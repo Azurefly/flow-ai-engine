@@ -1,112 +1,11 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "aeda430d-9bc5-497c-9af0-7109c23c99e0",
+  "id": "efe7983f-0a35-48f1-a7fd-a0b17e767dac",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "authorization_audit_log": {
-      "name": "authorization_audit_log",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "varchar(36)",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "actorUserId": {
-          "name": "actorUserId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "targetUserId": {
-          "name": "targetUserId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "action": {
-          "name": "action",
-          "type": "enum('login_success','login_failed','logout','user_created','user_updated','user_disabled','role_assigned','role_revoked','temporary_role_assigned','temporary_role_revoked')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "resourceType": {
-          "name": "resourceType",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "resourceId": {
-          "name": "resourceId",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "detailsJson": {
-          "name": "detailsJson",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "authorization_audit_log_actorUserId_users_id_fk": {
-          "name": "authorization_audit_log_actorUserId_users_id_fk",
-          "tableFrom": "authorization_audit_log",
-          "tableTo": "users",
-          "columnsFrom": [
-            "actorUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "authorization_audit_log_targetUserId_users_id_fk": {
-          "name": "authorization_audit_log_targetUserId_users_id_fk",
-          "tableFrom": "authorization_audit_log",
-          "tableTo": "users",
-          "columnsFrom": [
-            "targetUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "authorization_audit_log_id": {
-          "name": "authorization_audit_log_id",
-          "columns": [
-            "id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "checkConstraint": {}
-    },
-    "permission": {
-      "name": "permission",
+    "iam_permission": {
+      "name": "iam_permission",
       "columns": {
         "id": {
           "name": "id",
@@ -117,47 +16,32 @@
         },
         "code": {
           "name": "code",
-          "type": "varchar(96)",
+          "type": "varchar(80)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "name": {
           "name": "name",
-          "type": "varchar(160)",
+          "type": "varchar(120)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "description": {
-          "name": "description",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "permission_id": {
-          "name": "permission_id",
+        "iam_permission_id": {
+          "name": "iam_permission_id",
           "columns": [
             "id"
           ]
         }
       },
       "uniqueConstraints": {
-        "permission_code_unique": {
-          "name": "permission_code_unique",
+        "iam_permission_code_unique": {
+          "name": "iam_permission_code_unique",
           "columns": [
             "code"
           ]
@@ -165,15 +49,15 @@
       },
       "checkConstraint": {}
     },
-    "role_assignment": {
-      "name": "role_assignment",
+    "iam_role_assignment": {
+      "name": "iam_role_assignment",
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": true
         },
         "userId": {
           "name": "userId",
@@ -189,28 +73,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "scopeType": {
-          "name": "scopeType",
-          "type": "enum('system','workflow')",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
-        "scopeId": {
-          "name": "scopeId",
-          "type": "varchar(36)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "effectiveFrom": {
-          "name": "effectiveFrom",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
         "expiresAt": {
           "name": "expiresAt",
           "type": "timestamp",
@@ -221,27 +83,6 @@
         "revokedAt": {
           "name": "revokedAt",
           "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "grantedByUserId": {
-          "name": "grantedByUserId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "revokedByUserId": {
-          "name": "revokedByUserId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "note": {
-          "name": "note",
-          "type": "varchar(320)",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -265,9 +106,9 @@
         }
       },
       "foreignKeys": {
-        "role_assignment_userId_users_id_fk": {
-          "name": "role_assignment_userId_users_id_fk",
-          "tableFrom": "role_assignment",
+        "iam_role_assignment_userId_users_id_fk": {
+          "name": "iam_role_assignment_userId_users_id_fk",
+          "tableFrom": "iam_role_assignment",
           "tableTo": "users",
           "columnsFrom": [
             "userId"
@@ -278,9 +119,9 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "role_assignment_roleId_iam_role_id_fk": {
-          "name": "role_assignment_roleId_iam_role_id_fk",
-          "tableFrom": "role_assignment",
+        "iam_role_assignment_roleId_iam_role_id_fk": {
+          "name": "iam_role_assignment_roleId_iam_role_id_fk",
+          "tableFrom": "iam_role_assignment",
           "tableTo": "iam_role",
           "columnsFrom": [
             "roleId"
@@ -290,37 +131,11 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "role_assignment_grantedByUserId_users_id_fk": {
-          "name": "role_assignment_grantedByUserId_users_id_fk",
-          "tableFrom": "role_assignment",
-          "tableTo": "users",
-          "columnsFrom": [
-            "grantedByUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "role_assignment_revokedByUserId_users_id_fk": {
-          "name": "role_assignment_revokedByUserId_users_id_fk",
-          "tableFrom": "role_assignment",
-          "tableTo": "users",
-          "columnsFrom": [
-            "revokedByUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
-        "role_assignment_id": {
-          "name": "role_assignment_id",
+        "iam_role_assignment_id": {
+          "name": "iam_role_assignment_id",
           "columns": [
             "id"
           ]
@@ -329,8 +144,8 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
-    "role_permission": {
-      "name": "role_permission",
+    "iam_role_permission": {
+      "name": "iam_role_permission",
       "columns": {
         "id": {
           "name": "id",
@@ -352,21 +167,13 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
-        },
-        "createdAt": {
-          "name": "createdAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
         }
       },
       "indexes": {},
       "foreignKeys": {
-        "role_permission_roleId_iam_role_id_fk": {
-          "name": "role_permission_roleId_iam_role_id_fk",
-          "tableFrom": "role_permission",
+        "iam_role_permission_roleId_iam_role_id_fk": {
+          "name": "iam_role_permission_roleId_iam_role_id_fk",
+          "tableFrom": "iam_role_permission",
           "tableTo": "iam_role",
           "columnsFrom": [
             "roleId"
@@ -377,10 +184,10 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "role_permission_permissionId_permission_id_fk": {
-          "name": "role_permission_permissionId_permission_id_fk",
-          "tableFrom": "role_permission",
-          "tableTo": "permission",
+        "iam_role_permission_permissionId_iam_permission_id_fk": {
+          "name": "iam_role_permission_permissionId_iam_permission_id_fk",
+          "tableFrom": "iam_role_permission",
+          "tableTo": "iam_permission",
           "columnsFrom": [
             "permissionId"
           ],
@@ -392,16 +199,16 @@
         }
       },
       "compositePrimaryKeys": {
-        "role_permission_id": {
-          "name": "role_permission_id",
+        "iam_role_permission_id": {
+          "name": "iam_role_permission_id",
           "columns": [
             "id"
           ]
         }
       },
       "uniqueConstraints": {
-        "role_permission_unique_idx": {
-          "name": "role_permission_unique_idx",
+        "role_permission_unique": {
+          "name": "role_permission_unique",
           "columns": [
             "roleId",
             "permissionId"
@@ -463,15 +270,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(now())"
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "onUpdate": true,
-          "default": "(now())"
         }
       },
       "indexes": {},
@@ -494,12 +292,12 @@
       },
       "checkConstraint": {}
     },
-    "auth_session": {
-      "name": "auth_session",
+    "iam_session": {
+      "name": "iam_session",
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(64)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -513,7 +311,7 @@
         },
         "tokenHash": {
           "name": "tokenHash",
-          "type": "varchar(64)",
+          "type": "varchar(128)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -532,21 +330,6 @@
           "notNull": false,
           "autoincrement": false
         },
-        "lastSeenAt": {
-          "name": "lastSeenAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
-        "userAgent": {
-          "name": "userAgent",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "createdAt": {
           "name": "createdAt",
           "type": "timestamp",
@@ -557,8 +340,8 @@
         }
       },
       "indexes": {
-        "auth_session_user_idx": {
-          "name": "auth_session_user_idx",
+        "session_user_idx": {
+          "name": "session_user_idx",
           "columns": [
             "userId"
           ],
@@ -566,9 +349,9 @@
         }
       },
       "foreignKeys": {
-        "auth_session_userId_users_id_fk": {
-          "name": "auth_session_userId_users_id_fk",
-          "tableFrom": "auth_session",
+        "iam_session_userId_users_id_fk": {
+          "name": "iam_session_userId_users_id_fk",
+          "tableFrom": "iam_session",
           "tableTo": "users",
           "columnsFrom": [
             "userId"
@@ -581,16 +364,16 @@
         }
       },
       "compositePrimaryKeys": {
-        "auth_session_id": {
-          "name": "auth_session_id",
+        "iam_session_id": {
+          "name": "iam_session_id",
           "columns": [
             "id"
           ]
         }
       },
       "uniqueConstraints": {
-        "auth_session_tokenHash_unique": {
-          "name": "auth_session_tokenHash_unique",
+        "iam_session_tokenHash_unique": {
+          "name": "iam_session_tokenHash_unique",
           "columns": [
             "tokenHash"
           ]
@@ -610,9 +393,9 @@
         },
         "openId": {
           "name": "openId",
-          "type": "varchar(64)",
+          "type": "varchar(96)",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "username": {
@@ -631,7 +414,7 @@
         },
         "name": {
           "name": "name",
-          "type": "varchar(160)",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -665,14 +448,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'active'"
-        },
-        "tokenVersion": {
-          "name": "tokenVersion",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": 1
         },
         "createdAt": {
           "name": "createdAt",
@@ -731,14 +506,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "int",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": true
         },
         "workflowId": {
           "name": "workflowId",
-          "type": "varchar(36)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -757,14 +532,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "effectiveFrom": {
-          "name": "effectiveFrom",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false,
-          "default": "(now())"
-        },
         "expiresAt": {
           "name": "expiresAt",
           "type": "timestamp",
@@ -775,13 +542,6 @@
         "revokedAt": {
           "name": "revokedAt",
           "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "grantedByUserId": {
-          "name": "grantedByUserId",
-          "type": "int",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -822,19 +582,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "workflow_member_grantedByUserId_users_id_fk": {
-          "name": "workflow_member_grantedByUserId_users_id_fk",
-          "tableFrom": "workflow_member",
-          "tableTo": "users",
-          "columnsFrom": [
-            "grantedByUserId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -862,28 +609,28 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "runId": {
           "name": "runId",
-          "type": "varchar(36)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "nodeId": {
           "name": "nodeId",
-          "type": "varchar(120)",
+          "type": "varchar(64)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "nodeType": {
           "name": "nodeType",
-          "type": "varchar(48)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -900,8 +647,7 @@
           "type": "enum('pending','running','success','failed','skipped')",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'pending'"
+          "autoincrement": false
         },
         "inputJson": {
           "name": "inputJson",
@@ -920,20 +666,6 @@
         "errorJson": {
           "name": "errorJson",
           "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "startedAt": {
-          "name": "startedAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "finishedAt": {
-          "name": "finishedAt",
-          "type": "timestamp",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -986,14 +718,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "workflowId": {
           "name": "workflowId",
-          "type": "varchar(36)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1005,13 +737,19 @@
           "notNull": true,
           "autoincrement": false
         },
+        "triggeredByUserId": {
+          "name": "triggeredByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "triggerType": {
           "name": "triggerType",
           "type": "enum('manual','api','schedule')",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'manual'"
+          "autoincrement": false
         },
         "status": {
           "name": "status",
@@ -1040,6 +778,13 @@
           "type": "json",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "authorizationSnapshotJson": {
+          "name": "authorizationSnapshotJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "finalOutputJson": {
@@ -1084,34 +829,6 @@
           "notNull": true,
           "autoincrement": false,
           "default": "(now())"
-        },
-        "executionLockToken": {
-          "name": "executionLockToken",
-          "type": "varchar(48)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "executionLockExpiresAt": {
-          "name": "executionLockExpiresAt",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "triggeredByUserId": {
-          "name": "triggeredByUserId",
-          "type": "int",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "authorizationSnapshotJson": {
-          "name": "authorizationSnapshotJson",
-          "type": "json",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
         }
       },
       "indexes": {
@@ -1181,7 +898,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false

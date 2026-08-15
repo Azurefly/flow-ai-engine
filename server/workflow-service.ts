@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
 
 type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
@@ -17,7 +18,99 @@ export function validate(definition: unknown, executable = false): Definition {
   if (executable && !value.edges.some(edge => edge.sourceNodeId === starts[0].id)) throw new Error("开始节点必须连接后继节点。");
   return value;
 }
-export async function listWorkflows(userId: number) { const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow WHERE ownerUserId=? ORDER BY updatedAt DESC", [userId]); return rows.map(row => ({ ...row, definition: row.definitionJson })); }
-export async function getWorkflow(idValue: string, userId: number) { const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow WHERE id=? AND ownerUserId=? LIMIT 1", [idValue, userId]); const row = rows[0]; return row ? { ...row, definition: row.definitionJson } : null; }
-export async function createWorkflow(userId: number, name: string, description?: string) { const workflowId = id(); const definition = emptyDefinition(); await db().query("INSERT INTO workflow (id,ownerUserId,name,description,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,'draft',1)", [workflowId, userId, name, description ?? null, JSON.stringify(definition)]); return getWorkflow(workflowId, userId); }
-export async function updateWorkflow(workflowId: string, userId: number, values: { name?: string; definition?: unknown; publish?: boolean }) { const current = await getWorkflow(workflowId, userId) as ({ name: string; status: "draft" | "published"; definition: Definition } | null); if (!current) return null; const definition = values.definition === undefined ? current.definition : validate(values.definition, Boolean(values.publish)); await db().query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=definitionVersion+1, updatedAt=NOW() WHERE id=? AND ownerUserId=?", [values.name ?? current.name, JSON.stringify(definition), values.publish ? "published" : current.status, workflowId, userId]); return getWorkflow(workflowId, userId); }
+type WorkflowUser = { id: number; role: "user" | "admin" };
+
+function hydrateWorkflow(row: mysql.RowDataPacket) {
+  const definition = typeof row.definitionJson === "string" ? JSON.parse(row.definitionJson) : row.definitionJson;
+  return { ...row, definition };
+}
+
+export async function listWorkflows(user: WorkflowUser) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    user.role === "admin"
+      ? "SELECT DISTINCT w.* FROM workflow w ORDER BY w.updatedAt DESC"
+      : `SELECT DISTINCT w.* FROM workflow w
+          LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
+          LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
+          LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
+          LEFT JOIN permission p ON p.id=rp.permissionId
+         WHERE w.ownerUserId=? OR wm.id IS NOT NULL OR p.code='workflow:view'
+         ORDER BY w.updatedAt DESC`,
+    user.role === "admin" ? [] : [user.id, user.id, user.id],
+  );
+  return rows.map(hydrateWorkflow);
+}
+
+export async function getWorkflow(idValue: string, user: WorkflowUser) {
+  if (!(await getWorkflowAccess(user, idValue)).permissions.has("workflow:view")) return null;
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow WHERE id=? LIMIT 1", [idValue]);
+  const row = rows[0];
+  return row ? hydrateWorkflow(row) : null;
+}
+
+export async function canCreateWorkflow(user: WorkflowUser) {
+  return hasSystemPermission(user, "workflow:create");
+}
+
+export async function createWorkflow(user: WorkflowUser, name: string, description?: string) {
+  if (!(await canCreateWorkflow(user))) throw new Error("当前账号没有创建流程的权限。");
+  const workflowId = id();
+  const definition = emptyDefinition();
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("INSERT INTO workflow (id,ownerUserId,name,description,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,'draft',1)", [workflowId, user.id, name, description ?? null, JSON.stringify(definition)]);
+    await connection.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [randomBytes(18).toString("hex"), workflowId, user.id, user.id]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return getWorkflow(workflowId, user);
+}
+
+export async function hasWorkflowPermission(user: WorkflowUser, workflowId: string, permission: WorkflowPermission) {
+  return (await getWorkflowAccess(user, workflowId)).permissions.has(permission);
+}
+
+export async function updateWorkflow(workflowId: string, user: WorkflowUser, values: { name?: string; definition?: unknown; publish?: boolean }) {
+  const permission: WorkflowPermission = values.publish ? "workflow:publish" : "workflow:edit";
+  if (!(await hasWorkflowPermission(user, workflowId, permission))) return null;
+  const current = await getWorkflow(workflowId, user) as ({ name: string; status: "draft" | "published"; definition: Definition } | null);
+  if (!current) return null;
+  const definition = values.definition === undefined ? current.definition : validate(values.definition, Boolean(values.publish));
+  await db().query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=definitionVersion+1, updatedAt=NOW() WHERE id=?", [values.name ?? current.name, JSON.stringify(definition), values.publish ? "published" : current.status, workflowId]);
+  return getWorkflow(workflowId, user);
+}
+
+export async function duplicateWorkflow(workflowId: string, user: WorkflowUser, name?: string) {
+  const source = await getWorkflow(workflowId, user) as ({ name: string; description?: string | null; definition: Definition } | null);
+  if (!source) return null;
+  const duplicated = await createWorkflow(user, name?.trim() || `${source.name} · 副本`, source.description ?? undefined);
+  if (!duplicated) return null;
+  return updateWorkflow((duplicated as any).id, user, { definition: source.definition });
+}
+
+export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
+  if (!(await hasWorkflowPermission(user, workflowId, "workflow:members:manage"))) return false;
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?", [workflowId]);
+    await connection.query("DELETE FROM workflow_run WHERE workflowId=?", [workflowId]);
+    await connection.query("DELETE FROM workflow_member WHERE workflowId=?", [workflowId]);
+    await connection.query("UPDATE role_assignment SET revokedAt=NOW(),revokedByUserId=? WHERE scopeType='workflow' AND scopeId=? AND revokedAt IS NULL", [user.id, workflowId]);
+    const [result] = await connection.query<mysql.ResultSetHeader>("DELETE FROM workflow WHERE id=?", [workflowId]);
+    if (!result.affectedRows) throw new Error("流程不存在或已被删除。");
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: workflowId, details: { operation: "workflow_deleted" } });
+  return true;
+}

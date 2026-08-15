@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "aeda430d-9bc5-497c-9af0-7109c23c99e0",
+  "id": "5616953d-2fc7-4a8d-8bce-62915efc857f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "authorization_audit_log": {
@@ -400,8 +400,8 @@
         }
       },
       "uniqueConstraints": {
-        "role_permission_unique_idx": {
-          "name": "role_permission_unique_idx",
+        "role_permission_unique": {
+          "name": "role_permission_unique",
           "columns": [
             "roleId",
             "permissionId"

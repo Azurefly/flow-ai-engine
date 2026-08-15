@@ -2,6 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from "node:util";
 import mysql from "mysql2/promise";
 import type { User } from "../drizzle/schema";
+import { recordAuthorizationAudit } from "./iam-service";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_MAX_SECONDS = 60 * 60 * 24 * 7;
@@ -48,21 +49,30 @@ export async function login(username: string, password: string, userAgent?: stri
   await ensureBootstrapAdmin();
   const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM users WHERE username=? AND status='active' LIMIT 1", [username.trim().toLowerCase()]);
   const user = rows[0] as User | undefined;
-  if (!user || !(await verifyPassword(password, user.passwordHash ?? null))) return null;
+  if (!user || !(await verifyPassword(password, user.passwordHash ?? null))) {
+    await recordAuthorizationAudit({ action: "login_failed", resourceType: "auth", details: { username: username.trim().toLowerCase() } });
+    return null;
+  }
   const token = randomBytes(32).toString("base64url");
   const id = randomBytes(18).toString("hex");
   await db().query("INSERT INTO auth_session (id,userId,tokenHash,expiresAt,userAgent) VALUES (?,?,?,?,?)", [id, user.id, tokenHash(token), new Date(Date.now() + SESSION_MAX_SECONDS * 1000), userAgent?.slice(0, 255) ?? null]);
   await db().query("UPDATE users SET lastSignedIn=NOW() WHERE id=?", [user.id]);
+  await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: user.id, action: "login_success", resourceType: "auth" });
   return { user, token };
 }
 
-export async function logout(token?: string) { if (token) await db().query("UPDATE auth_session SET revokedAt=NOW() WHERE tokenHash=?", [tokenHash(token)]); }
+export async function logout(token?: string, actorUserId?: number) {
+  if (!token) return;
+  await db().query("UPDATE auth_session SET revokedAt=NOW() WHERE tokenHash=?", [tokenHash(token)]);
+  await recordAuthorizationAudit({ actorUserId, targetUserId: actorUserId, action: "logout", resourceType: "auth" });
+}
 export async function listUsers() { const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,username,name,email,role,status,lastSignedIn,createdAt FROM users ORDER BY createdAt DESC"); return rows; }
 export async function createUser(values: { username: string; password: string; name: string; email?: string | null; role?: "user" | "admin" }) {
   if (values.password.length < 12) throw new Error("密码至少需要 12 位。");
   const username = values.username.trim().toLowerCase();
   if (!/^[a-z][a-z0-9._-]{2,63}$/.test(username)) throw new Error("用户名格式无效。");
   const passwordHash = await hashPassword(values.password);
-  await db().query("INSERT INTO users (openId,username,passwordHash,name,email,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,'active','internal',NOW())", [`internal:${username}`, username, passwordHash, values.name.trim(), values.email ?? null, values.role ?? "user"]);
+  const [result] = await db().query<mysql.ResultSetHeader>("INSERT INTO users (openId,username,passwordHash,name,email,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,'active','internal',NOW())", [`internal:${username}`, username, passwordHash, values.name.trim(), values.email ?? null, values.role ?? "user"]);
+  return result.insertId;
 }
 export async function setUserStatus(userId: number, status: "active" | "disabled") { await db().query("UPDATE users SET status=? WHERE id=?", [status, userId]); if (status === "disabled") await db().query("UPDATE auth_session SET revokedAt=NOW() WHERE userId=? AND revokedAt IS NULL", [userId]); }

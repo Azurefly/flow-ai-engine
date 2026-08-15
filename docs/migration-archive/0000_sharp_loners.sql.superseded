@@ -1,0 +1,179 @@
+CREATE TABLE `authorization_audit_log` (
+	`id` varchar(36) NOT NULL,
+	`actorUserId` int,
+	`targetUserId` int,
+	`action` enum('login_success','login_failed','logout','user_created','user_updated','user_disabled','role_assigned','role_revoked','temporary_role_assigned','temporary_role_revoked') NOT NULL,
+	`resourceType` varchar(64),
+	`resourceId` varchar(64),
+	`detailsJson` json,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `authorization_audit_log_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `permission` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`code` varchar(96) NOT NULL,
+	`name` varchar(160) NOT NULL,
+	`description` text,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `permission_id` PRIMARY KEY(`id`),
+	CONSTRAINT `permission_code_unique` UNIQUE(`code`)
+);
+--> statement-breakpoint
+CREATE TABLE `role_assignment` (
+	`id` varchar(36) NOT NULL,
+	`userId` int NOT NULL,
+	`roleId` int NOT NULL,
+	`scopeType` enum('system','workflow') NOT NULL,
+	`scopeId` varchar(36),
+	`effectiveFrom` timestamp NOT NULL DEFAULT (now()),
+	`expiresAt` timestamp,
+	`revokedAt` timestamp,
+	`grantedByUserId` int,
+	`revokedByUserId` int,
+	`note` varchar(320),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `role_assignment_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `role_permission` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`roleId` int NOT NULL,
+	`permissionId` int NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `role_permission_id` PRIMARY KEY(`id`),
+	CONSTRAINT `role_permission_unique` UNIQUE(`roleId`,`permissionId`)
+);
+--> statement-breakpoint
+CREATE TABLE `iam_role` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`code` varchar(64) NOT NULL,
+	`name` varchar(120) NOT NULL,
+	`description` text,
+	`scope` enum('system','workflow') NOT NULL,
+	`isSystem` boolean NOT NULL DEFAULT false,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `iam_role_id` PRIMARY KEY(`id`),
+	CONSTRAINT `iam_role_code_unique` UNIQUE(`code`)
+);
+--> statement-breakpoint
+CREATE TABLE `auth_session` (
+	`id` varchar(36) NOT NULL,
+	`userId` int NOT NULL,
+	`tokenHash` varchar(64) NOT NULL,
+	`expiresAt` timestamp NOT NULL,
+	`revokedAt` timestamp,
+	`lastSeenAt` timestamp NOT NULL DEFAULT (now()),
+	`userAgent` varchar(255),
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `auth_session_id` PRIMARY KEY(`id`),
+	CONSTRAINT `auth_session_tokenHash_unique` UNIQUE(`tokenHash`)
+);
+--> statement-breakpoint
+CREATE TABLE `users` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`openId` varchar(64),
+	`username` varchar(64),
+	`passwordHash` varchar(255),
+	`name` varchar(160),
+	`email` varchar(320),
+	`loginMethod` varchar(64),
+	`role` enum('user','admin') NOT NULL DEFAULT 'user',
+	`status` enum('active','disabled') NOT NULL DEFAULT 'active',
+	`tokenVersion` int NOT NULL DEFAULT 1,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	`lastSignedIn` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `users_id` PRIMARY KEY(`id`),
+	CONSTRAINT `users_openId_unique` UNIQUE(`openId`),
+	CONSTRAINT `users_username_unique` UNIQUE(`username`)
+);
+--> statement-breakpoint
+CREATE TABLE `workflow_member` (
+	`id` varchar(36) NOT NULL,
+	`workflowId` varchar(36) NOT NULL,
+	`userId` int NOT NULL,
+	`role` enum('owner','editor','operator','viewer') NOT NULL,
+	`effectiveFrom` timestamp NOT NULL DEFAULT (now()),
+	`expiresAt` timestamp,
+	`revokedAt` timestamp,
+	`grantedByUserId` int,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `workflow_member_id` PRIMARY KEY(`id`),
+	CONSTRAINT `workflow_member_unique` UNIQUE(`workflowId`,`userId`,`role`)
+);
+--> statement-breakpoint
+CREATE TABLE `workflow_node_run` (
+	`id` varchar(36) NOT NULL,
+	`runId` varchar(36) NOT NULL,
+	`nodeId` varchar(120) NOT NULL,
+	`nodeType` varchar(48) NOT NULL,
+	`nodeName` varchar(160) NOT NULL,
+	`status` enum('pending','running','success','failed','skipped') NOT NULL DEFAULT 'pending',
+	`inputJson` json NOT NULL,
+	`outputJson` json,
+	`errorJson` json,
+	`startedAt` timestamp,
+	`finishedAt` timestamp,
+	`durationMs` int,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `workflow_node_run_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `workflow_run` (
+	`id` varchar(36) NOT NULL,
+	`workflowId` varchar(36) NOT NULL,
+	`ownerUserId` int NOT NULL,
+	`triggerType` enum('manual','api','schedule') NOT NULL DEFAULT 'manual',
+	`status` enum('queued','running','success','failed','cancelled') NOT NULL DEFAULT 'queued',
+	`definitionSnapshotJson` json NOT NULL,
+	`inputJson` json NOT NULL,
+	`contextJson` json NOT NULL,
+	`finalOutputJson` json,
+	`errorJson` json,
+	`startedAt` timestamp,
+	`finishedAt` timestamp,
+	`durationMs` int,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`executionLockToken` varchar(48),
+	`executionLockExpiresAt` timestamp,
+	`triggeredByUserId` int,
+	`authorizationSnapshotJson` json,
+	CONSTRAINT `workflow_run_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `workflow` (
+	`id` varchar(36) NOT NULL,
+	`ownerUserId` int NOT NULL,
+	`name` varchar(160) NOT NULL,
+	`description` text,
+	`status` enum('draft','published') NOT NULL DEFAULT 'draft',
+	`definitionVersion` int NOT NULL DEFAULT 1,
+	`definitionJson` json NOT NULL,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `workflow_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+ALTER TABLE `authorization_audit_log` ADD CONSTRAINT `authorization_audit_log_actorUserId_users_id_fk` FOREIGN KEY (`actorUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `authorization_audit_log` ADD CONSTRAINT `authorization_audit_log_targetUserId_users_id_fk` FOREIGN KEY (`targetUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `role_assignment` ADD CONSTRAINT `role_assignment_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `role_assignment` ADD CONSTRAINT `role_assignment_roleId_iam_role_id_fk` FOREIGN KEY (`roleId`) REFERENCES `iam_role`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `role_assignment` ADD CONSTRAINT `role_assignment_grantedByUserId_users_id_fk` FOREIGN KEY (`grantedByUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `role_assignment` ADD CONSTRAINT `role_assignment_revokedByUserId_users_id_fk` FOREIGN KEY (`revokedByUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `role_permission` ADD CONSTRAINT `role_permission_roleId_iam_role_id_fk` FOREIGN KEY (`roleId`) REFERENCES `iam_role`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `role_permission` ADD CONSTRAINT `role_permission_permissionId_permission_id_fk` FOREIGN KEY (`permissionId`) REFERENCES `permission`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `auth_session` ADD CONSTRAINT `auth_session_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_member` ADD CONSTRAINT `workflow_member_workflowId_workflow_id_fk` FOREIGN KEY (`workflowId`) REFERENCES `workflow`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_member` ADD CONSTRAINT `workflow_member_userId_users_id_fk` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_member` ADD CONSTRAINT `workflow_member_grantedByUserId_users_id_fk` FOREIGN KEY (`grantedByUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_node_run` ADD CONSTRAINT `workflow_node_run_runId_workflow_run_id_fk` FOREIGN KEY (`runId`) REFERENCES `workflow_run`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_run` ADD CONSTRAINT `workflow_run_workflowId_workflow_id_fk` FOREIGN KEY (`workflowId`) REFERENCES `workflow`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_run` ADD CONSTRAINT `workflow_run_ownerUserId_users_id_fk` FOREIGN KEY (`ownerUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow_run` ADD CONSTRAINT `workflow_run_triggeredByUserId_users_id_fk` FOREIGN KEY (`triggeredByUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `workflow` ADD CONSTRAINT `workflow_ownerUserId_users_id_fk` FOREIGN KEY (`ownerUserId`) REFERENCES `users`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX `role_assignment_user_idx` ON `role_assignment` (`userId`);--> statement-breakpoint
+CREATE INDEX `auth_session_user_idx` ON `auth_session` (`userId`);--> statement-breakpoint
+CREATE INDEX `workflow_run_workflow_idx` ON `workflow_run` (`workflowId`,`createdAt`);--> statement-breakpoint
+CREATE INDEX `workflow_owner_updated_idx` ON `workflow` (`ownerUserId`,`updatedAt`);
