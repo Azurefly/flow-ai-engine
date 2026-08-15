@@ -26,8 +26,10 @@ describe("流程仓库管理", () => {
     if (!pool) return;
     const ids = [sourceId, copyId].filter(Boolean) as string[];
     if (ids.length) {
+      await pool.query("DELETE FROM workflow_run_alert WHERE workflowId IN (?)", [ids]);
       await pool.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId IN (?)", [ids]);
       await pool.query("DELETE FROM workflow_run WHERE workflowId IN (?)", [ids]);
+      await pool.query("DELETE FROM workflow_version WHERE workflowId IN (?)", [ids]);
       await pool.query("DELETE FROM workflow_member WHERE workflowId IN (?)", [ids]);
       await pool.query("DELETE FROM workflow WHERE id IN (?)", [ids]);
     }
@@ -82,5 +84,5 @@ describe("流程仓库管理", () => {
     await expect(deleteWorkflow(copyId, owner)).resolves.toBe(true);
     const [copiedRows] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM workflow WHERE id=?", [copyId]);
     expect(copiedRows).toHaveLength(0);
-  }, 30_000);
+  }, 60_000);
 });

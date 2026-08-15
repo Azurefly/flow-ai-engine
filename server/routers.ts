@@ -6,8 +6,8 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { createUser, ensureBootstrapAdmin, FLOW_SESSION_COOKIE, listUsers, login, logout, setUserStatus } from "./internal-auth";
 import { assignRole, createCustomRole, deleteCustomRole, getWorkflowAccess, grantWorkflowMember, listActiveUsersForWorkflowAssignment, listAuthorizationAudit, listRoles, listWorkflowMembers, recordAuthorizationAudit, revokeRoleAssignment, revokeWorkflowMember, updateCustomRole } from "./iam-service";
-import { executeWorkflow, getRuntimeModels, getWorkflowRun, listWorkflowRuns } from "./workflow-engine";
-import { createWorkflow, deleteWorkflow, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listWorkflows, updateWorkflow } from "./workflow-service";
+import { executeWorkflow, getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
+import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
 
 export const appRouter = router({
   system: systemRouter,
@@ -50,6 +50,21 @@ export const appRouter = router({
     publish: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => { const workflow = await updateWorkflow(input.id, ctx.user, { publish: true }); if (!workflow) throw new Error("流程不存在或无发布权限。"); return workflow; }),
     duplicate: protectedProcedure.input(z.object({ id: z.string().min(8).max(64), name: z.string().trim().min(1).max(160).optional() })).mutation(async ({ ctx, input }) => { const workflow = await duplicateWorkflow(input.id, ctx.user, input.name); if (!workflow) throw new Error("流程不存在或无查看权限。"); return workflow; }),
     delete: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => { const deleted = await deleteWorkflow(input.id, ctx.user); if (!deleted) throw new Error("流程不存在或无删除权限。"); return { success: true }; }),
+    versions: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
+      const versions = await listWorkflowVersions(input.workflowId, ctx.user);
+      if (!versions) throw new Error("无权查看流程版本。");
+      return versions;
+    }),
+    versionDiff: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), fromVersion: z.number().int().positive(), toVersion: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      const diff = await diffWorkflowVersions(input.workflowId, input.fromVersion, input.toVersion, ctx.user);
+      if (!diff) throw new Error("流程版本不存在或无查看权限。");
+      return diff;
+    }),
+    rollbackVersion: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), targetVersion: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      const workflow = await rollbackWorkflowVersion(input.workflowId, input.targetVersion, ctx.user);
+      if (!workflow) throw new Error("流程版本不存在或无恢复权限。");
+      return workflow;
+    }),
     members: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
       if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程成员。");
       return listWorkflowMembers(input.workflowId);
@@ -73,14 +88,28 @@ export const appRouter = router({
       return { success: true };
     }),
     runtimeModels: protectedProcedure.query(async () => getRuntimeModels()),
+    templates: protectedProcedure.query(({ ctx }) => listNodeTemplates(ctx.user)),
+    createTemplate: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(500).optional(), nodeType: z.enum(["llm", "http", "transform", "condition"]), config: z.record(z.string(), z.unknown()) })).mutation(async ({ ctx, input }) => ({ id: await createNodeTemplate(ctx.user, input) })),
+    updateTemplate: protectedProcedure.input(z.object({ id: z.string().min(8).max(64), name: z.string().trim().min(1).max(160).optional(), description: z.string().trim().max(500).nullable().optional(), config: z.record(z.string(), z.unknown()).optional() })).mutation(async ({ ctx, input }) => { if (!(await updateNodeTemplate(ctx.user, input))) throw new Error("节点模板不存在或无编辑权限。"); return { success: true }; }),
+    deleteTemplate: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => { if (!(await deleteNodeTemplate(ctx.user, input.id))) throw new Error("节点模板不存在或无删除权限。"); return { success: true }; }),
+    subflows: protectedProcedure.query(({ ctx }) => listSubflows(ctx.user)),
+    createSubflow: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(500).optional(), definition: z.unknown() })).mutation(async ({ ctx, input }) => ({ id: await createSubflow(ctx.user, input) })),
+    updateSubflow: protectedProcedure.input(z.object({ id: z.string().min(8).max(64), name: z.string().trim().min(1).max(160).optional(), description: z.string().trim().max(500).nullable().optional(), definition: z.unknown().optional(), isEnabled: z.boolean().optional() })).mutation(async ({ ctx, input }) => { if (!(await updateSubflow(ctx.user, input))) throw new Error("子流程不存在或无编辑权限。"); return { success: true }; }),
+    deleteSubflow: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => { if (!(await deleteSubflow(ctx.user, input.id))) throw new Error("子流程不存在或无删除权限。"); return { success: true }; }),
     run: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), input: z.record(z.string(), z.unknown()).optional() })).mutation(async ({ ctx, input }) => {
       if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:run"))) throw new Error("无权运行此流程。");
       return executeWorkflow({ workflowId: input.workflowId, triggeredBy: ctx.user, workflowInput: input.input });
     }),
-    runs: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
+    runs: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), status: z.enum(["queued", "running", "success", "failed", "cancelled"]).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional(), triggeredByUserId: z.number().int().positive().optional(), limit: z.number().int().min(1).max(200).optional() })).query(async ({ ctx, input }) => {
       if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程运行历史。");
-      return listWorkflowRuns(input.workflowId);
+      return listWorkflowRuns(input.workflowId, input);
     }),
+    runMetrics: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), status: z.enum(["queued", "running", "success", "failed", "cancelled"]).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional(), triggeredByUserId: z.number().int().positive().optional() })).query(async ({ ctx, input }) => {
+      if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程运行分析。");
+      return getWorkflowRunMetrics(input.workflowId, input);
+    }),
+    alerts: protectedProcedure.query(({ ctx }) => listRunAlerts(ctx.user)),
+    markAlertRead: protectedProcedure.input(z.object({ alertId: z.string().uuid() })).mutation(async ({ ctx, input }) => ({ success: await markRunAlertRead(input.alertId, ctx.user) })),
     runDetail: protectedProcedure.input(z.object({ runId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
       const run = await getWorkflowRun(input.runId);
       if (!run || !(await hasWorkflowPermission(ctx.user, run.workflowId, "workflow:view"))) throw new Error("运行记录不存在或无访问权限。");

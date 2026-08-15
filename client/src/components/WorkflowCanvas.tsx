@@ -12,12 +12,14 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Braces, GitBranch, Globe2, Play, Plus, Save, Sparkles, Square } from "lucide-react";
+import { Braces, FolderTree, GitBranch, Globe2, Play, Plus, Save, Sparkles, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Definition } from "../../../server/workflow-service";
 
 type NodeKind = Definition["nodes"][number]["type"];
 type NodeConfig = Record<string, unknown>;
+type ReuseTemplate = { id: string; name: string; nodeType: Exclude<NodeKind, "start" | "end" | "subflow">; config: NodeConfig };
+type ReuseSubflow = { id: string; name: string; isEnabled: boolean };
 
 const palette: Array<{ type: NodeKind; label: string; description: string; icon: typeof Play; color: string; defaultConfig: NodeConfig }> = [
   { type: "start", label: "开始", description: "初始化输入变量", icon: Play, color: "#10b981", defaultConfig: { initialVariables: {} } },
@@ -78,11 +80,25 @@ export default function WorkflowCanvas({
   definition,
   readOnly = false,
   onDefinitionChange,
+  templates = [],
+  subflows = [],
+  onSaveTemplate,
+  onUpdateTemplate,
+  onDeleteTemplate,
+  onToggleSubflow,
+  onDeleteSubflow,
 }: {
   workflowId?: string;
   definition?: Definition | null;
   readOnly?: boolean;
   onDefinitionChange?: (definition: Definition) => void;
+  templates?: ReuseTemplate[];
+  subflows?: ReuseSubflow[];
+  onSaveTemplate?: (template: Omit<ReuseTemplate, "id">) => void;
+  onUpdateTemplate?: (template: ReuseTemplate, updates: { name?: string; config?: NodeConfig }) => void;
+  onDeleteTemplate?: (id: string) => void;
+  onToggleSubflow?: (subflow: ReuseSubflow, isEnabled: boolean) => void;
+  onDeleteSubflow?: (id: string) => void;
 }) {
   const initial = definition ?? defaultDefinition();
   const [nodes, setNodes, onNodesChange] = useNodesState(toFlowNodes(initial));
@@ -120,6 +136,19 @@ export default function WorkflowCanvas({
     }));
   };
 
+  const addReusableNode = (input: { type: NodeKind; label: string; config: NodeConfig; color?: string }) => {
+    if (readOnly) return;
+    const suffix = Math.random().toString(36).slice(2, 7);
+    const color = input.color ?? colorFor(input.type);
+    setNodes(current => current.concat({
+      id: `${input.type}-${suffix}`,
+      type: "default",
+      position: { x: 260 + current.length * 26, y: 100 + (current.length % 4) * 95 },
+      data: { label: input.label, kind: input.type, config: input.config },
+      style: { border: `2px solid ${color}`, borderRadius: 8, boxShadow: "0 10px 22px rgba(15, 23, 42, .08)", minWidth: 150, fontWeight: 600 },
+    }));
+  };
+
   const onConnect = useCallback((connection: Connection) => {
     if (!readOnly) setEdges(current => addEdge({ ...connection, id: `edge-${Date.now()}`, animated: true, style: { stroke: "#94a3b8", strokeWidth: 1.7 } }, current));
   }, [readOnly, setEdges]);
@@ -150,6 +179,7 @@ export default function WorkflowCanvas({
           ))}
           {!readOnly && <span className="ml-auto flex items-center gap-1 text-xs text-slate-400"><Plus size={13} />拖入或添加节点</span>}
         </div>
+        {!readOnly && (templates.length > 0 || subflows.length > 0) && <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-1.5"><span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">REUSE LIBRARY</span>{templates.map(template => <Button key={template.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 text-xs" onClick={() => addReusableNode({ type: template.nodeType, label: template.name, config: template.config })}><Save size={12} />{template.name}</Button>)}{subflows.filter(subflow => subflow.isEnabled).map(subflow => <Button key={subflow.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-violet-200 text-xs text-violet-700 hover:bg-violet-50" onClick={() => addReusableNode({ type: "subflow", label: subflow.name, config: { subflowId: subflow.id }, color: "#7c3aed" })}><FolderTree size={12} />{subflow.name}</Button>)}</div>}
         <div className="h-[420px] sm:h-[590px]">
           <ReactFlow
             nodes={nodes}
@@ -179,9 +209,20 @@ export default function WorkflowCanvas({
           <label className="grid gap-1.5 text-xs font-medium text-slate-600">JSON 配置
             <textarea className="min-h-64 rounded-md border border-slate-200 bg-slate-950 p-3 font-mono text-xs leading-5 text-emerald-200 outline-none focus:border-indigo-400 disabled:opacity-70" value={configText} disabled={readOnly} onChange={event => setConfigText(event.target.value)} />
           </label>
-          {!readOnly && <Button type="button" size="sm" className="w-full" onClick={applyConfig}>应用配置</Button>}
+          {!readOnly && <div className="grid gap-2"><Button type="button" size="sm" className="w-full" onClick={applyConfig}>应用配置</Button>{selected.data.kind !== "start" && selected.data.kind !== "end" && selected.data.kind !== "subflow" && onSaveTemplate && <Button type="button" size="sm" variant="outline" className="w-full" onClick={() => { const name = window.prompt("节点模板名称", String(selected.data.label ?? "未命名模板")); if (name?.trim()) onSaveTemplate({ name: name.trim(), nodeType: selected.data.kind as ReuseTemplate["nodeType"], config: selected.data.config as NodeConfig }); }}><Save size={13} />保存为节点模板</Button>}</div>}
         </div> : <div className="mt-8 rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-500">选择画布节点以编辑名称与 JSON 配置。条件节点使用 <strong>true</strong> 和 <strong>false</strong> 源句柄连接两个分支。</div>}
+        {!readOnly && <details className="mt-5 border-t border-slate-100 pt-4"><summary className="cursor-pointer text-xs font-semibold text-slate-700">管理我的模板与子流程</summary><div className="mt-3 grid gap-2 text-xs">{templates.map(template => <div key={template.id} className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50 p-2"><span className="min-w-0 flex-1 truncate">{template.name}</span><button type="button" className="text-indigo-700 hover:underline" onClick={() => { const name = window.prompt("模板名称", template.name); if (name?.trim() && name !== template.name) onUpdateTemplate?.(template, { name: name.trim() }); }}>改名</button><button type="button" className="text-indigo-700 hover:underline" onClick={() => { const raw = window.prompt("模板 JSON 配置", JSON.stringify(template.config, null, 2)); if (!raw) return; try { const config = JSON.parse(raw); if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error(); onUpdateTemplate?.(template, { config }); } catch { window.alert("模板配置必须是合法的 JSON 对象。"); } }}>配置</button><button type="button" className="text-red-600 hover:underline" onClick={() => onDeleteTemplate?.(template.id)}><Trash2 size={12} /></button></div>)}{subflows.map(subflow => <div key={subflow.id} className="flex items-center gap-1 rounded border border-violet-100 bg-violet-50 p-2"><FolderTree size={12} className="text-violet-600" /><span className="min-w-0 flex-1 truncate">{subflow.name}</span><button type="button" className="text-violet-700 hover:underline" onClick={() => onToggleSubflow?.(subflow, !subflow.isEnabled)}>{subflow.isEnabled ? "停用" : "启用"}</button><button type="button" className="text-red-600 hover:underline" onClick={() => onDeleteSubflow?.(subflow.id)}><Trash2 size={12} /></button></div>)}{!templates.length && !subflows.length && <p className="text-slate-400">从选中节点保存模板，或在设计器顶部将当前流程保存为子流程。</p>}</div></details>}
+        {!readOnly && templates.length > 0 && onUpdateTemplate && <TemplateConfigurationEditor templates={templates} onUpdate={onUpdateTemplate} />}
       </aside>
     </div>
   );
+}
+
+function TemplateConfigurationEditor({ templates, onUpdate }: { templates: ReuseTemplate[]; onUpdate: (template: ReuseTemplate, updates: { config?: NodeConfig }) => void }) {
+  const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
+  const selected = templates.find(template => template.id === templateId) ?? templates[0];
+  const [draft, setDraft] = useState(() => JSON.stringify(selected?.config ?? {}, null, 2));
+  useEffect(() => { setTemplateId(current => templates.some(template => template.id === current) ? current : templates[0]?.id ?? ""); }, [templates]);
+  useEffect(() => { if (selected) setDraft(JSON.stringify(selected.config, null, 2)); }, [selected?.id]);
+  return <section className="mt-3 rounded border border-indigo-100 bg-indigo-50 p-3"><p className="text-xs font-semibold text-indigo-900">编辑模板配置</p><select aria-label="选择要编辑的模板" className="mt-2 h-8 w-full rounded border border-indigo-200 bg-white px-2 text-xs" value={selected?.id ?? ""} onChange={event => setTemplateId(event.target.value)}>{templates.map(template => <option key={template.id} value={template.id}>{template.name}</option>)}</select><textarea aria-label="模板 JSON 配置编辑器" className="mt-2 min-h-28 w-full rounded border border-indigo-200 bg-slate-950 p-2 font-mono text-[11px] leading-5 text-emerald-200" value={draft} onChange={event => setDraft(event.target.value)} /><Button type="button" size="sm" className="mt-2 w-full" onClick={() => { if (!selected) return; try { const config = JSON.parse(draft); if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error(); onUpdate(selected, { config }); } catch { window.alert("模板配置必须是合法的 JSON 对象。"); } }}>保存模板配置</Button></section>;
 }

@@ -8,6 +8,13 @@
       "when": 1786760236618,
       "tag": "0000_good_grandmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1786777961598,
+      "tag": "0001_wide_ultron",
+      "breakpoints": true
     }
   ]
 }

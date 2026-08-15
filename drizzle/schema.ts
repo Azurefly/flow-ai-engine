@@ -167,6 +167,79 @@ export const workflowNodeRuns = mysqlTable("workflow_node_run", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+/** Immutable definition snapshots created on every edit, publish, and rollback. */
+export const workflowVersions = mysqlTable(
+  "workflow_version",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    version: int("version").notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    status: mysqlEnum("status", ["draft", "published"]).notNull(),
+    definitionJson: json("definitionJson").notNull(),
+    changeSource: mysqlEnum("changeSource", ["created", "updated", "published", "rolled_back"]).notNull(),
+    restoredFromVersion: int("restoredFromVersion"),
+    createdByUserId: int("createdByUserId").references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("workflow_version_workflow_version_unique").on(table.workflowId, table.version),
+    index("workflow_version_workflow_created_idx").on(table.workflowId, table.createdAt),
+  ],
+);
+
+/** Per-recipient failed-run notifications; access never depends on another tenant's records. */
+export const workflowRunAlerts = mysqlTable(
+  "workflow_run_alert",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
+    recipientUserId: int("recipientUserId").notNull().references(() => users.id),
+    severity: mysqlEnum("severity", ["warning", "critical"]).default("critical").notNull(),
+    summary: varchar("summary", { length: 320 }).notNull(),
+    detailsJson: json("detailsJson"),
+    readAt: timestamp("readAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("workflow_run_alert_recipient_idx").on(table.recipientUserId, table.readAt, table.createdAt),
+    index("workflow_run_alert_workflow_idx").on(table.workflowId, table.createdAt),
+  ],
+);
+
+/** Private, user-owned node templates that can be inserted into any authorized workflow. */
+export const workflowNodeTemplates = mysqlTable(
+  "workflow_node_template",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    ownerUserId: int("ownerUserId").notNull().references(() => users.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: varchar("description", { length: 500 }),
+    nodeType: varchar("nodeType", { length: 48 }).notNull(),
+    configJson: json("configJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("workflow_node_template_owner_updated_idx").on(table.ownerUserId, table.updatedAt)],
+);
+
+/** Private, user-owned executable definitions referenced by subflow nodes. */
+export const workflowSubflows = mysqlTable(
+  "workflow_subflow",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    ownerUserId: int("ownerUserId").notNull().references(() => users.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: varchar("description", { length: 500 }),
+    definitionJson: json("definitionJson").notNull(),
+    isEnabled: boolean("isEnabled").default(true).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("workflow_subflow_owner_updated_idx").on(table.ownerUserId, table.updatedAt)],
+);
+
 export const authorizationAuditLogs = mysqlTable("authorization_audit_log", {
   id: varchar("id", { length: 36 }).primaryKey(),
   actorUserId: int("actorUserId").references(() => users.id),

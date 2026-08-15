@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
 
-type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
+type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
 export type Definition = { schemaVersion: 1; viewport: { x: number; y: number; zoom: number }; nodes: Node[]; edges: Edge[]; settings: Record<string, unknown> };
 const id = () => randomBytes(12).toString("base64url");
@@ -12,11 +12,12 @@ export const emptyDefinition = (): Definition => ({ schemaVersion: 1, viewport: 
 export function validate(definition: unknown, executable = false): Definition {
   const value = definition as Definition;
   if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) throw new Error("流程定义格式无效。");
-  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm"]);
+  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm", "subflow"]);
   for (const node of value.nodes) {
     if (!node || typeof node.id !== "string" || !node.id.trim() || typeof node.name !== "string" || !nodeTypes.has(node.type)) throw new Error("流程节点格式或类型无效。");
     if (!node.position || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) throw new Error("流程节点位置无效。");
     if (!node.config || typeof node.config !== "object" || Array.isArray(node.config)) throw new Error("流程节点配置必须是 JSON 对象。");
+    if (node.type === "subflow" && (typeof node.config.subflowId !== "string" || !node.config.subflowId.trim())) throw new Error("子流程节点必须选择有效的子流程。");
   }
   const starts = value.nodes.filter(node => node.type === "start"), ends = value.nodes.filter(node => node.type === "end");
   if (starts.length !== 1 || ends.length !== 1) throw new Error("流程必须且仅能包含一个开始节点和一个结束节点。");
@@ -29,10 +30,38 @@ export function validate(definition: unknown, executable = false): Definition {
   return value;
 }
 type WorkflowUser = { id: number; role: "user" | "admin" };
+type VersionSource = "created" | "updated" | "published" | "rolled_back";
+type TemplateNodeType = Exclude<Node["type"], "start" | "end" | "subflow">;
+
+const templateNodeTypes = new Set<TemplateNodeType>(["llm", "http", "transform", "condition"]);
+
+function parseJson(value: unknown) {
+  if (typeof value !== "string") return value;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+function assertJsonObject(value: unknown, message: string) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(message);
+  return value as Record<string, unknown>;
+}
 
 function hydrateWorkflow(row: mysql.RowDataPacket) {
-  const definition = typeof row.definitionJson === "string" ? JSON.parse(row.definitionJson) : row.definitionJson;
+  const definition = parseJson(row.definitionJson);
   return { ...row, definition };
+}
+
+async function insertVersion(connection: mysql.PoolConnection, input: { workflowId: string; version: number; name: string; status: "draft" | "published"; definition: Definition; source: VersionSource; actorUserId: number; restoredFromVersion?: number | null }) {
+  await connection.query(
+    "INSERT INTO workflow_version (id,workflowId,version,name,status,definitionJson,changeSource,restoredFromVersion,createdByUserId) VALUES (?,?,?,?,?,?,?,?,?)",
+    [id(), input.workflowId, input.version, input.name, input.status, JSON.stringify(input.definition), input.source, input.restoredFromVersion ?? null, input.actorUserId],
+  );
+}
+
+async function assertSubflowOwnership(definition: Definition, ownerUserId: number) {
+  const subflowIds = Array.from(new Set(definition.nodes.filter(node => node.type === "subflow").map(node => String(node.config.subflowId))));
+  if (!subflowIds.length) return;
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow_subflow WHERE ownerUserId=? AND id IN (?)", [ownerUserId, subflowIds]);
+  if (rows.length !== subflowIds.length) throw new Error("流程只能引用流程所有者创建的私有子流程。");
 }
 
 export async function listWorkflows(user: WorkflowUser) {
@@ -71,6 +100,7 @@ export async function createWorkflow(user: WorkflowUser, name: string, descripti
     await connection.beginTransaction();
     await connection.query("INSERT INTO workflow (id,ownerUserId,name,description,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,'draft',1)", [workflowId, user.id, name, description ?? null, JSON.stringify(definition)]);
     await connection.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [randomBytes(18).toString("hex"), workflowId, user.id, user.id]);
+    await insertVersion(connection, { workflowId, version: 1, name, status: "draft", definition, source: "created", actorUserId: user.id });
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -88,11 +118,144 @@ export async function hasWorkflowPermission(user: WorkflowUser, workflowId: stri
 export async function updateWorkflow(workflowId: string, user: WorkflowUser, values: { name?: string; definition?: unknown; publish?: boolean }) {
   const permission: WorkflowPermission = values.publish ? "workflow:publish" : "workflow:edit";
   if (!(await hasWorkflowPermission(user, workflowId, permission))) return null;
-  const current = await getWorkflow(workflowId, user) as ({ name: string; status: "draft" | "published"; definition: Definition } | null);
+  const current = await getWorkflow(workflowId, user) as ({ ownerUserId: number; name: string; status: "draft" | "published"; definitionVersion: number; definition: Definition } | null);
   if (!current) return null;
   const definition = values.definition === undefined ? current.definition : validate(values.definition, Boolean(values.publish));
-  await db().query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=definitionVersion+1, updatedAt=NOW() WHERE id=?", [values.name ?? current.name, JSON.stringify(definition), values.publish ? "published" : current.status, workflowId]);
+  await assertSubflowOwnership(definition, user.id);
+  const nextName = values.name ?? current.name;
+  const nextStatus = values.publish ? "published" : current.status;
+  const nextVersion = Number(current.definitionVersion) + 1;
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, workflowId]);
+    await insertVersion(connection, { workflowId, version: nextVersion, name: nextName, status: nextStatus, definition, source: values.publish ? "published" : "updated", actorUserId: user.id });
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   return getWorkflow(workflowId, user);
+}
+
+export async function listWorkflowVersions(workflowId: string, user: WorkflowUser) {
+  if (!(await hasWorkflowPermission(user, workflowId, "workflow:view"))) return null;
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT v.id,v.workflowId,v.version,v.name,v.status,v.changeSource,v.restoredFromVersion,v.createdByUserId,v.createdAt,u.username,u.name AS creatorName FROM workflow_version v LEFT JOIN users u ON u.id=v.createdByUserId WHERE v.workflowId=? ORDER BY v.version DESC LIMIT 100",
+    [workflowId],
+  );
+  return rows;
+}
+
+export async function getWorkflowVersion(workflowId: string, version: number, user: WorkflowUser) {
+  if (!(await hasWorkflowPermission(user, workflowId, "workflow:view"))) return null;
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_version WHERE workflowId=? AND version=? LIMIT 1", [workflowId, version]);
+  const row = rows[0];
+  return row ? { ...row, definition: parseJson(row.definitionJson) as Definition } : null;
+}
+
+export async function diffWorkflowVersions(workflowId: string, fromVersion: number, toVersion: number, user: WorkflowUser) {
+  const [from, to] = await Promise.all([getWorkflowVersion(workflowId, fromVersion, user), getWorkflowVersion(workflowId, toVersion, user)]);
+  if (!from || !to) return null;
+  const fromNodes = new Map(from.definition.nodes.map(node => [node.id, node]));
+  const toNodes = new Map(to.definition.nodes.map(node => [node.id, node]));
+  const addedNodes = to.definition.nodes.filter(node => !fromNodes.has(node.id)).map(node => ({ id: node.id, name: node.name, type: node.type }));
+  const removedNodes = from.definition.nodes.filter(node => !toNodes.has(node.id)).map(node => ({ id: node.id, name: node.name, type: node.type }));
+  const changedNodes = to.definition.nodes.flatMap(node => {
+    const previous = fromNodes.get(node.id);
+    if (!previous) return [];
+    const changedFields = ["name", "type", "position", "config"].filter(field => JSON.stringify(previous[field as keyof Node]) !== JSON.stringify(node[field as keyof Node]));
+    return changedFields.length ? [{ id: node.id, name: node.name, changedFields }] : [];
+  });
+  const edgeKey = (edge: Edge) => `${edge.sourceNodeId}|${edge.sourceHandle ?? "default"}|${edge.targetNodeId}`;
+  const fromEdges = new Set(from.definition.edges.map(edgeKey));
+  const toEdges = new Set(to.definition.edges.map(edgeKey));
+  return { fromVersion, toVersion, addedNodes, removedNodes, changedNodes, addedEdges: to.definition.edges.filter(edge => !fromEdges.has(edgeKey(edge))), removedEdges: from.definition.edges.filter(edge => !toEdges.has(edgeKey(edge))), summary: { nodes: `${from.definition.nodes.length} → ${to.definition.nodes.length}`, edges: `${from.definition.edges.length} → ${to.definition.edges.length}` } };
+}
+
+export async function rollbackWorkflowVersion(workflowId: string, targetVersion: number, user: WorkflowUser) {
+  if (!(await hasWorkflowPermission(user, workflowId, "workflow:edit"))) return null;
+  const target = await getWorkflowVersion(workflowId, targetVersion, user) as ({ name: string; status: "draft" | "published"; definition: Definition } | null);
+  if (!target) return null;
+  if (target.status === "published" && !(await hasWorkflowPermission(user, workflowId, "workflow:publish"))) throw new Error("恢复已发布版本需要发布权限。");
+  const current = await getWorkflow(workflowId, user) as ({ name: string; definitionVersion: number } | null);
+  if (!current) return null;
+  const nextVersion = Number(current.definitionVersion) + 1;
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.query("UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,updatedAt=NOW() WHERE id=?", [target.name, JSON.stringify(target.definition), target.status, nextVersion, workflowId]);
+    await insertVersion(connection, { workflowId, version: nextVersion, name: target.name, status: target.status, definition: target.definition, source: "rolled_back", actorUserId: user.id, restoredFromVersion: targetVersion });
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: workflowId, details: { operation: "version_rolled_back", restoredFromVersion: targetVersion, createdVersion: nextVersion } });
+  return getWorkflow(workflowId, user);
+}
+
+export async function listNodeTemplates(user: WorkflowUser) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_node_template WHERE ownerUserId=? ORDER BY updatedAt DESC LIMIT 100", [user.id]);
+  return rows.map(row => ({ ...row, config: parseJson(row.configJson) }));
+}
+
+export async function createNodeTemplate(user: WorkflowUser, input: { name: string; description?: string; nodeType: TemplateNodeType; config: unknown }) {
+  if (!templateNodeTypes.has(input.nodeType)) throw new Error("该节点类型不能保存为模板。");
+  const config = assertJsonObject(input.config, "节点模板配置必须是 JSON 对象。");
+  const templateId = id();
+  await db().query("INSERT INTO workflow_node_template (id,ownerUserId,name,description,nodeType,configJson) VALUES (?,?,?,?,?,?)", [templateId, user.id, input.name.trim(), input.description?.trim() || null, input.nodeType, JSON.stringify(config)]);
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_node_template", resourceId: templateId, details: { operation: "template_created", nodeType: input.nodeType } });
+  return templateId;
+}
+
+export async function updateNodeTemplate(user: WorkflowUser, input: { id: string; name?: string; description?: string | null; config?: unknown }) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_node_template WHERE id=? AND ownerUserId=? LIMIT 1", [input.id, user.id]);
+  const template = rows[0];
+  if (!template) return false;
+  const name = input.name?.trim() || template.name;
+  const description = input.description === undefined ? template.description : input.description?.trim() || null;
+  const config = input.config === undefined ? parseJson(template.configJson) : assertJsonObject(input.config, "节点模板配置必须是 JSON 对象。");
+  await db().query("UPDATE workflow_node_template SET name=?,description=?,configJson=?,updatedAt=NOW() WHERE id=? AND ownerUserId=?", [name, description, JSON.stringify(config), input.id, user.id]);
+  return true;
+}
+
+export async function deleteNodeTemplate(user: WorkflowUser, templateId: string) {
+  const [result] = await db().query<mysql.ResultSetHeader>("DELETE FROM workflow_node_template WHERE id=? AND ownerUserId=?", [templateId, user.id]);
+  return Boolean(result.affectedRows);
+}
+
+export async function listSubflows(user: WorkflowUser) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_subflow WHERE ownerUserId=? ORDER BY updatedAt DESC LIMIT 100", [user.id]);
+  return rows.map(row => ({ ...row, definition: parseJson(row.definitionJson) }));
+}
+
+export async function createSubflow(user: WorkflowUser, input: { name: string; description?: string; definition: unknown }) {
+  const definition = validate(input.definition, true);
+  if (definition.nodes.some(node => node.type === "subflow")) throw new Error("子流程暂不支持嵌套子流程调用。");
+  const subflowId = id();
+  await db().query("INSERT INTO workflow_subflow (id,ownerUserId,name,description,definitionJson,isEnabled) VALUES (?,?,?,?,?,1)", [subflowId, user.id, input.name.trim(), input.description?.trim() || null, JSON.stringify(definition)]);
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_subflow", resourceId: subflowId, details: { operation: "subflow_created" } });
+  return subflowId;
+}
+
+export async function updateSubflow(user: WorkflowUser, input: { id: string; name?: string; description?: string | null; definition?: unknown; isEnabled?: boolean }) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_subflow WHERE id=? AND ownerUserId=? LIMIT 1", [input.id, user.id]);
+  const subflow = rows[0];
+  if (!subflow) return false;
+  const definition = input.definition === undefined ? parseJson(subflow.definitionJson) as Definition : validate(input.definition, true);
+  if (definition.nodes.some(node => node.type === "subflow")) throw new Error("子流程暂不支持嵌套子流程调用。");
+  await db().query("UPDATE workflow_subflow SET name=?,description=?,definitionJson=?,isEnabled=?,updatedAt=NOW() WHERE id=? AND ownerUserId=?", [input.name?.trim() || subflow.name, input.description === undefined ? subflow.description : input.description?.trim() || null, JSON.stringify(definition), input.isEnabled === undefined ? subflow.isEnabled : input.isEnabled, input.id, user.id]);
+  return true;
+}
+
+export async function deleteSubflow(user: WorkflowUser, subflowId: string) {
+  const [result] = await db().query<mysql.ResultSetHeader>("DELETE FROM workflow_subflow WHERE id=? AND ownerUserId=?", [subflowId, user.id]);
+  return Boolean(result.affectedRows);
 }
 
 export async function duplicateWorkflow(workflowId: string, user: WorkflowUser, name?: string) {
@@ -108,8 +271,10 @@ export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query("DELETE FROM workflow_run_alert WHERE workflowId=?", [workflowId]);
     await connection.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?", [workflowId]);
     await connection.query("DELETE FROM workflow_run WHERE workflowId=?", [workflowId]);
+    await connection.query("DELETE FROM workflow_version WHERE workflowId=?", [workflowId]);
     await connection.query("DELETE FROM workflow_member WHERE workflowId=?", [workflowId]);
     await connection.query("UPDATE role_assignment SET revokedAt=NOW(),revokedByUserId=? WHERE scopeType='workflow' AND scopeId=? AND revokedAt IS NULL", [user.id, workflowId]);
     const [result] = await connection.query<mysql.ResultSetHeader>("DELETE FROM workflow WHERE id=?", [workflowId]);

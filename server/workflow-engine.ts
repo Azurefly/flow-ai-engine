@@ -3,6 +3,7 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import mysql from "mysql2/promise";
 import { invokeLLM, listLLMModels } from "./_core/llm";
+import { notifyOwner } from "./_core/notification";
 import type { Definition } from "./workflow-service";
 
 type JsonRecord = Record<string, unknown>;
@@ -10,6 +11,7 @@ type WorkflowUser = { id: number; role: "user" | "admin" };
 type WorkflowNode = Definition["nodes"][number];
 type WorkflowEdge = Definition["edges"][number];
 export type WorkflowRunDetail = { workflowId: string; nodeRuns: mysql.RowDataPacket[]; [key: string]: unknown };
+export type RunFilters = { status?: "queued" | "running" | "success" | "failed" | "cancelled"; from?: Date; to?: Date; triggeredByUserId?: number; limit?: number };
 
 const MAX_STEPS = 100;
 const MAX_HTTP_RESPONSE_BYTES = 1_000_000;
@@ -146,7 +148,51 @@ function compareCondition(left: unknown, operator: string, right: unknown) {
   }
 }
 
-async function executeNode(node: WorkflowNode, context: JsonRecord) {
+async function executeInlineDefinition(definition: Definition, input: JsonRecord) {
+  const context: JsonRecord = { input, vars: {}, nodes: {} };
+  const nodes = new Map(definition.nodes.map(node => [node.id, node]));
+  const startNode = definition.nodes.find(node => node.type === "start");
+  if (!startNode) throw new Error("子流程缺少开始节点。");
+  const queue = [startNode.id];
+  const executed = new Set<string>();
+  let finalOutput: unknown = null;
+  while (queue.length) {
+    if (executed.size >= MAX_STEPS) throw new Error("子流程执行超过最大节点步数。");
+    const nodeId = queue.shift()!;
+    if (executed.has(nodeId)) continue;
+    const node = nodes.get(nodeId);
+    if (!node) throw new Error(`子流程引用了不存在的节点：${nodeId}`);
+    if (node.type === "subflow") throw new Error("子流程不允许嵌套调用。");
+    executed.add(nodeId);
+    const result = await executeNode(node, context, false);
+    const vars = asRecord(context.vars);
+    const nodeOutputs = asRecord(context.nodes);
+    vars[node.id] = result.output;
+    nodeOutputs[node.id] = result.output;
+    context.vars = vars;
+    context.nodes = nodeOutputs;
+    if (node.type === "start") Object.assign(vars, asRecord(result.output));
+    if (node.type === "end") finalOutput = result.output;
+    definition.edges.filter(edge => edge.sourceNodeId === node.id && (!result.route || (edge.sourceHandle ?? "default") === result.route)).forEach(edge => queue.push(edge.targetNodeId));
+  }
+  return { output: finalOutput, context };
+}
+
+async function executeSubflowNode(config: JsonRecord, context: JsonRecord, ownerUserId: number) {
+  const resolved = asRecord(resolveTemplates(config, context));
+  const subflowId = String(resolved.subflowId ?? "").trim();
+  if (!subflowId) throw new Error("子流程节点缺少子流程标识。");
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,name,definitionJson,isEnabled FROM workflow_subflow WHERE id=? AND ownerUserId=? LIMIT 1", [subflowId, ownerUserId]);
+  const subflow = rows[0];
+  if (!subflow || !subflow.isEnabled) throw new Error("引用的子流程不存在或已停用。");
+  const definition = readJson(subflow.definitionJson) as Definition;
+  if (!definition?.nodes?.length) throw new Error("引用的子流程定义为空。");
+  const input = asRecord(resolved.input ?? context.input);
+  const result = await executeInlineDefinition(definition, input);
+  return { subflowId, subflowName: subflow.name, result: result.output };
+}
+
+async function executeNode(node: WorkflowNode, context: JsonRecord, allowSubflow = true, subflowOwnerUserId?: number) {
   const config = asRecord(node.config);
   switch (node.type) {
     case "start": return { output: asRecord(resolveTemplates(asRecord(config.initialVariables), context)) };
@@ -159,6 +205,11 @@ async function executeNode(node: WorkflowNode, context: JsonRecord) {
     }
     case "http": return { output: await executeHttpNode(config, context) };
     case "llm": return { output: await executeLlmNode(config, context) };
+    case "subflow": {
+      if (!allowSubflow) throw new Error("子流程不允许嵌套调用。");
+      if (!subflowOwnerUserId) throw new Error("子流程缺少流程所有者上下文。");
+      return { output: await executeSubflowNode(config, context, subflowOwnerUserId) };
+    }
     case "end": return { output: { result: resolveTemplates(config.resultTemplate ?? "{{vars}}", context) } };
     default: throw new Error(`不支持的节点类型：${node.type}`);
   }
@@ -174,8 +225,19 @@ async function finishNodeRun(nodeRunId: string, status: "success" | "failed" | "
   await db().query("UPDATE workflow_node_run SET status=?,outputJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [status, output === undefined ? null : JSON.stringify(output), error === undefined ? null : JSON.stringify(error), Date.now() - startedAt, nodeRunId]);
 }
 
+async function createFailureAlerts(input: { workflowId: string; workflowName: string; runId: string; ownerUserId: number; triggeredByUserId: number; details: JsonRecord }) {
+  const recipients = Array.from(new Set([input.ownerUserId, input.triggeredByUserId]));
+  if (recipients.length) {
+    await db().query(
+      "INSERT INTO workflow_run_alert (id,workflowId,runId,recipientUserId,severity,summary,detailsJson) VALUES ?",
+      [recipients.map(recipientUserId => [randomUUID(), input.workflowId, input.runId, recipientUserId, "critical", `流程“${input.workflowName}”运行失败`, JSON.stringify(input.details)])],
+    );
+  }
+  await notifyOwner({ title: "Flow AI Engine 运行失败", content: `流程：${input.workflowName}\n运行：${input.runId}\n原因：${String(input.details.message ?? "未知错误")}` }).catch(() => false);
+}
+
 export async function executeWorkflow(input: { workflowId: string; triggeredBy: WorkflowUser; workflowInput?: JsonRecord }) {
-  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,ownerUserId,definitionJson FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
+  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,ownerUserId,name,definitionJson FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
   const workflow = workflowRows[0];
   if (!workflow) throw new Error("流程不存在。");
   const definition = readJson(workflow.definitionJson) as Definition;
@@ -208,7 +270,7 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
       const nodeRunId = await insertNodeRun(runId, node, nodeInput);
       const startedAt = Date.now();
       try {
-        const result = await executeNode(node, context);
+        const result = await executeNode(node, context, true, Number(workflow.ownerUserId));
         const vars = asRecord(context.vars);
         const nodeOutputs = asRecord(context.nodes);
         vars[node.id] = result.output;
@@ -231,13 +293,52 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
   } catch (error) {
     const details = { message: error instanceof Error ? error.message : String(error) };
     await db().query("UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(details), Date.now() - runStartedAt, runId]);
+    try {
+      await createFailureAlerts({ workflowId: input.workflowId, workflowName: String(workflow.name), runId, ownerUserId: Number(workflow.ownerUserId), triggeredByUserId: input.triggeredBy.id, details });
+    } catch (alertError) {
+      console.error("[Workflow] Failed to persist run alert", alertError);
+    }
     throw error;
   }
 }
 
-export async function listWorkflowRuns(workflowId: string) {
-  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,workflowId,triggeredByUserId,triggerType,status,inputJson,finalOutputJson,errorJson,startedAt,finishedAt,durationMs,createdAt FROM workflow_run WHERE workflowId=? ORDER BY createdAt DESC LIMIT 100", [workflowId]);
+export async function listWorkflowRuns(workflowId: string, filters: RunFilters = {}) {
+  const limit = Math.min(Math.max(filters.limit ?? 100, 1), 200);
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT r.id,r.workflowId,r.triggeredByUserId,r.triggerType,r.status,r.inputJson,r.finalOutputJson,r.errorJson,r.startedAt,r.finishedAt,r.durationMs,r.createdAt,u.username,u.name AS triggeredByName
+       FROM workflow_run r LEFT JOIN users u ON u.id=r.triggeredByUserId
+      WHERE r.workflowId=? AND (? IS NULL OR r.status=?) AND (? IS NULL OR r.createdAt>=?) AND (? IS NULL OR r.createdAt<=?) AND (? IS NULL OR r.triggeredByUserId=?)
+      ORDER BY r.createdAt DESC LIMIT ?`,
+    [workflowId, filters.status ?? null, filters.status ?? null, filters.from ?? null, filters.from ?? null, filters.to ?? null, filters.to ?? null, filters.triggeredByUserId ?? null, filters.triggeredByUserId ?? null, limit],
+  );
   return rows;
+}
+
+export async function getWorkflowRunMetrics(workflowId: string, filters: Omit<RunFilters, "limit"> = {}) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT COUNT(*) AS totalRuns,COALESCE(SUM(status='success'),0) AS successfulRuns,COALESCE(SUM(status='failed'),0) AS failedRuns,COALESCE(ROUND(AVG(CASE WHEN status IN ('success','failed') THEN durationMs END)),0) AS averageDurationMs,COALESCE(MAX(durationMs),0) AS maxDurationMs
+       FROM workflow_run WHERE workflowId=? AND (? IS NULL OR status=?) AND (? IS NULL OR createdAt>=?) AND (? IS NULL OR createdAt<=?) AND (? IS NULL OR triggeredByUserId=?)`,
+    [workflowId, filters.status ?? null, filters.status ?? null, filters.from ?? null, filters.from ?? null, filters.to ?? null, filters.to ?? null, filters.triggeredByUserId ?? null, filters.triggeredByUserId ?? null],
+  );
+  const row = rows[0] ?? {};
+  const totalRuns = Number(row.totalRuns ?? 0);
+  const failedRuns = Number(row.failedRuns ?? 0);
+  return { totalRuns, successfulRuns: Number(row.successfulRuns ?? 0), failedRuns, averageDurationMs: Number(row.averageDurationMs ?? 0), maxDurationMs: Number(row.maxDurationMs ?? 0), failureRate: totalRuns ? Math.round((failedRuns / totalRuns) * 1000) / 10 : 0 };
+}
+
+export async function listRunAlerts(user: WorkflowUser) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT a.*,w.name AS workflowName,r.status AS runStatus,r.durationMs,r.finishedAt
+       FROM workflow_run_alert a JOIN workflow w ON w.id=a.workflowId JOIN workflow_run r ON r.id=a.runId
+      WHERE a.recipientUserId=? ORDER BY a.readAt IS NULL DESC,a.createdAt DESC LIMIT 100`,
+    [user.id],
+  );
+  return rows;
+}
+
+export async function markRunAlertRead(alertId: string, user: WorkflowUser) {
+  const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_run_alert SET readAt=COALESCE(readAt,NOW()) WHERE id=? AND recipientUserId=?", [alertId, user.id]);
+  return Boolean(result.affectedRows);
 }
 
 export async function getWorkflowRun(runId: string): Promise<WorkflowRunDetail | null> {
