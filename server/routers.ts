@@ -4,6 +4,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { createUser, ensureBootstrapAdmin, FLOW_SESSION_COOKIE, listUsers, login, logout, setUserStatus } from "./internal-auth";
+import { createWorkflow, getWorkflow, listWorkflows, updateWorkflow } from "./workflow-service";
 
 export const appRouter = router({
   system: systemRouter,
@@ -28,7 +29,11 @@ export const appRouter = router({
     updateUserStatus: adminProcedure.input(z.object({ userId: z.number().int().positive(), status: z.enum(["active", "disabled"]) })).mutation(async ({ input }) => { await setUserStatus(input.userId, input.status); return { success: true }; }),
   }),
   workflow: router({
-    list: protectedProcedure.query(() => [] as Array<never>),
+    list: protectedProcedure.query(({ ctx }) => listWorkflows(ctx.user.id)),
+    get: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).query(async ({ ctx, input }) => { const workflow = await getWorkflow(input.id, ctx.user.id); if (!workflow) throw new Error("流程不存在或无访问权限。"); return workflow; }),
+    create: protectedProcedure.input(z.object({ name: z.string().trim().min(1).max(160), description: z.string().max(1200).optional() })).mutation(async ({ ctx, input }) => createWorkflow(ctx.user.id, input.name, input.description)),
+    update: protectedProcedure.input(z.object({ id: z.string().min(8).max(64), name: z.string().trim().min(1).max(160).optional(), definition: z.unknown().optional() })).mutation(async ({ ctx, input }) => { const workflow = await updateWorkflow(input.id, ctx.user.id, input); if (!workflow) throw new Error("流程不存在或无访问权限。"); return workflow; }),
+    publish: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => { const workflow = await updateWorkflow(input.id, ctx.user.id, { publish: true }); if (!workflow) throw new Error("流程不存在或无访问权限。"); return workflow; }),
   }),
 });
 
