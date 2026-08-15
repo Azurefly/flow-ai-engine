@@ -60,7 +60,11 @@ export const appRouter = router({
     }),
     grantMember: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), userId: z.number().int().positive(), role: z.enum(["owner", "editor", "operator", "viewer"]), expiresAt: z.date().optional() })).mutation(async ({ ctx, input }) => {
       if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:members:manage"))) throw new Error("无权管理流程成员。");
-      await grantWorkflowMember({ ...input, grantedByUserId: ctx.user.id });
+      try {
+        await grantWorkflowMember({ ...input, grantedByUserId: ctx.user.id });
+      } catch (error) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: error instanceof Error ? error.message : "成员授权参数无效。" });
+      }
       return { success: true };
     }),
     revokeMember: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), userId: z.number().int().positive(), role: z.enum(["owner", "editor", "operator", "viewer"]) })).mutation(async ({ ctx, input }) => {
@@ -77,7 +81,7 @@ export const appRouter = router({
       if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程运行历史。");
       return listWorkflowRuns(input.workflowId);
     }),
-    runDetail: protectedProcedure.input(z.object({ runId: z.string().uuid() })).query(async ({ ctx, input }) => {
+    runDetail: protectedProcedure.input(z.object({ runId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
       const run = await getWorkflowRun(input.runId);
       if (!run || !(await hasWorkflowPermission(ctx.user, run.workflowId, "workflow:view"))) throw new Error("运行记录不存在或无访问权限。");
       return run;

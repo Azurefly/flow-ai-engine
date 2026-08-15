@@ -12,9 +12,19 @@ export const emptyDefinition = (): Definition => ({ schemaVersion: 1, viewport: 
 export function validate(definition: unknown, executable = false): Definition {
   const value = definition as Definition;
   if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) throw new Error("流程定义格式无效。");
+  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm"]);
+  for (const node of value.nodes) {
+    if (!node || typeof node.id !== "string" || !node.id.trim() || typeof node.name !== "string" || !nodeTypes.has(node.type)) throw new Error("流程节点格式或类型无效。");
+    if (!node.position || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) throw new Error("流程节点位置无效。");
+    if (!node.config || typeof node.config !== "object" || Array.isArray(node.config)) throw new Error("流程节点配置必须是 JSON 对象。");
+  }
   const starts = value.nodes.filter(node => node.type === "start"), ends = value.nodes.filter(node => node.type === "end");
   if (starts.length !== 1 || ends.length !== 1) throw new Error("流程必须且仅能包含一个开始节点和一个结束节点。");
   if (new Set(value.nodes.map(node => node.id)).size !== value.nodes.length) throw new Error("节点 ID 不可重复。");
+  const nodeIds = new Set(value.nodes.map(node => node.id));
+  for (const edge of value.edges) {
+    if (!edge || typeof edge.id !== "string" || !edge.id.trim() || !nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) throw new Error("流程连线引用了不存在的节点。");
+  }
   if (executable && !value.edges.some(edge => edge.sourceNodeId === starts[0].id)) throw new Error("开始节点必须连接后继节点。");
   return value;
 }

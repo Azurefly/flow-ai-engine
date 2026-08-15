@@ -15,6 +15,7 @@ let owner: any;
 let viewer: any;
 let outsider: any;
 let runId: string | undefined;
+let legacyRunId: string | undefined;
 
 const definition: Definition = {
   schemaVersion: 1,
@@ -39,9 +40,10 @@ function callerFor(user: any) {
 describe("工作流资源级运行权限", () => {
   afterAll(async () => {
     if (!pool) return;
-    if (runId) {
-      await pool.query("DELETE FROM workflow_node_run WHERE runId=?", [runId]);
-      await pool.query("DELETE FROM workflow_run WHERE id=?", [runId]);
+    const runIds = [runId, legacyRunId].filter(Boolean) as string[];
+    if (runIds.length) {
+      await pool.query("DELETE FROM workflow_node_run WHERE runId IN (?)", [runIds]);
+      await pool.query("DELETE FROM workflow_run WHERE id IN (?)", [runIds]);
     }
     await pool.query("DELETE FROM workflow_member WHERE workflowId=?", [workflowId]);
     await pool.query("DELETE FROM workflow WHERE id=?", [workflowId]);
@@ -66,6 +68,16 @@ describe("工作流资源级运行权限", () => {
     const viewerCaller = callerFor(viewer);
     const runs = await viewerCaller.workflow.runs({ workflowId });
     const detail = await viewerCaller.workflow.runDetail({ runId });
+    legacyRunId = `legacy-run-${randomUUID().slice(0, 8)}`;
+    await pool.query(
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,finalOutputJson,startedAt,finishedAt,durationMs,triggeredByUserId) VALUES (?,?,?,'manual','success',?,?,?,?,NOW(),NOW(),0,?)",
+      [legacyRunId, workflowId, owner.id, JSON.stringify(definition), JSON.stringify({ legacy: true }), JSON.stringify({}), JSON.stringify({ legacy: true }), owner.id],
+    );
+    await pool.query(
+      "INSERT INTO workflow_node_run (id,runId,nodeId,nodeType,nodeName,status,inputJson,outputJson,startedAt,finishedAt,durationMs) VALUES (?,?,?,'end','结束','success',?,?,NOW(),NOW(),0)",
+      [randomUUID(), legacyRunId, "end", JSON.stringify({}), JSON.stringify({ legacy: true })],
+    );
+    const legacyDetail = await viewerCaller.workflow.runDetail({ runId: legacyRunId });
     const outsiderCaller = callerFor(outsider);
 
     await expect(outsiderCaller.workflow.runs({ workflowId })).rejects.toThrow("无权查看流程运行历史");
@@ -73,6 +85,8 @@ describe("工作流资源级运行权限", () => {
     expect(result.status).toBe("success");
     expect(runs.some((run: any) => run.id === runId)).toBe(true);
     expect(detail.nodeRuns).toHaveLength(2);
+    expect(legacyDetail).toMatchObject({ id: legacyRunId, status: "success" });
+    expect(legacyDetail.nodeRuns).toHaveLength(1);
     const snapshot = typeof detail.authorizationSnapshotJson === "string" ? JSON.parse(detail.authorizationSnapshotJson) : detail.authorizationSnapshotJson;
     expect(snapshot).toMatchObject({ userId: owner.id, permission: "workflow:run" });
   }, 30_000);

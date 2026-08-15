@@ -140,7 +140,7 @@ export default function WorkflowCanvas({
   };
 
   return (
-    <div className="grid min-h-[650px] grid-cols-[1fr_320px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 bg-slate-50">
         <div className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
           {palette.map(item => (
@@ -150,7 +150,7 @@ export default function WorkflowCanvas({
           ))}
           {!readOnly && <span className="ml-auto flex items-center gap-1 text-xs text-slate-400"><Plus size={13} />拖入或添加节点</span>}
         </div>
-        <div className="h-[590px]">
+        <div className="h-[420px] sm:h-[590px]">
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -169,7 +169,7 @@ export default function WorkflowCanvas({
           </ReactFlow>
         </div>
       </section>
-      <aside className="border-l border-slate-200 bg-white p-5">
+      <aside className="border-t border-slate-200 bg-white p-4 lg:border-l lg:border-t-0 lg:p-5">
         <div className="flex items-center justify-between"><div><p className="text-[10px] font-bold tracking-[.2em] text-indigo-600">NODE INSPECTOR</p><h2 className="mt-1 text-sm font-semibold text-slate-900">节点配置</h2></div><Save size={16} className="text-slate-300" /></div>
         {selected ? <div className="mt-5 space-y-4">
           <label className="grid gap-1.5 text-xs font-medium text-slate-600">节点名称
