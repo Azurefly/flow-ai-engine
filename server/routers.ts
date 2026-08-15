@@ -1,28 +1,35 @@
-import { COOKIE_NAME } from "@shared/const";
+import { parse } from "cookie";
+import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { createUser, ensureBootstrapAdmin, FLOW_SESSION_COOKIE, listUsers, login, logout, setUserStatus } from "./internal-auth";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
-    logout: publicProcedure.mutation(({ ctx }) => {
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
-      return {
-        success: true,
-      } as const;
+    bootstrapStatus: publicProcedure.query(async () => { await ensureBootstrapAdmin(); return { configured: Boolean(process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME && process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD) }; }),
+    me: publicProcedure.query(async ({ ctx }) => { await ensureBootstrapAdmin(); return ctx.user; }),
+    login: publicProcedure.input(z.object({ username: z.string().trim().min(3).max(64), password: z.string().min(12).max(256) })).mutation(async ({ ctx, input }) => {
+      const result = await login(input.username, input.password, ctx.req.headers["user-agent"]);
+      if (!result) throw new Error("用户名或密码错误，或账号已停用。");
+      ctx.res.cookie(FLOW_SESSION_COOKIE, result.token, { ...getSessionCookieOptions(ctx.req), httpOnly: true, sameSite: "lax", maxAge: 7 * 24 * 60 * 60 * 1000 });
+      return result.user;
+    }),
+    logout: publicProcedure.mutation(async ({ ctx }) => {
+      await logout(parse(ctx.req.headers.cookie ?? "")[FLOW_SESSION_COOKIE]);
+      ctx.res.clearCookie(FLOW_SESSION_COOKIE, { ...getSessionCookieOptions(ctx.req), maxAge: -1 });
+      return { success: true } as const;
     }),
   }),
-
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  iam: router({
+    users: adminProcedure.query(() => listUsers()),
+    createUser: adminProcedure.input(z.object({ username: z.string().trim().min(3).max(64), password: z.string().min(12).max(256), name: z.string().trim().min(1).max(160), email: z.string().email().optional(), role: z.enum(["user", "admin"]).default("user") })).mutation(async ({ input }) => { await createUser(input); return { success: true }; }),
+    updateUserStatus: adminProcedure.input(z.object({ userId: z.number().int().positive(), status: z.enum(["active", "disabled"]) })).mutation(async ({ input }) => { await setUserStatus(input.userId, input.status); return { success: true }; }),
+  }),
+  workflow: router({
+    list: protectedProcedure.query(() => [] as Array<never>),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

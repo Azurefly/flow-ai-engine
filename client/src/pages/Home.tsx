@@ -1,33 +1,27 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { trpc } from "@/lib/trpc";
+import { Loader2, LogOut, ShieldCheck, UserPlus, UsersRound } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
 export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+  const utils = trpc.useUtils();
+  const me = trpc.auth.me.useQuery();
+  const [credentials, setCredentials] = useState({ username: "", password: "" });
+  const login = trpc.auth.login.useMutation({ onSuccess: () => { void utils.auth.me.invalidate(); toast.success("登录成功"); }, onError: error => toast.error(error.message) });
+  const logout = trpc.auth.logout.useMutation({ onSuccess: () => { void utils.auth.me.invalidate(); toast.success("已安全退出"); } });
+  if (me.isLoading) return <main className="min-h-screen grid place-items-center bg-slate-50 text-slate-500"><Loader2 className="animate-spin" />正在加载 Flow AI Engine</main>;
+  if (!me.data) return <main className="min-h-screen grid place-items-center bg-slate-50 p-5"><section className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50"><div className="mb-7"><div className="mb-4 inline-flex rounded-xl bg-blue-600 p-2 text-white"><ShieldCheck size={22} /></div><p className="text-xs font-bold tracking-[.18em] text-blue-600">FLOW AI ENGINE</p><h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-900">内部账号登录</h1><p className="mt-2 text-sm leading-6 text-slate-500">以内部 IAM 身份体系访问工作流、运行记录与协作权限。</p></div><form className="grid gap-4" onSubmit={event => { event.preventDefault(); login.mutate(credentials); }}><div className="grid gap-2"><Label htmlFor="signin-username">用户名</Label><Input id="signin-username" value={credentials.username} onChange={event => setCredentials({ ...credentials, username: event.target.value })} autoComplete="username" required /></div><div className="grid gap-2"><Label htmlFor="signin-password">密码</Label><Input id="signin-password" type="password" minLength={12} value={credentials.password} onChange={event => setCredentials({ ...credentials, password: event.target.value })} autoComplete="current-password" required /></div><Button type="submit" className="mt-2" disabled={login.isPending}>{login.isPending && <Loader2 className="animate-spin" />}登录并进入流程中心</Button></form><p className="mt-5 text-xs leading-5 text-slate-400">账号由管理员创建；系统不提供公开注册。</p></section></main>;
+  return <Dashboard user={me.data} onLogout={() => logout.mutate()} />;
+}
 
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
-
-  return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
-    </div>
-  );
+function Dashboard({ user, onLogout }: { user: { id: number; username: string | null; name: string | null; role: "user" | "admin" }; onLogout: () => void }) {
+  const utils = trpc.useUtils();
+  const users = trpc.iam.users.useQuery(undefined, { enabled: user.role === "admin", retry: false });
+  const [form, setForm] = useState({ username: "", name: "", password: "", email: "", role: "user" as "user" | "admin" });
+  const create = trpc.iam.createUser.useMutation({ onSuccess: () => { setForm({ username: "", name: "", password: "", email: "", role: "user" }); void utils.iam.users.invalidate(); toast.success("内部账号已创建"); }, onError: error => toast.error(error.message) });
+  const updateStatus = trpc.iam.updateUserStatus.useMutation({ onSuccess: () => void utils.iam.users.invalidate(), onError: error => toast.error(error.message) });
+  return <main className="min-h-screen bg-slate-50 text-slate-800"><header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4"><div><p className="text-xs font-bold tracking-[.16em] text-blue-600">FLOW AI ENGINE</p><h1 className="text-lg font-semibold">流程中心与身份权限</h1></div><div className="flex items-center gap-3"><div className="hidden text-right text-xs text-slate-500 sm:block"><strong className="block text-slate-700">{user.name ?? user.username}</strong>{user.role === "admin" ? "系统管理员" : "内部用户"}</div><Button variant="outline" size="sm" onClick={onLogout}><LogOut size={15} />退出</Button></div></div></header><div className="mx-auto grid max-w-6xl gap-6 px-6 py-8 lg:grid-cols-[1fr_1.4fr]"><section className="rounded-xl border border-slate-200 bg-white p-6"><div className="flex items-center gap-2"><ShieldCheck className="text-blue-600" /><h2 className="font-semibold">工作流能力正在恢复</h2></div><p className="mt-3 text-sm leading-6 text-slate-500">当前版本已恢复内部账号认证、密码保护会话和用户管理。下一步将恢复可视化流程设计、节点运行与角色授权的完整协作体验。</p><div className="mt-6 rounded-lg bg-blue-50 p-4 text-sm text-blue-800">当前登录身份：<strong>{user.username}</strong>；系统角色：<strong>{user.role}</strong></div></section>{user.role === "admin" && <section className="rounded-xl border border-slate-200 bg-white"><div className="border-b border-slate-100 p-6"><div className="flex items-center gap-2"><UserPlus className="text-blue-600" /><h2 className="font-semibold">创建内部账号</h2></div><form className="mt-5 grid gap-3 sm:grid-cols-2" onSubmit={event => { event.preventDefault(); create.mutate({ ...form, email: form.email || undefined }); }}><Input aria-label="用户名" placeholder="用户名" value={form.username} onChange={event => setForm({ ...form, username: event.target.value })} required /><Input aria-label="显示名称" placeholder="显示名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /><Input aria-label="初始密码" type="password" placeholder="至少 12 位密码" minLength={12} value={form.password} onChange={event => setForm({ ...form, password: event.target.value })} required /><select aria-label="系统角色" className="rounded-md border border-slate-200 bg-white px-3 text-sm" value={form.role} onChange={event => setForm({ ...form, role: event.target.value as "user" | "admin" })}><option value="user">内部用户</option><option value="admin">系统管理员</option></select><Button type="submit" className="sm:col-span-2" disabled={create.isPending}>创建账号</Button></form></div><div className="p-6"><div className="mb-3 flex items-center gap-2"><UsersRound size={17} className="text-slate-500" /><h2 className="font-semibold">内部用户</h2></div>{users.isLoading ? <Loader2 className="animate-spin" /> : <div className="space-y-2">{users.data?.map(item => <div className="flex items-center justify-between rounded-lg border border-slate-100 p-3" key={item.id}><div><strong className="block text-sm">{item.name ?? item.username}</strong><span className="text-xs text-slate-500">{item.username} · {item.role}</span></div><Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ userId: item.id, status: item.status === "active" ? "disabled" : "active" })}>{item.status === "active" ? "禁用" : "启用"}</Button></div>)}</div>}</div></section>}</div></main>;
 }
