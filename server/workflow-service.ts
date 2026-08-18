@@ -3,7 +3,7 @@ import mysql from "mysql2/promise";
 import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
 import { isProjectApprovalRequired } from "./p1-service";
 
-type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow" | "state" | "operate" | "router" | "rest" | "form" | "sql"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
+type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow" | "state" | "operate" | "router" | "rest" | "form" | "sql" | "source" | "table" | "filter" | "map" | "udf" | "sink" | "output" | "edit_sql"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
 export type Definition = { schemaVersion: 1; viewport: { x: number; y: number; zoom: number }; nodes: Node[]; edges: Edge[]; settings: Record<string, unknown> };
 const id = () => randomBytes(12).toString("base64url");
@@ -13,7 +13,7 @@ export const emptyDefinition = (): Definition => ({ schemaVersion: 1, viewport: 
 export function validate(definition: unknown, executable = false): Definition {
   const value = definition as Definition;
   if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) throw new Error("流程定义格式无效。");
-  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm", "subflow", "state", "operate", "router", "rest", "form", "sql"]);
+  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm", "subflow", "state", "operate", "router", "rest", "form", "sql", "source", "table", "filter", "map", "udf", "sink", "output", "edit_sql"]);
   for (const node of value.nodes) {
     if (!node || typeof node.id !== "string" || !node.id.trim() || typeof node.name !== "string" || !nodeTypes.has(node.type)) throw new Error("流程节点格式或类型无效。");
     if (!node.position || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) throw new Error("流程节点位置无效。");

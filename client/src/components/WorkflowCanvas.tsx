@@ -12,7 +12,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Braces, CircleDot, FileText, FolderTree, GitBranch, Globe2, Play, Plus, Save, Sparkles, Square, Trash2, Waypoints } from "lucide-react";
+import { Braces, CircleDot, Database, FileText, Filter, FolderTree, GitBranch, Globe2, Play, Plus, Save, Sigma, Sparkles, Square, Table2, Trash2, Waypoints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Definition } from "../../../server/workflow-service";
 
@@ -33,7 +33,14 @@ const palette: Array<{ type: NodeKind; label: string; description: string; icon:
   { type: "router", label: "路由", description: "原始控制流程分发节点", icon: Waypoints, color: "#7c3aed", flowTypes: ["control"], defaultConfig: { routes: [] } },
   { type: "rest", label: "REST", description: "原始流程 REST 调用节点", icon: Globe2, color: "#ea580c", flowTypes: ["control", "data"], defaultConfig: { method: "POST", endpoint: "" } },
   { type: "form", label: "表单", description: "流程实例表单与字段定义", icon: FileText, color: "#0f766e", flowTypes: ["state", "control"], defaultConfig: { fields: [] } },
-  { type: "sql", label: "SQL", description: "数据流程 SQL 节点（需数据源）", icon: Braces, color: "#475569", flowTypes: ["data"], defaultConfig: { datasourceId: "", statement: "SELECT 1" } },
+  { type: "source", label: "资源", description: "引用项目内已探查数据资源", icon: Database, color: "#0284c7", flowTypes: ["data"], defaultConfig: { assetId: "" } },
+  { type: "table", label: "中间表", description: "读取项目资源或中间数据集", icon: Table2, color: "#0f766e", flowTypes: ["data"], defaultConfig: { assetId: "" } },
+  { type: "filter", label: "筛选", description: "按字段和值安全筛选样本行", icon: Filter, color: "#8b5cf6", flowTypes: ["data"], defaultConfig: { filterField: "", filterValue: "" } },
+  { type: "map", label: "字段映射", description: "选择输出字段并限制行数", icon: Braces, color: "#0891b2", flowTypes: ["data"], defaultConfig: { columns: [], limit: 200 } },
+  { type: "edit_sql", label: "SQL", description: "仅允许单条只读 SELECT 计划", icon: Braces, color: "#475569", flowTypes: ["data"], defaultConfig: { sql: "SELECT * FROM source" } },
+  { type: "udf", label: "UDF", description: "引用经审核的项目函数元数据", icon: Sigma, color: "#b45309", flowTypes: ["data"], defaultConfig: { udfId: "" } },
+  { type: "sink", label: "输出", description: "将数据流结果输出到运行审计", icon: FileText, color: "#be123c", flowTypes: ["data"], defaultConfig: {} },
+  { type: "sql", label: "SQL", description: "数据流程 SQL 节点（需数据源）", icon: Braces, color: "#475569", flowTypes: ["data"], defaultConfig: { sql: "SELECT * FROM source" } },
   { type: "end", label: "结束", description: "输出最终结果", icon: Square, color: "#ef4444", flowTypes: ["state", "control", "data"], defaultConfig: { resultTemplate: "{{vars}}" } },
 ];
 
@@ -115,14 +122,20 @@ export default function WorkflowCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [configText, setConfigText] = useState("{}");
   const baseRef = useRef<Definition>(initial);
+  const appliedDefinitionRef = useRef("");
+  const appliedWorkflowRef = useRef<string | undefined>(undefined);
+  const definitionSignature = useMemo(() => JSON.stringify(definition ?? defaultDefinition()), [definition]);
 
   useEffect(() => {
+    if (appliedWorkflowRef.current === workflowId && appliedDefinitionRef.current === definitionSignature) return;
     const next = definition ?? defaultDefinition();
     baseRef.current = next;
+    appliedWorkflowRef.current = workflowId;
+    appliedDefinitionRef.current = definitionSignature;
     setNodes(toFlowNodes(next));
     setEdges(toFlowEdges(next));
     setSelectedId(null);
-  }, [workflowId, setEdges, setNodes]);
+  }, [definition, definitionSignature, workflowId, setEdges, setNodes]);
 
   useEffect(() => {
     if (onDefinitionChange) onDefinitionChange(toDefinition(nodes, edges, baseRef.current));

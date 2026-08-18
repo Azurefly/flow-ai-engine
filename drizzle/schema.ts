@@ -276,6 +276,137 @@ export const workDomains = mysqlTable(
   table => [index("work_domain_status_updated_idx").on(table.status, table.updatedAt)],
 );
 
+/** P2 project-scoped data-source metadata; credentials are referenced, never stored as plaintext. */
+export const dataSources = mysqlTable(
+  "data_source",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    sourceType: mysqlEnum("sourceType", ["jdbc", "api", "file", "inline"]).notNull(),
+    connectionJson: json("connectionJson").notNull(),
+    credentialRef: varchar("credentialRef", { length: 255 }),
+    status: mysqlEnum("status", ["draft", "verified", "disabled"]).default("draft").notNull(),
+    lastTestedAt: timestamp("lastTestedAt"),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("data_source_project_name_unique").on(table.projectId, table.name), index("data_source_project_updated_idx").on(table.projectId, table.updatedAt)],
+);
+
+/** Discoverable project resources derived from a source, such as tables, files, endpoints and views. */
+export const dataAssets = mysqlTable(
+  "data_asset",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    sourceId: varchar("sourceId", { length: 36 }).references(() => dataSources.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    assetType: mysqlEnum("assetType", ["table", "view", "file", "endpoint", "dataset"]).notNull(),
+    schemaJson: json("schemaJson").notNull(),
+    sampleJson: json("sampleJson"),
+    status: mysqlEnum("status", ["active", "disabled"]).default("active").notNull(),
+    discoveredAt: timestamp("discoveredAt").defaultNow().notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("data_asset_source_name_unique").on(table.sourceId, table.name), index("data_asset_project_updated_idx").on(table.projectId, table.updatedAt)],
+);
+
+/** Registered UDF metadata is project-scoped; execution remains subject to the dataflow sandbox policy. */
+export const dataUdfs = mysqlTable(
+  "data_udf",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    udfType: mysqlEnum("udfType", ["sql", "javascript", "python", "jar"]).notNull(),
+    description: text("description"),
+    paramsJson: json("paramsJson").notNull(),
+    returnType: varchar("returnType", { length: 160 }),
+    artifactRef: varchar("artifactRef", { length: 255 }),
+    status: mysqlEnum("status", ["draft", "approved", "disabled"]).default("draft").notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("data_udf_project_name_unique").on(table.projectId, table.name), index("data_udf_project_updated_idx").on(table.projectId, table.updatedAt)],
+);
+
+/** Project-owned taxonomy and plugin metadata are kept separate from workflow definitions. */
+export const dataTags = mysqlTable(
+  "data_tag",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    name: varchar("name", { length: 80 }).notNull(),
+    color: varchar("color", { length: 16 }).default("#2d6bea").notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [unique("data_tag_project_name_unique").on(table.projectId, table.name)],
+);
+
+export const projectPlugins = mysqlTable(
+  "project_plugin",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    name: varchar("name", { length: 160 }).notNull(),
+    pluginType: mysqlEnum("pluginType", ["transform", "connector", "visualization"]).notNull(),
+    version: varchar("version", { length: 64 }).notNull(),
+    configJson: json("configJson").notNull(),
+    status: mysqlEnum("status", ["enabled", "disabled"]).default("enabled").notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("project_plugin_project_name_unique").on(table.projectId, table.name), index("project_plugin_project_updated_idx").on(table.projectId, table.updatedAt)],
+);
+
+/** Immutable, project-scoped dataflow run audit separate from general workflow runs. */
+export const dataflowRuns = mysqlTable(
+  "dataflow_run",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    triggerType: mysqlEnum("triggerType", ["manual", "schedule"]).default("manual").notNull(),
+    status: mysqlEnum("status", ["queued", "running", "success", "failed", "cancelled"]).default("queued").notNull(),
+    definitionSnapshotJson: json("definitionSnapshotJson").notNull(),
+    inputJson: json("inputJson").notNull(),
+    outputJson: json("outputJson"),
+    errorJson: json("errorJson"),
+    startedAt: timestamp("startedAt"),
+    finishedAt: timestamp("finishedAt"),
+    durationMs: int("durationMs"),
+    triggeredByUserId: int("triggeredByUserId").references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [index("dataflow_run_project_created_idx").on(table.projectId, table.createdAt), index("dataflow_run_workflow_created_idx").on(table.workflowId, table.createdAt)],
+);
+
+/** One hosted schedule per dataflow; task UID is the only trusted callback lookup key. */
+export const dataflowSchedules = mysqlTable(
+  "dataflow_schedule",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    cronExpression: varchar("cronExpression", { length: 96 }).notNull(),
+    status: mysqlEnum("status", ["active", "paused", "deleted"]).default("paused").notNull(),
+    scheduleCronTaskUid: varchar("scheduleCronTaskUid", { length: 65 }),
+    lastTriggeredAt: timestamp("lastTriggeredAt"),
+    lastRunId: varchar("lastRunId", { length: 36 }).references(() => dataflowRuns.id),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("dataflow_schedule_workflow_unique").on(table.workflowId), unique("dataflow_schedule_task_uid_unique").on(table.scheduleCronTaskUid), index("dataflow_schedule_project_status_idx").on(table.projectId, table.status)],
+);
+
 /** Immutable definition snapshots created on every edit, publish, and rollback. */
 export const workflowVersions = mysqlTable(
   "workflow_version",
