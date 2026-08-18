@@ -15,6 +15,7 @@ export const ALL_PERMISSIONS = [...WORKFLOW_PERMISSIONS, ...SYSTEM_PERMISSIONS] 
 export type WorkflowPermission = (typeof WORKFLOW_PERMISSIONS)[number];
 export type PermissionCode = (typeof ALL_PERMISSIONS)[number];
 export type WorkflowMemberRole = "owner" | "editor" | "operator" | "viewer";
+type ProjectMemberRole = "owner" | "designer" | "operator" | "viewer";
 
 type CatalogRole = {
   code: string;
@@ -46,6 +47,13 @@ const permissionCatalog: Record<PermissionCode, { name: string; description: str
 const memberRolePermissions: Record<WorkflowMemberRole, readonly WorkflowPermission[]> = {
   owner: WORKFLOW_PERMISSIONS,
   editor: ["workflow:view", "workflow:edit"],
+  operator: ["workflow:view", "workflow:run"],
+  viewer: ["workflow:view"],
+};
+
+const projectMemberWorkflowPermissions: Record<ProjectMemberRole, readonly WorkflowPermission[]> = {
+  owner: WORKFLOW_PERMISSIONS,
+  designer: ["workflow:view", "workflow:edit", "workflow:publish"],
   operator: ["workflow:view", "workflow:run"],
   viewer: ["workflow:view"],
 };
@@ -138,11 +146,11 @@ export async function hasSystemPermission(user: { id: number; role: "user" | "ad
 
 export async function getWorkflowAccess(user: { id: number; role: "user" | "admin" }, workflowId: string) {
   await ensureIamCatalog();
-  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT ownerUserId FROM workflow WHERE id=? LIMIT 1", [workflowId]);
+  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT ownerUserId,projectId FROM workflow WHERE id=? LIMIT 1", [workflowId]);
   const workflow = workflowRows[0];
-  if (!workflow) return { exists: false, permissions: new Set<WorkflowPermission>(), memberRoles: [] as WorkflowMemberRole[] };
+  if (!workflow) return { exists: false, permissions: new Set<WorkflowPermission>(), memberRoles: [] as WorkflowMemberRole[], projectRoles: [] as ProjectMemberRole[] };
   if (user.role === "admin" || workflow.ownerUserId === user.id) {
-    return { exists: true, permissions: new Set<WorkflowPermission>(WORKFLOW_PERMISSIONS), memberRoles: ["owner"] as WorkflowMemberRole[] };
+    return { exists: true, permissions: new Set<WorkflowPermission>(WORKFLOW_PERMISSIONS), memberRoles: ["owner"] as WorkflowMemberRole[], projectRoles: [] as ProjectMemberRole[] };
   }
   const [memberRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT role FROM workflow_member
@@ -153,10 +161,19 @@ export async function getWorkflowAccess(user: { id: number; role: "user" | "admi
   const memberRoles = memberRows.map(row => row.role as WorkflowMemberRole);
   const permissions = new Set<WorkflowPermission>();
   memberRoles.forEach(role => memberRolePermissions[role]?.forEach(permission => permissions.add(permission)));
+  let projectRoles: ProjectMemberRole[] = [];
+  if (workflow.projectId) {
+    const [projectMemberRows] = await db().query<mysql.RowDataPacket[]>(
+      "SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())",
+      [workflow.projectId, user.id],
+    );
+    projectRoles = projectMemberRows.map(row => row.role as ProjectMemberRole);
+    projectRoles.forEach(role => projectMemberWorkflowPermissions[role]?.forEach(permission => permissions.add(permission)));
+  }
   for (const permission of Array.from(await assignedPermissions(user.id, workflowId))) {
     if (WORKFLOW_PERMISSIONS.includes(permission as WorkflowPermission)) permissions.add(permission as WorkflowPermission);
   }
-  return { exists: true, permissions, memberRoles };
+  return { exists: true, permissions, memberRoles, projectRoles };
 }
 
 export async function hasWorkflowPermission(user: { id: number; role: "user" | "admin" }, workflowId: string, permission: WorkflowPermission) {

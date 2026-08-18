@@ -5,6 +5,9 @@ const homeSource = readFileSync(new URL("../client/src/pages/Home.tsx", import.m
 const canvasSource = readFileSync(new URL("../client/src/components/WorkflowCanvas.tsx", import.meta.url), "utf8");
 const governanceSource = readFileSync(new URL("../client/src/components/WorkflowGovernance.tsx", import.meta.url), "utf8");
 const runCenterSource = readFileSync(new URL("../client/src/components/RunCenter.tsx", import.meta.url), "utf8");
+const projectWorkspaceSource = readFileSync(new URL("../client/src/components/ProjectWorkspace.tsx", import.meta.url), "utf8");
+const warehouseSource = readFileSync(new URL("../client/src/components/WorkflowWarehouse.tsx", import.meta.url), "utf8");
+const systemConfigSource = readFileSync(new URL("../client/src/components/SystemConfigShell.tsx", import.meta.url), "utf8");
 
 describe("流程设计器界面回归约束", () => {
   it("新建流程按钮提交表单，控制台壳层可在窄屏纵向收敛", () => {
@@ -41,5 +44,30 @@ describe("流程设计器界面回归约束", () => {
     expect(runCenterSource).toContain("flex flex-wrap items-center gap-2");
     expect(runCenterSource).toContain("sm:grid-cols-2 xl:grid-cols-5");
     expect(canvasSource).toContain("overflow-x-auto border-b");
+  });
+
+  it("保留原始四页签、项目工作区和独立系统配置入口", () => {
+    expect(homeSource).toContain('label: "已启动流程"');
+    expect(homeSource).toContain('label: "流程仓库"');
+    expect(homeSource).toContain('label: "系统配置"');
+    expect(projectWorkspaceSource).toContain("PROCESS DESIGN CENTER");
+    expect(projectWorkspaceSource).toContain("状态流程");
+    expect(projectWorkspaceSource).toContain("控制流程");
+    expect(projectWorkspaceSource).toContain("数据流程");
+    expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
+    expect(systemConfigSource).toContain("WORK DOMAIN");
+  });
+
+  it("保留树形仓库、只读画布预览、批量 JSON 导出和原始流程节点分类", () => {
+    expect(warehouseSource).toContain("PROCESS WAREHOUSE");
+    expect(warehouseSource).toContain("批量导出");
+    expect(warehouseSource).toContain("WorkflowCanvas");
+    expect(warehouseSource).toContain("FolderTree");
+    expect(canvasSource).toContain('type: "state"');
+    expect(canvasSource).toContain('type: "operate"');
+    expect(canvasSource).toContain('type: "router"');
+    expect(canvasSource).toContain('type: "rest"');
+    expect(canvasSource).toContain('type: "form"');
+    expect(canvasSource).toContain('type: "sql"');
   });
 });

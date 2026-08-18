@@ -196,6 +196,15 @@ async function executeNode(node: WorkflowNode, context: JsonRecord, allowSubflow
   const config = asRecord(node.config);
   switch (node.type) {
     case "start": return { output: asRecord(resolveTemplates(asRecord(config.initialVariables), context)) };
+    case "state": return { output: { stateCode: String(resolveTemplates(config.stateCode ?? "STATE", context)), displayName: String(resolveTemplates(config.displayName ?? node.name, context)) } };
+    case "form": return { output: { fields: resolveTemplates(Array.isArray(config.fields) ? config.fields : [], context), submitted: asRecord(context.input) } };
+    case "router": {
+      const route = interpolate(config.defaultRoute ?? "default", context);
+      return { output: { routes: resolveTemplates(Array.isArray(config.routes) ? config.routes : [], context), selectedRoute: route }, route };
+    }
+    case "rest": return { output: await executeHttpNode({ ...config, url: config.endpoint ?? config.url }, context) };
+    case "operate": throw new Error("操作节点需要 P1 人工任务工作台；当前运行已安全阻断，未执行任何外部操作。");
+    case "sql": throw new Error("SQL 节点需要 P2 数据源与查询策略；当前运行已安全阻断，未执行任何数据库语句。");
     case "transform": return { output: asRecord(resolveTemplates(asRecord(config.mappings ?? config.output), context)) };
     case "condition": {
       const left = interpolate(config.left, context);
@@ -237,9 +246,10 @@ async function createFailureAlerts(input: { workflowId: string; workflowName: st
 }
 
 export async function executeWorkflow(input: { workflowId: string; triggeredBy: WorkflowUser; workflowInput?: JsonRecord }) {
-  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,ownerUserId,name,definitionJson FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
+  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,ownerUserId,name,projectId,status,auditStatus,definitionJson FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
   const workflow = workflowRows[0];
   if (!workflow) throw new Error("流程不存在。");
+  if (workflow.projectId && (workflow.status !== "published" || workflow.auditStatus !== "approved")) throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
   const definition = readJson(workflow.definitionJson) as Definition;
   if (!definition?.nodes?.length) throw new Error("流程定义为空。");
 

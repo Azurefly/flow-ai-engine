@@ -94,20 +94,74 @@ export const roleAssignments = mysqlTable(
   table => [index("role_assignment_user_idx").on(table.userId)],
 );
 
+/** Original business/project workspace; project data is isolated from other tenants. */
+export const flowProjects = mysqlTable(
+  "flow_project",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    ownerUserId: int("ownerUserId").notNull().references(() => users.id),
+    code: varchar("code", { length: 64 }).notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: text("description"),
+    status: mysqlEnum("status", ["active", "archived"]).default("active").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("flow_project_owner_code_unique").on(table.ownerUserId, table.code), index("flow_project_owner_updated_idx").on(table.ownerUserId, table.updatedAt)],
+);
+
+/** Project roles mirror the original workspace boundary without weakening workflow-level IAM. */
+export const flowProjectMembers = mysqlTable(
+  "flow_project_member",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    userId: int("userId").notNull().references(() => users.id),
+    role: mysqlEnum("role", ["owner", "designer", "operator", "viewer"]).notNull(),
+    effectiveFrom: timestamp("effectiveFrom").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt"),
+    revokedAt: timestamp("revokedAt"),
+    grantedByUserId: int("grantedByUserId").references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [unique("flow_project_member_unique").on(table.projectId, table.userId, table.role), index("flow_project_member_user_idx").on(table.userId, table.projectId)],
+);
+
+/** Hierarchical warehouse folders used for readonly discovery and workflow placement. */
+export const workflowFolders = mysqlTable(
+  "workflow_folder",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
+    parentId: varchar("parentId", { length: 36 }),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: text("description"),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("workflow_folder_project_parent_name_unique").on(table.projectId, table.parentId, table.name), index("workflow_folder_project_idx").on(table.projectId, table.parentId)],
+);
+
 export const workflows = mysqlTable(
   "workflow",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
     ownerUserId: int("ownerUserId").notNull().references(() => users.id),
+    projectId: varchar("projectId", { length: 36 }).references(() => flowProjects.id),
+    folderId: varchar("folderId", { length: 36 }).references(() => workflowFolders.id),
     name: varchar("name", { length: 160 }).notNull(),
     description: text("description"),
+    flowType: mysqlEnum("flowType", ["state", "control", "data"]).default("state").notNull(),
+    auditStatus: mysqlEnum("auditStatus", ["init", "approved", "rejected"]).default("init").notNull(),
     status: mysqlEnum("status", ["draft", "published"]).default("draft").notNull(),
+    publishedAt: timestamp("publishedAt"),
     definitionVersion: int("definitionVersion").default(1).notNull(),
     definitionJson: json("definitionJson").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("workflow_owner_updated_idx").on(table.ownerUserId, table.updatedAt)],
+  table => [index("workflow_owner_updated_idx").on(table.ownerUserId, table.updatedAt), index("workflow_project_updated_idx").on(table.projectId, table.updatedAt), index("workflow_folder_idx").on(table.folderId)],
 );
 
 export const workflowMembers = mysqlTable(

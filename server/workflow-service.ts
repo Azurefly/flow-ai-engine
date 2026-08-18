@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
 
-type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
+type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow" | "state" | "operate" | "router" | "rest" | "form" | "sql"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
 export type Definition = { schemaVersion: 1; viewport: { x: number; y: number; zoom: number }; nodes: Node[]; edges: Edge[]; settings: Record<string, unknown> };
 const id = () => randomBytes(12).toString("base64url");
@@ -12,7 +12,7 @@ export const emptyDefinition = (): Definition => ({ schemaVersion: 1, viewport: 
 export function validate(definition: unknown, executable = false): Definition {
   const value = definition as Definition;
   if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) throw new Error("流程定义格式无效。");
-  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm", "subflow"]);
+  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm", "subflow", "state", "operate", "router", "rest", "form", "sql"]);
   for (const node of value.nodes) {
     if (!node || typeof node.id !== "string" || !node.id.trim() || typeof node.name !== "string" || !nodeTypes.has(node.type)) throw new Error("流程节点格式或类型无效。");
     if (!node.position || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) throw new Error("流程节点位置无效。");
@@ -70,12 +70,13 @@ export async function listWorkflows(user: WorkflowUser) {
       ? "SELECT DISTINCT w.* FROM workflow w ORDER BY w.updatedAt DESC"
       : `SELECT DISTINCT w.* FROM workflow w
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
+          LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
           LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
           LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
           LEFT JOIN permission p ON p.id=rp.permissionId
-         WHERE w.ownerUserId=? OR wm.id IS NOT NULL OR p.code='workflow:view'
+         WHERE w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.code='workflow:view'
          ORDER BY w.updatedAt DESC`,
-    user.role === "admin" ? [] : [user.id, user.id, user.id],
+    user.role === "admin" ? [] : [user.id, user.id, user.id, user.id],
   );
   return rows.map(hydrateWorkflow);
 }
@@ -91,14 +92,17 @@ export async function canCreateWorkflow(user: WorkflowUser) {
   return hasSystemPermission(user, "workflow:create");
 }
 
-export async function createWorkflow(user: WorkflowUser, name: string, description?: string) {
-  if (!(await canCreateWorkflow(user))) throw new Error("当前账号没有创建流程的权限。");
+export async function createWorkflow(user: WorkflowUser, name: string, description?: string, options?: { projectId?: string | null; folderId?: string | null; flowType?: "state" | "control" | "data"; auditStatus?: "init" | "approved" | "rejected"; projectCreationAuthorized?: boolean }) {
+  if (!options?.projectCreationAuthorized && !(await canCreateWorkflow(user))) throw new Error("当前账号没有创建流程的权限。");
   const workflowId = id();
   const definition = emptyDefinition();
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("INSERT INTO workflow (id,ownerUserId,name,description,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,'draft',1)", [workflowId, user.id, name, description ?? null, JSON.stringify(definition)]);
+    await connection.query(
+      "INSERT INTO workflow (id,ownerUserId,projectId,folderId,name,description,flowType,auditStatus,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,?,?,?,?,'draft',1)",
+      [workflowId, user.id, options?.projectId ?? null, options?.folderId ?? null, name, description ?? null, options?.flowType ?? "state", options?.auditStatus ?? "approved", JSON.stringify(definition)],
+    );
     await connection.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [randomBytes(18).toString("hex"), workflowId, user.id, user.id]);
     await insertVersion(connection, { workflowId, version: 1, name, status: "draft", definition, source: "created", actorUserId: user.id });
     await connection.commit();
@@ -118,17 +122,18 @@ export async function hasWorkflowPermission(user: WorkflowUser, workflowId: stri
 export async function updateWorkflow(workflowId: string, user: WorkflowUser, values: { name?: string; definition?: unknown; publish?: boolean }) {
   const permission: WorkflowPermission = values.publish ? "workflow:publish" : "workflow:edit";
   if (!(await hasWorkflowPermission(user, workflowId, permission))) return null;
-  const current = await getWorkflow(workflowId, user) as ({ ownerUserId: number; name: string; status: "draft" | "published"; definitionVersion: number; definition: Definition } | null);
+  const current = await getWorkflow(workflowId, user) as ({ ownerUserId: number; projectId?: string | null; auditStatus?: "init" | "approved" | "rejected"; name: string; status: "draft" | "published"; definitionVersion: number; definition: Definition } | null);
   if (!current) return null;
   const definition = values.definition === undefined ? current.definition : validate(values.definition, Boolean(values.publish));
   await assertSubflowOwnership(definition, user.id);
+  if (values.publish && current.projectId && current.auditStatus !== "approved") throw new Error("项目流程须通过审核后才能发布。");
   const nextName = values.name ?? current.name;
   const nextStatus = values.publish ? "published" : current.status;
   const nextVersion = Number(current.definitionVersion) + 1;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, workflowId]);
+    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedAt=CASE WHEN ? THEN NOW() ELSE publishedAt END, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, Boolean(values.publish), workflowId]);
     await insertVersion(connection, { workflowId, version: nextVersion, name: nextName, status: nextStatus, definition, source: values.publish ? "published" : "updated", actorUserId: user.id });
     await connection.commit();
   } catch (error) {

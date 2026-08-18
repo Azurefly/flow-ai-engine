@@ -12,7 +12,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Braces, FolderTree, GitBranch, Globe2, Play, Plus, Save, Sparkles, Square, Trash2 } from "lucide-react";
+import { Braces, CircleDot, FileText, FolderTree, GitBranch, Globe2, Play, Plus, Save, Sparkles, Square, Trash2, Waypoints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Definition } from "../../../server/workflow-service";
 
@@ -21,13 +21,20 @@ type NodeConfig = Record<string, unknown>;
 type ReuseTemplate = { id: string; name: string; nodeType: Exclude<NodeKind, "start" | "end" | "subflow">; config: NodeConfig };
 type ReuseSubflow = { id: string; name: string; isEnabled: boolean };
 
-const palette: Array<{ type: NodeKind; label: string; description: string; icon: typeof Play; color: string; defaultConfig: NodeConfig }> = [
-  { type: "start", label: "开始", description: "初始化输入变量", icon: Play, color: "#10b981", defaultConfig: { initialVariables: {} } },
-  { type: "llm", label: "LLM", description: "调用运行时模型目录", icon: Sparkles, color: "#4f46e5", defaultConfig: { systemPrompt: "你是一名严谨的工作流助手。", prompt: "{{input.prompt}}" } },
-  { type: "http", label: "HTTP", description: "受限的外部请求", icon: Globe2, color: "#d97706", defaultConfig: { method: "GET", url: "https://jsonplaceholder.typicode.com/todos/{{input.id}}" } },
-  { type: "transform", label: "转换", description: "字段映射与变量加工", icon: Braces, color: "#0891b2", defaultConfig: { mappings: {} } },
-  { type: "condition", label: "条件", description: "true / false 分支", icon: GitBranch, color: "#8b5cf6", defaultConfig: { left: "{{input.value}}", operator: "equals", right: true, trueHandle: "true", falseHandle: "false" } },
-  { type: "end", label: "结束", description: "输出最终结果", icon: Square, color: "#ef4444", defaultConfig: { resultTemplate: "{{vars}}" } },
+type FlowType = "state" | "control" | "data";
+const palette: Array<{ type: NodeKind; label: string; description: string; icon: typeof Play; color: string; flowTypes: FlowType[]; defaultConfig: NodeConfig }> = [
+  { type: "start", label: "开始", description: "初始化输入变量", icon: Play, color: "#10b981", flowTypes: ["state", "control", "data"], defaultConfig: { initialVariables: {} } },
+  { type: "llm", label: "LLM", description: "调用运行时模型目录", icon: Sparkles, color: "#4f46e5", flowTypes: ["state", "control", "data"], defaultConfig: { systemPrompt: "你是一名严谨的工作流助手。", prompt: "{{input.prompt}}" } },
+  { type: "http", label: "HTTP", description: "受限的外部请求", icon: Globe2, color: "#d97706", flowTypes: ["state", "control", "data"], defaultConfig: { method: "GET", url: "https://jsonplaceholder.typicode.com/todos/{{input.id}}" } },
+  { type: "transform", label: "转换", description: "字段映射与变量加工", icon: Braces, color: "#0891b2", flowTypes: ["state", "control", "data"], defaultConfig: { mappings: {} } },
+  { type: "condition", label: "条件", description: "true / false 分支", icon: GitBranch, color: "#8b5cf6", flowTypes: ["state", "control", "data"], defaultConfig: { left: "{{input.value}}", operator: "equals", right: true, trueHandle: "true", falseHandle: "false" } },
+  { type: "state", label: "状态", description: "原始状态流程的状态节点", icon: CircleDot, color: "#2563eb", flowTypes: ["state", "control"], defaultConfig: { stateCode: "STATE_CODE", displayName: "业务状态" } },
+  { type: "operate", label: "操作", description: "人工或系统操作命令", icon: Play, color: "#db2777", flowTypes: ["state", "control"], defaultConfig: { commandCode: "COMMAND_CODE", assigneeMode: "role" } },
+  { type: "router", label: "路由", description: "原始控制流程分发节点", icon: Waypoints, color: "#7c3aed", flowTypes: ["control"], defaultConfig: { routes: [] } },
+  { type: "rest", label: "REST", description: "原始流程 REST 调用节点", icon: Globe2, color: "#ea580c", flowTypes: ["control", "data"], defaultConfig: { method: "POST", endpoint: "" } },
+  { type: "form", label: "表单", description: "流程实例表单与字段定义", icon: FileText, color: "#0f766e", flowTypes: ["state", "control"], defaultConfig: { fields: [] } },
+  { type: "sql", label: "SQL", description: "数据流程 SQL 节点（需数据源）", icon: Braces, color: "#475569", flowTypes: ["data"], defaultConfig: { datasourceId: "", statement: "SELECT 1" } },
+  { type: "end", label: "结束", description: "输出最终结果", icon: Square, color: "#ef4444", flowTypes: ["state", "control", "data"], defaultConfig: { resultTemplate: "{{vars}}" } },
 ];
 
 function defaultDefinition(): Definition {
@@ -77,6 +84,7 @@ function toDefinition(nodes: Node[], edges: Edge[], base: Definition): Definitio
 
 export default function WorkflowCanvas({
   workflowId,
+  flowType = "state",
   definition,
   readOnly = false,
   onDefinitionChange,
@@ -89,6 +97,7 @@ export default function WorkflowCanvas({
   onDeleteSubflow,
 }: {
   workflowId?: string;
+  flowType?: FlowType;
   definition?: Definition | null;
   readOnly?: boolean;
   onDefinitionChange?: (definition: Definition) => void;
@@ -172,7 +181,7 @@ export default function WorkflowCanvas({
     <div className="grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_320px]">
       <section className="min-w-0 bg-slate-50">
         <div className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
-          {palette.map(item => (
+          {palette.filter(item => item.flowTypes.includes(flowType)).map(item => (
             <Button key={item.type} type="button" variant="ghost" size="sm" className="gap-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950" disabled={readOnly} onClick={() => addNode(item)} title={item.description}>
               <item.icon size={14} color={item.color} />{item.label}
             </Button>
