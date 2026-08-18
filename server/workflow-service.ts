@@ -2,8 +2,9 @@ import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
 import { isProjectApprovalRequired } from "./p1-service";
+import { FLOW_NODE_TYPES, isFlowNodeType, type FlowNodeType, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
 
-type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow" | "state" | "operate" | "router" | "rest" | "form" | "sql" | "source" | "table" | "filter" | "map" | "udf" | "sink" | "output" | "edit_sql"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
+type Node = { id: string; type: FlowNodeType; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
 export type Definition = { schemaVersion: 1; viewport: { x: number; y: number; zoom: number }; nodes: Node[]; edges: Edge[]; settings: Record<string, unknown> };
 const id = () => randomBytes(12).toString("base64url");
@@ -13,12 +14,13 @@ export const emptyDefinition = (): Definition => ({ schemaVersion: 1, viewport: 
 export function validate(definition: unknown, executable = false): Definition {
   const value = definition as Definition;
   if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) throw new Error("流程定义格式无效。");
-  const nodeTypes = new Set(["start", "end", "transform", "condition", "http", "llm", "subflow", "state", "operate", "router", "rest", "form", "sql", "source", "table", "filter", "map", "udf", "sink", "output", "edit_sql"]);
   for (const node of value.nodes) {
-    if (!node || typeof node.id !== "string" || !node.id.trim() || typeof node.name !== "string" || !nodeTypes.has(node.type)) throw new Error("流程节点格式或类型无效。");
+    if (!node || typeof node.id !== "string" || !node.id.trim() || typeof node.name !== "string" || !isFlowNodeType(node.type)) throw new Error("流程节点格式或类型无效。");
     if (!node.position || !Number.isFinite(node.position.x) || !Number.isFinite(node.position.y)) throw new Error("流程节点位置无效。");
     if (!node.config || typeof node.config !== "object" || Array.isArray(node.config)) throw new Error("流程节点配置必须是 JSON 对象。");
-    if (node.type === "subflow" && (typeof node.config.subflowId !== "string" || !node.config.subflowId.trim())) throw new Error("子流程节点必须选择有效的子流程。");
+    // 原始画布以红/蓝/绿表示未完整配置、配置中和已配置；草稿必须可保存，
+    // 仅在发布或创建可执行子流程时阻断缺少执行必需字段的定义。
+    if (executable) validateNodeConfig(node.type, withNodeConfigDefaults(node.type, node.config));
   }
   const starts = value.nodes.filter(node => node.type === "start"), ends = value.nodes.filter(node => node.type === "end");
   if (starts.length !== 1 || ends.length !== 1) throw new Error("流程必须且仅能包含一个开始节点和一个结束节点。");

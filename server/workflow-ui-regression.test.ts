@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const homeSource = readFileSync(new URL("../client/src/pages/Home.tsx", import.meta.url), "utf8");
 const canvasSource = readFileSync(new URL("../client/src/components/WorkflowCanvas.tsx", import.meta.url), "utf8");
+const nodeContractSource = readFileSync(new URL("../shared/workflow-node-contract.ts", import.meta.url), "utf8");
 const governanceSource = readFileSync(new URL("../client/src/components/WorkflowGovernance.tsx", import.meta.url), "utf8");
 const runCenterSource = readFileSync(new URL("../client/src/components/RunCenter.tsx", import.meta.url), "utf8");
 const projectWorkspaceSource = readFileSync(new URL("../client/src/components/ProjectWorkspace.tsx", import.meta.url), "utf8");
@@ -19,7 +20,7 @@ describe("流程设计器界面回归约束", () => {
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain('grid-cols-1');
     expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_320px]');
-    expect(canvasSource).toContain('border-t border-slate-200 bg-white p-4 lg:border-l lg:border-t-0');
+    expect(canvasSource).toContain('border-t border-slate-200 bg-white lg:border-l lg:border-t-0');
   });
 
   it("保留版本差异与可审计回滚入口", () => {
@@ -63,11 +64,26 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("批量导出");
     expect(warehouseSource).toContain("WorkflowCanvas");
     expect(warehouseSource).toContain("FolderTree");
-    expect(canvasSource).toContain('type: "state"');
-    expect(canvasSource).toContain('type: "operate"');
-    expect(canvasSource).toContain('type: "router"');
-    expect(canvasSource).toContain('type: "rest"');
-    expect(canvasSource).toContain('type: "form"');
-    expect(canvasSource).toContain('type: "sql"');
+    expect(nodeContractSource).toContain('type: "state"');
+    expect(nodeContractSource).toContain('type: "operate"');
+    expect(nodeContractSource).toContain('type: "router"');
+    expect(nodeContractSource).toContain('type: "rest"');
+    expect(nodeContractSource).toContain('type: "form"');
+    expect(nodeContractSource).toContain('type: "sql"');
+  });
+
+  it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {
+    expect(canvasSource).toContain("整理画布");
+    expect(canvasSource).toContain("保存为图片");
+    expect(canvasSource).toContain("全屏展示");
+    expect(canvasSource).toContain("取消高亮");
+    expect(canvasSource).toContain("未完全配置");
+    expect(canvasSource).toContain("配置中");
+    expect(canvasSource).toContain("已配置");
+    expect(canvasSource).toContain("画布移动");
+    expect(canvasSource).toContain("节点框选");
+    expect(canvasSource).toContain("暂无配置信息");
+    expect(canvasSource).toContain("高级 JSON 配置（保留扩展字段）");
+    expect(canvasSource).toContain("LockKeyhole");
   });
 });

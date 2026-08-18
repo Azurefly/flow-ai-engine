@@ -1,0 +1,77 @@
+===== businessOverview.html =====
+8:    <title>项目概览</title>
+25:            <div class="nav-close-open">
+30:                <span>返回业务中心</span>
+37:            <div class="left-nav-light">
+44:                                    <a role="button" left-nav-type='ywgl'>
+45:                                        <img src="../assets/images/ywgl.png" alt=""> <span>业务概览</span>
+54:                                    <a role="button" left-nav-type='lcsjzx'>
+55:                                        <img src="../assets/images/lcsjzx.png" alt=""> <span>流程设计中心</span>
+64:                                    <a role="button" left-nav-type='qxpzzx'>
+65:                                        <img src="../assets/images/qxpzzx.png" alt=""> <span>权限配置中心</span>
+74:                                        <li class="list-group-item" data-navtype="roleManagement">流程角色管理</li>
+83:<!--                                    <a role="button" left-nav-type='zypzzx'>-->
+84:<!--                                        <img src="../assets/images/zypzzx.png" alt=""> <span>资源配置中心</span>-->
+103:                                    <a role="button" left-nav-type='bqzx'>
+104:                                        <img src="../assets/images/bqzx.png" alt="" style="width: 25px;padding: 6px;"> <span>标签中心</span>
+===== processWarehouse.html =====
+8:    <title>流程仓库</title>
+24:        <div class="top-title" style="position: relative;">流程列表
+30:                    <span class="input-prefix">
+33:                    <input id="resourcesSearchInput" type="text" class="form-control" placeholder="请输入搜索内容"
+38:                    <button class="btn btn-primary dropdown-toggle" type="button" id="dropdownMenu4"
+43:                        <!--<span class="dropdown-icon caret"></span>-->
+67:            <span>流程简介</span>
+68:            <!--<button type="button" class="btn btn-primary processExport hide">-->
+70:            <!--流程导出1-->
+72:            <span class="edit-introduction hide">
+82:                    <span class="noData-text">没有搜到任何数据</span>
+87:                    <span>流程图</span>
+===== process_detail.html =====
+8:    <title>流程详情</title>
+22:        <div class="title-head"><img src="../assets/images/u515.png" alt="">流程引导</div>
+28:            <button type="button" class="btn btn-default editModuleBtn">
+29:                <span class="aidicon aidicon-lead-pencil margin-right-small-3"></span>编辑
+36:            <img src="../assets/images/u515.png" alt="">流程图
+37:            <button type="button" class="btn btn-primary btn-sm viewConfig"
+38:                style="position: absolute;left: 100px;">查看详细配置</button>
+39:            <button type="button" class="btn btn-primary btn-sm hide issueBtn">取消发布</button>
+43:                <span>画布</span>
+62:            <img src="../assets/images/u515.png" alt="">已启动流程列表
+64:                <span class="input-prefix" style="left: 280px;">
+67:                <input type="text" class="form-control startedProcessListInputSearch" placeholder="请输入关键词按Enter键搜索"
+77:                        <th>已启动流程ID</th>
+78:                        <th>业务名称</th>
+79:                        <th>流程名称</th>
+80:                        <th>发送方</th>
+81:                        <th>创建时间</th>
+82:                        <th>更新时间</th>
+83:                        <th>状态</th>
+84:                        <th>流程状态</th>
+85:                        <th>操作</th>
+===== dataflow_process_detail.html =====
+8:    <title>流程详情</title>
+19:        <div class="title-head"><img src="../assets/images/u515.png" alt="">流程引导</div>
+25:            <button type="button" class="btn btn-default editModuleBtn">
+26:                <span class="aidicon aidicon-lead-pencil margin-right-small-3"></span>编辑
+33:            <img src="../assets/images/u515.png" alt="">流程图
+34:            <button type="button" class="btn btn-primary btn-sm viewConfig"
+35:                style="position: absolute;left: 100px;">查看详细配置</button>
+36:            <button type="button" class="btn btn-primary btn-sm hide issueBtn">取消发布</button>
+40:                <span>画布</span>
+59:            <img src="../assets/images/u515.png" alt="">已操作流程列表
+61:                <span class="input-prefix" style="left: 280px;">
+64:                <input type="text" class="form-control startedProcessListInputSearch" placeholder="请输入关键词按Enter键搜索"
+74:                        <th>操作ID</th>
+75:                        <th>业务名称</th>
+76:                        <th>流程名称</th>
+77:                        <th>启动时间</th>
+78:                        <th>手动停止时间</th>
+79:                        <th>操作</th>
+===== system_config.html =====
+8:    <title>系统配置</title>
+21:            <div class="nav-close-open">
+24:            <ul class="nav-list">
+30:                <div class="nav-card-tabs-wrapper">
+31:                    <ul class="nav nav-card-tabs">
+39:                    <div class="tab-content nav-content">

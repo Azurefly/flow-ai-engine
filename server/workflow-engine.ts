@@ -102,7 +102,9 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   const serializedBody = body === undefined || body === null ? undefined : typeof body === "string" ? body : JSON.stringify(body);
   if (serializedBody && !Object.keys(safeHeaders).some(key => key.toLowerCase() === "content-type")) safeHeaders["content-type"] = "application/json";
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+  const configuredTimeout = typeof resolved.timeout === "number" && Number.isFinite(resolved.timeout) ? resolved.timeout : HTTP_TIMEOUT_MS;
+  const timeoutMs = Math.min(Math.max(Math.floor(configuredTimeout), 1_000), HTTP_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { method, headers: safeHeaders, body: ["GET", "DELETE"].includes(method) ? undefined : serializedBody, redirect: "error", signal: controller.signal });
     const contentLength = Number(response.headers.get("content-length") ?? "0");
@@ -146,6 +148,19 @@ function compareCondition(left: unknown, operator: string, right: unknown) {
     case "lessThan": return Number(left) < Number(right);
     default: throw new Error(`条件节点不支持操作符：${operator}`);
   }
+}
+
+/** 选择第一个命中的路由规则；未命中时使用配置的默认连线句柄。 */
+export function selectRouterRoute(config: JsonRecord, context: JsonRecord) {
+  const resolved = asRecord(resolveTemplates(config, context));
+  const routes = Array.isArray(resolved.routes) ? resolved.routes.map(route => asRecord(route)) : [];
+  const matched = routes.find(route => {
+    const condition = asRecord(route.condition);
+    if (!Object.keys(condition).length) return false;
+    return compareCondition(interpolate(condition.left, context), String(condition.operator ?? "equals"), interpolate(condition.right, context));
+  });
+  const handle = matched?.handle ?? interpolate(resolved.defaultRoute ?? "default", context);
+  return { routes, selectedRoute: String(handle) };
 }
 
 async function executeInlineDefinition(definition: Definition, input: JsonRecord) {
@@ -196,11 +211,11 @@ async function executeNode(node: WorkflowNode, context: JsonRecord, allowSubflow
   const config = asRecord(node.config);
   switch (node.type) {
     case "start": return { output: asRecord(resolveTemplates(asRecord(config.initialVariables), context)) };
-    case "state": return { output: { stateCode: String(resolveTemplates(config.stateCode ?? "STATE", context)), displayName: String(resolveTemplates(config.displayName ?? node.name, context)) } };
+    case "state": return { output: { stateCode: String(resolveTemplates(config.stateCode ?? "STATE", context)), displayName: String(resolveTemplates(config.displayName ?? node.name, context)), stateType: String(resolveTemplates(config.stateType ?? "business", context)) } };
     case "form": return { output: { fields: resolveTemplates(Array.isArray(config.fields) ? config.fields : [], context), submitted: asRecord(context.input) } };
     case "router": {
-      const route = interpolate(config.defaultRoute ?? "default", context);
-      return { output: { routes: resolveTemplates(Array.isArray(config.routes) ? config.routes : [], context), selectedRoute: route }, route };
+      const result = selectRouterRoute(config, context);
+      return { output: result, route: result.selectedRoute };
     }
     case "rest": return { output: await executeHttpNode({ ...config, url: config.endpoint ?? config.url }, context) };
     case "operate": throw new Error("操作节点需要 P1 人工任务工作台；当前运行已安全阻断，未执行任何外部操作。");
@@ -252,20 +267,22 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
   if (workflow.projectId && (workflow.status !== "published" || workflow.auditStatus !== "approved")) throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
   const definition = readJson(workflow.definitionJson) as Definition;
   if (!definition?.nodes?.length) throw new Error("流程定义为空。");
+  // 对持久化快照再次做可执行校验，防止历史草稿或直接写库绕过发布时的字段约束。
+  const executableDefinition = (await import("./workflow-service")).validate(definition, true);
 
   const runId = randomUUID();
-  const context: JsonRecord = { input: input.workflowInput ?? {}, vars: {}, nodes: {} };
+  const context: JsonRecord = { input: input.workflowInput ?? {}, vars: {}, nodes: {}, runtime: { triggeredByUserId: input.triggeredBy.id } };
   const authorizationSnapshot = { userId: input.triggeredBy.id, userRole: input.triggeredBy.role, permission: "workflow:run", authorizedAt: new Date().toISOString() };
   await db().query(
     "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,startedAt) VALUES (?,?,?,?,?,'running',?,?,?,?,NOW())",
-    [runId, input.workflowId, workflow.ownerUserId, input.triggeredBy.id, "manual", JSON.stringify(definition), JSON.stringify(input.workflowInput ?? {}), JSON.stringify(context), JSON.stringify(authorizationSnapshot)],
+    [runId, input.workflowId, workflow.ownerUserId, input.triggeredBy.id, "manual", JSON.stringify(executableDefinition), JSON.stringify(input.workflowInput ?? {}), JSON.stringify(context), JSON.stringify(authorizationSnapshot)],
   );
 
-  const startNode = definition.nodes.find(node => node.type === "start");
+  const startNode = executableDefinition.nodes.find(node => node.type === "start");
   if (!startNode) throw new Error("流程缺少开始节点。");
   const runStartedAt = Date.now();
   try {
-    const segment = await executeRunSegment({ runId, workflow, definition, context, queue: [startNode.id] });
+    const segment = await executeRunSegment({ runId, workflow, definition: executableDefinition, context, queue: [startNode.id] });
     if (segment.status === "waiting") return { runId, status: "waiting" as const, taskId: segment.taskId };
     await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - runStartedAt, runId]);
     return { runId, status: "success" as const, output: segment.output };
@@ -301,8 +318,15 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
     try {
       if (node.type === "operate") {
         const config = asRecord(resolveTemplates(node.config, input.context));
+        // 旧版节点只有 assigneeUserId；未显式声明 assigneeMode 时继续按指定用户处理。
+        const assigneeMode = String(config.assigneeMode ?? (config.assigneeUserId ? "user" : "none"));
         const requestedAssignee = Number(config.assigneeUserId);
-        const assignedUserId = Number.isInteger(requestedAssignee) && requestedAssignee > 0 ? requestedAssignee : null;
+        const runtime = asRecord(input.context.runtime);
+        const assignedUserId = assigneeMode === "user" && Number.isInteger(requestedAssignee) && requestedAssignee > 0
+          ? requestedAssignee
+          : assigneeMode === "initiator" && Number.isInteger(Number(runtime.triggeredByUserId)) && Number(runtime.triggeredByUserId) > 0
+            ? Number(runtime.triggeredByUserId)
+            : null;
         if (assignedUserId) {
           const [users] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE id=? AND status='active' LIMIT 1", [assignedUserId]);
           if (!users[0]) throw new Error("操作节点指定的处理人不存在或已停用。");

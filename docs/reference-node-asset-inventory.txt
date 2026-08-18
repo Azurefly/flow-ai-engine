@@ -1,0 +1,3 @@
+backend-history/platform/bin/startup.sh
+backend/src/main/resources/static/assets/js/processDesign/processDesignCenter.js
+backend/src/main/resources/static/views/dataFlowCanvas.html
