@@ -43,6 +43,13 @@
       "when": 1787036012279,
       "tag": "0005_rich_alex_power",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1787062036457,
+      "tag": "0006_thankful_ben_grimm",
+      "breakpoints": true
     }
   ]
 }

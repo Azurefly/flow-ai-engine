@@ -253,14 +253,14 @@ async function runDataflowDefinition(projectId: string, definition: any) {
   return { terminals: terminal, nodes: executed };
 }
 
-export async function runDataflow(user: DataflowUser, input: { projectId: string; workflowId: string; data?: JsonRecord; triggerType?: "manual" | "schedule" }) {
+export async function runDataflow(user: DataflowUser, input: { projectId: string; workflowId: string; data?: JsonRecord; triggerType?: "manual" | "schedule"; scheduleBucket?: string }) {
   await requireProjectAccess(user, input.projectId, input.triggerType === "schedule" ? "edit" : "run");
   const [workflows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND status='published' LIMIT 1", [input.workflowId, input.projectId]);
   const workflow = workflows[0];
   if (!workflow) throw new Error("数据流不存在、未发布或不属于当前项目。 ");
   const runId = id();
   const definition = parseJson(workflow.definitionJson, { nodes: [], edges: [] });
-  await db().query("INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,status,definitionSnapshotJson,inputJson,startedAt,triggeredByUserId) VALUES (?,?,?,?, 'running',?,?,NOW(),?)", [runId, input.projectId, input.workflowId, input.triggerType ?? "manual", JSON.stringify(definition), JSON.stringify(input.data ?? {}), user.id]);
+  await db().query("INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,inputJson,startedAt,triggeredByUserId) VALUES (?,?,?,?,?, 'running',?,?,NOW(),?)", [runId, input.projectId, input.workflowId, input.triggerType ?? "manual", input.scheduleBucket ?? null, JSON.stringify(definition), JSON.stringify(input.data ?? {}), user.id]);
   const started = Date.now();
   try {
     const output = await runDataflowDefinition(input.projectId, definition);
@@ -380,7 +380,17 @@ export async function handleDataflowScheduleCallback(req: Request, res: Response
     );
     const schedule = rows[0];
     if (!schedule) return res.json({ ok: true, skipped: "orphan_or_paused" });
-    const result = await runDataflow({ id: Number(schedule.ownerUserId), role: schedule.ownerRole === "admin" ? "admin" : "user" }, { projectId: String(schedule.projectId), workflowId: String(schedule.workflowId), triggerType: "schedule" });
+    const scheduleBucket = `${cronUser.taskUid}:${new Date().toISOString().slice(0, 16)}`;
+    const [existingRuns] = await db().query<mysql.RowDataPacket[]>("SELECT id,status FROM dataflow_run WHERE workflowId=? AND scheduleBucket=? LIMIT 1", [schedule.workflowId, scheduleBucket]);
+    if (existingRuns[0]) return res.json({ ok: true, duplicate: true, runId: existingRuns[0].id, status: existingRuns[0].status });
+    let result;
+    try {
+      result = await runDataflow({ id: Number(schedule.ownerUserId), role: schedule.ownerRole === "admin" ? "admin" : "user" }, { projectId: String(schedule.projectId), workflowId: String(schedule.workflowId), triggerType: "schedule", scheduleBucket });
+    } catch (error) {
+      const [concurrentRuns] = await db().query<mysql.RowDataPacket[]>("SELECT id,status FROM dataflow_run WHERE workflowId=? AND scheduleBucket=? LIMIT 1", [schedule.workflowId, scheduleBucket]);
+      if (concurrentRuns[0]) return res.json({ ok: true, duplicate: true, runId: concurrentRuns[0].id, status: concurrentRuns[0].status });
+      throw error;
+    }
     await db().query("UPDATE dataflow_schedule SET lastTriggeredAt=NOW(),lastRunId=?,updatedAt=NOW() WHERE id=?", [result.runId, schedule.id]);
     return res.json({ ok: true, runId: result.runId });
   } catch (error) {

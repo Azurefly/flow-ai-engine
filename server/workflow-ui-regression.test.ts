@@ -76,6 +76,13 @@ describe("流程设计器界面回归约束", () => {
     expect(nodeContractSource).toContain('type: "rest"');
     expect(nodeContractSource).toContain('type: "form"');
     expect(nodeContractSource).toContain('type: "sql"');
+    expect(warehouseSource).toContain("流程列表");
+    expect(warehouseSource).toContain("请输入搜索内容");
+    expect(warehouseSource).toContain("批量操作");
+    expect(warehouseSource).toContain("批量导入");
+    expect(warehouseSource).toContain("流程简介");
+    expect(warehouseSource).toContain("没有搜到任何数据");
+    expect(warehouseSource).toContain("只读流程图");
   });
 
   it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {

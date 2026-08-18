@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { runDataflow } from "./p2-service";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -88,6 +89,12 @@ describe("P2 项目数据资源与数据流", () => {
     expect((run.output.terminals[0] as any).rows).toEqual([{ orderId: "A-01", amount: 12 }, { orderId: "A-02", amount: 34 }]);
     const runs = await owner.data.runs({ projectId, workflowId });
     expect(runs[0]).toMatchObject({ id: run.runId, status: "success", triggerType: "manual" });
+    const scheduleBucket = `trusted-task:${new Date().toISOString().slice(0, 16)}`;
+    const scheduled = await runDataflow(admin, { projectId, workflowId, triggerType: "schedule", scheduleBucket });
+    await expect(runDataflow(admin, { projectId, workflowId, triggerType: "schedule", scheduleBucket })).rejects.toThrow();
+    const [duplicateRows] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM dataflow_run WHERE workflowId=? AND scheduleBucket=?", [workflowId, scheduleBucket]);
+    expect(duplicateRows).toHaveLength(1);
+    expect(duplicateRows[0].id).toBe(scheduled.runId);
     await expect(owner.data.saveScheduleDraft({ projectId, workflowId, cronExpression: "0 0 9 * * *" })).resolves.toMatchObject({ status: "paused", cronExpression: "0 0 9 * * *" });
     await expect(owner.data.saveScheduleDraft({ projectId, workflowId, cronExpression: "0 9 * * *" })).rejects.toThrow("6 段 UTC");
     await expect(readonly.data.saveScheduleDraft({ projectId, workflowId, cronExpression: "0 0 9 * * *" })).rejects.toThrow("无权");

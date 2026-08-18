@@ -15,6 +15,7 @@ let domainId: string | undefined;
 let projectId: string | undefined;
 let workflowId: string | undefined;
 let previousSettings: mysql.RowDataPacket[] = [];
+let approvalLock: mysql.PoolConnection | undefined;
 
 function callerFor(identity: any) {
   return appRouter.createCaller({ user: identity, req: { headers: {}, protocol: "https" }, res: {} } as unknown as TrpcContext);
@@ -39,11 +40,14 @@ describe("P1 系统配置与工作域", () => {
     for (const setting of previousSettings) await pool.query("INSERT INTO system_setting (`key`,valueJson,updatedByUserId,updatedAt) VALUES (?,?,?,?)", [setting.key, typeof setting.valueJson === "string" ? setting.valueJson : JSON.stringify(setting.valueJson), setting.updatedByUserId, setting.updatedAt]);
     await pool.query("DELETE FROM authorization_audit_log WHERE actorUserId IN (?,?) OR targetUserId IN (?,?)", [admin?.id ?? -1, user?.id ?? -1, admin?.id ?? -1, user?.id ?? -1]);
     await pool.query("DELETE FROM users WHERE username IN (?,?)", [adminName, userName]);
+    if (approvalLock) { await approvalLock.query("SELECT RELEASE_LOCK('flow_ai_engine_approval_test_lock')"); approvalLock.release(); }
     await pool.end();
   });
 
   runIntegration("仅管理员可管理系统设置和工作域，水印、审批门禁与项目工作域关联均真实生效", async () => {
     pool = mysql.createPool(process.env.DATABASE_URL!);
+    approvalLock = await pool.getConnection();
+    await approvalLock.query("SELECT GET_LOCK('flow_ai_engine_approval_test_lock', 90)");
     const [settings] = await pool.query<mysql.RowDataPacket[]>("SELECT * FROM system_setting WHERE `key` IN ('general','approval')");
     previousSettings = settings;
     await pool.query("INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW())", [`test:${adminName}`, adminName, "P1 配置管理员", "admin", "active", "internal", `test:${userName}`, userName, "P1 普通成员", "user", "active", "internal"]);

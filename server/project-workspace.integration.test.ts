@@ -16,6 +16,7 @@ let outsider: any;
 let projectId: string | undefined;
 let workflowId: string | undefined;
 let folderId: string | undefined;
+let approvalLock: mysql.PoolConnection | undefined;
 
 function callerFor(user: any) {
   return appRouter.createCaller({ user, req: { headers: {}, protocol: "https" }, res: {} } as unknown as TrpcContext);
@@ -39,11 +40,14 @@ describe("原始项目工作区 P0", () => {
     }
     await pool.query("DELETE FROM authorization_audit_log WHERE actorUserId IN (?,?,?) OR targetUserId IN (?,?,?)", [owner?.id ?? 0, designer?.id ?? 0, outsider?.id ?? 0, owner?.id ?? 0, designer?.id ?? 0, outsider?.id ?? 0]);
     await pool.query("DELETE FROM users WHERE username IN (?,?,?)", [ownerUsername, designerUsername, outsiderUsername]);
+    if (approvalLock) { await approvalLock.query("SELECT RELEASE_LOCK('flow_ai_engine_approval_test_lock')"); approvalLock.release(); }
     await pool.end();
   });
 
   runIntegration("项目成员仅能访问授权项目，并可完成流程审核、发布和仓库归档", async () => {
     pool = mysql.createPool(process.env.DATABASE_URL!);
+    approvalLock = await pool.getConnection();
+    await approvalLock.query("SELECT GET_LOCK('flow_ai_engine_approval_test_lock', 90)");
     await pool.query(
       "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW())",
       [`test:${ownerUsername}`, ownerUsername, "项目所有者", "admin", "active", "internal", `test:${designerUsername}`, designerUsername, "项目设计者", "user", "active", "internal", `test:${outsiderUsername}`, outsiderUsername, "项目外部用户", "user", "active", "internal"],

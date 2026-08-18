@@ -374,6 +374,8 @@ export const dataflowRuns = mysqlTable(
     projectId: varchar("projectId", { length: 36 }).notNull().references(() => flowProjects.id),
     workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
     triggerType: mysqlEnum("triggerType", ["manual", "schedule"]).default("manual").notNull(),
+    /** Trusted task UID plus UTC minute bucket; null for manual runs. */
+    scheduleBucket: varchar("scheduleBucket", { length: 96 }),
     status: mysqlEnum("status", ["queued", "running", "success", "failed", "cancelled"]).default("queued").notNull(),
     definitionSnapshotJson: json("definitionSnapshotJson").notNull(),
     inputJson: json("inputJson").notNull(),
@@ -385,7 +387,7 @@ export const dataflowRuns = mysqlTable(
     triggeredByUserId: int("triggeredByUserId").references(() => users.id),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
-  table => [index("dataflow_run_project_created_idx").on(table.projectId, table.createdAt), index("dataflow_run_workflow_created_idx").on(table.workflowId, table.createdAt)],
+  table => [index("dataflow_run_project_created_idx").on(table.projectId, table.createdAt), index("dataflow_run_workflow_created_idx").on(table.workflowId, table.createdAt), unique("dataflow_run_schedule_bucket_unique").on(table.workflowId, table.scheduleBucket)],
 );
 
 /** One hosted schedule per dataflow; task UID is the only trusted callback lookup key. */

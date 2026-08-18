@@ -1,4 +1,4 @@
-import { createDefaultNodeConfig, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
+import { createDefaultNodeConfig, getNodeConfigEvidence, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
 import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
 
@@ -28,6 +28,7 @@ describe("原始节点配置统一契约", () => {
   it("保留历史或安装包导入定义的未知字段，同时填充缺失的已知默认值", () => {
     const merged = withNodeConfigDefaults("state", { stateCode: "APPROVED", originalExtension: { color: "#3370ED" } });
     expect(merged).toMatchObject({ stateCode: "APPROVED", displayName: "业务状态", stateType: "business", originalExtension: { color: "#3370ED" } });
+    expect(getNodeConfigEvidence("rest")).toBe("compatibility-extension");
   });
 
   it("严格验证路由分支、表单结构、REST 方法和条件句柄", () => {

@@ -22,6 +22,8 @@ export type FlowNodeDefinition = {
   type: FlowNodeType;
   label: string;
   description: string;
+  /** 当前副本未包含节点 bundle；字段键/默认值的证据级别必须被显式消费。 */
+  configEvidence?: "reference-confirmed" | "compatibility-extension";
   flowTypes: FlowType[];
   defaultConfig: NodeConfig;
   fields: NodeField[];
@@ -155,6 +157,11 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   sink: { type: "sink", label: "输出", description: "将数据流结果输出到运行审计", flowTypes: ["data"], defaultConfig: { outputName: "result" }, fields: [{ key: "outputName", label: "输出名称", help: "数据流运行审计中的输出引用名称。", kind: "text", required: true }] },
   output: { type: "output", label: "输出", description: "兼容输出节点", flowTypes: ["data"], defaultConfig: { outputName: "result" }, fields: [{ key: "outputName", label: "输出名称", help: "数据流运行审计中的输出引用名称。", kind: "text", required: true }] },
 };
+
+/** 仅节点名称和可见工具栏可由裁剪安装包直接证明；字段细节等待完整 bundle 到位后复核。 */
+export function getNodeConfigEvidence(type: FlowNodeType) {
+  return FLOW_NODE_DEFINITIONS[type].configEvidence ?? "compatibility-extension";
+}
 
 export function isFlowNodeType(value: unknown): value is FlowNodeType {
   return typeof value === "string" && (FLOW_NODE_TYPES as readonly string[]).includes(value);
