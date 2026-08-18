@@ -39,4 +39,11 @@ describe("原始节点配置统一契约", () => {
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "equals", right: true, trueHandle: "yes", falseHandle: "no" })).not.toThrow();
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "invalid", right: true, trueHandle: "yes", falseHandle: "no" })).toThrow("条件节点操作符无效");
   });
+
+  it("兼容安装包历史定义中的对象结束模板、简写表单字段和 code/target 路由", () => {
+    expect(() => validateNodeConfig("end", { resultTemplate: { result: "{{vars.value}}" } })).not.toThrow();
+    expect(() => validateNodeConfig("form", { fields: [{ key: "reason", required: true }] })).not.toThrow();
+    expect(() => validateNodeConfig("router", { defaultRoute: "default", routes: [{ code: "default", target: "end" }] })).not.toThrow();
+    expect(withNodeConfigDefaults("end", { resultTemplate: undefined }).resultTemplate).toBe("{{vars}}");
+  });
 });

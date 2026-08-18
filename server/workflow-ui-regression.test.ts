@@ -9,6 +9,7 @@ const runCenterSource = readFileSync(new URL("../client/src/components/RunCenter
 const projectWorkspaceSource = readFileSync(new URL("../client/src/components/ProjectWorkspace.tsx", import.meta.url), "utf8");
 const warehouseSource = readFileSync(new URL("../client/src/components/WorkflowWarehouse.tsx", import.meta.url), "utf8");
 const systemConfigSource = readFileSync(new URL("../client/src/components/SystemConfigShell.tsx", import.meta.url), "utf8");
+const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
 
 describe("流程设计器界面回归约束", () => {
   it("新建流程按钮提交表单，控制台壳层可在窄屏纵向收敛", () => {
@@ -27,6 +28,11 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("workflow.versionDiff.useQuery");
     expect(governanceSource).toContain("workflow.rollbackVersion.useMutation");
     expect(governanceSource).toContain("恢复此版本");
+    expect(governanceSource).toContain("流程引导与基本信息");
+    expect(governanceSource).toContain('label: "流程设计"');
+    expect(governanceSource).toContain('label: "审核"');
+    expect(governanceSource).toContain('label: "发布"');
+    expect(governanceSource).toContain('label: "运行"');
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {
@@ -85,5 +91,18 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("暂无配置信息");
     expect(canvasSource).toContain("高级 JSON 配置（保留扩展字段）");
     expect(canvasSource).toContain("LockKeyhole");
+  });
+
+  it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
+    expect(dataResourceSource).toContain("DATAFLOW CANVAS REFERENCE");
+    expect(dataResourceSource).toContain("数据资源");
+    expect(dataResourceSource).toContain("函数资源");
+    expect(dataResourceSource).toContain("一键展开");
+    expect(dataResourceSource).toContain("任务详情");
+    expect(dataResourceSource).toContain("调度配置");
+    expect(dataResourceSource).toContain("交集");
+    expect(dataResourceSource).toContain("差集");
+    expect(dataResourceSource).toContain("并集");
+    expect(dataResourceSource).toContain("TSML");
   });
 });

@@ -11,6 +11,7 @@ function formatTime(value: unknown) {
 export default function WorkflowGovernance({ workflowId, canEdit, canPublish }: { workflowId: string; canEdit: boolean; canPublish: boolean }) {
   const utils = trpc.useUtils();
   const versions = trpc.workflow.versions.useQuery({ workflowId }, { retry: false });
+  const workflow = trpc.workflow.get.useQuery({ id: workflowId }, { retry: false });
   const items = (versions.data ?? []) as any[];
   const [fromVersion, setFromVersion] = useState<number | null>(null);
   const [toVersion, setToVersion] = useState<number | null>(null);
@@ -33,7 +34,19 @@ export default function WorkflowGovernance({ workflowId, canEdit, canPublish }: 
     onError: error => toast.error(error.message),
   });
 
-  return <section className="mt-4 rounded-lg border border-slate-200 bg-white shadow-sm">
+  const item = workflow.data as any;
+  const stages = [
+    { label: "流程设计", done: Boolean(item), detail: item?.definitionVersion ? `v${item.definitionVersion}` : "草稿" },
+    { label: "审核", done: item?.auditStatus === "approved", detail: item?.auditStatus === "approved" ? "审核通过" : item?.auditStatus === "rejected" ? "审核驳回" : "待审核" },
+    { label: "发布", done: item?.status === "published", detail: item?.status === "published" ? "已发布" : "未发布" },
+    { label: "运行", done: item?.status === "published", detail: item?.status === "published" ? "可在已启动流程中发起" : "发布后可发起" },
+  ];
+
+  return <><section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="border-b border-slate-100 p-4"><p className="text-[10px] font-bold tracking-[.18em] text-blue-600">PROCESS DETAIL</p><div className="mt-1 flex flex-wrap items-end justify-between gap-2"><div><h3 className="text-sm font-semibold text-slate-900">流程引导与基本信息</h3><p className="mt-1 text-xs text-slate-500">原始详情页的设计、审核、发布和实例运行路径；每项状态均来自当前流程真实数据。</p></div><span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">{item?.flowType === "data" ? "数据流程" : item?.flowType === "control" ? "控制流程" : "状态流程"}</span></div></div>
+    <div className="grid gap-3 p-4 md:grid-cols-4">{stages.map((stage, index) => <div key={stage.label} className="relative rounded border border-slate-100 bg-slate-50 p-3"><span className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${stage.done ? "bg-emerald-500" : "bg-slate-300"}`} /><p className="text-xs font-semibold text-slate-800">{index + 1}. {stage.label}</p><p className="mt-1 text-[11px] text-slate-500">{stage.detail}</p></div>)}</div>
+    <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-3"><div><p className="text-[10px] font-bold tracking-[.12em] text-slate-400">流程名称</p><p className="mt-1 truncate text-sm font-medium text-slate-700">{item?.name ?? "正在读取…"}</p></div><div><p className="text-[10px] font-bold tracking-[.12em] text-slate-400">流程说明</p><p className="mt-1 truncate text-sm text-slate-600">{item?.description || "未填写流程说明"}</p></div><div><p className="text-[10px] font-bold tracking-[.12em] text-slate-400">详细配置</p><p className="mt-1 text-sm text-slate-600">请在上方画布选择元件查看字段级配置。</p></div></div>
+  </section><section className="mt-4 rounded-lg border border-slate-200 bg-white shadow-sm">
     <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div><p className="flex items-center gap-1.5 text-[10px] font-bold tracking-[.18em] text-indigo-600"><History size={13} />VERSION GOVERNANCE</p><h3 className="mt-1 text-sm font-semibold text-slate-900">版本快照、差异与安全回滚</h3></div>
       <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600"><ShieldCheck size={12} />{canEdit ? "可恢复版本" : "只读版本历史"}</span>
@@ -54,7 +67,7 @@ export default function WorkflowGovernance({ workflowId, canEdit, canPublish }: 
         {diff.data ? <div className="mt-4 grid gap-3 sm:grid-cols-2"><DiffBlock label="新增节点" items={diff.data.addedNodes.map((node: any) => `${node.name} · ${node.type}`)} tone="emerald" /><DiffBlock label="移除节点" items={diff.data.removedNodes.map((node: any) => `${node.name} · ${node.type}`)} tone="red" /><DiffBlock label="变更节点" items={diff.data.changedNodes.map((node: any) => `${node.name}：${node.changedFields.join("、")}`)} tone="amber" /><DiffBlock label="连线变化" items={[`新增 ${diff.data.addedEdges.length} 条`, `移除 ${diff.data.removedEdges.length} 条`]} tone="slate" /></div> : <div className="mt-4 rounded bg-slate-50 p-4 text-xs leading-5 text-slate-500">选择两个不同版本后，将展示节点、配置与连线的结构化差异。</div>}
       </div>
     </div>
-  </section>;
+  </section></>;
 }
 
 function DiffBlock({ label, items, tone }: { label: string; items: string[]; tone: "emerald" | "red" | "amber" | "slate" }) {
