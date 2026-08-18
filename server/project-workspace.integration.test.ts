@@ -63,7 +63,7 @@ describe("原始项目工作区 P0", () => {
     const created = await designerCaller.project.createWorkflow({ projectId, name: "控制流程验收", description: "项目内控制流程", flowType: "control" });
     workflowId = (created as any).id;
     expect(created).toMatchObject({ projectId, flowType: "control", auditStatus: "init", status: "draft" });
-    await expect(designerCaller.workflow.publish({ id: workflowId })).rejects.toThrow("项目流程须通过审核后才能发布");
+    await expect(designerCaller.workflow.publish({ id: workflowId })).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
     await ownerCaller.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
     await expect(designerCaller.workflow.publish({ id: workflowId })).resolves.toMatchObject({ status: "published", auditStatus: "approved" });
     const visible = await designerCaller.project.workflows({ projectId, flowType: "control", auditStatus: "approved", status: "published" });

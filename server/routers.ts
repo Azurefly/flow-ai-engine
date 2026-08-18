@@ -9,6 +9,7 @@ import { assignRole, createCustomRole, deleteCustomRole, getWorkflowAccess, gran
 import { executeWorkflow, getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
 import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
 import { createFolder, createProject, createProjectWorkflow, deleteFolder, exportProjectWorkflows, getProjectAccess, grantProjectMember, listProjectMembers, listProjects, listProjectWorkflows, listWarehouse, moveProjectWorkflow, setProjectWorkflowAudit, updateFolder } from "./project-service";
+import { claimWorkflowTask, completeWorkflowTask, createWorkDomain, getP1SystemSettings, getPublicGeneralSettings, getTaskCalendar, getTaskDashboard, getWorkflowTask, listActiveWorkDomains, listProcessInstances, listWorkDomains, listWorkflowTasks, updateP1SystemSetting, updateWorkDomain } from "./p1-service";
 
 export const appRouter = router({
   system: systemRouter,
@@ -45,7 +46,8 @@ export const appRouter = router({
   project: router({
     list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user)),
     access: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => getProjectAccess(ctx.user, input.projectId)),
-    create: protectedProcedure.input(z.object({ code: z.string().trim().min(2).max(64), name: z.string().trim().min(1).max(160), description: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => ({ id: await createProject(ctx.user, input) })),
+    create: protectedProcedure.input(z.object({ code: z.string().trim().min(2).max(64), name: z.string().trim().min(1).max(160), description: z.string().trim().max(2000).optional(), domainId: z.string().uuid().nullable().optional() })).mutation(async ({ ctx, input }) => ({ id: await createProject(ctx.user, input) })),
+    activeDomains: protectedProcedure.query(() => listActiveWorkDomains()),
     workflows: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64), flowType: z.enum(["state", "control", "data"]).optional(), auditStatus: z.enum(["init", "approved", "rejected"]).optional(), status: z.enum(["draft", "published"]).optional(), keyword: z.string().trim().max(160).optional() })).query(({ ctx, input }) => listProjectWorkflows(ctx.user, input.projectId, input)),
     createWorkflow: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64), name: z.string().trim().min(1).max(160), description: z.string().trim().max(1200).optional(), flowType: z.enum(["state", "control", "data"]), folderId: z.string().min(8).max(64).nullable().optional(), definition: z.unknown().optional() })).mutation(({ ctx, input }) => createProjectWorkflow(ctx.user, input)),
     auditWorkflow: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64), workflowId: z.string().min(8).max(64), auditStatus: z.enum(["approved", "rejected"]) })).mutation(({ ctx, input }) => setProjectWorkflowAudit(ctx.user, input)),
@@ -57,6 +59,23 @@ export const appRouter = router({
     updateFolder: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64), folderId: z.string().min(8).max(64), name: z.string().trim().min(1).max(160).optional(), description: z.string().trim().max(2000).nullable().optional() })).mutation(async ({ ctx, input }) => ({ success: await updateFolder(ctx.user, input) })),
     deleteFolder: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64), folderId: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => ({ success: await deleteFolder(ctx.user, input) })),
     moveWorkflow: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64), workflowId: z.string().min(8).max(64), folderId: z.string().min(8).max(64).nullable().optional() })).mutation(async ({ ctx, input }) => ({ success: await moveProjectWorkflow(ctx.user, input) })),
+  }),
+  task: router({
+    dashboard: protectedProcedure.query(({ ctx }) => getTaskDashboard(ctx.user)),
+    list: protectedProcedure.input(z.object({ view: z.enum(["todo", "done", "initiated", "all"]), projectId: z.string().min(8).max(64).optional(), status: z.enum(["pending", "claimed", "completed", "cancelled"]).optional(), limit: z.number().int().min(1).max(200).optional() })).query(({ ctx, input }) => listWorkflowTasks(ctx.user, input)),
+    instances: protectedProcedure.input(z.object({ view: z.enum(["initiated", "all"]), limit: z.number().int().min(1).max(200).optional() })).query(({ ctx, input }) => listProcessInstances(ctx.user, input)),
+    calendar: protectedProcedure.input(z.object({ month: z.coerce.date() })).query(({ ctx, input }) => getTaskCalendar(ctx.user, input.month)),
+    get: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).query(async ({ ctx, input }) => { const task = await getWorkflowTask(ctx.user, input.taskId); if (!task) throw new Error("人工任务不存在或无访问权限。 "); return task; }),
+    claim: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).mutation(({ ctx, input }) => claimWorkflowTask(ctx.user, input.taskId)),
+    complete: protectedProcedure.input(z.object({ taskId: z.string().uuid(), result: z.record(z.string(), z.unknown()) })).mutation(({ ctx, input }) => completeWorkflowTask(ctx.user, input.taskId, input.result)),
+  }),
+  config: router({
+    publicGeneral: publicProcedure.query(() => getPublicGeneralSettings()),
+    settings: adminProcedure.query(() => getP1SystemSettings()),
+    updateSetting: adminProcedure.input(z.object({ key: z.enum(["general", "approval"]), value: z.record(z.string(), z.unknown()) })).mutation(({ ctx, input }) => updateP1SystemSetting(ctx.user, input.key, input.value)),
+    workDomains: adminProcedure.query(() => listWorkDomains()),
+    createWorkDomain: adminProcedure.input(z.object({ code: z.string().trim().min(2).max(64), name: z.string().trim().min(1).max(160), description: z.string().trim().max(2000).optional() })).mutation(async ({ ctx, input }) => ({ id: await createWorkDomain(ctx.user, input) })),
+    updateWorkDomain: adminProcedure.input(z.object({ id: z.string().uuid(), name: z.string().trim().min(1).max(160).optional(), description: z.string().trim().max(2000).nullable().optional(), status: z.enum(["active", "disabled"]).optional() })).mutation(async ({ ctx, input }) => ({ success: await updateWorkDomain(ctx.user, input) })),
   }),
   workflow: router({
     list: protectedProcedure.query(({ ctx }) => listWorkflows(ctx.user)),

@@ -45,11 +45,11 @@ async function requireProjectPermission(user: ProjectUser, projectId: string, pe
 export async function listProjects(user: ProjectUser) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     user.role === "admin"
-      ? `SELECT p.*,owner.username AS ownerUsername,owner.name AS ownerName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id) AS workflowCount
-           FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId
+      ? `SELECT p.*,owner.username AS ownerUsername,owner.name AS ownerName,d.code AS domainCode,d.name AS domainName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id) AS workflowCount
+           FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId LEFT JOIN work_domain d ON d.id=p.domainId
           WHERE p.status='active' ORDER BY p.updatedAt DESC`
-      : `SELECT DISTINCT p.*,owner.username AS ownerUsername,owner.name AS ownerName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id) AS workflowCount
-           FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId
+      : `SELECT DISTINCT p.*,owner.username AS ownerUsername,owner.name AS ownerName,d.code AS domainCode,d.name AS domainName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id) AS workflowCount
+           FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId LEFT JOIN work_domain d ON d.id=p.domainId
            LEFT JOIN flow_project_member pm ON pm.projectId=p.id AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
           WHERE p.status='active' AND (p.ownerUserId=? OR pm.id IS NOT NULL) ORDER BY p.updatedAt DESC`,
     user.role === "admin" ? [] : [user.id, user.id],
@@ -57,17 +57,21 @@ export async function listProjects(user: ProjectUser) {
   return rows;
 }
 
-export async function createProject(user: ProjectUser, input: { code: string; name: string; description?: string }) {
+export async function createProject(user: ProjectUser, input: { code: string; name: string; description?: string; domainId?: string | null }) {
   if (!(await hasSystemPermission(user, "workflow:create"))) throw new Error("当前账号没有创建项目的权限。");
   const projectId = id();
   const code = input.code.trim().toUpperCase();
   const name = input.name.trim();
   if (!/^[A-Z][A-Z0-9_-]{1,63}$/.test(code)) throw new Error("项目代号须以字母开头，且仅包含大写字母、数字、下划线或连字符。");
   if (!name) throw new Error("项目名称不能为空。");
+  if (input.domainId) {
+    const [domains] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM work_domain WHERE id=? AND status='active' LIMIT 1", [input.domainId]);
+    if (!domains[0]) throw new Error("所选工作域不存在或已停用。");
+  }
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("INSERT INTO flow_project (id,ownerUserId,code,name,description,status) VALUES (?,?,?,?,?,'active')", [projectId, user.id, code, name, input.description?.trim() || null]);
+    await connection.query("INSERT INTO flow_project (id,ownerUserId,domainId,code,name,description,status) VALUES (?,?,?,?,?,?,'active')", [projectId, user.id, input.domainId ?? null, code, name, input.description?.trim() || null]);
     await connection.query("INSERT INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [id(), projectId, user.id, user.id]);
     await connection.commit();
   } catch (error) {
@@ -76,7 +80,7 @@ export async function createProject(user: ProjectUser, input: { code: string; na
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "flow_project", resourceId: projectId, details: { operation: "project_created", code } });
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "flow_project", resourceId: projectId, details: { operation: "project_created", code, domainId: input.domainId ?? null } });
   return projectId;
 }
 

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
+import { isProjectApprovalRequired } from "./p1-service";
 
 type Node = { id: string; type: "start" | "end" | "transform" | "condition" | "http" | "llm" | "subflow" | "state" | "operate" | "router" | "rest" | "form" | "sql"; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
@@ -126,7 +127,7 @@ export async function updateWorkflow(workflowId: string, user: WorkflowUser, val
   if (!current) return null;
   const definition = values.definition === undefined ? current.definition : validate(values.definition, Boolean(values.publish));
   await assertSubflowOwnership(definition, user.id);
-  if (values.publish && current.projectId && current.auditStatus !== "approved") throw new Error("项目流程须通过审核后才能发布。");
+  if (values.publish && current.projectId && (await isProjectApprovalRequired()) && current.auditStatus !== "approved") throw new Error("当前审批规则要求项目流程通过审核后才能发布。");
   const nextName = values.name ?? current.name;
   const nextStatus = values.publish ? "published" : current.status;
   const nextVersion = Number(current.definitionVersion) + 1;

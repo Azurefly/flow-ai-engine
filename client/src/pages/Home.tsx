@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
 import WorkflowGovernance from "@/components/WorkflowGovernance";
 import RunCenter from "@/components/RunCenter";
+import ProcessWorkbench from "@/components/ProcessWorkbench";
 import { BusinessCenter, ProjectWorkspace, type ProjectRecord } from "@/components/ProjectWorkspace";
 import WorkflowWarehouse from "@/components/WorkflowWarehouse";
 import SystemConfigShell from "@/components/SystemConfigShell";
@@ -38,6 +39,7 @@ import { toast } from "sonner";
 
 type Section = "flows" | "runs" | "warehouse" | "system";
 type UserIdentity = { id: number; username: string | null; name: string | null; role: "user" | "admin" };
+type PublicGeneral = { platformName: string; watermarkEnabled: boolean; watermarkText: string };
 
 function decodeJson(value: unknown) {
   if (typeof value !== "string") return value;
@@ -52,6 +54,7 @@ function formatTime(value: unknown) {
 export default function Home() {
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery();
+  const general = trpc.config.publicGeneral.useQuery();
   const [credentials, setCredentials] = useState({ username: "", password: "" });
   const login = trpc.auth.login.useMutation({
     onSuccess: () => { void utils.auth.me.invalidate(); toast.success("登录成功，正在进入流程中心。"); },
@@ -59,16 +62,17 @@ export default function Home() {
   });
   const logout = trpc.auth.logout.useMutation({ onSuccess: () => { void utils.auth.me.invalidate(); toast.success("已安全退出。"); } });
 
-  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-slate-950 text-slate-300"><div className="flex items-center gap-3"><Loader2 className="animate-spin" />正在连接 Flow AI Engine</div></main>;
-  if (!me.data) return <LoginScreen credentials={credentials} setCredentials={setCredentials} pending={login.isPending} onSubmit={() => login.mutate(credentials)} />;
-  return <FlowConsole user={me.data} onLogout={() => logout.mutate()} />;
+  const publicGeneral: PublicGeneral = general.data ?? { platformName: "Flow AI Engine", watermarkEnabled: false, watermarkText: "" };
+  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-slate-950 text-slate-300"><div className="flex items-center gap-3"><Loader2 className="animate-spin" />正在连接 {publicGeneral.platformName}</div></main>;
+  if (!me.data) return <LoginScreen platformName={publicGeneral.platformName} credentials={credentials} setCredentials={setCredentials} pending={login.isPending} onSubmit={() => login.mutate(credentials)} />;
+  return <FlowConsole user={me.data} general={publicGeneral} onLogout={() => logout.mutate()} />;
 }
 
-function LoginScreen({ credentials, setCredentials, pending, onSubmit }: { credentials: { username: string; password: string }; setCredentials: (next: { username: string; password: string }) => void; pending: boolean; onSubmit: () => void }) {
+function LoginScreen({ platformName, credentials, setCredentials, pending, onSubmit }: { platformName: string; credentials: { username: string; password: string }; setCredentials: (next: { username: string; password: string }) => void; pending: boolean; onSubmit: () => void }) {
   return <main className="relative grid min-h-screen place-items-center overflow-hidden bg-slate-950 p-5 text-slate-100">
     <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:22px_22px]" />
     <section className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-700 bg-slate-900/95 shadow-2xl shadow-blue-950/60">
-      <div className="border-b border-slate-700 bg-slate-800 px-7 py-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded bg-blue-500 text-white"><Gauge size={21} /></div><div><p className="text-xs font-bold tracking-[.2em] text-blue-300">NEBULA INSPIRED · V3</p><h1 className="mt-0.5 text-lg font-semibold">Flow AI Engine 控制台</h1></div></div></div>
+      <div className="border-b border-slate-700 bg-slate-800 px-7 py-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded bg-blue-500 text-white"><Gauge size={21} /></div><div><p className="text-xs font-bold tracking-[.2em] text-blue-300">NEBULA INSPIRED · V3</p><h1 className="mt-0.5 text-lg font-semibold">{platformName} 控制台</h1></div></div></div>
       <form className="grid gap-4 p-7" onSubmit={event => { event.preventDefault(); onSubmit(); }}>
         <p className="text-sm leading-6 text-slate-400">内部账号认证已接入 IAM。流程、运行记录和协作授权均按资源级权限隔离。</p>
         <label className="grid gap-2 text-xs font-medium text-slate-300">用户名<Input className="border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500" autoComplete="username" value={credentials.username} onChange={event => setCredentials({ ...credentials, username: event.target.value })} required /></label>
@@ -80,7 +84,7 @@ function LoginScreen({ credentials, setCredentials, pending, onSubmit }: { crede
   </main>;
 }
 
-function FlowConsole({ user, onLogout }: { user: UserIdentity; onLogout: () => void }) {
+function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general: PublicGeneral; onLogout: () => void }) {
   const utils = trpc.useUtils();
   const [section, setSection] = useState<Section>("flows");
   const [systemView, setSystemView] = useState<"config" | "identity">("config");
@@ -92,6 +96,7 @@ function FlowConsole({ user, onLogout }: { user: UserIdentity; onLogout: () => v
   const [draftName, setDraftName] = useState("");
   const [runInput, setRunInput] = useState('{\n  "id": 2,\n  "prompt": "请总结输入内容"\n}');
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runView, setRunView] = useState<"workbench" | "monitor">("workbench");
   const [newFlowName, setNewFlowName] = useState("");
   const [userForm, setUserForm] = useState({ username: "", name: "", password: "", email: "", role: "user" as "user" | "admin" });
   const importRef = useRef<HTMLInputElement>(null);
@@ -209,9 +214,9 @@ function FlowConsole({ user, onLogout }: { user: UserIdentity; onLogout: () => v
 
   const workspaceWorkflows = selectedProject ? workflowItems.filter(workflow => workflow.projectId === selectedProject.id) : workflowItems;
 
-  return <main className="min-h-screen bg-slate-100 text-slate-800">
+  return <main className="relative min-h-screen bg-slate-100 text-slate-800">
     <header className="sticky top-0 z-30 border-b border-slate-700 bg-slate-900 text-slate-100 shadow-lg">
-      <div className="flex h-14 items-center"><button className="grid h-14 w-16 place-items-center border-r border-slate-700 text-slate-300 hover:bg-slate-800" onClick={() => setSidebarOpen(value => !value)} aria-label="展开导航">{sidebarOpen ? <X size={19} /> : <Menu size={19} />}</button><div className="flex min-w-0 items-center gap-3 px-4"><div className="grid h-7 w-7 place-items-center rounded bg-blue-500"><Gauge size={16} /></div><div className="hidden sm:block"><p className="text-[10px] font-bold tracking-[.22em] text-blue-300">NEBULA BUSINESS ENGINE</p><p className="text-sm font-semibold">Flow AI Engine</p></div></div><div className="ml-4 hidden h-full items-end gap-1 md:flex">{nav.map(item => <button key={item.id} onClick={() => { setSection(item.id); if (item.id === "flows") setFlowView("center"); if (item.id === "system") setSystemView("config"); }} className={`flex h-full items-center gap-2 border-b-2 px-4 text-sm transition-colors ${section === item.id ? "border-blue-400 bg-slate-800 text-white" : "border-transparent text-slate-400 hover:bg-slate-800 hover:text-slate-100"}`}><item.icon size={15} />{item.label}</button>)}</div><div className="ml-auto flex h-full items-center gap-3 px-4 text-xs"><span className="hidden text-slate-400 lg:inline">{user.name || user.username || "内部用户"}</span><span className="rounded border border-slate-600 px-2 py-1 text-slate-300">{user.role === "admin" ? "系统管理员" : "成员"}</span><Button variant="ghost" size="sm" className="text-slate-300 hover:bg-slate-800 hover:text-white" onClick={onLogout}><LogOut size={15} />退出</Button></div></div>
+      <div className="flex h-14 items-center"><button className="grid h-14 w-16 place-items-center border-r border-slate-700 text-slate-300 hover:bg-slate-800" onClick={() => setSidebarOpen(value => !value)} aria-label="展开导航">{sidebarOpen ? <X size={19} /> : <Menu size={19} />}</button><div className="flex min-w-0 items-center gap-3 px-4"><div className="grid h-7 w-7 place-items-center rounded bg-blue-500"><Gauge size={16} /></div><div className="hidden sm:block"><p className="text-[10px] font-bold tracking-[.22em] text-blue-300">NEBULA BUSINESS ENGINE</p><p className="text-sm font-semibold">{general.platformName}</p></div></div><div className="ml-4 hidden h-full items-end gap-1 md:flex">{nav.map(item => <button key={item.id} onClick={() => { setSection(item.id); if (item.id === "flows") setFlowView("center"); if (item.id === "runs") setRunView("workbench"); if (item.id === "system") setSystemView("config"); }} className={`flex h-full items-center gap-2 border-b-2 px-4 text-sm transition-colors ${section === item.id ? "border-blue-400 bg-slate-800 text-white" : "border-transparent text-slate-400 hover:bg-slate-800 hover:text-slate-100"}`}><item.icon size={15} />{item.label}</button>)}</div><div className="ml-auto flex h-full items-center gap-3 px-4 text-xs"><span className="hidden text-slate-400 lg:inline">{user.name || user.username || "内部用户"}</span><span className="rounded border border-slate-600 px-2 py-1 text-slate-300">{user.role === "admin" ? "系统管理员" : "成员"}</span><Button variant="ghost" size="sm" className="text-slate-300 hover:bg-slate-800 hover:text-white" onClick={onLogout}><LogOut size={15} />退出</Button></div></div>
     </header>
     <div className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
       {section === "flows" && flowView === "editor" && <aside className={`${sidebarOpen ? "w-full md:w-72" : "h-0 w-full overflow-hidden md:h-auto md:w-0"} shrink-0 border-b border-slate-200 bg-white transition-[width,height] duration-200 md:border-b-0 md:border-r`}>
@@ -222,12 +227,13 @@ function FlowConsole({ user, onLogout }: { user: UserIdentity; onLogout: () => v
         {section === "flows" && flowView === "workspace" && selectedProject && <ProjectWorkspace project={selectedProject} onBack={() => setFlowView("center")} onOpenWorkflow={workflowId => { setSelectedWorkflowId(workflowId); setFlowView("editor"); }} onOpenWarehouse={() => setSection("warehouse")} />}
         {section === "flows" && flowView === "editor" && <FlowDesigner
         workflow={selectedWorkflow} definition={draftDefinition} name={draftName} setName={setDraftName} canEdit={canEdit} canPublish={canPublish} canRun={canRun} canManage={canManageMembers} members={(members.data ?? []) as any[]} candidates={(memberCandidates.data ?? []) as any[]} savePending={saveFlow.isPending} publishPending={publishFlow.isPending} runPending={runFlow.isPending} runInput={runInput} setRunInput={setRunInput} models={runtimeModels.data ?? []} templates={(templates.data ?? []) as any[]} subflows={(subflows.data ?? []) as any[]} onDefinitionChange={setDraftDefinition} onSave={saveCurrent} onPublish={() => selectedId && publishFlow.mutate({ id: selectedId })} onRun={startRun} onExport={exportCurrent} onImport={() => importRef.current?.click()} onDuplicate={() => { if (selectedId) duplicateFlow.mutate({ id: selectedId, name: `${draftName} · 副本` }); }} onDelete={() => { if (selectedId && window.confirm(`确定删除“${draftName}”及其运行记录吗？`)) deleteFlow.mutate({ id: selectedId }); }} onSaveAsSubflow={() => { if (draftDefinition) createSubflow.mutate({ name: `${draftName || "未命名流程"} · 子流程`, definition: draftDefinition }); }} onCreateTemplate={input => createTemplate.mutate(input)} onUpdateTemplate={(template, updates) => updateTemplate.mutate({ id: template.id, ...updates })} onDeleteTemplate={id => deleteTemplate.mutate({ id })} onToggleSubflow={(subflow, isEnabled) => updateSubflow.mutate({ id: subflow.id, isEnabled })} onDeleteSubflow={id => deleteSubflow.mutate({ id })} onGrant={(userId, role, hours) => { if (selectedId) grantMember.mutate({ workflowId: selectedId, userId, role, expiresAt: hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : undefined }); }} onRevoke={(userId, role) => { if (selectedId) revokeMember.mutate({ workflowId: selectedId, userId, role }); }} />}
-        {section === "runs" && <RunCenter workflowId={selectedId} selectedRun={runDetail.data ?? null} onSelect={setSelectedRunId} />}
+        {section === "runs" && (runView === "workbench" ? <ProcessWorkbench onOpenRun={runId => { setSelectedRunId(runId); setRunView("monitor"); setSection("runs"); }} /> : <div><div className="border-b border-slate-200 bg-white px-4 py-2"><Button type="button" variant="ghost" size="sm" className="text-[#2d6bea]" onClick={() => setRunView("workbench")}>← 返回流程工作台</Button></div><RunCenter workflowId={selectedId} selectedRun={runDetail.data ?? null} onSelect={setSelectedRunId} /></div>)}
         {section === "warehouse" && <WorkflowWarehouse projects={(projects.data ?? []) as ProjectRecord[]} onOpenWorkflow={(project, workflowId) => { setSelectedProject(project); setSelectedWorkflowId(workflowId); setSection("flows"); setFlowView("editor"); }} />}
         {section === "system" && user.role === "admin" && (systemView === "config" ? <SystemConfigShell onOpenIdentity={() => setSystemView("identity")} /> : <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div className="mx-auto max-w-6xl"><button className="mb-4 text-sm text-[#2d6bea] hover:underline" onClick={() => setSystemView("config")}>← 返回系统配置</button><IamCenter users={users.data ?? []} roles={roles.data ?? []} audit={audit.data ?? []} form={userForm} setForm={setUserForm} onCreate={() => createUser.mutate({ ...userForm, email: userForm.email || undefined })} creating={createUser.isPending} onToggleStatus={(id, status) => updateUserStatus.mutate({ userId: id, status: status === "active" ? "disabled" : "active" })} /></div></div>)}
       </section>
     </div>
     <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importDefinition} />
+    {general.watermarkEnabled && general.watermarkText && <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-20 grid grid-cols-2 content-around gap-24 overflow-hidden px-12 text-center text-3xl font-bold tracking-[.18em] text-slate-400/15 [transform:rotate(-24deg)_scale(1.25)] sm:grid-cols-3">{Array.from({ length: 15 }, (_, index) => <span key={index}>{general.watermarkText}</span>)}</div>}
   </main>;
 }
 

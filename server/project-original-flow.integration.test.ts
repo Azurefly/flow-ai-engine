@@ -37,7 +37,7 @@ function callerFor(user: any) {
 describe("P0 原始流程类型与项目发起", () => {
   afterAll(async () => {
     if (!pool) return;
-    if (projectId) { await pool.query("DELETE a FROM workflow_run_alert a JOIN workflow_run r ON r.id=a.runId JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE r FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE FROM workflow_member WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)", [projectId]); await pool.query("DELETE FROM workflow_version WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)", [projectId]); await pool.query("DELETE FROM workflow WHERE projectId=?", [projectId]); await pool.query("DELETE FROM flow_project_member WHERE projectId=?", [projectId]); await pool.query("DELETE FROM flow_project WHERE id=?", [projectId]); }
+    if (projectId) { await pool.query("DELETE a FROM workflow_run_alert a JOIN workflow_run r ON r.id=a.runId JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE t FROM workflow_task t JOIN workflow_run r ON r.id=t.runId JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE r FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?", [projectId]); await pool.query("DELETE FROM workflow_member WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)", [projectId]); await pool.query("DELETE FROM workflow_version WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)", [projectId]); await pool.query("DELETE FROM workflow WHERE projectId=?", [projectId]); await pool.query("DELETE FROM flow_project_member WHERE projectId=?", [projectId]); await pool.query("DELETE FROM flow_project WHERE id=?", [projectId]); }
     await pool.query("DELETE FROM authorization_audit_log WHERE actorUserId IN (?, ?, ?) OR targetUserId IN (?, ?, ?)", [owner?.id ?? -1, operator?.id ?? -1, viewer?.id ?? -1, owner?.id ?? -1, operator?.id ?? -1, viewer?.id ?? -1]);
     await pool.query("DELETE FROM users WHERE username IN (?,?,?)", [`p0_owner_${suffix}`, `p0_operator_${suffix}`, `p0_viewer_${suffix}`]);
     await pool.end();
@@ -89,10 +89,12 @@ describe("P0 原始流程类型与项目发起", () => {
     await expect(callerFor(operator).workflow.run({ workflowId: blockedWorkflowId, input: {} })).rejects.toThrow("流程尚未发布");
     const blockedDefinition: Definition = { ...executableDefinition, nodes: [...executableDefinition.nodes.slice(0, 1), { id: "operate", type: "operate", name: "人工审批", position: { x: 180, y: 0 }, config: {} }, executableDefinition.nodes[4]], edges: [{ id: "s-o", sourceNodeId: "start", targetNodeId: "operate" }, { id: "o-e", sourceNodeId: "operate", targetNodeId: "end" }] };
     await updateWorkflow(workflowId, owner, { definition: blockedDefinition });
-    await expect(callerFor(operator).workflow.run({ workflowId, input: {} })).rejects.toThrow("P1 人工任务工作台");
-    const [blockedRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT id,status,errorJson FROM workflow_run WHERE workflowId=? ORDER BY startedAt DESC LIMIT 1", [workflowId]);
-    blockedRunId = blockedRuns[0]?.id;
-    expect(blockedRuns[0]).toMatchObject({ status: "failed" });
-    expect(JSON.stringify(blockedRuns[0]?.errorJson)).toContain("P1 人工任务工作台");
+    const manualRun: any = await callerFor(operator).workflow.run({ workflowId, input: {} });
+    expect(manualRun).toMatchObject({ status: "waiting" });
+    const [waitingRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT id,status FROM workflow_run WHERE id=?", [manualRun.runId]);
+    blockedRunId = waitingRuns[0]?.id;
+    expect(waitingRuns[0]).toMatchObject({ status: "running" });
+    const [manualTasks] = await pool.query<mysql.RowDataPacket[]>("SELECT id,status,nodeName FROM workflow_task WHERE runId=?", [manualRun.runId]);
+    expect(manualTasks[0]).toMatchObject({ id: manualRun.taskId, status: "pending", nodeName: "人工审批" });
   }, 60_000);
 });

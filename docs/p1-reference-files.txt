@@ -1,0 +1,3 @@
+./backend/src/main/resources/static/assets/js/systemConfig/systemConfig.js
+./backend/src/main/resources/static/assets/js/processDesign/resourceConfigPluginsManagement.js
+./backend/src/main/resources/static/views/system_config.html

@@ -230,7 +230,7 @@ async function insertNodeRun(runId: string, node: WorkflowNode, input: JsonRecor
   return nodeRunId;
 }
 
-async function finishNodeRun(nodeRunId: string, status: "success" | "failed" | "skipped", startedAt: number, output?: unknown, error?: unknown) {
+async function finishNodeRun(nodeRunId: string, status: "success" | "failed" | "waiting" | "skipped", startedAt: number, output?: unknown, error?: unknown) {
   await db().query("UPDATE workflow_node_run SET status=?,outputJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [status, output === undefined ? null : JSON.stringify(output), error === undefined ? null : JSON.stringify(error), Date.now() - startedAt, nodeRunId]);
 }
 
@@ -247,7 +247,7 @@ async function createFailureAlerts(input: { workflowId: string; workflowName: st
 
 export async function executeWorkflow(input: { workflowId: string; triggeredBy: WorkflowUser; workflowInput?: JsonRecord }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,ownerUserId,name,projectId,status,auditStatus,definitionJson FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
-  const workflow = workflowRows[0];
+  const workflow = workflowRows[0] as PersistedWorkflow | undefined;
   if (!workflow) throw new Error("流程不存在。");
   if (workflow.projectId && (workflow.status !== "published" || workflow.auditStatus !== "approved")) throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
   const definition = readJson(workflow.definitionJson) as Definition;
@@ -261,45 +261,14 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
     [runId, input.workflowId, workflow.ownerUserId, input.triggeredBy.id, "manual", JSON.stringify(definition), JSON.stringify(input.workflowInput ?? {}), JSON.stringify(context), JSON.stringify(authorizationSnapshot)],
   );
 
-  const nodes = new Map(definition.nodes.map(node => [node.id, node]));
   const startNode = definition.nodes.find(node => node.type === "start");
   if (!startNode) throw new Error("流程缺少开始节点。");
-  const queue = [startNode.id];
-  const executed = new Set<string>();
-  let finalOutput: unknown = null;
   const runStartedAt = Date.now();
   try {
-    while (queue.length) {
-      if (executed.size >= MAX_STEPS) throw new Error("流程执行超过最大节点步数，可能存在循环。");
-      const nodeId = queue.shift()!;
-      if (executed.has(nodeId)) continue;
-      const node = nodes.get(nodeId);
-      if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
-      executed.add(nodeId);
-      const nodeInput = { context: JSON.parse(JSON.stringify(context)), config: node.config };
-      const nodeRunId = await insertNodeRun(runId, node, nodeInput);
-      const startedAt = Date.now();
-      try {
-        const result = await executeNode(node, context, true, Number(workflow.ownerUserId));
-        const vars = asRecord(context.vars);
-        const nodeOutputs = asRecord(context.nodes);
-        vars[node.id] = result.output;
-        nodeOutputs[node.id] = result.output;
-        context.vars = vars;
-        context.nodes = nodeOutputs;
-        if (node.type === "start") Object.assign(vars, asRecord(result.output));
-        if (node.type === "end") finalOutput = result.output;
-        await finishNodeRun(nodeRunId, "success", startedAt, result.output);
-        const outgoing = definition.edges.filter(edge => edge.sourceNodeId === node.id && (!result.route || (edge.sourceHandle ?? "default") === result.route));
-        outgoing.forEach(edge => queue.push(edge.targetNodeId));
-      } catch (error) {
-        const details = { message: error instanceof Error ? error.message : String(error) };
-        await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details);
-        throw error;
-      }
-    }
-    await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(finalOutput), Date.now() - runStartedAt, runId]);
-    return { runId, status: "success" as const, output: finalOutput };
+    const segment = await executeRunSegment({ runId, workflow, definition, context, queue: [startNode.id] });
+    if (segment.status === "waiting") return { runId, status: "waiting" as const, taskId: segment.taskId };
+    await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - runStartedAt, runId]);
+    return { runId, status: "success" as const, output: segment.output };
   } catch (error) {
     const details = { message: error instanceof Error ? error.message : String(error) };
     await db().query("UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(details), Date.now() - runStartedAt, runId]);
@@ -308,6 +277,100 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
     } catch (alertError) {
       console.error("[Workflow] Failed to persist run alert", alertError);
     }
+    throw error;
+  }
+}
+
+type PersistedWorkflow = mysql.RowDataPacket & { id: string; ownerUserId: number; projectId?: string | null; name: string };
+type RunSegmentResult = { status: "success"; output: unknown } | { status: "waiting"; taskId: string };
+
+async function executeRunSegment(input: { runId: string; workflow: PersistedWorkflow; definition: Definition; context: JsonRecord; queue: string[]; finalOutput?: unknown }): Promise<RunSegmentResult> {
+  const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
+  const executed = new Set<string>();
+  let finalOutput = input.finalOutput ?? null;
+  while (input.queue.length) {
+    if (executed.size >= MAX_STEPS) throw new Error("流程执行超过最大节点步数，可能存在循环。");
+    const nodeId = input.queue.shift()!;
+    if (executed.has(nodeId)) continue;
+    const node = nodes.get(nodeId);
+    if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
+    executed.add(nodeId);
+    const nodeInput = { context: JSON.parse(JSON.stringify(input.context)), config: node.config };
+    const nodeRunId = await insertNodeRun(input.runId, node, nodeInput);
+    const startedAt = Date.now();
+    try {
+      if (node.type === "operate") {
+        const config = asRecord(resolveTemplates(node.config, input.context));
+        const requestedAssignee = Number(config.assigneeUserId);
+        const assignedUserId = Number.isInteger(requestedAssignee) && requestedAssignee > 0 ? requestedAssignee : null;
+        if (assignedUserId) {
+          const [users] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE id=? AND status='active' LIMIT 1", [assignedUserId]);
+          if (!users[0]) throw new Error("操作节点指定的处理人不存在或已停用。");
+        }
+        const taskId = randomUUID();
+        const nextNodeIds = input.definition.edges.filter(edge => edge.sourceNodeId === node.id).map(edge => edge.targetNodeId);
+        await db().query(
+          "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?)",
+          [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, assignedUserId, String(config.instruction ?? config.description ?? node.name), JSON.stringify({ config, context: input.context }), JSON.stringify(nextNodeIds)],
+        );
+        await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId, status: "pending", assignedUserId });
+        await db().query("UPDATE workflow_run SET status='running',contextJson=? WHERE id=?", [JSON.stringify(input.context), input.runId]);
+        return { status: "waiting", taskId };
+      }
+      const result = await executeNode(node, input.context, true, Number(input.workflow.ownerUserId));
+      const vars = asRecord(input.context.vars);
+      const nodeOutputs = asRecord(input.context.nodes);
+      vars[node.id] = result.output;
+      nodeOutputs[node.id] = result.output;
+      input.context.vars = vars;
+      input.context.nodes = nodeOutputs;
+      if (node.type === "start") Object.assign(vars, asRecord(result.output));
+      if (node.type === "end") finalOutput = result.output;
+      await finishNodeRun(nodeRunId, "success", startedAt, result.output);
+      input.definition.edges.filter(edge => edge.sourceNodeId === node.id && (!result.route || (edge.sourceHandle ?? "default") === result.route)).forEach(edge => input.queue.push(edge.targetNodeId));
+    } catch (error) {
+      const details = { message: error instanceof Error ? error.message : String(error) };
+      await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details);
+      throw error;
+    }
+  }
+  return { status: "success", output: finalOutput };
+}
+
+export async function resumeWorkflowTask(input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT t.*,r.contextJson,r.definitionSnapshotJson,r.status AS runStatus,r.startedAt,w.ownerUserId,w.name AS workflowName,w.projectId
+       FROM workflow_task t JOIN workflow_run r ON r.id=t.runId JOIN workflow w ON w.id=t.workflowId WHERE t.id=? LIMIT 1`,
+    [input.taskId],
+  );
+  const task = rows[0] as PersistedWorkflow & mysql.RowDataPacket;
+  if (!task) throw new Error("人工任务不存在。 ");
+  if (task.status !== "claimed" || (Number(task.claimedByUserId) !== input.completedBy.id && input.completedBy.role !== "admin")) throw new Error("仅领取该任务的处理人可以完成操作。 ");
+  if (task.runStatus !== "running") throw new Error("所属流程实例不处于等待人工操作状态。 ");
+  const [claim] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed'", [input.completedBy.id, JSON.stringify(input.result), input.taskId]);
+  if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
+  const context = asRecord(readJson(task.contextJson));
+  const definition = readJson(task.definitionSnapshotJson) as Definition;
+  const taskOutput = { taskId: input.taskId, completedByUserId: input.completedBy.id, result: input.result };
+  const vars = asRecord(context.vars);
+  const nodeOutputs = asRecord(context.nodes);
+  vars[String(task.nodeId)] = taskOutput;
+  nodeOutputs[String(task.nodeId)] = taskOutput;
+  context.vars = vars;
+  context.nodes = nodeOutputs;
+  const [nodeRuns] = await db().query<mysql.RowDataPacket[]>("SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1", [task.runId, task.nodeId]);
+  if (nodeRuns[0]) await finishNodeRun(nodeRuns[0].id, "success", new Date(nodeRuns[0].startedAt ?? Date.now()).getTime(), taskOutput);
+  const nextNodeIds = readJson(task.nextNodeIdsJson);
+  const runStartedAt = Date.now();
+  try {
+    const segment = await executeRunSegment({ runId: String(task.runId), workflow: task, definition, context, queue: Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [] });
+    if (segment.status === "waiting") return { runId: String(task.runId), status: "waiting" as const, taskId: segment.taskId };
+    await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(), task.runId]);
+    return { runId: String(task.runId), status: "success" as const, output: segment.output };
+  } catch (error) {
+    const details = { message: error instanceof Error ? error.message : String(error) };
+    await db().query("UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(details), Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(), task.runId]);
+    await createFailureAlerts({ workflowId: String(task.workflowId), workflowName: String(task.workflowName), runId: String(task.runId), ownerUserId: Number(task.ownerUserId), triggeredByUserId: input.completedBy.id, details }).catch(() => undefined);
     throw error;
   }
 }

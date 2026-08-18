@@ -100,6 +100,7 @@ export const flowProjects = mysqlTable(
   {
     id: varchar("id", { length: 36 }).primaryKey(),
     ownerUserId: int("ownerUserId").notNull().references(() => users.id),
+    domainId: varchar("domainId", { length: 36 }).references(() => workDomains.id),
     code: varchar("code", { length: 64 }).notNull(),
     name: varchar("name", { length: 160 }).notNull(),
     description: text("description"),
@@ -107,7 +108,7 @@ export const flowProjects = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [unique("flow_project_owner_code_unique").on(table.ownerUserId, table.code), index("flow_project_owner_updated_idx").on(table.ownerUserId, table.updatedAt)],
+  table => [unique("flow_project_owner_code_unique").on(table.ownerUserId, table.code), index("flow_project_owner_updated_idx").on(table.ownerUserId, table.updatedAt), index("flow_project_domain_updated_idx").on(table.domainId, table.updatedAt)],
 );
 
 /** Project roles mirror the original workspace boundary without weakening workflow-level IAM. */
@@ -211,7 +212,7 @@ export const workflowNodeRuns = mysqlTable("workflow_node_run", {
   nodeId: varchar("nodeId", { length: 120 }).notNull(),
   nodeType: varchar("nodeType", { length: 48 }).notNull(),
   nodeName: varchar("nodeName", { length: 160 }).notNull(),
-  status: mysqlEnum("status", ["pending", "running", "success", "failed", "skipped"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "running", "waiting", "success", "failed", "skipped"]).default("pending").notNull(),
   inputJson: json("inputJson").notNull(),
   outputJson: json("outputJson"),
   errorJson: json("errorJson"),
@@ -220,6 +221,60 @@ export const workflowNodeRuns = mysqlTable("workflow_node_run", {
   durationMs: int("durationMs"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+/** Human work created by an operate node; rows remain scoped to their workflow, run and project. */
+export const workflowTasks = mysqlTable(
+  "workflow_task",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    projectId: varchar("projectId", { length: 36 }).references(() => flowProjects.id),
+    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    nodeName: varchar("nodeName", { length: 160 }).notNull(),
+    taskType: mysqlEnum("taskType", ["operate"]).default("operate").notNull(),
+    status: mysqlEnum("status", ["pending", "claimed", "completed", "cancelled"]).default("pending").notNull(),
+    assignedUserId: int("assignedUserId").references(() => users.id),
+    claimedByUserId: int("claimedByUserId").references(() => users.id),
+    completedByUserId: int("completedByUserId").references(() => users.id),
+    instruction: text("instruction"),
+    payloadJson: json("payloadJson"),
+    resultJson: json("resultJson"),
+    nextNodeIdsJson: json("nextNodeIdsJson").notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    claimedAt: timestamp("claimedAt"),
+    completedAt: timestamp("completedAt"),
+  },
+  table => [
+    index("workflow_task_assignee_status_idx").on(table.assignedUserId, table.status, table.createdAt),
+    index("workflow_task_workflow_status_idx").on(table.workflowId, table.status, table.createdAt),
+    unique("workflow_task_run_node_unique").on(table.runId, table.nodeId),
+  ],
+);
+
+/** Administrator-owned settings for approval governance and visible system preferences. */
+export const systemSettings = mysqlTable("system_setting", {
+  key: varchar("key", { length: 96 }).primaryKey(),
+  valueJson: json("valueJson").notNull(),
+  updatedByUserId: int("updatedByUserId").references(() => users.id),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+/** Named administrative work domains; projects remain their own data isolation boundary. */
+export const workDomains = mysqlTable(
+  "work_domain",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    code: varchar("code", { length: 64 }).notNull().unique(),
+    name: varchar("name", { length: 160 }).notNull(),
+    description: text("description"),
+    status: mysqlEnum("status", ["active", "disabled"]).default("active").notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("work_domain_status_updated_idx").on(table.status, table.updatedAt)],
+);
 
 /** Immutable definition snapshots created on every edit, publish, and rollback. */
 export const workflowVersions = mysqlTable(
