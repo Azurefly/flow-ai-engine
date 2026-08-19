@@ -75,6 +75,15 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("状态流程");
     expect(projectWorkspaceSource).toContain("控制流程");
     expect(projectWorkspaceSource).toContain("数据流程");
+    expect(projectWorkspaceSource).toContain("收起项目工作区导航");
+    expect(projectWorkspaceSource).toContain("展开项目工作区导航");
+    expect(projectWorkspaceSource).toContain("当前业务：");
+    expect(projectWorkspaceSource).toContain("PanelLeftClose");
+    expect(projectWorkspaceSource).toContain("PanelLeftOpen");
+    expect(projectWorkspaceSource).toContain("创建时间开始");
+    expect(projectWorkspaceSource).toContain("创建时间结束");
+    expect(projectWorkspaceSource).toContain("同步 BDP 配置");
+    expect(projectWorkspaceSource).toContain("筛选仅作用于当前已授权可见的业务项目");
     expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
     expect(systemConfigSource).toContain("WORK DOMAIN");
   });
