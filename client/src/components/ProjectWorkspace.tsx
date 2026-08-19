@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import { ChevronLeft, ChevronRight, CircleDot, Database, FolderKanban, LayoutList, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, Upload, UsersRound } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import DataResourceCenter from "./DataResourceCenter";
 
@@ -51,6 +51,12 @@ export function ProjectWorkspace({ project, onBack, onOpenWorkflow, onOpenWareho
   const [showCreate, setShowCreate] = useState(false);
   const [detailWorkflowId, setDetailWorkflowId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", flowType: "state" as "state" | "control" | "data" });
+  useEffect(() => {
+    setFilters({});
+    setFilterForm({});
+    setShowCreate(false);
+    setDetailWorkflowId(null);
+  }, [project.id]);
   const access = trpc.project.access.useQuery({ projectId: project.id });
   const workflows = trpc.project.workflows.useQuery({ projectId: project.id, ...filters });
   const members = trpc.project.members.useQuery({ projectId: project.id });
