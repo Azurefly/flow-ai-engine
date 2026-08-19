@@ -33,7 +33,7 @@ export function validate(definition: unknown, executable = false): Definition {
   return value;
 }
 type WorkflowUser = { id: number; role: "user" | "admin" };
-type VersionSource = "created" | "updated" | "published" | "rolled_back";
+type VersionSource = "created" | "updated" | "published" | "unpublished" | "rolled_back";
 type TemplateNodeType = Exclude<Node["type"], "start" | "end" | "subflow">;
 
 const templateNodeTypes = new Set<TemplateNodeType>(["llm", "http", "transform", "condition"]);
@@ -122,8 +122,9 @@ export async function hasWorkflowPermission(user: WorkflowUser, workflowId: stri
   return (await getWorkflowAccess(user, workflowId)).permissions.has(permission);
 }
 
-export async function updateWorkflow(workflowId: string, user: WorkflowUser, values: { name?: string; definition?: unknown; publish?: boolean }) {
-  const permission: WorkflowPermission = values.publish ? "workflow:publish" : "workflow:edit";
+export async function updateWorkflow(workflowId: string, user: WorkflowUser, values: { name?: string; definition?: unknown; publish?: boolean; unpublish?: boolean }) {
+  if (values.publish && values.unpublish) throw new Error("发布和取消发布不能同时执行。 ");
+  const permission: WorkflowPermission = values.publish || values.unpublish ? "workflow:publish" : "workflow:edit";
   if (!(await hasWorkflowPermission(user, workflowId, permission))) return null;
   const current = await getWorkflow(workflowId, user) as ({ ownerUserId: number; projectId?: string | null; auditStatus?: "init" | "approved" | "rejected"; name: string; status: "draft" | "published"; definitionVersion: number; definition: Definition } | null);
   if (!current) return null;
@@ -131,13 +132,13 @@ export async function updateWorkflow(workflowId: string, user: WorkflowUser, val
   await assertSubflowOwnership(definition, user.id);
   if (values.publish && current.projectId && (await isProjectApprovalRequired()) && current.auditStatus !== "approved") throw new Error("当前审批规则要求项目流程通过审核后才能发布。");
   const nextName = values.name ?? current.name;
-  const nextStatus = values.publish ? "published" : current.status;
+  const nextStatus = values.unpublish ? "draft" : values.publish ? "published" : current.status;
   const nextVersion = Number(current.definitionVersion) + 1;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedAt=CASE WHEN ? THEN NOW() ELSE publishedAt END, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, Boolean(values.publish), workflowId]);
-    await insertVersion(connection, { workflowId, version: nextVersion, name: nextName, status: nextStatus, definition, source: values.publish ? "published" : "updated", actorUserId: user.id });
+    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, Boolean(values.publish), Boolean(values.unpublish), workflowId]);
+    await insertVersion(connection, { workflowId, version: nextVersion, name: nextName, status: nextStatus, definition, source: values.unpublish ? "unpublished" : values.publish ? "published" : "updated", actorUserId: user.id });
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -145,6 +146,7 @@ export async function updateWorkflow(workflowId: string, user: WorkflowUser, val
   } finally {
     connection.release();
   }
+  if (values.publish || values.unpublish) await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: workflowId, details: { operation: values.unpublish ? "workflow_unpublished" : "workflow_published", version: nextVersion, preservedRunHistory: true } });
   return getWorkflow(workflowId, user);
 }
 

@@ -419,7 +419,7 @@ export const workflowVersions = mysqlTable(
     name: varchar("name", { length: 160 }).notNull(),
     status: mysqlEnum("status", ["draft", "published"]).notNull(),
     definitionJson: json("definitionJson").notNull(),
-    changeSource: mysqlEnum("changeSource", ["created", "updated", "published", "rolled_back"]).notNull(),
+    changeSource: mysqlEnum("changeSource", ["created", "updated", "published", "unpublished", "rolled_back"]).notNull(),
     restoredFromVersion: int("restoredFromVersion"),
     createdByUserId: int("createdByUserId").references(() => users.id),
     createdAt: timestamp("createdAt").defaultNow().notNull(),

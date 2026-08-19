@@ -19,6 +19,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('sidebarOpen ? "w-full md:w-72"');
     expect(homeSource).toContain('key={`${workflow.id}:${workflow.definitionVersion}`}');
     expect(homeSource).not.toContain('workflow.definitionVersion}:${JSON.stringify(definition).length');
+    expect(homeSource).toContain("trpc.workflow.unpublish.useMutation");
+    expect(homeSource).toContain("取消发布");
+    expect(homeSource).toContain("历史版本与运行审计已保留");
   });
 
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
@@ -147,5 +150,10 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("不会跨流程或跨项目执行");
     expect(processWorkbenchSource).toContain("trpc.task.handover.useMutation");
     expect(processWorkbenchSource).toContain("trpc.task.batchComplete.useMutation");
+    expect(processWorkbenchSource).toContain("收起已启动流程导航");
+    expect(processWorkbenchSource).toContain("展开已启动流程导航");
+    expect(processWorkbenchSource).toContain("当前视图仅展示具备运行权限的流程实例与人工任务");
+    expect(processWorkbenchSource).toContain("PanelLeftClose");
+    expect(processWorkbenchSource).toContain("PanelLeftOpen");
   });
 });

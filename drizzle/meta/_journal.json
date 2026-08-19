@@ -50,6 +50,13 @@
       "when": 1787062036457,
       "tag": "0006_thankful_ben_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1787115259938,
+      "tag": "0007_brown_sphinx",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE `workflow_version` MODIFY COLUMN `changeSource` enum('created','updated','published','unpublished','rolled_back') NOT NULL;

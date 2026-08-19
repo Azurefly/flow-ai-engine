@@ -73,6 +73,18 @@ describe("原始项目工作区 P0", () => {
     const visible = await designerCaller.project.workflows({ projectId, flowType: "control", auditStatus: "approved", status: "published" });
     expect(visible).toHaveLength(1);
     expect(visible[0]).toMatchObject({ id: workflowId, projectId, flowType: "control" });
+    const completedRun = await ownerCaller.workflow.run({ workflowId, input: { source: "unpublish-retention-test" } });
+    expect(completedRun.status).toBe("success");
+    await expect(outsiderCaller.workflow.unpublish({ id: workflowId })).rejects.toThrow("流程不存在或无取消发布权限");
+    await expect(designerCaller.workflow.unpublish({ id: workflowId })).resolves.toMatchObject({ status: "draft", auditStatus: "approved" });
+    const [retainedRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM workflow_run WHERE id=? AND workflowId=?", [completedRun.runId, workflowId]);
+    expect(retainedRuns).toHaveLength(1);
+    const versionsAfterUnpublish: any[] = await ownerCaller.workflow.versions({ workflowId });
+    expect(versionsAfterUnpublish[0]).toMatchObject({ status: "draft", changeSource: "unpublished" });
+    const [unpublishAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [designer.id, workflowId]);
+    const unpublishDetails = typeof unpublishAudits[0].detailsJson === "string" ? JSON.parse(unpublishAudits[0].detailsJson) : unpublishAudits[0].detailsJson;
+    expect(unpublishDetails).toMatchObject({ operation: "workflow_unpublished", preservedRunHistory: true });
+    await expect(ownerCaller.workflow.run({ workflowId, input: {} })).rejects.toThrow("项目流程尚未发布或未通过审核，无法发起运行");
     const folder = await ownerCaller.project.createFolder({ projectId, name: "已发布流程", description: "仓库目录" });
     folderId = folder.id;
     await ownerCaller.project.moveWorkflow({ projectId, workflowId, folderId });
