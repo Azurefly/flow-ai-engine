@@ -38,6 +38,9 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("请输入关键词按 Enter 搜索");
     expect(governanceSource).toContain("已启动流程 ID");
     expect(governanceSource).toContain("流程状态");
+    expect(governanceSource).toContain("查看详细配置");
+    expect(governanceSource).toContain("实例详情");
+    expect(canvasSource).toContain("flow:inspect-node");
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {

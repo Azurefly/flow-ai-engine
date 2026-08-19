@@ -230,6 +230,19 @@ export default function WorkflowCanvas({
     return () => document.removeEventListener("fullscreenchange", syncFullscreen);
   }, []);
 
+  useEffect(() => {
+    const inspect = () => {
+      const next = nodes.find(node => !["start", "end"].includes(node.data.kind)) ?? nodes[0];
+      if (!next) return;
+      setSelectedId(next.id);
+      setInspectorMode("normal");
+      canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      reactFlow?.fitView({ nodes: [next], padding: 0.6, duration: 180 });
+    };
+    window.addEventListener("flow:inspect-node", inspect);
+    return () => window.removeEventListener("flow:inspect-node", inspect);
+  }, [nodes, reactFlow]);
+
   const selected = useMemo(() => nodes.find(node => node.id === selectedId), [nodes, selectedId]);
   const selectedDefinition = selected ? (() => { const item = FLOW_NODE_DEFINITIONS[selected.data.kind]; return getNodeConfigEvidence(selected.data.kind) === "compatibility-extension" ? { ...item, description: `${item.description} 当前裁剪安装包未保留节点打包脚本；以下字段按安全兼容契约呈现，并会保留未知扩展字段。` } : item; })() : null;
   const selectedConfig = (selected?.data.config ?? {}) as NodeConfig;
