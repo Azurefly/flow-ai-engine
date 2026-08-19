@@ -22,12 +22,18 @@ const importedDefinition: Definition = {
   settings: { trace: true },
   nodes: [
     { id: "start", type: "start", name: "输入", position: { x: 0, y: 0 }, config: { initialVariables: { city: "{{input.city}}" } } },
-    { id: "transform", type: "transform", name: "映射", position: { x: 220, y: 0 }, config: { mappings: { greeting: "你好，{{vars.city}}" } } },
-    { id: "end", type: "end", name: "输出", position: { x: 440, y: 0 }, config: { resultTemplate: { text: "{{nodes.transform.greeting}}" } } },
+    { id: "state", type: "state", name: "业务状态", position: { x: 190, y: 0 }, config: { stateCode: "SUBMITTED", displayName: "已提交", stateType: "business" } },
+    { id: "operate", type: "operate", name: "人工处理", position: { x: 380, y: 0 }, config: { commandCode: "REVIEW", assigneeMode: "role", instruction: "请审核 {{vars.city}} 的申请。", assigneeRole: "reviewer" } },
+    { id: "router", type: "router", name: "路由", position: { x: 570, y: 0 }, config: { routes: [{ handle: "approved", label: "通过", condition: { left: "{{input.status}}", operator: "equals", right: "approved" } }], defaultRoute: "default" } },
+    { id: "rest", type: "rest", name: "外部通知", position: { x: 760, y: 0 }, config: { endpoint: "https://example.com/notify", method: "POST", headers: { "X-Flow": "{{vars.city}}" }, body: { city: "{{vars.city}}" }, timeout: 15000 } },
+    { id: "end", type: "end", name: "输出", position: { x: 950, y: 0 }, config: { resultTemplate: { text: "{{nodes.rest.body}}" } } },
   ],
   edges: [
-    { id: "start-transform", sourceNodeId: "start", sourceHandle: "default", targetNodeId: "transform" },
-    { id: "transform-end", sourceNodeId: "transform", sourceHandle: "default", targetNodeId: "end" },
+    { id: "start-state", sourceNodeId: "start", sourceHandle: "default", targetNodeId: "state" },
+    { id: "state-operate", sourceNodeId: "state", sourceHandle: "default", targetNodeId: "operate" },
+    { id: "operate-router", sourceNodeId: "operate", sourceHandle: "default", targetNodeId: "router" },
+    { id: "router-rest", sourceNodeId: "router", sourceHandle: "default", targetNodeId: "rest" },
+    { id: "rest-end", sourceNodeId: "rest", sourceHandle: "default", targetNodeId: "end" },
   ],
 };
 
