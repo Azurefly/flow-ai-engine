@@ -33,6 +33,11 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain('label: "审核"');
     expect(governanceSource).toContain('label: "发布"');
     expect(governanceSource).toContain('label: "运行"');
+    expect(governanceSource).toContain("STARTED PROCESS LIST");
+    expect(governanceSource).toContain("已启动流程列表");
+    expect(governanceSource).toContain("请输入关键词按 Enter 搜索");
+    expect(governanceSource).toContain("已启动流程 ID");
+    expect(governanceSource).toContain("流程状态");
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {

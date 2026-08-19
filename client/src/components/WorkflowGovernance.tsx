@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { GitCompareArrows, History, Loader2, RotateCcw, ShieldCheck } from "lucide-react";
+import { GitCompareArrows, History, Loader2, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -12,9 +12,11 @@ export default function WorkflowGovernance({ workflowId, canEdit, canPublish }: 
   const utils = trpc.useUtils();
   const versions = trpc.workflow.versions.useQuery({ workflowId }, { retry: false });
   const workflow = trpc.workflow.get.useQuery({ id: workflowId }, { retry: false });
+  const runs = trpc.workflow.runs.useQuery({ workflowId }, { retry: false });
   const items = (versions.data ?? []) as any[];
   const [fromVersion, setFromVersion] = useState<number | null>(null);
   const [toVersion, setToVersion] = useState<number | null>(null);
+  const [runKeyword, setRunKeyword] = useState("");
 
   useEffect(() => {
     if (!items.length) return;
@@ -41,12 +43,13 @@ export default function WorkflowGovernance({ workflowId, canEdit, canPublish }: 
     { label: "发布", done: item?.status === "published", detail: item?.status === "published" ? "已发布" : "未发布" },
     { label: "运行", done: item?.status === "published", detail: item?.status === "published" ? "可在已启动流程中发起" : "发布后可发起" },
   ];
+  const visibleRuns = ((runs.data ?? []) as any[]).filter(run => `${run.id} ${run.triggeredByName ?? run.username ?? ""} ${run.status}`.toLowerCase().includes(runKeyword.trim().toLowerCase()));
 
   return <><section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
     <div className="border-b border-slate-100 p-4"><p className="text-[10px] font-bold tracking-[.18em] text-blue-600">PROCESS DETAIL</p><div className="mt-1 flex flex-wrap items-end justify-between gap-2"><div><h3 className="text-sm font-semibold text-slate-900">流程引导与基本信息</h3><p className="mt-1 text-xs text-slate-500">原始详情页的设计、审核、发布和实例运行路径；每项状态均来自当前流程真实数据。</p></div><span className="rounded border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-600">{item?.flowType === "data" ? "数据流程" : item?.flowType === "control" ? "控制流程" : "状态流程"}</span></div></div>
     <div className="grid gap-3 p-4 md:grid-cols-4">{stages.map((stage, index) => <div key={stage.label} className="relative rounded border border-slate-100 bg-slate-50 p-3"><span className={`mb-2 inline-block h-2.5 w-2.5 rounded-full ${stage.done ? "bg-emerald-500" : "bg-slate-300"}`} /><p className="text-xs font-semibold text-slate-800">{index + 1}. {stage.label}</p><p className="mt-1 text-[11px] text-slate-500">{stage.detail}</p></div>)}</div>
     <div className="grid gap-3 border-t border-slate-100 p-4 sm:grid-cols-3"><div><p className="text-[10px] font-bold tracking-[.12em] text-slate-400">流程名称</p><p className="mt-1 truncate text-sm font-medium text-slate-700">{item?.name ?? "正在读取…"}</p></div><div><p className="text-[10px] font-bold tracking-[.12em] text-slate-400">流程说明</p><p className="mt-1 truncate text-sm text-slate-600">{item?.description || "未填写流程说明"}</p></div><div><p className="text-[10px] font-bold tracking-[.12em] text-slate-400">详细配置</p><p className="mt-1 text-sm text-slate-600">请在上方画布选择元件查看字段级配置。</p></div></div>
-  </section><section className="mt-4 rounded-lg border border-slate-200 bg-white shadow-sm">
+  </section><section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[10px] font-bold tracking-[.18em] text-blue-600">STARTED PROCESS LIST</p><h3 className="mt-1 text-sm font-semibold text-slate-900">已启动流程列表</h3></div><label className="relative block"><Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" /><input className="h-8 w-60 rounded border border-slate-200 bg-white pl-8 pr-2 text-xs outline-none focus:border-blue-400" value={runKeyword} onChange={event => setRunKeyword(event.target.value)} placeholder="请输入关键词按 Enter 搜索" /></label></div><div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left text-xs"><thead className="bg-slate-50 text-slate-500"><tr><th className="px-4 py-3">已启动流程 ID</th><th className="px-4 py-3">业务名称</th><th className="px-4 py-3">流程名称</th><th className="px-4 py-3">发送方</th><th className="px-4 py-3">创建时间</th><th className="px-4 py-3">更新时间</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">流程状态</th></tr></thead><tbody>{visibleRuns.map(run => <tr key={run.id} className="border-t border-slate-100"><td className="px-4 py-3 font-mono text-slate-500">{String(run.id).slice(0, 8)}</td><td className="px-4 py-3">当前项目</td><td className="px-4 py-3 font-medium text-slate-700">{item?.name ?? "当前流程"}</td><td className="px-4 py-3">{run.triggeredByName || run.username || `用户 ${run.triggeredByUserId ?? "—"}`}</td><td className="px-4 py-3 text-slate-500">{formatTime(run.createdAt)}</td><td className="px-4 py-3 text-slate-500">{formatTime(run.finishedAt ?? run.createdAt)}</td><td className="px-4 py-3"><span className={`rounded px-1.5 py-0.5 ${run.status === "success" ? "bg-emerald-100 text-emerald-700" : run.status === "failed" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}>{run.status}</span></td><td className="px-4 py-3">{item?.status === "published" ? "已发布" : "未发布"}</td></tr>)}{!runs.isLoading && !visibleRuns.length && <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-slate-400">当前关键词下尚无已启动流程。</td></tr>}</tbody></table></div></section><section className="mt-4 rounded-lg border border-slate-200 bg-white shadow-sm">
     <div className="flex flex-col gap-3 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div><p className="flex items-center gap-1.5 text-[10px] font-bold tracking-[.18em] text-indigo-600"><History size={13} />VERSION GOVERNANCE</p><h3 className="mt-1 text-sm font-semibold text-slate-900">版本快照、差异与安全回滚</h3></div>
       <span className="inline-flex w-fit items-center gap-1 rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600"><ShieldCheck size={12} />{canEdit ? "可恢复版本" : "只读版本历史"}</span>
