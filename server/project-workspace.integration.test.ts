@@ -85,6 +85,15 @@ describe("原始项目工作区 P0", () => {
     const unpublishDetails = typeof unpublishAudits[0].detailsJson === "string" ? JSON.parse(unpublishAudits[0].detailsJson) : unpublishAudits[0].detailsJson;
     expect(unpublishDetails).toMatchObject({ operation: "workflow_unpublished", preservedRunHistory: true });
     await expect(ownerCaller.workflow.run({ workflowId, input: {} })).rejects.toThrow("项目流程尚未发布或未通过审核，无法发起运行");
+    await ownerCaller.project.auditWorkflow({ projectId, workflowId, auditStatus: "rejected" });
+    await expect(designerCaller.project.resetWorkflowAudit({ projectId, workflowId })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+    await expect(ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })).resolves.toBe(true);
+    const afterReset = await ownerCaller.project.workflows({ projectId, auditStatus: "init", status: "draft" });
+    expect(afterReset.find((workflow: any) => workflow.id === workflowId)).toMatchObject({ auditStatus: "init", status: "draft" });
+    const [resetAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [owner.id, workflowId]);
+    const resetDetails = typeof resetAudits[0].detailsJson === "string" ? JSON.parse(resetAudits[0].detailsJson) : resetAudits[0].detailsJson;
+    expect(resetDetails).toMatchObject({ operation: "workflow_audit_reset", retainedDefinition: true });
+    await expect(ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })).rejects.toThrow("仅可重置当前项目中未发布且已驳回的流程");
     const folder = await ownerCaller.project.createFolder({ projectId, name: "已发布流程", description: "仓库目录" });
     folderId = folder.id;
     await ownerCaller.project.moveWorkflow({ projectId, workflowId, folderId });

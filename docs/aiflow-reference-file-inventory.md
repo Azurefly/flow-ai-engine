@@ -104,3 +104,7 @@
 | `.../assets/js/systemConfig/systemConfig.js` | JavaScript | 系统设置与状态配置线索。 | `SystemConfigShell`、审批门禁、工作域。 |
 | `backend-history/platform/src/main/java/.../FlowController.java` | Java | 流程操作、移交、回退、模板、状态与历史步骤接口。 | 见第 6 节安全映射。 |
 | `backend-history/platform/bin/startup.sh` | Shell | 历史服务启动入口存在。 | 未执行；缺少依赖、配置和同目录工程文件，不能推断可部署契约。 |
+
+## 8. 完整归档缺口复核
+
+2026-08-19 已在当前本地可访问工作目录中再次检索 `AiFlowGraph.zip`、`designProcess/bundle.js` 与 `designProcess/canvas.js`。除第三方依赖目录中的同名文件外，未发现参考项目的完整归档或缺失画布脚本。因此本审计仍以本表的 23 项可读取文件为唯一证据；节点字段、默认值、帮助文案和校验规则无法由现有文件直接证明时，继续维持“兼容扩展”标记，等待完整归档到位后复核。

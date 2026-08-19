@@ -121,6 +121,15 @@ export async function setProjectWorkflowAudit(user: ProjectUser, input: { projec
   return true;
 }
 
+/** Restore a rejected draft to the review queue without publishing or changing its definition. */
+export async function resetProjectWorkflowAudit(user: ProjectUser, input: { projectId: string; workflowId: string }) {
+  await requireProjectPermission(user, input.projectId, "project:manage");
+  const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow SET auditStatus='init',updatedAt=NOW() WHERE id=? AND projectId=? AND status='draft' AND auditStatus='rejected'", [input.workflowId, input.projectId]);
+  if (!result.affectedRows) throw new Error("仅可重置当前项目中未发布且已驳回的流程。 ");
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: input.workflowId, details: { operation: "workflow_audit_reset", projectId: input.projectId, auditStatus: "init", retainedDefinition: true } });
+  return true;
+}
+
 export async function listProjectMembers(user: ProjectUser, projectId: string) {
   await requireProjectPermission(user, projectId, "project:view");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
