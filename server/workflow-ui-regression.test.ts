@@ -57,7 +57,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('label: "已启动流程"');
     expect(homeSource).toContain('label: "流程仓库"');
     expect(homeSource).toContain('label: "系统配置"');
-    expect(projectWorkspaceSource).toContain("PROCESS DESIGN CENTER");
+    expect(systemConfigSource).toContain("工作域配置");
+    expect(systemConfigSource).toContain("收起配置导航");
+    expect(systemConfigSource).toContain("展开配置导航");
+    expect(systemConfigSource).toContain("系统配置卡片页签");
     expect(projectWorkspaceSource).toContain("状态流程");
     expect(projectWorkspaceSource).toContain("控制流程");
     expect(projectWorkspaceSource).toContain("数据流程");
