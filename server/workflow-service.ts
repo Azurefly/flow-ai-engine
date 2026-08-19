@@ -137,7 +137,7 @@ export async function updateWorkflow(workflowId: string, user: WorkflowUser, val
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, Boolean(values.publish), Boolean(values.unpublish), workflowId]);
+    await connection.query("UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?", [nextName, JSON.stringify(definition), nextStatus, nextVersion, Boolean(values.publish), Boolean(values.unpublish), Boolean(values.unpublish), workflowId]);
     await insertVersion(connection, { workflowId, version: nextVersion, name: nextName, status: nextStatus, definition, source: values.unpublish ? "unpublished" : values.publish ? "published" : "updated", actorUserId: user.id });
     await connection.commit();
   } catch (error) {

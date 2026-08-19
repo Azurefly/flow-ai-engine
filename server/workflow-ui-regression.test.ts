@@ -49,6 +49,9 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("resetWorkflowAudit.useMutation");
     expect(governanceSource).toContain("重置审核状态");
     expect(governanceSource).toContain("project:manage");
+    expect(governanceSource).toContain("最近发布时间");
+    expect(governanceSource).toContain("最近取消发布时间");
+    expect(governanceSource).toContain("unpublishedAt");
     expect(canvasSource).toContain("flow:inspect-node");
   });
 

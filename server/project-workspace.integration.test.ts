@@ -76,7 +76,9 @@ describe("原始项目工作区 P0", () => {
     const completedRun = await ownerCaller.workflow.run({ workflowId, input: { source: "unpublish-retention-test" } });
     expect(completedRun.status).toBe("success");
     await expect(outsiderCaller.workflow.unpublish({ id: workflowId })).rejects.toThrow("流程不存在或无取消发布权限");
-    await expect(designerCaller.workflow.unpublish({ id: workflowId })).resolves.toMatchObject({ status: "draft", auditStatus: "approved" });
+    const unpublished = await designerCaller.workflow.unpublish({ id: workflowId });
+    expect(unpublished).toMatchObject({ status: "draft", auditStatus: "approved", publishedAt: null });
+    expect(unpublished.unpublishedAt).toBeTruthy();
     const [retainedRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM workflow_run WHERE id=? AND workflowId=?", [completedRun.runId, workflowId]);
     expect(retainedRuns).toHaveLength(1);
     const versionsAfterUnpublish: any[] = await ownerCaller.workflow.versions({ workflowId });

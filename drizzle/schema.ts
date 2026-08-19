@@ -157,6 +157,7 @@ export const workflows = mysqlTable(
     auditStatus: mysqlEnum("auditStatus", ["init", "approved", "rejected"]).default("init").notNull(),
     status: mysqlEnum("status", ["draft", "published"]).default("draft").notNull(),
     publishedAt: timestamp("publishedAt"),
+    unpublishedAt: timestamp("unpublishedAt"),
     definitionVersion: int("definitionVersion").default(1).notNull(),
     definitionJson: json("definitionJson").notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
