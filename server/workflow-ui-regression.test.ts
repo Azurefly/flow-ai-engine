@@ -95,6 +95,8 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("筛选仅作用于当前已授权可见的业务项目");
     expect(projectWorkspaceSource).toContain("重置筛选");
     expect(projectWorkspaceSource).toContain("可重置筛选或从右上角新建状态、控制或数据流程");
+    expect(projectWorkspaceSource).toContain("最近取消发布时间");
+    expect(projectWorkspaceSource).toContain("尚未取消发布");
     expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
     expect(systemConfigSource).toContain("WORK DOMAIN");
   });
