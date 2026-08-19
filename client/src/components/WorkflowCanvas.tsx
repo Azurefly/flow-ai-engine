@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Braces, CircleDot, Database, Download, FileText, Filter, FolderTree, GitBranch, Globe2, LockKeyhole, Maximize2, Minimize2, MousePointer2, Move, Play, Plus, Save, Sigma, Sparkles, Square, Table2, Trash2, Waypoints } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Definition } from "../../../server/workflow-service";
-import { createDefaultNodeConfig, FLOW_NODE_DEFINITIONS, type FlowNodeDefinition, type FlowNodeType, type FlowType, type NodeConfig, validateNodeConfig } from "@shared/workflow-node-contract";
+import { createDefaultNodeConfig, FLOW_NODE_DEFINITIONS, getNodeConfigEvidence, type FlowNodeDefinition, type FlowNodeType, type FlowType, type NodeConfig, validateNodeConfig } from "@shared/workflow-node-contract";
 
 type NodeKind = FlowNodeType;
 type FlowNodeData = { label: string; kind: NodeKind; config: NodeConfig };
@@ -231,7 +231,7 @@ export default function WorkflowCanvas({
   }, []);
 
   const selected = useMemo(() => nodes.find(node => node.id === selectedId), [nodes, selectedId]);
-  const selectedDefinition = selected ? FLOW_NODE_DEFINITIONS[selected.data.kind] : null;
+  const selectedDefinition = selected ? (() => { const item = FLOW_NODE_DEFINITIONS[selected.data.kind]; return getNodeConfigEvidence(selected.data.kind) === "compatibility-extension" ? { ...item, description: `${item.description} 当前裁剪安装包未保留节点打包脚本；以下字段按安全兼容契约呈现，并会保留未知扩展字段。` } : item; })() : null;
   const selectedConfig = (selected?.data.config ?? {}) as NodeConfig;
   const selectedDefaults = selected ? createDefaultNodeConfig(selected.data.kind) : {};
   const selectedConfigState = selected ? nodeConfigState(selected.data.kind, selectedConfig) : null;

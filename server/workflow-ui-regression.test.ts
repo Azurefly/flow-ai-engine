@@ -101,6 +101,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("暂无配置信息");
     expect(canvasSource).toContain("高级 JSON 配置（保留扩展字段）");
     expect(canvasSource).toContain("LockKeyhole");
+    expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
   });
 
   it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
