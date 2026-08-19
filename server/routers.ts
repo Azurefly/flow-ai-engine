@@ -9,7 +9,7 @@ import { assignRole, createCustomRole, deleteCustomRole, getWorkflowAccess, gran
 import { executeWorkflow, getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
 import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
 import { createFolder, createProject, createProjectWorkflow, deleteFolder, exportProjectWorkflows, getProjectAccess, grantProjectMember, listProjectMembers, listProjects, listProjectWorkflows, listWarehouse, moveProjectWorkflow, setProjectWorkflowAudit, updateFolder } from "./project-service";
-import { claimWorkflowTask, completeWorkflowTask, createWorkDomain, getP1SystemSettings, getPublicGeneralSettings, getTaskCalendar, getTaskDashboard, getWorkflowTask, listActiveWorkDomains, listProcessInstances, listWorkDomains, listWorkflowTasks, updateP1SystemSetting, updateWorkDomain } from "./p1-service";
+import { batchClaimWorkflowTasks, batchCompleteWorkflowTasks, claimWorkflowTask, completeWorkflowTask, createWorkDomain, getP1SystemSettings, getPublicGeneralSettings, getTaskCalendar, getTaskDashboard, getWorkflowTask, handoverWorkflowTask, listActiveWorkDomains, listProcessInstances, listWorkDomains, listWorkflowTaskAssignees, listWorkflowTasks, returnWorkflowTaskToPending, updateP1SystemSetting, updateWorkDomain } from "./p1-service";
 import { activateDataflowSchedule, createDataAsset, createDataSource, createDataTag, createDataUdf, createProjectPlugin, deleteDataAsset, deleteDataSource, deleteDataTag, deleteDataUdf, deleteDataflowSchedule, deleteProjectPlugin, listDataflowRuns, listDataflowSchedules, listDataflows, listDataResources, pauseDataflowSchedule, runDataflow, saveDataflowScheduleDraft, updateDataAsset, updateDataSource, updateDataUdf, updateProjectPlugin } from "./p2-service";
 
 export const appRouter = router({
@@ -92,8 +92,13 @@ export const appRouter = router({
     instances: protectedProcedure.input(z.object({ view: z.enum(["initiated", "all"]), limit: z.number().int().min(1).max(200).optional() })).query(({ ctx, input }) => listProcessInstances(ctx.user, input)),
     calendar: protectedProcedure.input(z.object({ month: z.coerce.date() })).query(({ ctx, input }) => getTaskCalendar(ctx.user, input.month)),
     get: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).query(async ({ ctx, input }) => { const task = await getWorkflowTask(ctx.user, input.taskId); if (!task) throw new Error("人工任务不存在或无访问权限。 "); return task; }),
+    assignees: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).query(({ ctx, input }) => listWorkflowTaskAssignees(ctx.user, input.taskId)),
     claim: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).mutation(({ ctx, input }) => claimWorkflowTask(ctx.user, input.taskId)),
     complete: protectedProcedure.input(z.object({ taskId: z.string().uuid(), result: z.record(z.string(), z.unknown()) })).mutation(({ ctx, input }) => completeWorkflowTask(ctx.user, input.taskId, input.result)),
+    handover: protectedProcedure.input(z.object({ taskId: z.string().uuid(), targetUserId: z.number().int().positive() })).mutation(({ ctx, input }) => handoverWorkflowTask(ctx.user, input)),
+    returnToPending: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).mutation(({ ctx, input }) => returnWorkflowTaskToPending(ctx.user, input.taskId)),
+    batchClaim: protectedProcedure.input(z.object({ taskIds: z.array(z.string().uuid()).min(1).max(20) })).mutation(({ ctx, input }) => batchClaimWorkflowTasks(ctx.user, Array.from(new Set(input.taskIds)))),
+    batchComplete: protectedProcedure.input(z.object({ taskIds: z.array(z.string().uuid()).min(1).max(20), result: z.record(z.string(), z.unknown()) })).mutation(({ ctx, input }) => batchCompleteWorkflowTasks(ctx.user, Array.from(new Set(input.taskIds)), input.result)),
   }),
   config: router({
     publicGeneral: publicProcedure.query(() => getPublicGeneralSettings()),

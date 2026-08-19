@@ -10,6 +10,7 @@ const projectWorkspaceSource = readFileSync(new URL("../client/src/components/Pr
 const warehouseSource = readFileSync(new URL("../client/src/components/WorkflowWarehouse.tsx", import.meta.url), "utf8");
 const systemConfigSource = readFileSync(new URL("../client/src/components/SystemConfigShell.tsx", import.meta.url), "utf8");
 const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
+const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
 
 describe("流程设计器界面回归约束", () => {
   it("新建流程按钮提交表单，控制台壳层可在窄屏纵向收敛", () => {
@@ -126,5 +127,16 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("差集");
     expect(dataResourceSource).toContain("并集");
     expect(dataResourceSource).toContain("TSML");
+  });
+
+  it("保留已启动流程的任务移交、退回与逐项批量处理入口", () => {
+    expect(processWorkbenchSource).toContain("批量领取");
+    expect(processWorkbenchSource).toContain("批量完成");
+    expect(processWorkbenchSource).toContain("任务移交与回退");
+    expect(processWorkbenchSource).toContain("移交");
+    expect(processWorkbenchSource).toContain("退回待处理");
+    expect(processWorkbenchSource).toContain("不会跨流程或跨项目执行");
+    expect(processWorkbenchSource).toContain("trpc.task.handover.useMutation");
+    expect(processWorkbenchSource).toContain("trpc.task.batchComplete.useMutation");
   });
 });

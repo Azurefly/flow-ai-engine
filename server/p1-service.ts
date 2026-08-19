@@ -79,6 +79,67 @@ export async function completeWorkflowTask(user: User, taskId: string, result: J
   return resumed;
 }
 
+async function getEligibleAssignee(task: mysql.RowDataPacket, userId: number) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,username,name,email,role,status FROM users WHERE id=? AND status='active' LIMIT 1", [userId]);
+  const candidate = rows[0];
+  if (!candidate) throw new Error("目标处理人不存在或已停用。 ");
+  const candidateUser: User = { id: Number(candidate.id), role: candidate.role === "admin" ? "admin" : "user" };
+  if (!(await hasWorkflowPermission(candidateUser, String(task.workflowId), "workflow:run"))) throw new Error("目标处理人没有该流程的运行权限。 ");
+  return candidate;
+}
+
+export async function listWorkflowTaskAssignees(user: User, taskId: string) {
+  const task: any = await getWorkflowTask(user, taskId);
+  if (!task || !(await canAccessTask(user, task, true))) throw new Error("人工任务不存在或无分配权限。 ");
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,username,name,email,role FROM users WHERE status='active' ORDER BY COALESCE(name,username),id LIMIT 200");
+  const eligible: Array<{ id: number; username: string; name: string | null; email: string | null }> = [];
+  for (const candidate of rows) {
+    const candidateUser: User = { id: Number(candidate.id), role: candidate.role === "admin" ? "admin" : "user" };
+    if (await hasWorkflowPermission(candidateUser, String(task.workflowId), "workflow:run")) {
+      eligible.push({ id: Number(candidate.id), username: String(candidate.username), name: candidate.name ?? null, email: candidate.email ?? null });
+    }
+  }
+  return eligible;
+}
+
+export async function handoverWorkflowTask(user: User, input: { taskId: string; targetUserId: number }) {
+  const task: any = await getWorkflowTask(user, input.taskId);
+  if (!task || !(await canAccessTask(user, task, true))) throw new Error("人工任务不存在或无移交权限。 ");
+  if (!["pending", "claimed"].includes(String(task.status)) || task.runStatus !== "running") throw new Error("仅可移交正在等待处理的人工任务。 ");
+  if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("仅当前处理人或系统管理员可移交已领取任务。 ");
+  const target = await getEligibleAssignee(task, input.targetUserId);
+  const claimedCondition = task.status === "claimed" ? " AND claimedByUserId=?" : "";
+  const params: unknown[] = [input.targetUserId, input.taskId, ...(task.status === "claimed" ? [Number(task.claimedByUserId)] : [])];
+  const [result] = await db().query<mysql.ResultSetHeader>(`UPDATE workflow_task SET assignedUserId=?,status='pending',claimedByUserId=NULL,claimedAt=NULL WHERE id=? AND status='${task.status}'${claimedCondition}`, params);
+  if (!result.affectedRows) throw new Error("人工任务状态已变化，请刷新后重试。 ");
+  await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: Number(target.id), action: "user_updated", resourceType: "workflow_task", resourceId: input.taskId, details: { operation: "task_handover", fromUserId: task.assignedUserId ?? task.claimedByUserId ?? null, toUserId: input.targetUserId } });
+  return getWorkflowTask(user, input.taskId);
+}
+
+export async function returnWorkflowTaskToPending(user: User, taskId: string) {
+  const task: any = await getWorkflowTask(user, taskId);
+  if (!task || !(await canAccessTask(user, task, true))) throw new Error("人工任务不存在或无退回权限。 ");
+  if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("仅当前处理人或系统管理员可将已领取任务退回待处理。 ");
+  const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_task SET status='pending',claimedByUserId=NULL,claimedAt=NULL WHERE id=? AND status='claimed' AND claimedByUserId=?", [taskId, Number(task.claimedByUserId)]);
+  if (!result.affectedRows) throw new Error("人工任务状态已变化，请刷新后重试。 ");
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: "task_returned_to_pending", assignedUserId: task.assignedUserId ?? null } });
+  return getWorkflowTask(user, taskId);
+}
+
+export async function batchClaimWorkflowTasks(user: User, taskIds: string[]) {
+  return Promise.all(taskIds.map(async taskId => {
+    try { await claimWorkflowTask(user, taskId); return { taskId, success: true as const }; }
+    catch (error) { return { taskId, success: false as const, message: error instanceof Error ? error.message : String(error) }; }
+  }));
+}
+
+export async function batchCompleteWorkflowTasks(user: User, taskIds: string[], result: JsonRecord) {
+  return Promise.all(taskIds.map(async taskId => {
+    try { const completed = await completeWorkflowTask(user, taskId, result); return { taskId, success: true as const, runId: completed.runId, status: completed.status }; }
+    catch (error) { return { taskId, success: false as const, message: error instanceof Error ? error.message : String(error) }; }
+  }));
+}
+
 export async function getTaskDashboard(user: User) {
   const [todo, done, initiated, all] = await Promise.all([
     listWorkflowTasks(user, { view: "todo", limit: 200 }), listWorkflowTasks(user, { view: "done", limit: 200 }), listWorkflowTasks(user, { view: "initiated", limit: 200 }), listWorkflowTasks(user, { view: "all", limit: 200 }),

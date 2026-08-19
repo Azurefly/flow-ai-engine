@@ -61,3 +61,46 @@
 | 设计器 bundle/canvas 脚本缺失 | 无法证明某些字段为原始默认值。 | 统一节点契约中这些键标为兼容/扩展候选，并用服务端安全校验保护。 |
 | CSS 和图片资源缺失 | 无法像素级还原。 | 复原层级、文案、状态和交互；视觉采用现有组件系统。 |
 | 后端源码缺失 | 无法复制原服务端权限或数据库实现。 | 以当前内部认证、IAM、多用户隔离和测试为安全基线，不引入外部身份依赖。 |
+
+## 6. 历史流程控制器操作映射（`FlowController.java`）
+
+唯一保留的历史控制器以 `/footstone/flow` 为根路径，可直接证明存在操作执行、查询处理人、创建流程、历史步骤、模板状态/操作维护、任务回退、移交及批量操作等概念；但它未提供用户认证、租户隔离或数据库实现，不能原样复刻为当前服务的安全契约。
+
+| 历史控制器动作 | 证据位置 | 当前安全映射 | 审计结论 |
+|---|---|---|---|
+| 单项流程操作、操作处理人查询 | `/operate`、`/operate/acceptor` | `task.claim`、`task.complete`、`task.assignees` | 已恢复；仅具备 `workflow:run` 的内部用户可操作或被列为候选。 |
+| 操作回退 | `/operate/backoff` | `task.returnToPending` | 已采用“退回待处理、不倒写已完成实例”的受限语义，避免破坏已审计运行。 |
+| 操作移交 | `/operate/handover` | `task.handover` | 已恢复；目标用户必须处于 active 状态并拥有相同流程的运行权限。 |
+| 批量操作 | `/operate/batch`、`/operate/batch/future` | `task.batchClaim`、`task.batchComplete` | 已恢复为最多 20 项的逐项处理，逐项权限/状态校验并返回成功或失败结果，避免跨项目批量副作用。 |
+| 历史步骤、最近步骤、子流程历史 | `/get/history/step`、`/get/lasttime/step` | 运行详情、节点执行日志、子流程节点输入输出审计 | 已以资源级运行日志替代；保留流程运行与节点日志查询。 |
+| 模板、状态、操作的历史写接口 | `/module/*` | 流程版本、节点模板、状态/操作节点配置、审核发布门禁 | 已映射到版本化定义和资源级权限；未暴露历史控制器中的无鉴权写接口。 |
+
+## 7. 当前可访问副本逐文件清单（23 项）
+
+下表覆盖 2026-08-19 在当前沙箱内实际可读取的全部文件。该结论只适用于裁剪副本；共享文件声明的原始 `AiFlowGraph.zip` 仍未在文件系统中出现，因此本表不能替代完整归档到位后的二次审计。
+
+| 相对路径 | 类型 | 可证明的功能线索 | 当前映射或处置 |
+|---|---|---|---|
+| `backend/src/main/resources/static/index.html` | HTML | 前端入口与顶层壳层。 | `Home` 顶层控制台。 |
+| `.../views/businessCenter.html` | HTML | 业务列表、搜索、新增/导入入口。 | `BusinessCenter`。 |
+| `.../views/businessOverview.html` | HTML | 业务工作区、流程/权限导航。 | `ProjectWorkspace`。 |
+| `.../views/design_process.html` | HTML | 状态流程工具栏、帮助、图例、画布操作。 | `WorkflowCanvas`。 |
+| `.../views/initiatedProcess.html` | HTML | 已启动流程导航、看板、日历、待办。 | `ProcessWorkbench`。 |
+| `.../views/processWarehouse.html` | HTML | 树形仓库、搜索、批量操作、预览。 | `WorkflowWarehouse`。 |
+| `.../views/process_detail.html` | HTML | 流程引导、基本信息、运行实例表。 | `WorkflowGovernance`。 |
+| `.../views/dataFlowCanvas.html` | HTML | 数据资源/函数树、画布工具、调度入口。 | `DataResourceCenter`。 |
+| `.../views/dataflow_process_detail.html` | HTML | 数据流详情与操作审计展示。 | `DataResourceCenter` 的运行审计与调度区。 |
+| `.../views/system_config.html` | HTML | 系统配置左栏和动态页签。 | `SystemConfigShell`。 |
+| `.../assets/js/common/model.js` | JavaScript | 公共模型与枚举引用。 | 仅作状态文案/兼容审计线索。 |
+| `.../assets/js/index.js` | JavaScript | 顶层页面初始化与路由线索。 | 顶层导航/页面状态已映射。 |
+| `.../assets/js/initiatedProcess/initiatedProcess.js` | JavaScript | 启动流程工作台切换与实例查询线索。 | `ProcessWorkbench`、运行日志 API。 |
+| `.../assets/js/processDesign/businessOverview.js` | JavaScript | 项目工作区导航与业务选择线索。 | `ProjectWorkspace`。 |
+| `.../assets/js/processDesign/processDesignCenter.js` | JavaScript | 新增、详情、设计、审核、发布、取消发布、发起、启动、筛选。 | 项目流程生命周期、设计器与权限门禁。 |
+| `.../assets/js/processDesign/datasourceManagement.js` | JavaScript | 数据源管理入口。 | P2 项目隔离数据源 API/页面。 |
+| `.../assets/js/processDesign/resourceConfigPluginsManagement.js` | JavaScript | 插件资源管理入口。 | P2 项目插件资源。 |
+| `.../assets/js/processDesign/tagCenter.js` | JavaScript | 标签中心入口。 | P2 数据标签资源。 |
+| `.../assets/js/processDesign/udfManagement.js` | JavaScript | UDF 管理入口。 | P2 项目 UDF 元数据。 |
+| `.../assets/js/processWarehouse/processWarehouse.js` | JavaScript | 仓库搜索、选择、批量导入导出。 | `WorkflowWarehouse`。 |
+| `.../assets/js/systemConfig/systemConfig.js` | JavaScript | 系统设置与状态配置线索。 | `SystemConfigShell`、审批门禁、工作域。 |
+| `backend-history/platform/src/main/java/.../FlowController.java` | Java | 流程操作、移交、回退、模板、状态与历史步骤接口。 | 见第 6 节安全映射。 |
+| `backend-history/platform/bin/startup.sh` | Shell | 历史服务启动入口存在。 | 未执行；缺少依赖、配置和同目录工程文件，不能推断可部署契约。 |
