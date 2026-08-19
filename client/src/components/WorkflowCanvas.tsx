@@ -206,10 +206,16 @@ export default function WorkflowCanvas({
   const canvasRegionRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<Definition>(initial);
   const appliedDefinitionRef = useRef("");
+  const emittedDefinitionRef = useRef("");
   const appliedWorkflowRef = useRef<string | undefined>(undefined);
   const definitionSignature = useMemo(() => JSON.stringify(definition ?? defaultDefinition()), [definition]);
 
   useEffect(() => {
+    if (emittedDefinitionRef.current === definitionSignature) {
+      appliedDefinitionRef.current = definitionSignature;
+      appliedWorkflowRef.current = workflowId;
+      return;
+    }
     if (appliedWorkflowRef.current === workflowId && appliedDefinitionRef.current === definitionSignature) return;
     const next = definition ?? defaultDefinition();
     baseRef.current = next;
@@ -217,11 +223,14 @@ export default function WorkflowCanvas({
     appliedDefinitionRef.current = definitionSignature;
     setNodes(toFlowNodes(next));
     setEdges(toFlowEdges(next));
-    setSelectedId(null);
+    setSelectedId(current => current && next.nodes.some(node => node.id === current) ? current : null);
   }, [definition, definitionSignature, workflowId, setEdges, setNodes]);
 
   useEffect(() => {
-    if (onDefinitionChange) onDefinitionChange(toDefinition(nodes, edges, baseRef.current));
+    if (!onDefinitionChange) return;
+    const next = toDefinition(nodes, edges, baseRef.current);
+    emittedDefinitionRef.current = JSON.stringify(next);
+    onDefinitionChange(next);
   }, [edges, nodes, onDefinitionChange]);
 
   useEffect(() => {

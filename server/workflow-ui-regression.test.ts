@@ -16,6 +16,8 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('<Button type="submit" size="sm" className="h-8"');
     expect(homeSource).toContain('flex min-h-[calc(100vh-56px)] flex-col md:flex-row');
     expect(homeSource).toContain('sidebarOpen ? "w-full md:w-72"');
+    expect(homeSource).toContain('key={`${workflow.id}:${workflow.definitionVersion}`}');
+    expect(homeSource).not.toContain('workflow.definitionVersion}:${JSON.stringify(definition).length');
   });
 
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
@@ -110,6 +112,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("高级 JSON 配置（保留扩展字段）");
     expect(canvasSource).toContain("LockKeyhole");
     expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
+    expect(canvasSource).toContain("next.nodes.some(node => node.id === current)");
   });
 
   it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
