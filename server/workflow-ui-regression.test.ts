@@ -22,6 +22,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("trpc.workflow.unpublish.useMutation");
     expect(homeSource).toContain("取消发布");
     expect(homeSource).toContain("历史版本与运行审计已保留");
+    expect(homeSource).toContain("StructuredRunInput");
+    expect(homeSource).toContain("运行字段");
+    expect(homeSource).toContain("添加运行字段");
   });
 
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {

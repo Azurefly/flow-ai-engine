@@ -148,6 +148,11 @@
   display: none;
 }
 
+/* 流程运行改用下方的结构化键值字段，旧 JSON 文本输入不再向用户展示。 */
+textarea.h-20.font-mono {
+  display: none;
+}
+
 @layer components {
   /**
    * Custom container utility that centers content and adds responsive padding.
