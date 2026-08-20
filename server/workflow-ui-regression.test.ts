@@ -11,6 +11,7 @@ const warehouseSource = readFileSync(new URL("../client/src/components/WorkflowW
 const systemConfigSource = readFileSync(new URL("../client/src/components/SystemConfigShell.tsx", import.meta.url), "utf8");
 const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
 const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
+const processWorkbenchRunTabSource = readFileSync(new URL("../client/src/components/ProcessWorkbenchRunTab.tsx", import.meta.url), "utf8");
 
 describe("流程设计器界面回归约束", () => {
   it("新建流程按钮提交表单，控制台壳层可在窄屏纵向收敛", () => {
@@ -194,5 +195,10 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("当前视图仅展示具备运行权限的流程实例与人工任务");
     expect(processWorkbenchSource).toContain("PanelLeftClose");
     expect(processWorkbenchSource).toContain("PanelLeftOpen");
+    expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
+    expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
+    expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
+    expect(processWorkbenchRunTabSource).toContain("返回工作台");
+    expect(processWorkbenchRunTabSource).toContain("trpc.workflow.runDetail.useQuery");
   });
 });
