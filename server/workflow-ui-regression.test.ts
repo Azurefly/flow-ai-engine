@@ -169,6 +169,10 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("操作 ID");
     expect(dataResourceSource).toContain("结束时间");
     expect(dataResourceSource).toContain("查看审计");
+    expect(dataResourceSource).toContain("dataflow-canvas-utility-actions");
+    expect(dataResourceSource).toContain("保存为图片");
+    expect(dataResourceSource).toContain("整理画布");
+    expect(dataResourceSource).toContain("已打开“${flow.name}”设计器");
   });
 
   it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {
