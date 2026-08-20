@@ -195,6 +195,9 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("当前视图仅展示具备运行权限的流程实例与人工任务");
     expect(processWorkbenchSource).toContain("PanelLeftClose");
     expect(processWorkbenchSource).toContain("PanelLeftOpen");
+    expect(processWorkbenchSource).toContain("data-process-workbench-loading");
+    expect(processWorkbenchSource).toContain("正在读取已启动流程");
+    expect(processWorkbenchSource).toContain("正在加载当前授权范围内的看板统计与最近任务");
     expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
     expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
