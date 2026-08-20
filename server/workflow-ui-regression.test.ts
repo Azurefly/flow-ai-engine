@@ -159,6 +159,13 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("data-resource-center");
   });
 
+  it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {
+    expect(systemConfigSource).toContain("平台名称");
+    expect(systemConfigSource).toContain("要求审核通过后发布");
+    expect(systemConfigSource).toContain("工作域名称");
+    expect(systemConfigSource).not.toContain("JSON.parse");
+  });
+
   it("保留已启动流程的任务移交、退回与逐项批量处理入口", () => {
     expect(processWorkbenchSource).toContain("批量领取");
     expect(processWorkbenchSource).toContain("批量完成");
