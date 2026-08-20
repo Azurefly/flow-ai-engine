@@ -163,6 +163,11 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("TSML");
     expect(dataResourceSource).toContain("StructuredResourceForm");
     expect(dataResourceSource).toContain("data-resource-center");
+    expect(dataResourceSource).toContain("dataflow-operation-list");
+    expect(dataResourceSource).toContain("已操作流程列表");
+    expect(dataResourceSource).toContain("操作 ID");
+    expect(dataResourceSource).toContain("结束时间");
+    expect(dataResourceSource).toContain("查看审计");
   });
 
   it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {
