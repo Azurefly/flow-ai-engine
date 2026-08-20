@@ -39,6 +39,7 @@
 | 33 | 生产非法计划回调 | 无计划身份拒绝与运行审计副作用 | 对线上 `/api/scheduled/dataflow` 发送不带计划身份的 POST 请求，真实返回 HTTP 403。随后只读查询 `dataflow_run`，仍仅存在此前 `cJ2glbU_1eLdO2xS` 的一条计划运行，未新增运行记录。 |
 | 34 | 生产计划暂停—恢复 | 平台生命周期状态与下次触发窗口 | 生产任务 `LZdLD7JML8zvtPWtiXFEj8` 已真实短暂停用，列表核验 `is_enable=false`；随后立即恢复，返回启用成功和 `next_execution_at=2026-08-20T09:00:00Z`，最终列表再次确认 `is_enable=true`。未删除生产任务，隔离删除与当前版本发布后的时间桶幂等复验仍待完成。 |
 | 35 | 隔离计划删除 | 真实删除语义与生产计划隔离 | 创建远期、不绑定数据流业务行的隔离计划 `LRSfWWFrXHZfF5kJk49T2U` 后立即调用删除；平台返回成功。后续列表仅保留生产任务 `LZdLD7JML8zvtPWtiXFEj8`，且其 `is_enable=true`、下一次触发仍为 `2026-08-20T09:00:00Z`。由真实数据库 `p2-schedule-callback` 测试覆盖同分钟时间桶幂等和回调隔离；当前生产版本写入时间桶仍待发布后复验。 |
+| 36 | 应用级隔离计划删除 | 应用记录、平台任务与生产计划隔离 | 显式开启真实集成测试后，系统创建隔离项目与已发布数据流，通过 `saveDataflowScheduleDraft`、`activateDataflowSchedule` 创建远期平台任务，确认任务 UID 在平台列表存在；再通过 `deleteDataflowSchedule` 删除，确认 `dataflow_schedule.status='deleted'` 且平台任务消失。测试清理完成后平台列表只保留生产任务 `LZdLD7JML8zvtPWtiXFEj8`，其状态仍为启用。 |
 
 ## 当前尚待记录的生产验收
 
