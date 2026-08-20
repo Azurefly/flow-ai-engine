@@ -133,6 +133,21 @@
   }
 }
 
+/* 节点配置仅通过字段化面板编辑；历史 JSON 兼容通道不向用户直接暴露。 */
+[data-workflow-inspector] > div:nth-child(2) > details {
+  display: none;
+}
+
+/* 模板配置复用同一字段化节点面板；不再通过提示框直接编辑 JSON。 */
+[data-workflow-inspector] > div:nth-child(3) details > div > div > button:nth-of-type(2) {
+  display: none;
+}
+
+/* 数据资源页面用结构化表单替代历史 JSON 文本表单。 */
+[data-resource-center] form:has(textarea) {
+  display: none;
+}
+
 @layer components {
   /**
    * Custom container utility that centers content and adds responsive padding.

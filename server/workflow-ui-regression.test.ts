@@ -134,7 +134,11 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("画布移动");
     expect(canvasSource).toContain("节点框选");
     expect(canvasSource).toContain("暂无配置信息");
-    expect(canvasSource).toContain("高级 JSON 配置（保留扩展字段）");
+    expect(canvasSource).toContain("StructuredValueEditor");
+    expect(canvasSource).toContain("StructuredListRow");
+    expect(canvasSource).toContain("添加字段");
+    expect(canvasSource).toContain("添加一项");
+    expect(canvasSource).not.toContain("function JsonField");
     expect(canvasSource).toContain("LockKeyhole");
     expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
     expect(canvasSource).toContain("next.nodes.some(node => node.id === current)");
@@ -151,6 +155,8 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("差集");
     expect(dataResourceSource).toContain("并集");
     expect(dataResourceSource).toContain("TSML");
+    expect(dataResourceSource).toContain("StructuredResourceForm");
+    expect(dataResourceSource).toContain("data-resource-center");
   });
 
   it("保留已启动流程的任务移交、退回与逐项批量处理入口", () => {
