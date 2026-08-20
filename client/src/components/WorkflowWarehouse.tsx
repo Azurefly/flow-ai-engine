@@ -39,7 +39,9 @@ export default function WorkflowWarehouse({ projects, onOpenWorkflow }: { projec
   const selectedFolder = folders.find(folder => folder.id === selectedFolderId) ?? null;
   const scoped = selectedFolderId ? workflows.filter(workflow => workflow.folderId === selectedFolderId) : workflows.filter(workflow => !workflow.folderId);
   const visibleWorkflows = scoped.filter(workflow => `${workflow.name} ${workflow.description ?? ""} ${workflow.flowType}`.toLowerCase().includes(keyword.trim().toLowerCase()));
-  const children = (parentId: string | null) => folders.filter(folder => (folder.parentId ?? null) === parentId);
+  const rawChildren = (parentId: string | null) => folders.filter(folder => (folder.parentId ?? null) === parentId);
+  const hasFolderMatch = (folder: Folder): boolean => !keyword.trim() || folder.name.toLowerCase().includes(keyword.trim().toLowerCase()) || rawChildren(folder.id).some(hasFolderMatch);
+  const children = (parentId: string | null) => rawChildren(parentId).filter(hasFolderMatch);
   const invalidate = () => void utils.project.warehouse.invalidate({ projectId: activeProjectId });
   const createFolder = trpc.project.createFolder.useMutation({ onSuccess: () => { invalidate(); setFolderName(""); toast.success("仓库目录已创建。"); }, onError: error => toast.error(error.message) });
   const updateFolder = trpc.project.updateFolder.useMutation({ onSuccess: () => { invalidate(); toast.success("目录说明已更新。"); }, onError: error => toast.error(error.message) });

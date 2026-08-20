@@ -119,6 +119,8 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("流程简介");
     expect(warehouseSource).toContain("没有搜到任何数据");
     expect(warehouseSource).toContain("只读流程图");
+    expect(warehouseSource).toContain("hasFolderMatch");
+    expect(warehouseSource).toContain("rawChildren(folder.id).some(hasFolderMatch)");
   });
 
   it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {
