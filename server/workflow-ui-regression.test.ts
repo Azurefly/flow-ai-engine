@@ -194,6 +194,8 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain('dataflow-canvas-utility-actions=""');
     expect(dataResourceSource).toContain("保存为图片");
     expect(dataResourceSource).toContain("整理画布");
+    expect(styleSource).toContain('[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child');
+    expect(styleSource).toContain('[data-resource-center] [dataflow-canvas-utility-actions]');
     expect(dataResourceSource).toContain("已打开“${flow.name}”设计器");
   });
 

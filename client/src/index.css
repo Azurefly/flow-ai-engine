@@ -562,13 +562,41 @@
 }
 
 [data-resource-center] > div:first-child {
-  margin-bottom: 12px !important;
-  padding-bottom: 10px !important;
+  display: none;
 }
 
 [data-resource-center] > .mb-4 > button {
   border-radius: 0 !important;
   box-shadow: none !important;
+}
+
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child {
+  min-height: 40px;
+  padding: 6px 12px;
+}
+
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child > div > p:first-child,
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child > div > p:last-child {
+  display: none;
+}
+
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child h2 {
+  margin-top: 0;
+  font-size: 13px;
+}
+
+[data-resource-center] [dataflow-canvas-utility-actions] {
+  margin-bottom: 0;
+  min-height: 38px;
+  border: 0;
+  border-bottom: 1px solid #dfe5ec;
+  border-radius: 0;
+  padding: 5px 12px;
+  box-shadow: none;
+}
+
+[data-resource-center] [dataflow-canvas-utility-actions] > div:first-child {
+  display: none;
 }
 
 @media (max-width: 1279px) {
