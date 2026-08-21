@@ -134,7 +134,7 @@
 }
 
 /* 节点配置仅通过字段化面板编辑；历史 JSON 兼容通道不向用户直接暴露。 */
-[data-workflow-inspector] > div:nth-child(2) > details {
+[data-workflow-inspector] details:has(textarea.font-mono) {
   display: none;
 }
 

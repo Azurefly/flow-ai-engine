@@ -69,6 +69,8 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("REUSE LIBRARY");
     expect(canvasSource).toContain("保存为节点模板");
     expect(canvasSource).toContain("模板 JSON 配置");
+    expect(styleSource).toContain('[data-workflow-inspector] details:has(textarea.font-mono)');
+    expect(styleSource).toContain('button:nth-of-type(2)');
     expect(homeSource).toContain("保存当前定义为子流程");
   });
 
