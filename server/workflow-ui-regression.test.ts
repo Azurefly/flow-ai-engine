@@ -12,6 +12,7 @@ const systemConfigSource = readFileSync(new URL("../client/src/components/System
 const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
 const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
 const processWorkbenchRunTabSource = readFileSync(new URL("../client/src/components/ProcessWorkbenchRunTab.tsx", import.meta.url), "utf8");
+const styleSource = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
 
 describe("流程设计器界面回归约束", () => {
   it("新建流程按钮提交表单，控制台壳层可在窄屏纵向收敛", () => {
@@ -207,5 +208,18 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
     expect(processWorkbenchRunTabSource).toContain("trpc.workflow.runDetail.useQuery");
+  });
+
+  it("原安装包视觉壳层保持浅色平面工作台与三栏画布结构", () => {
+    expect(homeSource).toContain('data-aiflow-console=""');
+    expect(homeSource).toContain('data-aiflow-designer=""');
+    expect(canvasSource).toContain('data-aiflow-workflow-canvas=""');
+    expect(projectWorkspaceSource).toContain('data-aiflow-business-center=""');
+    expect(warehouseSource).toContain('data-aiflow-warehouse=""');
+    expect(styleSource).toContain('content: "AI FLOW GRAPH"');
+    expect(styleSource).toContain('[data-aiflow-business-center]');
+    expect(styleSource).toContain('[data-aiflow-designer] [data-aiflow-workflow-canvas]');
+    expect(styleSource).toContain('[data-aiflow-warehouse] > div > .grid');
+    expect(styleSource).toContain('div:has(> div > aside)');
   });
 });

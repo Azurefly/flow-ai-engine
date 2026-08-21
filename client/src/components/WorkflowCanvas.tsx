@@ -341,7 +341,7 @@ export default function WorkflowCanvas({
   };
 
   return (
-    <div className={inspectorMode === "maximized" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_480px]" : inspectorMode === "compact" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_320px]"}>
+    <div data-aiflow-workflow-canvas="" className={inspectorMode === "maximized" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_480px]" : inspectorMode === "compact" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_320px]"}>
       <section ref={canvasRegionRef} className="min-w-0 bg-slate-50">
         <div className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
           <div className="flex items-center gap-1 pr-2">

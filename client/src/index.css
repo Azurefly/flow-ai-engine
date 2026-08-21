@@ -153,6 +153,322 @@ textarea.h-20.font-mono {
   display: none;
 }
 
+/* 原 AiFlowGraph 工作台采用白色标题栏、细灰边框和克制的直角面板；仅作用于已登录控制台。 */
+[data-aiflow-console] > header {
+  border-color: #d9e0e9 !important;
+  background: #ffffff !important;
+  color: #354052 !important;
+  box-shadow: 0 1px 3px rgb(38 56 79 / 8%) !important;
+}
+
+[data-aiflow-console] > header .bg-slate-900,
+[data-aiflow-console] > header .bg-slate-800 {
+  background: #ffffff !important;
+}
+
+[data-aiflow-console] > header .border-slate-700,
+[data-aiflow-console] > header .border-slate-600 {
+  border-color: #e0e6ee !important;
+}
+
+[data-aiflow-console] > header .text-slate-100,
+[data-aiflow-console] > header .text-slate-300,
+[data-aiflow-console] > header .text-slate-400 {
+  color: #596678 !important;
+}
+
+[data-aiflow-console] > header .text-blue-300 {
+  color: #2d72cf !important;
+}
+
+[data-aiflow-console] > header button:hover {
+  background: #f2f6fc !important;
+  color: #2469c7 !important;
+}
+
+[data-aiflow-console] > header button.border-blue-400 {
+  border-color: #3a82e4 !important;
+  background: #edf4ff !important;
+  color: #2469c7 !important;
+}
+
+[data-aiflow-console] .rounded-lg,
+[data-aiflow-console] .rounded-md,
+[data-aiflow-console] .rounded-xl {
+  border-radius: 3px;
+}
+
+[data-aiflow-console] .shadow-sm,
+[data-aiflow-console] .shadow-lg {
+  box-shadow: 0 1px 3px rgb(38 56 79 / 7%);
+}
+
+[data-aiflow-console] > header .hidden.sm\:block > p:first-child {
+  display: none;
+}
+
+[data-aiflow-console] > header .hidden.sm\:block::before {
+  display: block;
+  color: #2d72cf;
+  content: "AI FLOW GRAPH";
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.15;
+}
+
+/* 业务中心按原始页面保持平面筛选条与紧凑数据表，而非仪表盘卡片堆叠。 */
+[data-aiflow-business-center] {
+  background: #fff;
+}
+
+[data-aiflow-business-center] > div {
+  max-width: none;
+}
+
+[data-aiflow-business-center] > div > div:first-child > p:first-child {
+  display: none;
+}
+
+[data-aiflow-business-center] > div > div:first-child {
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+}
+
+[data-aiflow-business-center] h1 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+[data-aiflow-business-center] section {
+  border-color: #dfe5ec;
+  box-shadow: none;
+}
+
+[data-aiflow-business-center] section > div:first-child {
+  background: #fff;
+  padding: 12px 16px;
+}
+
+[data-aiflow-business-center] table th {
+  background: #f6f8fb;
+  color: #697789;
+  font-weight: 600;
+}
+
+[data-aiflow-business-center] table th,
+[data-aiflow-business-center] table td {
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+/* 项目概览：左侧是原始模块菜单，右侧为连续工作区，不采用宽卡片栅格。 */
+@media (min-width: 1024px) {
+  [data-aiflow-console] > div > section > div:has(> aside) > aside {
+    width: 216px !important;
+    border-color: #dfe5ec;
+    box-shadow: none;
+  }
+
+  [data-aiflow-console] > div > section > div:has(> aside) > section {
+    background: #fff;
+    padding: 16px 20px;
+  }
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > aside > div:first-child {
+  padding: 12px 14px;
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > aside nav {
+  gap: 0;
+  padding: 6px 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > aside nav button {
+  border-radius: 0;
+  padding: 9px 14px;
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > aside nav button[class*="bg-[#eaf1ff]"] {
+  border-left: 3px solid #2f77d2;
+  background: #edf4ff;
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > section h1 {
+  font-size: 20px;
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > section .rounded-lg {
+  border-radius: 2px;
+}
+
+/* 设计器以原始三栏画布为主，权限、运行和协作信息保持可用但降为次级紧凑区。 */
+[data-aiflow-designer] > .mb-4.grid {
+  margin-bottom: 8px;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 270px;
+}
+
+[data-aiflow-designer] > .mb-4.grid > div {
+  border-radius: 2px;
+  padding: 10px 12px;
+}
+
+[data-aiflow-designer] > .mb-4.grid p {
+  line-height: 1.35;
+}
+
+[data-aiflow-designer] [data-structured-run-input] {
+  margin-bottom: 8px;
+  border-radius: 2px;
+  padding: 10px 12px;
+}
+
+[data-aiflow-designer] [data-structured-run-input] > div:first-child p:last-child {
+  display: none;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] {
+  border-radius: 2px;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child,
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > aside {
+  border-color: #dfe5ec;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child {
+  min-height: 48px;
+  padding: 0 10px;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > .relative {
+  height: 610px;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > aside > div:first-child {
+  min-height: 50px;
+  padding: 9px 12px;
+}
+
+@media (max-width: 1279px) {
+  [data-aiflow-designer] > .mb-4.grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 已启动流程：保留原始工作台的左侧视图导航和右侧连续列表，去除仪表盘式卡片间距。 */
+[data-aiflow-console] > div > section > div:has(> div > aside) {
+  background: #fff;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div {
+  max-width: none;
+  gap: 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside,
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside {
+  border-right-color: #dfe5ec;
+  padding: 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside nav {
+  gap: 0;
+  padding: 6px 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside nav button {
+  border-radius: 0;
+  padding: 9px 14px;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section > header {
+  padding: 12px 16px;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section > header > div > p:first-child {
+  display: none;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section > header h2 {
+  font-size: 20px;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside > div.mt-4 {
+  display: none;
+}
+
+[data-aiflow-console] > div > section > div:has(> aside) > aside > div:first-child > p:first-of-type {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+}
+
+/* 流程仓库：原始页面以树、流程列表、简介预览连续分栏承载，避免三张独立仪表盘卡片。 */
+[data-aiflow-warehouse] {
+  background: #fff;
+}
+
+[data-aiflow-warehouse] > div {
+  max-width: none;
+}
+
+[data-aiflow-warehouse] > div > div:first-child > div > p:first-child {
+  display: none;
+}
+
+[data-aiflow-warehouse] > div > .grid {
+  gap: 0;
+  grid-template-columns: 250px minmax(0, 1fr) 380px;
+}
+
+[data-aiflow-warehouse] > div > .grid > aside,
+[data-aiflow-warehouse] > div > .grid > section {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-aiflow-warehouse] > div > .grid > aside:first-child {
+  border-right-color: #dfe5ec;
+}
+
+[data-aiflow-warehouse] > div > .grid > aside:last-child {
+  border-left-color: #dfe5ec;
+}
+
+/* 数据流资源中心沿用原始资源树—工具栏—运行审计的薄分隔线工作区。 */
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]),
+[data-resource-center] [dataflow-operation-list] {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:nth-child(2) {
+  gap: 0;
+  padding: 0;
+  background: #fff;
+}
+
+[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:nth-child(2) > div {
+  border-radius: 0;
+  border-top: 0;
+  border-bottom: 0;
+  padding: 12px;
+}
+
+@media (max-width: 1279px) {
+  [data-aiflow-warehouse] > div > .grid {
+    gap: 12px;
+    grid-template-columns: 1fr;
+  }
+}
+
 @layer components {
   /**
    * Custom container utility that centers content and adds responsive padding.
