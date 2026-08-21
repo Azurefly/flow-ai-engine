@@ -539,31 +539,6 @@
   padding: 8px 12px 0 !important;
 }
 
-[data-aiflow-console] div:has(> aside button[title="收起配置导航"]),
-[data-aiflow-console] div:has(> aside button[title="展开配置导航"]) {
-  max-width: none !important;
-  gap: 0 !important;
-}
-
-[data-aiflow-console] div:has(> aside button[title="收起配置导航"]) > aside,
-[data-aiflow-console] div:has(> aside button[title="展开配置导航"]) > aside,
-[data-aiflow-console] div:has(> aside button[title="收起配置导航"]) > section,
-[data-aiflow-console] div:has(> aside button[title="展开配置导航"]) > section {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-[data-aiflow-console] div:has(> aside button[title="收起配置导航"]) > aside,
-[data-aiflow-console] div:has(> aside button[title="展开配置导航"]) > aside {
-  border-right-color: #dfe5ec !important;
-}
-
-[data-aiflow-console] div:has(> aside button[title="收起配置导航"]) > section > div:first-child,
-[data-aiflow-console] div:has(> aside button[title="展开配置导航"]) > section > div:first-child {
-  background: #f7f9fc !important;
-  padding: 8px 12px 0 !important;
-}
-
 /* 原始流程详情用虚线标题段落串接引导、基本信息、画布与实例列表。 */
 [data-aiflow-process-detail] {
   border-radius: 0 !important;
