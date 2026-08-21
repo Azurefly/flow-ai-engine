@@ -459,8 +459,22 @@
   max-width: none;
 }
 
-[data-aiflow-warehouse] > div > div:first-child > div > p:first-child {
+[data-aiflow-warehouse] > div > div:first-child {
+  min-height: 40px;
+  margin-bottom: 0;
+  border-bottom-color: #dfe5ec;
+  padding: 5px 12px;
+}
+
+[data-aiflow-warehouse] > div > div:first-child > div {
   display: none;
+}
+
+[data-aiflow-warehouse] > div > div:first-child > select {
+  height: 30px;
+  min-width: 220px;
+  border-radius: 2px;
+  font-size: 12px;
 }
 
 [data-aiflow-warehouse] > div > .grid {

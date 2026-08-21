@@ -252,6 +252,8 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain('order: 2;');
     expect(styleSource).toContain('[data-aiflow-designer] > [data-structured-run-input]');
     expect(styleSource).toContain('[data-aiflow-warehouse] > div > .grid');
+    expect(styleSource).toContain('[data-aiflow-warehouse] > div > div:first-child > select');
+    expect(styleSource).toContain('min-height: 40px;');
     expect(styleSource).toContain('[data-aiflow-process-detail]');
     expect(styleSource).toContain('[data-aiflow-system-config]');
     expect(styleSource).not.toContain('div:has(> aside button[title="收起配置导航"])');
