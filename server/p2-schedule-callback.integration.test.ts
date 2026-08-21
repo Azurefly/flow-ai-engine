@@ -29,6 +29,7 @@ function responseCapture() {
 describe("P2 托管计划可信回调", () => {
   afterAll(async () => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     if (!pool) return;
     if (projectId) {
       await pool.query("DELETE FROM dataflow_schedule WHERE projectId=?", [projectId]);
@@ -45,6 +46,8 @@ describe("P2 托管计划可信回调", () => {
   });
 
   runIntegration("仅可信任务 UID 可触发一次数据流运行，非法与重复回调均不重复执行", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-21T06:00:00.000Z"));
     pool = mysql.createPool(process.env.DATABASE_URL!);
     await pool.query("INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW())", [`test:${username}`, username, "计划回调验收管理员", "admin", "active", "internal"]);
     const [users] = await pool.query<mysql.RowDataPacket[]>("SELECT * FROM users WHERE username=?", [username]);
