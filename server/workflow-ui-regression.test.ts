@@ -231,6 +231,7 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain('[data-aiflow-process-detail]');
     expect(styleSource).toContain('[data-aiflow-system-config]');
     expect(styleSource).toContain('button[title="收起配置导航"]');
-    expect(styleSource).toContain('div:has(> div > aside)');
+    expect(styleSource).toContain('button[aria-label="收起已启动流程导航"]');
+    expect(styleSource).toContain('button[aria-label="展开已启动流程导航"]');
   });
 });

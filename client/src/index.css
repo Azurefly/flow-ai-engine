@@ -402,70 +402,29 @@ textarea.h-20.font-mono {
   }
 }
 
-/* 已启动流程：保留原始工作台的左侧视图导航和右侧连续列表，去除仪表盘式卡片间距。 */
-[data-aiflow-console] > div > section > div:has(> div > aside) {
-  background: #fff;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div {
-  max-width: none;
-  gap: 0;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside,
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section {
-  border-radius: 0;
-  box-shadow: none;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside {
-  border-right-color: #dfe5ec;
-  padding: 0;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside nav {
-  gap: 0;
-  padding: 6px 0;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside nav button {
-  border-radius: 0;
-  padding: 9px 14px;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section > header {
-  padding: 12px 16px;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section > header > div > p:first-child {
-  display: none;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > main > section > header h2 {
-  font-size: 20px;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) > div > aside > div.mt-4 {
-  display: none;
-}
-
-[data-aiflow-console] > div > section > div:has(> div > aside) {
+/* 已启动流程：以稳定的导航 aria 标记锚定连续双栏，避免泛化 aside 选择器影响其他工作区。 */
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]),
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) {
   padding: 0;
   background: #fff;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) > div {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) > div,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) > div {
   max-width: none;
   gap: 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) aside,
-[data-aiflow-console] > div > section > div:has(> div > aside) main > section {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section {
   border-radius: 0;
   box-shadow: none;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) aside {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside {
   border-color: #dfe5ec;
   border-top: 0;
   border-bottom: 0;
@@ -473,26 +432,38 @@ textarea.h-20.font-mono {
   padding: 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) aside nav {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside nav,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside nav {
   gap: 0;
   padding: 6px 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) aside nav button {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside nav button,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside nav button {
   border-radius: 0;
+  padding: 9px 14px;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) main > section {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section {
   border: 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside) main > section > header {
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header {
   padding: 12px 16px;
 }
 
-[data-aiflow-console] > div > section > div:has(> aside) > aside > div:first-child > p:first-of-type {
-  font-size: 9px;
-  letter-spacing: 0.12em;
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header > div > p:first-child,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header > div > p:first-child,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside > div.mt-4,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside > div.mt-4 {
+  display: none;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header h2,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header h2 {
+  font-size: 20px;
 }
 
 /* 流程仓库：原始页面以树、流程列表、简介预览连续分栏承载，避免三张独立仪表盘卡片。 */
