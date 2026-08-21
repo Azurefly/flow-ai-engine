@@ -82,7 +82,7 @@ function FlowNodeCard({ data, selected }: NodeProps) {
   const handles = sourceHandles(nodeData.kind, nodeData.config);
   const hasTarget = nodeData.kind !== "start";
   return (
-    <div className={`relative min-w-40 rounded-lg border-2 bg-white px-3 py-2.5 shadow-[0_10px_22px_rgba(15,23,42,.08)] ${selected ? "ring-2 ring-indigo-200" : ""}`} style={{ borderColor: appearance.color }}>
+    <div className={`relative min-w-40 rounded-[2px] border-2 bg-white px-3 py-2 shadow-none ${selected ? "ring-2 ring-indigo-200" : ""}`} style={{ borderColor: appearance.color }}>
       {hasTarget && <Handle type="target" position={Position.Left} id="target" className="!h-2.5 !w-2.5 !border-2 !border-white" style={{ backgroundColor: appearance.color }} />}
       <div className="flex items-center gap-2">
         <appearance.icon size={15} color={appearance.color} />

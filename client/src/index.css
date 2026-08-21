@@ -222,6 +222,30 @@ textarea.h-20.font-mono {
   background: #fff;
 }
 
+[data-aiflow-business-center] > div > div:first-child {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+}
+
+[data-aiflow-business-center] > div > div:first-child > p:first-child {
+  display: none;
+}
+
+[data-aiflow-business-center] > div > div:first-child h1 {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+[data-aiflow-business-center] > div > section {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-aiflow-business-center] > div > section > div:first-child {
+  padding: 10px 12px;
+  background: #fff;
+}
+
 [data-aiflow-business-center] > div {
   max-width: none;
 }
@@ -341,6 +365,26 @@ textarea.h-20.font-mono {
 [data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child {
   min-height: 48px;
   padding: 0 10px;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child > div > button {
+  height: 52px;
+  min-width: 54px;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: 0;
+  padding: 5px 7px;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child > div:last-child > button {
+  min-width: 58px;
+}
+
+[data-aiflow-designer] [data-aiflow-workflow-canvas] .react-flow__node-workflowNode > div {
+  border-radius: 2px;
+  box-shadow: none;
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] > section > .relative {

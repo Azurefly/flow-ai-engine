@@ -63,7 +63,7 @@ export default function Home() {
   const logout = trpc.auth.logout.useMutation({ onSuccess: () => { void utils.auth.me.invalidate(); toast.success("已安全退出。"); } });
 
   const publicGeneral: PublicGeneral = general.data ?? { platformName: "Flow AI Engine", watermarkEnabled: false, watermarkText: "" };
-  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-slate-950 text-slate-300"><div className="flex items-center gap-3"><Loader2 className="animate-spin" />正在连接 {publicGeneral.platformName}</div></main>;
+  if (me.isLoading) return <main className="grid min-h-screen place-items-center bg-white text-slate-600"><div className="flex items-center gap-3 border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm"><Loader2 className="animate-spin text-[#2d6bea]" size={16} />正在读取流程工作台…</div></main>;
   if (!me.data) return <LoginScreen platformName={publicGeneral.platformName} credentials={credentials} setCredentials={setCredentials} pending={login.isPending} onSubmit={() => login.mutate(credentials)} />;
   return <FlowConsole user={me.data} general={publicGeneral} onLogout={() => logout.mutate()} />;
 }
@@ -90,7 +90,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const [systemView, setSystemView] = useState<"config" | "identity">("config");
   const [flowView, setFlowView] = useState<"center" | "workspace" | "editor">("center");
   const [selectedProject, setSelectedProject] = useState<ProjectRecord | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [draftDefinition, setDraftDefinition] = useState<Definition | null>(null);
   const [draftName, setDraftName] = useState("");
