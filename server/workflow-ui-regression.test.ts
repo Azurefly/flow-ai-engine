@@ -27,6 +27,8 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("StructuredRunInput");
     expect(homeSource).toContain("运行字段");
     expect(homeSource).toContain("添加运行字段");
+    expect(homeSource).toContain("canRun={canRun}");
+    expect(homeSource).not.toContain('className="mt-2 h-20 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono');
   });
 
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
@@ -68,9 +70,10 @@ describe("流程设计器界面回归约束", () => {
     expect(runCenterSource).toContain("失败告警");
     expect(canvasSource).toContain("REUSE LIBRARY");
     expect(canvasSource).toContain("保存为节点模板");
-    expect(canvasSource).toContain("模板 JSON 配置");
-    expect(styleSource).toContain('[data-workflow-inspector] details:has(textarea.font-mono)');
-    expect(styleSource).toContain('button:nth-of-type(2)');
+    expect(canvasSource).toContain("在画布中编辑");
+    expect(canvasSource).not.toContain("模板 JSON 配置");
+    expect(canvasSource).not.toContain("高级 JSON 配置");
+    expect(canvasSource).not.toContain("应用 JSON 配置");
     expect(homeSource).toContain("保存当前定义为子流程");
   });
 
@@ -234,7 +237,7 @@ describe("流程设计器界面回归约束", () => {
   it("原安装包视觉壳层保持浅色平面工作台与三栏画布结构", () => {
     expect(homeSource).toContain('data-aiflow-console=""');
     expect(homeSource).toContain('data-aiflow-designer=""');
-    expect(styleSource).toContain('[data-aiflow-designer] textarea.h-20.font-mono');
+    expect(styleSource).not.toContain('[data-aiflow-designer] textarea.h-20.font-mono');
     expect(homeSource).toContain('AI FLOW GRAPH');
     expect(homeSource).toContain('bg-[#f4f6f9]');
     expect(homeSource).not.toContain('NEBULA INSPIRED · V3');
@@ -245,6 +248,9 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain('[data-aiflow-business-center]');
     expect((styleSource.match(/\[data-aiflow-business-center\] > div > div:first-child \{/g) ?? []).length).toBe(1);
     expect(styleSource).toContain('[data-aiflow-designer] [data-aiflow-workflow-canvas]');
+    expect(styleSource).toContain('[data-aiflow-designer] > [data-aiflow-workflow-canvas]');
+    expect(styleSource).toContain('order: 2;');
+    expect(styleSource).toContain('[data-aiflow-designer] > [data-structured-run-input]');
     expect(styleSource).toContain('[data-aiflow-warehouse] > div > .grid');
     expect(styleSource).toContain('[data-aiflow-process-detail]');
     expect(styleSource).toContain('[data-aiflow-system-config]');

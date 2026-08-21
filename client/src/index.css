@@ -133,23 +133,8 @@
   }
 }
 
-/* 节点配置仅通过字段化面板编辑；历史 JSON 兼容通道不向用户直接暴露。 */
-[data-workflow-inspector] details:has(textarea.font-mono) {
-  display: none;
-}
-
-/* 模板配置复用同一字段化节点面板；不再通过提示框直接编辑 JSON。 */
-[data-workflow-inspector] > div:nth-child(3) details > div > div > button:nth-of-type(2) {
-  display: none;
-}
-
 /* 数据资源页面用结构化表单替代历史 JSON 文本表单。 */
 [data-resource-center] form:has(textarea) {
-  display: none;
-}
-
-/* 流程设计器运行改用下方的结构化键值字段，旧 JSON 文本输入不再向用户展示。 */
-[data-aiflow-designer] textarea.h-20.font-mono {
   display: none;
 }
 
@@ -300,6 +285,33 @@
 }
 
 /* 设计器以原始三栏画布为主，权限、运行和协作信息保持可用但降为次级紧凑区。 */
+[data-aiflow-designer] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-aiflow-designer] > .mb-4.flex {
+  order: 1;
+}
+
+[data-aiflow-designer] > [data-aiflow-workflow-canvas] {
+  order: 2;
+}
+
+[data-aiflow-designer] > [data-structured-run-input] {
+  order: 3;
+}
+
+[data-aiflow-designer] > .mb-4.rounded-lg {
+  order: 4;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+[data-aiflow-designer] > :nth-child(n + 5) {
+  order: 5;
+}
+
 [data-aiflow-designer] > .mb-4.grid {
   margin-bottom: 8px;
   gap: 8px;
