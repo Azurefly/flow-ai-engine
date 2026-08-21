@@ -46,6 +46,7 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain('label: "运行"');
     expect(governanceSource).toContain("STARTED PROCESS LIST");
     expect(governanceSource).toContain("已启动流程列表");
+    expect(governanceSource).toContain("正在读取已启动流程…");
     expect(governanceSource).toContain("请输入关键词按 Enter 搜索");
     expect(governanceSource).toContain("已启动流程 ID");
     expect(governanceSource).toContain("流程状态");
