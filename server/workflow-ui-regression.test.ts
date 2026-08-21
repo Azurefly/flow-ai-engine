@@ -176,6 +176,9 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("StructuredResourceForm");
     expect(dataResourceSource).toContain('title === "添加数据源" || title === "资源探查结果"');
     expect(dataResourceSource).toContain("return null;");
+    expect(dataResourceSource).not.toContain("JSON.parse");
+    expect(dataResourceSource).not.toContain("sourceForm.");
+    expect(dataResourceSource).not.toContain("assetForm.");
     expect(dataResourceSource).toContain("data-resource-center");
     expect(dataResourceSource).toContain("dataflow-operation-list");
     expect(dataResourceSource).toContain("已操作流程列表");
