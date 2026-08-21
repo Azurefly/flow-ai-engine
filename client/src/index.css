@@ -212,12 +212,17 @@
 }
 
 [data-aiflow-business-center] > div > div:first-child {
-  margin-bottom: 18px;
-  padding-bottom: 12px;
+  min-height: 48px;
+  margin-bottom: 10px;
+  padding: 6px 16px;
+}
+
+[data-aiflow-business-center] > div > div:first-child > div > div > p {
+  display: none;
 }
 
 [data-aiflow-business-center] h1 {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 600;
 }
 
