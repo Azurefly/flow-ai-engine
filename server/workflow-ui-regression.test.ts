@@ -100,6 +100,10 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("创建时间开始");
     expect(projectWorkspaceSource).toContain("创建时间结束");
     expect(projectWorkspaceSource).toContain("同步 BDP 配置");
+    expect(projectWorkspaceSource).toContain("导入业务");
+    expect(projectWorkspaceSource).toContain('accept=".csv,text/csv"');
+    expect(projectWorkspaceSource).toContain("CSV 标题必须包含");
+    expect(projectWorkspaceSource).toContain("业务代号、业务名称");
     expect(projectWorkspaceSource).toContain("筛选仅作用于当前已授权可见的业务项目");
     expect(projectWorkspaceSource).toContain('view === "process" && workflows.isLoading');
     expect(projectWorkspaceSource).toContain("正在读取项目流程");
