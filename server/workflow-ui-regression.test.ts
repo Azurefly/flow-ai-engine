@@ -210,7 +210,8 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("trpc.task.batchComplete.useMutation");
     expect(processWorkbenchSource).toContain("处理结果字段");
     expect(processWorkbenchSource).toContain("添加处理结果字段");
-    expect(processWorkbenchSource).toContain("function LegacyTaskDrawer");
+    expect(processWorkbenchSource).not.toContain("function LegacyTaskDrawer");
+    expect(processWorkbenchSource).not.toContain("处理结果（JSON）");
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");
     expect(processWorkbenchSource).toContain("当前视图仅展示具备运行权限的流程实例与人工任务");
