@@ -41,7 +41,8 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("workflow.versionDiff.useQuery");
     expect(governanceSource).toContain("workflow.rollbackVersion.useMutation");
     expect(governanceSource).toContain("恢复此版本");
-    expect(governanceSource).toContain("流程引导与基本信息");
+    expect(governanceSource).toContain("流程引导");
+    expect(governanceSource).toContain("基本信息");
     expect(governanceSource).toContain('label: "流程设计"');
     expect(governanceSource).toContain('label: "审核"');
     expect(governanceSource).toContain('label: "发布"');

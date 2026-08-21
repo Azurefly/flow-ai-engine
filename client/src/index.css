@@ -557,6 +557,11 @@
   padding: 12px 16px !important;
 }
 
+[data-aiflow-process-detail] > div:first-child > p:first-child,
+[data-aiflow-process-detail] > div:first-child > div > div > p:last-child {
+  display: none;
+}
+
 [data-aiflow-process-detail] > div:nth-child(2) {
   gap: 0 !important;
   padding: 0 !important;
