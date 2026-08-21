@@ -148,8 +148,8 @@
   display: none;
 }
 
-/* 流程运行改用下方的结构化键值字段，旧 JSON 文本输入不再向用户展示。 */
-textarea.h-20.font-mono {
+/* 流程设计器运行改用下方的结构化键值字段，旧 JSON 文本输入不再向用户展示。 */
+[data-aiflow-designer] textarea.h-20.font-mono {
   display: none;
 }
 
