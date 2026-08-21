@@ -87,6 +87,7 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).toContain("收起配置导航");
     expect(systemConfigSource).toContain("展开配置导航");
     expect(systemConfigSource).toContain("系统配置卡片页签");
+    expect(systemConfigSource).toContain('data-aiflow-system-config=""');
     expect(projectWorkspaceSource).toContain("状态流程");
     expect(projectWorkspaceSource).toContain("控制流程");
     expect(projectWorkspaceSource).toContain("数据流程");
@@ -227,6 +228,7 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain('[data-aiflow-designer] [data-aiflow-workflow-canvas]');
     expect(styleSource).toContain('[data-aiflow-warehouse] > div > .grid');
     expect(styleSource).toContain('[data-aiflow-process-detail]');
+    expect(styleSource).toContain('[data-aiflow-system-config]');
     expect(styleSource).toContain('button[title="收起配置导航"]');
     expect(styleSource).toContain('div:has(> div > aside)');
   });

@@ -548,6 +548,26 @@ textarea.h-20.font-mono {
 }
 
 /* 系统配置沿用原始 left-panel / nav-card-tabs 的连续双栏，不保留仪表盘式卡片间隙。 */
+[data-aiflow-system-config] > div {
+  max-width: none !important;
+  gap: 0 !important;
+}
+
+[data-aiflow-system-config] > div > aside,
+[data-aiflow-system-config] > div > section {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+[data-aiflow-system-config] > div > aside {
+  border-right-color: #dfe5ec !important;
+}
+
+[data-aiflow-system-config] > div > section > div:first-child {
+  background: #f7f9fc !important;
+  padding: 8px 12px 0 !important;
+}
+
 [data-aiflow-console] div:has(> aside button[title="收起配置导航"]),
 [data-aiflow-console] div:has(> aside button[title="展开配置导航"]) {
   max-width: none !important;
