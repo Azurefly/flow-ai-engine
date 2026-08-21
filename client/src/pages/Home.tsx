@@ -94,7 +94,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [draftDefinition, setDraftDefinition] = useState<Definition | null>(null);
   const [draftName, setDraftName] = useState("");
-  const [runInput, setRunInput] = useState('{\n  "id": 2,\n  "prompt": "请总结输入内容"\n}');
+  const [runInput, setRunInput] = useState<Record<string, unknown>>({ id: 2, prompt: "请总结输入内容" });
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runView, setRunView] = useState<"workbench" | "monitor">("workbench");
   const [newFlowName, setNewFlowName] = useState("");
@@ -206,13 +206,10 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
 
   const startRun = () => {
     if (!selectedId) return;
-    try {
-      const input = JSON.parse(runInput) as Record<string, unknown>;
-      if (selectedWorkflow?.flowType === "data") {
-        if (!selectedWorkflow.projectId) { toast.error("数据流缺少项目归属，无法运行。"); return; }
-        runDataflow.mutate({ projectId: selectedWorkflow.projectId, workflowId: selectedId, data: input });
-      } else runFlow.mutate({ workflowId: selectedId, input });
-    } catch { toast.error("运行输入必须是合法 JSON 对象。"); }
+    if (selectedWorkflow?.flowType === "data") {
+      if (!selectedWorkflow.projectId) { toast.error("数据流缺少项目归属，无法运行。"); return; }
+      runDataflow.mutate({ projectId: selectedWorkflow.projectId, workflowId: selectedId, data: runInput });
+    } else runFlow.mutate({ workflowId: selectedId, input: runInput });
   };
 
   const nav = [
@@ -247,7 +244,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   </main>;
 }
 
-function FlowDesigner({ workflow, definition, name, setName, canEdit, canPublish, canRun, canManage, members, candidates, savePending, publishPending, runPending, runInput, setRunInput, models, templates, subflows, onDefinitionChange, onSave, onPublish, onRun, onExport, onImport, onDuplicate, onDelete, onSaveAsSubflow, onCreateTemplate, onUpdateTemplate, onDeleteTemplate, onToggleSubflow, onDeleteSubflow, onGrant, onRevoke }: { workflow: any; definition: Definition | null; name: string; setName: (value: string) => void; canEdit: boolean; canPublish: boolean; canRun: boolean; canManage: boolean; members: any[]; candidates: any[]; savePending: boolean; publishPending: boolean; runPending: boolean; runInput: string; setRunInput: (value: string) => void; models: Array<{ id: string; ownedBy: string }>; templates: any[]; subflows: any[]; onDefinitionChange: (definition: Definition) => void; onSave: () => void; onPublish: () => void; onRun: () => void; onExport: () => void; onImport: () => void; onDuplicate: () => void; onDelete: () => void; onSaveAsSubflow: () => void; onCreateTemplate: (input: any) => void; onUpdateTemplate: (template: any, updates: any) => void; onDeleteTemplate: (id: string) => void; onToggleSubflow: (subflow: any, isEnabled: boolean) => void; onDeleteSubflow: (id: string) => void; onGrant: (userId: number, role: "owner" | "editor" | "operator" | "viewer", hours?: number) => void; onRevoke: (userId: number, role: "owner" | "editor" | "operator" | "viewer") => void }) {
+function FlowDesigner({ workflow, definition, name, setName, canEdit, canPublish, canRun, canManage, members, candidates, savePending, publishPending, runPending, runInput, setRunInput, models, templates, subflows, onDefinitionChange, onSave, onPublish, onRun, onExport, onImport, onDuplicate, onDelete, onSaveAsSubflow, onCreateTemplate, onUpdateTemplate, onDeleteTemplate, onToggleSubflow, onDeleteSubflow, onGrant, onRevoke }: { workflow: any; definition: Definition | null; name: string; setName: (value: string) => void; canEdit: boolean; canPublish: boolean; canRun: boolean; canManage: boolean; members: any[]; candidates: any[]; savePending: boolean; publishPending: boolean; runPending: boolean; runInput: Record<string, unknown>; setRunInput: (value: Record<string, unknown>) => void; models: Array<{ id: string; ownedBy: string }>; templates: any[]; subflows: any[]; onDefinitionChange: (definition: Definition) => void; onSave: () => void; onPublish: () => void; onRun: () => void; onExport: () => void; onImport: () => void; onDuplicate: () => void; onDelete: () => void; onSaveAsSubflow: () => void; onCreateTemplate: (input: any) => void; onUpdateTemplate: (template: any, updates: any) => void; onDeleteTemplate: (id: string) => void; onToggleSubflow: (subflow: any, isEnabled: boolean) => void; onDeleteSubflow: (id: string) => void; onGrant: (userId: number, role: "owner" | "editor" | "operator" | "viewer", hours?: number) => void; onRevoke: (userId: number, role: "owner" | "editor" | "operator" | "viewer") => void }) {
   const [candidateId, setCandidateId] = useState("");
   const [memberRole, setMemberRole] = useState<"owner" | "editor" | "operator" | "viewer">("viewer");
   const [hours, setHours] = useState("");
@@ -272,11 +269,11 @@ function valueFromField(value: string): unknown {
   return value;
 }
 
-function StructuredRunInput({ value, onChange, canRun, runPending, onRun }: { value: string; onChange: (value: string) => void; canRun: boolean; runPending: boolean; onRun: () => void }) {
-  const parseRows = (raw: string) => { try { const parsed = JSON.parse(raw); return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? Object.entries(parsed).map(([key, item]) => ({ key, value: String(item ?? "") })) : [{ key: "", value: "" }]; } catch { return [{ key: "", value: "" }]; } };
-  const [rows, setRows] = useState(() => parseRows(value));
-  useEffect(() => { setRows(parseRows(value)); }, [value]);
-  const update = (next: Array<{ key: string; value: string }>) => { setRows(next); onChange(JSON.stringify(Object.fromEntries(next.filter(row => row.key.trim()).map(row => [row.key, valueFromField(row.value)])))); };
+function StructuredRunInput({ value, onChange, canRun, runPending, onRun }: { value: Record<string, unknown>; onChange: (value: Record<string, unknown>) => void; canRun: boolean; runPending: boolean; onRun: () => void }) {
+  const toRows = (input: Record<string, unknown>) => Object.entries(input).map(([key, item]) => ({ key, value: String(item ?? "") }));
+  const [rows, setRows] = useState(() => toRows(value));
+  useEffect(() => { setRows(toRows(value)); }, [value]);
+  const update = (next: Array<{ key: string; value: string }>) => { setRows(next); onChange(Object.fromEntries(next.filter(row => row.key.trim()).map(row => [row.key, valueFromField(row.value)]))); };
   return <section data-structured-run-input className="mb-3 rounded-lg border border-slate-200 bg-white p-3"><div><p className="flex items-center gap-2 text-xs font-semibold text-slate-700"><CirclePlay size={14} className="text-emerald-600" />运行字段</p><p className="mt-1 text-[11px] leading-5 text-slate-500">按字段填写本次运行输入；数值与 true/false 会自动保留类型，无需编辑 JSON。</p></div><div className="mt-3 grid gap-2">{rows.map((row, index) => <div key={index} className="grid grid-cols-[minmax(100px,.8fr)_minmax(0,1.2fr)_auto] gap-2"><Input aria-label="运行字段名称" placeholder="字段名" value={row.key} onChange={event => update(rows.map((current, rowIndex) => rowIndex === index ? { ...current, key: event.target.value } : current))} /><Input aria-label="运行字段值" placeholder="字段值" value={row.value} onChange={event => update(rows.map((current, rowIndex) => rowIndex === index ? { ...current, value: event.target.value } : current))} /><button type="button" className="rounded px-2 text-slate-400 hover:text-red-600" onClick={() => update(rows.filter((_, rowIndex) => rowIndex !== index))} aria-label="删除运行字段"><Trash2 size={15} /></button></div>)}<button type="button" className="w-fit text-xs font-medium text-[#245fc8] hover:underline" onClick={() => update([...rows, { key: "", value: "" }])}>+ 添加运行字段</button></div><Button className="mt-3 w-full bg-blue-600 hover:bg-blue-500" size="sm" disabled={!canRun || runPending} onClick={onRun}>{runPending ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />}后端运行</Button></section>;
 }
 
