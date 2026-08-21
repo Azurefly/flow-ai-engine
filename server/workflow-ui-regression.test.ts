@@ -98,6 +98,9 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("创建时间结束");
     expect(projectWorkspaceSource).toContain("同步 BDP 配置");
     expect(projectWorkspaceSource).toContain("筛选仅作用于当前已授权可见的业务项目");
+    expect(projectWorkspaceSource).toContain('view === "process" && workflows.isLoading');
+    expect(projectWorkspaceSource).toContain("正在读取项目流程");
+    expect(projectWorkspaceSource).toContain("正在加载当前业务授权范围内的流程与审核状态");
     expect(projectWorkspaceSource).toContain("重置筛选");
     expect(projectWorkspaceSource).toContain("可重置筛选或从右上角新建状态、控制或数据流程");
     expect(projectWorkspaceSource).toContain("最近取消发布时间");

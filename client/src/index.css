@@ -449,6 +449,47 @@ textarea.h-20.font-mono {
   display: none;
 }
 
+[data-aiflow-console] > div > section > div:has(> div > aside) {
+  padding: 0;
+  background: #fff;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) > div {
+  max-width: none;
+  gap: 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) aside,
+[data-aiflow-console] > div > section > div:has(> div > aside) main > section {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) aside {
+  border-color: #dfe5ec;
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 0;
+  padding: 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) aside nav {
+  gap: 0;
+  padding: 6px 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) aside nav button {
+  border-radius: 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) main > section {
+  border: 0;
+}
+
+[data-aiflow-console] > div > section > div:has(> div > aside) main > section > header {
+  padding: 12px 16px;
+}
+
 [data-aiflow-console] > div > section > div:has(> aside) > aside > div:first-child > p:first-of-type {
   font-size: 9px;
   letter-spacing: 0.12em;
