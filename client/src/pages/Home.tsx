@@ -69,17 +69,17 @@ export default function Home() {
 }
 
 function LoginScreen({ platformName, credentials, setCredentials, pending, onSubmit }: { platformName: string; credentials: { username: string; password: string }; setCredentials: (next: { username: string; password: string }) => void; pending: boolean; onSubmit: () => void }) {
-  return <main className="relative grid min-h-screen place-items-center overflow-hidden bg-slate-950 p-5 text-slate-100">
-    <div className="absolute inset-0 opacity-25 [background-image:radial-gradient(#3b82f6_1px,transparent_1px)] [background-size:22px_22px]" />
-    <section className="relative w-full max-w-md overflow-hidden rounded-xl border border-slate-700 bg-slate-900/95 shadow-2xl shadow-blue-950/60">
-      <div className="border-b border-slate-700 bg-slate-800 px-7 py-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded bg-blue-500 text-white"><Gauge size={21} /></div><div><p className="text-xs font-bold tracking-[.2em] text-blue-300">NEBULA INSPIRED · V3</p><h1 className="mt-0.5 text-lg font-semibold">{platformName} 控制台</h1></div></div></div>
+  return <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#f4f6f9] p-5 text-slate-800">
+    <div className="absolute inset-x-0 top-0 h-1 bg-[#2d6bea]" />
+    <section className="relative w-full max-w-md overflow-hidden border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 px-7 py-5"><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center bg-[#2d6bea] text-white"><Gauge size={21} /></div><div><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">AI FLOW GRAPH</p><h1 className="mt-0.5 text-lg font-semibold text-slate-800">{platformName} 控制台</h1></div></div></div>
       <form className="grid gap-4 p-7" onSubmit={event => { event.preventDefault(); onSubmit(); }}>
-        <p className="text-sm leading-6 text-slate-400">内部账号认证已接入 IAM。流程、运行记录和协作授权均按资源级权限隔离。</p>
-        <label className="grid gap-2 text-xs font-medium text-slate-300">用户名<Input className="border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500" autoComplete="username" value={credentials.username} onChange={event => setCredentials({ ...credentials, username: event.target.value })} required /></label>
-        <label className="grid gap-2 text-xs font-medium text-slate-300">密码<Input className="border-slate-600 bg-slate-800 text-slate-100 placeholder:text-slate-500" type="password" autoComplete="current-password" minLength={12} value={credentials.password} onChange={event => setCredentials({ ...credentials, password: event.target.value })} required /></label>
-        <Button className="mt-2 bg-blue-600 hover:bg-blue-500" disabled={pending}>{pending && <Loader2 className="animate-spin" />}登录流程引擎</Button>
+        <p className="text-sm leading-6 text-slate-500">使用内部账号登录。流程、运行记录和协作授权均按资源级权限隔离。</p>
+        <label className="grid gap-2 text-xs font-medium text-slate-600">用户名<Input className="border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#2d6bea]" autoComplete="username" value={credentials.username} onChange={event => setCredentials({ ...credentials, username: event.target.value })} required /></label>
+        <label className="grid gap-2 text-xs font-medium text-slate-600">密码<Input className="border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#2d6bea]" type="password" autoComplete="current-password" minLength={12} value={credentials.password} onChange={event => setCredentials({ ...credentials, password: event.target.value })} required /></label>
+        <Button className="mt-2 bg-[#2d6bea] hover:bg-[#245fc8]" disabled={pending}>{pending && <Loader2 className="animate-spin" />}登录流程引擎</Button>
       </form>
-      <div className="border-t border-slate-800 px-7 py-4 text-xs text-slate-500">账号由管理员创建；系统不提供公开注册。</div>
+      <div className="border-t border-slate-200 bg-slate-50 px-7 py-4 text-xs text-slate-500">账号由管理员创建；系统不提供公开注册。</div>
     </section>
   </main>;
 }

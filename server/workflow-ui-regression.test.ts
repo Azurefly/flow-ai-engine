@@ -232,6 +232,9 @@ describe("流程设计器界面回归约束", () => {
   it("原安装包视觉壳层保持浅色平面工作台与三栏画布结构", () => {
     expect(homeSource).toContain('data-aiflow-console=""');
     expect(homeSource).toContain('data-aiflow-designer=""');
+    expect(homeSource).toContain('AI FLOW GRAPH');
+    expect(homeSource).toContain('bg-[#f4f6f9]');
+    expect(homeSource).not.toContain('NEBULA INSPIRED · V3');
     expect(canvasSource).toContain('data-aiflow-workflow-canvas=""');
     expect(projectWorkspaceSource).toContain('data-aiflow-business-center=""');
     expect(warehouseSource).toContain('data-aiflow-warehouse=""');
