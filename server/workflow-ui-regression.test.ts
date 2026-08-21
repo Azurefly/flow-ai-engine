@@ -208,6 +208,8 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("不会跨流程或跨项目执行");
     expect(processWorkbenchSource).toContain("trpc.task.handover.useMutation");
     expect(processWorkbenchSource).toContain("trpc.task.batchComplete.useMutation");
+    expect(processWorkbenchSource).toContain('result: { decision: "approved" }');
+    expect(processWorkbenchSource).not.toContain("批量处理结果必须是合法 JSON 对象");
     expect(processWorkbenchSource).toContain("处理结果字段");
     expect(processWorkbenchSource).toContain("添加处理结果字段");
     expect(processWorkbenchSource).not.toContain("function LegacyTaskDrawer");
