@@ -221,6 +221,9 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("添加处理结果字段");
     expect(processWorkbenchSource).not.toContain("function LegacyTaskDrawer");
     expect(processWorkbenchSource).not.toContain("处理结果（JSON）");
+    expect(processWorkbenchSource).not.toContain("JSON.parse(resultText)");
+    expect(processWorkbenchSource).not.toContain("处理结果必须是合法 JSON 对象");
+    expect(processWorkbenchSource).toContain("onComplete(createPayload(resultRows))");
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");
     expect(processWorkbenchSource).toContain("当前视图仅展示具备运行权限的流程实例与人工任务");
@@ -231,6 +234,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("正在加载当前授权范围内的看板统计与最近任务");
     expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
     expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
+    expect(styleSource).toContain('min-height: 46px;');
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
     expect(processWorkbenchRunTabSource).toContain("trpc.workflow.runDetail.useQuery");

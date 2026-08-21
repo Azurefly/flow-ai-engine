@@ -440,11 +440,14 @@
 
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header,
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header {
-  padding: 12px 16px;
+  min-height: 46px;
+  padding: 7px 16px;
 }
 
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header > div > p:first-child,
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header > div > p:first-child,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header > div > p:last-child,
+[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header > div > p:last-child,
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside > div.mt-4,
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside > div.mt-4 {
   display: none;
@@ -452,7 +455,8 @@
 
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header h2,
 [data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header h2 {
-  font-size: 20px;
+  margin-top: 0;
+  font-size: 16px;
 }
 
 /* 流程仓库：原始页面以树、流程列表、简介预览连续分栏承载，避免三张独立仪表盘卡片。 */
