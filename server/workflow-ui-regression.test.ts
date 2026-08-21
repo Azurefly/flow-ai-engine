@@ -57,6 +57,7 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("最近发布时间");
     expect(governanceSource).toContain("最近取消发布时间");
     expect(governanceSource).toContain("unpublishedAt");
+    expect(governanceSource).toContain('data-aiflow-process-detail=""');
     expect(canvasSource).toContain("flow:inspect-node");
   });
 
@@ -167,6 +168,8 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("并集");
     expect(dataResourceSource).toContain("TSML");
     expect(dataResourceSource).toContain("StructuredResourceForm");
+    expect(dataResourceSource).toContain('title === "添加数据源" || title === "资源探查结果"');
+    expect(dataResourceSource).toContain("return null;");
     expect(dataResourceSource).toContain("data-resource-center");
     expect(dataResourceSource).toContain("dataflow-operation-list");
     expect(dataResourceSource).toContain("已操作流程列表");
@@ -223,6 +226,8 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain('[data-aiflow-business-center]');
     expect(styleSource).toContain('[data-aiflow-designer] [data-aiflow-workflow-canvas]');
     expect(styleSource).toContain('[data-aiflow-warehouse] > div > .grid');
+    expect(styleSource).toContain('[data-aiflow-process-detail]');
+    expect(styleSource).toContain('button[title="收起配置导航"]');
     expect(styleSource).toContain('div:has(> div > aside)');
   });
 });
