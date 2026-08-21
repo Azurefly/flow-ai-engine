@@ -241,6 +241,7 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain('data-aiflow-warehouse=""');
     expect(styleSource).toContain('content: "AI FLOW GRAPH"');
     expect(styleSource).toContain('[data-aiflow-business-center]');
+    expect((styleSource.match(/\[data-aiflow-business-center\] > div > div:first-child \{/g) ?? []).length).toBe(1);
     expect(styleSource).toContain('[data-aiflow-designer] [data-aiflow-workflow-canvas]');
     expect(styleSource).toContain('[data-aiflow-warehouse] > div > .grid');
     expect(styleSource).toContain('[data-aiflow-process-detail]');

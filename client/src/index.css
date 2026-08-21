@@ -218,34 +218,6 @@
 }
 
 /* 业务中心按原始页面保持平面筛选条与紧凑数据表，而非仪表盘卡片堆叠。 */
-[data-aiflow-business-center] {
-  background: #fff;
-}
-
-[data-aiflow-business-center] > div > div:first-child {
-  margin-bottom: 12px;
-  padding-bottom: 10px;
-}
-
-[data-aiflow-business-center] > div > div:first-child > p:first-child {
-  display: none;
-}
-
-[data-aiflow-business-center] > div > div:first-child h1 {
-  font-size: 20px;
-  font-weight: 600;
-}
-
-[data-aiflow-business-center] > div > section {
-  border-radius: 0;
-  box-shadow: none;
-}
-
-[data-aiflow-business-center] > div > section > div:first-child {
-  padding: 10px 12px;
-  background: #fff;
-}
-
 [data-aiflow-business-center] > div {
   max-width: none;
 }
