@@ -31,6 +31,14 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).not.toContain('className="mt-2 h-20 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono');
   });
 
+  it("保留原始业务中心的序号和根部门列表列，不以工作域伪造根部门", () => {
+    expect(projectWorkspaceSource).toContain("序号");
+    expect(projectWorkspaceSource).toContain("根部门");
+    expect(projectWorkspaceSource).toContain("rootDepartment");
+    expect(projectWorkspaceSource).toContain("当前内部项目模型未配置根部门，未以工作域字段替代。");
+    expect(projectWorkspaceSource).toContain("colSpan={10}");
+  });
+
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain('grid-cols-1');
     expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_320px]');
