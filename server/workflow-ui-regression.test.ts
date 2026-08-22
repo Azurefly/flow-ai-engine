@@ -181,6 +181,9 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("函数资源");
     expect(dataResourceSource).toContain("一键展开");
     expect(dataResourceSource).toContain("任务详情");
+    expect(dataResourceSource).toContain("dataflow-task-summary");
+    expect(dataResourceSource).toContain("查看当前受权数据流摘要");
+    expect(dataResourceSource).toContain("托管计划");
     expect(dataResourceSource).toContain("调度配置");
     expect(dataResourceSource).toContain("交集");
     expect(dataResourceSource).toContain("差集");
