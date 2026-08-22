@@ -186,8 +186,16 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("添加一项");
     expect(canvasSource).not.toContain("function JsonField");
     expect(canvasSource).toContain("LockKeyhole");
+    expect(canvasSource).toContain("最大化面板");
+    expect(canvasSource).toContain("恢复配置面板");
+    expect(canvasSource).toContain("最小化面板");
+    expect(canvasSource).toContain("RotateCcw");
+    expect(canvasSource).toContain("若无元件，请添加元件。");
     expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
     expect(canvasSource).toContain("next.nodes.some(node => node.id === current)");
+    expect(homeSource).toContain("点击流程名称可返回流程设计中心");
+    expect(homeSource).toContain("onBackToDesignCenter");
+    expect(homeSource).toContain("保存画布");
   });
 
   it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
