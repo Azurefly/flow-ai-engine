@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
 import { recordAuthorizationAudit } from "./iam-service";
 
 type User = { id: number; role: "user" | "admin" };
@@ -123,6 +124,23 @@ export async function resolveRoleCandidateUserIds(roleCode: string, workflowId: 
   return rows.map(row => Number(row.id)).filter(id => Number.isInteger(id) && id > 0);
 }
 
+export async function resolveWorkflowUserRoleKeys(userIds: number[], workflowId: string) {
+  const uniqueUserIds = Array.from(new Set(userIds.filter(id => Number.isInteger(id) && id > 0)));
+  const result = new Map<number, string[]>(uniqueUserIds.map(userId => [userId, ["default"]]));
+  if (!uniqueUserIds.length) return result;
+  const placeholders = uniqueUserIds.map(() => "?").join(",");
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT DISTINCT ra.userId,r.id AS roleId,r.code FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId JOIN users u ON u.id=ra.userId WHERE ra.userId IN (" + placeholders + ") AND u.status='active' AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))",
+    [...uniqueUserIds, workflowId],
+  );
+  for (const row of rows) {
+    const userId = Number(row.userId);
+    const roleCode = String(row.code || "").trim();
+    if (result.has(userId) && roleCode) result.set(userId, Array.from(new Set([...(result.get(userId) ?? []), roleCode, String(row.roleId)])));
+  }
+  return result;
+}
+
 export async function resolveOperateAssignees(input: { config: JsonRecord; context: JsonRecord; workflowId: string }) {
   const runtime = asRecord(input.context.runtime);
   const initiatorUserId = Number(runtime.triggeredByUserId);
@@ -147,8 +165,7 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
 }
 
 export async function resolveAutoRelatedParticipantUserIds(config: JsonRecord, context: JsonRecord) {
-  const attribute = asRecord(config.sxsz);
-  const autoRelatedParty = asStrings(attribute.zdglxgfsz);
+  const autoRelatedParty = normalizeReferenceOperateConfig(config).autoRelatedParty;
   if (!autoRelatedParty.includes("upperAuthUnitWord")) return [];
   const runtime = asRecord(context.runtime);
   const sources = [Number(runtime.lastActorUserId || runtime.triggeredByUserId)].filter(id => Number.isInteger(id) && id > 0);

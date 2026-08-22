@@ -2,9 +2,11 @@ import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import mysql from "mysql2/promise";
+import { approvalRequirement, normalizeReferenceOperateConfig, type TemporaryRoleChange } from "../shared/reference-operate-config";
+import { normalizeReferenceRouterConfig, type NormalizedRouterRule } from "../shared/reference-router-config";
 import { invokeLLM, listLLMModels } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
-import { resolveAutoRelatedParticipantUserIds, resolveOperateAssignees } from "./organization-service";
+import { resolveAutoRelatedParticipantUserIds, resolveOperateAssignees, resolveWorkflowUserRoleKeys } from "./organization-service";
 import type { Definition } from "./workflow-service";
 
 type JsonRecord = Record<string, unknown>;
@@ -188,17 +190,79 @@ function compareCondition(left: unknown, operator: string, right: unknown) {
   }
 }
 
-/** 选择第一个命中的路由规则；未命中时使用配置的默认连线句柄。 */
-export function selectRouterRoute(config: JsonRecord, context: JsonRecord) {
+function routerRuleMatches(rule: NormalizedRouterRule, context: JsonRecord, roleKeys: string[]) {
+  if (rule.hasUnsafeCode) throw new Error("路由规则包含原版任意代码，必须迁移为安全条件后才能运行。");
+  const hasRoleFilter = rule.roleKeys.length > 0;
+  const roleMatched = !hasRoleFilter || rule.roleKeys.some(role => roleKeys.includes(role));
+  const hasConditions = rule.conditions.length > 0;
+  const conditionsMatched = !hasConditions || rule.conditions.every(condition =>
+    compareCondition(interpolate(condition.left, context), condition.operator, interpolate(condition.right, context)),
+  );
+  if (rule.relation === "or" && (hasRoleFilter || hasConditions)) {
+    return (hasRoleFilter && roleMatched) || (hasConditions && conditionsMatched);
+  }
+  return roleMatched && conditionsMatched;
+}
+
+/**
+ * 按原版语义为每个当前人员分别匹配路由。非广播模式每人只进入首个命中分支，
+ * 广播模式允许同一人员进入多个分支；权重越大越优先，-1 为默认规则。
+ */
+export function selectRouterRoutes(
+  config: JsonRecord,
+  context: JsonRecord,
+  participantUserIds: number[] = [],
+  roleKeysByUser: Map<number, string[]> = new Map(),
+) {
   const resolved = asRecord(resolveTemplates(config, context));
-  const routes = Array.isArray(resolved.routes) ? resolved.routes.map(route => asRecord(route)) : [];
-  const matched = routes.find(route => {
-    const condition = asRecord(route.condition);
-    if (!Object.keys(condition).length) return false;
-    return compareCondition(interpolate(condition.left, context), String(condition.operator ?? "equals"), interpolate(condition.right, context));
-  });
-  const handle = matched?.handle ?? interpolate(resolved.defaultRoute ?? "default", context);
-  return { routes, selectedRoute: String(handle) };
+  const normalized = normalizeReferenceRouterConfig(resolved);
+  const participants = Array.from(new Set(participantUserIds.filter(id => Number.isInteger(id) && id > 0)));
+  const assignments = new Map<string, { handle: string; targetNodeId: string; userIds: number[] }>();
+  const addAssignment = (rule: Pick<NormalizedRouterRule, "handle" | "targetNodeId">, userId: number) => {
+    const key = `${rule.handle}\u0000${rule.targetNodeId}`;
+    const current = assignments.get(key) ?? { handle: rule.handle, targetNodeId: rule.targetNodeId, userIds: [] };
+    if (!current.userIds.includes(userId)) current.userIds.push(userId);
+    assignments.set(key, current);
+  };
+
+  if (participants.length) {
+    const ordinaryRules = normalized.rules.filter(rule => !rule.isDefault);
+    const defaultRule = normalized.rules.find(rule => rule.isDefault);
+    for (const userId of participants) {
+      const roles = Array.from(new Set(["default", ...(roleKeysByUser.get(userId) ?? [])]));
+      let matched = false;
+      for (const rule of ordinaryRules) {
+        if (!routerRuleMatches(rule, context, roles)) continue;
+        matched = true;
+        addAssignment(rule, userId);
+        if (!normalized.broadcast) break;
+      }
+      if (!matched) {
+        const fallback = defaultRule ?? { handle: String(interpolate(normalized.defaultRoute, context)), targetNodeId: "" };
+        addAssignment(fallback, userId);
+      }
+    }
+  } else {
+    // 保持无人员数据流和既有控制流定义的兼容行为。
+    const matched = normalized.rules.find(rule => !rule.isDefault && routerRuleMatches(rule, context, ["default"]));
+    const fallback = normalized.rules.find(rule => rule.isDefault) ?? { handle: String(interpolate(normalized.defaultRoute, context)), targetNodeId: "" };
+    const selected = matched ?? fallback;
+    assignments.set(`${selected.handle}\u0000${selected.targetNodeId}`, { handle: selected.handle, targetNodeId: selected.targetNodeId, userIds: [] });
+  }
+
+  const selectedBranches = Array.from(assignments.values());
+  return {
+    broadcast: normalized.broadcast,
+    rules: normalized.rules,
+    selectedBranches,
+    selectedRoutes: Array.from(new Set(selectedBranches.map(branch => branch.handle))),
+    selectedRoute: selectedBranches[0]?.handle ?? normalized.defaultRoute,
+  };
+}
+
+/** 兼容旧调用方的单一路由返回结构。 */
+export function selectRouterRoute(config: JsonRecord, context: JsonRecord) {
+  return selectRouterRoutes(config, context);
 }
 
 async function executeInlineDefinition(definition: Definition, input: JsonRecord) {
@@ -252,8 +316,16 @@ async function executeNode(node: WorkflowNode, context: JsonRecord, allowSubflow
     case "state": return { output: { stateCode: String(resolveTemplates(firstConfiguredString(config.nodeDh, config.stateCode) ?? "STATE", context)), displayName: String(resolveTemplates(firstConfiguredString(config.jdmc, config.displayName) ?? node.name, context)), stateType: String(resolveTemplates(config.stateType ?? "business", context)), stateColor: resolveTemplates(config.stateColor, context), flowStatus: resolveTemplates(config.flowStatus, context) } };
     case "form": return { output: { fields: resolveTemplates(Array.isArray(config.fields) ? config.fields : [], context), submitted: asRecord(context.input) } };
     case "router": {
-      const result = selectRouterRoute(config, context);
-      return { output: result, route: result.selectedRoute };
+      const runtime = asRecord(context.runtime);
+      const participantUserIds = Array.isArray(runtime.currentNodeParticipantUserIds) ? runtime.currentNodeParticipantUserIds.map(Number).filter(id => Number.isInteger(id) && id > 0) : [];
+      const roleKeysByUser = new Map<number, string[]>();
+      const configuredRoles = asRecord(runtime.roleKeysByUser);
+      for (const userId of participantUserIds) {
+        const keys = Array.isArray(configuredRoles[String(userId)]) ? configuredRoles[String(userId)] as unknown[] : [];
+        roleKeysByUser.set(userId, keys.map(String));
+      }
+      const result = selectRouterRoutes(config, context, participantUserIds, roleKeysByUser);
+      return { output: result, route: result.selectedRoute, routeTargets: result.selectedBranches };
     }
     case "rest":
     case "method": return { output: await executeHttpNode(normalizeReferenceHttpConfig(config), context) };
@@ -310,7 +382,17 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
   const executableDefinition = (await import("./workflow-service")).validate(definition, true);
 
   const runId = randomUUID();
-  const context: JsonRecord = { input: input.workflowInput ?? {}, vars: {}, nodes: {}, runtime: { triggeredByUserId: input.triggeredBy.id, lastActorUserId: input.triggeredBy.id, participantUserIds: [input.triggeredBy.id] } };
+  const context: JsonRecord = {
+    input: input.workflowInput ?? {},
+    vars: {},
+    nodes: {},
+    runtime: {
+      triggeredByUserId: input.triggeredBy.id,
+      lastActorUserId: input.triggeredBy.id,
+      participantUserIds: [input.triggeredBy.id],
+      roleKeysByUser: { [String(input.triggeredBy.id)]: ["default", "initiator", "sender"] },
+    },
+  };
   const authorizationSnapshot = { userId: input.triggeredBy.id, userRole: input.triggeredBy.role, permission: "workflow:run", authorizedAt: new Date().toISOString() };
   await db().query(
     "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,startedAt) VALUES (?,?,?,?,?,'running',?,?,?,?,NOW())",
@@ -319,6 +401,7 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
 
   const startNode = executableDefinition.nodes.find(node => node.type === "start");
   if (!startNode) throw new Error("流程缺少开始节点。");
+  setRuntimeNodeParticipants(context, startNode.id, [input.triggeredBy.id]);
   const runStartedAt = Date.now();
   try {
     const segment = await executeRunSegment({ runId, workflow, definition: executableDefinition, context, queue: [startNode.id] });
@@ -340,11 +423,6 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
 type PersistedWorkflow = mysql.RowDataPacket & { id: string; ownerUserId: number; projectId?: string | null; name: string };
 type RunSegmentResult = { status: "success"; output: unknown } | { status: "waiting"; taskId: string };
 
-function isAutomaticOperate(config: JsonRecord) {
-  const legacy = asRecord(config.zdzx);
-  return config.autoExecute === true || config.autoExecute === "true" || legacy.sfzdzx === "是" || legacy.sfzdzx === true;
-}
-
 function runtimeUserIds(context: JsonRecord) {
   const runtime = asRecord(context.runtime);
   const values = Array.isArray(runtime.participantUserIds) ? runtime.participantUserIds : [];
@@ -363,11 +441,90 @@ function setRuntimeReceivers(context: JsonRecord, userIds: number[]) {
   context.runtime = runtime;
 }
 
-async function upsertParticipantState(input: { runId: string; workflowId: string; userId: number; stateCode?: string; stateName: string; flowStatus?: string; stateColor?: string; sourceNodeId?: string; availableOperations?: unknown[] }) {
+function runtimeNodeParticipants(context: JsonRecord, nodeId: string) {
+  const runtime = asRecord(context.runtime);
+  const byNode = asRecord(runtime.nodeParticipantUserIds);
+  const values = Array.isArray(byNode[nodeId]) ? byNode[nodeId] as unknown[] : [];
+  return Array.from(new Set(values.map(Number).filter(id => Number.isInteger(id) && id > 0)));
+}
+
+function setRuntimeNodeParticipants(context: JsonRecord, nodeId: string, userIds: number[]) {
+  const runtime = asRecord(context.runtime);
+  const byNode = asRecord(runtime.nodeParticipantUserIds);
+  byNode[nodeId] = Array.from(new Set(userIds.filter(id => Number.isInteger(id) && id > 0)));
+  runtime.nodeParticipantUserIds = byNode;
+  context.runtime = runtime;
+}
+
+function setCurrentNodeParticipants(context: JsonRecord, userIds: number[]) {
+  const runtime = asRecord(context.runtime);
+  runtime.currentNodeParticipantUserIds = Array.from(new Set(userIds.filter(id => Number.isInteger(id) && id > 0)));
+  context.runtime = runtime;
+}
+
+function runtimeRoleKeys(context: JsonRecord, userId: number) {
+  const runtime = asRecord(context.runtime);
+  const rolesByUser = asRecord(runtime.roleKeysByUser);
+  const configured = Array.isArray(rolesByUser[String(userId)]) ? rolesByUser[String(userId)] as unknown[] : [];
+  return Array.from(new Set(["default", ...configured.map(String).filter(Boolean)]));
+}
+
+function updateRuntimeRoles(context: JsonRecord, userIds: number[], changes: TemporaryRoleChange[], contextualRole?: string) {
+  const runtime = asRecord(context.runtime);
+  const rolesByUser = asRecord(runtime.roleKeysByUser);
+  for (const userId of userIds.filter(id => Number.isInteger(id) && id > 0)) {
+    const current = new Set(runtimeRoleKeys(context, userId));
+    if (contextualRole) current.add(contextualRole);
+    for (const change of changes) for (const roleKey of change.roleKeys) change.action === "add" ? current.add(roleKey) : current.delete(roleKey);
+    rolesByUser[String(userId)] = Array.from(current);
+  }
+  runtime.roleKeysByUser = rolesByUser;
+  context.runtime = runtime;
+}
+
+function configuredRoleKeys(value: unknown) {
+  const items = Array.isArray(value) ? value : value === undefined || value === null || value === "" ? [] : [value];
+  return Array.from(new Set(items.map(item => {
+    if (typeof item === "string" || typeof item === "number") return String(item).trim();
+    const record = asRecord(item);
+    return String(record.roleCode ?? record.roleKey ?? record.code ?? record.id ?? record.key ?? record.value ?? "").trim();
+  }).filter(Boolean)));
+}
+
+function shouldAutomaticallyExecute(config: JsonRecord, context: JsonRecord) {
+  const normalized = normalizeReferenceOperateConfig(config);
+  if (!normalized.autoExecute) return false;
+  if (normalized.hasUnsafeAutoExecuteCode) throw new Error("操作节点包含原版自动执行代码，必须迁移为安全条件后才能运行。");
+  if (!normalized.autoExecuteConditions.length) return true;
+  return normalized.autoExecuteConditions.every(item => {
+    const condition = asRecord(item);
+    if (condition.left === undefined || condition.operator === undefined) throw new Error("操作节点自动执行条件无法安全解释，请配置左值、操作符和右值。");
+    return compareCondition(interpolate(condition.left, context), String(condition.operator), interpolate(condition.right, context));
+  });
+}
+
+async function upsertParticipantState(input: { runId: string; workflowId: string; userId: number; roleKey?: string; stateCode?: string; stateName: string; flowStatus?: string; stateColor?: string; sourceNodeId?: string; availableOperations?: unknown[] }) {
   await db().query(
-    "INSERT INTO workflow_participant_state (id,runId,workflowId,userId,stateCode,stateName,flowStatus,stateColor,sourceNodeId,availableOperationsJson) VALUES (?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stateCode=VALUES(stateCode),stateName=VALUES(stateName),flowStatus=VALUES(flowStatus),stateColor=VALUES(stateColor),sourceNodeId=VALUES(sourceNodeId),availableOperationsJson=VALUES(availableOperationsJson),updatedAt=NOW()",
-    [randomUUID(), input.runId, input.workflowId, input.userId, input.stateCode ?? null, input.stateName, input.flowStatus ?? input.stateName, input.stateColor ?? null, input.sourceNodeId ?? null, JSON.stringify(input.availableOperations ?? [])],
+    "INSERT INTO workflow_participant_state (id,runId,workflowId,userId,roleKey,stateCode,stateName,flowStatus,stateColor,sourceNodeId,availableOperationsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stateCode=VALUES(stateCode),stateName=VALUES(stateName),flowStatus=VALUES(flowStatus),stateColor=VALUES(stateColor),sourceNodeId=VALUES(sourceNodeId),availableOperationsJson=VALUES(availableOperationsJson),updatedAt=NOW()",
+    [randomUUID(), input.runId, input.workflowId, input.userId, input.roleKey ?? "default", input.stateCode ?? null, input.stateName, input.flowStatus ?? input.stateName, input.stateColor ?? null, input.sourceNodeId ?? null, JSON.stringify(input.availableOperations ?? [])],
   );
+}
+
+function stateConfiguredOperations(config: JsonRecord) {
+  const operations: JsonRecord[] = [];
+  for (const item of Array.isArray(config.ywcz) ? config.ywcz : []) {
+    const record = asRecord(item);
+    const code = String(record.czid ?? record.flowOprateCode ?? "").trim();
+    const name = String(record.czmc ?? record.flowOprateName ?? "").trim();
+    if (code && name) operations.push({ code, name, type: "business" });
+  }
+  for (const item of Array.isArray(config.jdgycz) ? config.jdgycz : []) {
+    const record = asRecord(item);
+    if (record.bj) operations.push({ code: "bj", name: "办结", type: "innate" });
+    if (record.cs) operations.push({ code: "cs", name: "抄送", type: "innate" });
+    if (record.ch) operations.push({ code: "ch", name: "撤回", type: "innate" });
+  }
+  return operations;
 }
 
 async function persistStateNode(input: { runId: string; workflowId: string; node: WorkflowNode; context: JsonRecord }) {
@@ -380,13 +537,30 @@ async function persistStateNode(input: { runId: string; workflowId: string; node
   const flowStatus = String(firstConfiguredString(config.flowStatus) ?? stateName);
   const stateColor = firstConfiguredString(config.stateColor);
 
-  if (Number.isInteger(initiatorUserId) && initiatorUserId > 0) {
-    await upsertParticipantState({ runId: input.runId, workflowId: input.workflowId, userId: initiatorUserId, stateCode, stateName: flowStatus, flowStatus, stateColor, sourceNodeId: input.node.id });
+  const currentParticipants = runtimeNodeParticipants(input.context, input.node.id);
+  const participantUserIds = Array.from(new Set([...currentParticipants, initiatorUserId, actorUserId].filter(id => Number.isInteger(id) && id > 0)));
+  const iamRoles = await resolveWorkflowUserRoleKeys(participantUserIds, input.workflowId);
+  const boundRoles = configuredRoleKeys(config.bdjs);
+  const availableOperations = stateConfiguredOperations(config);
+  for (const userId of participantUserIds) {
+    const roles = Array.from(new Set([...(iamRoles.get(userId) ?? ["default"]), ...runtimeRoleKeys(input.context, userId)]));
+    const stateRoles = boundRoles.length ? roles.filter(role => boundRoles.includes(role)) : ["default"];
+    for (const roleKey of stateRoles) {
+      await upsertParticipantState({
+        runId: input.runId,
+        workflowId: input.workflowId,
+        userId,
+        roleKey,
+        stateCode,
+        stateName: userId === initiatorUserId ? flowStatus : stateName,
+        flowStatus,
+        stateColor,
+        sourceNodeId: input.node.id,
+        availableOperations,
+      });
+    }
   }
-  if (Number.isInteger(actorUserId) && actorUserId > 0 && actorUserId !== initiatorUserId) {
-    await upsertParticipantState({ runId: input.runId, workflowId: input.workflowId, userId: actorUserId, stateCode, stateName, flowStatus, stateColor, sourceNodeId: input.node.id });
-  }
-  addRuntimeParticipants(input.context, [initiatorUserId, actorUserId]);
+  addRuntimeParticipants(input.context, participantUserIds);
 }
 
 async function executeRunSegment(input: { runId: string; workflow: PersistedWorkflow; definition: Definition; context: JsonRecord; queue: string[]; finalOutput?: unknown }): Promise<RunSegmentResult> {
@@ -400,6 +574,8 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
     const node = nodes.get(nodeId);
     if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
     executed.add(nodeId);
+    const currentParticipants = runtimeNodeParticipants(input.context, node.id);
+    setCurrentNodeParticipants(input.context, currentParticipants.length ? currentParticipants : runtimeUserIds(input.context));
     const nodeInput = { context: JSON.parse(JSON.stringify(input.context)), config: node.config };
     const nodeRunId = await insertNodeRun(input.runId, node, nodeInput);
     const startedAt = Date.now();
@@ -407,11 +583,17 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
       if (node.type === "operate") {
         const config = asRecord(resolveTemplates(node.config, input.context));
         const runtime = asRecord(input.context.runtime);
+        const reference = normalizeReferenceOperateConfig(config);
+        const senderUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
+        updateRuntimeRoles(input.context, [senderUserId], reference.senderTemporaryRoles, "sender");
         const relatedParticipants = await resolveAutoRelatedParticipantUserIds(config, input.context);
         addRuntimeParticipants(input.context, relatedParticipants);
-        if (relatedParticipants.length) setRuntimeReceivers(input.context, relatedParticipants);
+        if (relatedParticipants.length) {
+          setRuntimeReceivers(input.context, relatedParticipants);
+          updateRuntimeRoles(input.context, relatedParticipants, reference.receiverTemporaryRoles, "receiver");
+        }
 
-        if (isAutomaticOperate(config)) {
+        if (shouldAutomaticallyExecute(config, input.context)) {
           const completedByUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
           const automaticOutput = { automatic: true, completedByUserId, operationName: String(firstConfiguredString(config.czmc, config.instruction) ?? node.name), relatedParticipantUserIds: relatedParticipants };
           const vars = asRecord(input.context.vars);
@@ -421,26 +603,64 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
           input.context.vars = vars;
           input.context.nodes = nodeOutputs;
           await finishNodeRun(nodeRunId, "success", startedAt, automaticOutput);
-          input.definition.edges.filter(edge => edge.sourceNodeId === node.id).forEach(edge => input.queue.push(edge.targetNodeId));
+          const automaticParticipants = Array.from(new Set([...currentParticipants, ...relatedParticipants]));
+          input.definition.edges.filter(edge => edge.sourceNodeId === node.id).forEach(edge => {
+            setRuntimeNodeParticipants(input.context, edge.targetNodeId, automaticParticipants);
+            input.queue.push(edge.targetNodeId);
+          });
           continue;
         }
 
         const assignment = await resolveOperateAssignees({ config, context: input.context, workflowId: input.workflow.id });
-        const taskId = randomUUID();
+        let approverUserIds = assignment.candidateUserIds;
+        if (reference.signMode !== "single" && reference.signSelectorUserIds.length) {
+          approverUserIds = approverUserIds.filter(userId => reference.signSelectorUserIds.includes(userId));
+          if (!approverUserIds.length) throw new Error("或签/会签指定方未命中当前操作候选人。");
+        }
+        if (reference.signMode !== "single" && !approverUserIds.length) throw new Error("或签/会签必须解析到至少一名审批人。");
+        setRuntimeReceivers(input.context, approverUserIds);
+        updateRuntimeRoles(input.context, approverUserIds, reference.receiverTemporaryRoles, "receiver");
         const nextNodeIds = input.definition.edges.filter(edge => edge.sourceNodeId === node.id).map(edge => edge.targetNodeId);
         const operationName = String(firstConfiguredString(config.czmc, config.instruction, config.description) ?? node.name);
         const pendingStatusName = String(firstConfiguredString(config.pendingStatusName) ?? "待审批");
-        await db().query(
-          "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-          [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, assignment.assignedUserId, assignment.candidateUserIds.length ? JSON.stringify(assignment.candidateUserIds) : null, operationName, pendingStatusName, String(firstConfiguredString(config.instruction) ?? operationName), JSON.stringify({ config, context: input.context, assignmentMode: assignment.mode }), JSON.stringify(nextNodeIds)],
-        );
-        for (const userId of assignment.candidateUserIds) {
-          await upsertParticipantState({ runId: input.runId, workflowId: input.workflow.id, userId, stateCode: node.id, stateName: pendingStatusName, flowStatus: pendingStatusName, sourceNodeId: node.id, availableOperations: [{ taskId, name: operationName }] });
+        const taskRoleKey = assignment.mode === "role" ? String(config.assigneeRoleCode || "default") : "default";
+        const approvalGroupId = reference.signMode === "single" ? null : randomUUID();
+        if (approvalGroupId) {
+          const requiredApprovals = approvalRequirement(reference.signMode, approverUserIds.length, reference.passPercent);
+          await db().query(
+            "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?)",
+            [approvalGroupId, input.workflow.id, input.runId, node.id, reference.signMode, approverUserIds.length, requiredApprovals, Math.round(reference.passPercent * 10000), JSON.stringify(nextNodeIds)],
+          );
         }
-        addRuntimeParticipants(input.context, assignment.candidateUserIds);
-        await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId, status: "pending", assignedUserId: assignment.assignedUserId, candidateUserIds: assignment.candidateUserIds, operationName });
+        const taskAssignments = approvalGroupId ? approverUserIds.map(userId => ({ assignedUserId: userId, candidateUserIds: [userId] })) : [{ assignedUserId: assignment.assignedUserId, candidateUserIds: approverUserIds }];
+        const taskIds: string[] = [];
+        for (const taskAssignment of taskAssignments) {
+          const taskId = randomUUID();
+          taskIds.push(taskId);
+          await db().query(
+            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,roleKey,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, taskAssignment.assignedUserId, taskAssignment.candidateUserIds.length ? JSON.stringify(taskAssignment.candidateUserIds) : null, approvalGroupId, reference.signMode, taskRoleKey, operationName, pendingStatusName, String(firstConfiguredString(config.instruction) ?? operationName), JSON.stringify({ config, context: input.context, assignmentMode: assignment.mode, reference }), JSON.stringify(nextNodeIds)],
+          );
+          for (const userId of taskAssignment.candidateUserIds) {
+            const availableOperation = { taskId, name: operationName, ...(reference.signMode === "single" ? {} : { signMode: reference.signMode }) };
+            await upsertParticipantState({ runId: input.runId, workflowId: input.workflow.id, userId, roleKey: taskRoleKey, stateCode: node.id, stateName: pendingStatusName, flowStatus: pendingStatusName, sourceNodeId: node.id, availableOperations: [availableOperation] });
+          }
+        }
+        addRuntimeParticipants(input.context, approverUserIds);
+        await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId: taskIds[0], taskIds, approvalGroupId, signMode: reference.signMode, status: "pending", assignedUserId: assignment.assignedUserId, candidateUserIds: approverUserIds, operationName });
         await db().query("UPDATE workflow_run SET status='running',contextJson=? WHERE id=?", [JSON.stringify(input.context), input.runId]);
-        return { status: "waiting", taskId };
+        return { status: "waiting", taskId: taskIds[0] };
+      }
+      if (node.type === "router") {
+        const routeParticipants = runtimeNodeParticipants(input.context, node.id);
+        const iamRoles = await resolveWorkflowUserRoleKeys(routeParticipants, input.workflow.id);
+        const runtime = asRecord(input.context.runtime);
+        const rolesByUser = asRecord(runtime.roleKeysByUser);
+        for (const userId of routeParticipants) {
+          rolesByUser[String(userId)] = Array.from(new Set([...(Array.isArray(rolesByUser[String(userId)]) ? rolesByUser[String(userId)] as unknown[] : []), ...(iamRoles.get(userId) ?? [])]));
+        }
+        runtime.roleKeysByUser = rolesByUser;
+        input.context.runtime = runtime;
       }
       const result = await executeNode(node, input.context, true, Number(input.workflow.ownerUserId));
       const vars = asRecord(input.context.vars);
@@ -453,7 +673,25 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
       if (node.type === "state") await persistStateNode({ runId: input.runId, workflowId: input.workflow.id, node, context: input.context });
       if (node.type === "end") finalOutput = result.output;
       await finishNodeRun(nodeRunId, "success", startedAt, result.output);
-      input.definition.edges.filter(edge => edge.sourceNodeId === node.id && (!result.route || (edge.sourceHandle ?? "default") === result.route)).forEach(edge => input.queue.push(edge.targetNodeId));
+      const routed = result as { route?: string; routeTargets?: unknown[] };
+      const routeTargets = Array.isArray(routed.routeTargets) ? routed.routeTargets.map(asRecord) : [];
+      if (node.type === "router" && routeTargets.length) {
+        for (const branch of routeTargets) {
+          const handle = String(branch.handle ?? routed.route ?? "default");
+          const targetNodeId = String(branch.targetNodeId ?? "");
+          const branchUsers = Array.isArray(branch.userIds) ? branch.userIds.map(Number).filter(id => Number.isInteger(id) && id > 0) : currentParticipants;
+          const edges = input.definition.edges.filter(edge => edge.sourceNodeId === node.id && ((targetNodeId && edge.targetNodeId === targetNodeId) || (!targetNodeId && (edge.sourceHandle ?? "default") === handle) || (edge.sourceHandle ?? "default") === handle));
+          for (const edge of edges) {
+            setRuntimeNodeParticipants(input.context, edge.targetNodeId, branchUsers);
+            input.queue.push(edge.targetNodeId);
+          }
+        }
+      } else {
+        input.definition.edges.filter(edge => edge.sourceNodeId === node.id && (!routed.route || (edge.sourceHandle ?? "default") === routed.route)).forEach(edge => {
+          setRuntimeNodeParticipants(input.context, edge.targetNodeId, currentParticipants);
+          input.queue.push(edge.targetNodeId);
+        });
+      }
     } catch (error) {
       const details = { message: error instanceof Error ? error.message : String(error) };
       await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details);
@@ -461,6 +699,74 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
     }
   }
   return { status: "success", output: finalOutput };
+}
+
+type ApprovalGateResult = {
+  continueFlow: boolean;
+  completedApprovals: number;
+  requiredApprovals: number;
+  totalApprovers: number;
+  affectedUserIds: number[];
+  pendingTaskId?: string;
+  groupResults?: unknown[];
+};
+
+async function completeTaskAndEvaluateApprovalGroup(task: mysql.RowDataPacket, input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }): Promise<ApprovalGateResult> {
+  if (!task.approvalGroupId) {
+    const [claim] = await db().query<mysql.ResultSetHeader>(
+      "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed'",
+      [input.completedBy.id, JSON.stringify(input.result), input.taskId],
+    );
+    if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
+    return { continueFlow: true, completedApprovals: 1, requiredApprovals: 1, totalApprovers: 1, affectedUserIds: [input.completedBy.id], groupResults: [input.result] };
+  }
+
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>("SELECT * FROM workflow_task WHERE id=? FOR UPDATE", [input.taskId]);
+    const lockedTask = lockedTasks[0];
+    if (!lockedTask || lockedTask.status !== "claimed" || (Number(lockedTask.claimedByUserId) !== input.completedBy.id && input.completedBy.role !== "admin")) {
+      throw new Error("人工任务已被其他操作处理。 ");
+    }
+    const [groups] = await connection.query<mysql.RowDataPacket[]>("SELECT * FROM workflow_task_group WHERE id=? FOR UPDATE", [task.approvalGroupId]);
+    const group = groups[0];
+    if (!group || group.status !== "waiting") throw new Error("或签/会签任务组已结束。 ");
+    await connection.query(
+      "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
+      [input.completedBy.id, JSON.stringify(input.result), input.taskId],
+    );
+    const [progressRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT SUM(status='completed') AS completedApprovals FROM workflow_task WHERE approvalGroupId=?",
+      [task.approvalGroupId],
+    );
+    const completedApprovals = Number(progressRows[0]?.completedApprovals ?? 0);
+    const requiredApprovals = Number(group.requiredApprovals);
+    const totalApprovers = Number(group.totalApprovers);
+    const [members] = await connection.query<mysql.RowDataPacket[]>("SELECT id,assignedUserId,status,resultJson FROM workflow_task WHERE approvalGroupId=? ORDER BY createdAt,id", [task.approvalGroupId]);
+    const affectedUserIds = Array.from(new Set(members.map(row => Number(row.assignedUserId)).filter(id => Number.isInteger(id) && id > 0)));
+    if (completedApprovals < requiredApprovals) {
+      const pendingTaskId = String(members.find(row => row.status === "pending" || row.status === "claimed")?.id ?? "");
+      await connection.commit();
+      return { continueFlow: false, completedApprovals, requiredApprovals, totalApprovers, affectedUserIds: [input.completedBy.id], pendingTaskId: pendingTaskId || undefined };
+    }
+    await connection.query("UPDATE workflow_task_group SET status='completed',completedByTaskId=?,completedAt=NOW() WHERE id=? AND status='waiting'", [input.taskId, task.approvalGroupId]);
+    await connection.query("UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')", [task.approvalGroupId]);
+    await connection.commit();
+    return {
+      continueFlow: true,
+      completedApprovals,
+      requiredApprovals,
+      totalApprovers,
+      affectedUserIds,
+      groupResults: members.filter(row => row.status === "completed").map(row => readJson(row.resultJson)),
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function resumeWorkflowTask(input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }) {
@@ -473,16 +779,43 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
   if (!task) throw new Error("人工任务不存在。 ");
   if (task.status !== "claimed" || (Number(task.claimedByUserId) !== input.completedBy.id && input.completedBy.role !== "admin")) throw new Error("仅领取该任务的处理人可以完成操作。 ");
   if (task.runStatus !== "running") throw new Error("所属流程实例不处于等待人工操作状态。 ");
-  const [claim] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed'", [input.completedBy.id, JSON.stringify(input.result), input.taskId]);
-  if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
+  const gate = await completeTaskAndEvaluateApprovalGroup(task, input);
+  await db().query(
+    "UPDATE workflow_participant_state SET stateName='已审核',flowStatus='已审核',availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=? AND roleKey=?",
+    [JSON.stringify([]), task.runId, input.completedBy.id, String(task.roleKey || "default")],
+  );
+  if (!gate.continueFlow) {
+    return {
+      runId: String(task.runId),
+      status: "waiting" as const,
+      taskId: gate.pendingTaskId ?? input.taskId,
+      approvalProgress: { completed: gate.completedApprovals, required: gate.requiredApprovals, total: gate.totalApprovers },
+    };
+  }
   const context = asRecord(readJson(task.contextJson));
   const runtime = asRecord(context.runtime);
   runtime.lastActorUserId = input.completedBy.id;
   context.runtime = runtime;
+  updateRuntimeRoles(context, [input.completedBy.id], [], "sender");
   addRuntimeParticipants(context, [input.completedBy.id]);
-  await db().query("UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?", [JSON.stringify([]), task.runId, input.completedBy.id]);
+  if (gate.affectedUserIds.length) {
+    const placeholders = gate.affectedUserIds.map(() => "?").join(",");
+    await db().query(
+      "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (" + placeholders + ")",
+      [JSON.stringify([]), task.runId, ...gate.affectedUserIds],
+    );
+  }
   const definition = readJson(task.definitionSnapshotJson) as Definition;
-  const taskOutput = { taskId: input.taskId, completedByUserId: input.completedBy.id, operationName: task.operationName ?? task.nodeName, result: input.result };
+  const taskOutput = {
+    taskId: input.taskId,
+    approvalGroupId: task.approvalGroupId ?? null,
+    signMode: task.signMode ?? "single",
+    completedByUserId: input.completedBy.id,
+    operationName: task.operationName ?? task.nodeName,
+    result: input.result,
+    groupResults: gate.groupResults ?? [input.result],
+    approvalProgress: { completed: gate.completedApprovals, required: gate.requiredApprovals, total: gate.totalApprovers },
+  };
   const vars = asRecord(context.vars);
   const nodeOutputs = asRecord(context.nodes);
   vars[String(task.nodeId)] = taskOutput;

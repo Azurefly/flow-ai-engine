@@ -258,6 +258,27 @@ export const workflowNodeRuns = mysqlTable("workflow_node_run", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+/** Durable coordination for original single/or-sign/and-sign operate semantics. */
+export const workflowTaskGroups = mysqlTable(
+  "workflow_task_group",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor"]).default("single").notNull(),
+    totalApprovers: int("totalApprovers").default(1).notNull(),
+    requiredApprovals: int("requiredApprovals").default(1).notNull(),
+    passPercentBasisPoints: int("passPercentBasisPoints").default(10000).notNull(),
+    status: mysqlEnum("status", ["waiting", "completed", "cancelled"]).default("waiting").notNull(),
+    nextNodeIdsJson: json("nextNodeIdsJson").notNull(),
+    completedByTaskId: varchar("completedByTaskId", { length: 36 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    completedAt: timestamp("completedAt"),
+  },
+  table => [unique("workflow_task_group_run_node_unique").on(table.runId, table.nodeId), index("workflow_task_group_run_status_idx").on(table.runId, table.status)],
+);
+
 /** Human work created by an operate node; rows remain scoped to their workflow, run and project. */
 export const workflowTasks = mysqlTable(
   "workflow_task",
@@ -272,6 +293,9 @@ export const workflowTasks = mysqlTable(
     status: mysqlEnum("status", ["pending", "claimed", "completed", "cancelled"]).default("pending").notNull(),
     assignedUserId: int("assignedUserId").references(() => users.id),
     candidateUserIdsJson: json("candidateUserIdsJson"),
+    approvalGroupId: varchar("approvalGroupId", { length: 36 }).references(() => workflowTaskGroups.id),
+    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor"]).default("single").notNull(),
+    roleKey: varchar("roleKey", { length: 160 }).default("default").notNull(),
     operationName: varchar("operationName", { length: 160 }),
     pendingStatusName: varchar("pendingStatusName", { length: 160 }),
     claimedByUserId: int("claimedByUserId").references(() => users.id),
@@ -287,7 +311,8 @@ export const workflowTasks = mysqlTable(
   table => [
     index("workflow_task_assignee_status_idx").on(table.assignedUserId, table.status, table.createdAt),
     index("workflow_task_workflow_status_idx").on(table.workflowId, table.status, table.createdAt),
-    unique("workflow_task_run_node_unique").on(table.runId, table.nodeId),
+    index("workflow_task_approval_group_idx").on(table.approvalGroupId, table.status),
+    unique("workflow_task_run_node_assignee_unique").on(table.runId, table.nodeId, table.assignedUserId),
   ],
 );
 
@@ -299,6 +324,7 @@ export const workflowParticipantStates = mysqlTable(
     runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
     workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
     userId: int("userId").notNull().references(() => users.id),
+    roleKey: varchar("roleKey", { length: 160 }).default("default").notNull(),
     stateCode: varchar("stateCode", { length: 160 }),
     stateName: varchar("stateName", { length: 160 }).notNull(),
     flowStatus: varchar("flowStatus", { length: 255 }),
@@ -308,7 +334,7 @@ export const workflowParticipantStates = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [unique("workflow_participant_run_user_unique").on(table.runId, table.userId), index("workflow_participant_user_updated_idx").on(table.userId, table.updatedAt)],
+  table => [unique("workflow_participant_run_user_role_unique").on(table.runId, table.userId, table.roleKey), index("workflow_participant_user_updated_idx").on(table.userId, table.updatedAt)],
 );
 
 /** Administrator-owned settings for approval governance and visible system preferences. */

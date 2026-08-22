@@ -511,8 +511,8 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
     expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
     expect(processWorkbenchSource).toContain("baseTabLabel={labels[view]}");
-    expect(processWorkbenchSource).toContain("const closeRunTab = () => { setSelectedRunId(null); invalidate(); }");
-    expect(processWorkbenchSource).toContain("setSelectedRunId(null); setSelectedTaskId(null); setSelectedTaskIds([]); invalidate();");
+    expect(processWorkbenchSource).toMatch(/const closeRunTab = \(\) => \{\s*setSelectedRunId\(null\);\s*invalidate\(\);\s*\}/);
+    expect(processWorkbenchSource).toMatch(/setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*invalidate\(\);/);
     expect(styleSource).toContain('min-height: 46px;');
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
     expect(processWorkbenchRunTabSource).toContain("返回工作台");

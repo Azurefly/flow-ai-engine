@@ -203,7 +203,11 @@ function NestedStructuredValueEditor({ value, disabled, onChange }: { value: unk
 type OriginalFieldSpec = {
   key: string;
   label: string;
-  kind?: "text" | "number" | "boolean" | "yes-no" | "structured";
+  help?: string;
+  kind?: "text" | "number" | "boolean" | "yes-no" | "structured" | "select" | "multi-select";
+  options?: Array<{ value: string; label: string }>;
+  min?: number;
+  max?: number;
 };
 
 const ORIGINAL_OBJECT_FIELD_SPECS: Record<string, OriginalFieldSpec[]> = {
@@ -213,19 +217,19 @@ const ORIGINAL_OBJECT_FIELD_SPECS: Record<string, OriginalFieldSpec[]> = {
   ],
   bdcz: [
     { key: "bdcz", label: "绑定操作", kind: "structured" },
-    { key: "bdczjs", label: "绑定操作角色", kind: "structured" },
-    { key: "hqhqsz", label: "或签/会签设置" },
-    { key: "xzdfhq", label: "需指定方或签", kind: "structured" },
-    { key: "hqtgbfb", label: "会签通过百分比", kind: "number" },
+    { key: "bdczjs", label: "绑定操作角色", help: "发送方表示沿用上一步操作人，接收方表示沿用上一步接收人。", kind: "multi-select", options: [{ value: "sender", label: "发送方" }, { value: "acceptor", label: "接收方" }] },
+    { key: "hqhqsz", label: "签收方式", help: "或签任意一人通过即继续；会签达到配置比例后继续。", kind: "select", options: [{ value: "", label: "普通单人/领取处理" }, { value: "orSignFor", label: "或签" }, { value: "andSignFor", label: "会签" }] },
+    { key: "xzdfhq", label: "指定参与或签/会签的人员", help: "留空表示所有候选人；可填写内部用户 ID 列表或原版人员对象。", kind: "structured" },
+    { key: "hqtgbfb", label: "会签通过百分比", help: "1 至 100；留空按 100% 全部通过。", kind: "number", min: 1, max: 100 },
   ],
   sxsz: [
-    { key: "zdglxgfsz", label: "自动关联相关方", kind: "structured" },
+    { key: "zdglxgfsz", label: "自动关联相关方", help: "部门、权限部门或直属上级会作为后续接收方补入流程。", kind: "multi-select", options: [{ value: "unitWord", label: "相关方所属部门" }, { value: "authUnitWord", label: "相关方权限部门" }, { value: "upperAuthUnitWord", label: "相关方直属上级" }] },
     { key: "yrdbmsfkcz", label: "引入部门可操作", kind: "yes-no" },
     { key: "xzdzlcjywc", label: "需完成的子流程", kind: "structured" },
   ],
   fsfsz: [
     { key: "fsfbm", label: "发送方编码" },
-    { key: "fsflzsf", label: "发送方流转身份" },
+    { key: "fsflzsf", label: "发送方流转身份", help: "决定下一节点以本人、部门还是权限部门身份继续。", kind: "select", options: [{ value: "以本人身份", label: "以本人身份" }, { value: "以部门身份", label: "以部门身份" }, { value: "以权限部门身份", label: "以权限部门身份" }] },
     { key: "fsfgycz", label: "发送方固有操作" },
     { key: "lsjspz", label: "发送方临时角色", kind: "structured" },
   ],
@@ -279,7 +283,12 @@ function OriginalFieldControl({ spec, value, disabled, onChange }: { spec: Origi
   if (spec.kind === "structured") return <NestedStructuredValueEditor value={value ?? []} disabled={disabled} onChange={onChange} />;
   if (spec.kind === "boolean") return <label className="inline-flex items-center gap-2 text-xs text-slate-700"><input type="checkbox" checked={Boolean(value)} disabled={disabled} onChange={event => onChange(event.target.checked)} />启用</label>;
   if (spec.kind === "yes-no") return <select className={inputClass} value={String(value ?? "否")} disabled={disabled} onChange={event => onChange(event.target.value)}><option value="否">否</option><option value="是">是</option></select>;
-  return <input className={inputClass} type={spec.kind === "number" ? "number" : "text"} value={String(value ?? "")} disabled={disabled} onChange={event => onChange(spec.kind === "number" ? structuredValue(event.target.value) : event.target.value)} />;
+  if (spec.kind === "select") return <select className={inputClass} value={String(value ?? "")} disabled={disabled} onChange={event => onChange(event.target.value)}>{(spec.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  if (spec.kind === "multi-select") {
+    const selected = new Set(Array.isArray(value) ? value.map(String) : []);
+    return <div className="grid gap-1 rounded border border-slate-200 bg-white p-2">{(spec.options ?? []).map(option => <label key={option.value} className="inline-flex items-center gap-2 text-xs font-normal text-slate-700"><input type="checkbox" checked={selected.has(option.value)} disabled={disabled} onChange={event => { const next = new Set(selected); event.target.checked ? next.add(option.value) : next.delete(option.value); onChange(Array.from(next)); }} />{option.label}</label>)}</div>;
+  }
+  return <input className={inputClass} type={spec.kind === "number" ? "number" : "text"} min={spec.min} max={spec.max} value={String(value ?? "")} disabled={disabled} onChange={event => onChange(spec.kind === "number" ? structuredValue(event.target.value) : event.target.value)} />;
 }
 
 function OriginalObjectEditor({ fieldKey, value, disabled, onChange }: { fieldKey: string; value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {
@@ -287,7 +296,7 @@ function OriginalObjectEditor({ fieldKey, value, disabled, onChange }: { fieldKe
   const record = value && typeof value === "object" && !Array.isArray(value) ? value as NodeConfig : {};
   const knownKeys = new Set(specs.map(spec => spec.key));
   const extras = Object.fromEntries(Object.entries(record).filter(([key]) => !knownKeys.has(key)));
-  return <div className="grid gap-2">{specs.map(spec => <label key={spec.key} className="grid min-w-0 gap-1 text-[11px] font-medium text-slate-600"><span>{spec.label}</span><OriginalFieldControl spec={spec} value={record[spec.key]} disabled={disabled} onChange={next => onChange({ ...record, [spec.key]: next })} /></label>)}{Object.keys(extras).length > 0 && <div className="grid gap-1"><span className="text-[11px] font-medium text-slate-600">原版扩展字段</span><NestedStructuredValueEditor value={extras} disabled={disabled} onChange={next => { const known = Object.fromEntries(specs.filter(spec => record[spec.key] !== undefined).map(spec => [spec.key, record[spec.key]])); onChange({ ...known, ...(next && typeof next === "object" && !Array.isArray(next) ? next as NodeConfig : {}) }); }} /></div>}</div>;
+  return <div className="grid gap-2">{specs.map(spec => <label key={spec.key} className="grid min-w-0 gap-1 text-[11px] font-medium text-slate-600"><span>{spec.label}</span><OriginalFieldControl spec={spec} value={record[spec.key]} disabled={disabled} onChange={next => onChange({ ...record, [spec.key]: next })} />{spec.help && <span className="font-normal leading-4 text-slate-400">{spec.help}</span>}</label>)}{Object.keys(extras).length > 0 && <div className="grid gap-1"><span className="text-[11px] font-medium text-slate-600">原版扩展字段</span><NestedStructuredValueEditor value={extras} disabled={disabled} onChange={next => { const known = Object.fromEntries(specs.filter(spec => record[spec.key] !== undefined).map(spec => [spec.key, record[spec.key]])); onChange({ ...known, ...(next && typeof next === "object" && !Array.isArray(next) ? next as NodeConfig : {}) }); }} /></div>}</div>;
 }
 
 function StructuredValueEditor({ field, value, disabled, onChange }: { field: FlowNodeDefinition["fields"][number]; value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {

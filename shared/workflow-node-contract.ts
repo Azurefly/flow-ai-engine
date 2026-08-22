@@ -1,3 +1,6 @@
+import { normalizeReferenceOperateConfig } from "./reference-operate-config";
+import { normalizeReferenceRouterConfig } from "./reference-router-config";
+
 export type FlowType = "state" | "control" | "data";
 
 export const FLOW_NODE_TYPES = [
@@ -291,6 +294,19 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       if (config.qxkz !== undefined && !Array.isArray(config.qxkz)) throw new Error("操作节点权限控制必须是数组。");
       if (config.bddx !== undefined && !Array.isArray(config.bddx)) throw new Error("操作节点绑定对象必须是数组。");
       for (const key of ["bdcz", "sxsz", "fsfsz", "jsfsz", "zdzx"]) if (config[key] !== undefined) assertObject(config[key], "操作节点" + key + "配置必须是对象。");
+      const reference = normalizeReferenceOperateConfig(config);
+      const bindOperate = config.bdcz && typeof config.bdcz === "object" && !Array.isArray(config.bdcz) ? config.bdcz as NodeConfig : {};
+      const rawPercent = Number(bindOperate.hqtgbfb);
+      if (reference.signMode === "andSignFor" && bindOperate.hqtgbfb !== undefined && bindOperate.hqtgbfb !== "" && (!Number.isFinite(rawPercent) || rawPercent <= 0 || rawPercent > 100)) {
+        throw new Error("操作节点会签通过百分比必须在 1 至 100 之间。");
+      }
+      if (reference.autoExecute && reference.hasUnsafeAutoExecuteCode) throw new Error("操作节点自动执行代码尚未迁移为安全条件，禁止发布执行。");
+      for (const item of reference.autoExecuteConditions) {
+        assertObject(item, "操作节点自动执行条件必须是对象。");
+        const condition = item as NodeConfig;
+        if (condition.left === undefined || condition.operator === undefined) throw new Error("操作节点自动执行条件必须配置左值和操作符。");
+        if (!conditionOperators.some(item => item.value === String(condition.operator))) throw new Error("操作节点自动执行条件操作符无效。");
+      }
       break;
     }
     case "router": {
@@ -309,7 +325,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         }
       }
       if (Array.isArray(config.lysz) && config.lysz.length > 0 && config.routes.length === 0) {
-        throw new Error("路由节点包含原版 lysz 规则，必须迁移为安全路由规则后才能执行。");
+        const legacyRouter = normalizeReferenceRouterConfig(config);
+        if (legacyRouter.hasUnsafeCode) throw new Error("路由节点包含原版任意代码，必须迁移为安全路由规则后才能执行。");
+        if (legacyRouter.rules.some(rule => !rule.targetNodeId)) throw new Error("原版路由规则缺少目标节点，无法安全迁移。");
       }
       break;
     }

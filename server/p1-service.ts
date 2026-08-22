@@ -46,7 +46,14 @@ async function canAccessTask(user: User, task: mysql.RowDataPacket, write = fals
 function presentTask(row: mysql.RowDataPacket) {
   const status = String(row.status);
   const displayStatus = status === "pending" ? String(row.pendingStatusName || "待审批") : status === "claimed" ? "处理中" : status === "completed" ? "已审核" : "已取消";
-  return { ...row, displayStatus, candidateUserIds: candidateIds(row), payload: parseJson(row.payloadJson), result: parseJson(row.resultJson) };
+  return {
+    ...row,
+    displayStatus,
+    candidateUserIds: candidateIds(row),
+    payload: parseJson(row.payloadJson),
+    result: parseJson(row.resultJson),
+    approvalProgress: row.approvalGroupId ? { completed: Number(row.completedApprovals ?? 0), required: Number(row.requiredApprovals ?? 1), total: Number(row.totalApprovers ?? 1) } : null,
+  };
 }
 
 export async function listWorkflowTasks(user: User, input: { view: TaskView; projectId?: string; status?: "pending" | "claimed" | "completed" | "cancelled"; limit?: number }) {
@@ -57,8 +64,10 @@ export async function listWorkflowTasks(user: User, input: { view: TaskView; pro
   if (input.status) { clauses.push("t.status=?"); params.push(input.status); }
   params.push(Math.min(Math.max(input.limit ?? 100, 1), 200));
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName
+    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,
+            g.totalApprovers,g.requiredApprovals,(SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedApprovals
        FROM workflow_task t JOIN workflow w ON w.id=t.workflowId JOIN workflow_run r ON r.id=t.runId
+       LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
        LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId
       WHERE ${clauses.join(" AND ")} ORDER BY CASE t.status WHEN 'pending' THEN 0 WHEN 'claimed' THEN 1 ELSE 2 END,t.createdAt DESC LIMIT ?`,
     params,
@@ -70,8 +79,10 @@ export async function listWorkflowTasks(user: User, input: { view: TaskView; pro
 
 export async function getWorkflowTask(user: User, taskId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName
+    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,
+            g.totalApprovers,g.requiredApprovals,(SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedApprovals
        FROM workflow_task t JOIN workflow w ON w.id=t.workflowId JOIN workflow_run r ON r.id=t.runId
+       LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
        LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId WHERE t.id=? LIMIT 1`,
     [taskId],
   );
@@ -183,11 +194,11 @@ export async function listProcessInstances(user: User, input: { view: "initiated
     input.view === "initiated"
       ? `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,initiator.name AS initiatedByName,ps.stateCode,ps.stateName,ps.flowStatus,ps.stateColor,ps.availableOperationsJson
            FROM workflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
-           LEFT JOIN workflow_participant_state ps ON ps.runId=r.id AND ps.userId=?
+           LEFT JOIN workflow_participant_state ps ON ps.id=(SELECT latest.id FROM workflow_participant_state latest WHERE latest.runId=r.id AND latest.userId=? ORDER BY latest.updatedAt DESC,latest.id DESC LIMIT 1)
           WHERE r.triggeredByUserId=? ORDER BY r.createdAt DESC LIMIT ?`
       : `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,initiator.name AS initiatedByName,ps.stateCode,ps.stateName,ps.flowStatus,ps.stateColor,ps.availableOperationsJson
            FROM workflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
-           LEFT JOIN workflow_participant_state ps ON ps.runId=r.id AND ps.userId=?
+           LEFT JOIN workflow_participant_state ps ON ps.id=(SELECT latest.id FROM workflow_participant_state latest WHERE latest.runId=r.id AND latest.userId=? ORDER BY latest.updatedAt DESC,latest.id DESC LIMIT 1)
           ORDER BY r.createdAt DESC LIMIT ?`,
     input.view === "initiated" ? [user.id, user.id, limit] : [user.id, limit],
   );

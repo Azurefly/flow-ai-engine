@@ -78,6 +78,13 @@
       "when": 1787401069904,
       "tag": "0010_zippy_ezekiel",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1787404955176,
+      "tag": "0011_restore_signing_roles",
+      "breakpoints": true
     }
   ]
 }

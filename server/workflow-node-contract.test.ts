@@ -52,12 +52,30 @@ describe("原始节点配置统一契约", () => {
       qxkz: [{ qxid: "legacy-auth", qxmc: "原版权限" }],
     }))).not.toThrow();
     expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", { nodeDh: "ROLE_APPROVE", assigneeMode: "role", assigneeRoleCode: "" }))).toThrow("必须配置角色代号");
+    expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", {
+      nodeDh: "AND_SIGN",
+      bdcz: { bdcz: [], bdczjs: ["acceptor"], hqhqsz: "andSignFor", xzdfhq: {}, hqtgbfb: 101 },
+    }))).toThrow("会签通过百分比必须在 1 至 100 之间");
+    expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", {
+      nodeDh: "AUTO_CODE",
+      zdzx: { sfzdzx: "是", tjsz: [], code: ["return true;"] },
+    }))).toThrow("自动执行代码尚未迁移为安全条件");
+    expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", {
+      nodeDh: "AUTO_CONDITION",
+      zdzx: { sfzdzx: "是", tjsz: [{ left: "{{input.days}}", operator: "lessThan", right: 3 }], code: [] },
+    }))).not.toThrow();
     expect(() => validateNodeConfig("router", withNodeConfigDefaults("router", {
       nodeDh: "ROUTE1",
       lymc: "旧路由",
       lysz: [{ routerTargetyId: "approved", route: { routerJavaCode: "return true;" } }],
       routes: [],
     }))).toThrow("必须迁移为安全路由规则");
+    expect(() => validateNodeConfig("router", withNodeConfigDefaults("router", {
+      nodeDh: "ROUTE_SAFE",
+      lymc: "原版安全路由",
+      lysz: [{ routerTargetyId: "approved", route: { routerRuleId: "rule-1", routerRulePriority: 100, routerTargetId: "approved", routerAuthGroups: [{ authReceiver: { receiverRole: ["manager"] } }] } }],
+      routes: [],
+    }))).not.toThrow();
     expect(() => validateNodeConfig("rest", withNodeConfigDefaults("rest", {
       nodeDh: "REST1",
       restmc: "旧校验",
