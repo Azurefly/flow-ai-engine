@@ -100,27 +100,29 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const [newFlowName, setNewFlowName] = useState("");
   const [userForm, setUserForm] = useState({ username: "", name: "", password: "", email: "", role: "user" as "user" | "admin" });
   const importRef = useRef<HTMLInputElement>(null);
+  const editorActive = section === "flows" && flowView === "editor";
+  const identityActive = section === "system" && systemView === "identity" && user.role === "admin";
 
   const workflows = trpc.workflow.list.useQuery();
   const projects = trpc.project.list.useQuery();
   const workflowItems = (workflows.data ?? []) as any[];
   const selectedWorkflowFromList = workflowItems.find(workflow => workflow.id === selectedWorkflowId) ?? null;
   const selectedWorkflowInput = useMemo(() => ({ id: selectedWorkflowId ?? "00000000" }), [selectedWorkflowId]);
-  const selectedWorkflowQuery = trpc.workflow.get.useQuery(selectedWorkflowInput, { enabled: Boolean(selectedWorkflowId && !selectedWorkflowFromList), retry: false });
+  const selectedWorkflowQuery = trpc.workflow.get.useQuery(selectedWorkflowInput, { enabled: Boolean(editorActive && selectedWorkflowId && !selectedWorkflowFromList), retry: false });
   const selectedWorkflow = resolveSelectedWorkflow(workflowItems, selectedWorkflowId, selectedWorkflowQuery.data as any);
   const selectedId = selectedWorkflowId ?? selectedWorkflow?.id ?? null;
   const detailInput = useMemo(() => ({ runId: selectedRunId ?? "00000000-0000-0000-0000-000000000000" }), [selectedRunId]);
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, { enabled: Boolean(selectedRunId) });
   const accessInput = useMemo(() => ({ id: selectedId ?? "00000000" }), [selectedId]);
   const access = trpc.workflow.access.useQuery(accessInput, { enabled: Boolean(selectedId) });
-  const members = trpc.workflow.members.useQuery(useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]), { enabled: Boolean(selectedId), retry: false });
-  const memberCandidates = trpc.workflow.memberCandidates.useQuery(useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]), { enabled: Boolean(selectedId && access.data?.permissions?.has("workflow:members:manage")), retry: false });
-  const runtimeModels = trpc.workflow.runtimeModels.useQuery(undefined, { staleTime: 60_000, retry: false });
-  const templates = trpc.workflow.templates.useQuery(undefined, { retry: false });
-  const subflows = trpc.workflow.subflows.useQuery(undefined, { retry: false });
-  const users = trpc.iam.users.useQuery(undefined, { enabled: user.role === "admin", retry: false });
-  const roles = trpc.iam.roles.useQuery(undefined, { enabled: user.role === "admin", retry: false });
-  const audit = trpc.iam.authorizationAudit.useQuery({ limit: 20 }, { enabled: user.role === "admin", retry: false });
+  const members = trpc.workflow.members.useQuery(useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]), { enabled: Boolean(editorActive && selectedId), retry: false });
+  const memberCandidates = trpc.workflow.memberCandidates.useQuery(useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]), { enabled: Boolean(editorActive && selectedId && access.data?.permissions?.has("workflow:members:manage")), retry: false });
+  const runtimeModels = trpc.workflow.runtimeModels.useQuery(undefined, { enabled: editorActive, staleTime: 60_000, retry: false });
+  const templates = trpc.workflow.templates.useQuery(undefined, { enabled: editorActive, retry: false });
+  const subflows = trpc.workflow.subflows.useQuery(undefined, { enabled: editorActive, retry: false });
+  const users = trpc.iam.users.useQuery(undefined, { enabled: identityActive, retry: false });
+  const roles = trpc.iam.roles.useQuery(undefined, { enabled: identityActive, retry: false });
+  const audit = trpc.iam.authorizationAudit.useQuery({ limit: 20 }, { enabled: identityActive, retry: false });
 
   useEffect(() => {
     if (!selectedWorkflowId && workflowItems[0]) setSelectedWorkflowId(workflowItems[0].id);

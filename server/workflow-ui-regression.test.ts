@@ -66,6 +66,15 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-labelledby={`aiflow-console-tab-${section}`}');
   });
 
+  it("延迟加载非活动设计器与身份中心查询，避免首屏超大 tRPC 批量", () => {
+    expect(homeSource).toContain('const editorActive = section === "flows" && flowView === "editor"');
+    expect(homeSource).toContain('const identityActive = section === "system" && systemView === "identity" && user.role === "admin"');
+    expect(homeSource).toContain('enabled: editorActive, staleTime: 60_000');
+    expect(homeSource).toContain('enabled: editorActive, retry: false');
+    expect(homeSource).toContain('enabled: identityActive, retry: false');
+    expect(homeSource).toContain('Boolean(editorActive && selectedId)');
+  });
+
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain('grid-cols-1');
     expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_320px]');
