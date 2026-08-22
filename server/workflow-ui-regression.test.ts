@@ -338,6 +338,13 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("已打开“${flow.name}”设计器");
   });
 
+  it("保留数据流画布一键展开的资源树状态关联", () => {
+    expect(dataResourceSource).toContain('aria-controls="dataflow-resource-trees"');
+    expect(dataResourceSource).toContain("aria-expanded={expanded}");
+    expect(dataResourceSource).toContain('id="dataflow-resource-trees"');
+    expect(dataResourceSource).toContain('expanded ? "收起资源树" : "一键展开"');
+  });
+
   it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {
     expect(systemConfigSource).toContain("平台名称");
     expect(systemConfigSource).toContain("要求审核通过后发布");
