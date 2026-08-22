@@ -494,7 +494,8 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
   const nextNodeIds = readJson(task.nextNodeIdsJson);
   const runStartedAt = Date.now();
   try {
-    const segment = await executeRunSegment({ runId: String(task.runId), workflow: task, definition, context, queue: Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [] });
+    const resumedWorkflow = { ...task, id: String(task.workflowId), name: String(task.workflowName) } as PersistedWorkflow;
+    const segment = await executeRunSegment({ runId: String(task.runId), workflow: resumedWorkflow, definition, context, queue: Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [] });
     if (segment.status === "waiting") return { runId: String(task.runId), status: "waiting" as const, taskId: segment.taskId };
     await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(), task.runId]);
     return { runId: String(task.runId), status: "success" as const, output: segment.output };
