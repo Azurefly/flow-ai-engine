@@ -175,6 +175,8 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
     expect(dataResourceSource).toContain("DATAFLOW CANVAS REFERENCE");
+    expect(dataResourceSource).toContain('projectName} · 数据流画布');
+    expect(dataResourceSource).toContain('trpc.project.list.useQuery()');
     expect(dataResourceSource).toContain("数据资源");
     expect(dataResourceSource).toContain("函数资源");
     expect(dataResourceSource).toContain("一键展开");
