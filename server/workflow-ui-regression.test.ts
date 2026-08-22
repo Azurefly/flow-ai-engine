@@ -156,6 +156,17 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("只读流程图");
     expect(warehouseSource).toContain("hasFolderMatch");
     expect(warehouseSource).toContain("rawChildren(folder.id).some(hasFolderMatch)");
+    expect(warehouseSource).toContain("新增同级文件夹");
+    expect(warehouseSource).toContain("新增子级文件夹");
+    expect(warehouseSource).toContain("添加同级");
+    expect(warehouseSource).toContain("添加子级");
+    expect(warehouseSource).toContain("确认删除");
+    expect(warehouseSource).toContain("trpc.workflow.delete.useMutation");
+    expect(warehouseSource).toContain("删除流程");
+    expect(warehouseSource).toContain("关联版本、运行与成员授权已由服务端按安全顺序清理");
+    expect(warehouseSource).toContain("取消高亮");
+    expect(warehouseSource).toContain("保存为图片");
+    expect(warehouseSource).toContain("全屏");
   });
 
   it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {
