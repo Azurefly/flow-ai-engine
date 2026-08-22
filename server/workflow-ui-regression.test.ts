@@ -126,6 +126,12 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("workflow.publishedAt ? formatDate(workflow.publishedAt)");
     expect(projectWorkspaceSource).toContain("workflow.unpublishedAt ? formatDate(workflow.unpublishedAt)");
     expect(projectWorkspaceSource).toContain('colSpan={11}');
+    expect(projectWorkspaceSource).toContain('workflow.flowType === "data" ? "启动" : "发起流程"');
+    expect(projectWorkspaceSource).toContain('trpc.workflow.publish.useMutation');
+    expect(projectWorkspaceSource).toContain('trpc.workflow.unpublish.useMutation');
+    expect(projectWorkspaceSource).toContain('workflow.status === "draft" && workflow.auditStatus === "approved"');
+    expect(projectWorkspaceSource).toContain('workflow.status === "published" && <button');
+    expect(projectWorkspaceSource).toContain('>取消发布</button>');
     expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
     expect(systemConfigSource).toContain("WORK DOMAIN");
   });
