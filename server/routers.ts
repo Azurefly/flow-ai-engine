@@ -168,7 +168,9 @@ export const appRouter = router({
     updateSubflow: protectedProcedure.input(z.object({ id: z.string().min(8).max(64), name: z.string().trim().min(1).max(160).optional(), description: z.string().trim().max(500).nullable().optional(), definition: z.unknown().optional(), isEnabled: z.boolean().optional() })).mutation(async ({ ctx, input }) => { if (!(await updateSubflow(ctx.user, input))) throw new Error("子流程不存在或无编辑权限。"); return { success: true }; }),
     deleteSubflow: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => { if (!(await deleteSubflow(ctx.user, input.id))) throw new Error("子流程不存在或无删除权限。"); return { success: true }; }),
     run: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), input: z.record(z.string(), z.unknown()).optional() })).mutation(async ({ ctx, input }) => {
-      if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:run"))) throw new Error("无权运行此流程。");
+      if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:run"))) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "无权运行此流程。" });
+      }
       return executeWorkflow({ workflowId: input.workflowId, triggeredBy: ctx.user, workflowInput: input.input });
     }),
     runs: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64), status: z.enum(["queued", "running", "success", "failed", "cancelled"]).optional(), from: z.coerce.date().optional(), to: z.coerce.date().optional(), triggeredByUserId: z.number().int().positive().optional(), limit: z.number().int().min(1).max(200).optional() })).query(async ({ ctx, input }) => {
