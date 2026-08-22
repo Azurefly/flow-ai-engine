@@ -257,6 +257,15 @@ function firstNonBlank(...values: unknown[]) {
   return values.find(value => typeof value === "string" && value.trim()) as string | undefined;
 }
 
+function hasMeaningfulLegacyValue(value: unknown): boolean {
+  if (typeof value === "string") return Boolean(value.trim()) && !["否", "以本人身份", "赋予"].includes(value.trim());
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value !== 0;
+  if (Array.isArray(value)) return value.some(hasMeaningfulLegacyValue);
+  if (value && typeof value === "object") return Object.values(value as NodeConfig).some(hasMeaningfulLegacyValue);
+  return false;
+}
+
 function assertOptionalNumber(value: unknown, message: string, min: number, max: number) {
   if (value === undefined || value === null || value === "") return;
   if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) throw new Error(message);
@@ -277,6 +286,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       if (!['role', 'user', 'initiator', 'none'].includes(String(config.assigneeMode))) throw new Error("操作节点处理人方式无效。");
       assertString(config.instruction, "操作节点必须配置操作说明。");
       if (config.assigneeMode === "user") assertOptionalNumber(config.assigneeUserId, "操作节点指定处理人必须是有效的内部账号 ID。", 1, Number.MAX_SAFE_INTEGER);
+      if (["lsWorkZone", "qxkz", "bddx", "bdcz", "sxsz", "fsfsz", "jsfsz", "zdzx"].some(key => hasMeaningfulLegacyValue(config[key])) || config.bddxcrjsrsx === true || config.bdczcrjsrsx === true) {
+        throw new Error("操作节点包含尚未映射的原版权限、绑定或自动执行配置，必须完成当前 IAM 与人工任务语义迁移后才能执行。");
+      }
       break;
     }
     case "router": {
@@ -294,6 +306,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           if (!conditionOperators.some(item => item.value === String((condition as NodeConfig).operator))) throw new Error("路由规则条件操作符无效。");
         }
       }
+      if (Array.isArray(config.lysz) && config.lysz.length > 0 && config.routes.length === 0) {
+        throw new Error("路由节点包含原版 lysz 规则，必须迁移为安全路由规则后才能执行。");
+      }
       break;
     }
     case "rest": case "method": case "http": {
@@ -304,6 +319,10 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       const headers = type === "http" ? config.headers : config.restHeaderParam ?? config.headers;
       if (headers !== undefined && !Array.isArray(headers)) assertObject(headers, `${referenceType} 节点请求头必须是键值项数组或 JSON 对象。`);
       assertOptionalNumber(config.timeout, `${referenceType} 节点超时必须在 1,000 至 15,000 毫秒之间。`, 1_000, 15_000);
+      const attributes = config.restAttributeMap && typeof config.restAttributeMap === "object" && !Array.isArray(config.restAttributeMap) ? config.restAttributeMap as NodeConfig : {};
+      if (type !== "http" && (hasMeaningfulLegacyValue(config.restScriptCode) || attributes.valid === true || attributes.valid === "true")) {
+        throw new Error(`${referenceType} 节点启用了尚未隔离迁移的原版响应校验脚本，当前禁止执行。`);
+      }
       break;
     }
     case "form": {

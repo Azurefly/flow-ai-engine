@@ -45,6 +45,32 @@ describe("原始节点配置统一契约", () => {
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "invalid", right: true, trueHandle: "yes", falseHandle: "no" })).toThrow("条件节点操作符无效");
   });
 
+  it("阻止尚未安全迁移的原版代码、权限和路由配置被静默执行", () => {
+    expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", {
+      nodeDh: "APPROVE",
+      czmc: "审批",
+      qxkz: [{ qxid: "legacy-auth", qxmc: "原版权限" }],
+    }))).toThrow("尚未映射的原版权限");
+    expect(() => validateNodeConfig("router", withNodeConfigDefaults("router", {
+      nodeDh: "ROUTE1",
+      lymc: "旧路由",
+      lysz: [{ routerTargetyId: "approved", route: { routerJavaCode: "return true;" } }],
+      routes: [],
+    }))).toThrow("必须迁移为安全路由规则");
+    expect(() => validateNodeConfig("rest", withNodeConfigDefaults("rest", {
+      nodeDh: "REST1",
+      restmc: "旧校验",
+      restApi: "https://example.com/api",
+      restScriptCode: "return response.code == 0;",
+    }))).toThrow("尚未隔离迁移");
+    expect(() => validateNodeConfig("router", withNodeConfigDefaults("router", {
+      nodeDh: "ROUTE2",
+      lymc: "已迁移路由",
+      lysz: [{ routerTargetyId: "approved", route: { routerJavaCode: "legacy" } }],
+      routes: [{ handle: "approved", condition: { left: "{{input.status}}", operator: "equals", right: "approved" } }],
+    }))).not.toThrow();
+  });
+
   it("兼容安装包历史定义中的对象结束模板、简写表单字段和 code/target 路由", () => {
     expect(() => validateNodeConfig("end", { resultTemplate: { result: "{{vars.value}}" } })).not.toThrow();
     expect(() => validateNodeConfig("form", { fields: [{ key: "reason", required: true }] })).not.toThrow();
