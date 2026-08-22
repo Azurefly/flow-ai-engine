@@ -53,7 +53,7 @@
 
 ## 原始视觉资产复检
 
-本轮重新扫描项目共享目录、`/home/ubuntu/reference-aiflow/original/AiFlowGraph` 裁剪副本和 `/home/ubuntu` 下的归档候选，均未发现 `AiFlowGraph.zip`、原引用的 `assets/css/*.css`、图标 PNG、`designProcess/bundle.js` 或 `canvas/canvas.js`。因此现阶段可使用的唯一原始视觉证据仍为静态 HTML 中的 DOM 层级、类名、文字、按钮与页面分栏；不能将当前 CSS 推断为原项目像素级样式。后续需要完整归档或缺失 assets 才能继续完成精确字体、间距、图标和状态皮肤还原。
+本轮重新扫描项目共享目录、`/home/ubuntu/reference-aiflow/original/AiFlowGraph` 裁剪副本和 `/home/ubuntu` 下的归档候选，均未发现 `AiFlowGraph.zip`、原引用的 `assets/css/*.css`、图标 PNG、`designProcess/bundle.js` 或 `canvas/canvas.js`。裁剪副本中仍保留页面管理脚本，可补强列表列、状态分支、工具入口与接口概念的证据；不能将这些管理脚本推断为缺失的画布字段模板或像素级样式。后续需要完整归档或缺失 assets 才能继续完成精确字体、间距、图标和状态皮肤还原。
 
 ## 已启动流程连续工作台复验
 
