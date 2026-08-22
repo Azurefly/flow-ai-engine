@@ -50,6 +50,11 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("processCode:");
   });
 
+  it("保留仓库上传仅适用于状态和控制流程的类型边界", () => {
+    expect(warehouseSource).toContain("数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。");
+    expect(projectWorkspaceSource).toContain("creationSource");
+  });
+
   it("保留状态与控制流程的字段化发起面板，不暴露 JSON 输入", () => {
     expect(projectWorkspaceSource).toContain("发起流程");
     expect(projectWorkspaceSource).toContain("发起方类型");

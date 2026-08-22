@@ -54,6 +54,7 @@ describe("项目流程创建字段与数据源隔离", () => {
     await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `DF_${suffix}`, name: "重复代号", flowType: "state" })).rejects.toThrow("相同流程代号");
     await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `ST_${suffix}`, name: "状态流程错误关联", flowType: "state", dataSourceId: sourceId })).rejects.toThrow("仅数据流程");
     await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `X_${suffix}`, name: "跨项目数据源", flowType: "data", dataSourceId: foreignSourceId })).rejects.toThrow("不属于当前业务");
+    await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `IMP_DF_${suffix}`, name: "仓库数据流程", flowType: "data", creationSource: "warehouse" })).rejects.toThrow("数据流程不支持从流程仓库导入");
 
     const imported: any = await createProjectWorkflow(user, { projectId: primaryProjectId, name: "仓库导入流程", flowType: "control", creationSource: "warehouse" });
     expect(imported.creationSource).toBe("warehouse");

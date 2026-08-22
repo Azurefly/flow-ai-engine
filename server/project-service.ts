@@ -104,6 +104,7 @@ export async function listProjectWorkflows(user: ProjectUser, projectId: string,
 export async function createProjectWorkflow(user: ProjectUser, input: { projectId: string; processCode?: string; name: string; description?: string; flowType: "state" | "control" | "data"; creationSource?: "manual" | "warehouse"; dataSourceId?: string | null; folderId?: string | null; definition?: unknown }) {
   await requireProjectPermission(user, input.projectId, "project:workflow:create");
   const creationSource = input.creationSource ?? "manual";
+  if (creationSource === "warehouse" && input.flowType === "data") throw new Error("数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。");
   const processCode = (input.processCode?.trim() || `${creationSource === "warehouse" ? "IMP" : "MAN"}_${id().slice(0, 10).toUpperCase()}`).toUpperCase();
   if (!/^[A-Z][A-Z0-9_-]{1,63}$/.test(processCode)) throw new Error("流程代号须以字母开头，且仅包含大写字母、数字、下划线或连字符。");
   const [existingCodes] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow WHERE projectId=? AND processCode=? LIMIT 1", [input.projectId, processCode]);
