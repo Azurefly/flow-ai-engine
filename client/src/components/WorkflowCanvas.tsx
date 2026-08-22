@@ -176,12 +176,34 @@ function structuredValue(value: string) {
   return value;
 }
 
+function nextObjectKey(value: NodeConfig) {
+  let index = 1;
+  let key = "字段名";
+  while (Object.prototype.hasOwnProperty.call(value, key)) {
+    index += 1;
+    key = "字段名" + index;
+  }
+  return key;
+}
+
+function NestedStructuredValueEditor({ value, disabled, onChange }: { value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {
+  const inputClass = "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50";
+  if (Array.isArray(value)) {
+    return <div className="grid min-w-0 gap-2 rounded border border-slate-200 bg-white p-2">{value.map((item, index) => <div key={index} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2"><NestedStructuredValueEditor value={item} disabled={disabled} onChange={next => onChange(value.map((current, itemIndex) => itemIndex === index ? next : current))} /><button type="button" className="rounded px-1 text-slate-400 hover:text-red-600" disabled={disabled} onClick={() => onChange(value.filter((_, itemIndex) => itemIndex !== index))} aria-label={"删除第" + (index + 1) + "项"}><Trash2 size={14} /></button></div>)}<div className="flex flex-wrap gap-1"><Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={disabled} onClick={() => onChange([...value, ""])}><Plus size={12} />添加值</Button><Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={disabled} onClick={() => onChange([...value, {}])}><Plus size={12} />添加对象</Button><Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={disabled} onClick={() => onChange([...value, []])}><Plus size={12} />添加数组</Button></div></div>;
+  }
+  if (value && typeof value === "object") {
+    const record = value as NodeConfig;
+    const entries = Object.entries(record);
+    const updateEntries = (next: Array<[string, unknown]>) => onChange(Object.fromEntries(next.filter(([key]) => key.trim())));
+    return <div className="grid min-w-0 gap-2 rounded border border-slate-200 bg-white p-2">{entries.map(([key, entryValue], index) => <div key={key + "-" + index} className="grid min-w-0 grid-cols-[minmax(72px,.6fr)_minmax(0,1.4fr)_auto] gap-2"><input className={inputClass} value={key} disabled={disabled} aria-label={"字段 " + key + " 名称"} onChange={event => updateEntries(entries.map(([currentKey, currentValue], itemIndex) => itemIndex === index ? [event.target.value, currentValue] : [currentKey, currentValue]))} /><NestedStructuredValueEditor value={entryValue} disabled={disabled} onChange={next => updateEntries(entries.map(([currentKey, currentValue], itemIndex) => itemIndex === index ? [currentKey, next] : [currentKey, currentValue]))} /><button type="button" className="rounded px-1 text-slate-400 hover:text-red-600" disabled={disabled} onClick={() => updateEntries(entries.filter((_, itemIndex) => itemIndex !== index))} aria-label={"删除字段 " + key}><Trash2 size={14} /></button></div>)}<div className="flex flex-wrap gap-1"><Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={disabled} onClick={() => onChange({ ...record, [nextObjectKey(record)]: "" })}><Plus size={12} />添加字段</Button><Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={disabled} onClick={() => onChange({ ...record, [nextObjectKey(record)]: {} })}><Plus size={12} />添加对象字段</Button><Button type="button" size="sm" variant="outline" className="h-7 text-[11px]" disabled={disabled} onClick={() => onChange({ ...record, [nextObjectKey(record)]: [] })}><Plus size={12} />添加数组字段</Button></div></div>;
+  }
+  return <input className={inputClass} value={String(value ?? "")} disabled={disabled} onChange={event => onChange(structuredValue(event.target.value))} />;
+}
+
 function StructuredValueEditor({ field, value, disabled, onChange }: { field: FlowNodeDefinition["fields"][number]; value: unknown; disabled: boolean; onChange: (value: unknown) => void }) {
   const isList = Array.isArray(value);
-  const objectEntries = !isList && value && typeof value === "object" ? Object.entries(value as Record<string, unknown>) : [];
   const list = isList ? value : [];
-  const inputClass = "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50";
-  const updateObject = (entries: Array<[string, unknown]>) => onChange(Object.fromEntries(entries.filter(([key]) => key.trim())));
+  const isSpecializedList = isList && ["routes", "fields", "restHeaderParam", "restGetBodyParam"].includes(field.key);
   const updateList = (next: unknown[]) => onChange(next);
   const newListItem = field.key === "routes"
     ? { handle: "route", label: "新分支", condition: { left: "{{input.value}}", operator: "equals", right: "" } }
@@ -190,7 +212,7 @@ function StructuredValueEditor({ field, value, disabled, onChange }: { field: Fl
       : ["restHeaderParam", "restGetBodyParam"].includes(field.key)
         ? { key: "", value: "" }
         : "";
-  return <fieldset className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2.5"><legend className="px-1 text-xs font-semibold text-slate-700">{field.required && <i className="mr-1 not-italic text-red-500">*</i>}{field.label}</legend>{isList ? <div className="grid gap-2">{list.map((item, index) => <StructuredListRow key={`${field.key}-${index}`} fieldKey={field.key} item={item} disabled={disabled} onChange={next => updateList(list.map((current, itemIndex) => itemIndex === index ? next : current))} onRemove={() => updateList(list.filter((_, itemIndex) => itemIndex !== index))} />)}<Button type="button" size="sm" variant="outline" className="w-fit text-xs" disabled={disabled} onClick={() => updateList([...list, newListItem])}><Plus size={13} />添加一项</Button></div> : <div className="grid gap-2">{objectEntries.map(([key, entryValue], index) => <div key={`${key}-${index}`} className="grid grid-cols-[minmax(88px,.8fr)_minmax(0,1.2fr)_auto] gap-2"><input className={inputClass} value={key} disabled={disabled} aria-label={`${field.label}名称`} onChange={event => updateObject(objectEntries.map(([currentKey, currentValue], itemIndex) => itemIndex === index ? [event.target.value, currentValue] : [currentKey, currentValue]))} /><input className={inputClass} value={String(entryValue ?? "")} disabled={disabled} aria-label={`${field.label}${key}的值`} onChange={event => updateObject(objectEntries.map(([currentKey, currentValue], itemIndex) => itemIndex === index ? [currentKey, structuredValue(event.target.value)] : [currentKey, currentValue]))} /><button type="button" className="rounded px-1 text-slate-400 hover:text-red-600" disabled={disabled} onClick={() => updateObject(objectEntries.filter((_, itemIndex) => itemIndex !== index))} aria-label={`删除${key}`}><Trash2 size={14} /></button></div>)}<Button type="button" size="sm" variant="outline" className="w-fit text-xs" disabled={disabled} onClick={() => updateObject([...objectEntries, ["字段名", ""]])}><Plus size={13} />添加字段</Button></div>}<FieldHelp help={field.help.replace(/JSON (对象|数组|标量)/g, "结构化字段")} /></fieldset>;
+  return <fieldset className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2.5"><legend className="px-1 text-xs font-semibold text-slate-700">{field.required && <i className="mr-1 not-italic text-red-500">*</i>}{field.label}</legend>{isSpecializedList ? <div className="grid gap-2">{list.map((item, index) => <StructuredListRow key={field.key + "-" + index} fieldKey={field.key} item={item} disabled={disabled} onChange={next => updateList(list.map((current, itemIndex) => itemIndex === index ? next : current))} onRemove={() => updateList(list.filter((_, itemIndex) => itemIndex !== index))} />)}<Button type="button" size="sm" variant="outline" className="w-fit text-xs" disabled={disabled} onClick={() => updateList([...list, newListItem])}><Plus size={13} />添加一项</Button></div> : <NestedStructuredValueEditor value={value} disabled={disabled} onChange={onChange} />}<FieldHelp help={field.help.replace(/JSON (对象|数组|标量)/g, "结构化字段")} /></fieldset>;
 }
 
 function StructuredListRow({ fieldKey, item, disabled, onChange, onRemove }: { fieldKey: string; item: unknown; disabled: boolean; onChange: (value: unknown) => void; onRemove: () => void }) {

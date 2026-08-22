@@ -339,6 +339,11 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("暂无配置信息");
     expect(canvasSource).toContain("StructuredValueEditor");
     expect(canvasSource).toContain("StructuredListRow");
+    expect(canvasSource).toContain("NestedStructuredValueEditor");
+    expect(canvasSource).toContain("添加对象字段");
+    expect(canvasSource).toContain("添加数组字段");
+    expect(canvasSource).toContain("添加对象");
+    expect(canvasSource).toContain("添加数组");
     expect(canvasSource).toContain('field.kind === "boolean"');
     expect(canvasSource).toContain('["restHeaderParam", "restGetBodyParam"].includes(fieldKey)');
     expect(canvasSource).toContain("GET 参数");
