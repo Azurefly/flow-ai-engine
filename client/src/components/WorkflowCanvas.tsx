@@ -28,7 +28,34 @@ type ReuseTemplate = { id: string; name: string; nodeType: Exclude<NodeKind, "st
 type ReuseSubflow = { id: string; name: string; isEnabled: boolean };
 type InspectorMode = "normal" | "compact" | "maximized";
 type ConfigState = "partial" | "editing" | "complete";
-type CanvasContextMenu = { x: number; y: number; kind: "node" | "edge" | "pane"; nodeId?: string; edgeId?: string } | null;
+type CanvasContextMenu = { x: number; y: number; kind: "node" | "edge" | "pane" | "group"; nodeId?: string; edgeId?: string } | null;
+
+/** The reference designer only exposes structurally valid targets from its context menu. */
+const allowedCanvasTargets: Partial<Record<NodeKind, NodeKind[]>> = {
+  start: ["state", "operate", "router", "rest", "method", "subflow"],
+  state: ["operate", "state", "router", "rest", "method", "subflow", "end"],
+  operate: ["state", "router", "rest", "method", "subflow", "end"],
+  router: ["state", "operate", "router", "rest", "method", "subflow", "end"],
+  rest: ["state", "operate", "router", "rest", "method", "subflow", "end"],
+  method: ["state", "router", "rest", "method", "subflow", "end"],
+  subflow: ["state", "router", "rest", "method", "end"],
+  condition: ["state", "operate", "router", "rest", "method", "subflow", "end"],
+  transform: ["state", "operate", "router", "condition", "transform", "end"],
+  http: ["state", "operate", "router", "condition", "end"],
+  llm: ["state", "operate", "router", "condition", "end"],
+};
+
+function canConnectCanvasNodes(source: CanvasNode, target: CanvasNode, edges: Edge[]) {
+  if (source.id === target.id || source.data.kind === "end" || target.data.kind === "start") return false;
+  const targets = allowedCanvasTargets[source.data.kind];
+  if (targets && !targets.includes(target.data.kind)) return false;
+  const outgoing = edges.filter(edge => edge.source === source.id);
+  if (["start", "operate", "rest"].includes(source.data.kind) && outgoing.length > 0) return false;
+  if (target.data.kind === "end" && edges.some(edge => edge.target === target.id)) return false;
+  if (outgoing.some(edge => edge.target === target.id && (edge.sourceHandle || "default") === "default")) return false;
+  if (target.data.kind === "end" && outgoing.some(edge => edge.target !== target.id)) return false;
+  return true;
+}
 
 const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   start: { icon: Play, color: "#10b981" },
@@ -552,7 +579,33 @@ export default function WorkflowCanvas({
     setSelectedId(current => current === nodeId ? null : current);
     setSelectedEdgeId(null);
     setContextMenu(null);
-  }, [readOnly, setEdges, setNodes]);
+  }, [edges, readOnly, setEdges, setNodes]);
+
+  const deleteSelectedNodes = useCallback(() => {
+    if (readOnly) return;
+    const ids = nodes.filter(node => node.selected && !["start", "end"].includes(node.data.kind)).map(node => node.id);
+    if (!ids.length) return;
+    if (!window.confirm("是否批量删除框选中的节点？删除后不可恢复，请谨慎操作！")) return;
+    const idSet = new Set(ids);
+    const nextEdges = edges.filter(edge => !idSet.has(edge.source) && !idSet.has(edge.target));
+    setNodes(current => syncRouterRouteTargets(current.filter(node => !idSet.has(node.id)), nextEdges));
+    setEdges(nextEdges);
+    setSelectedId(null);
+    setSelectedEdgeId(null);
+    setContextMenu(null);
+  }, [edges, nodes, readOnly, setEdges, setNodes]);
+
+  const alignSelectedNodes = useCallback((axis: "X" | "Y", anchorId: string) => {
+    if (readOnly) return;
+    const selectedNodes = nodes.filter(node => node.selected);
+    if (selectedNodes.length < 2) return;
+    const anchor = nodes.find(node => node.id === anchorId);
+    if (!anchor) return;
+    const value = axis === "X" ? anchor.position.x : anchor.position.y;
+    setNodes(current => current.map(node => node.selected ? { ...node, position: { ...node.position, [axis === "X" ? "x" : "y"]: value } } : node));
+    setContextMenu(null);
+  }, [nodes, readOnly, setNodes]);
+
   const addContextNode = useCallback((item: (typeof palette)[number], sourceId: string) => {
     if (readOnly) return;
     const source = nodes.find(node => node.id === sourceId);
@@ -560,6 +613,7 @@ export default function WorkflowCanvas({
     const suffix = Math.random().toString(36).slice(2, 7);
     const nodeId = `${item.type}-${suffix}`;
     const nextNode: CanvasNode = { id: nodeId, type: "workflowNode", position: { x: source.position.x + 250, y: source.position.y }, data: { label: item.label, kind: item.type, config: createDefaultNodeConfig(item.type) } };
+    if (!canConnectCanvasNodes(source, nextNode, edges)) { setContextMenu(null); return; }
     const sourceHandle = source.data.kind === "condition" ? "true" : source.data.kind === "router" ? String(source.data.config.defaultRoute ?? "default") : "default";
     const nextEdge: Edge = { id: `edge-${Date.now()}`, source: sourceId, sourceHandle, target: nodeId, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } };
     setNodes(current => syncRouterRouteTargets(current.concat(nextNode), edges.concat(nextEdge), source.data.kind === "router" ? source.id : undefined));
@@ -570,9 +624,13 @@ export default function WorkflowCanvas({
   }, [edges, nodes, readOnly, setEdges, setNodes]);
   const onConnect = useCallback((connection: Connection) => {
     if (readOnly || !connection.source || !connection.target) return;
-    const nextEdge = { ...connection, id: `edge-${Date.now()}`, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } } as Edge;
-    setEdges(current => current.some(edge => edge.source === nextEdge.source && edge.target === nextEdge.target && (edge.sourceHandle || "default") === (nextEdge.sourceHandle || "default")) ? current : addEdge(nextEdge, current));
-    if (nodes.some(node => node.id === connection.source && node.data.kind === "router")) setNodes(current => syncRouterRouteTargets(current, edges.concat(nextEdge), connection.source));
+    const source = nodes.find(node => node.id === connection.source);
+    const target = nodes.find(node => node.id === connection.target);
+    if (!source || !target || !canConnectCanvasNodes(source, target, edges)) return;
+    const nextEdge = { ...connection, id: "edge-" + Date.now(), targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } } as Edge;
+    const nextEdges = addEdge(nextEdge, edges);
+    setEdges(current => current.some(edge => edge.source === nextEdge.source && edge.target === nextEdge.target && (edge.sourceHandle || "default") === (nextEdge.sourceHandle || "default")) ? current : nextEdges);
+    if (source.data.kind === "router") setNodes(current => syncRouterRouteTargets(current, nextEdges, connection.source));
   }, [edges, nodes, readOnly, setEdges, setNodes]);
 
   const deleteSelectedEdge = useCallback(() => {
@@ -603,26 +661,63 @@ export default function WorkflowCanvas({
   }, [deletedEdge, edges, nodes, readOnly, setEdges, setNodes]);
 
   useEffect(() => {
-    if (readOnly || !selectedEdgeId) return;
+    if (readOnly) return;
     const handleDeleteKey = (event: KeyboardEvent) => {
       if (event.key !== "Delete" && event.key !== "Backspace") return;
       const target = event.target as HTMLElement | null;
       if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
+      if (!selectedEdgeId && !nodes.some(node => node.selected && !["start", "end"].includes(node.data.kind))) return;
       event.preventDefault();
-      deleteSelectedEdge();
+      if (selectedEdgeId) deleteSelectedEdge();
+      else deleteSelectedNodes();
     };
     window.addEventListener("keydown", handleDeleteKey);
     return () => window.removeEventListener("keydown", handleDeleteKey);
-  }, [deleteSelectedEdge, readOnly, selectedEdgeId]);
+  }, [deleteSelectedEdge, deleteSelectedNodes, nodes, readOnly, selectedEdgeId]);
 
+  const selectedNodes = useMemo(() => nodes.filter(node => node.selected), [nodes]);
+  const onNodeSelectionClick = useCallback((event: React.MouseEvent, node: CanvasNode) => {
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+    setNodes(current => current.map(item => additive
+      ? item.id === node.id ? { ...item, selected: !item.selected } : item
+      : { ...item, selected: item.id === node.id }));
+    setSelectedId(node.id);
+    setSelectedEdgeId(null);
+    setContextMenu(null);
+  }, [setNodes]);
+
+  const handleCanvasDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (readOnly) return;
+    const type = event.dataTransfer.getData("application/x-aiflow-node") as NodeKind;
+    if (!type || !FLOW_NODE_DEFINITIONS[type]) return;
+    const position = reactFlow?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) ?? { x: 160, y: 160 };
+    const suffix = Math.random().toString(36).slice(2, 7);
+    const dropped: CanvasNode = { id: type + "-" + suffix, type: "workflowNode", position, data: { label: FLOW_NODE_DEFINITIONS[type].label, kind: type, config: createDefaultNodeConfig(type) } };
+    setNodes(current => current.concat(dropped));
+    setSelectedId(dropped.id);
+    setContextMenu(null);
+  }, [reactFlow, readOnly, setNodes]);
+
+  const handlePaletteDragStart = useCallback((event: React.DragEvent, item: (typeof palette)[number]) => {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-aiflow-node", item.type);
+    event.dataTransfer.setData("node-type", item.type);
+    event.dataTransfer.setData("node-label", item.label);
+  }, []);
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: CanvasNode) => {
     event.preventDefault();
     event.stopPropagation();
-    setSelectedId(node.id);
-    setSelectedEdgeId(null);
     const bounds = canvasRegionRef.current?.getBoundingClientRect();
-    setContextMenu({ kind: "node", nodeId: node.id, x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
-  }, []);
+    if (node.selected && selectedNodes.length > 1) {
+      setContextMenu({ kind: "group", nodeId: node.id, x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+    } else {
+      setNodes(current => current.map(item => ({ ...item, selected: item.id === node.id })));
+      setSelectedId(node.id);
+      setSelectedEdgeId(null);
+      setContextMenu({ kind: "node", nodeId: node.id, x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+    }
+  }, [selectedNodes, setNodes]);
   const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
     event.preventDefault();
     event.stopPropagation();
@@ -636,8 +731,12 @@ export default function WorkflowCanvas({
     const bounds = canvasRegionRef.current?.getBoundingClientRect();
     setSelectedId(null);
     setSelectedEdgeId(null);
-    setContextMenu({ kind: "pane", x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
-  }, []);
+    if (selectedNodes.length > 1) {
+      setContextMenu({ kind: "group", x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+    } else {
+      setContextMenu({ kind: "pane", x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+    }
+  }, [selectedNodes]);
   const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: CanvasNode) => {
     event.preventDefault();
     event.stopPropagation();
@@ -664,6 +763,21 @@ export default function WorkflowCanvas({
 
   const updateConfigField = (key: string, value: unknown) => updateSelected({ config: { ...selectedConfig, [key]: value } });
 
+  const showNodePath = useCallback((nodeId: string) => {
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const path: string[] = [];
+    const visited = new Set<string>();
+    let current: string | undefined = nodeId;
+    while (current && !visited.has(current) && path.length < nodes.length + 1) {
+      visited.add(current);
+      const node = byId.get(current);
+      if (!node) break;
+      path.push(String(node.data.label || node.id));
+      current = edges.find(edge => edge.source === current)?.target;
+    }
+    window.alert("流程路径：" + path.join(" → "));
+    setContextMenu(null);
+  }, [edges, nodes]);
   const exportCanvasImage = () => {
     const width = Math.max(900, ...nodes.map(node => node.position.x + 240));
     const height = Math.max(520, ...nodes.map(node => node.position.y + 140));
@@ -686,7 +800,7 @@ export default function WorkflowCanvas({
 
   useEffect(() => {
     const focusCanvas = () => canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    const clearHighlight = () => { setSelectedId(null); setSelectedEdgeId(null); focusCanvas(); };
+    const clearHighlight = () => { setSelectedId(null); setSelectedEdgeId(null); setNodes(current => current.map(node => ({ ...node, selected: false }))); focusCanvas(); };
     const neatenCanvas = () => { reactFlow?.fitView({ padding: 0.24, duration: 180 }); focusCanvas(); };
     const saveCanvasImage = () => { exportCanvasImage(); focusCanvas(); };
     const fullscreenCanvas = () => { void toggleFullscreen(); };
@@ -707,7 +821,7 @@ export default function WorkflowCanvas({
       <section ref={canvasRegionRef} className="relative min-w-0 bg-slate-50">
         <div className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
           <div className="flex items-center gap-1 pr-2">
-            {palette.filter(item => item.flowTypes.includes(flowType)).map(item => <Button key={item.type} type="button" variant="ghost" size="sm" className="gap-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950" disabled={readOnly} onClick={() => addNode(item)} title={item.description}><item.icon size={14} color={item.color} />{item.label}</Button>)}
+            {palette.filter(item => item.flowTypes.includes(flowType)).map(item => <Button key={item.type} type="button" variant="ghost" size="sm" className="gap-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950" disabled={readOnly} draggable={!readOnly} onDragStart={event => handlePaletteDragStart(event, item)} onClick={() => addNode(item)} title={item.description}><item.icon size={14} color={item.color} />{item.label}</Button>)}
             {(flowType === "state" || flowType === "control") && <><span className="mx-1 h-5 w-px bg-slate-200" /><span aria-disabled="true" title="原始安装包中为禁用状态，项目资源接入后才可用" className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"><Database size={14} />业务资源</span><span aria-disabled="true" title="原始安装包中为禁用状态，物理资源接入后才可用" className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"><Table2 size={14} />物理资源</span></>}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1 border-l border-slate-200 pl-2">
@@ -720,7 +834,7 @@ export default function WorkflowCanvas({
           </div>
         </div>
         {!readOnly && (templates.length > 0 || subflows.length > 0) && <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-1.5"><span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">REUSE LIBRARY</span>{templates.map(template => <Button key={template.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 text-xs" onClick={() => addReusableNode({ type: template.nodeType, label: template.name, config: template.config })}><Save size={12} />{template.name}</Button>)}{subflows.filter(subflow => subflow.isEnabled).map(subflow => <Button key={subflow.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-violet-200 text-xs text-violet-700 hover:bg-violet-50" onClick={() => addReusableNode({ type: "subflow", label: subflow.name, config: { subflowId: subflow.id, input: "{{input}}" } })}><FolderTree size={12} />{subflow.name}</Button>)}</div>}
-        <div className="relative h-[420px] sm:h-[590px]">
+        <div className="relative h-[420px] sm:h-[590px]" onDragOver={event => event.preventDefault()} onDrop={handleCanvasDrop}>
           <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-600 shadow-sm"><span className="font-semibold text-slate-700">配置状态</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-red-500" />未完全配置</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-500" />配置中</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" />已配置</span></div>
           <div className="absolute bottom-3 left-3 z-10 hidden items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-500 shadow-sm sm:flex"><span className="flex items-center gap-1"><Move size={13} />画布移动</span><span className="flex items-center gap-1"><Maximize2 size={13} />画布缩放</span><span className="flex items-center gap-1"><MousePointer2 size={13} />单击连线后可删除</span><span className="flex items-center gap-1"><Square size={12} />节点框选</span></div>
           {contextMenu && <div data-flow-context-menu="" className="absolute z-50 min-w-44 rounded-md border border-slate-200 bg-white py-1 text-xs shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={event => event.stopPropagation()}>
@@ -728,19 +842,21 @@ export default function WorkflowCanvas({
               const targetNode = nodes.find(node => node.id === contextMenu.nodeId);
               if (!targetNode) return null;
               const canDelete = !readOnly && !["start", "end"].includes(targetNode.data.kind);
-              const addable = palette.filter(item => item.flowTypes.includes(flowType) && item.type !== "start");
+              const allowed = allowedCanvasTargets[targetNode.data.kind] ?? palette.map(item => item.type); const addable = palette.filter(item => item.flowTypes.includes(flowType) && allowed.includes(item.type) && item.type !== "start");
               return <>
                 {!["start", "end"].includes(targetNode.data.kind) && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { setInspectorMode("normal"); setSelectedId(targetNode.id); closeContextMenu(); }}>编辑 / 查看配置</button>}
+                {(targetNode.data.kind === "start" || targetNode.data.kind === "end") && targetNode.data.label !== "默认开始" && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { const name = window.prompt("修改节点名称", String(targetNode.data.label)); if (name?.trim()) setNodes(current => current.map(item => item.id === targetNode.id ? { ...item, data: { ...item.data, label: name.trim() } } : item)); closeContextMenu(); }}>修改名称</button>}
                 <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { navigator.clipboard?.writeText(targetNode.id).catch(() => undefined); closeContextMenu(); }}>查看节点编号</button>
+                <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => showNodePath(targetNode.id)}>查看路径</button>
                 <div className="my-1 border-t border-slate-100" />
                 {!readOnly && targetNode.data.kind !== "end" && <div className="px-3 py-1 text-[10px] font-semibold text-slate-400">在此节点后添加</div>}
                 {!readOnly && targetNode.data.kind !== "end" && addable.slice(0, 8).map(item => <button key={item.type} type="button" className="block w-full px-3 py-1.5 text-left hover:bg-slate-100" onClick={() => addContextNode(item, targetNode.id)}>添加{item.label}</button>)}
                 {canDelete && <><div className="my-1 border-t border-slate-100" /><button type="button" className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50" onClick={() => removeNode(targetNode.id)}>删除节点</button></>}
               </>;
             })()}
-            {contextMenu.kind === "edge" && contextMenu.edgeId && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50" onClick={() => { deleteSelectedEdge(); closeContextMenu(); }}>删除连线</button>}
+            {contextMenu.kind === "group" && <><button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => alignSelectedNodes("X", contextMenu.nodeId || selectedNodes[0]?.id || "")}>横向对齐</button><button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => alignSelectedNodes("Y", contextMenu.nodeId || selectedNodes[0]?.id || "")}>竖向对齐</button>{!readOnly && <button type="button" className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50" onClick={deleteSelectedNodes}>批量删除</button>}<button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { setNodes(current => current.map(node => ({ ...node, selected: false }))); closeContextMenu(); }}>取消框选</button></>}            {contextMenu.kind === "edge" && contextMenu.edgeId && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50" onClick={() => { deleteSelectedEdge(); closeContextMenu(); }}>删除连线</button>}
             {contextMenu.kind === "pane" && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { setSelectedId(null); setSelectedEdgeId(null); closeContextMenu(); }}>清除选择</button>}
-          </div>}          <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} onInit={setReactFlow} onNodesChange={readOnly ? undefined : onNodesChange} onEdgesChange={readOnly ? undefined : onEdgesChange} onConnect={onConnect} onNodeClick={(event, node) => { setSelectedId(node.id); setSelectedEdgeId(null); if (event.shiftKey) setNodes(current => current.map(item => item.id === node.id ? { ...item, selected: true } : item)); }} onNodeDoubleClick={onNodeDoubleClick} onNodeContextMenu={onNodeContextMenu} onEdgeClick={(event, edge) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(null); setContextMenu(null); }} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null); setContextMenu(null); }} onPaneContextMenu={onPaneContextMenu} nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable fitView>
+          </div>}          <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} onInit={setReactFlow} onNodesChange={readOnly ? undefined : onNodesChange} onEdgesChange={readOnly ? undefined : onEdgesChange} onConnect={onConnect} onNodeClick={onNodeSelectionClick} onNodeDoubleClick={onNodeDoubleClick} onNodeContextMenu={onNodeContextMenu} onEdgeClick={(event, edge) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(null); setContextMenu(null); }} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null); setNodes(current => current.map(node => ({ ...node, selected: false }))); setContextMenu(null); }} onPaneContextMenu={onPaneContextMenu} nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable fitView>
             <Background color="#d9e2ec" gap={20} size={1} />
             <MiniMap nodeColor={node => colorFor((node.data as FlowNodeData).kind)} pannable zoomable />
             <Controls showInteractive={!readOnly} />

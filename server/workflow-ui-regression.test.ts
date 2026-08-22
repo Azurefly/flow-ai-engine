@@ -259,6 +259,23 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("!readOnly && <Button");
   });
 
+  it("恢复原版画布左右键、框选、拖放和路径菜单交互", () => {
+    expect(canvasSource).toContain("allowedCanvasTargets");
+    expect(canvasSource).toContain("canConnectCanvasNodes");
+    expect(canvasSource).toContain("onNodeSelectionClick");
+    expect(canvasSource).toContain("event.shiftKey || event.ctrlKey || event.metaKey");
+    expect(canvasSource).toContain("handlePaletteDragStart");
+    expect(canvasSource).toContain("handleCanvasDrop");
+    expect(canvasSource).toContain('contextMenu.kind === "group"');
+    expect(canvasSource).toContain("横向对齐");
+    expect(canvasSource).toContain("竖向对齐");
+    expect(canvasSource).toContain("批量删除");
+    expect(canvasSource).toContain("取消框选");
+    expect(canvasSource).toContain("查看节点编号");
+    expect(canvasSource).toContain("查看路径");
+    expect(canvasSource).toContain("修改名称");
+    expect(canvasSource).toContain("nodes.filter(node => node.selected");
+  });
   it("按原版语义分组操作、路由与子流程配置并解释当前运行字段", () => {
     expect(canvasSource).toContain("CONFIG_GROUPS");
     expect(canvasSource).toContain('label: "人员与操作"');
