@@ -82,6 +82,7 @@ export function ProjectWorkspace({ project, onBack, onOpenWorkflow, onOpenWareho
   const [detailWorkflowId, setDetailWorkflowId] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", flowType: "state" as "state" | "control" | "data" });
   useEffect(() => {
+    setView("process");
     setFilters({});
     setFilterForm({});
     setShowCreate(false);

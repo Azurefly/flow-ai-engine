@@ -39,6 +39,16 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("colSpan={10}");
   });
 
+  it("恢复原始项目工作区的受权业务选择控件和切换状态清理", () => {
+    expect(homeSource).toContain('data-aiflow-business-selector');
+    expect(homeSource).toContain("切换当前受权业务");
+    expect(homeSource).toContain("仅显示当前账号具备查看权限的业务项目");
+    expect(homeSource).toContain("setSelectedWorkflowId(null)");
+    expect(projectWorkspaceSource).toContain('setView("process")');
+    expect(projectWorkspaceSource).toContain("setFilters({})");
+    expect(projectWorkspaceSource).toContain("setDetailWorkflowId(null)");
+  });
+
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain('grid-cols-1');
     expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_320px]');
