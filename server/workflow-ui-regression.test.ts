@@ -50,6 +50,19 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("processCode:");
   });
 
+  it("保留状态与控制流程的字段化发起面板，不暴露 JSON 输入", () => {
+    expect(projectWorkspaceSource).toContain("发起流程");
+    expect(projectWorkspaceSource).toContain("发起方类型");
+    expect(projectWorkspaceSource).toContain("流程应结束时间（可选）");
+    expect(projectWorkspaceSource).toContain("发起方角色键（可选）");
+    expect(projectWorkspaceSource).toContain("业务信息一");
+    expect(projectWorkspaceSource).toContain("业务信息二");
+    expect(projectWorkspaceSource).toContain("业务信息三");
+    expect(projectWorkspaceSource).toContain("businessInformationText");
+    expect(projectWorkspaceSource).toContain("实际发起人由服务端会话身份记录");
+    expect(projectWorkspaceSource).not.toContain("发起流程 JSON");
+  });
+
   it("恢复原始项目工作区的受权业务选择控件和切换状态清理", () => {
     expect(homeSource).toContain('data-aiflow-business-selector');
     expect(homeSource).toContain("切换当前受权业务");
