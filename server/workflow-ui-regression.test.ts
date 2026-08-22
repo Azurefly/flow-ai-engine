@@ -50,6 +50,14 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("processCode:");
   });
 
+  it("保留流程设计中心的项目内关联数据源列表列", () => {
+    expect(projectWorkspaceSource).toContain("关联数据源");
+    expect(projectWorkspaceSource).toContain("const sourceNameById = new Map(dataSources.map");
+    expect(projectWorkspaceSource).toContain('workflow.flowType !== "data" ? "—"');
+    expect(projectWorkspaceSource).toContain("已关联数据源");
+    expect(projectWorkspaceSource).toContain("未关联");
+  });
+
   it("保留仓库上传仅适用于状态和控制流程的类型边界", () => {
     expect(warehouseSource).toContain("数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。");
     expect(projectWorkspaceSource).toContain("creationSource");
@@ -208,7 +216,7 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("尚未取消发布");
     expect(projectWorkspaceSource).toContain("workflow.publishedAt ? formatDate(workflow.publishedAt)");
     expect(projectWorkspaceSource).toContain("workflow.unpublishedAt ? formatDate(workflow.unpublishedAt)");
-    expect(projectWorkspaceSource).toContain('colSpan={11}');
+    expect(projectWorkspaceSource).toContain('colSpan={12}');
     expect(projectWorkspaceSource).toContain('workflow.flowType === "data" ? "启动" : "发起流程"');
     expect(projectWorkspaceSource).toContain('trpc.workflow.publish.useMutation');
     expect(projectWorkspaceSource).toContain('trpc.workflow.unpublish.useMutation');
