@@ -113,6 +113,17 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-labelledby={`aiflow-console-tab-${section}`}');
   });
 
+  it("保留顶层工作区的哈希路由同步与权限回退", () => {
+    expect(homeSource).toContain('const consoleSections: Section[] = ["flows", "runs", "warehouse", "system"]');
+    expect(homeSource).toContain("function sectionFromHash(hash: string): Section");
+    expect(homeSource).toContain("function sectionHash(section: Section)");
+    expect(homeSource).toContain("const navigateSection = useCallback");
+    expect(homeSource).toContain("window.history.pushState(null, \"\", sectionHash(resolved))");
+    expect(homeSource).toContain("window.addEventListener(\"popstate\", restoreHashSection)");
+    expect(homeSource).toContain("window.addEventListener(\"hashchange\", restoreHashSection)");
+    expect(homeSource).toContain('requested === "system" && user.role !== "admin" ? "flows" : requested');
+  });
+
   it("延迟加载非活动设计器与身份中心查询，避免首屏超大 tRPC 批量", () => {
     expect(homeSource).toContain('const editorActive = section === "flows" && flowView === "editor"');
     expect(homeSource).toContain('const identityActive = section === "system" && systemView === "identity" && user.role === "admin"');
