@@ -718,6 +718,21 @@
   display: none;
 }
 
+[data-resource-center] [dataflow-operation-list] > div:first-child {
+  min-height: 44px;
+  padding: 6px 12px;
+}
+
+[data-resource-center] [dataflow-operation-list] > div:first-child > div:first-child > p:first-child,
+[data-resource-center] [dataflow-operation-list] > div:first-child > div:first-child > p:last-child {
+  display: none;
+}
+
+[data-resource-center] [dataflow-operation-list] > div:first-child h2 {
+  margin-top: 0;
+  font-size: 13px;
+}
+
 @media (max-width: 1279px) {
   [data-aiflow-warehouse] > div > .grid {
     gap: 12px;

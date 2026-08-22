@@ -193,6 +193,8 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("data-resource-center");
     expect(dataResourceSource).toContain("dataflow-operation-list");
     expect(dataResourceSource).toContain("已操作流程列表");
+    expect(dataResourceSource).toContain("请输入关键词按 Enter 键搜索");
+    expect(dataResourceSource).toContain("未找到匹配的已操作流程。");
     expect(dataResourceSource).toContain("操作 ID");
     expect(dataResourceSource).toContain("结束时间");
     expect(dataResourceSource).toContain("查看审计");
