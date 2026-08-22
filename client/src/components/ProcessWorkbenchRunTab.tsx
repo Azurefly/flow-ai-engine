@@ -3,14 +3,14 @@ import { trpc } from "@/lib/trpc";
 import { RunDetailContent } from "./WorkflowGovernanceRunDetail";
 import { X } from "lucide-react";
 
-export function ProcessWorkbenchRunTab({ runId, onClose }: { runId: string; onClose: () => void }) {
+export function ProcessWorkbenchRunTab({ runId, baseTabLabel, onClose, onReturn }: { runId: string; baseTabLabel: string; onClose: () => void; onReturn: () => void }) {
   const detail = trpc.workflow.runDetail.useQuery({ runId }, { retry: false });
   const run = detail.data as any;
   const title = run?.workflowName || `实例 ${runId.slice(0, 8)}`;
 
   return <section data-process-workbench-run-tab className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm">
-    <div className="flex overflow-x-auto border-b border-slate-200 bg-slate-50 px-3 pt-2">
-      <span className="shrink-0 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-xs text-slate-500">流程工作台</span>
+    <div data-process-workbench-tabs className="flex overflow-x-auto border-b border-slate-200 bg-slate-50 px-3 pt-2">
+      <button type="button" className="shrink-0 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-left text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-800" onClick={onReturn} title={`返回${baseTabLabel}`}>{baseTabLabel}</button>
       <span className="ml-1 flex min-w-0 shrink-0 items-center gap-2 rounded-t border border-b-0 border-blue-200 bg-white px-3 py-2 text-xs font-medium text-blue-700">
         <span className="max-w-48 truncate">实例详情 · {title}</span>
         <Button type="button" variant="ghost" size="icon" className="h-5 w-5 shrink-0 text-slate-400 hover:text-slate-700" aria-label="关闭实例详情页签" title="关闭实例详情" onClick={onClose}><X size={13} /></Button>

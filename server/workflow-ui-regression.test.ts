@@ -267,10 +267,16 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("正在加载当前授权范围内的看板统计与最近任务");
     expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
     expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
+    expect(processWorkbenchSource).toContain("baseTabLabel={labels[view]}");
+    expect(processWorkbenchSource).toContain("const closeRunTab = () => { setSelectedRunId(null); invalidate(); }");
+    expect(processWorkbenchSource).toContain("setSelectedRunId(null); setSelectedTaskId(null); setSelectedTaskIds([]); invalidate();");
     expect(styleSource).toContain('min-height: 46px;');
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
     expect(processWorkbenchRunTabSource).toContain("trpc.workflow.runDetail.useQuery");
+    expect(processWorkbenchRunTabSource).toContain("baseTabLabel");
+    expect(processWorkbenchRunTabSource).toContain('title={`返回${baseTabLabel}`}');
+    expect(processWorkbenchRunTabSource).toContain('data-process-workbench-tabs');
   });
 
   it("原安装包视觉壳层保持浅色平面工作台与三栏画布结构", () => {
