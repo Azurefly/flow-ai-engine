@@ -28,6 +28,7 @@ type ReuseTemplate = { id: string; name: string; nodeType: Exclude<NodeKind, "st
 type ReuseSubflow = { id: string; name: string; isEnabled: boolean };
 type InspectorMode = "normal" | "compact" | "maximized";
 type ConfigState = "partial" | "editing" | "complete";
+type CanvasContextMenu = { x: number; y: number; kind: "node" | "edge" | "pane"; nodeId?: string; edgeId?: string } | null;
 
 const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   start: { icon: Play, color: "#10b981" },
@@ -142,6 +143,43 @@ function toDefinition(nodes: Node[], edges: Edge[], base: Definition): Definitio
   };
 }
 
+/** Keep modern router rules and legacy lysz entries aligned with actual outgoing edges. */
+function syncRouterRouteTargets(nodes: CanvasNode[], edges: Edge[], changedRouterId?: string): CanvasNode[] {
+  return nodes.map(node => {
+    if (node.data.kind !== "router" || (changedRouterId && node.id !== changedRouterId)) return node;
+    const outgoing = edges.filter(edge => edge.source === node.id);
+    const handles = new Set(outgoing.map(edge => edge.sourceHandle || "default"));
+    const config = node.data.config as NodeConfig;
+    const existingRoutes = Array.isArray(config.routes) ? config.routes : [];
+    const existingLegacy = Array.isArray(config.lysz) ? config.lysz : [];
+    const routes = existingRoutes.filter(item => item && typeof item === "object" && handles.has(String((item as NodeConfig).handle ?? (item as NodeConfig).code ?? "default"))).map(item => {
+      const route = item as NodeConfig;
+      const handle = String(route.handle ?? route.code ?? "default");
+      const target = outgoing.find(edge => (edge.sourceHandle || "default") === handle)?.target;
+      return target ? { ...route, handle, target, targetNodeId: target } : route;
+    });
+    for (const edge of outgoing) {
+      const handle = edge.sourceHandle || "default";
+      if (!routes.some(route => String((route as NodeConfig).handle ?? (route as NodeConfig).code ?? "default") === handle)) routes.push({ handle, label: handle === "default" ? "默认" : handle, target: edge.target, targetNodeId: edge.target });
+    }
+    const lysz = existingLegacy.filter(item => item && typeof item === "object").filter(item => {
+      const value = item as NodeConfig;
+      const route = value.route && typeof value.route === "object" ? value.route as NodeConfig : value;
+      return handles.has(String(route.handle ?? route.routerRuleId ?? route.code ?? "default"));
+    }).map(item => {
+      const value = item as NodeConfig;
+      const route = value.route && typeof value.route === "object" ? value.route as NodeConfig : value;
+      const handle = String(route.handle ?? route.routerRuleId ?? route.code ?? "default");
+      const target = outgoing.find(edge => (edge.sourceHandle || "default") === handle)?.target;
+      return target ? { ...value, routerTargetId: target, routerTargetyId: target, route: { ...route, routerTargetId: target } } : value;
+    });
+    for (const edge of outgoing) {
+      const handle = edge.sourceHandle || "default";
+      if (!lysz.some(item => { const value = item as NodeConfig; const route = value.route && typeof value.route === "object" ? value.route as NodeConfig : value; return String(route.handle ?? route.routerRuleId ?? route.code ?? "default") === handle; })) lysz.push({ routerTargetId: edge.target, routerTargetyId: edge.target, route: { routerRuleId: handle, routerRuleName: handle, routerTargetId: edge.target } });
+    }
+    return { ...node, data: { ...node.data, config: { ...config, routes, lysz } } };
+  });
+}
 function escapeXml(value: string) {
   return value.replace(/[<>&"']/g, character => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;", "'": "&apos;" })[character] ?? character);
 }
@@ -423,6 +461,7 @@ export default function WorkflowCanvas({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [deletedEdge, setDeletedEdge] = useState<Edge | null>(null);
+  const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("normal");
   const [inspectorLocked, setInspectorLocked] = useState(false);
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance<CanvasNode, Edge> | null>(null);
@@ -504,19 +543,50 @@ export default function WorkflowCanvas({
     setNodes(current => current.concat({ id: `${input.type}-${suffix}`, type: "workflowNode", position: { x: 260 + current.length * 26, y: 100 + (current.length % 4) * 95 }, data: { label: input.label, kind: input.type, config: structuredClone(input.config) } }));
   };
 
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+  const removeNode = useCallback((nodeId: string) => {
+    if (readOnly || nodeId === "start" || nodeId === "end") return;
+    const nextEdges = edges.filter(edge => edge.source !== nodeId && edge.target !== nodeId);
+    setNodes(current => syncRouterRouteTargets(current.filter(node => node.id !== nodeId), nextEdges));
+    setEdges(nextEdges);
+    setSelectedId(current => current === nodeId ? null : current);
+    setSelectedEdgeId(null);
+    setContextMenu(null);
+  }, [readOnly, setEdges, setNodes]);
+  const addContextNode = useCallback((item: (typeof palette)[number], sourceId: string) => {
+    if (readOnly) return;
+    const source = nodes.find(node => node.id === sourceId);
+    if (!source) return;
+    const suffix = Math.random().toString(36).slice(2, 7);
+    const nodeId = `${item.type}-${suffix}`;
+    const nextNode: CanvasNode = { id: nodeId, type: "workflowNode", position: { x: source.position.x + 250, y: source.position.y }, data: { label: item.label, kind: item.type, config: createDefaultNodeConfig(item.type) } };
+    const sourceHandle = source.data.kind === "condition" ? "true" : source.data.kind === "router" ? String(source.data.config.defaultRoute ?? "default") : "default";
+    const nextEdge: Edge = { id: `edge-${Date.now()}`, source: sourceId, sourceHandle, target: nodeId, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } };
+    setNodes(current => syncRouterRouteTargets(current.concat(nextNode), edges.concat(nextEdge), source.data.kind === "router" ? source.id : undefined));
+    setEdges(current => current.concat(nextEdge));
+    setSelectedId(nodeId);
+    setSelectedEdgeId(null);
+    setContextMenu(null);
+  }, [edges, nodes, readOnly, setEdges, setNodes]);
   const onConnect = useCallback((connection: Connection) => {
-    if (!readOnly) setEdges(current => addEdge({ ...connection, id: `edge-${Date.now()}`, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } }, current));
-  }, [readOnly, setEdges]);
+    if (readOnly || !connection.source || !connection.target) return;
+    const nextEdge = { ...connection, id: `edge-${Date.now()}`, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } } as Edge;
+    setEdges(current => current.some(edge => edge.source === nextEdge.source && edge.target === nextEdge.target && (edge.sourceHandle || "default") === (nextEdge.sourceHandle || "default")) ? current : addEdge(nextEdge, current));
+    if (nodes.some(node => node.id === connection.source && node.data.kind === "router")) setNodes(current => syncRouterRouteTargets(current, edges.concat(nextEdge), connection.source));
+  }, [edges, nodes, readOnly, setEdges, setNodes]);
 
   const deleteSelectedEdge = useCallback(() => {
     if (readOnly || !selectedEdgeId) return;
     setEdges(current => {
       const edge = current.find(item => item.id === selectedEdgeId);
       if (edge) setDeletedEdge(edge);
-      return current.filter(item => item.id !== selectedEdgeId);
+      const next = current.filter(item => item.id !== selectedEdgeId);
+      const router = edge ? nodes.find(node => node.id === edge.source && node.data.kind === "router") : undefined;
+      if (router) setNodes(existing => syncRouterRouteTargets(existing, next, router.id));
+      return next;
     });
     setSelectedEdgeId(null);
-  }, [readOnly, selectedEdgeId, setEdges]);
+  }, [nodes, readOnly, selectedEdgeId, setEdges, setNodes]);
 
   const undoDeletedEdge = useCallback(() => {
     if (readOnly || !deletedEdge) return;
@@ -524,11 +594,13 @@ export default function WorkflowCanvas({
       setDeletedEdge(null);
       return;
     }
-    setEdges(current => current.some(edge => edge.id === deletedEdge.id) ? current : current.concat(deletedEdge));
+    const nextEdges = edges.some(edge => edge.id === deletedEdge.id) ? edges : edges.concat(deletedEdge);
+    setEdges(nextEdges);
+    setNodes(current => syncRouterRouteTargets(current, nextEdges));
     setSelectedEdgeId(deletedEdge.id);
     setSelectedId(null);
     setDeletedEdge(null);
-  }, [deletedEdge, nodes, readOnly, setEdges]);
+  }, [deletedEdge, edges, nodes, readOnly, setEdges, setNodes]);
 
   useEffect(() => {
     if (readOnly || !selectedEdgeId) return;
@@ -543,6 +615,48 @@ export default function WorkflowCanvas({
     return () => window.removeEventListener("keydown", handleDeleteKey);
   }, [deleteSelectedEdge, readOnly, selectedEdgeId]);
 
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: CanvasNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedId(node.id);
+    setSelectedEdgeId(null);
+    const bounds = canvasRegionRef.current?.getBoundingClientRect();
+    setContextMenu({ kind: "node", nodeId: node.id, x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+  }, []);
+  const onEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setSelectedEdgeId(edge.id);
+    setSelectedId(null);
+    const bounds = canvasRegionRef.current?.getBoundingClientRect();
+    setContextMenu({ kind: "edge", edgeId: edge.id, x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+  }, []);
+  const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
+    event.preventDefault();
+    const bounds = canvasRegionRef.current?.getBoundingClientRect();
+    setSelectedId(null);
+    setSelectedEdgeId(null);
+    setContextMenu({ kind: "pane", x: event.clientX - (bounds?.left ?? 0), y: event.clientY - (bounds?.top ?? 0) });
+  }, []);
+  const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: CanvasNode) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (node.data.kind !== "start" && node.data.kind !== "end") {
+      setSelectedId(node.id);
+      setSelectedEdgeId(null);
+      setInspectorMode("normal");
+    }
+  }, []);
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement | null)?.closest("[data-flow-context-menu]")) setContextMenu(null);
+    };
+    const key = (event: KeyboardEvent) => { if (event.key === "Escape") setContextMenu(null); };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("mousedown", close); document.removeEventListener("keydown", key); };
+  }, [contextMenu]);
   const updateSelected = (updates: Partial<FlowNodeData>) => {
     if (!selectedId || inspectorDisabled) return;
     setNodes(current => current.map(node => node.id === selectedId ? { ...node, data: { ...node.data, ...updates } } : node));
@@ -590,7 +704,7 @@ export default function WorkflowCanvas({
 
   return (
     <div data-aiflow-workflow-canvas="" className={inspectorMode === "maximized" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_480px]" : inspectorMode === "compact" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_320px]"}>
-      <section ref={canvasRegionRef} className="min-w-0 bg-slate-50">
+      <section ref={canvasRegionRef} className="relative min-w-0 bg-slate-50">
         <div className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
           <div className="flex items-center gap-1 pr-2">
             {palette.filter(item => item.flowTypes.includes(flowType)).map(item => <Button key={item.type} type="button" variant="ghost" size="sm" className="gap-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950" disabled={readOnly} onClick={() => addNode(item)} title={item.description}><item.icon size={14} color={item.color} />{item.label}</Button>)}
@@ -609,7 +723,24 @@ export default function WorkflowCanvas({
         <div className="relative h-[420px] sm:h-[590px]">
           <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-600 shadow-sm"><span className="font-semibold text-slate-700">配置状态</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-red-500" />未完全配置</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-500" />配置中</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" />已配置</span></div>
           <div className="absolute bottom-3 left-3 z-10 hidden items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-500 shadow-sm sm:flex"><span className="flex items-center gap-1"><Move size={13} />画布移动</span><span className="flex items-center gap-1"><Maximize2 size={13} />画布缩放</span><span className="flex items-center gap-1"><MousePointer2 size={13} />单击连线后可删除</span><span className="flex items-center gap-1"><Square size={12} />节点框选</span></div>
-          <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} onInit={setReactFlow} onNodesChange={readOnly ? undefined : onNodesChange} onEdgesChange={readOnly ? undefined : onEdgesChange} onConnect={onConnect} onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedEdgeId(null); }} onEdgeClick={(event, edge) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(null); }} onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null); }} nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable fitView>
+          {contextMenu && <div data-flow-context-menu="" className="absolute z-50 min-w-44 rounded-md border border-slate-200 bg-white py-1 text-xs shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onMouseDown={event => event.stopPropagation()}>
+            {contextMenu.kind === "node" && contextMenu.nodeId && (() => {
+              const targetNode = nodes.find(node => node.id === contextMenu.nodeId);
+              if (!targetNode) return null;
+              const canDelete = !readOnly && !["start", "end"].includes(targetNode.data.kind);
+              const addable = palette.filter(item => item.flowTypes.includes(flowType) && item.type !== "start");
+              return <>
+                {!["start", "end"].includes(targetNode.data.kind) && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { setInspectorMode("normal"); setSelectedId(targetNode.id); closeContextMenu(); }}>编辑 / 查看配置</button>}
+                <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { navigator.clipboard?.writeText(targetNode.id).catch(() => undefined); closeContextMenu(); }}>查看节点编号</button>
+                <div className="my-1 border-t border-slate-100" />
+                {!readOnly && targetNode.data.kind !== "end" && <div className="px-3 py-1 text-[10px] font-semibold text-slate-400">在此节点后添加</div>}
+                {!readOnly && targetNode.data.kind !== "end" && addable.slice(0, 8).map(item => <button key={item.type} type="button" className="block w-full px-3 py-1.5 text-left hover:bg-slate-100" onClick={() => addContextNode(item, targetNode.id)}>添加{item.label}</button>)}
+                {canDelete && <><div className="my-1 border-t border-slate-100" /><button type="button" className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50" onClick={() => removeNode(targetNode.id)}>删除节点</button></>}
+              </>;
+            })()}
+            {contextMenu.kind === "edge" && contextMenu.edgeId && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50" onClick={() => { deleteSelectedEdge(); closeContextMenu(); }}>删除连线</button>}
+            {contextMenu.kind === "pane" && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { setSelectedId(null); setSelectedEdgeId(null); closeContextMenu(); }}>清除选择</button>}
+          </div>}          <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} onInit={setReactFlow} onNodesChange={readOnly ? undefined : onNodesChange} onEdgesChange={readOnly ? undefined : onEdgesChange} onConnect={onConnect} onNodeClick={(event, node) => { setSelectedId(node.id); setSelectedEdgeId(null); if (event.shiftKey) setNodes(current => current.map(item => item.id === node.id ? { ...item, selected: true } : item)); }} onNodeDoubleClick={onNodeDoubleClick} onNodeContextMenu={onNodeContextMenu} onEdgeClick={(event, edge) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(null); setContextMenu(null); }} onEdgeContextMenu={onEdgeContextMenu} onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null); setContextMenu(null); }} onPaneContextMenu={onPaneContextMenu} nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable fitView>
             <Background color="#d9e2ec" gap={20} size={1} />
             <MiniMap nodeColor={node => colorFor((node.data as FlowNodeData).kind)} pannable zoomable />
             <Controls showInteractive={!readOnly} />
