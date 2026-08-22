@@ -67,6 +67,13 @@ describe("原始项目工作区 P0", () => {
     const created = await designerCaller.project.createWorkflow({ projectId, name: "控制流程验收", description: "项目内控制流程", flowType: "control" });
     workflowId = (created as any).id;
     expect(created).toMatchObject({ projectId, flowType: "control", auditStatus: "init", status: "draft" });
+    await expect(outsiderCaller.project.updateWorkflowInfo({ projectId, workflowId, name: "越权更新", description: "不应写入" })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+    await expect(designerCaller.project.updateWorkflowInfo({ projectId, workflowId, name: "控制流程基本信息已更新", description: "由项目设计者字段化更新" })).resolves.toEqual({ success: true });
+    const afterInfoUpdate = await ownerCaller.project.workflows({ projectId });
+    expect(afterInfoUpdate.find((workflow: any) => workflow.id === workflowId)).toMatchObject({ name: "控制流程基本信息已更新", description: "由项目设计者字段化更新" });
+    const [infoAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [designer.id, workflowId]);
+    const infoDetails = typeof infoAudits[0].detailsJson === "string" ? JSON.parse(infoAudits[0].detailsJson) : infoAudits[0].detailsJson;
+    expect(infoDetails).toMatchObject({ operation: "project_workflow_info_updated", projectId, fields: { nameChanged: true, descriptionChanged: true } });
     await expect(designerCaller.workflow.publish({ id: workflowId })).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
     await ownerCaller.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
     const designerApprovalHistory = await designerCaller.project.workflowAudit({ projectId, workflowId });

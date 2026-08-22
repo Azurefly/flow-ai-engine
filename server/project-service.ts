@@ -124,6 +124,19 @@ export async function createProjectWorkflow(user: ProjectUser, input: { projectI
   return workflow;
 }
 
+export async function updateProjectWorkflowInfo(user: ProjectUser, input: { projectId: string; workflowId: string; name: string; description?: string | null }) {
+  await requireProjectPermission(user, input.projectId, "project:workflow:edit");
+  const name = input.name.trim();
+  const description = input.description?.trim() || null;
+  if (!name) throw new Error("流程名称不能为空。");
+  const [existing] = await db().query<mysql.RowDataPacket[]>("SELECT name,description FROM workflow WHERE id=? AND projectId=? LIMIT 1", [input.workflowId, input.projectId]);
+  if (!existing[0]) throw new Error("项目流程不存在或不属于当前项目。");
+  const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow SET name=?,description=?,updatedAt=NOW() WHERE id=? AND projectId=?", [name, description, input.workflowId, input.projectId]);
+  if (!result.affectedRows) throw new Error("项目流程基本信息更新失败。");
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: input.workflowId, details: { operation: "project_workflow_info_updated", projectId: input.projectId, fields: { nameChanged: existing[0].name !== name, descriptionChanged: (existing[0].description ?? null) !== description } } });
+  return true;
+}
+
 export async function setProjectWorkflowAudit(user: ProjectUser, input: { projectId: string; workflowId: string; auditStatus: "approved" | "rejected" }) {
   await requireProjectPermission(user, input.projectId, "project:manage");
   const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow SET auditStatus=?,updatedAt=NOW() WHERE id=? AND projectId=?", [input.auditStatus, input.workflowId, input.projectId]);

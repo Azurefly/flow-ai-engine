@@ -12,6 +12,8 @@ const systemConfigSource = readFileSync(new URL("../client/src/components/System
 const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
 const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
 const processWorkbenchRunTabSource = readFileSync(new URL("../client/src/components/ProcessWorkbenchRunTab.tsx", import.meta.url), "utf8");
+const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+const projectServiceSource = readFileSync(new URL("./project-service.ts", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
 
 describe("流程设计器界面回归约束", () => {
@@ -173,6 +175,33 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("unpublishedAt");
     expect(governanceSource).toContain('data-aiflow-process-detail=""');
     expect(canvasSource).toContain("flow:inspect-node");
+  });
+
+  it("恢复原始流程详情的基本信息字段化编辑，并与项目流程编辑权限一致", () => {
+    expect(governanceSource).toContain("编辑基本信息");
+    expect(governanceSource).toContain("编辑流程基本信息");
+    expect(governanceSource).toContain("流程名称");
+    expect(governanceSource).toContain("流程说明");
+    expect(governanceSource).toContain("trpc.project.updateWorkflowInfo.useMutation");
+    expect(governanceSource).toContain('projectAccess.data?.permissions?.has("project:workflow:edit")');
+    expect(governanceSource).toContain("不会修改流程定义、审核状态、发布状态或运行记录");
+    expect(governanceSource).toContain("<Input value={infoName}");
+    expect(governanceSource).toContain("<Textarea value={infoDescription}");
+    expect(governanceSource).not.toContain("基本信息 JSON");
+    expect(governanceSource).not.toContain("JSON.parse");
+    expect(projectWorkspaceSource).toContain("canEditWorkflowInfo");
+    expect(projectWorkspaceSource).toContain("trpc.project.updateWorkflowInfo.useMutation");
+    expect(projectWorkspaceSource).toContain("<WorkflowDetailDialog workflow={detailWorkflow.data} canEditInfo={canEditWorkflowInfo}");
+    expect(projectWorkspaceSource).toContain("编辑基本信息");
+    expect(projectWorkspaceSource).toContain("保存基本信息");
+    expect(projectWorkspaceSource).toContain("仅更新流程名称和说明，不会修改流程定义、审核状态、发布状态或运行记录。");
+    expect(projectWorkspaceSource).toContain("<Textarea value={description}");
+    expect(projectWorkspaceSource).not.toContain("流程说明 JSON");
+    expect(routerSource).toContain("updateWorkflowInfo: protectedProcedure.input");
+    expect(routerSource).toContain("description: z.string().trim().max(1200).nullable().optional()");
+    expect(projectServiceSource).toContain('requireProjectPermission(user, input.projectId, "project:workflow:edit")');
+    expect(projectServiceSource).toContain("WHERE id=? AND projectId=? LIMIT 1");
+    expect(projectServiceSource).toContain("project_workflow_info_updated");
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {

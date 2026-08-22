@@ -6,7 +6,6 @@ import type { Definition } from "./workflow-service";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const workflowId = randomUUID();
-let runId: string | undefined;
 let pool: mysql.Pool | undefined;
 
 const definition: Definition = {
@@ -15,8 +14,8 @@ const definition: Definition = {
   settings: {},
   nodes: [
     { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: { initialVariables: { postId: "{{input.postId}}" } } },
-    { id: "http", type: "http", name: "读取待办", position: { x: 200, y: 0 }, config: { url: "https://jsonplaceholder.typicode.com/todos/{{vars.postId}}", method: "GET" } },
-    { id: "transform", type: "transform", name: "提取字段", position: { x: 400, y: 0 }, config: { mappings: { title: "{{nodes.http.body.title}}", completed: "{{nodes.http.body.completed}}" } } },
+    { id: "http", type: "http", name: "读取待办", position: { x: 200, y: 0 }, config: { url: "https://dummyjson.com/todos/{{vars.postId}}", method: "GET" } },
+    { id: "transform", type: "transform", name: "提取字段", position: { x: 400, y: 0 }, config: { mappings: { title: "{{nodes.http.body.todo}}", completed: "{{nodes.http.body.completed}}" } } },
     { id: "condition", type: "condition", name: "检查状态", position: { x: 600, y: 0 }, config: { left: "{{nodes.transform.completed}}", operator: "equals", right: false, trueHandle: "true", falseHandle: "false" } },
     { id: "end", type: "end", name: "结束", position: { x: 800, y: 0 }, config: { resultTemplate: { title: "{{nodes.transform.title}}", completed: "{{nodes.transform.completed}}" } } },
   ],
@@ -31,10 +30,10 @@ const definition: Definition = {
 describe("工作流引擎真实 HTTP 集成", () => {
   afterAll(async () => {
     if (pool) {
-      if (runId) {
-        await pool.query("DELETE FROM workflow_node_run WHERE runId=?", [runId]);
-        await pool.query("DELETE FROM workflow_run WHERE id=?", [runId]);
-      }
+      await pool.query("DELETE FROM workflow_run_alert WHERE workflowId=?", [workflowId]);
+      await pool.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?", [workflowId]);
+      await pool.query("DELETE FROM workflow_task WHERE workflowId=?", [workflowId]);
+      await pool.query("DELETE FROM workflow_run WHERE workflowId=?", [workflowId]);
       await pool.query("DELETE FROM workflow_member WHERE workflowId=?", [workflowId]);
       await pool.query("DELETE FROM workflow WHERE id=?", [workflowId]);
       await pool.end();
@@ -49,12 +48,11 @@ describe("工作流引擎真实 HTTP 集成", () => {
     await pool.query("INSERT INTO workflow (id,ownerUserId,name,description,status,definitionVersion,definitionJson) VALUES (?,?,?,'integration test','published',1,?)", [workflowId, user.id, "工作流引擎 HTTP 集成测试", JSON.stringify(definition)]);
     await pool.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [randomUUID(), workflowId, user.id, user.id]);
 
-    const result = await executeWorkflow({ workflowId, triggeredBy: { id: user.id, role: user.role }, workflowInput: { postId: 2 } });
-    runId = result.runId;
+    const result = await executeWorkflow({ workflowId, triggeredBy: { id: user.id, role: user.role }, workflowInput: { postId: 1 } });
     const detail = await getWorkflowRun(result.runId);
 
     expect(result.status).toBe("success");
-    expect(result.output).toEqual({ result: { title: "quis ut nam facilis et officia qui", completed: false } });
+    expect(result.output).toEqual({ result: { title: "Do something nice for someone you care about", completed: false } });
     expect(detail?.status).toBe("success");
     expect(detail?.nodeRuns).toHaveLength(5);
     expect(detail?.nodeRuns.every(node => node.status === "success")).toBe(true);
