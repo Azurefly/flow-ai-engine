@@ -140,6 +140,23 @@ export async function resetProjectWorkflowAudit(user: ProjectUser, input: { proj
   return true;
 }
 
+export async function listProjectWorkflowAudit(user: ProjectUser, input: { projectId: string; workflowId: string }) {
+  await requireProjectPermission(user, input.projectId, "project:view");
+  const [workflows] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow WHERE id=? AND projectId=? LIMIT 1", [input.workflowId, input.projectId]);
+  if (!workflows[0]) throw new Error("项目流程不存在或不属于当前业务。");
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT a.id,a.action,a.detailsJson,a.createdAt,u.username AS actorUsername,u.name AS actorName
+       FROM authorization_audit_log a LEFT JOIN users u ON u.id=a.actorUserId
+      WHERE a.resourceType='workflow' AND a.resourceId=?
+      ORDER BY a.createdAt DESC LIMIT 100`,
+    [input.workflowId],
+  );
+  return rows.map(row => {
+    const details = typeof row.detailsJson === "string" ? JSON.parse(row.detailsJson) : row.detailsJson ?? {};
+    return { ...row, details, operation: details.operation ?? "" };
+  }).filter(row => ["workflow_audited", "workflow_audit_reset"].includes(String(row.operation)));
+}
+
 export async function listProjectMembers(user: ProjectUser, projectId: string) {
   await requireProjectPermission(user, projectId, "project:view");
   const [rows] = await db().query<mysql.RowDataPacket[]>(

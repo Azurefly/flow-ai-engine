@@ -69,6 +69,9 @@ describe("原始项目工作区 P0", () => {
     expect(created).toMatchObject({ projectId, flowType: "control", auditStatus: "init", status: "draft" });
     await expect(designerCaller.workflow.publish({ id: workflowId })).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
     await ownerCaller.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
+    const designerApprovalHistory = await designerCaller.project.workflowAudit({ projectId, workflowId });
+    expect(designerApprovalHistory.some((entry: any) => entry.operation === "workflow_audited" && entry.details.auditStatus === "approved")).toBe(true);
+    await expect(outsiderCaller.project.workflowAudit({ projectId, workflowId })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
     await expect(designerCaller.workflow.publish({ id: workflowId })).resolves.toMatchObject({ status: "published", auditStatus: "approved" });
     const visible = await designerCaller.project.workflows({ projectId, flowType: "control", auditStatus: "approved", status: "published" });
     expect(visible).toHaveLength(1);
@@ -95,6 +98,8 @@ describe("原始项目工作区 P0", () => {
     const [resetAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [owner.id, workflowId]);
     const resetDetails = typeof resetAudits[0].detailsJson === "string" ? JSON.parse(resetAudits[0].detailsJson) : resetAudits[0].detailsJson;
     expect(resetDetails).toMatchObject({ operation: "workflow_audit_reset", retainedDefinition: true });
+    const resetApprovalHistory = await designerCaller.project.workflowAudit({ projectId, workflowId });
+    expect(resetApprovalHistory.some((entry: any) => entry.operation === "workflow_audit_reset" && entry.details.retainedDefinition === true)).toBe(true);
     await expect(ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })).rejects.toThrow("仅可重置当前项目中未发布且已驳回的流程");
     const folder = await ownerCaller.project.createFolder({ projectId, name: "已发布流程", description: "仓库目录" });
     folderId = folder.id;

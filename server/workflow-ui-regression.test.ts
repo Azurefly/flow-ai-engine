@@ -63,6 +63,16 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).not.toContain("发起流程 JSON");
   });
 
+  it("保留原始流程设计中心的项目级审批记录入口", () => {
+    expect(projectWorkspaceSource).toContain("选择流程查看审批记录");
+    expect(projectWorkspaceSource).toContain("trpc.project.workflowAudit.useQuery");
+    expect(projectWorkspaceSource).toContain("仅展示当前业务内所选流程的审核与审核重置审计");
+    expect(projectWorkspaceSource).toContain("正在读取审批记录…");
+    expect(projectWorkspaceSource).toContain("审核通过");
+    expect(projectWorkspaceSource).toContain("审核驳回");
+    expect(projectWorkspaceSource).toContain("重置审核状态");
+  });
+
   it("恢复原始项目工作区的受权业务选择控件和切换状态清理", () => {
     expect(homeSource).toContain('data-aiflow-business-selector');
     expect(homeSource).toContain("切换当前受权业务");
