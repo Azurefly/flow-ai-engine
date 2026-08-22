@@ -12,6 +12,7 @@ const systemConfigSource = readFileSync(new URL("../client/src/components/System
 const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
 const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
 const processWorkbenchRunTabSource = readFileSync(new URL("../client/src/components/ProcessWorkbenchRunTab.tsx", import.meta.url), "utf8");
+const processDetailPageSource = readFileSync(new URL("../client/src/components/WorkflowDetailPage.tsx", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
 const projectServiceSource = readFileSync(new URL("./project-service.ts", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
@@ -95,7 +96,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("setSelectedWorkflowId(null)");
     expect(projectWorkspaceSource).toContain('setView("process")');
     expect(projectWorkspaceSource).toContain("setFilters({})");
-    expect(projectWorkspaceSource).toContain("setDetailWorkflowId(null)");
+    expect(projectWorkspaceSource).not.toContain("detailWorkflowId");
   });
 
   it("保留原始系统配置的单一活动页签和内容面板关联", () => {
@@ -189,19 +190,31 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("<Textarea value={infoDescription}");
     expect(governanceSource).not.toContain("基本信息 JSON");
     expect(governanceSource).not.toContain("JSON.parse");
-    expect(projectWorkspaceSource).toContain("canEditWorkflowInfo");
-    expect(projectWorkspaceSource).toContain("trpc.project.updateWorkflowInfo.useMutation");
-    expect(projectWorkspaceSource).toContain("<WorkflowDetailDialog workflow={detailWorkflow.data} canEditInfo={canEditWorkflowInfo}");
-    expect(projectWorkspaceSource).toContain("编辑基本信息");
-    expect(projectWorkspaceSource).toContain("保存基本信息");
-    expect(projectWorkspaceSource).toContain("仅更新流程名称和说明，不会修改流程定义、审核状态、发布状态或运行记录。");
-    expect(projectWorkspaceSource).toContain("<Textarea value={description}");
-    expect(projectWorkspaceSource).not.toContain("流程说明 JSON");
+    expect(projectWorkspaceSource).not.toContain("WorkflowDetailDialog");
+    expect(projectWorkspaceSource).not.toContain("trpc.project.updateWorkflowInfo.useMutation");
     expect(routerSource).toContain("updateWorkflowInfo: protectedProcedure.input");
     expect(routerSource).toContain("description: z.string().trim().max(1200).nullable().optional()");
     expect(projectServiceSource).toContain('requireProjectPermission(user, input.projectId, "project:workflow:edit")');
     expect(projectServiceSource).toContain("WHERE id=? AND projectId=? LIMIT 1");
     expect(projectServiceSource).toContain("project_workflow_info_updated");
+  });
+
+  it("将原始流程详情承载为可关闭的受权详情视图，并保留只读画布和设计器返回路径", () => {
+    expect(homeSource).toContain('"center" | "workspace" | "detail" | "editor"');
+    expect(homeSource).toContain('const detailActive = section === "flows" && flowView === "detail"');
+    expect(homeSource).toContain('onOpenDetail={workflowId => { setSelectedWorkflowId(workflowId); setFlowView("detail"); }}');
+    expect(homeSource).toContain('flowView === "detail" && <WorkflowDetailPage');
+    expect(projectWorkspaceSource).toContain("onOpenDetail: (workflowId: string) => void");
+    expect(projectWorkspaceSource).toContain("onDetail={onOpenDetail}");
+    expect(processDetailPageSource).toContain('data-aiflow-process-detail-page=""');
+    expect(processDetailPageSource).toContain("WorkflowGovernance");
+    expect(governanceSource).toContain("流程引导");
+    expect(processDetailPageSource).toContain("返回流程设计中心");
+    expect(processDetailPageSource).toContain("进入设计器");
+    expect(processDetailPageSource).toContain("READ-ONLY CANVAS");
+    expect(processDetailPageSource).toContain("流程图只读预览");
+    expect(processDetailPageSource).toContain("详情页不会写入流程定义");
+    expect(processDetailPageSource).toContain("readOnly");
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {
