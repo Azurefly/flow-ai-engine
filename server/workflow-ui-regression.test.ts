@@ -124,6 +124,14 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('requested === "system" && user.role !== "admin" ? "flows" : requested');
   });
 
+  it("保留窄屏工作区选择器与顶层路由联动", () => {
+    expect(homeSource).toContain('data-aiflow-mobile-workspace-nav');
+    expect(homeSource).toContain('aria-label="切换流程工作区"');
+    expect(homeSource).toContain('onChange={event => navigateSection(event.target.value as Section)}');
+    expect(homeSource).toContain('{nav.map(item => <option');
+    expect(homeSource).toContain('md:hidden');
+  });
+
   it("延迟加载非活动设计器与身份中心查询，避免首屏超大 tRPC 批量", () => {
     expect(homeSource).toContain('const editorActive = section === "flows" && flowView === "editor"');
     expect(homeSource).toContain('const identityActive = section === "system" && systemView === "identity" && user.role === "admin"');
