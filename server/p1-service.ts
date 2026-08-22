@@ -17,15 +17,36 @@ const parseJson = (value: unknown) => {
 };
 
 function taskFilter(view: TaskView, userId: number) {
-  if (view === "todo") return { clause: "t.status IN ('pending','claimed') AND (t.assignedUserId IS NULL OR t.assignedUserId=?)", params: [userId] };
+  if (view === "todo") return { clause: "t.status IN ('pending','claimed') AND (t.assignedUserId=? OR t.claimedByUserId=? OR (t.assignedUserId IS NULL AND (t.candidateUserIdsJson IS NULL OR JSON_LENGTH(t.candidateUserIdsJson)=0 OR JSON_CONTAINS(t.candidateUserIdsJson,?))))", params: [userId, userId, JSON.stringify(userId)] };
   if (view === "done") return { clause: "t.status='completed' AND t.completedByUserId=?", params: [userId] };
   if (view === "initiated") return { clause: "r.triggeredByUserId=?", params: [userId] };
-  return { clause: "1=1", params: [] as number[] };
+  return { clause: "1=1", params: [] as Array<number | string> };
+}
+
+function candidateIds(task: mysql.RowDataPacket) {
+  const parsed = parseJson(task.candidateUserIdsJson);
+  return Array.isArray(parsed) ? parsed.map(Number).filter(id => Number.isInteger(id) && id > 0) : [];
+}
+
+function isTaskActor(userId: number, task: mysql.RowDataPacket) {
+  return [task.assignedUserId, task.claimedByUserId, task.completedByUserId].some(value => Number(value) === userId) || candidateIds(task).includes(userId);
 }
 
 async function canAccessTask(user: User, task: mysql.RowDataPacket, write = false) {
   if (user.role === "admin") return true;
-  return hasWorkflowPermission(user, String(task.workflowId), write ? "workflow:run" : "workflow:view");
+  if (write) {
+    if (isTaskActor(user.id, task)) return true;
+    const restricted = Boolean(task.assignedUserId) || candidateIds(task).length > 0;
+    return !restricted && hasWorkflowPermission(user, String(task.workflowId), "workflow:run");
+  }
+  if (isTaskActor(user.id, task) || Number(task.triggeredByUserId) === user.id) return true;
+  return hasWorkflowPermission(user, String(task.workflowId), "workflow:view");
+}
+
+function presentTask(row: mysql.RowDataPacket) {
+  const status = String(row.status);
+  const displayStatus = status === "pending" ? String(row.pendingStatusName || "待审批") : status === "claimed" ? "处理中" : status === "completed" ? "已审核" : "已取消";
+  return { ...row, displayStatus, candidateUserIds: candidateIds(row), payload: parseJson(row.payloadJson), result: parseJson(row.resultJson) };
 }
 
 export async function listWorkflowTasks(user: User, input: { view: TaskView; projectId?: string; status?: "pending" | "claimed" | "completed" | "cancelled"; limit?: number }) {
@@ -43,7 +64,7 @@ export async function listWorkflowTasks(user: User, input: { view: TaskView; pro
     params,
   );
   const accessible: mysql.RowDataPacket[] = [];
-  for (const row of rows) if (await canAccessTask(user, row)) accessible.push({ ...row, payload: parseJson(row.payloadJson), result: parseJson(row.resultJson) });
+  for (const row of rows) if (await canAccessTask(user, row)) accessible.push(presentTask(row));
   return accessible;
 }
 
@@ -56,7 +77,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
   );
   const task = rows[0];
   if (!task || !(await canAccessTask(user, task))) return null;
-  return { ...task, payload: parseJson(task.payloadJson), result: parseJson(task.resultJson), nextNodeIds: parseJson(task.nextNodeIdsJson) };
+  return { ...presentTask(task), nextNodeIds: parseJson(task.nextNodeIdsJson) };
 }
 
 export async function claimWorkflowTask(user: User, taskId: string) {
@@ -68,6 +89,14 @@ export async function claimWorkflowTask(user: User, taskId: string) {
   if (!result.affectedRows) throw new Error("人工任务已被领取或已结束。 ");
   await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: "task_claimed" } });
   return getWorkflowTask(user, taskId);
+}
+
+export async function executeWorkflowTask(user: User, taskId: string, result: JsonRecord) {
+  const task: any = await getWorkflowTask(user, taskId);
+  if (!task) throw new Error("人工任务不存在或无访问权限。");
+  if (task.status === "pending") await claimWorkflowTask(user, taskId);
+  else if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("当前操作不可执行，请刷新任务状态。");
+  return completeWorkflowTask(user, taskId, result);
 }
 
 export async function completeWorkflowTask(user: User, taskId: string, result: JsonRecord) {
@@ -152,16 +181,22 @@ export async function listProcessInstances(user: User, input: { view: "initiated
   const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     input.view === "initiated"
-      ? `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,initiator.name AS initiatedByName
+      ? `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,initiator.name AS initiatedByName,ps.stateCode,ps.stateName,ps.flowStatus,ps.stateColor,ps.availableOperationsJson
            FROM workflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
+           LEFT JOIN workflow_participant_state ps ON ps.runId=r.id AND ps.userId=?
           WHERE r.triggeredByUserId=? ORDER BY r.createdAt DESC LIMIT ?`
-      : `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,initiator.name AS initiatedByName
+      : `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,initiator.name AS initiatedByName,ps.stateCode,ps.stateName,ps.flowStatus,ps.stateColor,ps.availableOperationsJson
            FROM workflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
+           LEFT JOIN workflow_participant_state ps ON ps.runId=r.id AND ps.userId=?
           ORDER BY r.createdAt DESC LIMIT ?`,
-    input.view === "initiated" ? [user.id, limit] : [limit],
+    input.view === "initiated" ? [user.id, user.id, limit] : [user.id, limit],
   );
   const accessible: mysql.RowDataPacket[] = [];
-  for (const row of rows) if (await hasWorkflowPermission(user, String(row.workflowId), "workflow:view")) accessible.push(row);
+  for (const row of rows) {
+    if (row.stateName || await hasWorkflowPermission(user, String(row.workflowId), "workflow:view")) {
+      accessible.push({ ...row, displayStatus: row.stateName || row.status, availableOperations: parseJson(row.availableOperationsJson) });
+    }
+  }
   return accessible;
 }
 

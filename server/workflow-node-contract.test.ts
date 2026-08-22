@@ -7,7 +7,7 @@ describe("原始节点配置统一契约", () => {
     expect(createDefaultNodeConfig("start")).toMatchObject({ initialVariables: {} });
     expect(createDefaultNodeConfig("end")).toMatchObject({ resultTemplate: "{{vars}}" });
     expect(createDefaultNodeConfig("state")).toMatchObject({ stateCode: "STATE_CODE", displayName: "业务状态", stateType: "business" });
-    expect(createDefaultNodeConfig("operate")).toMatchObject({ commandCode: "COMMAND_CODE", assigneeMode: "role", instruction: expect.any(String) });
+    expect(createDefaultNodeConfig("operate")).toMatchObject({ commandCode: "COMMAND_CODE", assigneeMode: "receivers", instruction: expect.any(String) });
     expect(createDefaultNodeConfig("router")).toMatchObject({ routes: [], defaultRoute: "default" });
     expect(createDefaultNodeConfig("rest")).toMatchObject({ nodeDh: "", restmc: "", restApi: "", restType: "POST", restHeaderParam: [{ key: "", value: "" }], timeout: 15000 });
     expect(createDefaultNodeConfig("method")).toMatchObject({ nodeDh: "", restmc: "", restApi: "", restType: "POST", restAttributeMap: { valid: false, suspend: true, async: false } });
@@ -45,12 +45,13 @@ describe("原始节点配置统一契约", () => {
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "invalid", right: true, trueHandle: "yes", falseHandle: "no" })).toThrow("条件节点操作符无效");
   });
 
-  it("阻止尚未安全迁移的原版代码、权限和路由配置被静默执行", () => {
+  it("接纳结构化原版权限配置，但继续阻止任意代码和未迁移路由被静默执行", () => {
     expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", {
       nodeDh: "APPROVE",
       czmc: "审批",
       qxkz: [{ qxid: "legacy-auth", qxmc: "原版权限" }],
-    }))).toThrow("尚未映射的原版权限");
+    }))).not.toThrow();
+    expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", { nodeDh: "ROLE_APPROVE", assigneeMode: "role", assigneeRoleCode: "" }))).toThrow("必须配置角色代号");
     expect(() => validateNodeConfig("router", withNodeConfigDefaults("router", {
       nodeDh: "ROUTE1",
       lymc: "旧路由",

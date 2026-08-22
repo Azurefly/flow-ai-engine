@@ -28,6 +28,38 @@ export const users = mysqlTable("users", {
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
 });
 
+/** Original-compatible organization tree used to resolve departments and direct superiors. */
+export const organizationUnits = mysqlTable(
+  "organization_unit",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    code: varchar("code", { length: 64 }).notNull().unique(),
+    name: varchar("name", { length: 160 }).notNull(),
+    parentUnitId: varchar("parentUnitId", { length: 36 }),
+    managerUserId: int("managerUserId").references(() => users.id),
+    status: mysqlEnum("status", ["active", "disabled"]).default("active").notNull(),
+    createdByUserId: int("createdByUserId").notNull().references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [index("organization_unit_parent_idx").on(table.parentUnitId), index("organization_unit_manager_idx").on(table.managerUserId)],
+);
+
+/** A user may belong to multiple units; one primary unit drives direct-superior resolution. */
+export const organizationMemberships = mysqlTable(
+  "organization_membership",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    unitId: varchar("unitId", { length: 36 }).notNull().references(() => organizationUnits.id),
+    userId: int("userId").notNull().references(() => users.id),
+    title: varchar("title", { length: 160 }),
+    isPrimary: boolean("isPrimary").default(false).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("organization_membership_unit_user_unique").on(table.unitId, table.userId), index("organization_membership_user_primary_idx").on(table.userId, table.isPrimary)],
+);
+
 /** Hashed, revocable browser sessions. */
 export const sessions = mysqlTable(
   "auth_session",
@@ -239,6 +271,9 @@ export const workflowTasks = mysqlTable(
     taskType: mysqlEnum("taskType", ["operate"]).default("operate").notNull(),
     status: mysqlEnum("status", ["pending", "claimed", "completed", "cancelled"]).default("pending").notNull(),
     assignedUserId: int("assignedUserId").references(() => users.id),
+    candidateUserIdsJson: json("candidateUserIdsJson"),
+    operationName: varchar("operationName", { length: 160 }),
+    pendingStatusName: varchar("pendingStatusName", { length: 160 }),
     claimedByUserId: int("claimedByUserId").references(() => users.id),
     completedByUserId: int("completedByUserId").references(() => users.id),
     instruction: text("instruction"),
@@ -254,6 +289,26 @@ export const workflowTasks = mysqlTable(
     index("workflow_task_workflow_status_idx").on(table.workflowId, table.status, table.createdAt),
     unique("workflow_task_run_node_unique").on(table.runId, table.nodeId),
   ],
+);
+
+/** Per-user process status and available operations, mirroring the original people-centric state model. */
+export const workflowParticipantStates = mysqlTable(
+  "workflow_participant_state",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    userId: int("userId").notNull().references(() => users.id),
+    stateCode: varchar("stateCode", { length: 160 }),
+    stateName: varchar("stateName", { length: 160 }).notNull(),
+    flowStatus: varchar("flowStatus", { length: 255 }),
+    stateColor: varchar("stateColor", { length: 32 }),
+    sourceNodeId: varchar("sourceNodeId", { length: 160 }),
+    availableOperationsJson: json("availableOperationsJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [unique("workflow_participant_run_user_unique").on(table.runId, table.userId), index("workflow_participant_user_updated_idx").on(table.userId, table.updatedAt)],
 );
 
 /** Administrator-owned settings for approval governance and visible system preferences. */

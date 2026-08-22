@@ -4,6 +4,7 @@ import { isIP } from "node:net";
 import mysql from "mysql2/promise";
 import { invokeLLM, listLLMModels } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
+import { resolveAutoRelatedParticipantUserIds, resolveOperateAssignees } from "./organization-service";
 import type { Definition } from "./workflow-service";
 
 type JsonRecord = Record<string, unknown>;
@@ -309,7 +310,7 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
   const executableDefinition = (await import("./workflow-service")).validate(definition, true);
 
   const runId = randomUUID();
-  const context: JsonRecord = { input: input.workflowInput ?? {}, vars: {}, nodes: {}, runtime: { triggeredByUserId: input.triggeredBy.id } };
+  const context: JsonRecord = { input: input.workflowInput ?? {}, vars: {}, nodes: {}, runtime: { triggeredByUserId: input.triggeredBy.id, lastActorUserId: input.triggeredBy.id, participantUserIds: [input.triggeredBy.id] } };
   const authorizationSnapshot = { userId: input.triggeredBy.id, userRole: input.triggeredBy.role, permission: "workflow:run", authorizedAt: new Date().toISOString() };
   await db().query(
     "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,startedAt) VALUES (?,?,?,?,?,'running',?,?,?,?,NOW())",
@@ -339,6 +340,55 @@ export async function executeWorkflow(input: { workflowId: string; triggeredBy: 
 type PersistedWorkflow = mysql.RowDataPacket & { id: string; ownerUserId: number; projectId?: string | null; name: string };
 type RunSegmentResult = { status: "success"; output: unknown } | { status: "waiting"; taskId: string };
 
+function isAutomaticOperate(config: JsonRecord) {
+  const legacy = asRecord(config.zdzx);
+  return config.autoExecute === true || config.autoExecute === "true" || legacy.sfzdzx === "是" || legacy.sfzdzx === true;
+}
+
+function runtimeUserIds(context: JsonRecord) {
+  const runtime = asRecord(context.runtime);
+  const values = Array.isArray(runtime.participantUserIds) ? runtime.participantUserIds : [];
+  return Array.from(new Set(values.map(Number).filter(id => Number.isInteger(id) && id > 0)));
+}
+
+function addRuntimeParticipants(context: JsonRecord, userIds: number[]) {
+  const runtime = asRecord(context.runtime);
+  runtime.participantUserIds = Array.from(new Set([...runtimeUserIds(context), ...userIds.filter(id => Number.isInteger(id) && id > 0)]));
+  context.runtime = runtime;
+}
+
+function setRuntimeReceivers(context: JsonRecord, userIds: number[]) {
+  const runtime = asRecord(context.runtime);
+  runtime.receiverUserIds = Array.from(new Set(userIds.filter(id => Number.isInteger(id) && id > 0)));
+  context.runtime = runtime;
+}
+
+async function upsertParticipantState(input: { runId: string; workflowId: string; userId: number; stateCode?: string; stateName: string; flowStatus?: string; stateColor?: string; sourceNodeId?: string; availableOperations?: unknown[] }) {
+  await db().query(
+    "INSERT INTO workflow_participant_state (id,runId,workflowId,userId,stateCode,stateName,flowStatus,stateColor,sourceNodeId,availableOperationsJson) VALUES (?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stateCode=VALUES(stateCode),stateName=VALUES(stateName),flowStatus=VALUES(flowStatus),stateColor=VALUES(stateColor),sourceNodeId=VALUES(sourceNodeId),availableOperationsJson=VALUES(availableOperationsJson),updatedAt=NOW()",
+    [randomUUID(), input.runId, input.workflowId, input.userId, input.stateCode ?? null, input.stateName, input.flowStatus ?? input.stateName, input.stateColor ?? null, input.sourceNodeId ?? null, JSON.stringify(input.availableOperations ?? [])],
+  );
+}
+
+async function persistStateNode(input: { runId: string; workflowId: string; node: WorkflowNode; context: JsonRecord }) {
+  const config = asRecord(resolveTemplates(input.node.config, input.context));
+  const runtime = asRecord(input.context.runtime);
+  const initiatorUserId = Number(runtime.triggeredByUserId);
+  const actorUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
+  const stateCode = String(firstConfiguredString(config.nodeDh, config.stateCode) ?? input.node.id);
+  const stateName = String(firstConfiguredString(config.jdmc, config.displayName) ?? input.node.name);
+  const flowStatus = String(firstConfiguredString(config.flowStatus) ?? stateName);
+  const stateColor = firstConfiguredString(config.stateColor);
+
+  if (Number.isInteger(initiatorUserId) && initiatorUserId > 0) {
+    await upsertParticipantState({ runId: input.runId, workflowId: input.workflowId, userId: initiatorUserId, stateCode, stateName: flowStatus, flowStatus, stateColor, sourceNodeId: input.node.id });
+  }
+  if (Number.isInteger(actorUserId) && actorUserId > 0 && actorUserId !== initiatorUserId) {
+    await upsertParticipantState({ runId: input.runId, workflowId: input.workflowId, userId: actorUserId, stateCode, stateName, flowStatus, stateColor, sourceNodeId: input.node.id });
+  }
+  addRuntimeParticipants(input.context, [initiatorUserId, actorUserId]);
+}
+
 async function executeRunSegment(input: { runId: string; workflow: PersistedWorkflow; definition: Definition; context: JsonRecord; queue: string[]; finalOutput?: unknown }): Promise<RunSegmentResult> {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
@@ -356,26 +406,39 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
     try {
       if (node.type === "operate") {
         const config = asRecord(resolveTemplates(node.config, input.context));
-        // 旧版节点只有 assigneeUserId；未显式声明 assigneeMode 时继续按指定用户处理。
-        const assigneeMode = String(config.assigneeMode ?? (config.assigneeUserId ? "user" : "none"));
-        const requestedAssignee = Number(config.assigneeUserId);
         const runtime = asRecord(input.context.runtime);
-        const assignedUserId = assigneeMode === "user" && Number.isInteger(requestedAssignee) && requestedAssignee > 0
-          ? requestedAssignee
-          : assigneeMode === "initiator" && Number.isInteger(Number(runtime.triggeredByUserId)) && Number(runtime.triggeredByUserId) > 0
-            ? Number(runtime.triggeredByUserId)
-            : null;
-        if (assignedUserId) {
-          const [users] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE id=? AND status='active' LIMIT 1", [assignedUserId]);
-          if (!users[0]) throw new Error("操作节点指定的处理人不存在或已停用。");
+        const relatedParticipants = await resolveAutoRelatedParticipantUserIds(config, input.context);
+        addRuntimeParticipants(input.context, relatedParticipants);
+        if (relatedParticipants.length) setRuntimeReceivers(input.context, relatedParticipants);
+
+        if (isAutomaticOperate(config)) {
+          const completedByUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
+          const automaticOutput = { automatic: true, completedByUserId, operationName: String(firstConfiguredString(config.czmc, config.instruction) ?? node.name), relatedParticipantUserIds: relatedParticipants };
+          const vars = asRecord(input.context.vars);
+          const nodeOutputs = asRecord(input.context.nodes);
+          vars[node.id] = automaticOutput;
+          nodeOutputs[node.id] = automaticOutput;
+          input.context.vars = vars;
+          input.context.nodes = nodeOutputs;
+          await finishNodeRun(nodeRunId, "success", startedAt, automaticOutput);
+          input.definition.edges.filter(edge => edge.sourceNodeId === node.id).forEach(edge => input.queue.push(edge.targetNodeId));
+          continue;
         }
+
+        const assignment = await resolveOperateAssignees({ config, context: input.context, workflowId: input.workflow.id });
         const taskId = randomUUID();
         const nextNodeIds = input.definition.edges.filter(edge => edge.sourceNodeId === node.id).map(edge => edge.targetNodeId);
+        const operationName = String(firstConfiguredString(config.czmc, config.instruction, config.description) ?? node.name);
+        const pendingStatusName = String(firstConfiguredString(config.pendingStatusName) ?? "待审批");
         await db().query(
-          "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, assignedUserId, String(firstConfiguredString(config.czmc, config.instruction, config.description) ?? node.name), JSON.stringify({ config, context: input.context }), JSON.stringify(nextNodeIds)],
+          "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, assignment.assignedUserId, assignment.candidateUserIds.length ? JSON.stringify(assignment.candidateUserIds) : null, operationName, pendingStatusName, String(firstConfiguredString(config.instruction) ?? operationName), JSON.stringify({ config, context: input.context, assignmentMode: assignment.mode }), JSON.stringify(nextNodeIds)],
         );
-        await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId, status: "pending", assignedUserId });
+        for (const userId of assignment.candidateUserIds) {
+          await upsertParticipantState({ runId: input.runId, workflowId: input.workflow.id, userId, stateCode: node.id, stateName: pendingStatusName, flowStatus: pendingStatusName, sourceNodeId: node.id, availableOperations: [{ taskId, name: operationName }] });
+        }
+        addRuntimeParticipants(input.context, assignment.candidateUserIds);
+        await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId, status: "pending", assignedUserId: assignment.assignedUserId, candidateUserIds: assignment.candidateUserIds, operationName });
         await db().query("UPDATE workflow_run SET status='running',contextJson=? WHERE id=?", [JSON.stringify(input.context), input.runId]);
         return { status: "waiting", taskId };
       }
@@ -387,6 +450,7 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
       input.context.vars = vars;
       input.context.nodes = nodeOutputs;
       if (node.type === "start") Object.assign(vars, asRecord(result.output));
+      if (node.type === "state") await persistStateNode({ runId: input.runId, workflowId: input.workflow.id, node, context: input.context });
       if (node.type === "end") finalOutput = result.output;
       await finishNodeRun(nodeRunId, "success", startedAt, result.output);
       input.definition.edges.filter(edge => edge.sourceNodeId === node.id && (!result.route || (edge.sourceHandle ?? "default") === result.route)).forEach(edge => input.queue.push(edge.targetNodeId));
@@ -412,8 +476,13 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
   const [claim] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed'", [input.completedBy.id, JSON.stringify(input.result), input.taskId]);
   if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
   const context = asRecord(readJson(task.contextJson));
+  const runtime = asRecord(context.runtime);
+  runtime.lastActorUserId = input.completedBy.id;
+  context.runtime = runtime;
+  addRuntimeParticipants(context, [input.completedBy.id]);
+  await db().query("UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?", [JSON.stringify([]), task.runId, input.completedBy.id]);
   const definition = readJson(task.definitionSnapshotJson) as Definition;
-  const taskOutput = { taskId: input.taskId, completedByUserId: input.completedBy.id, result: input.result };
+  const taskOutput = { taskId: input.taskId, completedByUserId: input.completedBy.id, operationName: task.operationName ?? task.nodeName, result: input.result };
   const vars = asRecord(context.vars);
   const nodeOutputs = asRecord(context.nodes);
   vars[String(task.nodeId)] = taskOutput;

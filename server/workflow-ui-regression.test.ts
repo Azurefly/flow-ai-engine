@@ -247,6 +247,38 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("Object.entries(record).filter(([key]) => !knownKeys.has(key))");
   });
 
+  it("提供显式且可撤销的连线删除交互，并在只读模式禁用删除", () => {
+    expect(canvasSource).toContain("selectedEdgeId");
+    expect(canvasSource).toContain("interactionWidth: 24");
+    expect(canvasSource).toContain("onEdgeClick");
+    expect(canvasSource).toContain("删除连线");
+    expect(canvasSource).toContain("Delete");
+    expect(canvasSource).toContain("Backspace");
+    expect(canvasSource).toContain("撤销删线");
+    expect(canvasSource).toContain("if (readOnly || !selectedEdgeId) return");
+    expect(canvasSource).toContain("!readOnly && <Button");
+  });
+
+  it("按原版语义分组操作、路由与子流程配置并解释当前运行字段", () => {
+    expect(canvasSource).toContain("CONFIG_GROUPS");
+    expect(canvasSource).toContain('label: "人员与操作"');
+    expect(canvasSource).toContain('label: "流程参与方显示"');
+    expect(canvasSource).toContain('label: "权限控制"');
+    expect(canvasSource).toContain('label: "绑定对象"');
+    expect(canvasSource).toContain('label: "绑定操作"');
+    expect(canvasSource).toContain('label: "属性设置"');
+    expect(canvasSource).toContain('label: "发送方设置"');
+    expect(canvasSource).toContain('label: "接收方设置"');
+    expect(canvasSource).toContain('label: "自动执行"');
+    expect(canvasSource).toContain('label: "原版路由设置"');
+    expect(canvasSource).toContain('label: "当前安全路由规则"');
+    expect(canvasSource).toContain('label: "流转方式"');
+    expect(canvasSource).toContain('label: "入口映射"');
+    expect(canvasSource).toContain('label: "出口映射"');
+    expect(canvasSource).toContain('label: "当前运行映射"');
+    expect(canvasSource).toContain("不会覆盖上面的原版兼容配置");
+  });
+
   it("新增治理、运行分析与复用资产面板在窄屏保持可访问结构", () => {
     expect(governanceSource).toContain("flex flex-col gap-3");
     expect(governanceSource).toContain("xl:grid-cols-[260px_1fr]");

@@ -125,7 +125,7 @@ function toFlowNodes(definition: Definition): CanvasNode[] {
 }
 
 function toFlowEdges(definition: Definition): Edge[] {
-  return definition.edges.map(edge => ({ id: edge.id, source: edge.sourceNodeId, sourceHandle: edge.sourceHandle, target: edge.targetNodeId, targetHandle: "target", animated: true, style: { stroke: "#94a3b8", strokeWidth: 1.7 } }));
+  return definition.edges.map(edge => ({ id: edge.id, source: edge.sourceNodeId, sourceHandle: edge.sourceHandle, target: edge.targetNodeId, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } }));
 }
 
 function toDefinition(nodes: Node[], edges: Edge[], base: Definition): Definition {
@@ -337,6 +337,50 @@ function FieldHelp({ help }: { help: string }) {
   return <p className="text-[11px] leading-4 text-slate-500">{help}</p>;
 }
 
+type ConfigField = FlowNodeDefinition["fields"][number];
+type ConfigGroup = { label: string; description: string; keys: string[] };
+
+const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
+  state: [
+    { label: "基础状态", description: "状态代号用于审计与流转；状态名称是当前办理人的人员级状态。", keys: ["nodeDh", "jdmc", "stateType", "stateColor"] },
+    { label: "人员与操作", description: "保留原版绑定角色、状态固有操作和业务操作，决定不同人员在该状态可执行什么。", keys: ["bdjs", "jdgycz", "ywcz"] },
+    { label: "流程参与方显示", description: "流程状态是发起人等参与方看到的文案，可与当前办理人的状态名称不同。", keys: ["flowStatus", "bdym"] },
+  ],
+  operate: [
+    { label: "基础信息", description: "标识这个操作节点。操作代号用于流程识别，操作名称展示给办理人。", keys: ["nodeDh", "czmc", "lsWorkZone"] },
+    { label: "权限控制", description: "决定哪些角色可以看见或办理该操作，以及绑定数据是否影响接收人。", keys: ["bddxcrjsrsx", "bdczcrjsrsx", "qxkz"] },
+    { label: "绑定对象", description: "指定操作需要关联的业务对象、获取范围和双方数据。", keys: ["bddx"] },
+    { label: "绑定操作", description: "配置办理动作、或签/会签方式、角色和通过比例。", keys: ["bdcz"] },
+    { label: "属性设置", description: "配置自动关联、部门操作权限和必须完成的子流程。", keys: ["sxsz"] },
+    { label: "发送方设置", description: "配置流程发送方的身份、固有操作和临时角色。", keys: ["fsfsz"] },
+    { label: "接收方设置", description: "配置流程接收方的固有操作和临时角色。", keys: ["jsfsz"] },
+    { label: "自动执行", description: "决定该操作是否自动执行及其触发条件。旧版代码仅保存，不会直接运行。", keys: ["zdzx"] },
+    { label: "当前运行设置", description: "将原版接收方、权限角色或组织关系解析为人员级待办；不会覆盖上面的原版兼容配置。", keys: ["assigneeMode", "assigneeRoleCode", "instruction", "assigneeUserId"] },
+  ],
+  router: [
+    { label: "基础信息", description: "标识路由节点，并决定是否允许多个分支同时流转。", keys: ["nodeDh", "lymc", "gbms"] },
+    { label: "原版路由设置", description: "保留原页面的目标节点、优先权重、条件和代码结构，用于兼容已有流程。", keys: ["lysz"] },
+    { label: "当前安全路由规则", description: "运行时按顺序匹配这些规则；默认分支用于所有规则都未命中时。", keys: ["routes", "defaultRoute"] },
+  ],
+  subflow: [
+    { label: "基础信息", description: "选择要调用的原版子流程，并设置当前节点代号。", keys: ["zlcxz", "nodeDh"] },
+    { label: "流转方式", description: "决定主流程是否等待、由发送方还是接收方发起，以及附加进入条件。", keys: ["sfgqzlc", "zlcfqf", "gdtj"] },
+    { label: "入口映射", description: "把当前流程数据映射到子流程的开始节点和入口操作。", keys: ["zlcrk"] },
+    { label: "出口映射", description: "定义子流程结束后回到当前流程的连接节点。", keys: ["zlcck"] },
+    { label: "当前运行映射", description: "将原版流程选择映射到当前已启用的私有子流程，并设置传入数据。", keys: ["subflowId", "input"] },
+  ],
+};
+
+function configFieldGroups(kind: NodeKind, fields: ConfigField[]) {
+  const definitions = CONFIG_GROUPS[kind];
+  if (!definitions) return [{ label: "节点配置", description: "按照字段说明填写该节点运行所需的信息。", fields }];
+  const byKey = new Map(fields.map(field => [field.key, field]));
+  const groups = definitions.map(group => ({ ...group, fields: group.keys.map(key => byKey.get(key)).filter((field): field is ConfigField => Boolean(field)) }));
+  const groupedKeys = new Set(definitions.flatMap(group => group.keys));
+  const remaining = fields.filter(field => !groupedKeys.has(field.key));
+  return remaining.length ? [...groups, { label: "其他兼容配置", description: "保留已有流程中的扩展配置，不会在保存时丢失。", keys: [], fields: remaining }] : groups;
+}
+
 export default function WorkflowCanvas({
   workflowId,
   flowType = "state",
@@ -368,6 +412,8 @@ export default function WorkflowCanvas({
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(toFlowNodes(initial));
   const [edges, setEdges, onEdgesChange] = useEdgesState(toFlowEdges(initial));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  const [deletedEdge, setDeletedEdge] = useState<Edge | null>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("normal");
   const [inspectorLocked, setInspectorLocked] = useState(false);
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance<CanvasNode, Edge> | null>(null);
@@ -393,6 +439,8 @@ export default function WorkflowCanvas({
     setNodes(toFlowNodes(next));
     setEdges(toFlowEdges(next));
     setSelectedId(current => current && next.nodes.some(node => node.id === current) ? current : null);
+    setSelectedEdgeId(current => current && next.edges.some(edge => edge.id === current) ? current : null);
+    setDeletedEdge(null);
   }, [definition, definitionSignature, workflowId, setEdges, setNodes]);
 
   useEffect(() => {
@@ -426,7 +474,9 @@ export default function WorkflowCanvas({
   const selectedConfig = (selected?.data.config ?? {}) as NodeConfig;
   const selectedDefaults = selected ? createDefaultNodeConfig(selected.data.kind) : {};
   const selectedConfigState = selected ? nodeConfigState(selected.data.kind, selectedConfig) : null;
+  const selectedFieldGroups = selected && selectedDefinition ? configFieldGroups(selected.data.kind, selectedDefinition.fields) : [];
   const inspectorDisabled = readOnly || inspectorLocked;
+  const displayedEdges = useMemo(() => edges.map(edge => edge.id === selectedEdgeId ? { ...edge, selected: true, interactionWidth: 24, style: { ...edge.style, stroke: "#4f46e5", strokeWidth: 3 } } : { ...edge, selected: false, interactionWidth: 24 }), [edges, selectedEdgeId]);
 
   const addNode = (item: (typeof palette)[number]) => {
     if (readOnly) return;
@@ -446,8 +496,43 @@ export default function WorkflowCanvas({
   };
 
   const onConnect = useCallback((connection: Connection) => {
-    if (!readOnly) setEdges(current => addEdge({ ...connection, id: `edge-${Date.now()}`, targetHandle: "target", animated: true, style: { stroke: "#94a3b8", strokeWidth: 1.7 } }, current));
+    if (!readOnly) setEdges(current => addEdge({ ...connection, id: `edge-${Date.now()}`, targetHandle: "target", animated: true, interactionWidth: 24, style: { stroke: "#94a3b8", strokeWidth: 1.7 } }, current));
   }, [readOnly, setEdges]);
+
+  const deleteSelectedEdge = useCallback(() => {
+    if (readOnly || !selectedEdgeId) return;
+    setEdges(current => {
+      const edge = current.find(item => item.id === selectedEdgeId);
+      if (edge) setDeletedEdge(edge);
+      return current.filter(item => item.id !== selectedEdgeId);
+    });
+    setSelectedEdgeId(null);
+  }, [readOnly, selectedEdgeId, setEdges]);
+
+  const undoDeletedEdge = useCallback(() => {
+    if (readOnly || !deletedEdge) return;
+    if (!nodes.some(node => node.id === deletedEdge.source) || !nodes.some(node => node.id === deletedEdge.target)) {
+      setDeletedEdge(null);
+      return;
+    }
+    setEdges(current => current.some(edge => edge.id === deletedEdge.id) ? current : current.concat(deletedEdge));
+    setSelectedEdgeId(deletedEdge.id);
+    setSelectedId(null);
+    setDeletedEdge(null);
+  }, [deletedEdge, nodes, readOnly, setEdges]);
+
+  useEffect(() => {
+    if (readOnly || !selectedEdgeId) return;
+    const handleDeleteKey = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")) return;
+      event.preventDefault();
+      deleteSelectedEdge();
+    };
+    window.addEventListener("keydown", handleDeleteKey);
+    return () => window.removeEventListener("keydown", handleDeleteKey);
+  }, [deleteSelectedEdge, readOnly, selectedEdgeId]);
 
   const updateSelected = (updates: Partial<FlowNodeData>) => {
     if (!selectedId || inspectorDisabled) return;
@@ -478,7 +563,7 @@ export default function WorkflowCanvas({
 
   useEffect(() => {
     const focusCanvas = () => canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-    const clearHighlight = () => { setSelectedId(null); focusCanvas(); };
+    const clearHighlight = () => { setSelectedId(null); setSelectedEdgeId(null); focusCanvas(); };
     const neatenCanvas = () => { reactFlow?.fitView({ padding: 0.24, duration: 180 }); focusCanvas(); };
     const saveCanvasImage = () => { exportCanvasImage(); focusCanvas(); };
     const fullscreenCanvas = () => { void toggleFullscreen(); };
@@ -506,14 +591,16 @@ export default function WorkflowCanvas({
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:neaten-canvas"))} title="整理画布"><Waypoints size={14} />整理画布</Button>
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:save-canvas-image"))} title="保存为图片"><Download size={14} />保存为图片</Button>
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:fullscreen-canvas"))} title="全屏展示"><Maximize2 size={14} />{fullscreen ? "退出全屏" : "全屏展示"}</Button>
+            {!readOnly && <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-red-600 disabled:text-slate-300" disabled={!selectedEdgeId} onClick={deleteSelectedEdge} title={selectedEdgeId ? "删除选中的连线（Delete 或 Backspace）" : "先单击画布中的连线"}><Trash2 size={14} />删除连线</Button>}
+            {!readOnly && deletedEdge && <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-indigo-600" onClick={undoDeletedEdge} title="恢复刚删除的连线"><RotateCcw size={14} />撤销删线</Button>}
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:clear-highlight"))} title="取消高亮"><MousePointer2 size={14} />取消高亮</Button>
           </div>
         </div>
         {!readOnly && (templates.length > 0 || subflows.length > 0) && <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-1.5"><span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">REUSE LIBRARY</span>{templates.map(template => <Button key={template.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 text-xs" onClick={() => addReusableNode({ type: template.nodeType, label: template.name, config: template.config })}><Save size={12} />{template.name}</Button>)}{subflows.filter(subflow => subflow.isEnabled).map(subflow => <Button key={subflow.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-violet-200 text-xs text-violet-700 hover:bg-violet-50" onClick={() => addReusableNode({ type: "subflow", label: subflow.name, config: { subflowId: subflow.id, input: "{{input}}" } })}><FolderTree size={12} />{subflow.name}</Button>)}</div>}
         <div className="relative h-[420px] sm:h-[590px]">
           <div className="absolute left-3 top-3 z-10 flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-600 shadow-sm"><span className="font-semibold text-slate-700">配置状态</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-red-500" />未完全配置</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-blue-500" />配置中</span><span className="flex items-center gap-1"><i className="h-2 w-2 rounded-full bg-emerald-500" />已配置</span></div>
-          <div className="absolute bottom-3 left-3 z-10 hidden items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-500 shadow-sm sm:flex"><span className="flex items-center gap-1"><Move size={13} />画布移动</span><span className="flex items-center gap-1"><Maximize2 size={13} />画布缩放</span><span className="flex items-center gap-1"><MousePointer2 size={13} />节点多选</span><span className="flex items-center gap-1"><Square size={12} />节点框选</span></div>
-          <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={edges} nodeTypes={nodeTypes} onInit={setReactFlow} onNodesChange={readOnly ? undefined : onNodesChange} onEdgesChange={readOnly ? undefined : onEdgesChange} onConnect={onConnect} onNodeClick={(_, node) => setSelectedId(node.id)} nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable fitView>
+          <div className="absolute bottom-3 left-3 z-10 hidden items-center gap-3 rounded-md border border-slate-200 bg-white/95 px-3 py-2 text-[11px] text-slate-500 shadow-sm sm:flex"><span className="flex items-center gap-1"><Move size={13} />画布移动</span><span className="flex items-center gap-1"><Maximize2 size={13} />画布缩放</span><span className="flex items-center gap-1"><MousePointer2 size={13} />单击连线后可删除</span><span className="flex items-center gap-1"><Square size={12} />节点框选</span></div>
+          <ReactFlow<CanvasNode, Edge> nodes={nodes} edges={displayedEdges} nodeTypes={nodeTypes} onInit={setReactFlow} onNodesChange={readOnly ? undefined : onNodesChange} onEdgesChange={readOnly ? undefined : onEdgesChange} onConnect={onConnect} onNodeClick={(_, node) => { setSelectedId(node.id); setSelectedEdgeId(null); }} onEdgeClick={(event, edge) => { event.stopPropagation(); setSelectedEdgeId(edge.id); setSelectedId(null); }} onPaneClick={() => { setSelectedId(null); setSelectedEdgeId(null); }} nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable fitView>
             <Background color="#d9e2ec" gap={20} size={1} />
             <MiniMap nodeColor={node => colorFor((node.data as FlowNodeData).kind)} pannable zoomable />
             <Controls showInteractive={!readOnly} />
@@ -522,7 +609,7 @@ export default function WorkflowCanvas({
       </section>
       <aside data-workflow-inspector className="border-t border-slate-200 bg-white lg:border-l lg:border-t-0">
         <div className="flex min-h-16 items-center justify-between border-b border-slate-100 px-4 py-3"><div className={inspectorMode === "compact" ? "hidden" : ""}><p className="text-[10px] font-bold tracking-[.2em] text-indigo-600">CONFIGURATION</p><h2 className="mt-1 text-sm font-semibold text-slate-900">配置信息</h2></div><div className="ml-auto flex items-center gap-1"><button type="button" className={`rounded p-1.5 text-slate-500 hover:bg-slate-100 ${inspectorLocked ? "text-indigo-600" : ""}`} title={inspectorLocked ? "解除面板锁定" : "锁定配置面板"} aria-label={inspectorLocked ? "解除面板锁定" : "锁定配置面板"} onClick={() => setInspectorLocked(value => !value)}><LockKeyhole size={15} /></button><button type="button" className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="最大化面板" aria-label="最大化面板" onClick={() => setInspectorMode("maximized")}><Maximize2 size={15} /></button><button type="button" className={`rounded p-1.5 text-slate-500 hover:bg-slate-100 ${inspectorMode === "normal" ? "text-slate-300" : ""}`} title="恢复配置面板" aria-label="恢复配置面板" onClick={() => setInspectorMode("normal")}><RotateCcw size={15} /></button><button type="button" className="rounded p-1.5 text-slate-500 hover:bg-slate-100" title="最小化面板" aria-label="最小化面板" onClick={() => setInspectorMode("compact")}><Minimize2 size={15} /></button></div></div>
-        {inspectorMode !== "compact" && (selected && selectedDefinition ? <div className="max-h-[650px] space-y-4 overflow-y-auto p-4"><label className="grid gap-1.5 text-xs font-medium text-slate-600">节点名称<input className="h-9 rounded-md border border-slate-200 px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50" value={String(selected.data.label ?? "")} disabled={inspectorDisabled} onChange={event => updateSelected({ label: event.target.value })} /></label><div className={`rounded-md border p-3 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-blue-200 bg-blue-50" : "border-emerald-200 bg-emerald-50"}`}><p className="text-xs font-semibold text-slate-700">{selectedDefinition.label} · {selectedConfigState === "partial" ? "未完全配置" : selectedConfigState === "editing" ? "配置中" : "已配置"}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{selectedDefinition.description}</p></div><div className="space-y-4">{selectedDefinition.fields.map(field => { const fieldValue = configFieldValue(field, selectedConfig); return <ConfigFieldEditor key={`${selected.id}-${field.key}-${JSON.stringify(fieldValue ?? selectedDefaults[field.key])}`} field={field} value={fieldValue} fallback={selectedDefaults[field.key]} disabled={inspectorDisabled} onChange={value => updateConfigField(field.key, value)} />; })}</div>{!readOnly && <div className="grid gap-2"><Button type="button" size="sm" variant="outline" className="w-full" disabled={inspectorDisabled} onClick={() => { const name = window.prompt("节点模板名称", String(selected.data.label ?? "未命名模板")); if (name?.trim()) onSaveTemplate?.({ name: name.trim(), nodeType: selected.data.kind as ReuseTemplate["nodeType"], config: selectedConfig }); }}><Save size={13} />保存为节点模板</Button></div>}</div> : <div className="m-4 mt-8 rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-500"><p className="font-medium text-slate-700">暂无配置信息</p><p className="mt-1">请选择画布中的元件查看配置信息；若无元件，请添加元件。</p></div>)}
+        {inspectorMode !== "compact" && (selected && selectedDefinition ? <div className="max-h-[650px] space-y-4 overflow-y-auto p-4"><label className="grid gap-1.5 text-xs font-medium text-slate-600">节点名称<input className="h-9 rounded-md border border-slate-200 px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50" value={String(selected.data.label ?? "")} disabled={inspectorDisabled} onChange={event => updateSelected({ label: event.target.value })} /></label><div className={`rounded-md border p-3 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-blue-200 bg-blue-50" : "border-emerald-200 bg-emerald-50"}`}><p className="text-xs font-semibold text-slate-700">{selectedDefinition.label} · {selectedConfigState === "partial" ? "未完全配置" : selectedConfigState === "editing" ? "配置中" : "已配置"}</p><p className="mt-1 text-[11px] leading-5 text-slate-600">{selectedDefinition.description}</p></div><div className="space-y-4">{selectedFieldGroups.map(group => <section key={group.label} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3"><div className="mb-3"><h3 className="text-xs font-bold text-slate-800">{group.label}</h3><p className="mt-1 text-[11px] leading-4 text-slate-500">{group.description}</p></div><div className="space-y-4">{group.fields.map(field => { const fieldValue = configFieldValue(field, selectedConfig); return <ConfigFieldEditor key={`${selected.id}-${field.key}-${JSON.stringify(fieldValue ?? selectedDefaults[field.key])}`} field={field} value={fieldValue} fallback={selectedDefaults[field.key]} disabled={inspectorDisabled} onChange={value => updateConfigField(field.key, value)} />; })}</div></section>)}</div>{!readOnly && <div className="grid gap-2"><Button type="button" size="sm" variant="outline" className="w-full" disabled={inspectorDisabled} onClick={() => { const name = window.prompt("节点模板名称", String(selected.data.label ?? "未命名模板")); if (name?.trim()) onSaveTemplate?.({ name: name.trim(), nodeType: selected.data.kind as ReuseTemplate["nodeType"], config: selectedConfig }); }}><Save size={13} />保存为节点模板</Button></div>}</div> : selectedEdgeId ? <div className="m-4 mt-8 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800"><p className="font-semibold">已选中连线</p><p className="mt-1 text-xs">可点击顶部“删除连线”，或按 Delete / Backspace。删除后可立即撤销。</p></div> : <div className="m-4 mt-8 rounded-md border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-500"><p className="font-medium text-slate-700">暂无配置信息</p><p className="mt-1">请选择画布中的元件查看配置信息；若无元件，请添加元件。</p></div>)}
         {inspectorMode !== "compact" && !readOnly && <div className="border-t border-slate-100 p-4"><details><summary className="cursor-pointer text-xs font-semibold text-slate-700">管理我的模板与子流程</summary><div className="mt-3 grid gap-2 text-xs">{templates.map(template => <div key={template.id} className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50 p-2"><span className="min-w-0 flex-1 truncate">{template.name}</span><button type="button" className="text-indigo-700 hover:underline" onClick={() => { const name = window.prompt("模板名称", template.name); if (name?.trim() && name !== template.name) onUpdateTemplate?.(template, { name: name.trim() }); }}>改名</button><button type="button" className="text-indigo-700 hover:underline" onClick={() => addReusableNode({ type: template.nodeType, label: template.name, config: template.config })}>在画布中编辑</button><button type="button" className="text-red-600 hover:underline" onClick={() => onDeleteTemplate?.(template.id)}><Trash2 size={12} /></button></div>)}{subflows.map(subflow => <div key={subflow.id} className="flex items-center gap-1 rounded border border-violet-100 bg-violet-50 p-2"><FolderTree size={12} className="text-violet-600" /><span className="min-w-0 flex-1 truncate">{subflow.name}</span><button type="button" className="text-violet-700 hover:underline" onClick={() => onToggleSubflow?.(subflow, !subflow.isEnabled)}>{subflow.isEnabled ? "停用" : "启用"}</button><button type="button" className="text-red-600 hover:underline" onClick={() => onDeleteSubflow?.(subflow.id)}><Trash2 size={12} /></button></div>)}{!templates.length && !subflows.length && <p className="text-slate-400">从选中节点保存模板，或在设计器顶部将当前流程保存为子流程。</p>}</div></details></div>}
       </aside>
     </div>

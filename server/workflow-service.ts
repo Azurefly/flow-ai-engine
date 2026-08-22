@@ -282,6 +282,8 @@ export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
   try {
     await connection.beginTransaction();
     await connection.query("DELETE FROM workflow_run_alert WHERE workflowId=?", [workflowId]);
+    await connection.query("DELETE FROM workflow_task WHERE workflowId=?", [workflowId]);
+    await connection.query("DELETE FROM workflow_participant_state WHERE workflowId=?", [workflowId]);
     await connection.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?", [workflowId]);
     await connection.query("DELETE FROM workflow_run WHERE workflowId=?", [workflowId]);
     await connection.query("DELETE FROM workflow_version WHERE workflowId=?", [workflowId]);

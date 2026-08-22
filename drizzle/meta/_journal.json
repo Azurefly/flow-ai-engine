@@ -71,6 +71,13 @@
       "when": 1787373411215,
       "tag": "0009_dusty_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1787401069904,
+      "tag": "0010_zippy_ezekiel",
+      "breakpoints": true
     }
   ]
 }

@@ -106,7 +106,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       fsfsz: { fsfbm: "", fsflzsf: "以本人身份", fsfgycz: "", lsjspz: [{ pzlx: "赋予", xzjs: [] }] },
       jsfsz: { jsfbm: "", jsfgycz: "", lsjspz: [{ pzlx: "赋予", xzjs: [] }] },
       zdzx: { sfzdzx: "否", tjsz: [], code: [] },
-      commandCode: "COMMAND_CODE", assigneeMode: "role", instruction: "请完成此项流程操作。",
+      commandCode: "COMMAND_CODE", assigneeMode: "receivers", assigneeRoleCode: "", instruction: "请完成此项流程操作。",
     },
     fields: [
       { key: "nodeDh", aliases: ["commandCode"], label: "操作代号", help: "原版操作节点代号，仅允许数字和字母。", kind: "text", required: true },
@@ -121,7 +121,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       { key: "fsfsz", label: "发送方设置", help: "原版发送方身份、固有操作和临时角色配置。", kind: "json" },
       { key: "jsfsz", label: "接收方设置", help: "原版接收方固有操作和临时角色配置。", kind: "json" },
       { key: "zdzx", label: "自动执行", help: "原版自动执行、条件和代码配置；任意旧代码不会直接执行。", kind: "json" },
-      { key: "assigneeMode", label: "处理人方式", help: "按角色、指定用户、发起人或无人指定创建待办。", kind: "select", required: true, options: [{ value: "role", label: "角色" }, { value: "user", label: "指定用户" }, { value: "initiator", label: "发起人" }, { value: "none", label: "不指定" }] },
+      { key: "assigneeMode", label: "处理人方式", help: "优先按上一步接收方流转，也可按权限角色、指定用户、发起人或组织上级解析待办对象。", kind: "select", required: true, options: [{ value: "receivers", label: "上一步接收方" }, { value: "role", label: "权限角色" }, { value: "user", label: "指定用户" }, { value: "initiator", label: "流程发起人" }, { value: "initiator_manager", label: "发起人直属上级" }, { value: "sender_manager", label: "当前操作人直属上级" }, { value: "none", label: "不指定（可领取）" }] },
+      { key: "assigneeRoleCode", label: "处理人角色代号", help: "“权限角色”方式使用；匹配系统级或当前流程范围内的有效角色授权。", kind: "text" },
       { key: "instruction", label: "操作说明", help: templateHelp, kind: "textarea", required: true },
       { key: "assigneeUserId", label: "指定处理人 ID", help: "仅“指定用户”方式需要；必须为可用内部账号。", kind: "number" },
     ],
@@ -283,12 +284,13 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
     case "state": assertString(firstNonBlank(config.nodeDh, config.stateCode), "状态节点必须配置状态代号。"); assertString(firstNonBlank(config.jdmc, config.displayName), "状态节点必须配置状态名称。"); break;
     case "operate": {
       assertString(firstNonBlank(config.nodeDh, config.commandCode), "操作节点必须配置操作代号。");
-      if (!['role', 'user', 'initiator', 'none'].includes(String(config.assigneeMode))) throw new Error("操作节点处理人方式无效。");
+      if (!["receivers", "role", "user", "initiator", "initiator_manager", "sender_manager", "none"].includes(String(config.assigneeMode))) throw new Error("操作节点处理人方式无效。");
       assertString(config.instruction, "操作节点必须配置操作说明。");
       if (config.assigneeMode === "user") assertOptionalNumber(config.assigneeUserId, "操作节点指定处理人必须是有效的内部账号 ID。", 1, Number.MAX_SAFE_INTEGER);
-      if (["lsWorkZone", "qxkz", "bddx", "bdcz", "sxsz", "fsfsz", "jsfsz", "zdzx"].some(key => hasMeaningfulLegacyValue(config[key])) || config.bddxcrjsrsx === true || config.bdczcrjsrsx === true) {
-        throw new Error("操作节点包含尚未映射的原版权限、绑定或自动执行配置，必须完成当前 IAM 与人工任务语义迁移后才能执行。");
-      }
+      if (config.assigneeMode === "role") assertString(config.assigneeRoleCode, "操作节点按权限角色分配时必须配置角色代号。");
+      if (config.qxkz !== undefined && !Array.isArray(config.qxkz)) throw new Error("操作节点权限控制必须是数组。");
+      if (config.bddx !== undefined && !Array.isArray(config.bddx)) throw new Error("操作节点绑定对象必须是数组。");
+      for (const key of ["bdcz", "sxsz", "fsfsz", "jsfsz", "zdzx"]) if (config[key] !== undefined) assertObject(config[key], "操作节点" + key + "配置必须是对象。");
       break;
     }
     case "router": {
