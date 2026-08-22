@@ -82,6 +82,7 @@
 | 76 | 业务中心原始列表列 | 原始 `businessCenter.html` 的序号、业务代号、业务名称、根部门及操作列 | 业务表恢复首列“序号”和“根部门”。序号仅基于当前筛选后的、当前用户被授权可见项目列表生成；根部门仅显示未来/已有模型的 `rootDepartment` 值，当前内部项目模型没有该值时明确显示“未配置”并以提示说明未用工作域替代。既有工作域、流程数量、创建人、创建时间、说明和进入业务操作均保留。界面回归、`pnpm check` 和完整 `pnpm test` 通过：**25** 文件、**47** 项通过、**1** 项安全跳过；本轮未创建、导入或修改业务项目。 |
 | 77 | 生产托管计划分钟桶只读复核 | 平台 Heartbeat 任务 `LZdLD7JML8zvtPWtiXFEj8`、平台投递日志与 `dataflow_run` 审计 | 计划仍启用，回调路径为 `/api/scheduled/dataflow`、UTC 表达式为 `0 0 9 * * *`；平台历史仍仅含 2026-08-19 与 2026-08-20 两次 HTTP 200 单次投递，均为 1 次尝试。当前版本应用记录 `N1MTG5qcSmhD8_XL` 的分钟桶为 `LZdLD7JML8zvtPWtiXFEj8:2026-08-20T09:08`，与平台投递时间一致；旧记录 `cJ2glbU_1eLdO2xS` 的 `scheduleBucket` 为 NULL，符合部署该字段前的历史数据。尚无同一可信 `taskUid + minute bucket` 的重复回调，不能以单次成功替代幂等证据。未触发、暂停、恢复、更新或删除生产计划，待自然重放或重投递。 |
 | 78 | 项目工作区业务选择 | 原始 `businessOverview.html` 的 `businessSelect2` 业务选择控件与左侧项目菜单 | 项目工作区顶部恢复“当前业务”选择控件，仅使用 `project.list` 返回的当前账号受权项目；切换时清除当前选中流程并由 `ProjectWorkspace` 复位至流程设计中心，重置流程筛选、新建流程展开状态和详情状态，防止前一项目的局部界面状态误带入下一项目。界面回归、`pnpm check` 和完整 `pnpm test` 通过：**25** 文件、**48** 项通过、**1** 项安全跳过；本轮未修改项目、流程、成员或资源数据。 |
+| 79 | 系统配置单页签容器 | 原始 `system_config.html` 的 `nav-card-tabs-wrapper`、单一活动 `<li>` 与 `tab-pane` | 系统配置的活动卡片页签恢复稳定 `tab` / `tabpanel` 标识关联：活动页签 `system-config-active-tab` 通过 `aria-controls` 指向 `system-config-card`，内容面板以 `role="tabpanel"` 和 `aria-labelledby` 回链；左侧配置导航仍决定唯一活动字段化内容。管理员设置接口、身份中心入口和工作域操作未改变。界面回归、`pnpm check` 与完整 `pnpm test` 通过：**25** 文件、**49** 项通过、**1** 项安全跳过；本轮未保存、创建、启停任何系统配置数据。 |
 ## 当前尚待记录的生产验收
 
 | 验收项 | 条件 | 通过标准 |
