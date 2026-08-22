@@ -289,6 +289,43 @@
   border-radius: 2px;
 }
 
+/* 原 businessOverview.html 为 216px 左侧连续菜单与右侧工作区；仅锚定项目工作区。 */
+@media (min-width: 1024px) {
+  [data-aiflow-project-workspace] > aside {
+    width: 216px !important;
+    border-color: #dfe5ec;
+    box-shadow: none;
+  }
+
+  [data-aiflow-project-workspace] > aside.lg\:w-16 {
+    width: 64px !important;
+  }
+
+  [data-aiflow-project-workspace] > section {
+    padding: 16px 20px;
+    background: #fff;
+  }
+}
+
+[data-aiflow-project-workspace] > aside > div:first-child {
+  padding: 12px 14px;
+}
+
+[data-aiflow-project-workspace] > aside nav {
+  gap: 0;
+  padding: 6px 0;
+}
+
+[data-aiflow-project-workspace] > aside nav button {
+  border-radius: 0;
+  padding: 9px 14px;
+}
+
+[data-aiflow-project-workspace] > aside nav button[class*="bg-[#eaf1ff]"] {
+  border-left: 3px solid #2f77d2;
+  background: #edf4ff;
+}
+
 /* 设计器以原始三栏画布为主，权限、运行和协作信息保持可用但降为次级紧凑区。 */
 [data-aiflow-designer] {
   display: flex;

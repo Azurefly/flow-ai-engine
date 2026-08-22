@@ -103,6 +103,9 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("当前业务：");
     expect(projectWorkspaceSource).toContain("PanelLeftClose");
     expect(projectWorkspaceSource).toContain("PanelLeftOpen");
+    expect(projectWorkspaceSource).toContain('data-aiflow-project-workspace=""');
+    expect(styleSource).toContain("[data-aiflow-project-workspace] > aside");
+    expect(styleSource).toContain("width: 216px !important");
     expect(projectWorkspaceSource).toContain("创建时间开始");
     expect(projectWorkspaceSource).toContain("创建时间结束");
     expect(projectWorkspaceSource).toContain("同步 BDP 配置");
