@@ -5,6 +5,7 @@ const scheduleBucketMigration = readFileSync(
   new URL("../drizzle/0006_thankful_ben_grimm.sql", import.meta.url),
   "utf8",
 );
+const signingMigration = readFileSync(new URL("../drizzle/0011_restore_signing_roles.sql", import.meta.url), "utf8");
 
 describe("database migration integrity", () => {
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
@@ -17,5 +18,17 @@ describe("database migration integrity", () => {
     expect(statements).toHaveLength(2);
     expect(statements[0]).toContain("ADD COLUMN `scheduleBucket` varchar(96) NULL");
     expect(statements[1]).toContain("ADD CONSTRAINT `dataflow_run_schedule_bucket_unique`");
+  });
+
+  it("creates replacement unique indexes before dropping foreign-key support indexes", () => {
+    const statements = signingMigration.split("--> statement-breakpoint").map(statement => statement.trim()).filter(Boolean);
+    const participantReplacement = statements.findIndex(statement => statement.includes("workflow_participant_run_user_role_unique"));
+    const participantDrop = statements.findIndex(statement => statement.includes("DROP INDEX `workflow_participant_run_user_unique`"));
+    const taskReplacement = statements.findIndex(statement => statement.includes("workflow_task_run_node_assignee_unique"));
+    const taskDrop = statements.findIndex(statement => statement.includes("DROP INDEX `workflow_task_run_node_unique`"));
+    expect(participantReplacement).toBeGreaterThanOrEqual(0);
+    expect(taskReplacement).toBeGreaterThanOrEqual(0);
+    expect(participantReplacement).toBeLessThan(participantDrop);
+    expect(taskReplacement).toBeLessThan(taskDrop);
   });
 });
