@@ -94,6 +94,10 @@ export async function assertSafeHttpUrl(rawUrl: string) {
 async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   const resolved = asRecord(resolveTemplates(config, context));
   const url = await assertSafeHttpUrl(String(resolved.url ?? ""));
+  const query = asRecord(resolved.query);
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
+  }
   const method = String(resolved.method ?? "GET").toUpperCase();
   if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) throw new Error("HTTP 节点请求方法不受支持。");
   const headers = asRecord(resolved.headers);
@@ -122,6 +126,39 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function firstConfiguredString(...values: unknown[]) {
+  return values.find(value => typeof value === "string" && value.trim()) as string | undefined;
+}
+
+function keyValueEntries(value: unknown) {
+  if (!Array.isArray(value)) return asRecord(value);
+  return Object.fromEntries(value.map(item => asRecord(item)).filter(item => typeof item.key === "string" && item.key.trim()).map(item => [String(item.key), item.value]));
+}
+
+function parseReferenceBody(value: unknown) {
+  if (typeof value !== "string") return value;
+  if (!value.trim()) return undefined;
+  try { return JSON.parse(value); } catch { return value; }
+}
+
+/** Converts the original REST/METHOD persistence shape without dropping legacy keys or weakening HTTP guards. */
+export function normalizeReferenceHttpConfig(config: JsonRecord): JsonRecord {
+  const method = String(firstConfiguredString(config.restType, config.method) ?? "GET").toUpperCase();
+  const attributes = asRecord(config.restAttributeMap);
+  const query = {
+    ...keyValueEntries(config.restGetBodyParam),
+    ...asRecord(attributes.restEntryParam),
+  };
+  return {
+    url: firstConfiguredString(config.restApi, config.endpoint, config.url) ?? "",
+    method,
+    headers: keyValueEntries(config.restHeaderParam ?? config.headers),
+    body: parseReferenceBody(config.restJsonParam === undefined || config.restJsonParam === "" ? config.body : config.restJsonParam),
+    query,
+    timeout: config.timeout,
+  };
 }
 
 async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
@@ -211,13 +248,14 @@ async function executeNode(node: WorkflowNode, context: JsonRecord, allowSubflow
   const config = asRecord(node.config);
   switch (node.type) {
     case "start": return { output: asRecord(resolveTemplates(asRecord(config.initialVariables), context)) };
-    case "state": return { output: { stateCode: String(resolveTemplates(config.stateCode ?? "STATE", context)), displayName: String(resolveTemplates(config.displayName ?? node.name, context)), stateType: String(resolveTemplates(config.stateType ?? "business", context)) } };
+    case "state": return { output: { stateCode: String(resolveTemplates(firstConfiguredString(config.nodeDh, config.stateCode) ?? "STATE", context)), displayName: String(resolveTemplates(firstConfiguredString(config.jdmc, config.displayName) ?? node.name, context)), stateType: String(resolveTemplates(config.stateType ?? "business", context)), stateColor: resolveTemplates(config.stateColor, context), flowStatus: resolveTemplates(config.flowStatus, context) } };
     case "form": return { output: { fields: resolveTemplates(Array.isArray(config.fields) ? config.fields : [], context), submitted: asRecord(context.input) } };
     case "router": {
       const result = selectRouterRoute(config, context);
       return { output: result, route: result.selectedRoute };
     }
-    case "rest": return { output: await executeHttpNode({ ...config, url: config.endpoint ?? config.url }, context) };
+    case "rest":
+    case "method": return { output: await executeHttpNode(normalizeReferenceHttpConfig(config), context) };
     case "operate": throw new Error("操作节点需要 P1 人工任务工作台；当前运行已安全阻断，未执行任何外部操作。");
     case "sql": throw new Error("SQL 节点需要 P2 数据源与查询策略；当前运行已安全阻断，未执行任何数据库语句。");
     case "transform": return { output: asRecord(resolveTemplates(asRecord(config.mappings ?? config.output), context)) };
@@ -335,7 +373,7 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
         const nextNodeIds = input.definition.edges.filter(edge => edge.sourceNodeId === node.id).map(edge => edge.targetNodeId);
         await db().query(
           "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?)",
-          [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, assignedUserId, String(config.instruction ?? config.description ?? node.name), JSON.stringify({ config, context: input.context }), JSON.stringify(nextNodeIds)],
+          [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, assignedUserId, String(firstConfiguredString(config.czmc, config.instruction, config.description) ?? node.name), JSON.stringify({ config, context: input.context }), JSON.stringify(nextNodeIds)],
         );
         await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId, status: "pending", assignedUserId });
         await db().query("UPDATE workflow_run SET status='running',contextJson=? WHERE id=?", [JSON.stringify(input.context), input.runId]);

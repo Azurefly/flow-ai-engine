@@ -75,28 +75,30 @@ export function WorkflowDetailPage({
           workflowId={workflow.id}
           canEdit={canEdit}
           canPublish={canPublish}
+          canvas={
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-white px-4 py-3">
+                <div>
+                  <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
+                    READ-ONLY CANVAS
+                  </p>
+                  <h2 className="mt-1 text-sm font-semibold text-slate-800">
+                    流程图只读预览
+                  </h2>
+                </div>
+                <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                  详情页不会写入流程定义
+                </span>
+              </div>
+              <WorkflowCanvas
+                workflowId={workflow.id}
+                flowType={workflow.flowType ?? "state"}
+                definition={definition}
+                readOnly
+              />
+            </>
+          }
         />
-        <section className="mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
-            <div>
-              <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
-                READ-ONLY CANVAS
-              </p>
-              <h2 className="mt-1 text-sm font-semibold text-slate-800">
-                流程图只读预览
-              </h2>
-            </div>
-            <span className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
-              详情页不会写入流程定义
-            </span>
-          </div>
-          <WorkflowCanvas
-            workflowId={workflow.id}
-            flowType={workflow.flowType ?? "state"}
-            definition={definition}
-            readOnly
-          />
-        </section>
       </div>
     </div>
   );

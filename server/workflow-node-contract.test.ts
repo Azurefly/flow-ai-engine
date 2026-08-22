@@ -3,13 +3,14 @@ import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
 
 describe("原始节点配置统一契约", () => {
-  it("为开始、结束、状态、操作、路由、REST、表单、SQL、条件、LLM 和子流程提供可追溯默认字段", () => {
+  it("为开始、结束、状态、操作、路由、REST、方法、表单、SQL、条件、LLM 和子流程提供可追溯默认字段", () => {
     expect(createDefaultNodeConfig("start")).toMatchObject({ initialVariables: {} });
     expect(createDefaultNodeConfig("end")).toMatchObject({ resultTemplate: "{{vars}}" });
     expect(createDefaultNodeConfig("state")).toMatchObject({ stateCode: "STATE_CODE", displayName: "业务状态", stateType: "business" });
     expect(createDefaultNodeConfig("operate")).toMatchObject({ commandCode: "COMMAND_CODE", assigneeMode: "role", instruction: expect.any(String) });
     expect(createDefaultNodeConfig("router")).toMatchObject({ routes: [], defaultRoute: "default" });
-    expect(createDefaultNodeConfig("rest")).toMatchObject({ endpoint: "", method: "POST", headers: {}, body: {}, timeout: 15000 });
+    expect(createDefaultNodeConfig("rest")).toMatchObject({ nodeDh: "", restmc: "", restApi: "", restType: "POST", restHeaderParam: [{ key: "", value: "" }], timeout: 15000 });
+    expect(createDefaultNodeConfig("method")).toMatchObject({ nodeDh: "", restmc: "", restApi: "", restType: "POST", restAttributeMap: { valid: false, suspend: true, async: false } });
     expect(createDefaultNodeConfig("form")).toMatchObject({ fields: [] });
     expect(createDefaultNodeConfig("sql")).toMatchObject({ datasourceId: "", statement: expect.stringContaining("SELECT"), parameters: {} });
     expect(createDefaultNodeConfig("condition")).toMatchObject({ left: "{{input.value}}", operator: "equals", trueHandle: "true", falseHandle: "false" });
@@ -28,7 +29,8 @@ describe("原始节点配置统一契约", () => {
   it("保留历史或安装包导入定义的未知字段，同时填充缺失的已知默认值", () => {
     const merged = withNodeConfigDefaults("state", { stateCode: "APPROVED", originalExtension: { color: "#3370ED" } });
     expect(merged).toMatchObject({ stateCode: "APPROVED", displayName: "业务状态", stateType: "business", originalExtension: { color: "#3370ED" } });
-    expect(getNodeConfigEvidence("rest")).toBe("compatibility-extension");
+    expect(getNodeConfigEvidence("rest")).toBe("reference-confirmed");
+    expect(getNodeConfigEvidence("method")).toBe("reference-confirmed");
   });
 
   it("严格验证路由分支、表单结构、REST 方法和条件句柄", () => {
@@ -37,6 +39,8 @@ describe("原始节点配置统一契约", () => {
     expect(() => validateNodeConfig("form", { fields: [{ key: "reason", label: "原因", type: "textarea", required: true }] })).not.toThrow();
     expect(() => validateNodeConfig("form", { fields: [{ key: "reason", label: "原因", type: "textarea", required: "true" }] })).toThrow("required 必须是布尔值");
     expect(() => validateNodeConfig("rest", { endpoint: "https://example.com", method: "TRACE", headers: {} })).toThrow("请求方法不受支持");
+    expect(() => validateNodeConfig("rest", { restApi: "https://example.com/api", restType: "GET", restHeaderParam: [{ key: "x-token", value: "demo" }] })).not.toThrow();
+    expect(() => validateNodeConfig("method", { restApi: "https://example.com/method", restType: "POST", restHeaderParam: [] })).not.toThrow();
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "equals", right: true, trueHandle: "yes", falseHandle: "no" })).not.toThrow();
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "invalid", right: true, trueHandle: "yes", falseHandle: "no" })).toThrow("条件节点操作符无效");
   });
@@ -46,5 +50,10 @@ describe("原始节点配置统一契约", () => {
     expect(() => validateNodeConfig("form", { fields: [{ key: "reason", required: true }] })).not.toThrow();
     expect(() => validateNodeConfig("router", { defaultRoute: "default", routes: [{ code: "default", target: "end" }] })).not.toThrow();
     expect(withNodeConfigDefaults("end", { resultTemplate: undefined }).resultTemplate).toBe("{{vars}}");
+  });
+
+  it("填充原版 REST 默认值时保留未知安装包字段", () => {
+    const merged = withNodeConfigDefaults("rest", { restApi: "https://example.com/api", originalExtension: { responseMode: "legacy" } });
+    expect(merged).toMatchObject({ restApi: "https://example.com/api", restType: "POST", originalExtension: { responseMode: "legacy" } });
   });
 });

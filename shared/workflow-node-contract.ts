@@ -2,7 +2,7 @@ export type FlowType = "state" | "control" | "data";
 
 export const FLOW_NODE_TYPES = [
   "start", "end", "transform", "condition", "http", "llm", "subflow",
-  "state", "operate", "router", "rest", "form", "sql", "source", "table",
+  "state", "operate", "router", "rest", "method", "form", "sql", "source", "table",
   "filter", "map", "udf", "sink", "output", "edit_sql",
 ] as const;
 
@@ -14,15 +14,16 @@ export type NodeField = {
   label: string;
   help: string;
   required?: boolean;
-  kind: "text" | "textarea" | "number" | "select" | "json" | "template";
+  kind: "text" | "textarea" | "number" | "boolean" | "select" | "json" | "template";
   options?: Array<{ value: string; label: string }>;
+  aliases?: string[];
 };
 
 export type FlowNodeDefinition = {
   type: FlowNodeType;
   label: string;
   description: string;
-  /** 当前副本未包含节点 bundle；字段键/默认值的证据级别必须被显式消费。 */
+  /** 节点及字段默认值是否已经由完整安装包或原后端源码直接确认。 */
   configEvidence?: "reference-confirmed" | "compatibility-extension";
   flowTypes: FlowType[];
   defaultConfig: NodeConfig;
@@ -40,6 +41,36 @@ const conditionOperators = [
 
 const templateHelp = "支持 {{input.field}}、{{vars.field}} 与 {{nodes.节点ID.字段}}，不执行任意表达式。";
 
+const referenceHttpDefaultConfig = {
+  nodeDh: "",
+  restmc: "",
+  restType: "POST",
+  restApi: "",
+  restHeaderParam: [{ key: "", value: "" }],
+  restGetBodyParam: [{ key: "", value: "" }],
+  restJsonParam: "",
+  restAttributeMap: { valid: false, suspend: true, async: false, restEntryParam: {} },
+  restScriptCode: "",
+  endpoint: "",
+  method: "POST",
+  headers: {},
+  body: {},
+  timeout: 15000,
+};
+
+const referenceHttpFields: NodeField[] = [
+  { key: "nodeDh", aliases: ["code"], label: "节点代号", help: "原版代号由流程、节点类型和自定义段组成；自定义段仅允许数字和字母。", kind: "text", required: true },
+  { key: "restmc", label: "节点名称", help: "原版节点配置中保留的名称；画布节点名称仍是当前显示名称。", kind: "text", required: true },
+  { key: "restType", aliases: ["method"], label: "请求方法", help: "原版仅提供 GET 和 POST；当前安全运行时也兼容 PUT、PATCH、DELETE。", kind: "select", required: true, options: ["GET", "POST", "PUT", "PATCH", "DELETE"].map(value => ({ value, label: value })) },
+  { key: "restApi", aliases: ["endpoint", "url"], label: "接口地址", help: `${templateHelp} 服务端拒绝本机、私有网段、凭据 URL 与非标准端口。`, kind: "template", required: true },
+  { key: "restHeaderParam", aliases: ["headers"], label: "请求头", help: "原版键值项数组；也兼容当前版本的对象结构。Host、Connection 与 Content-Length 会被服务端剔除。", kind: "json" },
+  { key: "restGetBodyParam", label: "GET 入参", help: "原版 GET 键值项数组，执行时作为查询参数附加到接口地址。", kind: "json" },
+  { key: "restJsonParam", aliases: ["body"], label: "POST 请求体", help: "原版 JSON 请求体文本或当前结构化请求体；支持受限模板变量。", kind: "json" },
+  { key: "restAttributeMap", label: "执行与校验设置", help: "原版字段：async、valid、suspend、restEntryParam。配置会完整保存；任意校验脚本不会在未隔离环境中直接执行。", kind: "json", required: true },
+  { key: "restScriptCode", label: "响应校验脚本", help: "保留原版响应校验脚本以便迁移；当前安全运行时不直接执行任意旧脚本。", kind: "textarea" },
+  { key: "timeout", label: "超时（毫秒）", help: "当前安全扩展，服务端限制为 1,000 至 15,000 毫秒。", kind: "number" },
+];
+
 export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   start: {
     type: "start", label: "开始", description: "初始化流程输入变量", flowTypes: ["state", "control", "data"],
@@ -52,42 +83,70 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     fields: [{ key: "resultTemplate", label: "结果模板", help: templateHelp, kind: "template", required: true }],
   },
   state: {
-    type: "state", label: "状态节点", description: "记录业务或系统状态", flowTypes: ["state", "control"],
-    defaultConfig: { stateCode: "STATE_CODE", displayName: "业务状态", stateType: "business" },
+    type: "state", label: "状态节点", description: "记录业务或系统状态", configEvidence: "reference-confirmed", flowTypes: ["state", "control"],
+    defaultConfig: { nodeDh: "", jdmc: "业务状态", bdjs: [], jdgycz: [], ywcz: [{ czid: "", czmc: "" }], stateColor: "", flowStatus: "", bdym: "", stateCode: "STATE_CODE", displayName: "业务状态", stateType: "business" },
     fields: [
-      { key: "stateCode", label: "状态代号", help: "用于状态流识别和审计的稳定代码。", kind: "text", required: true },
-      { key: "displayName", label: "状态名称", help: "面向流程设计者和实例查看者的显示名称。", kind: "text", required: true },
+      { key: "nodeDh", aliases: ["stateCode"], label: "状态代号", help: "原版代号仅允许数字和字母；用于状态流识别和审计。", kind: "text", required: true },
+      { key: "jdmc", aliases: ["displayName"], label: "状态名称", help: "原版状态节点名称。", kind: "text", required: true },
+      { key: "bdjs", label: "绑定角色", help: "原版绑定角色对象数组。", kind: "json" },
+      { key: "jdgycz", label: "状态固有操作", help: "原版办结、自动办结、同时办结所有子流程、撤诉配置。", kind: "json" },
+      { key: "ywcz", label: "业务操作", help: "原版操作 ID 与操作名称数组。", kind: "json" },
+      { key: "stateColor", label: "状态颜色", help: "原版状态节点颜色。", kind: "text" },
+      { key: "flowStatus", label: "流程状态", help: "原版流程状态文案。", kind: "text" },
+      { key: "bdym", label: "绑定页面", help: "BDOS 场景下的原版绑定页面标识。", kind: "text" },
       { key: "stateType", label: "状态类型", help: "区分业务状态和系统状态。", kind: "select", options: [{ value: "business", label: "业务状态" }, { value: "system", label: "系统状态" }], required: true },
     ],
   },
   operate: {
-    type: "operate", label: "操作节点", description: "创建可领取、可审计的人工操作", flowTypes: ["state", "control"],
-    defaultConfig: { commandCode: "COMMAND_CODE", assigneeMode: "role", instruction: "请完成此项流程操作。" },
+    type: "operate", label: "操作节点", description: "创建可领取、可审计的人工操作", configEvidence: "reference-confirmed", flowTypes: ["state", "control"],
+    defaultConfig: {
+      nodeDh: "", czmc: "", lsWorkZone: "", bddxcrjsrsx: false, bdczcrjsrsx: false, qxkz: [], bddx: [],
+      bdcz: { bdcz: [{ id: "", text: "" }], bdczjs: [], hqhqsz: "", xzdfhq: {}, hqtgbfb: "" },
+      sxsz: { zdglxgfsz: [], yrdbmsfkcz: "否", xzdzlcjywc: [] },
+      fsfsz: { fsfbm: "", fsflzsf: "以本人身份", fsfgycz: "", lsjspz: [{ pzlx: "赋予", xzjs: [] }] },
+      jsfsz: { jsfbm: "", jsfgycz: "", lsjspz: [{ pzlx: "赋予", xzjs: [] }] },
+      zdzx: { sfzdzx: "否", tjsz: [], code: [] },
+      commandCode: "COMMAND_CODE", assigneeMode: "role", instruction: "请完成此项流程操作。",
+    },
     fields: [
-      { key: "commandCode", label: "操作代号", help: "用于审计和业务系统映射的操作代码。", kind: "text", required: true },
+      { key: "nodeDh", aliases: ["commandCode"], label: "操作代号", help: "原版操作节点代号，仅允许数字和字母。", kind: "text", required: true },
+      { key: "czmc", label: "操作名称", help: "原版操作节点名称。", kind: "text", required: true },
+      { key: "lsWorkZone", label: "隶属 WorkZone", help: "原版操作节点所属工作域。", kind: "text" },
+      { key: "bddxcrjsrsx", label: "绑定对象传入接收人生效", help: "原版布尔配置。", kind: "boolean" },
+      { key: "bdczcrjsrsx", label: "绑定操作传入接收人生效", help: "原版布尔配置。", kind: "boolean" },
+      { key: "qxkz", label: "权限控制", help: "原版权限、发送方、接收方和过滤条件结构。", kind: "json" },
+      { key: "bddx", label: "绑定对象", help: "原版绑定对象、获取范围和双方设置。", kind: "json" },
+      { key: "bdcz", label: "绑定操作", help: "原版绑定操作、或签/会签和角色配置。", kind: "json" },
+      { key: "sxsz", label: "属性设置", help: "原版自动关联、部门可操作和子流程完成条件。", kind: "json" },
+      { key: "fsfsz", label: "发送方设置", help: "原版发送方身份、固有操作和临时角色配置。", kind: "json" },
+      { key: "jsfsz", label: "接收方设置", help: "原版接收方固有操作和临时角色配置。", kind: "json" },
+      { key: "zdzx", label: "自动执行", help: "原版自动执行、条件和代码配置；任意旧代码不会直接执行。", kind: "json" },
       { key: "assigneeMode", label: "处理人方式", help: "按角色、指定用户、发起人或无人指定创建待办。", kind: "select", required: true, options: [{ value: "role", label: "角色" }, { value: "user", label: "指定用户" }, { value: "initiator", label: "发起人" }, { value: "none", label: "不指定" }] },
       { key: "instruction", label: "操作说明", help: templateHelp, kind: "textarea", required: true },
       { key: "assigneeUserId", label: "指定处理人 ID", help: "仅“指定用户”方式需要；必须为可用内部账号。", kind: "number" },
     ],
   },
   router: {
-    type: "router", label: "路由节点", description: "按分支规则选择后继连线", flowTypes: ["control"],
-    defaultConfig: { routes: [], defaultRoute: "default" },
+    type: "router", label: "路由节点", description: "按分支规则选择后继连线", configEvidence: "reference-confirmed", flowTypes: ["state", "control"],
+    defaultConfig: { nodeDh: "", lymc: "", gbms: false, lysz: [], routes: [], defaultRoute: "default" },
     fields: [
+      { key: "nodeDh", label: "路由代号", help: "原版路由节点代号，仅允许数字和字母。", kind: "text", required: true },
+      { key: "lymc", label: "路由名称", help: "原版路由节点名称。", kind: "text", required: true },
+      { key: "gbms", label: "广播模式", help: "原版广播模式开关。", kind: "boolean", required: true },
+      { key: "lysz", label: "原版路由设置", help: "原版路径名称、优先权重、目标节点、权限过滤和代码结构；旧任意代码只保存不直接执行。", kind: "json" },
       { key: "routes", label: "路由规则", help: "按顺序匹配；每项包含 handle、label 及可选 condition（left、operator、right）。", kind: "json", required: true },
       { key: "defaultRoute", label: "默认分支", help: "未命中规则时使用的连线句柄；应与画布连线的源句柄一致。", kind: "text", required: true },
     ],
   },
   rest: {
-    type: "rest", label: "REST 节点", description: "通过受限网络策略调用外部 REST 服务", flowTypes: ["control", "data"],
-    defaultConfig: { endpoint: "", method: "POST", headers: {}, body: {}, timeout: 15000 },
-    fields: [
-      { key: "endpoint", label: "请求地址", help: `${templateHelp} 服务端拒绝本机、私有网段、凭据 URL 与非标准端口。`, kind: "template", required: true },
-      { key: "method", label: "请求方法", help: "支持 GET、POST、PUT、PATCH、DELETE。", kind: "select", required: true, options: ["GET", "POST", "PUT", "PATCH", "DELETE"].map(value => ({ value, label: value })) },
-      { key: "headers", label: "请求头", help: "JSON 对象；Host、Connection 与 Content-Length 会被服务端剔除。", kind: "json" },
-      { key: "body", label: "请求体", help: templateHelp, kind: "json" },
-      { key: "timeout", label: "超时（毫秒）", help: "服务端限制为 1,000 至 15,000 毫秒。", kind: "number" },
-    ],
+    type: "rest", label: "REST 节点", description: "保留原版字段并通过受限网络策略调用外部 REST 服务", configEvidence: "reference-confirmed", flowTypes: ["state", "control", "data"],
+    defaultConfig: referenceHttpDefaultConfig,
+    fields: referenceHttpFields,
+  },
+  method: {
+    type: "method", label: "方法节点", description: "原版 METHOD 节点，复用 REST 持久化与受限调用契约", configEvidence: "reference-confirmed", flowTypes: ["state", "control"],
+    defaultConfig: referenceHttpDefaultConfig,
+    fields: referenceHttpFields,
   },
   form: {
     type: "form", label: "表单节点", description: "定义流程实例需要提交的字段", flowTypes: ["state", "control"],
@@ -130,10 +189,17 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     ],
   },
   subflow: {
-    type: "subflow", label: "子流程", description: "调用当前所有者的可复用私有流程", flowTypes: ["state", "control", "data"],
-    defaultConfig: { subflowId: "", input: "{{input}}" },
+    type: "subflow", label: "子流程", description: "调用当前所有者的可复用私有流程", configEvidence: "reference-confirmed", flowTypes: ["state", "control", "data"],
+    defaultConfig: { zlcxz: { id: "", text: "" }, nodeDh: "", sfgqzlc: true, zlcfqf: "sender", gdtj: [], zlcrk: {}, zlcck: [{ connect: { id: "", text: "", yId: "" }, end: "" }], subflowId: "", input: "{{input}}" },
     fields: [
-      { key: "subflowId", label: "子流程", help: "必须选择当前流程所有者已启用的私有子流程。", kind: "text", required: true },
+      { key: "zlcxz", label: "原版流程选择", help: "原版子流程 ID 与名称；迁移时需映射为当前所有者的已启用私有子流程。", kind: "json", required: true },
+      { key: "nodeDh", label: "子流程代号", help: "原版子流程节点代号，仅允许数字和字母。", kind: "text", required: true },
+      { key: "sfgqzlc", label: "挂起主流程", help: "原版是否挂起主流程发起子流程。", kind: "boolean", required: true },
+      { key: "zlcfqf", label: "子流程发起方", help: "原版 sender（发送方）或 receiver（接收方）。", kind: "select", required: true, options: [{ value: "sender", label: "基于发送方" }, { value: "receiver", label: "基于接收方" }] },
+      { key: "gdtj", label: "更多条件", help: "原版“解析业务字段进入子流程”等条件。", kind: "json" },
+      { key: "zlcrk", label: "子流程入口", help: "原版开始节点和入口操作映射。", kind: "json", required: true },
+      { key: "zlcck", label: "子流程出口", help: "原版连接节点与结束节点映射数组。", kind: "json" },
+      { key: "subflowId", label: "当前子流程标识", help: "当前安全运行时使用；必须属于流程所有者且已启用。", kind: "text", required: true },
       { key: "input", label: "传入数据", help: templateHelp, kind: "json" },
     ],
   },
@@ -158,7 +224,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   output: { type: "output", label: "输出", description: "兼容输出节点", flowTypes: ["data"], defaultConfig: { outputName: "result" }, fields: [{ key: "outputName", label: "输出名称", help: "数据流运行审计中的输出引用名称。", kind: "text", required: true }] },
 };
 
-/** 仅节点名称和可见工具栏可由裁剪安装包直接证明；字段细节等待完整 bundle 到位后复核。 */
+/** 完整安装包和 FlowEnginServer dev 源码已到位；未确认的当前扩展仍保持 compatibility-extension。 */
 export function getNodeConfigEvidence(type: FlowNodeType) {
   return FLOW_NODE_DEFINITIONS[type].configEvidence ?? "compatibility-extension";
 }
@@ -187,6 +253,10 @@ function assertString(value: unknown, message: string) {
   if (typeof value !== "string" || !value.trim()) throw new Error(message);
 }
 
+function firstNonBlank(...values: unknown[]) {
+  return values.find(value => typeof value === "string" && value.trim()) as string | undefined;
+}
+
 function assertOptionalNumber(value: unknown, message: string, min: number, max: number) {
   if (value === undefined || value === null || value === "") return;
   if (typeof value !== "number" || !Number.isFinite(value) || value < min || value > max) throw new Error(message);
@@ -201,9 +271,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       if (template === undefined || template === null || (typeof template === "string" && !template.trim())) throw new Error("结束节点必须配置结果模板。");
       break;
     }
-    case "state": assertString(config.stateCode, "状态节点必须配置状态代号。"); assertString(config.displayName, "状态节点必须配置状态名称。"); break;
+    case "state": assertString(firstNonBlank(config.nodeDh, config.stateCode), "状态节点必须配置状态代号。"); assertString(firstNonBlank(config.jdmc, config.displayName), "状态节点必须配置状态名称。"); break;
     case "operate": {
-      assertString(config.commandCode, "操作节点必须配置操作代号。");
+      assertString(firstNonBlank(config.nodeDh, config.commandCode), "操作节点必须配置操作代号。");
       if (!['role', 'user', 'initiator', 'none'].includes(String(config.assigneeMode))) throw new Error("操作节点处理人方式无效。");
       assertString(config.instruction, "操作节点必须配置操作说明。");
       if (config.assigneeMode === "user") assertOptionalNumber(config.assigneeUserId, "操作节点指定处理人必须是有效的内部账号 ID。", 1, Number.MAX_SAFE_INTEGER);
@@ -226,11 +296,14 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       }
       break;
     }
-    case "rest": case "http": {
-      assertString(type === "rest" ? config.endpoint : config.url, `${type === "rest" ? "REST" : "HTTP"} 节点必须配置请求地址。`);
-      if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(String(config.method).toUpperCase())) throw new Error(`${type === "rest" ? "REST" : "HTTP"} 节点请求方法不受支持。`);
-      if (config.headers !== undefined) assertObject(config.headers, `${type === "rest" ? "REST" : "HTTP"} 节点请求头必须是 JSON 对象。`);
-      assertOptionalNumber(config.timeout, `${type === "rest" ? "REST" : "HTTP"} 节点超时必须在 1,000 至 15,000 毫秒之间。`, 1_000, 15_000);
+    case "rest": case "method": case "http": {
+      const referenceType = type === "method" ? "方法" : type === "rest" ? "REST" : "HTTP";
+      assertString(type === "http" ? config.url : firstNonBlank(config.restApi, config.endpoint, config.url), `${referenceType} 节点必须配置请求地址。`);
+      const method = type === "http" ? config.method : firstNonBlank(config.restType, config.method);
+      if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(String(method).toUpperCase())) throw new Error(`${referenceType} 节点请求方法不受支持。`);
+      const headers = type === "http" ? config.headers : config.restHeaderParam ?? config.headers;
+      if (headers !== undefined && !Array.isArray(headers)) assertObject(headers, `${referenceType} 节点请求头必须是键值项数组或 JSON 对象。`);
+      assertOptionalNumber(config.timeout, `${referenceType} 节点超时必须在 1,000 至 15,000 毫秒之间。`, 1_000, 15_000);
       break;
     }
     case "form": {
@@ -252,7 +325,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
     case "transform": assertObject(config.mappings, "转换节点的字段映射必须是 JSON 对象。"); break;
     case "condition": assertString(config.left, "条件节点必须配置左值。"); if (!conditionOperators.some(item => item.value === String(config.operator))) throw new Error("条件节点操作符无效。"); assertString(config.trueHandle, "条件节点必须配置成立分支句柄。"); assertString(config.falseHandle, "条件节点必须配置不成立分支句柄。"); break;
     case "llm": assertString(config.systemPrompt, "LLM 节点必须配置系统提示词。"); assertString(config.prompt ?? config.userPrompt, "LLM 节点必须配置提示词。"); assertOptionalNumber(config.maxTokens, "LLM 节点最大输出令牌必须在 64 至 8,192 之间。", 64, 8_192); break;
-    case "subflow": assertString(config.subflowId, "子流程节点必须选择有效的子流程。"); break;
+    case "subflow": assertString(firstNonBlank(config.subflowId), "子流程节点必须选择有效的当前子流程映射。"); break;
     case "source": case "table": assertString(config.assetId, "资源节点必须选择项目数据资源。"); break;
     case "filter": assertString(config.filterField, "筛选节点必须配置筛选字段。"); break;
     case "map": if (!Array.isArray(config.columns)) throw new Error("字段映射节点 columns 必须是数组。"); assertOptionalNumber(config.limit, "字段映射节点行数限制必须为正数。", 1, 100_000); break;

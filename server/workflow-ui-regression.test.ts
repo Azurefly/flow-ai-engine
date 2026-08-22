@@ -208,6 +208,8 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("onDetail={onOpenDetail}");
     expect(processDetailPageSource).toContain('data-aiflow-process-detail-page=""');
     expect(processDetailPageSource).toContain("WorkflowGovernance");
+    expect(processDetailPageSource).toContain("canvas={");
+    expect(processDetailPageSource).toContain("<WorkflowCanvas");
     expect(governanceSource).toContain("流程引导");
     expect(processDetailPageSource).toContain("返回流程设计中心");
     expect(processDetailPageSource).toContain("进入设计器");
@@ -215,6 +217,8 @@ describe("流程设计器界面回归约束", () => {
     expect(processDetailPageSource).toContain("流程图只读预览");
     expect(processDetailPageSource).toContain("详情页不会写入流程定义");
     expect(processDetailPageSource).toContain("readOnly");
+    expect(governanceSource.indexOf("{canvas ??")).toBeGreaterThan(governanceSource.indexOf(">基本信息</span>"));
+    expect(governanceSource.indexOf("{canvas ??")).toBeLessThan(governanceSource.indexOf("STARTED PROCESS LIST"));
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {
@@ -297,6 +301,7 @@ describe("流程设计器界面回归约束", () => {
     expect(nodeContractSource).toContain('type: "operate"');
     expect(nodeContractSource).toContain('type: "router"');
     expect(nodeContractSource).toContain('type: "rest"');
+    expect(nodeContractSource).toContain('type: "method"');
     expect(nodeContractSource).toContain('type: "form"');
     expect(nodeContractSource).toContain('type: "sql"');
     expect(warehouseSource).toContain("流程列表");
@@ -334,6 +339,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("暂无配置信息");
     expect(canvasSource).toContain("StructuredValueEditor");
     expect(canvasSource).toContain("StructuredListRow");
+    expect(canvasSource).toContain('field.kind === "boolean"');
+    expect(canvasSource).toContain('["restHeaderParam", "restGetBodyParam"].includes(fieldKey)');
+    expect(canvasSource).toContain("GET 参数");
     expect(canvasSource).toContain("添加字段");
     expect(canvasSource).toContain("添加一项");
     expect(canvasSource).not.toContain("function JsonField");
