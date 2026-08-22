@@ -151,9 +151,12 @@ export const workflows = mysqlTable(
     ownerUserId: int("ownerUserId").notNull().references(() => users.id),
     projectId: varchar("projectId", { length: 36 }).references(() => flowProjects.id),
     folderId: varchar("folderId", { length: 36 }).references(() => workflowFolders.id),
+    processCode: varchar("processCode", { length: 64 }),
     name: varchar("name", { length: 160 }).notNull(),
     description: text("description"),
     flowType: mysqlEnum("flowType", ["state", "control", "data"]).default("state").notNull(),
+    creationSource: mysqlEnum("creationSource", ["manual", "warehouse"]).default("manual").notNull(),
+    dataSourceId: varchar("dataSourceId", { length: 36 }),
     auditStatus: mysqlEnum("auditStatus", ["init", "approved", "rejected"]).default("init").notNull(),
     status: mysqlEnum("status", ["draft", "published"]).default("draft").notNull(),
     publishedAt: timestamp("publishedAt"),
@@ -163,7 +166,7 @@ export const workflows = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
-  table => [index("workflow_owner_updated_idx").on(table.ownerUserId, table.updatedAt), index("workflow_project_updated_idx").on(table.projectId, table.updatedAt), index("workflow_folder_idx").on(table.folderId)],
+  table => [index("workflow_owner_updated_idx").on(table.ownerUserId, table.updatedAt), index("workflow_project_updated_idx").on(table.projectId, table.updatedAt), index("workflow_folder_idx").on(table.folderId), index("workflow_data_source_idx").on(table.dataSourceId), unique("workflow_project_process_code_unique").on(table.projectId, table.processCode)],
 );
 
 export const workflowMembers = mysqlTable(

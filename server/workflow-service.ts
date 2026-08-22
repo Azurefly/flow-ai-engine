@@ -95,7 +95,7 @@ export async function canCreateWorkflow(user: WorkflowUser) {
   return hasSystemPermission(user, "workflow:create");
 }
 
-export async function createWorkflow(user: WorkflowUser, name: string, description?: string, options?: { projectId?: string | null; folderId?: string | null; flowType?: "state" | "control" | "data"; auditStatus?: "init" | "approved" | "rejected"; projectCreationAuthorized?: boolean }) {
+export async function createWorkflow(user: WorkflowUser, name: string, description?: string, options?: { projectId?: string | null; folderId?: string | null; processCode?: string | null; flowType?: "state" | "control" | "data"; creationSource?: "manual" | "warehouse"; dataSourceId?: string | null; auditStatus?: "init" | "approved" | "rejected"; projectCreationAuthorized?: boolean }) {
   if (!options?.projectCreationAuthorized && !(await canCreateWorkflow(user))) throw new Error("当前账号没有创建流程的权限。");
   const workflowId = id();
   const definition = emptyDefinition();
@@ -103,8 +103,8 @@ export async function createWorkflow(user: WorkflowUser, name: string, descripti
   try {
     await connection.beginTransaction();
     await connection.query(
-      "INSERT INTO workflow (id,ownerUserId,projectId,folderId,name,description,flowType,auditStatus,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,?,?,?,?,'draft',1)",
-      [workflowId, user.id, options?.projectId ?? null, options?.folderId ?? null, name, description ?? null, options?.flowType ?? "state", options?.auditStatus ?? "approved", JSON.stringify(definition)],
+      "INSERT INTO workflow (id,ownerUserId,projectId,folderId,processCode,name,description,flowType,creationSource,dataSourceId,auditStatus,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'draft',1)",
+      [workflowId, user.id, options?.projectId ?? null, options?.folderId ?? null, options?.processCode ?? null, name, description ?? null, options?.flowType ?? "state", options?.creationSource ?? "manual", options?.dataSourceId ?? null, options?.auditStatus ?? "approved", JSON.stringify(definition)],
     );
     await connection.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [randomBytes(18).toString("hex"), workflowId, user.id, user.id]);
     await insertVersion(connection, { workflowId, version: 1, name, status: "draft", definition, source: "created", actorUserId: user.id });

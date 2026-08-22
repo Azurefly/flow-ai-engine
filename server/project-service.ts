@@ -101,15 +101,25 @@ export async function listProjectWorkflows(user: ProjectUser, projectId: string,
   return rows.map(row => ({ ...row, definition: typeof row.definitionJson === "string" ? JSON.parse(row.definitionJson) : row.definitionJson }));
 }
 
-export async function createProjectWorkflow(user: ProjectUser, input: { projectId: string; name: string; description?: string; flowType: "state" | "control" | "data"; folderId?: string | null; definition?: unknown }) {
+export async function createProjectWorkflow(user: ProjectUser, input: { projectId: string; processCode?: string; name: string; description?: string; flowType: "state" | "control" | "data"; creationSource?: "manual" | "warehouse"; dataSourceId?: string | null; folderId?: string | null; definition?: unknown }) {
   await requireProjectPermission(user, input.projectId, "project:workflow:create");
+  const creationSource = input.creationSource ?? "manual";
+  const processCode = (input.processCode?.trim() || `${creationSource === "warehouse" ? "IMP" : "MAN"}_${id().slice(0, 10).toUpperCase()}`).toUpperCase();
+  if (!/^[A-Z][A-Z0-9_-]{1,63}$/.test(processCode)) throw new Error("流程代号须以字母开头，且仅包含大写字母、数字、下划线或连字符。");
+  const [existingCodes] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow WHERE projectId=? AND processCode=? LIMIT 1", [input.projectId, processCode]);
+  if (existingCodes[0]) throw new Error("当前业务下已存在相同流程代号。");
+  if (input.dataSourceId && input.flowType !== "data") throw new Error("仅数据流程可以关联项目数据源。");
+  if (input.dataSourceId) {
+    const [sources] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM data_source WHERE id=? AND projectId=? AND status<>'disabled' LIMIT 1", [input.dataSourceId, input.projectId]);
+    if (!sources[0]) throw new Error("所选数据源不存在、不属于当前业务或已停用。");
+  }
   if (input.folderId) {
     const [folders] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow_folder WHERE id=? AND projectId=? LIMIT 1", [input.folderId, input.projectId]);
     if (!folders[0]) throw new Error("目标仓库目录不存在或不属于当前项目。");
   }
-  const workflow = await createWorkflow(user, input.name, input.description, { projectId: input.projectId, folderId: input.folderId ?? null, flowType: input.flowType, auditStatus: "init", projectCreationAuthorized: true });
+  const workflow = await createWorkflow(user, input.name, input.description, { projectId: input.projectId, folderId: input.folderId ?? null, processCode, flowType: input.flowType, creationSource, dataSourceId: input.dataSourceId ?? null, auditStatus: "init", projectCreationAuthorized: true });
   if (input.definition && workflow) await updateWorkflow((workflow as any).id, user, { definition: validate(input.definition) });
-  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: String((workflow as any)?.id ?? ""), details: { operation: "project_workflow_created", projectId: input.projectId, flowType: input.flowType } });
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: String((workflow as any)?.id ?? ""), details: { operation: "project_workflow_created", projectId: input.projectId, processCode, flowType: input.flowType, creationSource, dataSourceId: input.dataSourceId ?? null } });
   return workflow;
 }
 

@@ -36,7 +36,18 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("根部门");
     expect(projectWorkspaceSource).toContain("rootDepartment");
     expect(projectWorkspaceSource).toContain("当前内部项目模型未配置根部门，未以工作域字段替代。");
-    expect(projectWorkspaceSource).toContain("colSpan={10}");
+    expect(projectWorkspaceSource).toContain('colSpan={10}');
+  });
+
+  it("保留原始流程创建的代号、来源和项目数据源结构化字段", () => {
+    expect(projectWorkspaceSource).toContain("流程代号，如 ORDER_APPROVAL");
+    expect(projectWorkspaceSource).toContain("手工创建");
+    expect(projectWorkspaceSource).toContain("从仓库导入");
+    expect(projectWorkspaceSource).toContain("不关联数据源");
+    expect(projectWorkspaceSource).toContain("流程代号在当前业务内唯一");
+    expect(projectWorkspaceSource).toContain('workflow.processCode || String(workflow.id)');
+    expect(warehouseSource).toContain('creationSource: "warehouse"');
+    expect(warehouseSource).toContain("processCode:");
   });
 
   it("恢复原始项目工作区的受权业务选择控件和切换状态清理", () => {
