@@ -57,6 +57,15 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).toContain('aria-labelledby="system-config-active-tab"');
   });
 
+  it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {
+    expect(homeSource).toContain('role="tablist" aria-label="流程工作台主导航"');
+    expect(homeSource).toContain('id={`aiflow-console-tab-${item.id}`}');
+    expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
+    expect(homeSource).toContain('aria-selected={section === item.id}');
+    expect(homeSource).toContain('id="aiflow-console-panel" role="tabpanel"');
+    expect(homeSource).toContain('aria-labelledby={`aiflow-console-tab-${section}`}');
+  });
+
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain('grid-cols-1');
     expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_320px]');
