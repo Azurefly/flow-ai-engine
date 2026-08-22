@@ -234,6 +234,19 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("保存当前定义为子流程");
   });
 
+  it("为原版操作、路由和子流程复杂结构提供专用字段控件并保留扩展字段", () => {
+    expect(canvasSource).toContain("ORIGINAL_OBJECT_FIELD_SPECS");
+    expect(canvasSource).toContain("ORIGINAL_LIST_ITEM_SPECS");
+    expect(canvasSource).toContain("权限 ID");
+    expect(canvasSource).toContain("绑定名称");
+    expect(canvasSource).toContain("优先权重");
+    expect(canvasSource).toContain("目标节点");
+    expect(canvasSource).toContain("流程 ID");
+    expect(canvasSource).toContain("子流程出口");
+    expect(canvasSource).toContain("原版扩展字段");
+    expect(canvasSource).toContain("Object.entries(record).filter(([key]) => !knownKeys.has(key))");
+  });
+
   it("新增治理、运行分析与复用资产面板在窄屏保持可访问结构", () => {
     expect(governanceSource).toContain("flex flex-col gap-3");
     expect(governanceSource).toContain("xl:grid-cols-[260px_1fr]");
