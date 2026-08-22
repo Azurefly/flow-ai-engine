@@ -325,6 +325,24 @@ export default function WorkflowCanvas({
     else await canvasRegionRef.current.requestFullscreen();
   };
 
+  useEffect(() => {
+    const focusCanvas = () => canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    const clearHighlight = () => { setSelectedId(null); focusCanvas(); };
+    const neatenCanvas = () => { reactFlow?.fitView({ padding: 0.24, duration: 180 }); focusCanvas(); };
+    const saveCanvasImage = () => { exportCanvasImage(); focusCanvas(); };
+    const fullscreenCanvas = () => { void toggleFullscreen(); };
+    window.addEventListener("flow:clear-highlight", clearHighlight);
+    window.addEventListener("flow:neaten-canvas", neatenCanvas);
+    window.addEventListener("flow:save-canvas-image", saveCanvasImage);
+    window.addEventListener("flow:fullscreen-canvas", fullscreenCanvas);
+    return () => {
+      window.removeEventListener("flow:clear-highlight", clearHighlight);
+      window.removeEventListener("flow:neaten-canvas", neatenCanvas);
+      window.removeEventListener("flow:save-canvas-image", saveCanvasImage);
+      window.removeEventListener("flow:fullscreen-canvas", fullscreenCanvas);
+    };
+  }, [reactFlow, fullscreen]);
+
   return (
     <div data-aiflow-workflow-canvas="" className={inspectorMode === "maximized" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_480px]" : inspectorMode === "compact" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_320px]"}>
       <section ref={canvasRegionRef} className="min-w-0 bg-slate-50">
@@ -334,10 +352,10 @@ export default function WorkflowCanvas({
             {(flowType === "state" || flowType === "control") && <><span className="mx-1 h-5 w-px bg-slate-200" /><span aria-disabled="true" title="原始安装包中为禁用状态，项目资源接入后才可用" className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"><Database size={14} />业务资源</span><span aria-disabled="true" title="原始安装包中为禁用状态，物理资源接入后才可用" className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"><Table2 size={14} />物理资源</span></>}
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-1 border-l border-slate-200 pl-2">
-            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => reactFlow?.fitView({ padding: 0.24, duration: 180 })} title="整理画布"><Waypoints size={14} />整理画布</Button>
-            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={exportCanvasImage} title="保存为图片"><Download size={14} />保存为图片</Button>
-            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => void toggleFullscreen()} title="全屏展示"><Maximize2 size={14} />{fullscreen ? "退出全屏" : "全屏展示"}</Button>
-            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => setSelectedId(null)} title="取消高亮"><MousePointer2 size={14} />取消高亮</Button>
+            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:neaten-canvas"))} title="整理画布"><Waypoints size={14} />整理画布</Button>
+            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:save-canvas-image"))} title="保存为图片"><Download size={14} />保存为图片</Button>
+            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:fullscreen-canvas"))} title="全屏展示"><Maximize2 size={14} />{fullscreen ? "退出全屏" : "全屏展示"}</Button>
+            <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:clear-highlight"))} title="取消高亮"><MousePointer2 size={14} />取消高亮</Button>
           </div>
         </div>
         {!readOnly && (templates.length > 0 || subflows.length > 0) && <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-1.5"><span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">REUSE LIBRARY</span>{templates.map(template => <Button key={template.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 text-xs" onClick={() => addReusableNode({ type: template.nodeType, label: template.name, config: template.config })}><Save size={12} />{template.name}</Button>)}{subflows.filter(subflow => subflow.isEnabled).map(subflow => <Button key={subflow.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-violet-200 text-xs text-violet-700 hover:bg-violet-50" onClick={() => addReusableNode({ type: "subflow", label: subflow.name, config: { subflowId: subflow.id, input: "{{input}}" } })}><FolderTree size={12} />{subflow.name}</Button>)}</div>}

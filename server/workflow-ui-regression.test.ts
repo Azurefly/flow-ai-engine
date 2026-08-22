@@ -198,6 +198,19 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("保存画布");
   });
 
+  it("保留原始流程详情的流程图标题段、画布工具和安全画布联动", () => {
+    expect(governanceSource).toContain("流程图");
+    expect(governanceSource).toContain("详情工具安全作用于当前页面的流程画布");
+    expect(governanceSource).toContain("flow:clear-highlight");
+    expect(governanceSource).toContain("flow:neaten-canvas");
+    expect(governanceSource).toContain("flow:save-canvas-image");
+    expect(governanceSource).toContain("flow:fullscreen-canvas");
+    expect(canvasSource).toContain("window.addEventListener(\"flow:clear-highlight\"");
+    expect(canvasSource).toContain("window.addEventListener(\"flow:neaten-canvas\"");
+    expect(canvasSource).toContain("window.addEventListener(\"flow:save-canvas-image\"");
+    expect(canvasSource).toContain("window.addEventListener(\"flow:fullscreen-canvas\"");
+  });
+
   it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
     expect(dataResourceSource).toContain("DATAFLOW CANVAS REFERENCE");
     expect(dataResourceSource).toContain('projectName} · 数据流画布');
