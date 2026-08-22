@@ -95,6 +95,8 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).toContain("展开配置导航");
     expect(systemConfigSource).toContain("系统配置卡片页签");
     expect(systemConfigSource).toContain('data-aiflow-system-config=""');
+    expect(styleSource).toContain("[data-aiflow-system-config] > div");
+    expect(styleSource).toContain("grid-template-columns: 216px minmax(0, 1fr)");
     expect(projectWorkspaceSource).toContain("状态流程");
     expect(projectWorkspaceSource).toContain("控制流程");
     expect(projectWorkspaceSource).toContain("数据流程");

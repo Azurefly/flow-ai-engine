@@ -326,6 +326,74 @@
   background: #edf4ff;
 }
 
+/* 原 system_config.html 为连续左右分栏及单一卡片页签容器。 */
+[data-aiflow-system-config] {
+  padding: 0;
+  background: #fff;
+}
+
+[data-aiflow-system-config] > div {
+  max-width: none;
+  min-height: calc(100vh - 56px);
+  gap: 0;
+}
+
+@media (min-width: 1024px) {
+  [data-aiflow-system-config] > div {
+    grid-template-columns: 216px minmax(0, 1fr);
+  }
+
+  [data-aiflow-system-config] > div:has(> aside > div > button[title="展开配置导航"]) {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+}
+
+[data-aiflow-system-config] aside,
+[data-aiflow-system-config] section {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-aiflow-system-config] aside {
+  border-top: 0;
+  border-bottom: 0;
+  border-left: 0;
+  padding: 0;
+}
+
+[data-aiflow-system-config] aside > div:first-child {
+  padding: 12px 14px;
+}
+
+[data-aiflow-system-config] aside nav {
+  gap: 0;
+  margin-top: 0;
+}
+
+[data-aiflow-system-config] aside nav button {
+  border-radius: 0;
+  padding: 9px 14px;
+}
+
+[data-aiflow-system-config] aside nav button[class*="bg-[#eaf1ff]"] {
+  border-left: 3px solid #2f77d2;
+  background: #edf4ff;
+}
+
+[data-aiflow-system-config] section {
+  border: 0;
+}
+
+[data-aiflow-system-config] section > div:first-child {
+  min-height: 45px;
+  padding: 7px 16px 0;
+  background: #f6f8fb;
+}
+
+[data-aiflow-system-config] section > div:last-child {
+  padding: 16px 20px;
+}
+
 /* 设计器以原始三栏画布为主，权限、运行和协作信息保持可用但降为次级紧凑区。 */
 [data-aiflow-designer] {
   display: flex;
