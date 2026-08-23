@@ -352,8 +352,23 @@ async function executeNode(node: WorkflowNode, context: JsonRecord, allowSubflow
 
 async function insertNodeRun(runId: string, node: WorkflowNode, input: JsonRecord) {
   const nodeRunId = randomUUID();
-  await db().query("INSERT INTO workflow_node_run (id,runId,nodeId,nodeType,nodeName,status,inputJson,startedAt) VALUES (?,?,?,?,?,'running',?,NOW())", [nodeRunId, runId, node.id, node.type, node.name, JSON.stringify(input)]);
-  return nodeRunId;
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [sequenceUpdate] = await connection.query<mysql.ResultSetHeader>("UPDATE workflow_run SET nextNodeSequence=LAST_INSERT_ID(nextNodeSequence+1) WHERE id=?", [runId]);
+    if (sequenceUpdate.affectedRows !== 1) throw new Error("流程运行不存在，无法记录节点执行顺序。");
+    const [sequenceRows] = await connection.query<mysql.RowDataPacket[]>("SELECT LAST_INSERT_ID() AS sequenceNo");
+    const sequenceNo = Number(sequenceRows[0]?.sequenceNo);
+    if (!Number.isInteger(sequenceNo) || sequenceNo < 1) throw new Error("无法生成节点执行序号。");
+    await connection.query("INSERT INTO workflow_node_run (id,runId,sequenceNo,nodeId,nodeType,nodeName,status,inputJson,startedAt) VALUES (?,?,?,?,?,?,'running',?,NOW())", [nodeRunId, runId, sequenceNo, node.id, node.type, node.name, JSON.stringify(input)]);
+    await connection.commit();
+    return nodeRunId;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 async function finishNodeRun(nodeRunId: string, status: "success" | "failed" | "waiting" | "skipped", startedAt: number, output?: unknown, error?: unknown) {
@@ -886,7 +901,7 @@ export async function getWorkflowRun(runId: string): Promise<WorkflowRunDetail |
   const [runRows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_run WHERE id=? LIMIT 1", [runId]);
   const run = runRows[0];
   if (!run) return null;
-  const [nodeRows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_node_run WHERE runId=? ORDER BY createdAt ASC", [runId]);
+  const [nodeRows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM workflow_node_run WHERE runId=? ORDER BY createdAt ASC,sequenceNo ASC,id ASC", [runId]);
   return { ...run, workflowId: String(run.workflowId), nodeRuns: nodeRows };
 }
 

@@ -197,7 +197,9 @@ describe("流程设计器界面回归约束", () => {
 
   it("实例详情按操作时间倒序展示必要字段，其余字段点击后以列表查看", () => {
     expect(instanceDetailSource).toContain("sortInstanceActions");
-    expect(instanceDetailSource).toContain("operationTime(right)");
+    expect(instanceDetailSource).toContain("operationTimestamp(right.action)");
+    expect(instanceDetailSource).toContain("rightSequence - leftSequence");
+    expect(instanceDetailSource).toContain("definitionNodeOrder");
     expect(instanceDetailSource).toContain("默认仅展示必要字段，并按操作时间倒序排列");
     expect(instanceDetailSource).toContain("data-instance-action-list");
     expect(instanceDetailSource).toContain("查看详情");

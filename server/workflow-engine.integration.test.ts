@@ -56,5 +56,6 @@ describe("工作流引擎真实 HTTP 集成", () => {
     expect(detail?.status).toBe("success");
     expect(detail?.nodeRuns).toHaveLength(5);
     expect(detail?.nodeRuns.every(node => node.status === "success")).toBe(true);
+    expect(detail?.nodeRuns.map(node => Number(node.sequenceNo))).toEqual([1, 2, 3, 4, 5]);
   }, 30_000);
 });

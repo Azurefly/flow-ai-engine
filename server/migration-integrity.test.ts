@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 const scheduleBucketMigration = readFileSync(new URL("../drizzle/0006_thankful_ben_grimm.sql", import.meta.url), "utf8");
 const signingMigration = readFileSync(new URL("../drizzle/0011_restore_signing_roles.sql", import.meta.url), "utf8");
 const organizationMigration = readFileSync(new URL("../drizzle/0012_greedy_firebird.sql", import.meta.url), "utf8");
+const nodeSequenceMigration = readFileSync(new URL("../drizzle/0013_node_run_sequence.sql", import.meta.url), "utf8");
 
 describe("database migration integrity", () => {
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
@@ -43,5 +44,11 @@ describe("database migration integrity", () => {
     expect(organizationMigration).toContain("ADD `category` varchar(96)");
     expect(organizationMigration).toContain("ADD `sortOrder` int DEFAULT 0 NOT NULL");
     expect(organizationMigration).toContain("ADD `description` text");
+  });
+
+  it("adds a per-run node sequence counter and unique node execution order", () => {
+    expect(nodeSequenceMigration).toContain("ADD `nextNodeSequence` int DEFAULT 0 NOT NULL");
+    expect(nodeSequenceMigration).toContain("ADD `sequenceNo` int");
+    expect(nodeSequenceMigration).toContain("CONSTRAINT `workflow_node_run_sequence_unique` UNIQUE(`runId`,`sequenceNo`)");
   });
 });

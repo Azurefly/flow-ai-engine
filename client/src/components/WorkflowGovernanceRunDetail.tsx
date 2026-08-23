@@ -106,7 +106,7 @@ export function RunDetailContent({ run }: { run: any }) {
         <Loader2 className="animate-spin text-slate-400" size={22} />
       </div>
     );
-  const actions = sortInstanceActions(run.nodeRuns ?? []);
+  const actions = sortInstanceActions(run.nodeRuns ?? [], run.definitionSnapshotJson);
   return (
     <div className="space-y-4 p-5">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -191,6 +191,7 @@ export function RunDetailContent({ run }: { run: any }) {
                       startedAt: node.startedAt,
                       finishedAt: node.finishedAt,
                       createdAt: node.createdAt,
+                      sequenceNo: node.sequenceNo,
                       durationMs: node.durationMs,
                     }}
                   />
@@ -209,12 +210,46 @@ export function RunDetailContent({ run }: { run: any }) {
   );
 }
 
-export function sortInstanceActions(actions: any[]) {
-  return [...actions].sort(
-    (left, right) =>
-      new Date(operationTime(right) ?? 0).getTime() -
-      new Date(operationTime(left) ?? 0).getTime()
-  );
+function operationTimestamp(node: any) {
+  const timestamp = new Date(operationTime(node) ?? 0).getTime();
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function definitionNodeOrder(definitionSnapshot: unknown) {
+  const definition = parse(definitionSnapshot);
+  if (!definition || typeof definition !== "object") return new Map<string, number>();
+  const nodes = (definition as { nodes?: unknown }).nodes;
+  if (!Array.isArray(nodes)) return new Map<string, number>();
+  return new Map(nodes.flatMap((node, index) => {
+    if (!node || typeof node !== "object" || !("id" in node)) return [];
+    return [[String((node as { id: unknown }).id), index] as const];
+  }));
+}
+
+export function sortInstanceActions(actions: any[], definitionSnapshot?: unknown) {
+  const nodeOrder = definitionNodeOrder(definitionSnapshot);
+  return actions
+    .map((action, originalIndex) => ({ action, originalIndex }))
+    .sort((left, right) => {
+      const timeDifference = operationTimestamp(right.action) - operationTimestamp(left.action);
+      if (timeDifference) return timeDifference;
+
+      const leftSequence = Number(left.action.sequenceNo);
+      const rightSequence = Number(right.action.sequenceNo);
+      const leftHasSequence = Number.isInteger(leftSequence) && leftSequence > 0;
+      const rightHasSequence = Number.isInteger(rightSequence) && rightSequence > 0;
+      if (leftHasSequence && rightHasSequence) return rightSequence - leftSequence;
+      if (leftHasSequence !== rightHasSequence) return leftHasSequence ? -1 : 1;
+
+      const leftDefinitionOrder = nodeOrder.get(String(left.action.nodeId));
+      const rightDefinitionOrder = nodeOrder.get(String(right.action.nodeId));
+      if (leftDefinitionOrder !== undefined && rightDefinitionOrder !== undefined && leftDefinitionOrder !== rightDefinitionOrder) {
+        return rightDefinitionOrder - leftDefinitionOrder;
+      }
+
+      return left.originalIndex - right.originalIndex;
+    })
+    .map(({ action }) => action);
 }
 
 function Summary({ label, value }: { label: string; value: string }) {

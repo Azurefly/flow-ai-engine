@@ -285,6 +285,7 @@ export const workflowRuns = mysqlTable(
     finishedAt: timestamp("finishedAt"),
     durationMs: int("durationMs"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
+    nextNodeSequence: int("nextNodeSequence").default(0).notNull(),
     executionLockToken: varchar("executionLockToken", { length: 48 }),
     executionLockExpiresAt: timestamp("executionLockExpiresAt"),
     triggeredByUserId: int("triggeredByUserId").references(() => users.id),
@@ -293,23 +294,28 @@ export const workflowRuns = mysqlTable(
   table => [index("workflow_run_workflow_idx").on(table.workflowId, table.createdAt)]
 );
 
-export const workflowNodeRuns = mysqlTable("workflow_node_run", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  runId: varchar("runId", { length: 36 })
-    .notNull()
-    .references(() => workflowRuns.id),
-  nodeId: varchar("nodeId", { length: 120 }).notNull(),
-  nodeType: varchar("nodeType", { length: 48 }).notNull(),
-  nodeName: varchar("nodeName", { length: 160 }).notNull(),
-  status: mysqlEnum("status", ["pending", "running", "waiting", "success", "failed", "skipped"]).default("pending").notNull(),
-  inputJson: json("inputJson").notNull(),
-  outputJson: json("outputJson"),
-  errorJson: json("errorJson"),
-  startedAt: timestamp("startedAt"),
-  finishedAt: timestamp("finishedAt"),
-  durationMs: int("durationMs"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+export const workflowNodeRuns = mysqlTable(
+  "workflow_node_run",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => workflowRuns.id),
+    sequenceNo: int("sequenceNo"),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    nodeType: varchar("nodeType", { length: 48 }).notNull(),
+    nodeName: varchar("nodeName", { length: 160 }).notNull(),
+    status: mysqlEnum("status", ["pending", "running", "waiting", "success", "failed", "skipped"]).default("pending").notNull(),
+    inputJson: json("inputJson").notNull(),
+    outputJson: json("outputJson"),
+    errorJson: json("errorJson"),
+    startedAt: timestamp("startedAt"),
+    finishedAt: timestamp("finishedAt"),
+    durationMs: int("durationMs"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [unique("workflow_node_run_sequence_unique").on(table.runId, table.sequenceNo)]
+);
 
 /** Durable coordination for original single/or-sign/and-sign operate semantics. */
 export const workflowTaskGroups = mysqlTable(
