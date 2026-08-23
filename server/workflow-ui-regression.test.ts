@@ -345,6 +345,8 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("目标节点");
     expect(canvasSource).toContain("流程 ID");
     expect(canvasSource).toContain("子流程出口");
+    expect(canvasSource).toContain("请选择已启用的私有子流程");
+    expect(canvasSource).toContain("zlcxz: selectedSubflow ?");
     expect(canvasSource).toContain("原版扩展字段");
     expect(canvasSource).toContain("Object.entries(record).filter(([key]) => !knownKeys.has(key))");
   });

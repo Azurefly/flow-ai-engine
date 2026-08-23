@@ -60,11 +60,33 @@ async function insertVersion(connection: mysql.PoolConnection, input: { workflow
   );
 }
 
-async function assertSubflowOwnership(definition: Definition, ownerUserId: number) {
-  const subflowIds = Array.from(new Set(definition.nodes.filter(node => node.type === "subflow").map(node => String(node.config.subflowId))));
-  if (!subflowIds.length) return;
-  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow_subflow WHERE ownerUserId=? AND id IN (?)", [ownerUserId, subflowIds]);
-  if (rows.length !== subflowIds.length) throw new Error("流程只能引用流程所有者创建的私有子流程。");
+async function resolveSubflowReferences(definition: Definition, ownerUserId: number, executable: boolean) {
+  const subflowNodes = definition.nodes.filter(node => node.type === "subflow");
+  if (!subflowNodes.length) return definition;
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,name,isEnabled FROM workflow_subflow WHERE ownerUserId=?", [ownerUserId]);
+  const byId = new Map(rows.map(row => [String(row.id), row]));
+  const byName = new Map<string, mysql.RowDataPacket | null>();
+  for (const row of rows) {
+    const name = String(row.name ?? "").trim();
+    if (!name) continue;
+    byName.set(name, byName.has(name) ? null : row);
+  }
+  const nodes = definition.nodes.map(node => {
+    if (node.type !== "subflow") return node;
+    const legacy = node.config.zlcxz && typeof node.config.zlcxz === "object" && !Array.isArray(node.config.zlcxz) ? node.config.zlcxz as Record<string, unknown> : {};
+    const explicitId = String(node.config.subflowId ?? "").trim();
+    const legacyId = String(legacy.id ?? "").trim();
+    const legacyName = String(legacy.text ?? legacy.name ?? "").trim();
+    const mapped = explicitId ? byId.get(explicitId) : byId.get(legacyId) ?? byName.get(legacyName) ?? undefined;
+    if (explicitId && !mapped) throw new Error("流程只能引用流程所有者创建的私有子流程。");
+    if (!mapped) {
+      if (executable) throw new Error("原版子流程尚未映射到当前所有者已启用的私有子流程。");
+      return node;
+    }
+    if (executable && !Boolean(mapped.isEnabled)) throw new Error("流程只能发布已启用的私有子流程引用。");
+    return { ...node, config: { ...node.config, subflowId: String(mapped.id), zlcxz: Object.keys(legacy).length ? legacy : { id: String(mapped.id), text: String(mapped.name) } } };
+  });
+  return { ...definition, nodes };
 }
 
 export async function listWorkflows(user: WorkflowUser) {
@@ -128,8 +150,10 @@ export async function updateWorkflow(workflowId: string, user: WorkflowUser, val
   if (!(await hasWorkflowPermission(user, workflowId, permission))) return null;
   const current = await getWorkflow(workflowId, user) as ({ ownerUserId: number; projectId?: string | null; auditStatus?: "init" | "approved" | "rejected"; name: string; status: "draft" | "published"; definitionVersion: number; definition: Definition } | null);
   if (!current) return null;
-  const definition = values.definition === undefined ? current.definition : validate(values.definition, Boolean(values.publish));
-  await assertSubflowOwnership(definition, user.id);
+  const executable = Boolean(values.publish) || (current.status === "published" && !values.unpublish);
+  const draftDefinition = values.definition === undefined ? current.definition : validate(values.definition, false);
+  const definition = await resolveSubflowReferences(draftDefinition, current.ownerUserId, executable);
+  if (executable) validate(definition, true);
   if (values.publish && current.projectId && (await isProjectApprovalRequired()) && current.auditStatus !== "approved") throw new Error("当前审批规则要求项目流程通过审核后才能发布。");
   const nextName = values.name ?? current.name;
   const nextStatus = values.unpublish ? "draft" : values.publish ? "published" : current.status;

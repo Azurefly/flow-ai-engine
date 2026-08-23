@@ -90,7 +90,8 @@ describe("流程定义 JSON 导入导出与持久化", () => {
     subflowId = subflow.id;
     const subflowNode = imported.nodes.find(node => node.id === "subflow");
     if (!subflowNode) throw new Error("测试定义缺少子流程节点。");
-    subflowNode.config.subflowId = subflowId;
+    delete subflowNode.config.subflowId;
+    subflowNode.config.zlcxz = { id: subflowId, text: "定义持久化引用子流程" };
     const invalidImported = JSON.parse(JSON.stringify(importedDefinition)) as Definition;
     (invalidImported.nodes[1] as any).config = [];
     await expect(routeCaller.workflow.update({ id: workflowId, definition: invalidImported })).rejects.toThrow("节点配置必须是 JSON 对象");
@@ -102,9 +103,13 @@ describe("流程定义 JSON 导入导出与持久化", () => {
     const copy = await duplicateWorkflow(workflowId, user, "导入定义副本");
     copyId = (copy as any).id;
 
-    expect(reloaded.definition).toEqual(imported);
-    expect(reimported).toEqual(imported);
-    expect((copy as any).definition).toEqual(imported);
+    const expectedImported = JSON.parse(JSON.stringify(imported)) as Definition;
+    const expectedSubflowNode = expectedImported.nodes.find(node => node.id === "subflow");
+    if (!expectedSubflowNode) throw new Error("期望定义缺少子流程节点。");
+    expectedSubflowNode.config.subflowId = subflowId;
+    expect(reloaded.definition).toEqual(expectedImported);
+    expect(reimported).toEqual(expectedImported);
+    expect((copy as any).definition).toEqual(expectedImported);
     expect(Number(routedUpdate.definitionVersion)).toBe(initialVersion + 1);
     expect(Number(reloaded.definitionVersion)).toBe(initialVersion + 1);
   }, 45_000);
