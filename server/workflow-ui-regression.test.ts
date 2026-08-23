@@ -127,6 +127,20 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('requested === "system" && user.role !== "admin" ? "flows" : requested');
   });
 
+  it("设计器按真实来源返回，并将运行监控作为已启动流程的同级页签", () => {
+    expect(homeSource).toContain('type FlowEditorReturn = "center" | "workspace" | "detail" | "warehouse"');
+    expect(homeSource).toContain("const openFlowEditor = useCallback");
+    expect(homeSource).toContain("const returnFromFlowEditor = useCallback");
+    expect(homeSource).toContain('openFlowEditor(workflowId, "workspace")');
+    expect(homeSource).toContain('openFlowEditor(selectedId, "detail")');
+    expect(homeSource).toContain('openFlowEditor(workflowId, "warehouse")');
+    expect(homeSource).toContain('backLabel={flowEditorReturnLabel}');
+    expect(homeSource).toContain('aria-label="已启动流程视图"');
+    expect(homeSource).toContain('aria-selected={runView === "workbench"}');
+    expect(homeSource).toContain('aria-selected={runView === "monitor"}');
+    expect(homeSource).toContain('setRunView("monitor")');
+  });
+
   it("保留窄屏工作区选择器与顶层路由联动", () => {
     expect(homeSource).toContain('data-aiflow-mobile-workspace-nav');
     expect(homeSource).toContain('aria-label="切换流程工作区"');
@@ -429,7 +443,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("若无元件，请添加元件。");
     expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
     expect(canvasSource).toContain("next.nodes.some(node => node.id === current)");
-    expect(homeSource).toContain("点击流程名称可返回流程设计中心");
+    expect(homeSource).toContain("返回项目流程中心");
+    expect(homeSource).toContain("返回流程详情");
+    expect(homeSource).toContain("返回流程仓库");
     expect(homeSource).toContain("onBackToDesignCenter");
     expect(homeSource).toContain("保存画布");
   });
