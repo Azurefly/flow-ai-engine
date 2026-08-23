@@ -166,7 +166,7 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
       await caller.config.bindOrganizationRole({ unitId, roleId });
       await caller.iam.assignSystemRole({
         userId: employee.id,
-        roleCode: "workflow_viewer",
+        roleCode: "workflow_creator",
         note: "验证直接角色与部门继承角色区分",
       });
 
@@ -199,7 +199,7 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
       ).toBe(false);
       expect(employeeMembership.directRoles).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ roleCode: "workflow_viewer" }),
+          expect.objectContaining({ roleCode: "workflow_creator" }),
         ])
       );
       expect(employeeMembership.inheritedRoles).toEqual(

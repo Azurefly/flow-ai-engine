@@ -593,7 +593,7 @@ export default function OrganizationManagementPage({
                 <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="text-xl font-semibold text-slate-800">
+                      <h2 className="min-w-0 break-words text-xl font-semibold text-slate-800">
                         {selected.name}
                       </h2>
                       <span
@@ -602,7 +602,7 @@ export default function OrganizationManagementPage({
                         {selected.status === "active" ? "启用" : "停用"}
                       </span>
                     </div>
-                    <p className="mt-1 font-mono text-xs text-[#2d6bea]">
+                    <p className="mt-1 break-all font-mono text-xs text-[#2d6bea]">
                       {selected.code}
                     </p>
                   </div>
@@ -816,13 +816,13 @@ export default function OrganizationManagementPage({
                               key={member.id}
                               className="border-t border-slate-100"
                             >
-                              <td className="px-4 py-3 font-medium text-slate-800">
+                              <td className="max-w-[220px] break-words px-4 py-3 font-medium text-slate-800">
                                 {member.name || member.username}
                               </td>
-                              <td className="px-4 py-3 text-xs text-slate-500">
+                              <td className="max-w-[220px] break-all px-4 py-3 text-xs text-slate-500">
                                 {member.username}
                               </td>
-                              <td className="px-4 py-3">
+                              <td className="max-w-[220px] break-words px-4 py-3">
                                 {member.title || "未配置"}
                               </td>
                               <td className="px-4 py-3 text-slate-500">
@@ -960,12 +960,12 @@ export default function OrganizationManagementPage({
                           key={binding.id}
                           className="flex flex-col gap-3 rounded-lg border border-slate-200 p-4 sm:flex-row sm:items-center sm:justify-between"
                         >
-                          <div>
+                          <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <p className="font-semibold text-slate-800">
+                              <p className="min-w-0 break-words font-semibold text-slate-800">
                                 {binding.roleName}
                               </p>
-                              <code className="rounded bg-slate-100 px-2 py-1 text-[10px] text-[#245fc8]">
+                              <code className="max-w-full break-all rounded bg-slate-100 px-2 py-1 text-[10px] text-[#245fc8]">
                                 {binding.roleCode}
                               </code>
                             </div>
@@ -1445,7 +1445,7 @@ function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 p-4">
       <p className="text-xs font-medium text-slate-400">{label}</p>
-      <p className="mt-2 text-sm font-medium text-slate-700">{value}</p>
+      <p className="mt-2 break-words text-sm font-medium text-slate-700">{value}</p>
     </div>
   );
 }
@@ -1463,7 +1463,7 @@ function Field({
   placeholder?: string;
 }) {
   return (
-    <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+    <label className="grid min-w-0 gap-1.5 text-sm font-medium text-slate-700">
       {label}
       <Input
         type={type}
@@ -1496,10 +1496,10 @@ function RoleSourceList({
             className="rounded-md border border-slate-200 bg-white p-3"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-slate-700">
+              <span className="min-w-0 break-words text-sm font-medium text-slate-700">
                 {role.roleName}
               </span>
-              <code className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">
+              <code className="max-w-full break-all rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">
                 {role.roleCode}
               </code>
             </div>

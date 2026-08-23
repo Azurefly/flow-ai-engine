@@ -157,6 +157,9 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationPageSource).toContain("用户直接角色");
     expect(organizationPageSource).toContain("部门继承角色");
     expect(organizationPageSource).toContain("没有匹配的机构");
+    expect(organizationPageSource).toContain('className="mt-1 break-all font-mono');
+    expect(organizationPageSource).toContain("max-w-[220px] break-words");
+    expect(organizationPageSource).toContain("max-w-full break-all");
   });
 
   it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {
