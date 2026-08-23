@@ -45,14 +45,28 @@ async function canAccessTask(user: User, task: mysql.RowDataPacket, write = fals
 
 function presentTask(row: mysql.RowDataPacket) {
   const status = String(row.status);
-  const displayStatus = status === "pending" ? String(row.pendingStatusName || "待审批") : status === "claimed" ? "处理中" : status === "completed" ? "已审核" : "已取消";
+  const result = parseJson(row.resultJson);
+  const displayStatus = status === "pending"
+    ? String(row.pendingStatusName || "待审批")
+    : status === "claimed"
+      ? "处理中"
+      : status === "completed"
+        ? result?.decision === "rejected" ? "已拒绝" : "已审核"
+        : "已取消";
   return {
     ...row,
     displayStatus,
     candidateUserIds: candidateIds(row),
     payload: parseJson(row.payloadJson),
-    result: parseJson(row.resultJson),
-    approvalProgress: row.approvalGroupId ? { completed: Number(row.completedApprovals ?? 0), required: Number(row.requiredApprovals ?? 1), total: Number(row.totalApprovers ?? 1) } : null,
+    result,
+    approvalProgress: row.approvalGroupId ? {
+      completed: Number(row.approvedApprovals ?? 0),
+      approved: Number(row.approvedApprovals ?? 0),
+      rejected: Number(row.rejectedApprovals ?? 0),
+      decided: Number(row.completedDecisions ?? 0),
+      required: Number(row.requiredApprovals ?? 1),
+      total: Number(row.totalApprovers ?? 1),
+    } : null,
   };
 }
 
@@ -65,7 +79,10 @@ export async function listWorkflowTasks(user: User, input: { view: TaskView; pro
   params.push(Math.min(Math.max(input.limit ?? 100, 1), 200));
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,
-            g.totalApprovers,g.requiredApprovals,(SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedApprovals
+            g.totalApprovers,g.requiredApprovals,
+            (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
+            (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
+            (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
        FROM workflow_task t JOIN workflow w ON w.id=t.workflowId JOIN workflow_run r ON r.id=t.runId
        LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
        LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId
@@ -80,7 +97,10 @@ export async function listWorkflowTasks(user: User, input: { view: TaskView; pro
 export async function getWorkflowTask(user: User, taskId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,
-            g.totalApprovers,g.requiredApprovals,(SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedApprovals
+            g.totalApprovers,g.requiredApprovals,
+            (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
+            (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
+            (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
        FROM workflow_task t JOIN workflow w ON w.id=t.workflowId JOIN workflow_run r ON r.id=t.runId
        LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
        LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId WHERE t.id=? LIMIT 1`,
@@ -115,7 +135,7 @@ export async function completeWorkflowTask(user: User, taskId: string, result: J
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true))) throw new Error("无权完成该人工任务。 ");
   const resumed = await resumeWorkflowTask({ taskId, completedBy: user, result });
-  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: "task_completed", runId: resumed.runId, status: resumed.status } });
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: result.decision === "rejected" ? "task_rejected" : "task_approved", decision: result.decision, runId: resumed.runId, status: resumed.status } });
   return resumed;
 }
 

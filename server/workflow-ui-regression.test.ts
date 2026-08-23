@@ -1,36 +1,68 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const homeSource = readFileSync(new URL("../client/src/pages/Home.tsx", import.meta.url), "utf8");
-const canvasSource = readFileSync(new URL("../client/src/components/WorkflowCanvas.tsx", import.meta.url), "utf8");
-const nodeContractSource = readFileSync(new URL("../shared/workflow-node-contract.ts", import.meta.url), "utf8");
-const governanceSource = readFileSync(new URL("../client/src/components/WorkflowGovernance.tsx", import.meta.url), "utf8");
-const runCenterSource = readFileSync(new URL("../client/src/components/RunCenter.tsx", import.meta.url), "utf8");
-const projectWorkspaceSource = readFileSync(new URL("../client/src/components/ProjectWorkspace.tsx", import.meta.url), "utf8");
-const warehouseSource = readFileSync(new URL("../client/src/components/WorkflowWarehouse.tsx", import.meta.url), "utf8");
-const systemConfigSource = readFileSync(new URL("../client/src/components/SystemConfigShell.tsx", import.meta.url), "utf8");
-const organizationPageSource = readFileSync(new URL("../client/src/components/OrganizationManagementPage.tsx", import.meta.url), "utf8");
-const dataResourceSource = readFileSync(new URL("../client/src/components/DataResourceCenter.tsx", import.meta.url), "utf8");
-const creationDialogSource = readFileSync(new URL("../client/src/components/CreationDialog.tsx", import.meta.url), "utf8");
-const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
-const processWorkbenchRunTabSource = readFileSync(new URL("../client/src/components/ProcessWorkbenchRunTab.tsx", import.meta.url), "utf8");
-const instanceDetailSource = readFileSync(new URL("../client/src/components/WorkflowGovernanceRunDetail.tsx", import.meta.url), "utf8");
-const processDetailPageSource = readFileSync(new URL("../client/src/components/WorkflowDetailPage.tsx", import.meta.url), "utf8");
-const consoleRouteSource = readFileSync(new URL("../shared/console-route.ts", import.meta.url), "utf8");
-const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
-const iamServiceSource = readFileSync(new URL("./iam-service.ts", import.meta.url), "utf8");
-const projectServiceSource = readFileSync(new URL("./project-service.ts", import.meta.url), "utf8");
-const styleSource = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
+const source = (path: string) =>
+  readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
+const homeSource = source("../client/src/pages/Home.tsx");
+const canvasSource = source("../client/src/components/WorkflowCanvas.tsx");
+const nodeContractSource = source("../shared/workflow-node-contract.ts");
+const governanceSource = source(
+  "../client/src/components/WorkflowGovernance.tsx"
+);
+const runCenterSource = source("../client/src/components/RunCenter.tsx");
+const projectWorkspaceSource = source(
+  "../client/src/components/ProjectWorkspace.tsx"
+);
+const warehouseSource = source(
+  "../client/src/components/WorkflowWarehouse.tsx"
+);
+const systemConfigSource = source(
+  "../client/src/components/SystemConfigShell.tsx"
+);
+const organizationPageSource = source(
+  "../client/src/components/OrganizationManagementPage.tsx"
+);
+const dataResourceSource = source(
+  "../client/src/components/DataResourceCenter.tsx"
+);
+const creationDialogSource = source(
+  "../client/src/components/CreationDialog.tsx"
+);
+const processWorkbenchSource = source(
+  "../client/src/components/ProcessWorkbench.tsx"
+);
+const processWorkbenchRunTabSource = source(
+  "../client/src/components/ProcessWorkbenchRunTab.tsx"
+);
+const instanceDetailSource = source(
+  "../client/src/components/WorkflowGovernanceRunDetail.tsx"
+);
+const processDetailPageSource = source(
+  "../client/src/components/WorkflowDetailPage.tsx"
+);
+const consoleRouteSource = source("../shared/console-route.ts");
+const routerSource = source("./routers.ts");
+const iamServiceSource = source("./iam-service.ts");
+const projectServiceSource = source("./project-service.ts");
+const styleSource = source("../client/src/index.css");
 
 describe("流程设计器界面回归约束", () => {
   it("新建流程通过按钮打开创建弹窗，控制台壳层可在窄屏纵向收敛", () => {
     expect(homeSource).toContain("setCreateFlowOpen(true)");
     expect(homeSource).toContain('title="新建流程"');
-    expect(homeSource).toContain("onSubmit={() => createFlow.mutate({ name: newFlowName })}");
-    expect(homeSource).toContain("flex min-h-[calc(100vh-56px)] flex-col md:flex-row");
+    expect(homeSource).toContain(
+      "onSubmit={() => createFlow.mutate({ name: newFlowName })}"
+    );
+    expect(homeSource).toContain(
+      "flex min-h-[calc(100vh-56px)] flex-col md:flex-row"
+    );
     expect(homeSource).toContain('sidebarOpen ? "w-full md:w-72"');
-    expect(homeSource).toContain("key={`${workflow.id}:${workflow.definitionVersion}`}");
-    expect(homeSource).not.toContain("workflow.definitionVersion}:${JSON.stringify(definition).length");
+    expect(homeSource).toContain(
+      "key={`${workflow.id}:${workflow.definitionVersion}`}"
+    );
+    expect(homeSource).not.toContain(
+      "workflow.definitionVersion}:${JSON.stringify(definition).length"
+    );
     expect(homeSource).toContain("trpc.workflow.unpublish.useMutation");
     expect(homeSource).toContain("取消发布");
     expect(homeSource).toContain("历史版本与运行审计已保留");
@@ -38,15 +70,21 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("运行字段");
     expect(homeSource).toContain("添加运行字段");
     expect(homeSource).toContain("canRun={canRun}");
-    expect(homeSource).not.toContain('className="mt-2 h-20 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono');
+    expect(homeSource).not.toContain(
+      'className="mt-2 h-20 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono'
+    );
   });
 
   it("统一新增入口为按钮触发弹窗，并仅在成功后关闭清理", () => {
     expect(creationDialogSource).toContain("data-aiflow-creation-dialog");
     expect(creationDialogSource).toContain("if (!pending) onOpenChange(next)");
-    expect(creationDialogSource).toContain('type="button" variant="outline" disabled={pending}');
+    expect(creationDialogSource).toContain(
+      'type="button" variant="outline" disabled={pending}'
+    );
     expect(creationDialogSource).toContain("void onSubmit()");
-    expect(homeSource).toContain("const [normalDialogOpen, setNormalDialogOpen]");
+    expect(homeSource).toContain(
+      "const [normalDialogOpen, setNormalDialogOpen]"
+    );
     expect(homeSource).toContain("const [aiDialogOpen, setAiDialogOpen]");
     expect(homeSource).toContain("await onCreate();");
     expect(homeSource).toContain("setNormalDialogOpen(false)");
@@ -54,7 +92,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("setAiDialogOpen(false)");
     expect(projectWorkspaceSource).toContain("<CreationDialog");
     expect(warehouseSource).toContain("<Dialog open={Boolean(folderDialog)}");
-    expect(warehouseSource).toContain("createFolder.mutate({ projectId: activeProjectId");
+    expect(warehouseSource).toContain(
+      "createFolder.mutate({ projectId: activeProjectId"
+    );
     expect(dataResourceSource).toContain("<CreationDialog");
     expect(organizationPageSource).toContain("<CreationDialog");
   });
@@ -63,7 +103,9 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("序号");
     expect(projectWorkspaceSource).toContain("根部门");
     expect(projectWorkspaceSource).toContain("rootDepartment");
-    expect(projectWorkspaceSource).toContain("当前内部项目模型未配置根部门，未以工作域字段替代。");
+    expect(projectWorkspaceSource).toContain(
+      "当前内部项目模型未配置根部门，未以工作域字段替代。"
+    );
     expect(projectWorkspaceSource).toContain("colSpan={10}");
   });
 
@@ -73,21 +115,29 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("从仓库导入");
     expect(projectWorkspaceSource).toContain("不关联数据源");
     expect(projectWorkspaceSource).toContain("流程代号在当前业务内唯一");
-    expect(projectWorkspaceSource).toContain("workflow.processCode || String(workflow.id)");
+    expect(projectWorkspaceSource).toContain(
+      "workflow.processCode || String(workflow.id)"
+    );
     expect(warehouseSource).toContain('creationSource: "warehouse"');
     expect(warehouseSource).toContain("processCode:");
   });
 
   it("保留流程设计中心的项目内关联数据源列表列", () => {
     expect(projectWorkspaceSource).toContain("关联数据源");
-    expect(projectWorkspaceSource).toContain("const sourceNameById = new Map(dataSources.map");
-    expect(projectWorkspaceSource).toContain('workflow.flowType !== "data" ? "—"');
+    expect(projectWorkspaceSource).toContain(
+      "const sourceNameById = new Map(dataSources.map"
+    );
+    expect(projectWorkspaceSource).toContain(
+      'workflow.flowType !== "data" ? "—"'
+    );
     expect(projectWorkspaceSource).toContain("已关联数据源");
     expect(projectWorkspaceSource).toContain("未关联");
   });
 
   it("保留仓库上传仅适用于状态和控制流程的类型边界", () => {
-    expect(warehouseSource).toContain("数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。");
+    expect(warehouseSource).toContain(
+      "数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。"
+    );
     expect(projectWorkspaceSource).toContain("creationSource");
   });
 
@@ -106,8 +156,12 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留原始流程设计中心的项目级审批记录入口", () => {
     expect(projectWorkspaceSource).toContain("选择流程查看审批记录");
-    expect(projectWorkspaceSource).toContain("trpc.project.workflowAudit.useQuery");
-    expect(projectWorkspaceSource).toContain("仅展示当前业务内所选流程的审核与审核重置审计");
+    expect(projectWorkspaceSource).toContain(
+      "trpc.project.workflowAudit.useQuery"
+    );
+    expect(projectWorkspaceSource).toContain(
+      "仅展示当前业务内所选流程的审核与审核重置审计"
+    );
     expect(projectWorkspaceSource).toContain("正在读取审批记录…");
     expect(projectWorkspaceSource).toContain("审核通过");
     expect(projectWorkspaceSource).toContain("审核驳回");
@@ -129,42 +183,68 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).toContain('aria-controls="system-config-card"');
     expect(systemConfigSource).toContain('id="system-config-card"');
     expect(systemConfigSource).toContain('role="tabpanel"');
-    expect(systemConfigSource).toContain('aria-labelledby="system-config-active-tab"');
+    expect(systemConfigSource).toContain(
+      'aria-labelledby="system-config-active-tab"'
+    );
   });
 
   it("组织架构从系统配置进入独立安全页面，并以弹窗提交真实接口", () => {
-    expect(consoleRouteSource).toContain('view: "config" | "identity" | "organization"');
-    expect(consoleRouteSource).toContain('if (route.view === "organization") return "#/system/organization"');
+    expect(consoleRouteSource).toContain(
+      'view: "config" | "identity" | "organization"'
+    );
+    expect(consoleRouteSource).toContain(
+      'if (route.view === "organization") return "#/system/organization"'
+    );
     expect(homeSource).toContain("OrganizationManagementPage");
     expect(homeSource).toContain('view: "organization"');
     expect(systemConfigSource).toContain("打开组织架构管理");
     expect(systemConfigSource).toContain("onOpenOrganization");
-    expect(systemConfigSource).toContain('{ id: "access" as const, label: "组织与权限"');
+    expect(systemConfigSource).toContain(
+      '{ id: "access" as const, label: "组织与权限"'
+    );
     expect(systemConfigSource).not.toContain('{ id: "organization" as const');
     expect(systemConfigSource).not.toContain('{ id: "identity" as const');
-    expect(systemConfigSource).toContain("组织、账号、角色和权限统一从一个入口管理");
+    expect(systemConfigSource).toContain(
+      "组织、账号、角色和权限统一从一个入口管理"
+    );
     expect(systemConfigSource).toContain("打开身份与权限中心");
-    expect(organizationPageSource).toContain('data-aiflow-organization-page=""');
+    expect(organizationPageSource).toContain(
+      'data-aiflow-organization-page=""'
+    );
     expect(organizationPageSource).toContain("新增根部门");
     expect(organizationPageSource).toContain("新增同级");
     expect(organizationPageSource).toContain("新增子部门");
     expect(organizationPageSource).toContain("部门概览");
     expect(organizationPageSource).toContain("成员与岗位");
     expect(organizationPageSource).toContain("权限组");
-    expect(organizationPageSource).toContain("createOrganizationUnit.useMutation");
-    expect(organizationPageSource).toContain("assignOrganizationMember.useMutation");
-    expect(organizationPageSource).toContain("bindOrganizationRole.useMutation");
+    expect(organizationPageSource).toContain(
+      "createOrganizationUnit.useMutation"
+    );
+    expect(organizationPageSource).toContain(
+      "assignOrganizationMember.useMutation"
+    );
+    expect(organizationPageSource).toContain(
+      "bindOrganizationRole.useMutation"
+    );
     expect(organizationPageSource).toContain("取消不会写入数据库");
-    expect(organizationPageSource).toContain("moveOrganizationMember.useMutation");
-    expect(organizationPageSource).toContain("setPrimaryOrganizationMembership.useMutation");
-    expect(organizationPageSource).toContain("deleteOrganizationUnit.useMutation");
+    expect(organizationPageSource).toContain(
+      "moveOrganizationMember.useMutation"
+    );
+    expect(organizationPageSource).toContain(
+      "setPrimaryOrganizationMembership.useMutation"
+    );
+    expect(organizationPageSource).toContain(
+      "deleteOrganizationUnit.useMutation"
+    );
     expect(organizationPageSource).toContain("createUser.useMutation");
     expect(organizationPageSource).toContain("新建内部用户");
     expect(organizationPageSource).toContain("包含子机构成员");
     expect(organizationPageSource).toContain("用户直接角色");
     expect(organizationPageSource).toContain("部门继承角色");
     expect(organizationPageSource).toContain("没有匹配的机构");
-    expect(organizationPageSource).toContain('className="mt-1 break-all font-mono');
+    expect(organizationPageSource).toContain(
+      'className="mt-1 break-all font-mono'
+    );
     expect(organizationPageSource).toContain("max-w-[220px] break-words");
     expect(organizationPageSource).toContain("max-w-full break-all");
   });
@@ -186,8 +266,12 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("data-iam-role-workbench");
     expect(homeSource).toContain('aria-label="搜索用户"');
     expect(homeSource).toContain('aria-label="搜索角色"');
-    expect(homeSource).toContain("filteredUsers.some(account => Number(account.id) === selectedUserId)");
-    expect(homeSource).toContain("filteredRoles.some(role => Number(role.id) === selectedRoleId)");
+    expect(homeSource).toContain(
+      "filteredUsers.some(account => Number(account.id) === selectedUserId)"
+    );
+    expect(homeSource).toContain(
+      "filteredRoles.some(role => Number(role.id) === selectedRoleId)"
+    );
     expect(homeSource).toContain("assignSystemRole.useMutation");
     expect(homeSource).toContain("revokeRoleAssignment.useMutation");
     expect(homeSource).toContain("为用户绑定角色");
@@ -205,7 +289,9 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).toContain("operationTimestamp(right.action)");
     expect(instanceDetailSource).toContain("rightSequence - leftSequence");
     expect(instanceDetailSource).toContain("definitionNodeOrder");
-    expect(instanceDetailSource).toContain("默认仅展示必要字段，并按操作时间倒序排列");
+    expect(instanceDetailSource).toContain(
+      "默认仅展示必要字段，并按操作时间倒序排列"
+    );
     expect(instanceDetailSource).toContain("data-instance-action-list");
     expect(instanceDetailSource).toContain("查看详情");
     expect(instanceDetailSource).toContain("flattenInstanceFields");
@@ -215,35 +301,68 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {
-    expect(homeSource).toContain('role="tablist" aria-label="流程工作台主导航"');
+    expect(homeSource).toContain(
+      'role="tablist" aria-label="流程工作台主导航"'
+    );
     expect(homeSource).toContain("id={`aiflow-console-tab-${item.id}`}");
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
     expect(homeSource).toContain("aria-selected={section === item.id}");
     expect(homeSource).toContain('id="aiflow-console-panel" role="tabpanel"');
-    expect(homeSource).toContain("aria-labelledby={`aiflow-console-tab-${section}`}");
+    expect(homeSource).toContain(
+      "aria-labelledby={`aiflow-console-tab-${section}`}"
+    );
   });
 
   it("保留顶层与子页面哈希路由同步、异步权限恢复和安全回退", () => {
-    expect(consoleRouteSource).toContain("export const consoleSections: ConsoleSection[]");
-    expect(consoleRouteSource).toContain('"flows",\n  "runs",\n  "warehouse",\n  "system"');
-    expect(consoleRouteSource).toContain("export function parseConsoleRoute(hash: string): ConsoleRoute");
-    expect(consoleRouteSource).toContain("export function formatConsoleRoute(route: ConsoleRoute): string");
-    expect(consoleRouteSource).toContain('view: "workspace"; projectId: string');
-    expect(consoleRouteSource).toContain('view: "detail" | "editor"; workflowId: string');
-    expect(consoleRouteSource).toContain('view: "monitor"; workflowId: string; runId?: string');
+    expect(consoleRouteSource).toContain(
+      "export const consoleSections: ConsoleSection[]"
+    );
+    expect(consoleRouteSource).toContain(
+      '"flows", "runs", "warehouse", "system"'
+    );
+    expect(consoleRouteSource).toContain(
+      "export function parseConsoleRoute(hash: string): ConsoleRoute"
+    );
+    expect(consoleRouteSource).toContain(
+      "export function formatConsoleRoute(route: ConsoleRoute): string"
+    );
+    expect(consoleRouteSource).toContain(
+      'view: "workspace"; projectId: string'
+    );
+    expect(consoleRouteSource).toContain(
+      'view: "detail" | "editor"; workflowId: string'
+    );
+    expect(consoleRouteSource).toContain(
+      'view: "monitor"; workflowId: string; runId?: string'
+    );
     expect(homeSource).toContain("const [requestedRoute, setRequestedRoute]");
-    expect(homeSource).toContain("if (!workflows.isSuccess || !projects.isSuccess || (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)) return");
-    expect(homeSource).toContain('if (!workflow || workflow.id !== route.workflowId) { replaceWith({ section: "flows", view: "center" })');
+    expect(homeSource).toContain("!workflows.isSuccess || !projects.isSuccess");
+    expect(homeSource).toContain(
+      "!selectedWorkflowFromList && selectedWorkflowQuery.isPending"
+    );
+    expect(homeSource).toContain(
+      'if (!workflow || workflow.id !== route.workflowId) { replaceWith({ section: "flows", view: "center" })'
+    );
     expect(homeSource).toContain("data-aiflow-route-restoring");
-    expect(homeSource).toContain('if (user.role !== "admin") { replaceWith({ section: "flows", view: "center" })');
+    expect(homeSource).toContain(
+      'if (user.role !== "admin") { replaceWith({ section: "flows", view: "center" })'
+    );
     expect(homeSource).toContain("const navigateSection = useCallback");
-    expect(homeSource).toContain('window.history[options?.replace ? "replaceState" : "pushState"]');
-    expect(homeSource).toContain('window.addEventListener("popstate", restoreConsoleRoute)');
-    expect(homeSource).toContain('window.addEventListener("hashchange", restoreConsoleRoute)');
+    expect(homeSource).toContain(
+      'window.history[options?.replace ? "replaceState" : "pushState"]'
+    );
+    expect(homeSource).toContain(
+      'window.addEventListener("popstate", restoreConsoleRoute)'
+    );
+    expect(homeSource).toContain(
+      'window.addEventListener("hashchange", restoreConsoleRoute)'
+    );
   });
 
   it("设计器按真实来源返回，并将运行监控作为已启动流程的同级页签", () => {
-    expect(homeSource).toContain('type FlowEditorReturn = "center" | "workspace" | "detail" | "warehouse"');
+    expect(homeSource).toContain(
+      'type FlowEditorReturn = "center" | "workspace" | "detail" | "warehouse"'
+    );
     expect(homeSource).toContain("const openFlowEditor = useCallback");
     expect(homeSource).toContain("const returnFromFlowEditor = useCallback");
     expect(homeSource).toContain('openFlowEditor(workflowId, "workspace")');
@@ -259,14 +378,21 @@ describe("流程设计器界面回归约束", () => {
   it("保留窄屏工作区选择器与顶层路由联动", () => {
     expect(homeSource).toContain("data-aiflow-mobile-workspace-nav");
     expect(homeSource).toContain('aria-label="切换流程工作区"');
-    expect(homeSource).toContain("onChange={event => navigateSection(event.target.value as ConsoleSection)}");
-    expect(homeSource).toContain("{nav.map(item => <option");
+    expect(homeSource).toContain(
+      "navigateSection(event.target.value as ConsoleSection)"
+    );
+    expect(homeSource).toContain("nav.map(item =>");
+    expect(homeSource).toContain("<option key={item.id}");
     expect(homeSource).toContain("md:hidden");
   });
 
   it("延迟加载非活动设计器与身份中心查询，避免首屏超大 tRPC 批量", () => {
-    expect(homeSource).toContain('const editorActive = section === "flows" && flowView === "editor"');
-    expect(homeSource).toContain('const identityActive = section === "system" && systemView === "identity" && user.role === "admin"');
+    expect(homeSource).toContain(
+      'const editorActive = section === "flows" && flowView === "editor"'
+    );
+    expect(homeSource).toContain(
+      'const identityActive = section === "system" && systemView === "identity" && user.role === "admin"'
+    );
     expect(homeSource).toContain("enabled: editorActive, staleTime: 60_000");
     expect(homeSource).toContain("enabled: editorActive, retry: false");
     expect(homeSource).toContain("enabled: identityActive, retry: false");
@@ -277,7 +403,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("grid-cols-1");
     expect(canvasSource).toContain("lg:grid-cols-[minmax(0,1fr)_420px]");
     expect(canvasSource).toContain("lg:grid-cols-[minmax(0,1fr)_620px]");
-    expect(canvasSource).toContain("border-t border-slate-200 bg-white lg:border-l lg:border-t-0");
+    expect(canvasSource).toContain(
+      "border-t border-slate-200 bg-white lg:border-l lg:border-t-0"
+    );
   });
 
   it("画布工具与节点图例分行展示，并以圆角徽标保护图标和长文本", () => {
@@ -295,7 +423,9 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("[data-flow-node-palette]");
     expect(styleSource).toContain("[data-flow-canvas-actions]");
     expect(styleSource).toContain("border-radius: 16px;");
-    expect(styleSource).not.toContain(".react-flow__node-workflowNode > div {\n  border-radius: 2px;");
+    expect(styleSource).not.toContain(
+      ".react-flow__node-workflowNode > div {\n  border-radius: 2px;"
+    );
   });
 
   it("路由规则名称和目标缺失时显示稳定回退文案，不渲染 undefined", () => {
@@ -337,30 +467,56 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("编辑流程基本信息");
     expect(governanceSource).toContain("流程名称");
     expect(governanceSource).toContain("流程说明");
-    expect(governanceSource).toContain("trpc.project.updateWorkflowInfo.useMutation");
-    expect(governanceSource).toContain('projectAccess.data?.permissions?.has("project:workflow:edit")');
-    expect(governanceSource).toContain("不会修改流程定义、审核状态、发布状态或运行记录");
+    expect(governanceSource).toContain(
+      "trpc.project.updateWorkflowInfo.useMutation"
+    );
+    expect(governanceSource).toContain(
+      'projectAccess.data?.permissions?.has("project:workflow:edit")'
+    );
+    expect(governanceSource).toContain(
+      "不会修改流程定义、审核状态、发布状态或运行记录"
+    );
     expect(governanceSource).toContain("<Input value={infoName}");
     expect(governanceSource).toContain("<Textarea value={infoDescription}");
     expect(governanceSource).not.toContain("基本信息 JSON");
     expect(governanceSource).not.toContain("JSON.parse");
     expect(projectWorkspaceSource).not.toContain("WorkflowDetailDialog");
-    expect(projectWorkspaceSource).not.toContain("trpc.project.updateWorkflowInfo.useMutation");
-    expect(routerSource).toMatch(/updateWorkflowInfo:\s*protectedProcedure\s*\.input/);
-    expect(routerSource).toMatch(/description:\s*z\.string\(\)\.trim\(\)\.max\(1200\)\.nullable\(\)\.optional\(\)/);
-    expect(projectServiceSource).toContain('requireProjectPermission(user, input.projectId, "project:workflow:edit")');
-    expect(projectServiceSource).toContain("WHERE id=? AND projectId=? LIMIT 1");
+    expect(projectWorkspaceSource).not.toContain(
+      "trpc.project.updateWorkflowInfo.useMutation"
+    );
+    expect(routerSource).toMatch(
+      /updateWorkflowInfo:\s*protectedProcedure\s*\.input/
+    );
+    expect(routerSource).toMatch(
+      /description:\s*z\.string\(\)\.trim\(\)\.max\(1200\)\.nullable\(\)\.optional\(\)/
+    );
+    expect(projectServiceSource).toContain(
+      'requireProjectPermission(user, input.projectId, "project:workflow:edit")'
+    );
+    expect(projectServiceSource).toContain(
+      "WHERE id=? AND projectId=? LIMIT 1"
+    );
     expect(projectServiceSource).toContain("project_workflow_info_updated");
   });
 
   it("将原始流程详情承载为可关闭的受权详情视图，并保留只读画布和设计器返回路径", () => {
-    expect(homeSource).toContain('"center" | "workspace" | "detail" | "editor"');
-    expect(homeSource).toContain('const detailActive = section === "flows" && flowView === "detail"');
-    expect(homeSource).toContain('onOpenDetail={workflowId => navigateRoute({ section: "flows", view: "detail", workflowId })}');
-    expect(homeSource).toContain('flowView === "detail" && <WorkflowDetailPage');
-    expect(projectWorkspaceSource).toContain("onOpenDetail: (workflowId: string) => void");
+    expect(homeSource).toContain(
+      '"center" | "workspace" | "detail" | "editor"'
+    );
+    expect(homeSource).toContain(
+      'const detailActive = section === "flows" && flowView === "detail"'
+    );
+    expect(homeSource).toContain("onOpenDetail={workflowId => navigateRoute(");
+    expect(homeSource).toContain('view: "detail", workflowId');
+    expect(homeSource).toContain('flowView === "detail" &&');
+    expect(homeSource).toContain("<WorkflowDetailPage");
+    expect(projectWorkspaceSource).toContain(
+      "onOpenDetail: (workflowId: string) => void"
+    );
     expect(projectWorkspaceSource).toContain("onDetail={onOpenDetail}");
-    expect(processDetailPageSource).toContain('data-aiflow-process-detail-page=""');
+    expect(processDetailPageSource).toContain(
+      'data-aiflow-process-detail-page=""'
+    );
     expect(processDetailPageSource).toContain("WorkflowGovernance");
     expect(processDetailPageSource).toContain("canvas={");
     expect(processDetailPageSource).toContain("<WorkflowCanvas");
@@ -371,8 +527,12 @@ describe("流程设计器界面回归约束", () => {
     expect(processDetailPageSource).toContain("流程图只读预览");
     expect(processDetailPageSource).toContain("详情页不会写入流程定义");
     expect(processDetailPageSource).toContain("readOnly");
-    expect(governanceSource.indexOf("{canvas ??")).toBeGreaterThan(governanceSource.indexOf(">基本信息</span>"));
-    expect(governanceSource.indexOf("{canvas ??")).toBeLessThan(governanceSource.indexOf("STARTED PROCESS LIST"));
+    expect(governanceSource.indexOf("{canvas ??")).toBeGreaterThan(
+      governanceSource.indexOf(">基本信息</span>")
+    );
+    expect(governanceSource.indexOf("{canvas ??")).toBeLessThan(
+      governanceSource.indexOf("STARTED PROCESS LIST")
+    );
   });
 
   it("保留运行筛选、耗时统计、失败告警和个人复用资产入口", () => {
@@ -400,7 +560,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("请选择已启用的私有子流程");
     expect(canvasSource).toContain("zlcxz: selectedSubflow ?");
     expect(canvasSource).toContain("原版扩展字段");
-    expect(canvasSource).toContain("Object.entries(record).filter(([key]) => !knownKeys.has(key))");
+    expect(canvasSource).toContain(
+      "Object.entries(record).filter(([key]) => !knownKeys.has(key))"
+    );
   });
 
   it("提供显式且可撤销的连线删除交互，并在只读模式禁用删除", () => {
@@ -412,14 +574,17 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("Backspace");
     expect(canvasSource).toContain("撤销删线");
     expect(canvasSource).toContain("if (readOnly || !selectedEdgeId) return");
-    expect(canvasSource).toContain("!readOnly && <Button");
+    expect(canvasSource).toContain("!readOnly && (");
+    expect(canvasSource).toContain("删除连线");
   });
 
   it("恢复原版画布左右键、框选、拖放和路径菜单交互", () => {
     expect(canvasSource).toContain("allowedCanvasTargets");
     expect(canvasSource).toContain("canConnectCanvasNodes");
     expect(canvasSource).toContain("onNodeSelectionClick");
-    expect(canvasSource).toContain("event.shiftKey || event.ctrlKey || event.metaKey");
+    expect(canvasSource).toContain(
+      "event.shiftKey || event.ctrlKey || event.metaKey"
+    );
     expect(canvasSource).toContain("handlePaletteDragStart");
     expect(canvasSource).toContain("handleCanvasDrop");
     expect(canvasSource).toContain("selectionOnDrag={!readOnly}");
@@ -486,7 +651,9 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).toContain("系统配置卡片页签");
     expect(systemConfigSource).toContain('data-aiflow-system-config=""');
     expect(styleSource).toContain("[data-aiflow-system-config] > div");
-    expect(styleSource).toContain("grid-template-columns: 216px minmax(0, 1fr)");
+    expect(styleSource).toContain(
+      "grid-template-columns: 216px minmax(0, 1fr)"
+    );
     expect(projectWorkspaceSource).toContain("状态流程");
     expect(projectWorkspaceSource).toContain("控制流程");
     expect(projectWorkspaceSource).toContain("数据流程");
@@ -495,7 +662,9 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("当前业务：");
     expect(projectWorkspaceSource).toContain("PanelLeftClose");
     expect(projectWorkspaceSource).toContain("PanelLeftOpen");
-    expect(projectWorkspaceSource).toContain('data-aiflow-project-workspace=""');
+    expect(projectWorkspaceSource).toContain(
+      'data-aiflow-project-workspace=""'
+    );
     expect(styleSource).toContain("[data-aiflow-project-workspace] > aside");
     expect(styleSource).toContain("width: 216px !important");
     expect(projectWorkspaceSource).toContain("创建时间开始");
@@ -505,22 +674,44 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain('accept=".csv,text/csv"');
     expect(projectWorkspaceSource).toContain("CSV 标题必须包含");
     expect(projectWorkspaceSource).toContain("业务代号、业务名称");
-    expect(projectWorkspaceSource).toContain("筛选仅作用于当前已授权可见的业务项目");
-    expect(projectWorkspaceSource).toContain('view === "process" && workflows.isLoading');
+    expect(projectWorkspaceSource).toContain(
+      "筛选仅作用于当前已授权可见的业务项目"
+    );
+    expect(projectWorkspaceSource).toContain(
+      'view === "process" && workflows.isLoading'
+    );
     expect(projectWorkspaceSource).toContain("正在读取项目流程");
-    expect(projectWorkspaceSource).toContain("正在加载当前业务授权范围内的流程与审核状态");
+    expect(projectWorkspaceSource).toContain(
+      "正在加载当前业务授权范围内的流程与审核状态"
+    );
     expect(projectWorkspaceSource).toContain("重置筛选");
-    expect(projectWorkspaceSource).toContain("可重置筛选或从右上角新建状态、控制或数据流程");
+    expect(projectWorkspaceSource).toContain(
+      "可重置筛选或从右上角新建状态、控制或数据流程"
+    );
     expect(projectWorkspaceSource).toContain("最近取消发布时间");
     expect(projectWorkspaceSource).toContain("尚未取消发布");
-    expect(projectWorkspaceSource).toContain("workflow.publishedAt ? formatDate(workflow.publishedAt)");
-    expect(projectWorkspaceSource).toContain("workflow.unpublishedAt ? formatDate(workflow.unpublishedAt)");
+    expect(projectWorkspaceSource).toContain(
+      "workflow.publishedAt ? formatDate(workflow.publishedAt)"
+    );
+    expect(projectWorkspaceSource).toContain(
+      "workflow.unpublishedAt ? formatDate(workflow.unpublishedAt)"
+    );
     expect(projectWorkspaceSource).toContain("colSpan={12}");
-    expect(projectWorkspaceSource).toContain('workflow.flowType === "data" ? "启动" : "发起流程"');
-    expect(projectWorkspaceSource).toContain("trpc.workflow.publish.useMutation");
-    expect(projectWorkspaceSource).toContain("trpc.workflow.unpublish.useMutation");
-    expect(projectWorkspaceSource).toContain('workflow.status === "draft" && workflow.auditStatus === "approved"');
-    expect(projectWorkspaceSource).toContain('workflow.status === "published" && <button');
+    expect(projectWorkspaceSource).toContain(
+      'workflow.flowType === "data" ? "启动" : "发起流程"'
+    );
+    expect(projectWorkspaceSource).toContain(
+      "trpc.workflow.publish.useMutation"
+    );
+    expect(projectWorkspaceSource).toContain(
+      "trpc.workflow.unpublish.useMutation"
+    );
+    expect(projectWorkspaceSource).toContain(
+      'workflow.status === "draft" && workflow.auditStatus === "approved"'
+    );
+    expect(projectWorkspaceSource).toContain(
+      'workflow.status === "published" && <button'
+    );
     expect(projectWorkspaceSource).toContain(">取消发布</button>");
     expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
     expect(systemConfigSource).toContain("WORK DOMAIN");
@@ -546,7 +737,9 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("没有搜到任何数据");
     expect(warehouseSource).toContain("只读流程图");
     expect(warehouseSource).toContain("hasFolderMatch");
-    expect(warehouseSource).toContain("rawChildren(folder.id).some(hasFolderMatch)");
+    expect(warehouseSource).toContain(
+      "rawChildren(folder.id).some(hasFolderMatch)"
+    );
     expect(warehouseSource).toContain("新增同级文件夹");
     expect(warehouseSource).toContain("新增子级文件夹");
     expect(warehouseSource).toContain("添加同级");
@@ -554,7 +747,9 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("确认删除");
     expect(warehouseSource).toContain("trpc.workflow.delete.useMutation");
     expect(warehouseSource).toContain("删除流程");
-    expect(warehouseSource).toContain("关联版本、运行与成员授权已由服务端按安全顺序清理");
+    expect(warehouseSource).toContain(
+      "关联版本、运行与成员授权已由服务端按安全顺序清理"
+    );
     expect(warehouseSource).toContain("取消高亮");
     expect(warehouseSource).toContain("保存为图片");
     expect(warehouseSource).toContain("全屏");
@@ -579,7 +774,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("添加对象");
     expect(canvasSource).toContain("添加数组");
     expect(canvasSource).toContain('field.kind === "boolean"');
-    expect(canvasSource).toContain('["restHeaderParam", "restGetBodyParam"].includes(fieldKey)');
+    expect(canvasSource).toContain(
+      '["restHeaderParam", "restGetBodyParam"].includes(fieldKey)'
+    );
     expect(canvasSource).toContain("GET 参数");
     expect(canvasSource).toContain("添加字段");
     expect(canvasSource).toContain("添加一项");
@@ -595,7 +792,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("RotateCcw");
     expect(canvasSource).toContain("若无元件，请添加元件。");
     expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
-    expect(canvasSource).toContain("next.nodes.some(node => node.id === current)");
+    expect(canvasSource).toContain(
+      "next.nodes.some(node => node.id === current)"
+    );
     expect(homeSource).toContain("返回项目流程中心");
     expect(homeSource).toContain("返回流程详情");
     expect(homeSource).toContain("返回流程仓库");
@@ -610,10 +809,18 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("flow:neaten-canvas");
     expect(governanceSource).toContain("flow:save-canvas-image");
     expect(governanceSource).toContain("flow:fullscreen-canvas");
-    expect(canvasSource).toContain('window.addEventListener("flow:clear-highlight"');
-    expect(canvasSource).toContain('window.addEventListener("flow:neaten-canvas"');
-    expect(canvasSource).toContain('window.addEventListener("flow:save-canvas-image"');
-    expect(canvasSource).toContain('window.addEventListener("flow:fullscreen-canvas"');
+    expect(canvasSource).toContain(
+      'window.addEventListener("flow:clear-highlight"'
+    );
+    expect(canvasSource).toContain(
+      'window.addEventListener("flow:neaten-canvas"'
+    );
+    expect(canvasSource).toContain(
+      'window.addEventListener("flow:save-canvas-image"'
+    );
+    expect(canvasSource).toContain(
+      'window.addEventListener("flow:fullscreen-canvas"'
+    );
   });
 
   it("保留原始数据流画布的资源树、函数树、任务与调度入口及禁用工具状态", () => {
@@ -633,7 +840,9 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("并集");
     expect(dataResourceSource).toContain("TSML");
     expect(dataResourceSource).toContain("StructuredResourceForm");
-    expect(dataResourceSource).toContain('title === "添加数据源" || title === "资源探查结果"');
+    expect(dataResourceSource).toContain(
+      'title === "添加数据源" || title === "资源探查结果"'
+    );
     expect(dataResourceSource).toContain("return null;");
     expect(dataResourceSource).not.toContain("JSON.parse");
     expect(dataResourceSource).not.toContain("sourceForm.");
@@ -652,19 +861,29 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("整理画布");
     expect(dataResourceSource).toContain("测试执行");
     expect(dataResourceSource).toContain("onTestRun");
-    expect(dataResourceSource).toContain("对当前已发布数据流执行一次受权限保护的测试运行");
+    expect(dataResourceSource).toContain(
+      "对当前已发布数据流执行一次受权限保护的测试运行"
+    );
     expect(dataResourceSource).toContain("打开设计器");
     expect(dataResourceSource).not.toContain("打开并保存画布");
-    expect(styleSource).toContain("[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child");
-    expect(styleSource).toContain("[data-resource-center] [dataflow-canvas-utility-actions]");
+    expect(styleSource).toContain(
+      "[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child"
+    );
+    expect(styleSource).toContain(
+      "[data-resource-center] [dataflow-canvas-utility-actions]"
+    );
     expect(dataResourceSource).toContain("已打开“${flow.name}”设计器");
   });
 
   it("保留数据流画布一键展开的资源树状态关联", () => {
-    expect(dataResourceSource).toContain('aria-controls="dataflow-resource-trees"');
+    expect(dataResourceSource).toContain(
+      'aria-controls="dataflow-resource-trees"'
+    );
     expect(dataResourceSource).toContain("aria-expanded={expanded}");
     expect(dataResourceSource).toContain('id="dataflow-resource-trees"');
-    expect(dataResourceSource).toContain('expanded ? "收起资源树" : "一键展开"');
+    expect(dataResourceSource).toContain(
+      'expanded ? "收起资源树" : "一键展开"'
+    );
   });
 
   it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {
@@ -676,18 +895,26 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留已启动流程的任务移交、退回与逐项批量处理入口", () => {
     expect(processWorkbenchSource).toContain("批量领取");
-    expect(processWorkbenchSource).toContain("批量完成");
+    expect(processWorkbenchSource).toContain("批量通过");
     expect(processWorkbenchSource).toContain("任务移交与回退");
     expect(processWorkbenchSource).toContain("移交");
     expect(processWorkbenchSource).toContain("退回待处理");
     expect(processWorkbenchSource).toContain("不会跨流程或跨项目执行");
     expect(processWorkbenchSource).toContain("trpc.task.handover.useMutation");
-    expect(processWorkbenchSource).toContain("trpc.task.batchComplete.useMutation");
-    expect(processWorkbenchSource).toContain('result: { decision: "approved" }');
-    expect(processWorkbenchSource).toContain('task.operationName || "执行操作"');
+    expect(processWorkbenchSource).toContain(
+      "trpc.task.batchComplete.useMutation"
+    );
+    expect(processWorkbenchSource).toContain(
+      'decision, setDecision] = useState<"approved" | "rejected">'
+    );
+    expect(processWorkbenchSource).toContain("拒绝并终止流程");
+    expect(processWorkbenchSource).toContain("拒绝时处理意见必填");
+    expect(processWorkbenchSource).toContain("处理审批");
     expect(processWorkbenchSource).toContain("无可执行操作");
     expect(processWorkbenchSource).toContain("直接上级审核通过，待经理通过");
-    expect(processWorkbenchSource).not.toContain("批量处理结果必须是合法 JSON 对象");
+    expect(processWorkbenchSource).not.toContain(
+      "批量处理结果必须是合法 JSON 对象"
+    );
     expect(processWorkbenchSource).toContain("处理结果字段");
     expect(processWorkbenchSource).toContain("添加处理结果字段");
     expect(processWorkbenchSource).not.toContain("function LegacyTaskDrawer");
@@ -695,29 +922,47 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).not.toContain("JSON.parse(resultText)");
     expect(homeSource).not.toContain("运行输入必须是合法 JSON 对象");
     expect(homeSource).not.toContain("JSON.parse(runInput)");
-    expect(homeSource).toContain('useState<Record<string, unknown>>({ id: 2, prompt: "请总结输入内容" })');
-    expect(homeSource).toContain("onChange(Object.fromEntries");
-    expect(processWorkbenchSource).toContain("onComplete(createPayload(resultRows))");
+    expect(homeSource).toContain("useState<Record<string, unknown>>");
+    expect(homeSource).toContain('prompt: "请总结输入内容"');
+    expect(homeSource).toContain("Object.fromEntries");
+    expect(processWorkbenchSource).toContain(
+      "const payload = createPayload(resultRows)"
+    );
+    expect(processWorkbenchSource).toContain("onComplete(payload)");
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");
-    expect(processWorkbenchSource).toContain("当前视图仅展示具备运行权限的流程实例与人工任务");
+    expect(processWorkbenchSource).toContain(
+      "当前视图仅展示具备运行权限的流程实例与人工任务"
+    );
     expect(processWorkbenchSource).toContain("PanelLeftClose");
     expect(processWorkbenchSource).toContain("PanelLeftOpen");
     expect(processWorkbenchSource).toContain("data-process-workbench-loading");
     expect(processWorkbenchSource).toContain("正在读取已启动流程");
-    expect(processWorkbenchSource).toContain("正在加载当前授权范围内的看板统计与最近任务");
+    expect(processWorkbenchSource).toContain(
+      "正在加载当前授权范围内的看板统计与最近任务"
+    );
     expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
     expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
     expect(processWorkbenchSource).toContain("baseTabLabel={labels[view]}");
-    expect(processWorkbenchSource).toMatch(/const closeRunTab = \(\) => \{\s*setSelectedRunId\(null\);\s*invalidate\(\);\s*\}/);
-    expect(processWorkbenchSource).toMatch(/setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*invalidate\(\);/);
+    expect(processWorkbenchSource).toMatch(
+      /const closeRunTab = \(\) => \{\s*setSelectedRunId\(null\);\s*invalidate\(\);\s*\}/
+    );
+    expect(processWorkbenchSource).toMatch(
+      /setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*invalidate\(\);/
+    );
     expect(styleSource).toContain("min-height: 46px;");
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
-    expect(processWorkbenchRunTabSource).toContain("trpc.workflow.runDetail.useQuery");
+    expect(processWorkbenchRunTabSource).toContain(
+      "trpc.workflow.runDetail.useQuery"
+    );
     expect(processWorkbenchRunTabSource).toContain("baseTabLabel");
-    expect(processWorkbenchRunTabSource).toContain("title={`返回${baseTabLabel}`}");
-    expect(processWorkbenchRunTabSource).toContain("data-process-workbench-tabs");
+    expect(processWorkbenchRunTabSource).toContain(
+      "title={`返回${baseTabLabel}`}"
+    );
+    expect(processWorkbenchRunTabSource).toContain(
+      "data-process-workbench-tabs"
+    );
   });
 
   it("原安装包视觉壳层保持浅色平面工作台与三栏画布结构", () => {
@@ -725,7 +970,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('data-aiflow-designer=""');
     expect(homeSource).toContain("AI FLOW GRAPH");
     expect(homeSource).not.toContain("NEBULA BUSINESS ENGINE");
-    expect(styleSource).not.toContain("[data-aiflow-designer] textarea.h-20.font-mono");
+    expect(styleSource).not.toContain(
+      "[data-aiflow-designer] textarea.h-20.font-mono"
+    );
     expect(homeSource).toContain("AI FLOW GRAPH");
     expect(homeSource).toContain("bg-[#f4f6f9]");
     expect(homeSource).not.toContain("NEBULA INSPIRED · V3");
@@ -734,19 +981,37 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain('data-aiflow-warehouse=""');
     expect(styleSource).toContain('content: "AI FLOW GRAPH"');
     expect(styleSource).toContain("[data-aiflow-business-center]");
-    expect((styleSource.match(/\[data-aiflow-business-center\] > div > div:first-child \{/g) ?? []).length).toBe(1);
-    expect(styleSource).toContain("[data-aiflow-business-center] > div > div:first-child > div > div > p");
+    expect(
+      (
+        styleSource.match(
+          /\[data-aiflow-business-center\] > div > div:first-child \{/g
+        ) ?? []
+      ).length
+    ).toBe(1);
+    expect(styleSource).toContain(
+      "[data-aiflow-business-center] > div > div:first-child > div > div > p"
+    );
     expect(styleSource).toContain("min-height: 48px;");
-    expect(styleSource).toContain("[data-aiflow-designer] [data-aiflow-workflow-canvas]");
-    expect(styleSource).toContain("[data-aiflow-designer] > [data-aiflow-workflow-canvas]");
+    expect(styleSource).toContain(
+      "[data-aiflow-designer] [data-aiflow-workflow-canvas]"
+    );
+    expect(styleSource).toContain(
+      "[data-aiflow-designer] > [data-aiflow-workflow-canvas]"
+    );
     expect(styleSource).toContain("order: 2;");
-    expect(styleSource).toContain("[data-aiflow-designer] > [data-structured-run-input]");
+    expect(styleSource).toContain(
+      "[data-aiflow-designer] > [data-structured-run-input]"
+    );
     expect(styleSource).toContain("[data-aiflow-warehouse] > div > .grid");
-    expect(styleSource).toContain("[data-aiflow-warehouse] > div > div:first-child > select");
+    expect(styleSource).toContain(
+      "[data-aiflow-warehouse] > div > div:first-child > select"
+    );
     expect(styleSource).toContain("min-height: 40px;");
     expect(styleSource).toContain("[data-aiflow-process-detail]");
     expect(styleSource).toContain("[data-aiflow-system-config]");
-    expect(styleSource).not.toContain('div:has(> aside button[title="收起配置导航"])');
+    expect(styleSource).not.toContain(
+      'div:has(> aside button[title="收起配置导航"])'
+    );
     expect(styleSource).toContain('button[aria-label="收起已启动流程导航"]');
     expect(styleSource).toContain('button[aria-label="展开已启动流程导航"]');
   });

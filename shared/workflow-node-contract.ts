@@ -183,7 +183,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     ],
   },
   llm: {
-    type: "llm", label: "LLM", description: "调用运行时可用模型目录", flowTypes: ["state", "control", "data"],
+    type: "llm", label: "LLM", description: "调用运行时可用模型目录", flowTypes: ["state", "control"],
     defaultConfig: { model: "", systemPrompt: "你是一名严谨的工作流助手。", prompt: "{{input.prompt}}", maxTokens: 1024 },
     fields: [
       { key: "model", label: "模型", help: "从运行时模型目录选择；未指定或不可用时使用目录中的可用模型。", kind: "text" },

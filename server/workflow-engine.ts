@@ -11,6 +11,7 @@ import type { Definition } from "./workflow-service";
 
 type JsonRecord = Record<string, unknown>;
 type WorkflowUser = { id: number; role: "user" | "admin" };
+export type ApprovalDecision = "approved" | "rejected";
 type WorkflowNode = Definition["nodes"][number];
 type WorkflowEdge = Definition["edges"][number];
 export type WorkflowRunDetail = { workflowId: string; nodeRuns: mysql.RowDataPacket[]; [key: string]: unknown };
@@ -371,6 +372,52 @@ async function insertNodeRun(runId: string, node: WorkflowNode, input: JsonRecor
   }
 }
 
+export function normalizeApprovalResult(result: JsonRecord) {
+  const decision = String(result.decision ?? "")
+    .trim()
+    .toLowerCase();
+  if (decision !== "approved" && decision !== "rejected")
+    throw new Error("审批结果必须明确选择同意或拒绝。");
+  const comment =
+    typeof result.comment === "string" ? result.comment.trim() : "";
+  if (decision === "rejected" && !comment)
+    throw new Error("拒绝审批时必须填写处理意见。");
+  return {
+    ...result,
+    decision: decision as ApprovalDecision,
+    ...(comment ? { comment } : {}),
+  };
+}
+
+export function evaluateApprovalResults(input: {
+  totalApprovers: number;
+  requiredApprovals: number;
+  results: unknown[];
+}) {
+  const decisions = input.results.map(result =>
+    String(asRecord(result).decision ?? "")
+      .trim()
+      .toLowerCase()
+  );
+  const approved = decisions.filter(decision => decision === "approved").length;
+  const rejected = decisions.filter(decision => decision === "rejected").length;
+  const completed = approved + rejected;
+  const pending = Math.max(0, input.totalApprovers - completed);
+  const outcome =
+    approved >= input.requiredApprovals
+      ? "approved"
+      : approved + pending < input.requiredApprovals
+        ? "rejected"
+        : "waiting";
+  return {
+    outcome: outcome as ApprovalDecision | "waiting",
+    approved,
+    rejected,
+    completed,
+    pending,
+  };
+}
+
 async function finishNodeRun(nodeRunId: string, status: "success" | "failed" | "waiting" | "skipped", startedAt: number, output?: unknown, error?: unknown) {
   await db().query("UPDATE workflow_node_run SET status=?,outputJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [status, output === undefined ? null : JSON.stringify(output), error === undefined ? null : JSON.stringify(error), Date.now() - startedAt, nodeRunId]);
 }
@@ -579,20 +626,37 @@ async function persistStateNode(input: { runId: string; workflowId: string; node
   addRuntimeParticipants(input.context, participantUserIds);
 }
 
-async function executeRunSegment(input: { runId: string; workflow: PersistedWorkflow; definition: Definition; context: JsonRecord; queue: string[]; finalOutput?: unknown }): Promise<RunSegmentResult> {
+async function executeRunSegment(input: {
+  runId: string;
+  workflow: PersistedWorkflow;
+  definition: Definition;
+  context: JsonRecord;
+  queue: string[];
+  finalOutput?: unknown;
+}): Promise<RunSegmentResult> {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
   let finalOutput = input.finalOutput ?? null;
+  let reachedEnd = false;
   while (input.queue.length) {
-    if (executed.size >= MAX_STEPS) throw new Error("流程执行超过最大节点步数，可能存在循环。");
+    if (executed.size >= MAX_STEPS)
+      throw new Error("流程执行超过最大节点步数，可能存在循环。");
     const nodeId = input.queue.shift()!;
     if (executed.has(nodeId)) continue;
     const node = nodes.get(nodeId);
     if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
     executed.add(nodeId);
     const currentParticipants = runtimeNodeParticipants(input.context, node.id);
-    setCurrentNodeParticipants(input.context, currentParticipants.length ? currentParticipants : runtimeUserIds(input.context));
-    const nodeInput = { context: JSON.parse(JSON.stringify(input.context)), config: node.config };
+    setCurrentNodeParticipants(
+      input.context,
+      currentParticipants.length
+        ? currentParticipants
+        : runtimeUserIds(input.context)
+    );
+    const nodeInput = {
+      context: JSON.parse(JSON.stringify(input.context)),
+      config: node.config,
+    };
     const nodeRunId = await insertNodeRun(input.runId, node, nodeInput);
     const startedAt = Date.now();
     try {
@@ -600,18 +664,43 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
         const config = asRecord(resolveTemplates(node.config, input.context));
         const runtime = asRecord(input.context.runtime);
         const reference = normalizeReferenceOperateConfig(config);
-        const senderUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
-        updateRuntimeRoles(input.context, [senderUserId], reference.senderTemporaryRoles, "sender");
-        const relatedParticipants = await resolveAutoRelatedParticipantUserIds(config, input.context);
+        const senderUserId = Number(
+          runtime.lastActorUserId || runtime.triggeredByUserId
+        );
+        updateRuntimeRoles(
+          input.context,
+          [senderUserId],
+          reference.senderTemporaryRoles,
+          "sender"
+        );
+        const relatedParticipants = await resolveAutoRelatedParticipantUserIds(
+          config,
+          input.context
+        );
         addRuntimeParticipants(input.context, relatedParticipants);
         if (relatedParticipants.length) {
           setRuntimeReceivers(input.context, relatedParticipants);
-          updateRuntimeRoles(input.context, relatedParticipants, reference.receiverTemporaryRoles, "receiver");
+          updateRuntimeRoles(
+            input.context,
+            relatedParticipants,
+            reference.receiverTemporaryRoles,
+            "receiver"
+          );
         }
 
         if (shouldAutomaticallyExecute(config, input.context)) {
-          const completedByUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
-          const automaticOutput = { automatic: true, completedByUserId, operationName: String(firstConfiguredString(config.czmc, config.instruction) ?? node.name), relatedParticipantUserIds: relatedParticipants };
+          const completedByUserId = Number(
+            runtime.lastActorUserId || runtime.triggeredByUserId
+          );
+          const automaticOutput = {
+            automatic: true,
+            completedByUserId,
+            operationName: String(
+              firstConfiguredString(config.czmc, config.instruction) ??
+                node.name
+            ),
+            relatedParticipantUserIds: relatedParticipants,
+          };
           const vars = asRecord(input.context.vars);
           const nodeOutputs = asRecord(input.context.nodes);
           vars[node.id] = automaticOutput;
@@ -619,66 +708,200 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
           input.context.vars = vars;
           input.context.nodes = nodeOutputs;
           await finishNodeRun(nodeRunId, "success", startedAt, automaticOutput);
-          const automaticParticipants = Array.from(new Set([...currentParticipants, ...relatedParticipants]));
-          input.definition.edges.filter(edge => edge.sourceNodeId === node.id).forEach(edge => {
-            setRuntimeNodeParticipants(input.context, edge.targetNodeId, automaticParticipants);
-            input.queue.push(edge.targetNodeId);
-          });
+          const automaticParticipants = Array.from(
+            new Set([...currentParticipants, ...relatedParticipants])
+          );
+          input.definition.edges
+            .filter(edge => edge.sourceNodeId === node.id)
+            .forEach(edge => {
+              setRuntimeNodeParticipants(
+                input.context,
+                edge.targetNodeId,
+                automaticParticipants
+              );
+              input.queue.push(edge.targetNodeId);
+            });
           continue;
         }
 
-        const assignment = await resolveOperateAssignees({ config, context: input.context, workflowId: input.workflow.id });
+        const assignment = await resolveOperateAssignees({
+          config,
+          context: input.context,
+          workflowId: input.workflow.id,
+        });
         let approverUserIds = assignment.candidateUserIds;
-        if (reference.signMode !== "single" && reference.signSelectorUserIds.length) {
-          approverUserIds = approverUserIds.filter(userId => reference.signSelectorUserIds.includes(userId));
-          if (!approverUserIds.length) throw new Error("或签/会签指定方未命中当前操作候选人。");
+        if (
+          reference.signMode !== "single" &&
+          reference.signSelectorUserIds.length
+        ) {
+          approverUserIds = approverUserIds.filter(userId =>
+            reference.signSelectorUserIds.includes(userId)
+          );
+          if (!approverUserIds.length)
+            throw new Error("或签/会签指定方未命中当前操作候选人。");
         }
-        if (reference.signMode !== "single" && !approverUserIds.length) throw new Error("或签/会签必须解析到至少一名审批人。");
+        if (reference.signMode !== "single" && !approverUserIds.length)
+          throw new Error("或签/会签必须解析到至少一名审批人。");
         setRuntimeReceivers(input.context, approverUserIds);
-        updateRuntimeRoles(input.context, approverUserIds, reference.receiverTemporaryRoles, "receiver");
-        const nextNodeIds = input.definition.edges.filter(edge => edge.sourceNodeId === node.id).map(edge => edge.targetNodeId);
-        const operationName = String(firstConfiguredString(config.czmc, config.instruction, config.description) ?? node.name);
-        const pendingStatusName = String(firstConfiguredString(config.pendingStatusName) ?? "待审批");
-        const taskRoleKey = assignment.mode === "role" ? String(config.assigneeRoleCode || "default") : "default";
-        const approvalGroupId = reference.signMode === "single" ? null : randomUUID();
+        updateRuntimeRoles(
+          input.context,
+          approverUserIds,
+          reference.receiverTemporaryRoles,
+          "receiver"
+        );
+        const nextNodeIds = input.definition.edges
+          .filter(edge => edge.sourceNodeId === node.id)
+          .map(edge => edge.targetNodeId);
+        const operationName = String(
+          firstConfiguredString(
+            config.czmc,
+            config.instruction,
+            config.description
+          ) ?? node.name
+        );
+        const pendingStatusName = String(
+          firstConfiguredString(config.pendingStatusName) ?? "待审批"
+        );
+        const taskRoleKey =
+          assignment.mode === "role"
+            ? String(config.assigneeRoleCode || "default")
+            : "default";
+        const approvalGroupId =
+          reference.signMode === "single" ? null : randomUUID();
         if (approvalGroupId) {
-          const requiredApprovals = approvalRequirement(reference.signMode, approverUserIds.length, reference.passPercent);
+          const requiredApprovals = approvalRequirement(
+            reference.signMode,
+            approverUserIds.length,
+            reference.passPercent
+          );
           await db().query(
             "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?)",
-            [approvalGroupId, input.workflow.id, input.runId, node.id, reference.signMode, approverUserIds.length, requiredApprovals, Math.round(reference.passPercent * 10000), JSON.stringify(nextNodeIds)],
+            [
+              approvalGroupId,
+              input.workflow.id,
+              input.runId,
+              node.id,
+              reference.signMode,
+              approverUserIds.length,
+              requiredApprovals,
+              Math.round(reference.passPercent * 10000),
+              JSON.stringify(nextNodeIds),
+            ]
           );
         }
-        const taskAssignments = approvalGroupId ? approverUserIds.map(userId => ({ assignedUserId: userId, candidateUserIds: [userId] })) : [{ assignedUserId: assignment.assignedUserId, candidateUserIds: approverUserIds }];
+        const taskAssignments = approvalGroupId
+          ? approverUserIds.map(userId => ({
+              assignedUserId: userId,
+              candidateUserIds: [userId],
+            }))
+          : [
+              {
+                assignedUserId: assignment.assignedUserId,
+                candidateUserIds: approverUserIds,
+              },
+            ];
         const taskIds: string[] = [];
         for (const taskAssignment of taskAssignments) {
           const taskId = randomUUID();
           taskIds.push(taskId);
           await db().query(
             "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,roleKey,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [taskId, input.workflow.id, input.workflow.projectId ?? null, input.runId, node.id, node.name, taskAssignment.assignedUserId, taskAssignment.candidateUserIds.length ? JSON.stringify(taskAssignment.candidateUserIds) : null, approvalGroupId, reference.signMode, taskRoleKey, operationName, pendingStatusName, String(firstConfiguredString(config.instruction) ?? operationName), JSON.stringify({ config, context: input.context, assignmentMode: assignment.mode, reference }), JSON.stringify(nextNodeIds)],
+            [
+              taskId,
+              input.workflow.id,
+              input.workflow.projectId ?? null,
+              input.runId,
+              node.id,
+              node.name,
+              taskAssignment.assignedUserId,
+              taskAssignment.candidateUserIds.length
+                ? JSON.stringify(taskAssignment.candidateUserIds)
+                : null,
+              approvalGroupId,
+              reference.signMode,
+              taskRoleKey,
+              operationName,
+              pendingStatusName,
+              String(
+                firstConfiguredString(config.instruction) ?? operationName
+              ),
+              JSON.stringify({
+                config,
+                context: input.context,
+                assignmentMode: assignment.mode,
+                reference,
+              }),
+              JSON.stringify(nextNodeIds),
+            ]
           );
           for (const userId of taskAssignment.candidateUserIds) {
-            const availableOperation = { taskId, name: operationName, ...(reference.signMode === "single" ? {} : { signMode: reference.signMode }) };
-            await upsertParticipantState({ runId: input.runId, workflowId: input.workflow.id, userId, roleKey: taskRoleKey, stateCode: node.id, stateName: pendingStatusName, flowStatus: pendingStatusName, sourceNodeId: node.id, availableOperations: [availableOperation] });
+            const availableOperation = {
+              taskId,
+              name: operationName,
+              ...(reference.signMode === "single"
+                ? {}
+                : { signMode: reference.signMode }),
+            };
+            await upsertParticipantState({
+              runId: input.runId,
+              workflowId: input.workflow.id,
+              userId,
+              roleKey: taskRoleKey,
+              stateCode: node.id,
+              stateName: pendingStatusName,
+              flowStatus: pendingStatusName,
+              sourceNodeId: node.id,
+              availableOperations: [availableOperation],
+            });
           }
         }
         addRuntimeParticipants(input.context, approverUserIds);
-        await finishNodeRun(nodeRunId, "waiting", startedAt, { taskId: taskIds[0], taskIds, approvalGroupId, signMode: reference.signMode, status: "pending", assignedUserId: assignment.assignedUserId, candidateUserIds: approverUserIds, operationName });
-        await db().query("UPDATE workflow_run SET status='running',contextJson=? WHERE id=?", [JSON.stringify(input.context), input.runId]);
+        await finishNodeRun(nodeRunId, "waiting", startedAt, {
+          taskId: taskIds[0],
+          taskIds,
+          approvalGroupId,
+          signMode: reference.signMode,
+          status: "pending",
+          assignedUserId: assignment.assignedUserId,
+          candidateUserIds: approverUserIds,
+          operationName,
+        });
+        await db().query(
+          "UPDATE workflow_run SET status='running',contextJson=? WHERE id=?",
+          [JSON.stringify(input.context), input.runId]
+        );
         return { status: "waiting", taskId: taskIds[0] };
       }
       if (node.type === "router") {
-        const routeParticipants = runtimeNodeParticipants(input.context, node.id);
-        const iamRoles = await resolveWorkflowUserRoleKeys(routeParticipants, input.workflow.id);
+        const routeParticipants = runtimeNodeParticipants(
+          input.context,
+          node.id
+        );
+        const iamRoles = await resolveWorkflowUserRoleKeys(
+          routeParticipants,
+          input.workflow.id
+        );
         const runtime = asRecord(input.context.runtime);
         const rolesByUser = asRecord(runtime.roleKeysByUser);
         for (const userId of routeParticipants) {
-          rolesByUser[String(userId)] = Array.from(new Set([...(Array.isArray(rolesByUser[String(userId)]) ? rolesByUser[String(userId)] as unknown[] : []), ...(iamRoles.get(userId) ?? [])]));
+          rolesByUser[String(userId)] = Array.from(
+            new Set([
+              ...(Array.isArray(rolesByUser[String(userId)])
+                ? (rolesByUser[String(userId)] as unknown[])
+                : []),
+              ...(iamRoles.get(userId) ?? []),
+            ])
+          );
         }
         runtime.roleKeysByUser = rolesByUser;
         input.context.runtime = runtime;
       }
-      const result = await executeNode(node, input.context, true, Number(input.workflow.ownerUserId));
+      const result = await executeNode(
+        node,
+        input.context,
+        true,
+        Number(input.workflow.ownerUserId)
+      );
       const vars = asRecord(input.context.vars);
       const nodeOutputs = asRecord(input.context.nodes);
       vars[node.id] = result.output;
@@ -686,40 +909,84 @@ async function executeRunSegment(input: { runId: string; workflow: PersistedWork
       input.context.vars = vars;
       input.context.nodes = nodeOutputs;
       if (node.type === "start") Object.assign(vars, asRecord(result.output));
-      if (node.type === "state") await persistStateNode({ runId: input.runId, workflowId: input.workflow.id, node, context: input.context });
-      if (node.type === "end") finalOutput = result.output;
+      if (node.type === "state")
+        await persistStateNode({
+          runId: input.runId,
+          workflowId: input.workflow.id,
+          node,
+          context: input.context,
+        });
+      if (node.type === "end") {
+        reachedEnd = true;
+        finalOutput = result.output;
+      }
       await finishNodeRun(nodeRunId, "success", startedAt, result.output);
       const routed = result as { route?: string; routeTargets?: unknown[] };
-      const routeTargets = Array.isArray(routed.routeTargets) ? routed.routeTargets.map(asRecord) : [];
+      const routeTargets = Array.isArray(routed.routeTargets)
+        ? routed.routeTargets.map(asRecord)
+        : [];
       if (node.type === "router" && routeTargets.length) {
         for (const branch of routeTargets) {
           const handle = String(branch.handle ?? routed.route ?? "default");
           const targetNodeId = String(branch.targetNodeId ?? "");
-          const branchUsers = Array.isArray(branch.userIds) ? branch.userIds.map(Number).filter(id => Number.isInteger(id) && id > 0) : currentParticipants;
-          const edges = input.definition.edges.filter(edge => edge.sourceNodeId === node.id && ((targetNodeId && edge.targetNodeId === targetNodeId) || (!targetNodeId && (edge.sourceHandle ?? "default") === handle) || (edge.sourceHandle ?? "default") === handle));
+          const branchUsers = Array.isArray(branch.userIds)
+            ? branch.userIds
+                .map(Number)
+                .filter(id => Number.isInteger(id) && id > 0)
+            : currentParticipants;
+          const edges = input.definition.edges.filter(
+            edge =>
+              edge.sourceNodeId === node.id &&
+              ((targetNodeId && edge.targetNodeId === targetNodeId) ||
+                (!targetNodeId &&
+                  (edge.sourceHandle ?? "default") === handle) ||
+                (edge.sourceHandle ?? "default") === handle)
+          );
           for (const edge of edges) {
-            setRuntimeNodeParticipants(input.context, edge.targetNodeId, branchUsers);
+            setRuntimeNodeParticipants(
+              input.context,
+              edge.targetNodeId,
+              branchUsers
+            );
             input.queue.push(edge.targetNodeId);
           }
         }
       } else {
-        input.definition.edges.filter(edge => edge.sourceNodeId === node.id && (!routed.route || (edge.sourceHandle ?? "default") === routed.route)).forEach(edge => {
-          setRuntimeNodeParticipants(input.context, edge.targetNodeId, currentParticipants);
-          input.queue.push(edge.targetNodeId);
-        });
+        input.definition.edges
+          .filter(
+            edge =>
+              edge.sourceNodeId === node.id &&
+              (!routed.route ||
+                (edge.sourceHandle ?? "default") === routed.route)
+          )
+          .forEach(edge => {
+            setRuntimeNodeParticipants(
+              input.context,
+              edge.targetNodeId,
+              currentParticipants
+            );
+            input.queue.push(edge.targetNodeId);
+          });
       }
     } catch (error) {
-      const details = { message: error instanceof Error ? error.message : String(error) };
+      const details = {
+        message: error instanceof Error ? error.message : String(error),
+      };
       await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details);
       throw error;
     }
   }
+  if (!reachedEnd)
+    throw new Error("流程未到达结束节点，已阻止将不完整运行标记为成功。");
   return { status: "success", output: finalOutput };
 }
 
 type ApprovalGateResult = {
   continueFlow: boolean;
+  rejected: boolean;
   completedApprovals: number;
+  rejectedApprovals: number;
+  completedDecisions: number;
   requiredApprovals: number;
   totalApprovers: number;
   affectedUserIds: number[];
@@ -727,55 +994,118 @@ type ApprovalGateResult = {
   groupResults?: unknown[];
 };
 
-async function completeTaskAndEvaluateApprovalGroup(task: mysql.RowDataPacket, input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }): Promise<ApprovalGateResult> {
+async function completeTaskAndEvaluateApprovalGroup(
+  task: mysql.RowDataPacket,
+  input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }
+): Promise<ApprovalGateResult> {
+  const result = normalizeApprovalResult(input.result);
   if (!task.approvalGroupId) {
     const [claim] = await db().query<mysql.ResultSetHeader>(
       "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed'",
-      [input.completedBy.id, JSON.stringify(input.result), input.taskId],
+      [input.completedBy.id, JSON.stringify(result), input.taskId]
     );
     if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
-    return { continueFlow: true, completedApprovals: 1, requiredApprovals: 1, totalApprovers: 1, affectedUserIds: [input.completedBy.id], groupResults: [input.result] };
+    const rejected = result.decision === "rejected";
+    return {
+      continueFlow: !rejected,
+      rejected,
+      completedApprovals: rejected ? 0 : 1,
+      rejectedApprovals: rejected ? 1 : 0,
+      completedDecisions: 1,
+      requiredApprovals: 1,
+      totalApprovers: 1,
+      affectedUserIds: [input.completedBy.id],
+      groupResults: [result],
+    };
   }
 
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>("SELECT * FROM workflow_task WHERE id=? FOR UPDATE", [input.taskId]);
+    const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT * FROM workflow_task WHERE id=? FOR UPDATE",
+      [input.taskId]
+    );
     const lockedTask = lockedTasks[0];
-    if (!lockedTask || lockedTask.status !== "claimed" || (Number(lockedTask.claimedByUserId) !== input.completedBy.id && input.completedBy.role !== "admin")) {
+    if (
+      !lockedTask ||
+      lockedTask.status !== "claimed" ||
+      (Number(lockedTask.claimedByUserId) !== input.completedBy.id &&
+        input.completedBy.role !== "admin")
+    ) {
       throw new Error("人工任务已被其他操作处理。 ");
     }
-    const [groups] = await connection.query<mysql.RowDataPacket[]>("SELECT * FROM workflow_task_group WHERE id=? FOR UPDATE", [task.approvalGroupId]);
+    const [groups] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT * FROM workflow_task_group WHERE id=? FOR UPDATE",
+      [task.approvalGroupId]
+    );
     const group = groups[0];
-    if (!group || group.status !== "waiting") throw new Error("或签/会签任务组已结束。 ");
+    if (!group || group.status !== "waiting")
+      throw new Error("或签/会签任务组已结束。 ");
     await connection.query(
       "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
-      [input.completedBy.id, JSON.stringify(input.result), input.taskId],
+      [input.completedBy.id, JSON.stringify(result), input.taskId]
     );
-    const [progressRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT SUM(status='completed') AS completedApprovals FROM workflow_task WHERE approvalGroupId=?",
-      [task.approvalGroupId],
-    );
-    const completedApprovals = Number(progressRows[0]?.completedApprovals ?? 0);
     const requiredApprovals = Number(group.requiredApprovals);
     const totalApprovers = Number(group.totalApprovers);
-    const [members] = await connection.query<mysql.RowDataPacket[]>("SELECT id,assignedUserId,status,resultJson FROM workflow_task WHERE approvalGroupId=? ORDER BY createdAt,id", [task.approvalGroupId]);
-    const affectedUserIds = Array.from(new Set(members.map(row => Number(row.assignedUserId)).filter(id => Number.isInteger(id) && id > 0)));
-    if (completedApprovals < requiredApprovals) {
-      const pendingTaskId = String(members.find(row => row.status === "pending" || row.status === "claimed")?.id ?? "");
+    const [members] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,assignedUserId,status,resultJson FROM workflow_task WHERE approvalGroupId=? ORDER BY createdAt,id",
+      [task.approvalGroupId]
+    );
+    const affectedUserIds = Array.from(
+      new Set(
+        members
+          .map(row => Number(row.assignedUserId))
+          .filter(id => Number.isInteger(id) && id > 0)
+      )
+    );
+    const groupResults = members
+      .filter(row => row.status === "completed")
+      .map(row => readJson(row.resultJson));
+    const progress = evaluateApprovalResults({
+      totalApprovers,
+      requiredApprovals,
+      results: groupResults,
+    });
+    if (progress.outcome === "waiting") {
+      const pendingTaskId = String(
+        members.find(
+          row => row.status === "pending" || row.status === "claimed"
+        )?.id ?? ""
+      );
       await connection.commit();
-      return { continueFlow: false, completedApprovals, requiredApprovals, totalApprovers, affectedUserIds: [input.completedBy.id], pendingTaskId: pendingTaskId || undefined };
+      return {
+        continueFlow: false,
+        rejected: false,
+        completedApprovals: progress.approved,
+        rejectedApprovals: progress.rejected,
+        completedDecisions: progress.completed,
+        requiredApprovals,
+        totalApprovers,
+        affectedUserIds: [input.completedBy.id],
+        pendingTaskId: pendingTaskId || undefined,
+      };
     }
-    await connection.query("UPDATE workflow_task_group SET status='completed',completedByTaskId=?,completedAt=NOW() WHERE id=? AND status='waiting'", [input.taskId, task.approvalGroupId]);
-    await connection.query("UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')", [task.approvalGroupId]);
+    const rejected = progress.outcome === "rejected";
+    await connection.query(
+      "UPDATE workflow_task_group SET status=?,completedByTaskId=?,completedAt=NOW() WHERE id=? AND status='waiting'",
+      [rejected ? "cancelled" : "completed", input.taskId, task.approvalGroupId]
+    );
+    await connection.query(
+      "UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')",
+      [task.approvalGroupId]
+    );
     await connection.commit();
     return {
-      continueFlow: true,
-      completedApprovals,
+      continueFlow: !rejected,
+      rejected,
+      completedApprovals: progress.approved,
+      rejectedApprovals: progress.rejected,
+      completedDecisions: progress.completed,
       requiredApprovals,
       totalApprovers,
       affectedUserIds,
-      groupResults: members.filter(row => row.status === "completed").map(row => readJson(row.resultJson)),
+      groupResults,
     };
   } catch (error) {
     await connection.rollback();
@@ -785,27 +1115,56 @@ async function completeTaskAndEvaluateApprovalGroup(task: mysql.RowDataPacket, i
   }
 }
 
-export async function resumeWorkflowTask(input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }) {
+export async function resumeWorkflowTask(input: {
+  taskId: string;
+  completedBy: WorkflowUser;
+  result: JsonRecord;
+}) {
+  const normalizedResult = normalizeApprovalResult(input.result);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT t.*,r.contextJson,r.definitionSnapshotJson,r.status AS runStatus,r.startedAt,w.ownerUserId,w.name AS workflowName,w.projectId
        FROM workflow_task t JOIN workflow_run r ON r.id=t.runId JOIN workflow w ON w.id=t.workflowId WHERE t.id=? LIMIT 1`,
-    [input.taskId],
+    [input.taskId]
   );
   const task = rows[0] as PersistedWorkflow & mysql.RowDataPacket;
   if (!task) throw new Error("人工任务不存在。 ");
-  if (task.status !== "claimed" || (Number(task.claimedByUserId) !== input.completedBy.id && input.completedBy.role !== "admin")) throw new Error("仅领取该任务的处理人可以完成操作。 ");
-  if (task.runStatus !== "running") throw new Error("所属流程实例不处于等待人工操作状态。 ");
-  const gate = await completeTaskAndEvaluateApprovalGroup(task, input);
+  if (
+    task.status !== "claimed" ||
+    (Number(task.claimedByUserId) !== input.completedBy.id &&
+      input.completedBy.role !== "admin")
+  )
+    throw new Error("仅领取该任务的处理人可以完成操作。 ");
+  if (task.runStatus !== "running")
+    throw new Error("所属流程实例不处于等待人工操作状态。 ");
+  const gate = await completeTaskAndEvaluateApprovalGroup(task, {
+    ...input,
+    result: normalizedResult,
+  });
+  const individualDecision = normalizedResult.decision as ApprovalDecision;
   await db().query(
-    "UPDATE workflow_participant_state SET stateName='已审核',flowStatus='已审核',availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=? AND roleKey=?",
-    [JSON.stringify([]), task.runId, input.completedBy.id, String(task.roleKey || "default")],
+    "UPDATE workflow_participant_state SET stateName=?,flowStatus=?,availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=? AND roleKey=?",
+    [
+      individualDecision === "rejected" ? "已拒绝" : "已审核",
+      individualDecision === "rejected" ? "已拒绝" : "已审核",
+      JSON.stringify([]),
+      task.runId,
+      input.completedBy.id,
+      String(task.roleKey || "default"),
+    ]
   );
-  if (!gate.continueFlow) {
+  if (!gate.continueFlow && !gate.rejected) {
     return {
       runId: String(task.runId),
       status: "waiting" as const,
       taskId: gate.pendingTaskId ?? input.taskId,
-      approvalProgress: { completed: gate.completedApprovals, required: gate.requiredApprovals, total: gate.totalApprovers },
+      approvalProgress: {
+        completed: gate.completedApprovals,
+        approved: gate.completedApprovals,
+        rejected: gate.rejectedApprovals,
+        decided: gate.completedDecisions,
+        required: gate.requiredApprovals,
+        total: gate.totalApprovers,
+      },
     };
   }
   const context = asRecord(readJson(task.contextJson));
@@ -817,8 +1176,10 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
   if (gate.affectedUserIds.length) {
     const placeholders = gate.affectedUserIds.map(() => "?").join(",");
     await db().query(
-      "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (" + placeholders + ")",
-      [JSON.stringify([]), task.runId, ...gate.affectedUserIds],
+      "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (" +
+        placeholders +
+        ")",
+      [JSON.stringify([]), task.runId, ...gate.affectedUserIds]
     );
   }
   const definition = readJson(task.definitionSnapshotJson) as Definition;
@@ -828,9 +1189,17 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
     signMode: task.signMode ?? "single",
     completedByUserId: input.completedBy.id,
     operationName: task.operationName ?? task.nodeName,
-    result: input.result,
-    groupResults: gate.groupResults ?? [input.result],
-    approvalProgress: { completed: gate.completedApprovals, required: gate.requiredApprovals, total: gate.totalApprovers },
+    decision: gate.rejected ? "rejected" : "approved",
+    result: normalizedResult,
+    groupResults: gate.groupResults ?? [normalizedResult],
+    approvalProgress: {
+      completed: gate.completedApprovals,
+      approved: gate.completedApprovals,
+      rejected: gate.rejectedApprovals,
+      decided: gate.completedDecisions,
+      required: gate.requiredApprovals,
+      total: gate.totalApprovers,
+    },
   };
   const vars = asRecord(context.vars);
   const nodeOutputs = asRecord(context.nodes);
@@ -838,22 +1207,94 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
   nodeOutputs[String(task.nodeId)] = taskOutput;
   context.vars = vars;
   context.nodes = nodeOutputs;
-  const [nodeRuns] = await db().query<mysql.RowDataPacket[]>("SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1", [task.runId, task.nodeId]);
-  if (nodeRuns[0]) await finishNodeRun(nodeRuns[0].id, "success", new Date(nodeRuns[0].startedAt ?? Date.now()).getTime(), taskOutput);
+  const [nodeRuns] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1",
+    [task.runId, task.nodeId]
+  );
+  if (nodeRuns[0])
+    await finishNodeRun(
+      nodeRuns[0].id,
+      "success",
+      new Date(nodeRuns[0].startedAt ?? Date.now()).getTime(),
+      taskOutput
+    );
+  if (gate.rejected) {
+    await db().query(
+      "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
+      [
+        JSON.stringify(context),
+        JSON.stringify(taskOutput),
+        Date.now() - new Date(task.startedAt ?? Date.now()).getTime(),
+        task.runId,
+      ]
+    );
+    return {
+      runId: String(task.runId),
+      status: "cancelled" as const,
+      output: taskOutput,
+    };
+  }
   const nextNodeIds = readJson(task.nextNodeIdsJson);
   const runStartedAt = Date.now();
   try {
-    const resumedWorkflow = { ...task, id: String(task.workflowId), name: String(task.workflowName) } as PersistedWorkflow;
-    const continuationNodeIds = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
-    for (const nodeId of continuationNodeIds) setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
-    const segment = await executeRunSegment({ runId: String(task.runId), workflow: resumedWorkflow, definition, context, queue: continuationNodeIds });
-    if (segment.status === "waiting") return { runId: String(task.runId), status: "waiting" as const, taskId: segment.taskId };
-    await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(), task.runId]);
-    return { runId: String(task.runId), status: "success" as const, output: segment.output };
+    const resumedWorkflow = {
+      ...task,
+      id: String(task.workflowId),
+      name: String(task.workflowName),
+    } as PersistedWorkflow;
+    const continuationNodeIds = Array.isArray(nextNodeIds)
+      ? nextNodeIds.map(String)
+      : [];
+    for (const nodeId of continuationNodeIds)
+      setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
+    const segment = await executeRunSegment({
+      runId: String(task.runId),
+      workflow: resumedWorkflow,
+      definition,
+      context,
+      queue: continuationNodeIds,
+    });
+    if (segment.status === "waiting")
+      return {
+        runId: String(task.runId),
+        status: "waiting" as const,
+        taskId: segment.taskId,
+      };
+    await db().query(
+      "UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
+      [
+        JSON.stringify(context),
+        JSON.stringify(segment.output),
+        Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(),
+        task.runId,
+      ]
+    );
+    return {
+      runId: String(task.runId),
+      status: "success" as const,
+      output: segment.output,
+    };
   } catch (error) {
-    const details = { message: error instanceof Error ? error.message : String(error) };
-    await db().query("UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(details), Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(), task.runId]);
-    await createFailureAlerts({ workflowId: String(task.workflowId), workflowName: String(task.workflowName), runId: String(task.runId), ownerUserId: Number(task.ownerUserId), triggeredByUserId: input.completedBy.id, details }).catch(() => undefined);
+    const details = {
+      message: error instanceof Error ? error.message : String(error),
+    };
+    await db().query(
+      "UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
+      [
+        JSON.stringify(context),
+        JSON.stringify(details),
+        Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(),
+        task.runId,
+      ]
+    );
+    await createFailureAlerts({
+      workflowId: String(task.workflowId),
+      workflowName: String(task.workflowName),
+      runId: String(task.runId),
+      ownerUserId: Number(task.ownerUserId),
+      triggeredByUserId: input.completedBy.id,
+      details,
+    }).catch(() => undefined);
     throw error;
   }
 }

@@ -267,7 +267,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   });
   const publishFlow = trpc.workflow.publish.useMutation({ onSuccess: () => { void utils.workflow.list.invalidate(); toast.success("流程已发布。"); }, onError: error => toast.error(error.message) });
   const duplicateFlow = trpc.workflow.duplicate.useMutation({ onSuccess: (workflow: any) => { void utils.workflow.list.invalidate(); if (workflow?.id) openFlowEditor(workflow.id, flowEditorReturn); toast.success("已创建流程副本。"); }, onError: error => toast.error(error.message) });
-  const deleteFlow = trpc.workflow.delete.useMutation({ onSuccess: () => { void utils.workflow.list.invalidate(); setSelectedWorkflowId(null); setDraftDefinition(null); returnFromFlowEditor(); toast.success("流程及其运行记录已删除。"); }, onError: error => toast.error(error.message) });
+  const deleteFlow = trpc.workflow.delete.useMutation({ onSuccess: () => { void utils.workflow.list.invalidate(); setSelectedWorkflowId(null); setDraftDefinition(null); returnFromFlowEditor(); toast.success("流程已删除。"); }, onError: error => toast.error(error.message) });
   const grantMember = trpc.workflow.grantMember.useMutation({ onSuccess: () => { void utils.workflow.members.invalidate(); toast.success("流程成员授权已更新。"); }, onError: error => toast.error(error.message) });
   const revokeMember = trpc.workflow.revokeMember.useMutation({ onSuccess: () => { void utils.workflow.members.invalidate(); toast.success("流程成员授权已撤销。"); }, onError: error => toast.error(error.message) });
   const runFlow = trpc.workflow.run.useMutation({
@@ -364,7 +364,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
         {section === "flows" && !routeRestoring && flowView === "workspace" && selectedProject && <div><div data-aiflow-business-selector className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between"><label className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600"><span className="shrink-0">当前业务</span><select className="h-8 min-w-0 max-w-[320px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-400" value={selectedProject.id} aria-label="切换当前受权业务" onChange={event => navigateRoute({ section: "flows", view: "workspace", projectId: event.target.value })}>{((projects.data ?? []) as ProjectRecord[]).map(project => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>)}</select></label><span className="text-[11px] text-slate-400">仅显示当前账号具备查看权限的业务项目</span></div><ProjectWorkspace project={selectedProject} onBack={() => navigateRoute({ section: "flows", view: "center" })} onOpenWorkflow={workflowId => openFlowEditor(workflowId, "workspace")} onOpenDetail={workflowId => navigateRoute({ section: "flows", view: "detail", workflowId })} onOpenWarehouse={() => navigateRoute({ section: "warehouse" })} /></div>}
         {section === "flows" && !routeRestoring && flowView === "detail" && <WorkflowDetailPage workflow={selectedWorkflow} definition={selectedWorkflowDefinition} canEdit={canEdit} canPublish={canPublish} onClose={() => navigateRoute(selectedProject ? { section: "flows", view: "workspace", projectId: selectedProject.id } : { section: "flows", view: "center" })} onOpen={() => selectedId && openFlowEditor(selectedId, "detail")} />}
         {section === "flows" && !routeRestoring && flowView === "editor" && <FlowDesigner
-        workflow={selectedWorkflow} definition={draftDefinition} name={draftName} setName={setDraftName} canEdit={canEdit} canPublish={canPublish} canRun={canRun} canManage={canManageMembers} members={(members.data ?? []) as any[]} candidates={(memberCandidates.data ?? []) as any[]} savePending={saveFlow.isPending} publishPending={publishFlow.isPending} runPending={runFlow.isPending} runInput={runInput} setRunInput={setRunInput} models={runtimeModels.data ?? []} templates={(templates.data ?? []) as any[]} subflows={(subflows.data ?? []) as any[]} onDefinitionChange={setDraftDefinition} backLabel={flowEditorReturnLabel} onBackToDesignCenter={returnFromFlowEditor} onSave={saveCurrent} onPublish={() => selectedId && publishFlow.mutate({ id: selectedId })} onRun={startRun} onExport={exportCurrent} onImport={() => importRef.current?.click()} onDuplicate={() => { if (selectedId) duplicateFlow.mutate({ id: selectedId, name: `${draftName} · 副本` }); }} onDelete={() => { if (selectedId && window.confirm(`确定删除“${draftName}”及其运行记录吗？`)) deleteFlow.mutate({ id: selectedId }); }} onSaveAsSubflow={() => { if (draftDefinition) createSubflow.mutate({ name: `${draftName || "未命名流程"} · 子流程`, definition: draftDefinition }); }} onCreateTemplate={input => createTemplate.mutate(input)} onUpdateTemplate={(template, updates) => updateTemplate.mutate({ id: template.id, ...updates })} onDeleteTemplate={id => deleteTemplate.mutate({ id })} onToggleSubflow={(subflow, isEnabled) => updateSubflow.mutate({ id: subflow.id, isEnabled })} onDeleteSubflow={id => deleteSubflow.mutate({ id })} onGrant={(userId, role, hours) => { if (selectedId) grantMember.mutate({ workflowId: selectedId, userId, role, expiresAt: hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : undefined }); }} onRevoke={(userId, role) => { if (selectedId) revokeMember.mutate({ workflowId: selectedId, userId, role }); }} />}
+        workflow={selectedWorkflow} definition={draftDefinition} name={draftName} setName={setDraftName} canEdit={canEdit} canPublish={canPublish} canRun={canRun} canManage={canManageMembers} members={(members.data ?? []) as any[]} candidates={(memberCandidates.data ?? []) as any[]} savePending={saveFlow.isPending} publishPending={publishFlow.isPending} runPending={runFlow.isPending} runInput={runInput} setRunInput={setRunInput} models={runtimeModels.data ?? []} templates={(templates.data ?? []) as any[]} subflows={(subflows.data ?? []) as any[]} onDefinitionChange={setDraftDefinition} backLabel={flowEditorReturnLabel} onBackToDesignCenter={returnFromFlowEditor} onSave={saveCurrent} onPublish={() => selectedId && publishFlow.mutate({ id: selectedId })} onRun={startRun} onExport={exportCurrent} onImport={() => importRef.current?.click()} onDuplicate={() => { if (selectedId) duplicateFlow.mutate({ id: selectedId, name: `${draftName} · 副本` }); }} onDelete={() => { if (selectedId && window.confirm(`确定删除“${draftName}”吗？已有运行历史的流程会被服务端阻止物理删除。`)) deleteFlow.mutate({ id: selectedId }); }} onSaveAsSubflow={() => { if (draftDefinition) createSubflow.mutate({ name: `${draftName || "未命名流程"} · 子流程`, definition: draftDefinition }); }} onCreateTemplate={input => createTemplate.mutate(input)} onUpdateTemplate={(template, updates) => updateTemplate.mutate({ id: template.id, ...updates })} onDeleteTemplate={id => deleteTemplate.mutate({ id })} onToggleSubflow={(subflow, isEnabled) => updateSubflow.mutate({ id: subflow.id, isEnabled })} onDeleteSubflow={id => deleteSubflow.mutate({ id })} onGrant={(userId, role, hours) => { if (selectedId) grantMember.mutate({ workflowId: selectedId, userId, role, expiresAt: hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : undefined }); }} onRevoke={(userId, role) => { if (selectedId) revokeMember.mutate({ workflowId: selectedId, userId, role }); }} />}
         {section === "runs" && !routeRestoring && <div><div data-aiflow-run-view-tabs role="tablist" aria-label="已启动流程视图" className="flex min-h-12 items-end gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4"><button type="button" role="tab" aria-selected={runView === "workbench"} className={`h-12 shrink-0 border-b-2 px-4 text-sm ${runView === "workbench" ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => navigateRoute({ section: "runs", view: "workbench" })}>流程工作台</button><button type="button" role="tab" aria-selected={runView === "monitor"} className={`h-12 shrink-0 border-b-2 px-4 text-sm ${runView === "monitor" ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => selectedId && navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId })}>运行监控</button></div>{runView === "workbench" ? <ProcessWorkbench /> : <RunCenter workflowId={selectedId} workflowName={selectedWorkflow?.name} selectedRun={runDetail.data ?? null} onSelect={runId => selectedId && navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId, runId })} />}</div>}
         {section === "warehouse" && <WorkflowWarehouse projects={(projects.data ?? []) as ProjectRecord[]} onOpenWorkflow={(project, workflowId) => { setSelectedProject(project); openFlowEditor(workflowId, "warehouse"); }} />}
         {section === "system" && user.role === "admin" && systemView === "config" && <SystemConfigShell onOpenIdentity={() => navigateRoute({ section: "system", view: "identity" })} onOpenOrganization={() => navigateRoute({ section: "system", view: "organization" })} />}
@@ -378,22 +378,403 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   </main>;
 }
 
-function FlowDesigner({ workflow, definition, name, setName, canEdit, canPublish, canRun, canManage, members, candidates, savePending, publishPending, runPending, runInput, setRunInput, models, templates, subflows, onDefinitionChange, backLabel, onBackToDesignCenter, onSave, onPublish, onRun, onExport, onImport, onDuplicate, onDelete, onSaveAsSubflow, onCreateTemplate, onUpdateTemplate, onDeleteTemplate, onToggleSubflow, onDeleteSubflow, onGrant, onRevoke }: { workflow: any; definition: Definition | null; name: string; setName: (value: string) => void; canEdit: boolean; canPublish: boolean; canRun: boolean; canManage: boolean; members: any[]; candidates: any[]; savePending: boolean; publishPending: boolean; runPending: boolean; runInput: Record<string, unknown>; setRunInput: (value: Record<string, unknown>) => void; models: Array<{ id: string; ownedBy: string }>; templates: any[]; subflows: any[]; onDefinitionChange: (definition: Definition) => void; backLabel: string; onBackToDesignCenter: () => void; onSave: () => void; onPublish: () => void; onRun: () => void; onExport: () => void; onImport: () => void; onDuplicate: () => void; onDelete: () => void; onSaveAsSubflow: () => void; onCreateTemplate: (input: any) => void; onUpdateTemplate: (template: any, updates: any) => void; onDeleteTemplate: (id: string) => void; onToggleSubflow: (subflow: any, isEnabled: boolean) => void; onDeleteSubflow: (id: string) => void; onGrant: (userId: number, role: "owner" | "editor" | "operator" | "viewer", hours?: number) => void; onRevoke: (userId: number, role: "owner" | "editor" | "operator" | "viewer") => void }) {
+function FlowDesigner({
+  workflow,
+  definition,
+  name,
+  setName,
+  canEdit,
+  canPublish,
+  canRun,
+  canManage,
+  members,
+  candidates,
+  savePending,
+  publishPending,
+  runPending,
+  runInput,
+  setRunInput,
+  models,
+  templates,
+  subflows,
+  onDefinitionChange,
+  backLabel,
+  onBackToDesignCenter,
+  onSave,
+  onPublish,
+  onRun,
+  onExport,
+  onImport,
+  onDuplicate,
+  onDelete,
+  onSaveAsSubflow,
+  onCreateTemplate,
+  onUpdateTemplate,
+  onDeleteTemplate,
+  onToggleSubflow,
+  onDeleteSubflow,
+  onGrant,
+  onRevoke,
+}: {
+  workflow: any;
+  definition: Definition | null;
+  name: string;
+  setName: (value: string) => void;
+  canEdit: boolean;
+  canPublish: boolean;
+  canRun: boolean;
+  canManage: boolean;
+  members: any[];
+  candidates: any[];
+  savePending: boolean;
+  publishPending: boolean;
+  runPending: boolean;
+  runInput: Record<string, unknown>;
+  setRunInput: (value: Record<string, unknown>) => void;
+  models: Array<{ id: string; ownedBy: string }>;
+  templates: any[];
+  subflows: any[];
+  onDefinitionChange: (definition: Definition) => void;
+  backLabel: string;
+  onBackToDesignCenter: () => void;
+  onSave: () => void;
+  onPublish: () => void;
+  onRun: () => void;
+  onExport: () => void;
+  onImport: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onSaveAsSubflow: () => void;
+  onCreateTemplate: (input: any) => void;
+  onUpdateTemplate: (template: any, updates: any) => void;
+  onDeleteTemplate: (id: string) => void;
+  onToggleSubflow: (subflow: any, isEnabled: boolean) => void;
+  onDeleteSubflow: (id: string) => void;
+  onGrant: (
+    userId: number,
+    role: "owner" | "editor" | "operator" | "viewer",
+    hours?: number
+  ) => void;
+  onRevoke: (
+    userId: number,
+    role: "owner" | "editor" | "operator" | "viewer"
+  ) => void;
+}) {
   const [candidateId, setCandidateId] = useState("");
-  const [memberRole, setMemberRole] = useState<"owner" | "editor" | "operator" | "viewer">("viewer");
+  const [memberRole, setMemberRole] = useState<
+    "owner" | "editor" | "operator" | "viewer"
+  >("viewer");
   const [hours, setHours] = useState("");
+  const runtimeModels = trpc.workflow.runtimeModels.useQuery(undefined, {
+    staleTime: 60_000,
+    retry: false,
+  });
   const utils = trpc.useUtils();
-  const unpublishFlow = trpc.workflow.unpublish.useMutation({ onSuccess: () => { void utils.workflow.list.invalidate(); toast.success("流程已取消发布；历史版本与运行审计已保留。"); }, onError: error => toast.error(error.message) });
-  const onUnpublish = () => { if (window.confirm("确定取消发布当前流程吗？流程将无法继续发起，但历史版本和运行记录会保留。")) unpublishFlow.mutate({ id: workflow.id }); };
-  if (!workflow || !definition) return <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8"><div className="max-w-md text-center"><FolderKanban className="mx-auto text-slate-300" size={42} /><h2 className="mt-4 font-semibold text-slate-700">选择或创建一个流程</h2><p className="mt-2 text-sm leading-6 text-slate-500">流程仓库显示了你拥有或被授予查看权限的工作流。</p></div></div>;
-  return <div data-aiflow-designer="" className="p-3 sm:p-4 lg:p-5"><div data-aiflow-context-header className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 text-xs"><button type="button" className="inline-flex items-center gap-1 font-medium text-[#2d6bea] hover:underline" aria-label={backLabel} title={backLabel} onClick={onBackToDesignCenter}><ChevronLeft size={14} />{backLabel}</button><span className="text-slate-300">/</span><span className="inline-flex items-center gap-1 text-slate-400"><FolderKanban size={13} />业务流程<ChevronRight size={13} />设计器</span></div><div className="mt-2 flex max-w-md items-center gap-1"><Input aria-label="流程名称" className="h-9 min-w-0 flex-1 border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-blue-300 focus-visible:ring-0 disabled:opacity-100" value={name} disabled={!canEdit} onChange={event => setName(event.target.value)} /></div></div><div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" onClick={onImport} disabled={!canEdit}><Upload size={14} />导入</Button><Button variant="outline" size="sm" onClick={onExport}><Download size={14} />导出</Button><Button size="sm" variant="outline" onClick={onSave} disabled={!canEdit || savePending}>{savePending ? <Loader2 className="animate-spin" size={14} /> : <FileJson size={14} />}保存画布</Button><Button size="sm" className="bg-emerald-600 hover:bg-emerald-500" onClick={onPublish} disabled={!canPublish || publishPending}>{publishPending && <Loader2 className="animate-spin" size={14} />}发布</Button>{canManage && <><Button variant="outline" size="sm" onClick={onDuplicate}><Copy size={14} />复制</Button><Button variant="outline" size="sm" className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={onDelete}><Trash2 size={14} />删除</Button></>}</div></div>
-    <div className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950"><div className="flex items-center gap-2 font-semibold"><LockKeyhole size={15} />权限感知设计器</div><p className="mt-1 text-xs leading-5 text-blue-700">{canEdit ? "你可编辑画布并保存版本。" : "当前为只读授权；仍可查看定义与运行反馈。"} LLM 节点会使用服务端运行时模型目录，当前已发现 {models.length} 个可用模型。</p><details className="mt-3 rounded border border-blue-200 bg-white/80 p-2 text-[11px]"><summary className="cursor-pointer font-semibold text-blue-900">协作成员与有效期（{members.length}）</summary><div className="mt-2 grid gap-1.5">{members.map(member => <div key={member.id} className="grid grid-cols-[1fr_auto] items-center gap-2 rounded border border-blue-100 bg-white px-2 py-1.5"><div><span className="font-medium">{member.name || member.username || `用户 ${member.userId}`}</span><span className="ml-2 text-blue-600">{member.role}</span><p className="mt-0.5 text-[10px] text-slate-400">生效：{formatTime(member.effectiveFrom)} · 到期：{member.expiresAt ? formatTime(member.expiresAt) : "长期"}</p></div><div className="flex items-center gap-1"><span className={`rounded px-1.5 py-0.5 text-[10px] ${member.revokedAt ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}>{member.revokedAt ? "已撤销" : "有效"}</span>{canManage && !member.revokedAt && <button type="button" className="text-[10px] text-red-600 hover:underline" onClick={() => onRevoke(member.userId, member.role)}>撤销</button>}</div></div>)}{!members.length && <span className="text-blue-500">暂无可见协作成员。</span>}</div></details>{canManage && <form className="mt-3 grid gap-2 rounded border border-dashed border-blue-300 bg-white p-2 text-[11px]" onSubmit={event => { event.preventDefault(); const userId = Number(candidateId); if (!userId) return; onGrant(userId, memberRole, hours ? Number(hours) : undefined); setCandidateId(""); setHours(""); }}><p className="font-semibold text-blue-900">授予流程成员</p><select className="h-8 rounded border border-slate-200 bg-white px-2" value={candidateId} onChange={event => setCandidateId(event.target.value)} required><option value="">选择内部账号</option>{candidates.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.name || candidate.username}（{candidate.username}）</option>)}</select><div className="grid grid-cols-2 gap-2"><select className="h-8 rounded border border-slate-200 bg-white px-2" value={memberRole} onChange={event => setMemberRole(event.target.value as typeof memberRole)}><option value="viewer">查看者</option><option value="operator">运行者</option><option value="editor">编辑者</option><option value="owner">所有者</option></select><input className="h-8 rounded border border-slate-200 px-2" type="number" min="1" placeholder="有效期小时（可选）" value={hours} onChange={event => setHours(event.target.value)} /></div><Button className="h-8 bg-blue-600 text-xs hover:bg-blue-500" type="submit">授予成员</Button></form>}</div>
-    <StructuredRunInput value={runInput} onChange={setRunInput} canRun={canRun} runPending={runPending} onRun={onRun} />
-    <WorkflowCanvas key={`${workflow.id}:${workflow.definitionVersion}`} workflowId={workflow.id} flowType={workflow.flowType ?? "state"} definition={definition} readOnly={!canEdit} onDefinitionChange={onDefinitionChange} templates={templates} subflows={subflows} onSaveTemplate={onCreateTemplate} onUpdateTemplate={onUpdateTemplate} onDeleteTemplate={onDeleteTemplate} onToggleSubflow={onToggleSubflow} onDeleteSubflow={onDeleteSubflow} />
-    {workflow.status === "published" && <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-semibold text-amber-950">发布治理</p><p className="mt-1 text-xs leading-5 text-amber-900">取消发布会阻止后续发起，不会删除已有版本、运行实例或节点日志。</p></div><Button type="button" variant="outline" size="sm" className="border-amber-300 text-amber-900 hover:bg-amber-100" disabled={!canPublish || unpublishFlow.isPending} onClick={onUnpublish}>{unpublishFlow.isPending && <Loader2 className="animate-spin" size={14} />}取消发布</Button></div>}
-    {canEdit && <div className="mt-3 flex justify-end"><Button type="button" variant="outline" size="sm" className="border-violet-200 text-violet-700 hover:bg-violet-50" onClick={onSaveAsSubflow}>保存当前定义为子流程</Button></div>}
-    <WorkflowGovernance workflowId={workflow.id} canEdit={canEdit} canPublish={canPublish} />
-  </div>;
+  const unpublishFlow = trpc.workflow.unpublish.useMutation({
+    onSuccess: () => {
+      void utils.workflow.list.invalidate();
+      toast.success("流程已取消发布；历史版本与运行审计已保留。");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const onUnpublish = () => {
+    if (
+      window.confirm(
+        "确定取消发布当前流程吗？流程将无法继续发起，但历史版本和运行记录会保留。"
+      )
+    )
+      unpublishFlow.mutate({ id: workflow.id });
+  };
+  if (!workflow || !definition)
+    return (
+      <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8">
+        <div className="max-w-md text-center">
+          <FolderKanban className="mx-auto text-slate-300" size={42} />
+          <h2 className="mt-4 font-semibold text-slate-700">
+            选择或创建一个流程
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            流程仓库显示了你拥有或被授予查看权限的工作流。
+          </p>
+        </div>
+      </div>
+    );
+  return (
+    <div
+      data-aiflow-designer=""
+      className="min-w-0 max-w-full overflow-x-hidden p-3 sm:p-4 lg:p-5"
+    >
+      <div
+        data-aiflow-context-header
+        className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <button
+              type="button"
+              className="inline-flex items-center gap-1 font-medium text-[#2d6bea] hover:underline"
+              aria-label={backLabel}
+              title={backLabel}
+              onClick={onBackToDesignCenter}
+            >
+              <ChevronLeft size={14} />
+              {backLabel}
+            </button>
+            <span className="text-slate-300">/</span>
+            <span className="inline-flex items-center gap-1 text-slate-400">
+              <FolderKanban size={13} />
+              业务流程
+              <ChevronRight size={13} />
+              设计器
+            </span>
+          </div>
+          <div className="mt-2 flex max-w-md items-center gap-1">
+            <Input
+              aria-label="流程名称"
+              className="h-9 min-w-0 flex-1 border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-blue-300 focus-visible:ring-0 disabled:opacity-100"
+              value={name}
+              disabled={!canEdit}
+              onChange={event => setName(event.target.value)}
+            />
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onImport}
+            disabled={!canEdit}
+          >
+            <Upload size={14} />
+            导入
+          </Button>
+          <Button variant="outline" size="sm" onClick={onExport}>
+            <Download size={14} />
+            导出
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onSave}
+            disabled={!canEdit || savePending}
+          >
+            {savePending ? (
+              <Loader2 className="animate-spin" size={14} />
+            ) : (
+              <FileJson size={14} />
+            )}
+            保存画布
+          </Button>
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-500"
+            onClick={onPublish}
+            disabled={!canPublish || publishPending}
+          >
+            {publishPending && <Loader2 className="animate-spin" size={14} />}
+            发布
+          </Button>
+          {canManage && (
+            <>
+              <Button variant="outline" size="sm" onClick={onDuplicate}>
+                <Copy size={14} />
+                复制
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                onClick={onDelete}
+              >
+                <Trash2 size={14} />
+                删除
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="mb-4 min-w-0 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+        <div className="flex items-center gap-2 font-semibold">
+          <LockKeyhole size={15} />
+          权限感知设计器
+        </div>
+        <p
+          className={`mt-1 text-xs leading-5 ${runtimeModels.isError ? "text-amber-700" : "text-blue-700"}`}
+        >
+          {canEdit
+            ? "你可编辑画布并保存版本。"
+            : "当前为只读授权；仍可查看定义与运行反馈。"}{" "}
+          {runtimeModels.isPending
+            ? "正在读取 LLM 模型目录…"
+            : runtimeModels.isError
+              ? "LLM 运行时当前不可用，请管理员配置 OpenAI 兼容模型提供方后重试。"
+              : `LLM 节点会使用服务端运行时模型目录，当前已发现 ${models.length} 个可用模型。`}
+        </p>
+        <details className="mt-3 min-w-0 rounded border border-blue-200 bg-white/80 p-2 text-[11px]">
+          <summary className="cursor-pointer font-semibold text-blue-900">
+            协作成员与有效期（{members.length}）
+          </summary>
+          <div className="mt-2 grid min-w-0 gap-1.5">
+            {members.map(member => (
+              <div
+                key={member.id}
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border border-blue-100 bg-white px-2 py-1.5"
+              >
+                <div className="min-w-0">
+                  <span className="break-words font-medium">
+                    {member.name || member.username || `用户 ${member.userId}`}
+                  </span>
+                  <span className="ml-2 text-blue-600">{member.role}</span>
+                  <p className="mt-0.5 text-[10px] text-slate-400">
+                    生效：{formatTime(member.effectiveFrom)} · 到期：
+                    {member.expiresAt ? formatTime(member.expiresAt) : "长期"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] ${member.revokedAt ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}
+                  >
+                    {member.revokedAt ? "已撤销" : "有效"}
+                  </span>
+                  {canManage && !member.revokedAt && (
+                    <button
+                      type="button"
+                      className="text-[10px] text-red-600 hover:underline"
+                      onClick={() => onRevoke(member.userId, member.role)}
+                    >
+                      撤销
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {!members.length && (
+              <span className="text-blue-500">暂无可见协作成员。</span>
+            )}
+          </div>
+        </details>
+        {canManage && (
+          <form
+            className="mt-3 grid min-w-0 gap-2 rounded border border-dashed border-blue-300 bg-white p-2 text-[11px]"
+            onSubmit={event => {
+              event.preventDefault();
+              const userId = Number(candidateId);
+              if (!userId) return;
+              onGrant(userId, memberRole, hours ? Number(hours) : undefined);
+              setCandidateId("");
+              setHours("");
+            }}
+          >
+            <p className="font-semibold text-blue-900">授予流程成员</p>
+            <select
+              className="h-8 min-w-0 max-w-full rounded border border-slate-200 bg-white px-2"
+              value={candidateId}
+              onChange={event => setCandidateId(event.target.value)}
+              required
+            >
+              <option value="">选择内部账号</option>
+              {candidates.map(candidate => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.name || candidate.username}（{candidate.username}）
+                </option>
+              ))}
+            </select>
+            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+              <select
+                className="h-8 min-w-0 rounded border border-slate-200 bg-white px-2"
+                value={memberRole}
+                onChange={event =>
+                  setMemberRole(event.target.value as typeof memberRole)
+                }
+              >
+                <option value="viewer">查看者</option>
+                <option value="operator">运行者</option>
+                <option value="editor">编辑者</option>
+                <option value="owner">所有者</option>
+              </select>
+              <input
+                className="h-8 min-w-0 rounded border border-slate-200 px-2"
+                type="number"
+                min="1"
+                placeholder="有效期小时（可选）"
+                value={hours}
+                onChange={event => setHours(event.target.value)}
+              />
+            </div>
+            <Button
+              className="h-8 bg-blue-600 text-xs hover:bg-blue-500"
+              type="submit"
+            >
+              授予成员
+            </Button>
+          </form>
+        )}
+      </div>
+      <StructuredRunInput
+        value={runInput}
+        onChange={setRunInput}
+        canRun={canRun}
+        runPending={runPending}
+        onRun={onRun}
+      />
+      <WorkflowCanvas
+        key={`${workflow.id}:${workflow.definitionVersion}`}
+        workflowId={workflow.id}
+        flowType={workflow.flowType ?? "state"}
+        definition={definition}
+        readOnly={!canEdit}
+        onDefinitionChange={onDefinitionChange}
+        templates={templates}
+        subflows={subflows}
+        onSaveTemplate={onCreateTemplate}
+        onUpdateTemplate={onUpdateTemplate}
+        onDeleteTemplate={onDeleteTemplate}
+        onToggleSubflow={onToggleSubflow}
+        onDeleteSubflow={onDeleteSubflow}
+      />
+      {workflow.status === "published" && (
+        <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-semibold text-amber-950">发布治理</p>
+            <p className="mt-1 text-xs leading-5 text-amber-900">
+              取消发布会阻止后续发起，不会删除已有版本、运行实例或节点日志。
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-amber-300 text-amber-900 hover:bg-amber-100"
+            disabled={!canPublish || unpublishFlow.isPending}
+            onClick={onUnpublish}
+          >
+            {unpublishFlow.isPending && (
+              <Loader2 className="animate-spin" size={14} />
+            )}
+            取消发布
+          </Button>
+        </div>
+      )}
+      {canEdit && (
+        <div className="mt-3 flex justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-violet-200 text-violet-700 hover:bg-violet-50"
+            onClick={onSaveAsSubflow}
+          >
+            保存当前定义为子流程
+          </Button>
+        </div>
+      )}
+      <WorkflowGovernance
+        workflowId={workflow.id}
+        canEdit={canEdit}
+        canPublish={canPublish}
+      />
+    </div>
+  );
 }
 
 function valueFromField(value: string): unknown {
@@ -403,12 +784,124 @@ function valueFromField(value: string): unknown {
   return value;
 }
 
-function StructuredRunInput({ value, onChange, canRun, runPending, onRun }: { value: Record<string, unknown>; onChange: (value: Record<string, unknown>) => void; canRun: boolean; runPending: boolean; onRun: () => void }) {
-  const toRows = (input: Record<string, unknown>) => Object.entries(input).map(([key, item]) => ({ key, value: String(item ?? "") }));
+function StructuredRunInput({
+  value,
+  onChange,
+  canRun,
+  runPending,
+  onRun,
+}: {
+  value: Record<string, unknown>;
+  onChange: (value: Record<string, unknown>) => void;
+  canRun: boolean;
+  runPending: boolean;
+  onRun: () => void;
+}) {
+  const toRows = (input: Record<string, unknown>) =>
+    Object.entries(input).map(([key, item]) => ({
+      key,
+      value: String(item ?? ""),
+    }));
   const [rows, setRows] = useState(() => toRows(value));
-  useEffect(() => { setRows(toRows(value)); }, [value]);
-  const update = (next: Array<{ key: string; value: string }>) => { setRows(next); onChange(Object.fromEntries(next.filter(row => row.key.trim()).map(row => [row.key, valueFromField(row.value)]))); };
-  return <section data-structured-run-input className="mb-3 rounded-lg border border-slate-200 bg-white p-3"><div><p className="flex items-center gap-2 text-xs font-semibold text-slate-700"><CirclePlay size={14} className="text-emerald-600" />运行字段</p><p className="mt-1 text-[11px] leading-5 text-slate-500">按字段填写本次运行输入；数值与 true/false 会自动保留类型，无需编辑 JSON。</p></div><div className="mt-3 grid gap-2">{rows.map((row, index) => <div key={index} className="grid grid-cols-[minmax(100px,.8fr)_minmax(0,1.2fr)_auto] gap-2"><Input aria-label="运行字段名称" placeholder="字段名" value={row.key} onChange={event => update(rows.map((current, rowIndex) => rowIndex === index ? { ...current, key: event.target.value } : current))} /><Input aria-label="运行字段值" placeholder="字段值" value={row.value} onChange={event => update(rows.map((current, rowIndex) => rowIndex === index ? { ...current, value: event.target.value } : current))} /><button type="button" className="rounded px-2 text-slate-400 hover:text-red-600" onClick={() => update(rows.filter((_, rowIndex) => rowIndex !== index))} aria-label="删除运行字段"><Trash2 size={15} /></button></div>)}<button type="button" className="w-fit text-xs font-medium text-[#245fc8] hover:underline" onClick={() => update([...rows, { key: "", value: "" }])}>+ 添加运行字段</button></div><Button className="mt-3 w-full bg-blue-600 hover:bg-blue-500" size="sm" disabled={!canRun || runPending} onClick={onRun}>{runPending ? <Loader2 className="animate-spin" size={14} /> : <Play size={14} />}后端运行</Button></section>;
+  useEffect(() => {
+    setRows(toRows(value));
+  }, [value]);
+  const update = (next: Array<{ key: string; value: string }>) => {
+    setRows(next);
+    onChange(
+      Object.fromEntries(
+        next
+          .filter(row => row.key.trim())
+          .map(row => [row.key, valueFromField(row.value)])
+      )
+    );
+  };
+  return (
+    <section
+      data-structured-run-input
+      className="mb-3 min-w-0 rounded-lg border border-slate-200 bg-white p-3"
+    >
+      <div>
+        <p className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+          <CirclePlay size={14} className="text-emerald-600" />
+          运行字段
+        </p>
+        <p className="mt-1 text-[11px] leading-5 text-slate-500">
+          按字段填写本次运行输入；数值与 true/false 会自动保留类型，无需编辑
+          JSON。
+        </p>
+      </div>
+      <div className="mt-3 grid min-w-0 gap-2">
+        {rows.map((row, index) => (
+          <div
+            key={index}
+            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(100px,.8fr)_minmax(0,1.2fr)_auto]"
+          >
+            <Input
+              aria-label="运行字段名称"
+              className="col-span-2 min-w-0 sm:col-span-1"
+              placeholder="字段名"
+              value={row.key}
+              onChange={event =>
+                update(
+                  rows.map((current, rowIndex) =>
+                    rowIndex === index
+                      ? { ...current, key: event.target.value }
+                      : current
+                  )
+                )
+              }
+            />
+            <Input
+              aria-label="运行字段值"
+              className="min-w-0"
+              placeholder="字段值"
+              value={row.value}
+              onChange={event =>
+                update(
+                  rows.map((current, rowIndex) =>
+                    rowIndex === index
+                      ? { ...current, value: event.target.value }
+                      : current
+                  )
+                )
+              }
+            />
+            <button
+              type="button"
+              className="rounded px-2 text-slate-400 hover:text-red-600"
+              onClick={() =>
+                update(rows.filter((_, rowIndex) => rowIndex !== index))
+              }
+              aria-label="删除运行字段"
+            >
+              <Trash2 size={15} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          className="w-fit text-xs font-medium text-[#245fc8] hover:underline"
+          onClick={() => update([...rows, { key: "", value: "" }])}
+        >
+          + 添加运行字段
+        </button>
+      </div>
+      <Button
+        className="mt-3 w-full bg-blue-600 hover:bg-blue-500"
+        size="sm"
+        disabled={!canRun || runPending}
+        onClick={onRun}
+      >
+        {runPending ? (
+          <Loader2 className="animate-spin" size={14} />
+        ) : (
+          <Play size={14} />
+        )}
+        后端运行
+      </Button>
+    </section>
+  );
 }
 
 function LegacyRunCenter({ runs, selectedRun, onSelect }: { runs: any[]; selectedRun: any; onSelect: (id: string) => void }) {

@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { executeWorkflow, getWorkflowRun } from "./workflow-engine";
 import type { Definition } from "./workflow-service";
 
-const runIntegration = process.env.DATABASE_URL && process.env.BUILT_IN_FORGE_API_KEY ? it : it.skip;
+const runIntegration = process.env.DATABASE_URL && (process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY) ? it : it.skip;
 const workflowId = randomUUID();
 let runId: string | undefined;
 let pool: mysql.Pool | undefined;

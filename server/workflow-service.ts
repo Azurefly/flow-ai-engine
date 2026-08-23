@@ -26,10 +26,63 @@ export function validate(definition: unknown, executable = false): Definition {
   if (starts.length !== 1 || ends.length !== 1) throw new Error("流程必须且仅能包含一个开始节点和一个结束节点。");
   if (new Set(value.nodes.map(node => node.id)).size !== value.nodes.length) throw new Error("节点 ID 不可重复。");
   const nodeIds = new Set(value.nodes.map(node => node.id));
+  const edgeIds = new Set<string>();
+  const edgeKeys = new Set<string>();
+  const outgoing = new Map(value.nodes.map(node => [node.id, [] as Edge[]]));
+  const incoming = new Map(value.nodes.map(node => [node.id, [] as Edge[]]));
   for (const edge of value.edges) {
     if (!edge || typeof edge.id !== "string" || !edge.id.trim() || !nodeIds.has(edge.sourceNodeId) || !nodeIds.has(edge.targetNodeId)) throw new Error("流程连线引用了不存在的节点。");
+    if (edgeIds.has(edge.id)) throw new Error(`流程连线 ID 不可重复：${edge.id}。`);
+    edgeIds.add(edge.id);
+    if (edge.sourceNodeId === edge.targetNodeId) throw new Error(`流程不允许节点自环：${edge.sourceNodeId}。`);
+    const edgeKey = `${edge.sourceNodeId}|${edge.sourceHandle ?? "default"}|${edge.targetNodeId}`;
+    if (edgeKeys.has(edgeKey)) throw new Error(`流程不允许重复连线：${edge.sourceNodeId} → ${edge.targetNodeId}。`);
+    edgeKeys.add(edgeKey);
+    outgoing.get(edge.sourceNodeId)!.push(edge);
+    incoming.get(edge.targetNodeId)!.push(edge);
   }
-  if (executable && !value.edges.some(edge => edge.sourceNodeId === starts[0].id)) throw new Error("开始节点必须连接后继节点。");
+  if (executable) {
+    const startId = starts[0].id;
+    const endId = ends[0].id;
+    if (incoming.get(startId)!.length) throw new Error("开始节点不允许存在入边。");
+    if (outgoing.get(endId)!.length) throw new Error("结束节点不允许存在出边。");
+    if (!outgoing.get(startId)!.length) throw new Error("开始节点必须连接后继节点。");
+
+    const reachable = new Set<string>();
+    const visitQueue = [startId];
+    while (visitQueue.length) {
+      const nodeId = visitQueue.shift()!;
+      if (reachable.has(nodeId)) continue;
+      reachable.add(nodeId);
+      for (const edge of outgoing.get(nodeId) ?? []) visitQueue.push(edge.targetNodeId);
+    }
+    const unreachable = value.nodes.filter(node => !reachable.has(node.id));
+    if (unreachable.length) throw new Error(`存在从开始节点不可达的节点：${unreachable.map(node => node.name || node.id).join("、")}。`);
+
+    const canReachEnd = new Set<string>();
+    const reverseQueue = [endId];
+    while (reverseQueue.length) {
+      const nodeId = reverseQueue.shift()!;
+      if (canReachEnd.has(nodeId)) continue;
+      canReachEnd.add(nodeId);
+      for (const edge of incoming.get(nodeId) ?? []) reverseQueue.push(edge.sourceNodeId);
+    }
+    const deadEnds = value.nodes.filter(node => !canReachEnd.has(node.id));
+    if (deadEnds.length) throw new Error(`存在无法到达结束节点的路径：${deadEnds.map(node => node.name || node.id).join("、")}。`);
+
+    const nodesById = new Map(value.nodes.map(node => [node.id, node]));
+    const visiting = new Set<string>();
+    const visited = new Set<string>();
+    const assertAcyclic = (nodeId: string) => {
+      if (visiting.has(nodeId)) throw new Error(`流程存在未声明执行语义的循环：${nodesById.get(nodeId)?.name || nodeId}。`);
+      if (visited.has(nodeId)) return;
+      visiting.add(nodeId);
+      for (const edge of outgoing.get(nodeId) ?? []) assertAcyclic(edge.targetNodeId);
+      visiting.delete(nodeId);
+      visited.add(nodeId);
+    };
+    assertAcyclic(startId);
+  }
   return value;
 }
 type WorkflowUser = { id: number; role: "user" | "admin" };
@@ -305,6 +358,8 @@ export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    const [runRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM workflow_run WHERE workflowId=? LIMIT 1 FOR UPDATE", [workflowId]);
+    if (runRows.length) throw new Error("流程已有运行历史，禁止物理删除；请取消发布并保留任务、运行和审计记录。");
     await connection.query("DELETE FROM workflow_run_alert WHERE workflowId=?", [workflowId]);
     await connection.query("DELETE FROM workflow_task WHERE workflowId=?", [workflowId]);
     await connection.query("DELETE FROM workflow_participant_state WHERE workflowId=?", [workflowId]);

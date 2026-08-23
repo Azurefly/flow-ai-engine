@@ -20,7 +20,11 @@ services:
     volumes:
       - flow_ai_mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", 'mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent']
+      test:
+        [
+          "CMD-SHELL",
+          "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent",
+        ]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -43,6 +47,8 @@ services:
       DATABASE_URL: mysql://flow_ai:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@mysql:3306/flow_ai_engine
       FLOW_BOOTSTRAP_ADMIN_USERNAME: ${FLOW_BOOTSTRAP_ADMIN_USERNAME:?FLOW_BOOTSTRAP_ADMIN_USERNAME is required}
       FLOW_BOOTSTRAP_ADMIN_PASSWORD: ${FLOW_BOOTSTRAP_ADMIN_PASSWORD:?FLOW_BOOTSTRAP_ADMIN_PASSWORD is required}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     depends_on:
       mysql:
         condition: service_healthy

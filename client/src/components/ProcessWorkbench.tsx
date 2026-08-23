@@ -79,16 +79,8 @@ function approvalLabel(task: any) {
 function approvalProgressText(task: any) {
   const progress = task?.approvalProgress;
   if (!progress) return "";
-  return (
-    approvalLabel(task) +
-    "进度 " +
-    Number(progress.completed || 0) +
-    "/" +
-    Number(progress.required || 1) +
-    "（共 " +
-    Number(progress.total || 1) +
-    " 人）"
-  );
+  const rejected = Number(progress.rejected || 0);
+  return `${approvalLabel(task)}通过 ${Number(progress.approved ?? progress.completed ?? 0)}/${Number(progress.required || 1)}（共 ${Number(progress.total || 1)} 人）${rejected ? ` · 拒绝 ${rejected}` : ""}`;
 }
 
 export default function ProcessWorkbench() {
@@ -156,11 +148,14 @@ export default function ProcessWorkbench() {
   const complete = trpc.task.complete.useMutation({
     onSuccess: result => {
       invalidate();
-      toast.success(
-        result.status === "waiting"
-          ? "当前任务已完成，流程正在等待下一人工任务。"
-          : "任务已完成，流程已由服务端继续执行。"
-      );
+      if (result.status === "cancelled")
+        toast.warning("审批已拒绝，流程已按安全策略终止。");
+      else
+        toast.success(
+          result.status === "waiting"
+            ? "当前决定已记录，流程正在等待其他审批人。"
+            : "审批已通过，流程已由服务端继续执行。"
+        );
       setSelectedRunId(result.runId);
     },
     onError: error => toast.error(error.message),
@@ -168,11 +163,14 @@ export default function ProcessWorkbench() {
   const execute = trpc.task.execute.useMutation({
     onSuccess: result => {
       invalidate();
-      toast.success(
-        result.status === "waiting"
-          ? "操作已执行，流程已流转到下一审批人。"
-          : "操作已执行，流程已完成。"
-      );
+      if (result.status === "cancelled")
+        toast.warning("审批已拒绝，流程已按安全策略终止。");
+      else
+        toast.success(
+          result.status === "waiting"
+            ? "当前决定已记录，流程正在等待其他审批人。"
+            : "审批已通过，流程已完成。"
+        );
       setSelectedTaskId(null);
     },
     onError: error => toast.error(error.message),
@@ -210,11 +208,12 @@ export default function ProcessWorkbench() {
       const success = results.filter(item => item.success).length;
       const failed = results.length - success;
       const completed = results.find(
-        item => item.success && item.status === "success"
+        item =>
+          item.success && ["success", "cancelled"].includes(String(item.status))
       );
       if (completed?.runId) setSelectedRunId(completed.runId);
       toast.success(
-        `批量完成已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`
+        `批量通过已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`
       );
     },
     onError: error => toast.error(error.message),
@@ -406,7 +405,7 @@ export default function ProcessWorkbench() {
                   tasks={(tasks.data ?? []) as any[]}
                   loading={tasks.isLoading}
                   onTask={setSelectedTaskId}
-                  onExecute={taskId => execute.mutate({ taskId, result: { decision: "approved" } })}
+                  onExecute={setSelectedTaskId}
                   busy={busy}
                   selectedTaskIds={selectedTaskIds}
                   onToggle={taskId =>
@@ -437,15 +436,16 @@ export default function ProcessWorkbench() {
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
           onClaim={() => claim.mutate({ taskId: selectedTaskId })}
-          onExecute={() =>
-            execute.mutate({
-              taskId: selectedTaskId,
-              result: { decision: "approved" },
-            })
-          }
-          onComplete={(result: Record<string, unknown>) =>
-            complete.mutate({ taskId: selectedTaskId, result })
-          }
+          onExecute={(result: {
+            decision: "approved" | "rejected";
+            comment?: string;
+            [key: string]: unknown;
+          }) => execute.mutate({ taskId: selectedTaskId, result })}
+          onComplete={(result: {
+            decision: "approved" | "rejected";
+            comment?: string;
+            [key: string]: unknown;
+          }) => complete.mutate({ taskId: selectedTaskId, result })}
           onHandover={(targetUserId: number) =>
             handover.mutate({ taskId: selectedTaskId, targetUserId })
           }
@@ -492,7 +492,7 @@ function TaskBatchBar({
           onClick={onComplete}
         >
           <CheckCheck size={14} />
-          批量完成
+          批量通过
         </Button>
       </div>
     </div>
@@ -674,8 +674,27 @@ function TaskList({
             </td>
             <td className="px-4 py-3">
               <div className="flex flex-wrap items-center gap-1">
-                {task.status === "pending" && <Button type="button" size="sm" className="h-7 bg-emerald-600 text-xs hover:bg-emerald-500" disabled={busy} onClick={() => onExecute(task.id)}>{busy && <Loader2 className="animate-spin" size={13} />}{task.operationName || "执行操作"}</Button>}
-                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-[#2d6bea]" onClick={() => onTask(task.id)}>详情</Button>
+                {task.status === "pending" && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 bg-emerald-600 text-xs hover:bg-emerald-500"
+                    disabled={busy}
+                    onClick={() => onExecute(task.id)}
+                  >
+                    {busy && <Loader2 className="animate-spin" size={13} />}
+                    处理审批
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs text-[#2d6bea]"
+                  onClick={() => onTask(task.id)}
+                >
+                  详情
+                </Button>
               </div>
             </td>
           </tr>
@@ -718,8 +737,20 @@ function InstanceList({
             </td>
             <td className="px-4 py-3">
               <div className="flex flex-col items-start gap-1">
-                {!(run.availableOperations ?? []).length && <span className="text-[10px] text-slate-400">无可执行操作</span>}
-                <Button type="button" variant="ghost" size="sm" className="h-7 px-0 text-xs text-[#2d6bea]" onClick={() => onOpenRun(run.id)}>实例详情</Button>
+                {!(run.availableOperations ?? []).length && (
+                  <span className="text-[10px] text-slate-400">
+                    无可执行操作
+                  </span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-0 text-xs text-[#2d6bea]"
+                  onClick={() => onOpenRun(run.id)}
+                >
+                  实例详情
+                </Button>
               </div>
             </td>
           </tr>
@@ -860,9 +891,11 @@ function TaskDrawer({
   onReturn,
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
-  const [resultRows, setResultRows] = useState([
-    { key: "decision", value: "approved" },
-  ]);
+  const [decision, setDecision] = useState<"approved" | "rejected">("approved");
+  const [comment, setComment] = useState("");
+  const [resultRows, setResultRows] = useState<
+    Array<{ key: string; value: string }>
+  >([]);
   const toValue = (value: string): unknown =>
     value === "true"
       ? true
@@ -871,14 +904,24 @@ function TaskDrawer({
         : value !== "" && Number.isFinite(Number(value))
           ? Number(value)
           : value;
-  const createPayload = (rows: Array<{ key: string; value: string }>) =>
-    Object.fromEntries(
+  const createPayload = (rows: Array<{ key: string; value: string }>) => ({
+    ...Object.fromEntries(
       rows
-        .filter(row => row.key.trim())
+        .filter(
+          row =>
+            row.key.trim() && !["decision", "comment"].includes(row.key.trim())
+        )
         .map(row => [row.key, toValue(row.value)])
-    );
+    ),
+    decision,
+    ...(comment.trim() ? { comment: comment.trim() } : {}),
+  });
   const canManage = task?.status === "pending" || task?.status === "claimed";
-  const submitResult = () => onComplete(createPayload(resultRows));
+  const submitResult = () => {
+    const payload = createPayload(resultRows);
+    if (task.status === "pending") onExecute(payload);
+    else onComplete(payload);
+  };
   const updateRow = (index: number, key: "key" | "value", value: string) =>
     setResultRows(rows =>
       rows.map((row, rowIndex) =>
@@ -980,92 +1023,129 @@ function TaskDrawer({
                 )}
               </div>
             )}
-            {task.status === "pending" && (
-              <div className="grid gap-2">
-                <Button
-                  className="w-full bg-emerald-600 hover:bg-emerald-500"
-                  disabled={busy}
-                  onClick={onExecute}
-                >
-                  {busy && <Loader2 className="animate-spin" size={15} />}
-                  {task.operationName || "执行操作"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={busy}
-                  onClick={onClaim}
-                >
-                  仅领取，稍后处理
-                </Button>
-              </div>
-            )}
-            {task.status === "claimed" && (
+            {(task.status === "pending" || task.status === "claimed") && (
               <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
-                <p className="text-xs font-semibold text-slate-600">
-                  处理结果字段
-                </p>
+                <p className="text-xs font-semibold text-slate-600">审批决定</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  通过字段名和值提交处理结果；数值与 true/false
-                  会保留基础类型，无需填写 JSON。
+                  明确选择同意或拒绝；拒绝时处理意见必填，服务端不会再把“任务完成”自动当作通过。
                 </p>
-                <div className="mt-3 grid gap-2">
-                  {resultRows.map((row, index) => (
-                    <div
-                      key={index}
-                      className="grid grid-cols-[1fr_1fr_auto] gap-2"
-                    >
-                      <input
-                        className="h-9 min-w-0 rounded border border-slate-200 bg-white px-2 text-sm"
-                        aria-label="处理结果字段名称"
-                        placeholder="字段名"
-                        value={row.key}
-                        onChange={event =>
-                          updateRow(index, "key", event.target.value)
-                        }
-                      />
-                      <input
-                        className="h-9 min-w-0 rounded border border-slate-200 bg-white px-2 text-sm"
-                        aria-label="处理结果字段值"
-                        placeholder="字段值"
-                        value={row.value}
-                        onChange={event =>
-                          updateRow(index, "value", event.target.value)
-                        }
-                      />
-                      <button
-                        type="button"
-                        className="rounded px-2 text-slate-400 hover:text-red-600"
-                        onClick={() =>
-                          setResultRows(rows =>
-                            rows.filter((_, rowIndex) => rowIndex !== index)
-                          )
-                        }
-                        aria-label="删除处理结果字段"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <button
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button
                     type="button"
-                    className="w-fit text-xs font-medium text-[#245fc8] hover:underline"
-                    onClick={() =>
-                      setResultRows(rows => [...rows, { key: "", value: "" }])
+                    variant={decision === "approved" ? "default" : "outline"}
+                    className={
+                      decision === "approved"
+                        ? "bg-emerald-600 hover:bg-emerald-500"
+                        : ""
                     }
+                    onClick={() => setDecision("approved")}
                   >
-                    + 添加处理结果字段
-                  </button>
+                    同意
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={decision === "rejected" ? "default" : "outline"}
+                    className={
+                      decision === "rejected"
+                        ? "bg-red-600 hover:bg-red-500"
+                        : "border-red-200 text-red-700 hover:bg-red-50"
+                    }
+                    onClick={() => setDecision("rejected")}
+                  >
+                    拒绝
+                  </Button>
                 </div>
+                <label className="mt-3 grid gap-1 text-xs font-medium text-slate-600">
+                  处理意见{decision === "rejected" ? "（必填）" : "（可选）"}
+                  <textarea
+                    className="min-h-20 resize-y rounded border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
+                    maxLength={2000}
+                    value={comment}
+                    onChange={event => setComment(event.target.value)}
+                    placeholder={
+                      decision === "rejected"
+                        ? "请说明拒绝原因"
+                        : "可填写审批意见"
+                    }
+                  />
+                </label>
+                <details className="mt-3 rounded border border-slate-200 bg-white/70 p-3">
+                  <summary className="cursor-pointer text-xs font-medium text-slate-600">
+                    附加结果字段（可选）
+                  </summary>
+                  <div className="mt-3 grid gap-2">
+                    {resultRows.map((row, index) => (
+                      <div
+                        key={index}
+                        className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+                      >
+                        <input
+                          className="col-span-2 h-9 min-w-0 rounded border border-slate-200 bg-white px-2 text-sm sm:col-span-1"
+                          aria-label="处理结果字段名称"
+                          placeholder="字段名"
+                          value={row.key}
+                          onChange={event =>
+                            updateRow(index, "key", event.target.value)
+                          }
+                        />
+                        <input
+                          className="h-9 min-w-0 rounded border border-slate-200 bg-white px-2 text-sm"
+                          aria-label="处理结果字段值"
+                          placeholder="字段值"
+                          value={row.value}
+                          onChange={event =>
+                            updateRow(index, "value", event.target.value)
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="rounded px-2 text-slate-400 hover:text-red-600"
+                          onClick={() =>
+                            setResultRows(rows =>
+                              rows.filter((_, rowIndex) => rowIndex !== index)
+                            )
+                          }
+                          aria-label="删除处理结果字段"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="w-fit text-xs font-medium text-[#245fc8] hover:underline"
+                      onClick={() =>
+                        setResultRows(rows => [...rows, { key: "", value: "" }])
+                      }
+                    >
+                      + 添加处理结果字段
+                    </button>
+                  </div>
+                </details>
                 <Button
-                  className="mt-3 w-full bg-emerald-600 hover:bg-emerald-500"
-                  disabled={busy}
+                  className={`mt-3 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
+                  disabled={
+                    busy || (decision === "rejected" && !comment.trim())
+                  }
                   onClick={submitResult}
                 >
                   {busy && <Loader2 className="animate-spin" size={15} />}
-                  {task.operationName || "完成并继续流程"}
+                  {decision === "rejected"
+                    ? "拒绝并终止流程"
+                    : task.operationName || "同意并继续流程"}
                 </Button>
+                {task.status === "pending" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    disabled={busy}
+                    onClick={onClaim}
+                  >
+                    仅领取，稍后处理
+                  </Button>
+                )}
               </div>
             )}
             {task.status === "completed" && (

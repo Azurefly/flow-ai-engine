@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { invokeLLM, listLLMModels } from "./_core/llm";
 
-const runIntegration = process.env.BUILT_IN_FORGE_API_KEY ? it : it.skip;
+const runIntegration = process.env.OPENAI_API_KEY || process.env.BUILT_IN_FORGE_API_KEY ? it : it.skip;
 
 describe("运行时 LLM 模型目录", () => {
   runIntegration("发现可用模型并使用目录中的模型完成一次真实响应", async () => {

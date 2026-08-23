@@ -32,17 +32,17 @@ type CanvasContextMenu = { x: number; y: number; kind: "node" | "edge" | "pane" 
 
 /** The reference designer only exposes structurally valid targets from its context menu. */
 const allowedCanvasTargets: Partial<Record<NodeKind, NodeKind[]>> = {
-  start: ["state", "operate", "router", "rest", "method", "subflow"],
-  state: ["operate", "state", "router", "rest", "method", "subflow", "end"],
-  operate: ["state", "router", "rest", "method", "subflow", "end"],
-  router: ["state", "operate", "router", "rest", "method", "subflow", "end"],
-  rest: ["state", "operate", "router", "rest", "method", "subflow", "end"],
-  method: ["state", "router", "rest", "method", "subflow", "end"],
-  subflow: ["state", "router", "rest", "method", "end"],
-  condition: ["state", "operate", "router", "rest", "method", "subflow", "end"],
-  transform: ["state", "operate", "router", "condition", "transform", "end"],
-  http: ["state", "operate", "router", "condition", "end"],
-  llm: ["state", "operate", "router", "condition", "end"],
+  start: ["state", "operate", "router", "rest", "method", "llm", "subflow"],
+  state: ["operate", "state", "router", "rest", "method", "llm", "subflow", "end"],
+  operate: ["state", "router", "rest", "method", "llm", "subflow", "end"],
+  router: ["state", "operate", "router", "rest", "method", "llm", "subflow", "end"],
+  rest: ["state", "operate", "router", "rest", "method", "llm", "subflow", "end"],
+  method: ["state", "router", "rest", "method", "llm", "subflow", "end"],
+  subflow: ["state", "router", "rest", "method", "llm", "end"],
+  condition: ["state", "operate", "router", "rest", "method", "llm", "subflow", "end"],
+  transform: ["state", "operate", "router", "condition", "transform", "llm", "end"],
+  http: ["state", "operate", "router", "condition", "llm", "end"],
+  llm: ["state", "operate", "router", "condition", "llm", "end"],
 };
 
 function canConnectCanvasNodes(source: CanvasNode, target: CanvasNode, edges: Edge[]) {
@@ -835,7 +835,7 @@ export default function WorkflowCanvas({
   }, [reactFlow, fullscreen]);
 
   return (
-    <div data-aiflow-workflow-canvas="" className={inspectorMode === "maximized" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_620px]" : inspectorMode === "compact" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_420px]"}>
+    <div data-aiflow-workflow-canvas="" className={inspectorMode === "maximized" ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_620px]" : inspectorMode === "compact" ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_420px]"}>
       <section ref={canvasRegionRef} className="relative min-w-0 bg-slate-50">
         <div data-flow-canvas-toolbar="" className="border-b border-slate-200 bg-white">
           <div data-flow-node-palette="" className="flex min-h-14 items-center gap-1 overflow-x-auto px-3 py-1.5">

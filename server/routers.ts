@@ -25,6 +25,13 @@ import {
 } from "./organization-service";
 import { activateDataflowSchedule, createDataAsset, createDataSource, createDataTag, createDataUdf, createProjectPlugin, deleteDataAsset, deleteDataSource, deleteDataTag, deleteDataUdf, deleteDataflowSchedule, deleteProjectPlugin, listDataflowRuns, listDataflowSchedules, listDataflows, listDataResources, pauseDataflowSchedule, runDataflow, saveDataflowScheduleDraft, updateDataAsset, updateDataSource, updateDataUdf, updateProjectPlugin } from "./p2-service";
 
+const approvalResultSchema = z
+  .object({
+    decision: z.enum(["approved", "rejected"]),
+    comment: z.string().trim().max(2000).optional(),
+  })
+  .catchall(z.unknown());
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -614,7 +621,7 @@ export const appRouter = router({
       .input(
         z.object({
           taskId: z.string().uuid(),
-          result: z.record(z.string(), z.unknown()),
+          result: approvalResultSchema,
         })
       )
       .mutation(({ ctx, input }) => completeWorkflowTask(ctx.user, input.taskId, input.result)),
@@ -622,7 +629,7 @@ export const appRouter = router({
       .input(
         z.object({
           taskId: z.string().uuid(),
-          result: z.record(z.string(), z.unknown()).default({ decision: "approved" }),
+          result: approvalResultSchema,
         })
       )
       .mutation(({ ctx, input }) => executeWorkflowTask(ctx.user, input.taskId, input.result)),
@@ -640,7 +647,7 @@ export const appRouter = router({
       .input(
         z.object({
           taskIds: z.array(z.string().uuid()).min(1).max(20),
-          result: z.record(z.string(), z.unknown()),
+          result: approvalResultSchema,
         })
       )
       .mutation(({ ctx, input }) => batchCompleteWorkflowTasks(ctx.user, Array.from(new Set(input.taskIds)), input.result)),
