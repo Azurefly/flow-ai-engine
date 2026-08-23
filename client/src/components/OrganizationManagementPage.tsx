@@ -2,6 +2,14 @@ import { CreationDialog } from "@/components/CreationDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
@@ -9,11 +17,16 @@ import {
   ChevronDown,
   ChevronRight,
   Edit3,
+  Eye,
   KeyRound,
   Loader2,
+  MoveRight,
   Plus,
   Search,
+  Star,
+  Trash2,
   UserPlus,
+  UserRoundPlus,
   UsersRound,
 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -70,6 +83,8 @@ export default function OrganizationManagementPage({
   const [unitDialog, setUnitDialog] = useState<UnitDialogMode>(null);
   const [unitForm, setUnitForm] = useState(emptyUnitForm);
   const [memberOpen, setMemberOpen] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [includeDescendants, setIncludeDescendants] = useState(false);
   const [memberForm, setMemberForm] = useState({
     userId: "",
     title: "",
@@ -77,6 +92,25 @@ export default function OrganizationManagementPage({
   });
   const [roleOpen, setRoleOpen] = useState(false);
   const [roleId, setRoleId] = useState("");
+  const [movingMember, setMovingMember] = useState<any | null>(null);
+  const [moveForm, setMoveForm] = useState({
+    toUnitId: "",
+    title: "",
+    makePrimary: false,
+  });
+  const [roleMember, setRoleMember] = useState<any | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [createdUserId, setCreatedUserId] = useState<number | null>(null);
+  const [newUserForm, setNewUserForm] = useState({
+    username: "",
+    password: "",
+    name: "",
+    email: "",
+    role: "user" as "user" | "admin",
+    title: "",
+    isPrimary: true,
+  });
   const selected = units.find(unit => unit.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -132,6 +166,11 @@ export default function OrganizationManagementPage({
   const updateUnit = trpc.config.updateOrganizationUnit.useMutation();
   const assignMember = trpc.config.assignOrganizationMember.useMutation();
   const removeMember = trpc.config.removeOrganizationMember.useMutation();
+  const setPrimaryMembership =
+    trpc.config.setPrimaryOrganizationMembership.useMutation();
+  const moveMember = trpc.config.moveOrganizationMember.useMutation();
+  const deleteUnit = trpc.config.deleteOrganizationUnit.useMutation();
+  const createInternalUser = trpc.iam.createUser.useMutation();
   const bindRole = trpc.config.bindOrganizationRole.useMutation();
   const unbindRole = trpc.config.unbindOrganizationRole.useMutation();
   const refresh = async () => {
@@ -237,9 +276,34 @@ export default function OrganizationManagementPage({
     }
   };
 
-  const selectedMembers = members.filter(
+  const descendantIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!selected?.id) return ids;
+    const queue = [selected.id];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (ids.has(id)) continue;
+      ids.add(id);
+      queue.push(...(childrenByParent.get(id) ?? []).map(unit => unit.id));
+    }
+    return ids;
+  }, [childrenByParent, selected?.id]);
+  const directSelectedMembers = members.filter(
     member => member.unitId === selected?.id
   );
+  const selectedMembers = members.filter(member => {
+    const inScope = includeDescendants
+      ? descendantIds.has(member.unitId)
+      : member.unitId === selected?.id;
+    if (!inScope) return false;
+    const keyword = memberQuery.trim().toLowerCase();
+    return (
+      !keyword ||
+      `${member.name || ""} ${member.username || ""} ${member.title || ""}`
+        .toLowerCase()
+        .includes(keyword)
+    );
+  });
   const selectedBindings = roleBindings.filter(
     binding => binding.unitId === selected?.id
   );
@@ -248,6 +312,97 @@ export default function OrganizationManagementPage({
     (user: any) => !assignedUserIds.has(Number(user.id))
   );
   const pending = createUnit.isPending || updateUnit.isPending;
+
+  const openMoveDialog = (member: any) => {
+    setMovingMember(member);
+    setMoveForm({
+      toUnitId: "",
+      title: member.title || "",
+      makePrimary: Boolean(member.isPrimary),
+    });
+  };
+
+  const submitMove = async () => {
+    if (!movingMember || !moveForm.toUnitId) return;
+    try {
+      await moveMember.mutateAsync({
+        fromUnitId: movingMember.unitId,
+        toUnitId: moveForm.toUnitId,
+        userId: Number(movingMember.userId),
+        title: moveForm.title,
+        makePrimary: moveForm.makePrimary,
+      });
+      await refresh();
+      setMovingMember(null);
+      toast.success("成员已迁移到目标部门。");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "成员迁移失败。");
+    }
+  };
+
+  const resetNewUser = () => {
+    setCreatedUserId(null);
+    setNewUserForm({
+      username: "",
+      password: "",
+      name: "",
+      email: "",
+      role: "user",
+      title: "",
+      isPrimary: true,
+    });
+  };
+
+  const submitNewUser = async () => {
+    if (!selected) return;
+    let userId = createdUserId;
+    try {
+      if (!userId) {
+        const created = await createInternalUser.mutateAsync({
+          username: newUserForm.username,
+          password: newUserForm.password,
+          name: newUserForm.name,
+          email: newUserForm.email || undefined,
+          role: newUserForm.role,
+        });
+        userId = created.userId;
+        setCreatedUserId(userId);
+        await utils.iam.users.invalidate();
+      }
+      await assignMember.mutateAsync({
+        unitId: selected.id,
+        userId,
+        title: newUserForm.title || undefined,
+        isPrimary: newUserForm.isPrimary,
+      });
+      await Promise.all([refresh(), utils.iam.users.invalidate()]);
+      setCreateUserOpen(false);
+      resetNewUser();
+      toast.success("内部用户已创建并加入当前部门。");
+    } catch (error) {
+      toast.error(
+        userId
+          ? `账号已创建，但加入部门失败：${error instanceof Error ? error.message : "请重试"}`
+          : error instanceof Error
+            ? error.message
+            : "内部用户创建失败。"
+      );
+    }
+  };
+
+  const confirmDeleteUnit = async () => {
+    if (!selected) return;
+    const fallbackId = selected.parentUnitId || null;
+    try {
+      await deleteUnit.mutateAsync({ id: selected.id });
+      setDeleteOpen(false);
+      setSelectedId(fallbackId);
+      await refresh();
+      toast.success("空部门已删除。");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "部门删除失败。");
+    }
+  };
 
   const renderTree = (parentId = "root", depth = 0): ReactNode =>
     (childrenByParent.get(parentId) ?? []).map(unit => {
@@ -360,6 +515,31 @@ export default function OrganizationManagementPage({
             </Button>
           </div>
         </header>
+        {(organization.isError || users.isError || roles.isError) && (
+          <div
+            role="alert"
+            className="m-4 flex flex-col gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <span>
+              {organization.error?.message ||
+                users.error?.message ||
+                roles.error?.message ||
+                "组织管理数据读取失败。"}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void organization.refetch();
+                void users.refetch();
+                void roles.refetch();
+              }}
+            >
+              重新加载
+            </Button>
+          </div>
+        )}
         <div className="grid min-h-[650px] lg:grid-cols-[300px_minmax(0,1fr)]">
           <aside className="border-b border-slate-200 bg-[#fbfcfe] p-3 lg:border-b-0 lg:border-r">
             <label className="flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-slate-400">
@@ -386,6 +566,14 @@ export default function OrganizationManagementPage({
                   尚未创建部门，请点击“新增根部门”。
                 </div>
               )}
+              {!organization.isLoading &&
+                Boolean(query.trim()) &&
+                units.length > 0 &&
+                visibleIds?.size === 0 && (
+                  <div className="p-6 text-center text-sm text-slate-400">
+                    没有匹配的机构，请更换关键词。
+                  </div>
+                )}
             </div>
             <div className="mt-4 rounded-lg border border-slate-200 bg-white p-3 text-xs leading-5 text-slate-500">
               <p className="font-semibold text-slate-700">账号归属提示</p>
@@ -453,6 +641,16 @@ export default function OrganizationManagementPage({
                     >
                       {selected.status === "active" ? "停用" : "启用"}
                     </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="text-rose-600 hover:text-rose-700"
+                      onClick={() => setDeleteOpen(true)}
+                    >
+                      <Trash2 size={14} />
+                      删除部门
+                    </Button>
                   </div>
                 </div>
                 <div
@@ -465,7 +663,7 @@ export default function OrganizationManagementPage({
                       { id: "overview", label: "部门概览", icon: Building2 },
                       {
                         id: "members",
-                        label: `成员与岗位 (${selectedMembers.length})`,
+                        label: `成员与岗位 (${directSelectedMembers.length})`,
                         icon: UsersRound,
                       },
                       {
@@ -557,18 +755,57 @@ export default function OrganizationManagementPage({
                       <p className="text-sm text-slate-500">
                         成员可跨部门任职；主部门变化在同一事务内完成。
                       </p>
-                      <Button type="button" onClick={() => setMemberOpen(true)}>
-                        <UserPlus size={15} />
-                        添加成员
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            resetNewUser();
+                            setCreateUserOpen(true);
+                          }}
+                        >
+                          <UserRoundPlus size={15} />
+                          新建内部用户
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => setMemberOpen(true)}
+                        >
+                          <UserPlus size={15} />
+                          添加已有成员
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:flex-row sm:items-center">
+                      <label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-slate-400">
+                        <Search size={14} />
+                        <Input
+                          aria-label="搜索部门成员"
+                          className="h-7 border-0 px-0 shadow-none focus-visible:ring-0"
+                          placeholder="搜索姓名、登录名或岗位"
+                          value={memberQuery}
+                          onChange={event => setMemberQuery(event.target.value)}
+                        />
+                      </label>
+                      <label className="flex shrink-0 items-center gap-2 text-sm text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={includeDescendants}
+                          onChange={event =>
+                            setIncludeDescendants(event.target.checked)
+                          }
+                        />
+                        包含子机构成员
+                      </label>
                     </div>
                     <div className="mt-4 overflow-x-auto">
-                      <table className="w-full min-w-[700px] text-left text-sm">
+                      <table className="w-full min-w-[920px] text-left text-sm">
                         <thead className="bg-slate-50 text-xs text-slate-500">
                           <tr>
                             <th className="px-4 py-3">成员</th>
                             <th className="px-4 py-3">登录名</th>
                             <th className="px-4 py-3">岗位/职务</th>
+                            <th className="px-4 py-3">所属部门</th>
                             <th className="px-4 py-3">部门关系</th>
                             <th className="px-4 py-3">操作</th>
                           </tr>
@@ -588,6 +825,9 @@ export default function OrganizationManagementPage({
                               <td className="px-4 py-3">
                                 {member.title || "未配置"}
                               </td>
+                              <td className="px-4 py-3 text-slate-500">
+                                {member.unitName || "—"}
+                              </td>
                               <td className="px-4 py-3">
                                 {member.isPrimary ? (
                                   <span className="rounded bg-blue-100 px-2 py-1 text-xs text-blue-700">
@@ -600,45 +840,101 @@ export default function OrganizationManagementPage({
                                 )}
                               </td>
                               <td className="px-4 py-3">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  disabled={removeMember.isPending}
-                                  onClick={() => {
-                                    if (
-                                      window.confirm(
-                                        `确定将“${member.name || member.username}”移出当前部门吗？`
-                                      )
-                                    )
-                                      removeMember.mutate(
-                                        {
-                                          unitId: selected.id,
-                                          userId: member.userId,
-                                        },
-                                        {
-                                          onSuccess: () => {
-                                            void refresh();
-                                            toast.success("成员关系已移除。 ");
+                                <div className="flex flex-wrap gap-1.5">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setRoleMember(member)}
+                                  >
+                                    <Eye size={13} />
+                                    权限
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={moveMember.isPending}
+                                    onClick={() => openMoveDialog(member)}
+                                  >
+                                    <MoveRight size={13} />
+                                    迁移
+                                  </Button>
+                                  {!member.isPrimary && (
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="outline"
+                                      disabled={setPrimaryMembership.isPending}
+                                      onClick={() =>
+                                        setPrimaryMembership.mutate(
+                                          {
+                                            unitId: member.unitId,
+                                            userId: Number(member.userId),
                                           },
-                                          onError: error =>
-                                            toast.error(error.message),
-                                        }
-                                      );
-                                  }}
-                                >
-                                  移除
-                                </Button>
+                                          {
+                                            onSuccess: () => {
+                                              void refresh();
+                                              toast.success(
+                                                "主机构已更新，将用于直属上级解析。"
+                                              );
+                                            },
+                                            onError: error =>
+                                              toast.error(error.message),
+                                          }
+                                        )
+                                      }
+                                    >
+                                      <Star size={13} />
+                                      设为主机构
+                                    </Button>
+                                  )}
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={removeMember.isPending}
+                                    onClick={() => {
+                                      if (
+                                        window.confirm(
+                                          `确定将“${member.name || member.username}”移出当前部门吗？`
+                                        )
+                                      )
+                                        removeMember.mutate(
+                                          {
+                                            unitId: member.unitId,
+                                            userId: member.userId,
+                                          },
+                                          {
+                                            onSuccess: () => {
+                                              void refresh();
+                                              toast.success(
+                                                "成员关系已移除。 "
+                                              );
+                                            },
+                                            onError: error =>
+                                              toast.error(error.message),
+                                          }
+                                        );
+                                    }}
+                                  >
+                                    移除
+                                  </Button>
+                                </div>
                               </td>
                             </tr>
                           ))}
                           {!selectedMembers.length && (
                             <tr>
                               <td
-                                colSpan={5}
+                                colSpan={6}
                                 className="p-10 text-center text-slate-400"
                               >
-                                当前部门暂无成员。
+                                {memberQuery.trim()
+                                  ? "没有匹配的成员，请更换关键词。"
+                                  : includeDescendants
+                                    ? "当前机构及子机构暂无成员。"
+                                    : "当前部门暂无成员。"}
                               </td>
                             </tr>
                           )}
@@ -859,7 +1155,7 @@ export default function OrganizationManagementPage({
         open={memberOpen}
         onOpenChange={setMemberOpen}
         title={`添加成员到${selected ? `“${selected.name}”` : "部门"}`}
-        description="选择现有内部账号并提交真实成员关系接口；创建新账号请在身份与权限中心完成。"
+        description="选择现有内部账号并提交真实成员关系接口；新账号请使用成员页的“新建内部用户”。"
         submitLabel="保存成员"
         pending={assignMember.isPending}
         onSubmit={submitMember}
@@ -903,6 +1199,211 @@ export default function OrganizationManagementPage({
           设为该成员的主部门（驱动直属上级解析）
         </label>
       </CreationDialog>
+      <CreationDialog
+        open={createUserOpen}
+        onOpenChange={open => {
+          setCreateUserOpen(open);
+          if (!open && !createdUserId) resetNewUser();
+        }}
+        title={`新建内部用户并加入${selected ? `“${selected.name}”` : "部门"}`}
+        description="提交时先调用真实账号创建接口，再自动写入当前部门成员关系；失败时保留输入供修正或重试。"
+        submitLabel={createdUserId ? "重试加入部门" : "创建并加入部门"}
+        pending={createInternalUser.isPending || assignMember.isPending}
+        onSubmit={submitNewUser}
+        className="max-w-2xl"
+      >
+        {createdUserId && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+            账号已经创建，本次提交只重试加入当前部门，不会重复创建账号。
+          </div>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field
+            label="登录名"
+            value={newUserForm.username}
+            onChange={value =>
+              setNewUserForm({ ...newUserForm, username: value.toLowerCase() })
+            }
+            placeholder="字母开头，至少 3 位"
+          />
+          <Field
+            label="姓名"
+            value={newUserForm.name}
+            onChange={value => setNewUserForm({ ...newUserForm, name: value })}
+          />
+          <Field
+            label="初始密码"
+            type="password"
+            value={newUserForm.password}
+            onChange={value =>
+              setNewUserForm({ ...newUserForm, password: value })
+            }
+            placeholder="至少 12 位"
+          />
+          <Field
+            label="邮箱（可选）"
+            type="email"
+            value={newUserForm.email}
+            onChange={value => setNewUserForm({ ...newUserForm, email: value })}
+          />
+          <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+            账号类型
+            <select
+              className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+              value={newUserForm.role}
+              onChange={event =>
+                setNewUserForm({
+                  ...newUserForm,
+                  role: event.target.value as "user" | "admin",
+                })
+              }
+            >
+              <option value="user">普通用户</option>
+              <option value="admin">系统管理员</option>
+            </select>
+          </label>
+          <Field
+            label="岗位/职务（可选）"
+            value={newUserForm.title}
+            onChange={value => setNewUserForm({ ...newUserForm, title: value })}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={newUserForm.isPrimary}
+            onChange={event =>
+              setNewUserForm({
+                ...newUserForm,
+                isPrimary: event.target.checked,
+              })
+            }
+          />
+          设为新用户的主机构（驱动直属上级解析）
+        </label>
+      </CreationDialog>
+      <CreationDialog
+        open={Boolean(movingMember)}
+        onOpenChange={open => {
+          if (!open) setMovingMember(null);
+        }}
+        title={`迁移成员${movingMember ? `“${movingMember.name || movingMember.username}”` : ""}`}
+        description="成员关系将在同一事务内从当前部门移动到目标部门；原关系只有在目标关系保存成功后才会删除。"
+        submitLabel="确认迁移"
+        pending={moveMember.isPending}
+        onSubmit={submitMove}
+      >
+        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+          目标部门
+          <select
+            className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+            value={moveForm.toUnitId}
+            onChange={event =>
+              setMoveForm({ ...moveForm, toUnitId: event.target.value })
+            }
+            required
+          >
+            <option value="">请选择目标部门</option>
+            {units
+              .filter(
+                unit =>
+                  unit.id !== movingMember?.unitId && unit.status === "active"
+              )
+              .map(unit => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name}（{unit.code}）
+                </option>
+              ))}
+          </select>
+        </label>
+        <Field
+          label="迁移后岗位/职务"
+          value={moveForm.title}
+          onChange={value => setMoveForm({ ...moveForm, title: value })}
+        />
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input
+            type="checkbox"
+            checked={moveForm.makePrimary}
+            onChange={event =>
+              setMoveForm({ ...moveForm, makePrimary: event.target.checked })
+            }
+          />
+          将目标部门设为该成员的主机构
+        </label>
+      </CreationDialog>
+      <Dialog
+        open={Boolean(roleMember)}
+        onOpenChange={open => !open && setRoleMember(null)}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {roleMember?.name || roleMember?.username || "成员"}的权限来源
+            </DialogTitle>
+            <DialogDescription>
+              直接授权与部门继承分栏展示；部门解绑后继承权限立即失效，不会变成直接授权。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid max-h-[60vh] gap-4 overflow-y-auto sm:grid-cols-2">
+            <RoleSourceList
+              title="用户直接角色"
+              empty="当前没有有效的系统级直接角色。"
+              roles={roleMember?.directRoles ?? []}
+              source={role =>
+                role.expiresAt
+                  ? `有效至 ${new Date(role.expiresAt).toLocaleString("zh-CN", { hour12: false })}`
+                  : "系统级直接授权"
+              }
+            />
+            <RoleSourceList
+              title="部门继承角色"
+              empty="当前没有从所属部门继承角色。"
+              roles={roleMember?.inheritedRoles ?? []}
+              source={role => `继承自 ${role.unitName || "未命名部门"}`}
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setRoleMember(null)}>
+              关闭
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除部门</DialogTitle>
+            <DialogDescription>
+              仅空部门可以删除。若仍有子部门、成员或权限组，服务端会明确阻止并保留全部数据。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+            待删除：{selected?.name || "未选择部门"}（{selected?.code || "—"}）
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={deleteUnit.isPending}
+              onClick={() => setDeleteOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={deleteUnit.isPending}
+              onClick={confirmDeleteUnit}
+            >
+              {deleteUnit.isPending && (
+                <Loader2 className="animate-spin" size={14} />
+              )}
+              确认删除空部门
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <CreationDialog
         open={roleOpen}
         onOpenChange={setRoleOpen}
@@ -971,5 +1472,46 @@ function Field({
         placeholder={placeholder}
       />
     </label>
+  );
+}
+
+function RoleSourceList({
+  title,
+  empty,
+  roles,
+  source,
+}: {
+  title: string;
+  empty: string;
+  roles: any[];
+  source: (role: any) => string;
+}) {
+  return (
+    <section className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+      <div className="mt-3 grid gap-2">
+        {roles.map((role, index) => (
+          <div
+            key={`${role.roleId}-${role.unitId || role.assignmentId || index}`}
+            className="rounded-md border border-slate-200 bg-white p-3"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-slate-700">
+                {role.roleName}
+              </span>
+              <code className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700">
+                {role.roleCode}
+              </code>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{source(role)}</p>
+          </div>
+        ))}
+        {!roles.length && (
+          <p className="rounded-md border border-dashed border-slate-200 bg-white p-4 text-center text-xs text-slate-400">
+            {empty}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }

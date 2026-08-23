@@ -31,10 +31,57 @@ export type OrganizationUnitFields = {
 const cleanOptional = (value: string | null | undefined) => (value === undefined ? undefined : value?.trim() || null);
 
 export async function listOrganization() {
-  const [units] = await db().query<mysql.RowDataPacket[]>("SELECT ou.*,manager.name AS managerName,manager.username AS managerUsername,parent.name AS parentName FROM organization_unit ou LEFT JOIN users manager ON manager.id=ou.managerUserId LEFT JOIN organization_unit parent ON parent.id=ou.parentUnitId ORDER BY ou.status,ou.sortOrder,ou.code");
-  const [members] = await db().query<mysql.RowDataPacket[]>("SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId ORDER BY ou.code,om.isPrimary DESC,u.name,u.username");
-  const [roleBindings] = await db().query<mysql.RowDataPacket[]>("SELECT our.id,our.unitId,our.roleId,our.createdByUserId,our.createdAt,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope FROM organization_unit_role our JOIN iam_role r ON r.id=our.roleId ORDER BY r.name,r.code");
-  return { units, members, roleBindings };
+  const [units] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT ou.*,manager.name AS managerName,manager.username AS managerUsername,parent.name AS parentName FROM organization_unit ou LEFT JOIN users manager ON manager.id=ou.managerUserId LEFT JOIN organization_unit parent ON parent.id=ou.parentUnitId ORDER BY ou.status,ou.sortOrder,ou.code"
+  );
+  const [members] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId ORDER BY ou.code,om.isPrimary DESC,u.name,u.username"
+  );
+  const [roleBindings] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT our.id,our.unitId,our.roleId,our.createdByUserId,our.createdAt,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope FROM organization_unit_role our JOIN iam_role r ON r.id=our.roleId ORDER BY r.name,r.code"
+  );
+  const [directRoleRows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT ra.id AS assignmentId,ra.userId,ra.roleId,ra.scopeType,ra.scopeId,ra.expiresAt,
+            r.code AS roleCode,r.name AS roleName
+       FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
+      WHERE ra.scopeType='system' AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW()
+        AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+      ORDER BY r.name,r.code`
+  );
+  const [inheritedRoleRows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT DISTINCT om.userId,our.unitId,ou.name AS unitName,our.roleId,
+            r.code AS roleCode,r.name AS roleName
+       FROM organization_membership om
+       JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+       JOIN organization_unit_role our ON our.unitId=ou.id
+       JOIN iam_role r ON r.id=our.roleId
+      ORDER BY ou.name,r.name,r.code`
+  );
+  const directRolesByUser = new Map<number, mysql.RowDataPacket[]>();
+  const inheritedRolesByUser = new Map<number, mysql.RowDataPacket[]>();
+  for (const role of directRoleRows) {
+    const userId = Number(role.userId);
+    directRolesByUser.set(userId, [
+      ...(directRolesByUser.get(userId) ?? []),
+      role,
+    ]);
+  }
+  for (const role of inheritedRoleRows) {
+    const userId = Number(role.userId);
+    inheritedRolesByUser.set(userId, [
+      ...(inheritedRolesByUser.get(userId) ?? []),
+      role,
+    ]);
+  }
+  return {
+    units,
+    members: members.map(member => ({
+      ...member,
+      directRoles: directRolesByUser.get(Number(member.userId)) ?? [],
+      inheritedRoles: inheritedRolesByUser.get(Number(member.userId)) ?? [],
+    })),
+    roleBindings,
+  };
 }
 
 export async function createOrganizationUnit(user: User, input: { code: string; name: string } & Omit<OrganizationUnitFields, "name" | "status">) {
@@ -128,6 +175,178 @@ export async function removeOrganizationMember(user: User, input: { unitId: stri
     resourceType: "organization_membership",
     resourceId: input.unitId + ":" + input.userId,
     details: { operation: "organization_member_removed" },
+  });
+  return true;
+}
+
+export async function setPrimaryOrganizationMembership(
+  user: User,
+  input: { unitId: string; userId: number }
+) {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [memberships] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT om.id FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active' WHERE om.unitId=? AND om.userId=? LIMIT 1 FOR UPDATE",
+      [input.unitId, input.userId]
+    );
+    if (!memberships[0]) throw new Error("组织成员关系不存在或部门已停用。");
+    await connection.query(
+      "UPDATE organization_membership SET isPrimary=0,updatedAt=NOW() WHERE userId=?",
+      [input.userId]
+    );
+    await connection.query(
+      "UPDATE organization_membership SET isPrimary=1,updatedAt=NOW() WHERE unitId=? AND userId=?",
+      [input.unitId, input.userId]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    targetUserId: input.userId,
+    action: "user_updated",
+    resourceType: "organization_membership",
+    resourceId: input.unitId + ":" + input.userId,
+    details: { operation: "organization_primary_membership_set" },
+  });
+  return true;
+}
+
+export async function moveOrganizationMember(
+  user: User,
+  input: {
+    fromUnitId: string;
+    toUnitId: string;
+    userId: number;
+    title?: string;
+    makePrimary?: boolean;
+  }
+) {
+  if (input.fromUnitId === input.toUnitId)
+    throw new Error("目标部门不能与当前部门相同。");
+  const connection = await db().getConnection();
+  let makePrimary = false;
+  try {
+    await connection.beginTransaction();
+    const [targets] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM organization_unit WHERE id=? AND status='active' LIMIT 1 FOR UPDATE",
+      [input.toUnitId]
+    );
+    if (!targets[0]) throw new Error("目标部门不存在或已停用。");
+    const [sources] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,title,isPrimary FROM organization_membership WHERE unitId=? AND userId=? LIMIT 1 FOR UPDATE",
+      [input.fromUnitId, input.userId]
+    );
+    const source = sources[0];
+    if (!source) throw new Error("待迁移的组织成员关系不存在。");
+    makePrimary = input.makePrimary ?? Boolean(source.isPrimary);
+    if (makePrimary)
+      await connection.query(
+        "UPDATE organization_membership SET isPrimary=0,updatedAt=NOW() WHERE userId=?",
+        [input.userId]
+      );
+    await connection.query(
+      "INSERT INTO organization_membership (id,unitId,userId,title,isPrimary) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title),isPrimary=VALUES(isPrimary),updatedAt=NOW()",
+      [
+        randomUUID(),
+        input.toUnitId,
+        input.userId,
+        input.title === undefined ? source.title : input.title.trim() || null,
+        makePrimary,
+      ]
+    );
+    await connection.query(
+      "DELETE FROM organization_membership WHERE unitId=? AND userId=?",
+      [input.fromUnitId, input.userId]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    targetUserId: input.userId,
+    action: "user_updated",
+    resourceType: "organization_membership",
+    resourceId: input.fromUnitId + ":" + input.userId,
+    details: {
+      operation: "organization_member_moved",
+      fromUnitId: input.fromUnitId,
+      toUnitId: input.toUnitId,
+      isPrimary: makePrimary,
+    },
+  });
+  return true;
+}
+
+export async function deleteOrganizationUnit(
+  user: User,
+  input: { id: string }
+) {
+  const connection = await db().getConnection();
+  let unit: mysql.RowDataPacket | undefined;
+  try {
+    await connection.beginTransaction();
+    const [units] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,code,name FROM organization_unit WHERE id=? LIMIT 1 FOR UPDATE",
+      [input.id]
+    );
+    unit = units[0];
+    if (!unit) throw new Error("组织单元不存在。");
+    const [childCount] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM organization_unit WHERE parentUnitId=?",
+      [input.id]
+    );
+    const [memberCount] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM organization_membership WHERE unitId=?",
+      [input.id]
+    );
+    const [roleCount] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT COUNT(*) AS total FROM organization_unit_role WHERE unitId=?",
+      [input.id]
+    );
+    const blockers = [
+      Number(childCount[0]?.total) > 0
+        ? `子部门 ${childCount[0].total} 个`
+        : "",
+      Number(memberCount[0]?.total) > 0
+        ? `成员 ${memberCount[0].total} 人`
+        : "",
+      Number(roleCount[0]?.total) > 0 ? `权限组 ${roleCount[0].total} 个` : "",
+    ].filter(Boolean);
+    if (blockers.length)
+      throw new Error(`无法删除部门：请先处理${blockers.join("、")}。`);
+    await connection.query("DELETE FROM organization_unit WHERE id=?", [
+      input.id,
+    ]);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    if ((error as { code?: string }).code === "ER_ROW_IS_REFERENCED_2")
+      throw new Error(
+        "无法删除部门：仍存在关联数据，请刷新后先完成迁移或解绑。"
+      );
+    throw error;
+  } finally {
+    connection.release();
+  }
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "user_updated",
+    resourceType: "organization_unit",
+    resourceId: input.id,
+    details: {
+      operation: "organization_unit_deleted",
+      code: String(unit?.code || ""),
+    },
   });
   return true;
 }

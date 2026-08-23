@@ -11,7 +11,18 @@ import { previewUserCreation } from "./iam-ai-service";
 import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
 import { createFolder, createProject, createProjectWorkflow, deleteFolder, exportProjectWorkflows, getProjectAccess, grantProjectMember, listProjectMembers, listProjects, listProjectWorkflowAudit, listProjectWorkflows, listWarehouse, moveProjectWorkflow, resetProjectWorkflowAudit, setProjectWorkflowAudit, updateFolder, updateProjectWorkflowInfo } from "./project-service";
 import { batchClaimWorkflowTasks, batchCompleteWorkflowTasks, claimWorkflowTask, completeWorkflowTask, executeWorkflowTask, createWorkDomain, getP1SystemSettings, getPublicGeneralSettings, getTaskCalendar, getTaskDashboard, getWorkflowTask, handoverWorkflowTask, listActiveWorkDomains, listProcessInstances, listWorkDomains, listWorkflowTaskAssignees, listWorkflowTasks, returnWorkflowTaskToPending, updateP1SystemSetting, updateWorkDomain } from "./p1-service";
-import { assignOrganizationMember, bindOrganizationRole, createOrganizationUnit, listOrganization, removeOrganizationMember, unbindOrganizationRole, updateOrganizationUnit } from "./organization-service";
+import {
+  assignOrganizationMember,
+  bindOrganizationRole,
+  createOrganizationUnit,
+  deleteOrganizationUnit,
+  listOrganization,
+  moveOrganizationMember,
+  removeOrganizationMember,
+  setPrimaryOrganizationMembership,
+  unbindOrganizationRole,
+  updateOrganizationUnit,
+} from "./organization-service";
 import { activateDataflowSchedule, createDataAsset, createDataSource, createDataTag, createDataUdf, createProjectPlugin, deleteDataAsset, deleteDataSource, deleteDataTag, deleteDataUdf, deleteDataflowSchedule, deleteProjectPlugin, listDataflowRuns, listDataflowSchedules, listDataflows, listDataResources, pauseDataflowSchedule, runDataflow, saveDataflowScheduleDraft, updateDataAsset, updateDataSource, updateDataUdf, updateProjectPlugin } from "./p2-service";
 
 export const appRouter = router({
@@ -91,7 +102,7 @@ export const appRouter = router({
           resourceType: "user",
           resourceId: String(userId),
         });
-        return { success: true };
+        return { success: true, userId };
       }),
     updateUserStatus: adminProcedure
       .input(
@@ -710,6 +721,34 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => ({
         success: await removeOrganizationMember(ctx.user, input),
+      })),
+    setPrimaryOrganizationMembership: adminProcedure
+      .input(
+        z.object({
+          unitId: z.string().uuid(),
+          userId: z.number().int().positive(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await setPrimaryOrganizationMembership(ctx.user, input),
+      })),
+    moveOrganizationMember: adminProcedure
+      .input(
+        z.object({
+          fromUnitId: z.string().uuid(),
+          toUnitId: z.string().uuid(),
+          userId: z.number().int().positive(),
+          title: z.string().trim().max(160).optional(),
+          makePrimary: z.boolean().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await moveOrganizationMember(ctx.user, input),
+      })),
+    deleteOrganizationUnit: adminProcedure
+      .input(z.object({ id: z.string().uuid() }))
+      .mutation(async ({ ctx, input }) => ({
+        success: await deleteOrganizationUnit(ctx.user, input),
       })),
     bindOrganizationRole: adminProcedure
       .input(

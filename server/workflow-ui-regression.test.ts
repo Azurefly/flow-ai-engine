@@ -148,6 +148,15 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationPageSource).toContain("assignOrganizationMember.useMutation");
     expect(organizationPageSource).toContain("bindOrganizationRole.useMutation");
     expect(organizationPageSource).toContain("取消不会写入数据库");
+    expect(organizationPageSource).toContain("moveOrganizationMember.useMutation");
+    expect(organizationPageSource).toContain("setPrimaryOrganizationMembership.useMutation");
+    expect(organizationPageSource).toContain("deleteOrganizationUnit.useMutation");
+    expect(organizationPageSource).toContain("createUser.useMutation");
+    expect(organizationPageSource).toContain("新建内部用户");
+    expect(organizationPageSource).toContain("包含子机构成员");
+    expect(organizationPageSource).toContain("用户直接角色");
+    expect(organizationPageSource).toContain("部门继承角色");
+    expect(organizationPageSource).toContain("没有匹配的机构");
   });
 
   it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {

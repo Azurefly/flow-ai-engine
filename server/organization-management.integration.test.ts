@@ -15,20 +15,35 @@ let pool: mysql.Pool | undefined;
 let admin: any;
 let employee: any;
 let unitId: string | undefined;
+let secondaryUnitId: string | undefined;
+let childUnitId: string | undefined;
 
 describe("BDP 参考式组织字段与部门权限组继承", () => {
   afterAll(async () => {
     if (!pool) return;
-    if (unitId) {
-      await pool.query("DELETE FROM organization_unit_role WHERE unitId=?", [
-        unitId,
+    const unitIds = [unitId, secondaryUnitId, childUnitId].filter(Boolean);
+    if (unitIds.length) {
+      await pool.query(
+        "DELETE FROM organization_unit_role WHERE unitId IN (?)",
+        [unitIds]
+      );
+      await pool.query(
+        "DELETE FROM organization_membership WHERE unitId IN (?)",
+        [unitIds]
+      );
+      await pool.query(
+        "UPDATE organization_unit SET parentUnitId=NULL WHERE id IN (?)",
+        [unitIds]
+      );
+      await pool.query("DELETE FROM organization_unit WHERE id IN (?)", [
+        unitIds,
       ]);
-      await pool.query("DELETE FROM organization_membership WHERE unitId=?", [
-        unitId,
-      ]);
-      await pool.query("DELETE FROM organization_unit WHERE id=?", [unitId]);
     }
     const ids = [admin?.id, employee?.id].filter(Boolean);
+    if (ids.length)
+      await pool.query("DELETE FROM role_assignment WHERE userId IN (?)", [
+        ids,
+      ]);
     if (ids.length)
       await pool.query(
         "DELETE FROM authorization_audit_log WHERE actorUserId IN (?) OR targetUserId IN (?)",
@@ -87,16 +102,24 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
 
       unitId = (
         await caller.config.createOrganizationUnit({
-        code: `ORG_${suffix.toUpperCase()}`,
-        name: "研发中心",
-        managerUserId: admin.id,
-        unitType: "department",
-        unitLevel: 2,
-        standardCode: `STD-${suffix}`,
-        areaCode: "440300",
-        category: "technology",
-        sortOrder: 20,
-        description: "用于组织权限继承集成测试",
+          code: `ORG_${suffix.toUpperCase()}`,
+          name: "研发中心",
+          managerUserId: admin.id,
+          unitType: "department",
+          unitLevel: 2,
+          standardCode: `STD-${suffix}`,
+          areaCode: "440300",
+          category: "technology",
+          sortOrder: 20,
+          description: "用于组织权限继承集成测试",
+        })
+      ).id;
+      secondaryUnitId = (
+        await caller.config.createOrganizationUnit({
+          code: `ORG_B_${suffix.toUpperCase()}`,
+          name: "交付中心",
+          managerUserId: admin.id,
+          unitType: "department",
         })
       ).id;
       await caller.config.assignOrganizationMember({
@@ -105,13 +128,49 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
         title: "开发工程师",
         isPrimary: true,
       });
+      await caller.config.assignOrganizationMember({
+        unitId: secondaryUnitId,
+        userId: employee.id,
+        title: "兼任工程师",
+        isPrimary: false,
+      });
+      await caller.config.setPrimaryOrganizationMembership({
+        unitId: secondaryUnitId,
+        userId: employee.id,
+      });
+      let organization: any = await caller.config.organization();
+      expect(
+        organization.members.find(
+          (member: any) =>
+            member.unitId === secondaryUnitId &&
+            Number(member.userId) === employee.id
+        )
+      ).toMatchObject({ isPrimary: 1 });
+      expect(
+        organization.members.find(
+          (member: any) =>
+            member.unitId === unitId && Number(member.userId) === employee.id
+        )
+      ).toMatchObject({ isPrimary: 0 });
+      await caller.config.moveOrganizationMember({
+        fromUnitId: secondaryUnitId,
+        toUnitId: unitId,
+        userId: employee.id,
+        title: "平台工程师",
+        makePrimary: true,
+      });
       const [roleRows] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT id FROM iam_role WHERE code='workflow_creator' LIMIT 1"
       );
       const roleId = Number(roleRows[0].id);
       await caller.config.bindOrganizationRole({ unitId, roleId });
+      await caller.iam.assignSystemRole({
+        userId: employee.id,
+        roleCode: "workflow_viewer",
+        note: "验证直接角色与部门继承角色区分",
+      });
 
-      const organization: any = await caller.config.organization();
+      organization = await caller.config.organization();
       expect(
         organization.units.find((unit: any) => unit.id === unitId)
       ).toMatchObject({
@@ -123,12 +182,34 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
         sortOrder: 20,
         description: "用于组织权限继承集成测试",
       });
+      const employeeMembership = organization.members.find(
+        (member: any) =>
+          member.unitId === unitId && Number(member.userId) === employee.id
+      );
+      expect(employeeMembership).toMatchObject({
+        title: "平台工程师",
+        isPrimary: 1,
+      });
       expect(
-        organization.members.find(
+        organization.members.some(
           (member: any) =>
-            member.unitId === unitId && Number(member.userId) === employee.id
+            member.unitId === secondaryUnitId &&
+            Number(member.userId) === employee.id
         )
-      ).toMatchObject({ title: "开发工程师", isPrimary: 1 });
+      ).toBe(false);
+      expect(employeeMembership.directRoles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ roleCode: "workflow_viewer" }),
+        ])
+      );
+      expect(employeeMembership.inheritedRoles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            unitId,
+            roleCode: "workflow_creator",
+          }),
+        ])
+      );
       expect(
         organization.roleBindings.find(
           (binding: any) => binding.unitId === unitId
@@ -158,6 +239,21 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
           ),
         })
       ).rejects.toThrow("非系统管理员");
+      childUnitId = (
+        await caller.config.createOrganizationUnit({
+          code: `ORG_C_${suffix.toUpperCase()}`,
+          name: "研发一组",
+          parentUnitId: unitId,
+          unitType: "department",
+        })
+      ).id;
+      await expect(
+        caller.config.deleteOrganizationUnit({ id: unitId })
+      ).rejects.toThrow("子部门");
+      await caller.config.deleteOrganizationUnit({ id: childUnitId });
+      await expect(
+        caller.config.deleteOrganizationUnit({ id: unitId })
+      ).rejects.toThrow("成员 1 人");
       await caller.config.updateOrganizationUnit({
         id: unitId,
         name: "研发与平台中心",
@@ -181,6 +277,12 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
       expect(
         await resolveRoleCandidateUserIds("workflow_creator", randomUUID())
       ).not.toContain(employee.id);
+      await caller.config.removeOrganizationMember({
+        unitId,
+        userId: employee.id,
+      });
+      await caller.config.deleteOrganizationUnit({ id: unitId });
+      await caller.config.deleteOrganizationUnit({ id: secondaryUnitId });
     },
     120_000
   );
