@@ -456,29 +456,18 @@
   border-color: #dfe5ec;
 }
 
-[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child {
+[data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-node-palette] {
   min-height: 48px;
   padding: 0 10px;
 }
 
-[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child > div > button {
-  height: 52px;
-  min-width: 54px;
-  flex-direction: column;
-  gap: 2px;
-  border-radius: 0;
-  padding: 5px 7px;
-  font-size: 10px;
-  line-height: 1.1;
-}
-
-[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child > div:last-child > button {
-  min-width: 58px;
+[data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-node-palette] > button,
+[data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-canvas-actions] > button {
+  min-width: max-content;
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] .react-flow__node-workflowNode > div {
-  border-radius: 2px;
-  box-shadow: none;
+  border-radius: 16px;
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] > section > .relative {

@@ -95,6 +95,7 @@ export function WorkflowDetailPage({
                 flowType={workflow.flowType ?? "state"}
                 definition={definition}
                 readOnly
+                showCanvasActions={false}
               />
             </>
           }

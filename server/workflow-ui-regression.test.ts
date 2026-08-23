@@ -228,6 +228,28 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("border-t border-slate-200 bg-white lg:border-l lg:border-t-0");
   });
 
+  it("画布工具与节点图例分行展示，并以圆角徽标保护图标和长文本", () => {
+    expect(canvasSource).toContain("function NodeTypeGlyph");
+    expect(canvasSource).toContain('data-flow-node-palette=""');
+    expect(canvasSource).toContain('data-flow-canvas-actions=""');
+    expect(canvasSource).toContain("showCanvasActions = true");
+    expect(processDetailPageSource).toContain("showCanvasActions={false}");
+    expect(canvasSource).toContain("rounded-2xl");
+    expect(canvasSource).toContain("max-w-[calc(100vw-3rem)]");
+    expect(canvasSource).toContain("break-words text-sm font-semibold");
+    expect(canvasSource).toContain("justify-start");
+    expect(styleSource).toContain("[data-flow-node-palette]");
+    expect(styleSource).toContain("[data-flow-canvas-actions]");
+    expect(styleSource).toContain("border-radius: 16px;");
+    expect(styleSource).not.toContain(".react-flow__node-workflowNode > div {\n  border-radius: 2px;");
+  });
+
+  it("路由规则名称和目标缺失时显示稳定回退文案，不渲染 undefined", () => {
+    expect(canvasSource).toContain("`规则 ${index + 1}`");
+    expect(canvasSource).toContain('routerTargetId || "待连线"');
+    expect(canvasSource).not.toContain("String(route.label ?? route.handle)");
+  });
+
   it("保留版本差异与可审计回滚入口", () => {
     expect(governanceSource).toContain("workflow.versionDiff.useQuery");
     expect(governanceSource).toContain("workflow.rollbackVersion.useMutation");
@@ -512,7 +534,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("最小化面板");
     expect(canvasSource).toContain('role="tablist"');
     expect(canvasSource).toContain('role="tabpanel"');
-    expect(canvasSource).toContain("rounded-xl border bg-white");
+    expect(canvasSource).toContain("rounded-2xl border bg-white");
     expect(canvasSource).toContain("画布说明");
     expect(canvasSource).toContain("RotateCcw");
     expect(canvasSource).toContain("若无元件，请添加元件。");

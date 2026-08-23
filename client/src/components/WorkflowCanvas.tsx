@@ -16,7 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Braces, CircleDot, Database, Download, FileText, Filter, FolderTree, GitBranch, Globe2, LockKeyhole, Maximize2, Minimize2, MousePointer2, Move, Play, Plus, RotateCcw, Save, Sigma, Sparkles, Square, Table2, Trash2, Waypoints } from "lucide-react";
+import { Braces, CircleDot, Database, Download, FileText, Filter, FolderTree, GitBranch, Globe2, LockKeyhole, Maximize2, Minimize2, MousePointer2, Move, Play, Plus, RotateCcw, Save, Sigma, Sparkles, Square, Table2, Trash2, Waypoints, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Definition } from "../../../server/workflow-service";
 import { createDefaultNodeConfig, FLOW_NODE_DEFINITIONS, getNodeConfigEvidence, type FlowNodeDefinition, type FlowNodeType, type FlowType, type NodeConfig, validateNodeConfig } from "@shared/workflow-node-contract";
@@ -84,6 +84,10 @@ const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
 
 const palette: Array<FlowNodeDefinition & { icon: typeof Play; color: string }> = (Object.values(FLOW_NODE_DEFINITIONS) as FlowNodeDefinition[]).map(item => ({ ...item, ...nodeAppearance[item.type] }));
 
+function NodeTypeGlyph({ icon: Icon, color, size = "card" }: { icon: LucideIcon; color: string; size?: "card" | "palette" }) {
+  return <span aria-hidden="true" className={size === "card" ? "grid h-9 w-9 shrink-0 place-items-center rounded-xl border shadow-sm" : "grid h-7 w-7 shrink-0 place-items-center rounded-lg border"} style={{ color, borderColor: `${color}33`, backgroundColor: `${color}12` }}><Icon size={size === "card" ? 17 : 14} strokeWidth={2.2} /></span>;
+}
+
 function nodeConfigState(kind: NodeKind, config: NodeConfig): ConfigState {
   try {
     validateNodeConfig(kind, config);
@@ -112,15 +116,17 @@ function FlowNodeCard({ data, selected }: NodeProps) {
   const hasTarget = nodeData.kind !== "start";
   const routeItems = nodeData.kind === "router" && Array.isArray(nodeData.config.routes) ? nodeData.config.routes.filter(item => item && typeof item === "object") as NodeConfig[] : [];
   return (
-    <div className={`relative min-w-44 rounded-xl border bg-white px-3.5 py-3 shadow-sm transition-shadow ${selected ? "ring-4 ring-indigo-100 shadow-md" : "hover:shadow-md"}`} style={{ borderColor: appearance.color }}>
+    <div className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-white px-4 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all ${selected ? "-translate-y-0.5 ring-4 ring-indigo-100 shadow-[0_12px_30px_rgba(79,70,229,0.16)]" : "hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,0.12)]"}`} style={{ borderColor: `${appearance.color}66` }}>
       {hasTarget && <Handle type="target" position={Position.Left} id="target" className="!h-2.5 !w-2.5 !border-2 !border-white" style={{ backgroundColor: appearance.color }} />}
-      <div className="flex items-center gap-2">
-        <appearance.icon size={15} color={appearance.color} />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">{nodeData.label}</span>
-        <span className={`h-2 w-2 rounded-full ${configState === "partial" ? "bg-red-500" : configState === "editing" ? "bg-blue-500" : "bg-emerald-500"}`} title={configState === "partial" ? "未完全配置" : configState === "editing" ? "配置中" : "已配置"} />
+      <div className="flex items-center gap-3">
+        <NodeTypeGlyph icon={appearance.icon} color={appearance.color} />
+        <div className="min-w-0 flex-1">
+          <span className="block break-words text-sm font-semibold leading-5 text-slate-800">{nodeData.label}</span>
+          <span className="mt-0.5 block truncate text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">{nodeData.kind}</span>
+        </div>
+        <span className={`h-2 w-2 shrink-0 rounded-full ${configState === "partial" ? "bg-red-500" : configState === "editing" ? "bg-blue-500" : "bg-emerald-500"}`} title={configState === "partial" ? "未完全配置" : configState === "editing" ? "配置中" : "已配置"} />
       </div>
-      <p className="mt-1 truncate text-[10px] font-medium uppercase tracking-[.12em] text-slate-400">{nodeData.kind}</p>
-      {routeItems.length > 0 && <div className="mt-2 grid gap-1 border-t border-slate-100 pt-2">{routeItems.map(route => <div key={String(route.handle)} className="flex items-center justify-between gap-3 text-[10px]"><span className="truncate font-medium text-violet-700">{String(route.label ?? route.handle)}</span><span className="max-w-24 truncate text-slate-400">→ {String(route.targetNodeId ?? route.target ?? "待连线")}</span></div>)}</div>}
+      {routeItems.length > 0 && <div className="mt-3 grid gap-1.5 border-t border-slate-100 pt-2.5">{routeItems.map((route, index) => { const routeName = String(route.label || route.routerRuleName || route.handle || `规则 ${index + 1}`); const routeTarget = String(route.targetNodeId || route.target || route.routerTargetId || "待连线"); return <div key={String(route.handle || route.routerRuleId || index)} className="flex items-center justify-between gap-3 text-[10px]"><span className="min-w-0 flex-1 truncate rounded-md bg-violet-50 px-1.5 py-1 font-semibold text-violet-700" title={routeName}>{routeName}</span><span className="max-w-24 truncate text-slate-400" title={routeTarget}>→ {routeTarget}</span></div>; })}</div>}
       {handles.map((id, index) => <Handle key={id} type="source" position={Position.Right} id={id} className="!h-2.5 !w-2.5 !border-2 !border-white" style={{ top: `${((index + 1) / (handles.length + 1)) * 100}%`, backgroundColor: appearance.color }} title={id} />)}
     </div>
   );
@@ -470,6 +476,7 @@ export default function WorkflowCanvas({
   onDeleteTemplate,
   onToggleSubflow,
   onDeleteSubflow,
+  showCanvasActions = true,
 }: {
   workflowId?: string;
   flowType?: FlowType;
@@ -483,6 +490,7 @@ export default function WorkflowCanvas({
   onDeleteTemplate?: (id: string) => void;
   onToggleSubflow?: (subflow: ReuseSubflow, isEnabled: boolean) => void;
   onDeleteSubflow?: (id: string) => void;
+  showCanvasActions?: boolean;
 }) {
   const initial = definition ?? defaultDefinition();
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(toFlowNodes(initial));
@@ -827,19 +835,19 @@ export default function WorkflowCanvas({
   return (
     <div data-aiflow-workflow-canvas="" className={inspectorMode === "maximized" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_620px]" : inspectorMode === "compact" ? "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]" : "grid min-h-[650px] grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_420px]"}>
       <section ref={canvasRegionRef} className="relative min-w-0 bg-slate-50">
-        <div className="flex min-h-14 items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3">
-          <div className="flex items-center gap-1 pr-2">
-            {palette.filter(item => item.flowTypes.includes(flowType)).map(item => <Button key={item.type} type="button" variant="ghost" size="sm" className="gap-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950" disabled={readOnly} draggable={!readOnly} onDragStart={event => handlePaletteDragStart(event, item)} onClick={() => addNode(item)} title={item.description}><item.icon size={14} color={item.color} />{item.label}</Button>)}
+        <div data-flow-canvas-toolbar="" className="border-b border-slate-200 bg-white">
+          <div data-flow-node-palette="" className="flex min-h-14 items-center gap-1 overflow-x-auto px-3 py-1.5">
+            {palette.filter(item => item.flowTypes.includes(flowType)).map(item => <Button key={item.type} type="button" variant="ghost" size="sm" className="h-10 shrink-0 gap-2 rounded-xl px-2.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950" disabled={readOnly} draggable={!readOnly} onDragStart={event => handlePaletteDragStart(event, item)} onClick={() => addNode(item)} title={item.description}><NodeTypeGlyph icon={item.icon} color={item.color} size="palette" />{item.label}</Button>)}
             {(flowType === "state" || flowType === "control") && <><span className="mx-1 h-5 w-px bg-slate-200" /><span aria-disabled="true" title="原始安装包中为禁用状态，项目资源接入后才可用" className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"><Database size={14} />业务资源</span><span aria-disabled="true" title="原始安装包中为禁用状态，物理资源接入后才可用" className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"><Table2 size={14} />物理资源</span></>}
           </div>
-          <div className="ml-auto flex shrink-0 items-center gap-1 border-l border-slate-200 pl-2">
+          {showCanvasActions && <div data-flow-canvas-actions="" className="flex min-h-10 items-center justify-start gap-1 overflow-x-auto border-t border-slate-100 bg-slate-50/80 px-3 py-1 sm:justify-end">
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:neaten-canvas"))} title="整理画布"><Waypoints size={14} />整理画布</Button>
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:save-canvas-image"))} title="保存为图片"><Download size={14} />保存为图片</Button>
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:fullscreen-canvas"))} title="全屏展示"><Maximize2 size={14} />{fullscreen ? "退出全屏" : "全屏展示"}</Button>
             {!readOnly && <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-red-600 disabled:text-slate-300" disabled={!selectedEdgeId} onClick={deleteSelectedEdge} title={selectedEdgeId ? "删除选中的连线（Delete 或 Backspace）" : "先单击画布中的连线"}><Trash2 size={14} />删除连线</Button>}
             {!readOnly && deletedEdge && <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-indigo-600" onClick={undoDeletedEdge} title="恢复刚删除的连线"><RotateCcw size={14} />撤销删线</Button>}
             <Button type="button" variant="ghost" size="sm" className="gap-1 text-xs text-slate-600" onClick={() => window.dispatchEvent(new Event("flow:clear-highlight"))} title="取消高亮"><MousePointer2 size={14} />取消高亮</Button>
-          </div>
+          </div>}
         </div>
         {!readOnly && (templates.length > 0 || subflows.length > 0) && <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-1.5"><span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">REUSE LIBRARY</span>{templates.map(template => <Button key={template.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 text-xs" onClick={() => addReusableNode({ type: template.nodeType, label: template.name, config: template.config })}><Save size={12} />{template.name}</Button>)}{subflows.filter(subflow => subflow.isEnabled).map(subflow => <Button key={subflow.id} type="button" variant="outline" size="sm" className="h-7 shrink-0 gap-1 border-violet-200 text-xs text-violet-700 hover:bg-violet-50" onClick={() => addReusableNode({ type: "subflow", label: subflow.name, config: { subflowId: subflow.id, input: "{{input}}" } })}><FolderTree size={12} />{subflow.name}</Button>)}</div>}
         <div className="relative h-[420px] sm:h-[590px]" onDragOver={event => event.preventDefault()} onDrop={handleCanvasDrop}>
