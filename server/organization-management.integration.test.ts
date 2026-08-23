@@ -164,11 +164,16 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
       );
       const roleId = Number(roleRows[0].id);
       await caller.config.bindOrganizationRole({ unitId, roleId });
-      await caller.iam.assignSystemRole({
-        userId: employee.id,
-        roleCode: "workflow_creator",
-        note: "验证直接角色与部门继承角色区分",
-      });
+      await pool.query(
+        "INSERT INTO role_assignment (id,userId,roleId,scopeType,effectiveFrom,grantedByUserId,note) VALUES (?,?,?,'system',NOW(),?,?)",
+        [
+          randomUUID(),
+          employee.id,
+          roleId,
+          admin.id,
+          "验证直接角色与部门继承角色区分",
+        ]
+      );
 
       organization = await caller.config.organization();
       expect(
@@ -225,6 +230,10 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
         new Map([
           [employee.id, ["default", "workflow_creator", String(roleId)]],
         ])
+      );
+      await pool.query(
+        "DELETE FROM role_assignment WHERE userId=? AND roleId=? AND scopeType='system'",
+        [employee.id, roleId]
       );
 
       await expect(
