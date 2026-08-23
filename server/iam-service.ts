@@ -501,6 +501,65 @@ export async function listRoles(scope?: "system" | "workflow") {
   return rows;
 }
 
+export async function getUserAuthorizationDetails(userId: number) {
+  await ensureIamCatalog();
+  const [userRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,username,name,email,role,status,lastSignedIn,createdAt FROM users WHERE id=? LIMIT 1", [userId]);
+  const user = userRows[0];
+  if (!user) throw new Error("未找到该内部账号。");
+  const [directRoles] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT ra.id AS assignmentId,ra.scopeType,ra.scopeId,ra.effectiveFrom,ra.expiresAt,ra.note,
+            r.id AS roleId,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope
+       FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
+      WHERE ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW()
+        AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+      ORDER BY r.scope,r.name,r.code,ra.scopeId`, [userId]
+  );
+  const [inheritedRoles] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT DISTINCT ou.id AS unitId,ou.name AS unitName,r.id AS roleId,r.code AS roleCode,
+            r.name AS roleName,r.description AS roleDescription,r.scope
+       FROM organization_membership om
+       JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+       JOIN organization_unit_role our ON our.unitId=ou.id
+       JOIN iam_role r ON r.id=our.roleId
+      WHERE om.userId=? ORDER BY ou.name,r.name,r.code`, [userId]
+  );
+  const [permissionRows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT DISTINCT p.code,p.name,p.description
+       FROM (
+         SELECT ra.roleId FROM role_assignment ra WHERE ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+         UNION
+         SELECT our.roleId FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active' JOIN organization_unit_role our ON our.unitId=ou.id WHERE om.userId=?
+       ) effective_role
+       JOIN role_permission rp ON rp.roleId=effective_role.roleId JOIN permission p ON p.id=rp.permissionId ORDER BY p.code`, [userId, userId]
+  );
+  const effectivePermissions = user.role === "admin"
+    ? Array.from(new Map([...permissionRows, ...ALL_PERMISSIONS.map(code => ({ code, name: code, description: "管理员账号内置权限" }))].map(row => [String(row.code), row])).values())
+    : permissionRows;
+  return { user, directRoles, inheritedRoles, effectivePermissions };
+}
+
+export async function getRoleAuthorizationDetails(roleId: number) {
+  await ensureIamCatalog();
+  const [roleRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,code,name,description,scope,isSystem,createdAt,updatedAt FROM iam_role WHERE id=? LIMIT 1", [roleId]);
+  const role = roleRows[0];
+  if (!role) throw new Error("未找到该角色。");
+  const [permissions] = await db().query<mysql.RowDataPacket[]>("SELECT p.code,p.name,p.description FROM role_permission rp JOIN permission p ON p.id=rp.permissionId WHERE rp.roleId=? ORDER BY p.code", [roleId]);
+  const [directUsers] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT ra.id AS assignmentId,ra.scopeType,ra.scopeId,ra.effectiveFrom,ra.expiresAt,ra.note,u.id AS userId,u.username,u.name,u.status
+       FROM role_assignment ra JOIN users u ON u.id=ra.userId
+      WHERE ra.roleId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+      ORDER BY u.name,u.username,ra.scopeType,ra.scopeId`, [roleId]
+  );
+  const [inheritedUsers] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT DISTINCT u.id AS userId,u.username,u.name,u.status,ou.id AS unitId,ou.name AS unitName
+       FROM organization_unit_role our JOIN organization_unit ou ON ou.id=our.unitId AND ou.status='active'
+       JOIN organization_membership om ON om.unitId=ou.id JOIN users u ON u.id=om.userId
+      WHERE our.roleId=? ORDER BY ou.name,u.name,u.username`, [roleId]
+  );
+  const [organizationUnits] = await db().query<mysql.RowDataPacket[]>("SELECT ou.id,ou.code,ou.name,ou.status FROM organization_unit_role our JOIN organization_unit ou ON ou.id=our.unitId WHERE our.roleId=? ORDER BY ou.name,ou.code", [roleId]);
+  return { role, permissions, directUsers, inheritedUsers, organizationUnits };
+}
+
 export async function listAuthorizationAudit(limit = 100) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT a.*,actor.username AS actorUsername,target.username AS targetUsername

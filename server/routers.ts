@@ -5,9 +5,9 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { createUser, ensureBootstrapAdmin, FLOW_SESSION_COOKIE, listUsers, login, logout, setUserStatus } from "./internal-auth";
-import { assignRole, createCustomRole, deleteCustomRole, getWorkflowAccess, grantWorkflowMember, listActiveUsersForWorkflowAssignment, listAuthorizationAudit, listRoles, listWorkflowMembers, recordAuthorizationAudit, revokeRoleAssignment, revokeWorkflowMember, updateCustomRole } from "./iam-service";
+import { assignRole, createCustomRole, deleteCustomRole, getRoleAuthorizationDetails, getUserAuthorizationDetails, getWorkflowAccess, grantWorkflowMember, listActiveUsersForWorkflowAssignment, listAuthorizationAudit, listRoles, listWorkflowMembers, recordAuthorizationAudit, revokeRoleAssignment, revokeWorkflowMember, updateCustomRole } from "./iam-service";
 import { executeWorkflow, getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
-import { previewUserCreation } from "./iam-ai-service";
+import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
 import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
 import { createFolder, createProject, createProjectWorkflow, deleteFolder, exportProjectWorkflows, getProjectAccess, grantProjectMember, listProjectMembers, listProjects, listProjectWorkflowAudit, listProjectWorkflows, listWarehouse, moveProjectWorkflow, resetProjectWorkflowAudit, setProjectWorkflowAudit, updateFolder, updateProjectWorkflowInfo } from "./project-service";
 import { batchClaimWorkflowTasks, batchCompleteWorkflowTasks, claimWorkflowTask, completeWorkflowTask, executeWorkflowTask, createWorkDomain, getP1SystemSettings, getPublicGeneralSettings, getTaskCalendar, getTaskDashboard, getWorkflowTask, handoverWorkflowTask, listActiveWorkDomains, listProcessInstances, listWorkDomains, listWorkflowTaskAssignees, listWorkflowTasks, returnWorkflowTaskToPending, updateP1SystemSetting, updateWorkDomain } from "./p1-service";
@@ -83,6 +83,9 @@ export const appRouter = router({
         })
       )
       .mutation(({ input }) => previewUserCreation(input)),
+    previewUserBatch: adminProcedure
+      .input(z.object({ goal: z.string().trim().min(3).max(2000), maxUsers: z.number().int().min(1).max(30).default(10), defaultRole: z.enum(["user", "admin"]).default("user") }))
+      .mutation(({ input }) => previewUserBatch(input)),
     createUser: adminProcedure
       .input(
         z.object({
@@ -104,6 +107,21 @@ export const appRouter = router({
         });
         return { success: true, userId };
       }),
+    createUsersBatch: adminProcedure
+      .input(z.object({ users: z.array(z.object({ username: z.string().trim().min(3).max(64), password: z.string().min(12).max(256), name: z.string().trim().min(1).max(160), email: z.string().email().optional(), role: z.enum(["user", "admin"]).default("user") })).min(1).max(30) }))
+      .mutation(async ({ ctx, input }) => {
+        const results: Array<{ username: string; success: boolean; userId?: number; error?: string }> = [];
+        for (const account of input.users) {
+          try {
+            const userId = await createUser(account);
+            await recordAuthorizationAudit({ actorUserId: ctx.user.id, targetUserId: userId, action: "user_created", resourceType: "user", resourceId: String(userId), details: { source: "ai_batch_preview" } });
+            results.push({ username: account.username, success: true, userId });
+          } catch (error) {
+            results.push({ username: account.username, success: false, error: error instanceof Error ? error.message : "创建失败" });
+          }
+        }
+        return { results, created: results.filter(result => result.success).length, failed: results.filter(result => !result.success).length };
+      }),
     updateUserStatus: adminProcedure
       .input(
         z.object({
@@ -124,6 +142,8 @@ export const appRouter = router({
         return { success: true };
       }),
     roles: adminProcedure.input(z.object({ scope: z.enum(["system", "workflow"]).optional() }).optional()).query(async ({ input }) => listRoles(input?.scope)),
+    userAuthorizationDetails: adminProcedure.input(z.object({ userId: z.number().int().positive() })).query(({ input }) => getUserAuthorizationDetails(input.userId)),
+    roleAuthorizationDetails: adminProcedure.input(z.object({ roleId: z.number().int().positive() })).query(({ input }) => getRoleAuthorizationDetails(input.roleId)),
     assignSystemRole: adminProcedure
       .input(
         z.object({

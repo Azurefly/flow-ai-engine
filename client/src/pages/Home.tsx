@@ -26,6 +26,8 @@ import {
   FileJson,
   FolderKanban,
   Gauge,
+  Eye,
+  KeyRound,
   Loader2,
   LockKeyhole,
   LogOut,
@@ -36,6 +38,7 @@ import {
   SlidersHorizontal,
   Upload,
   UsersRound,
+  WandSparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -115,7 +118,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const [newFlowName, setNewFlowName] = useState("");
   const [createFlowOpen, setCreateFlowOpen] = useState(false);
   const [userForm, setUserForm] = useState({ username: "", name: "", password: "", email: "", role: "user" as "user" | "admin" });
-  const [aiUserForm, setAiUserForm] = useState({ username: "", name: "", email: "", password: "", role: "user" as "user" | "admin", organizationHint: "", managerHint: "" });
+  const [aiUserForm, setAiUserForm] = useState({ goal: "", maxUsers: "10", password: "", defaultRole: "user" as "user" | "admin" });
   const [aiPreview, setAiPreview] = useState<any>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
@@ -280,11 +283,15 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const updateSubflow = trpc.workflow.updateSubflow.useMutation({ onSuccess: () => void utils.workflow.subflows.invalidate(), onError: error => toast.error(error.message) });
   const deleteSubflow = trpc.workflow.deleteSubflow.useMutation({ onSuccess: () => { void utils.workflow.subflows.invalidate(); toast.success("子流程已删除。"); }, onError: error => toast.error(error.message) });
   const createUser = trpc.iam.createUser.useMutation({
-    onSuccess: () => { setUserForm({ username: "", name: "", password: "", email: "", role: "user" }); setAiUserForm({ username: "", name: "", email: "", password: "", role: "user", organizationHint: "", managerHint: "" }); setAiPreview(null); void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); toast.success("内部账号已创建。"); },
+    onSuccess: () => { setUserForm({ username: "", name: "", password: "", email: "", role: "user" }); void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); toast.success("内部账号已创建。"); },
     onError: error => toast.error(error.message),
   });
   const updateUserStatus = trpc.iam.updateUserStatus.useMutation({ onSuccess: () => { void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); }, onError: error => toast.error(error.message) });
-  const aiPreviewMutation = trpc.iam.previewUserCreation.useMutation({ onSuccess: preview => { setAiPreview(preview); toast.success("AI 预览已生成，请确认后创建"); }, onError: error => toast.error(error.message) });
+  const aiPreviewMutation = trpc.iam.previewUserBatch.useMutation({ onSuccess: preview => { setAiPreview(preview); toast.success(`已生成 ${preview.users.length} 条用户预览，请确认后创建`); }, onError: error => toast.error(error.message) });
+  const createUsersBatch = trpc.iam.createUsersBatch.useMutation({
+    onSuccess: result => { void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); toast[result.failed ? "warning" : "success"](`批量创建完成：成功 ${result.created}，失败 ${result.failed}`); },
+    onError: error => toast.error(error.message),
+  });
 
   const canEdit = Boolean(access.data?.permissions?.has("workflow:edit"));
   const canPublish = Boolean(access.data?.permissions?.has("workflow:publish"));
@@ -360,7 +367,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
         {section === "warehouse" && <WorkflowWarehouse projects={(projects.data ?? []) as ProjectRecord[]} onOpenWorkflow={(project, workflowId) => { setSelectedProject(project); openFlowEditor(workflowId, "warehouse"); }} />}
         {section === "system" && user.role === "admin" && systemView === "config" && <SystemConfigShell onOpenIdentity={() => navigateRoute({ section: "system", view: "identity" })} onOpenOrganization={() => navigateRoute({ section: "system", view: "organization" })} />}
         {section === "system" && user.role === "admin" && systemView === "organization" && <OrganizationManagementPage onBack={() => navigateRoute({ section: "system", view: "config" })} />}
-        {section === "system" && user.role === "admin" && systemView === "identity" && <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div className="mx-auto max-w-6xl"><button className="mb-4 text-sm text-[#2d6bea] hover:underline" onClick={() => navigateRoute({ section: "system", view: "config" })}>← 返回系统配置</button><IamCenter users={users.data ?? []} roles={roles.data ?? []} audit={audit.data ?? []} form={userForm} setForm={setUserForm} onCreate={() => createUser.mutateAsync({ ...userForm, email: userForm.email || undefined })} creating={createUser.isPending} onToggleStatus={(id, status) => updateUserStatus.mutate({ userId: id, status: status === "active" ? "disabled" : "active" })} aiForm={aiUserForm} setAiForm={setAiUserForm} aiPreview={aiPreview} onPreview={() => aiPreviewMutation.mutate({ ...aiUserForm, email: aiUserForm.email || undefined, organizationHint: aiUserForm.organizationHint || undefined, managerHint: aiUserForm.managerHint || undefined })} previewing={aiPreviewMutation.isPending} onConfirmPreview={() => { if (!aiPreview || aiUserForm.password.length < 12) { toast.error("请先填写至少 12 位确认密码"); return Promise.reject(new Error("用户信息尚未完成")); } return createUser.mutateAsync({ username: aiPreview.username, name: aiPreview.displayName, password: aiUserForm.password, email: aiPreview.email || undefined, role: aiPreview.role }); }} /></div></div>}
+        {section === "system" && user.role === "admin" && systemView === "identity" && <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div className="mx-auto max-w-6xl"><button className="mb-4 text-sm text-[#2d6bea] hover:underline" onClick={() => navigateRoute({ section: "system", view: "config" })}>← 返回系统配置</button><IamCenter users={users.data ?? []} roles={roles.data ?? []} audit={audit.data ?? []} form={userForm} setForm={setUserForm} onCreate={() => createUser.mutateAsync({ ...userForm, email: userForm.email || undefined })} creating={createUser.isPending || createUsersBatch.isPending} onToggleStatus={(id, status) => updateUserStatus.mutate({ userId: id, status: status === "active" ? "disabled" : "active" })} aiForm={aiUserForm} setAiForm={setAiUserForm} aiPreview={aiPreview} setAiPreview={setAiPreview} onPreview={() => aiPreviewMutation.mutate({ goal: aiUserForm.goal, maxUsers: Number(aiUserForm.maxUsers), defaultRole: aiUserForm.defaultRole })} previewing={aiPreviewMutation.isPending} onConfirmPreview={selectedUsers => { if (aiUserForm.password.length < 12) { toast.error("请先填写至少 12 位初始密码"); return Promise.reject(new Error("初始密码尚未完成")); } return createUsersBatch.mutateAsync({ users: selectedUsers.map(account => ({ username: account.username, name: account.displayName, password: aiUserForm.password, email: account.email || undefined, role: account.role })) }); }} /></div></div>}
       </section>
     </div>
     <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importDefinition} />
@@ -416,9 +423,21 @@ type InternalUserForm = {
   role: "user" | "admin";
 };
 
-type AiInternalUserForm = InternalUserForm & {
-  organizationHint: string;
-  managerHint: string;
+type AiInternalUserForm = {
+  goal: string;
+  maxUsers: string;
+  password: string;
+  defaultRole: "user" | "admin";
+};
+
+type AiUserPreview = {
+  username: string;
+  displayName: string;
+  email?: string;
+  role: "user" | "admin";
+  organizationSuggestion?: string;
+  managerSuggestion?: string;
+  rationale: string;
 };
 
 function IamCenter({
@@ -433,6 +452,7 @@ function IamCenter({
   aiForm,
   setAiForm,
   aiPreview,
+  setAiPreview,
   onPreview,
   previewing,
   onConfirmPreview,
@@ -447,13 +467,25 @@ function IamCenter({
   onToggleStatus: (id: number, status: "active" | "disabled") => void;
   aiForm: AiInternalUserForm;
   setAiForm: (next: AiInternalUserForm) => void;
-  aiPreview: any;
+  aiPreview: { users: AiUserPreview[]; generatedBy: "ai" | "fallback" } | null;
+  setAiPreview: (next: { users: AiUserPreview[]; generatedBy: "ai" | "fallback" } | null) => void;
   onPreview: () => void;
   previewing: boolean;
-  onConfirmPreview: () => Promise<unknown>;
+  onConfirmPreview: (users: AiUserPreview[]) => Promise<{ results: Array<{ username: string; success: boolean; error?: string }>; created: number; failed: number }>;
 }) {
   const [normalDialogOpen, setNormalDialogOpen] = useState(false);
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
+  const [tab, setTab] = useState<"users" | "roles" | "audit">("users");
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
+  const [selectedPreviewUsers, setSelectedPreviewUsers] = useState<Set<string>>(new Set());
+  const [batchResult, setBatchResult] = useState<Array<{ username: string; success: boolean; error?: string }> | null>(null);
+  const userDetails = trpc.iam.userAuthorizationDetails.useQuery({ userId: selectedUserId ?? 1 }, { enabled: selectedUserId !== null, retry: false });
+  const roleDetails = trpc.iam.roleAuthorizationDetails.useQuery({ roleId: selectedRoleId ?? 1 }, { enabled: selectedRoleId !== null, retry: false });
+
+  useEffect(() => { if (selectedUserId === null && users[0]) setSelectedUserId(Number(users[0].id)); }, [selectedUserId, users]);
+  useEffect(() => { if (selectedRoleId === null && roles[0]) setSelectedRoleId(Number(roles[0].id)); }, [roles, selectedRoleId]);
+  useEffect(() => { setSelectedPreviewUsers(new Set((aiPreview?.users ?? []).map(account => account.username))); setBatchResult(null); }, [aiPreview]);
 
   const submitNormalUser = async () => {
     await onCreate();
@@ -465,18 +497,18 @@ function IamCenter({
       onPreview();
       return;
     }
-    await onConfirmPreview();
-    setAiDialogOpen(false);
-    setAiForm({
-      username: "",
-      name: "",
-      email: "",
-      password: "",
-      role: "user",
-      organizationHint: "",
-      managerHint: "",
-    });
+    const selected = aiPreview.users.filter(account => selectedPreviewUsers.has(account.username));
+    if (!selected.length) { toast.error("请至少选择一条用户建议。"); return; }
+    const result = await onConfirmPreview(selected);
+    setBatchResult(result.results);
+    if (!result.failed) {
+      setAiDialogOpen(false);
+      setAiForm({ goal: "", maxUsers: "10", password: "", defaultRole: "user" });
+      setAiPreview(null);
+    }
   };
+
+  const resetPreview = (next: AiInternalUserForm) => { setAiForm(next); setAiPreview(null); };
 
   return (
     <div className="space-y-5 p-4 lg:p-6">
@@ -484,11 +516,11 @@ function IamCenter({
         <div>
           <p className="text-xs font-bold tracking-[.18em] text-blue-600">IDENTITY & AUTHORIZATION</p>
           <h2 className="mt-1 text-xl font-semibold">内部账号与权限中心</h2>
-          <p className="mt-1 text-xs text-slate-500">页面只展示管理入口；账号信息在弹窗中填写并提交至真实用户创建接口。</p>
+          <p className="mt-1 text-xs text-slate-500">参考 BDP 的角色、权限、用户主从结构，账号创建仅通过弹窗提交真实接口。</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={() => setAiDialogOpen(true)}>
-            AI 辅助创建
+          <Button type="button" variant="outline" onClick={() => { setAiPreview(null); setBatchResult(null); setAiDialogOpen(true); }}>
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-violet-100 text-violet-700"><WandSparkles size={13} /></span>AI 辅助批量创建
           </Button>
           <Button type="button" className="bg-[#2d6bea] hover:bg-[#255bc8]" onClick={() => setNormalDialogOpen(true)}>
             <Plus size={15} />新增内部账号
@@ -519,59 +551,56 @@ function IamCenter({
         open={aiDialogOpen}
         onOpenChange={setAiDialogOpen}
         title="AI 辅助创建用户"
-        description="先生成建议预览，管理员确认后才调用真实用户创建接口。"
-        submitLabel={aiPreview ? "确认并创建用户" : "生成 AI 预览"}
+        description="输入目标后由模型生成非敏感用户列表；密码不会发送给模型，确认后才调用真实批量创建接口。"
+        submitLabel={aiPreview ? `创建选中的 ${selectedPreviewUsers.size} 个用户` : "生成用户预览"}
         pending={previewing || creating}
         onSubmit={submitAiUser}
-        className="max-w-2xl"
+        className="max-w-5xl"
       >
-        <div className="grid gap-3 md:grid-cols-2">
-          <Input placeholder="用户名（可让 AI 建议）" value={aiForm.username} onChange={event => setAiForm({ ...aiForm, username: event.target.value })} />
-          <Input autoFocus placeholder="显示名称" value={aiForm.name} onChange={event => setAiForm({ ...aiForm, name: event.target.value })} required />
-          <Input type="email" placeholder="邮箱（可选）" value={aiForm.email} onChange={event => setAiForm({ ...aiForm, email: event.target.value })} />
-          <Input type="password" minLength={12} placeholder="确认时使用的至少 12 位密码" value={aiForm.password} onChange={event => setAiForm({ ...aiForm, password: event.target.value })} required />
-          <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={aiForm.role} onChange={event => setAiForm({ ...aiForm, role: event.target.value as AiInternalUserForm["role"] })}>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_160px]">
+          <textarea autoFocus className="min-h-24 w-full rounded-md border border-slate-200 bg-white p-3 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 md:row-span-2" placeholder="例如：为财务部创建 5 名报销审核专员，显示名按一至五组命名，邮箱使用 example.com 域名。" value={aiForm.goal} onChange={event => resetPreview({ ...aiForm, goal: event.target.value })} required />
+          <label className="grid min-w-0 gap-1 text-xs text-slate-500">最多生成<Input type="number" min={1} max={30} value={aiForm.maxUsers} onChange={event => resetPreview({ ...aiForm, maxUsers: event.target.value })} required /></label>
+          <label className="grid min-w-0 gap-1 text-xs text-slate-500">账号角色<select className="h-9 min-w-0 rounded-md border border-slate-200 bg-white px-2 text-sm" value={aiForm.defaultRole} onChange={event => resetPreview({ ...aiForm, defaultRole: event.target.value as AiInternalUserForm["defaultRole"] })}>
             <option value="user">普通用户</option>
             <option value="admin">管理员</option>
-          </select>
-          <Input placeholder="组织/部门提示（可选）" value={aiForm.organizationHint} onChange={event => setAiForm({ ...aiForm, organizationHint: event.target.value })} />
-          <Input className="md:col-span-2" placeholder="直属上级提示（可选）" value={aiForm.managerHint} onChange={event => setAiForm({ ...aiForm, managerHint: event.target.value })} />
+          </select></label>
+          <p className="self-end break-words text-[11px] leading-5 text-slate-400 md:col-span-2">模型不能提升此处指定角色；生成预览不会写数据库。</p>
         </div>
         {aiPreview && (
-          <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 text-xs text-slate-700">
-            <p className="mb-2 font-semibold text-indigo-950">创建预览</p>
-            <div className="grid gap-1 sm:grid-cols-2">
-              <p><span className="text-slate-400">用户名：</span><code>{aiPreview.username}</code></p>
-              <p><span className="text-slate-400">显示名：</span>{aiPreview.displayName}</p>
-              <p><span className="text-slate-400">角色：</span>{aiPreview.role}</p>
-              <p><span className="text-slate-400">生成方式：</span>{aiPreview.generatedBy}</p>
-              <p><span className="text-slate-400">组织建议：</span>{aiPreview.organizationSuggestion || "—"}</p>
-              <p><span className="text-slate-400">直属上级建议：</span>{aiPreview.managerSuggestion || "—"}</p>
+          <div className="min-w-0 rounded-lg border border-indigo-200 bg-indigo-50/40 p-3 text-xs text-slate-700">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2"><p className="font-semibold text-indigo-950">即将创建的用户（{aiPreview.users.length}）</p><span className="rounded-full bg-white px-2 py-1 text-[10px] text-indigo-700">{aiPreview.generatedBy === "ai" ? "AI 生成" : "安全回退"}</span></div>
+            <div className="max-h-[360px] overflow-auto rounded-md border border-indigo-100 bg-white">
+              <table className="w-full min-w-[880px] table-fixed text-left">
+                <thead className="sticky top-0 bg-slate-50 text-slate-500"><tr><th className="w-10 p-2"><input aria-label="选择全部预览用户" type="checkbox" checked={selectedPreviewUsers.size === aiPreview.users.length} onChange={event => setSelectedPreviewUsers(event.target.checked ? new Set(aiPreview.users.map(account => account.username)) : new Set())} /></th><th className="w-36 p-2">用户名</th><th className="w-32 p-2">显示名</th><th className="w-44 p-2">邮箱</th><th className="w-24 p-2">角色</th><th className="w-36 p-2">组织/上级建议</th><th className="p-2">生成依据</th></tr></thead>
+                <tbody>{aiPreview.users.map(account => <tr key={account.username} className="border-t border-slate-100 align-top"><td className="p-2"><input aria-label={`选择 ${account.username}`} type="checkbox" checked={selectedPreviewUsers.has(account.username)} onChange={event => setSelectedPreviewUsers(current => { const next = new Set(current); if (event.target.checked) next.add(account.username); else next.delete(account.username); return next; })} /></td><td className="break-all p-2 font-mono text-indigo-700">{account.username}</td><td className="break-words p-2 font-medium">{account.displayName}</td><td className="break-all p-2 text-slate-500">{account.email || "—"}</td><td className="p-2">{account.role === "admin" ? "管理员" : "普通用户"}</td><td className="break-words p-2 text-slate-500">{account.organizationSuggestion || "—"}<br />{account.managerSuggestion || ""}</td><td className="break-words p-2 text-slate-500">{account.rationale}</td></tr>)}</tbody>
+              </table>
             </div>
-            <p className="mt-2 border-t border-indigo-100 pt-2 text-slate-500">{aiPreview.rationale}</p>
+            <label className="mt-3 grid gap-1 text-xs font-medium text-slate-600 sm:max-w-md">统一初始密码（不会发送给大模型）<Input type="password" minLength={12} placeholder="至少 12 位；仅用于本次确认创建" value={aiForm.password} onChange={event => setAiForm({ ...aiForm, password: event.target.value })} required /></label>
           </div>
         )}
+        {batchResult && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs"><p className="font-semibold text-amber-900">部分账号创建失败，请修正目标后重新生成</p>{batchResult.filter(item => !item.success).map(item => <p key={item.username} className="mt-1 break-all text-amber-800">{item.username}：{item.error || "创建失败"}</p>)}</div>}
       </CreationDialog>
 
-      <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-5 py-3 font-semibold">用户目录</div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3">账号</th><th className="px-5 py-3">系统角色</th><th className="px-5 py-3">状态</th><th className="px-5 py-3">最后登录</th><th className="px-5 py-3" /></tr></thead>
-              <tbody>{users.map(account => <tr key={account.id} className="border-t border-slate-100"><td className="px-5 py-3"><p className="font-medium">{account.name || account.username}</p><p className="text-xs text-slate-400">{account.username}</p></td><td className="px-5 py-3">{account.role}</td><td className="px-5 py-3"><span className={`rounded px-2 py-1 text-xs ${account.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{account.status}</span></td><td className="px-5 py-3 text-xs text-slate-500">{formatTime(account.lastSignedIn)}</td><td className="px-5 py-3"><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onToggleStatus(account.id, account.status)}>{account.status === "active" ? "停用" : "启用"}</Button></td></tr>)}</tbody>
-            </table>
-          </div>
-        </section>
-        <section className="rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 px-5 py-3 font-semibold">角色目录</div>
-          <div className="max-h-80 overflow-y-auto p-4">{roles.map(role => <div key={role.id} className="mb-3 rounded border border-slate-100 bg-slate-50 p-3"><div className="flex items-center justify-between"><p className="font-mono text-xs font-semibold text-indigo-700">{role.code}</p><span className="text-[10px] text-slate-400">{role.scope}</span></div><p className="mt-1 text-xs text-slate-500">{role.name}</p></div>)}</div>
-        </section>
+      <div role="tablist" aria-label="内部账号与权限中心" className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-2">
+        {([{ id: "users", label: "用户账号", icon: UsersRound }, { id: "roles", label: "角色与权限", icon: KeyRound }, { id: "audit", label: "授权审计", icon: SlidersHorizontal }] as const).map(item => <button key={item.id} type="button" role="tab" aria-selected={tab === item.id} className={`flex h-11 shrink-0 items-center gap-2 border-b-2 px-4 text-sm ${tab === item.id ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => setTab(item.id)}><span className={`grid h-7 w-7 place-items-center rounded-full ${tab === item.id ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-500"}`}><item.icon size={14} /></span>{item.label}</button>)}
       </div>
-      <section className="rounded-lg border border-slate-200 bg-white">
-        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 font-semibold"><SlidersHorizontal size={15} />近期授权审计</div>
-        <div className="max-h-64 overflow-y-auto">{audit.map(item => <div key={item.id} className="flex items-center justify-between gap-4 border-b border-slate-50 px-5 py-3 text-xs"><div><span className="font-mono text-slate-500">{item.action}</span><span className="ml-3 text-slate-700">{item.actorUsername || "系统"} → {item.targetUsername || "—"}</span></div><span className="text-slate-400">{formatTime(item.createdAt)}</span></div>)}{!audit.length && <p className="p-5 text-sm text-slate-400">暂未记录授权事件。</p>}</div>
-      </section>
+
+      {tab === "users" && <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-5 py-3 font-semibold">用户目录</div><div className="overflow-x-auto"><table className="w-full min-w-[720px] table-fixed text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="w-[34%] px-5 py-3">账号</th><th className="w-24 px-5 py-3">系统角色</th><th className="w-20 px-5 py-3">状态</th><th className="w-40 px-5 py-3">最后登录</th><th className="w-40 px-5 py-3" /></tr></thead><tbody>{users.map(account => <tr key={account.id} className={`border-t border-slate-100 ${selectedUserId === Number(account.id) ? "bg-blue-50/60" : ""}`}><td className="px-5 py-3"><p className="break-words font-medium">{account.name || account.username}</p><p className="break-all text-xs text-slate-400">{account.username}</p></td><td className="px-5 py-3">{account.role === "admin" ? "管理员" : "用户"}</td><td className="px-5 py-3"><span className={`rounded-full px-2 py-1 text-xs ${account.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{account.status === "active" ? "启用" : "停用"}</span></td><td className="px-5 py-3 text-xs text-slate-500">{formatTime(account.lastSignedIn)}</td><td className="px-5 py-3"><div className="flex gap-1"><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setSelectedUserId(Number(account.id))}><Eye size={13} />查看权限</Button><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onToggleStatus(account.id, account.status)}>{account.status === "active" ? "停用" : "启用"}</Button></div></td></tr>)}</tbody></table></div></section>
+        <section className="min-w-0 rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-4 py-3 font-semibold">用户权限详情</div><div className="max-h-[560px] overflow-y-auto p-4 text-xs">{userDetails.isLoading && <p className="text-slate-400">正在读取角色与权限…</p>}{userDetails.error && <p className="break-words text-rose-600">{userDetails.error.message}</p>}{userDetails.data && <div className="space-y-4"><div><p className="break-words text-sm font-semibold text-slate-800">{userDetails.data.user.name || userDetails.data.user.username}</p><p className="break-all font-mono text-slate-400">{userDetails.data.user.username}</p></div><RoleDetailGroup title="直接角色" roles={userDetails.data.directRoles} source="直接授权" /><RoleDetailGroup title="组织继承角色" roles={userDetails.data.inheritedRoles} source="组织继承" /><div><p className="mb-2 font-semibold text-slate-700">最终有效权限（{userDetails.data.effectivePermissions.length}）</p><div className="grid gap-1.5">{userDetails.data.effectivePermissions.map((permission: any) => <div key={permission.code} className="min-w-0 rounded-md bg-slate-50 p-2"><p className="break-all font-mono text-indigo-700">{permission.code}</p><p className="mt-0.5 break-words text-slate-500">{permission.name}</p></div>)}</div></div></div>}</div></section>
+      </div>}
+
+      {tab === "roles" && <div className="grid min-w-0 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]"><section className="min-w-0 rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-4 py-3 font-semibold">角色列表</div><div className="max-h-[560px] overflow-y-auto p-2">{roles.map(role => <button key={role.id} type="button" className={`mb-1 w-full min-w-0 rounded-lg border p-3 text-left ${selectedRoleId === Number(role.id) ? "border-blue-200 bg-blue-50" : "border-transparent bg-slate-50 hover:border-slate-200"}`} onClick={() => setSelectedRoleId(Number(role.id))}><div className="flex min-w-0 items-start justify-between gap-2"><p className="min-w-0 break-all font-mono text-xs font-semibold text-indigo-700">{role.code}</p><span className="shrink-0 rounded-full bg-white px-2 py-0.5 text-[10px] text-slate-400">{role.scope}</span></div><p className="mt-1 break-words text-xs text-slate-600">{role.name}</p></button>)}</div></section><section className="min-w-0 rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-4 py-3 font-semibold">角色权限与绑定用户</div><div className="p-4 text-xs">{roleDetails.isLoading && <p className="text-slate-400">正在读取角色绑定…</p>}{roleDetails.error && <p className="break-words text-rose-600">{roleDetails.error.message}</p>}{roleDetails.data && <div className="space-y-5"><div><p className="break-words text-base font-semibold text-slate-800">{roleDetails.data.role.name}</p><p className="mt-1 break-all font-mono text-indigo-700">{roleDetails.data.role.code}</p><p className="mt-1 break-words leading-5 text-slate-500">{roleDetails.data.role.description || "未填写角色说明"}</p></div><div><p className="mb-2 font-semibold text-slate-700">权限清单（{roleDetails.data.permissions.length}）</p><div className="grid gap-2 sm:grid-cols-2">{roleDetails.data.permissions.map((permission: any) => <div key={permission.code} className="min-w-0 rounded-md border border-slate-100 bg-slate-50 p-2"><p className="break-all font-mono text-indigo-700">{permission.code}</p><p className="mt-0.5 break-words text-slate-500">{permission.name}</p></div>)}</div></div><UserBindingGroup title="直接绑定用户" users={roleDetails.data.directUsers} source="直接授权" /><UserBindingGroup title="组织继承用户" users={roleDetails.data.inheritedUsers} source="组织继承" />{roleDetails.data.organizationUnits.length > 0 && <div><p className="mb-2 font-semibold text-slate-700">绑定组织</p><div className="flex flex-wrap gap-1.5">{roleDetails.data.organizationUnits.map((unit: any) => <span key={unit.id} className="max-w-full break-words rounded-full bg-violet-50 px-2.5 py-1 text-violet-700">{unit.name} · {unit.code}</span>)}</div></div>}</div>}</div></section></div>}
+
+      {tab === "audit" && <section className="rounded-lg border border-slate-200 bg-white"><div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 font-semibold"><SlidersHorizontal size={15} />近期授权审计</div><div className="max-h-[560px] overflow-y-auto">{audit.map(item => <div key={item.id} className="flex flex-col gap-1 border-b border-slate-50 px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:gap-4"><div className="min-w-0"><span className="break-all font-mono text-slate-500">{item.action}</span><span className="ml-3 break-words text-slate-700">{item.actorUsername || "系统"} → {item.targetUsername || "—"}</span></div><span className="shrink-0 text-slate-400">{formatTime(item.createdAt)}</span></div>)}{!audit.length && <p className="p-5 text-sm text-slate-400">暂未记录授权事件。</p>}</div></section>}
     </div>
   );
+}
+
+function RoleDetailGroup({ title, roles, source }: { title: string; roles: any[]; source: string }) {
+  return <div><p className="mb-2 font-semibold text-slate-700">{title}（{roles.length}）</p><div className="grid gap-1.5">{roles.map((role, index) => <div key={`${role.roleId}-${role.assignmentId || role.unitId || index}`} className="min-w-0 rounded-md border border-slate-100 p-2"><div className="flex min-w-0 flex-wrap items-center justify-between gap-1"><p className="break-words font-medium text-slate-700">{role.roleName}</p><span className="rounded-full bg-blue-50 px-2 py-0.5 text-[10px] text-blue-700">{source}</span></div><p className="mt-0.5 break-all font-mono text-indigo-700">{role.roleCode}</p><p className="mt-1 break-words text-slate-400">{role.unitName ? `来源组织：${role.unitName}` : `作用域：${role.scopeType}${role.scopeId ? ` / ${role.scopeId}` : ""}`}</p></div>)}{!roles.length && <p className="text-slate-400">无</p>}</div></div>;
+}
+
+function UserBindingGroup({ title, users, source }: { title: string; users: any[]; source: string }) {
+  return <div><p className="mb-2 font-semibold text-slate-700">{title}（{users.length}）</p><div className="grid gap-1.5 sm:grid-cols-2">{users.map((account, index) => <div key={`${account.userId}-${account.assignmentId || account.unitId || index}`} className="min-w-0 rounded-md border border-slate-100 p-2"><div className="flex min-w-0 items-start justify-between gap-2"><div className="min-w-0"><p className="break-words font-medium text-slate-700">{account.name || account.username}</p><p className="break-all font-mono text-slate-400">{account.username}</p></div><span className="shrink-0 rounded-full bg-violet-50 px-2 py-0.5 text-[10px] text-violet-700">{source}</span></div><p className="mt-1 break-words text-slate-400">{account.unitName ? `组织：${account.unitName}` : `作用域：${account.scopeType}${account.scopeId ? ` / ${account.scopeId}` : ""}`}</p></div>)}{!users.length && <p className="text-slate-400">无</p>}</div></div>;
 }

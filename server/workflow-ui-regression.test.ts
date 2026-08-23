@@ -14,6 +14,7 @@ const dataResourceSource = readFileSync(new URL("../client/src/components/DataRe
 const creationDialogSource = readFileSync(new URL("../client/src/components/CreationDialog.tsx", import.meta.url), "utf8");
 const processWorkbenchSource = readFileSync(new URL("../client/src/components/ProcessWorkbench.tsx", import.meta.url), "utf8");
 const processWorkbenchRunTabSource = readFileSync(new URL("../client/src/components/ProcessWorkbenchRunTab.tsx", import.meta.url), "utf8");
+const instanceDetailSource = readFileSync(new URL("../client/src/components/WorkflowGovernanceRunDetail.tsx", import.meta.url), "utf8");
 const processDetailPageSource = readFileSync(new URL("../client/src/components/WorkflowDetailPage.tsx", import.meta.url), "utf8");
 const consoleRouteSource = readFileSync(new URL("../shared/console-route.ts", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
@@ -48,7 +49,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("const [aiDialogOpen, setAiDialogOpen]");
     expect(homeSource).toContain("await onCreate();");
     expect(homeSource).toContain("setNormalDialogOpen(false)");
-    expect(homeSource).toContain("await onConfirmPreview();");
+    expect(homeSource).toContain("await onConfirmPreview(selected)");
     expect(homeSource).toContain("setAiDialogOpen(false)");
     expect(projectWorkspaceSource).toContain("<CreationDialog");
     expect(warehouseSource).toContain("<Dialog open={Boolean(folderDialog)}");
@@ -160,6 +161,37 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationPageSource).toContain('className="mt-1 break-all font-mono');
     expect(organizationPageSource).toContain("max-w-[220px] break-words");
     expect(organizationPageSource).toContain("max-w-full break-all");
+  });
+
+  it("内部账号中心支持 AI 批量预览、确认创建和用户角色双向查看", () => {
+    expect(homeSource).toContain("AI 辅助批量创建");
+    expect(homeSource).toContain("previewUserBatch.useMutation");
+    expect(homeSource).toContain("createUsersBatch.useMutation");
+    expect(homeSource).toContain("密码不会发送给模型");
+    expect(homeSource).toContain("即将创建的用户");
+    expect(homeSource).toContain('id: "users", label: "用户账号"');
+    expect(homeSource).toContain('id: "roles", label: "角色与权限"');
+    expect(homeSource).toContain('id: "audit", label: "授权审计"');
+    expect(homeSource).toContain("userAuthorizationDetails.useQuery");
+    expect(homeSource).toContain("roleAuthorizationDetails.useQuery");
+    expect(homeSource).toContain("直接绑定用户");
+    expect(homeSource).toContain("组织继承用户");
+    expect(routerSource).toContain("previewUserBatch: adminProcedure");
+    expect(routerSource).toContain("createUsersBatch: adminProcedure");
+    expect(routerSource).toContain("userAuthorizationDetails: adminProcedure");
+    expect(routerSource).toContain("roleAuthorizationDetails: adminProcedure");
+  });
+
+  it("实例详情按操作时间倒序展示必要字段，其余字段点击后以列表查看", () => {
+    expect(instanceDetailSource).toContain("sortInstanceActions");
+    expect(instanceDetailSource).toContain("operationTime(right)");
+    expect(instanceDetailSource).toContain("默认仅展示必要字段，并按操作时间倒序排列");
+    expect(instanceDetailSource).toContain("data-instance-action-list");
+    expect(instanceDetailSource).toContain("查看详情");
+    expect(instanceDetailSource).toContain("flattenInstanceFields");
+    expect(instanceDetailSource).toContain("输入字段");
+    expect(instanceDetailSource).toContain("输出字段");
+    expect(instanceDetailSource).not.toContain("JSON.stringify");
   });
 
   it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {
