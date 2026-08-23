@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
+import { createLeaveApprovalDefinition } from "../shared/leave-approval-workflow";
 import type { TrpcContext } from "./_core/context";
 import { assignOrganizationMember, createOrganizationUnit } from "./organization-service";
 import { createProject, createProjectWorkflow, grantProjectMember, setProjectWorkflowAudit } from "./project-service";
@@ -19,58 +20,7 @@ let workflowId: string | undefined;
 let teamUnitId: string | undefined;
 let managementUnitId: string | undefined;
 
-const leaveDefinition: Definition = {
-  schemaVersion: 1,
-  viewport: { x: 0, y: 0, zoom: 1 },
-  settings: {},
-  nodes: [
-    { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: { initialVariables: { leaveReason: "{{input.leaveReason}}" } } },
-    {
-      id: "apply-auto",
-      type: "operate",
-      name: "申请操作",
-      position: { x: 180, y: 0 },
-      config: {
-        nodeDh: "APPLY",
-        czmc: "申请操作",
-        assigneeMode: "receivers",
-        instruction: "提交请假申请并自动补充直属上级",
-        sxsz: { zdglxgfsz: ["upperAuthUnitWord"], yrdbmsfkcz: "是", xzdzlcjywc: [] },
-        zdzx: { sfzdzx: "是", tjsz: [], code: [] },
-      },
-    },
-    { id: "waiting-supervisor", type: "state", name: "等待直属上级审核", position: { x: 360, y: 0 }, config: { nodeDh: "WAIT_SUPERVISOR", jdmc: "等待审核", flowStatus: "等待审核", stateColor: "#f59e0b", stateType: "business" } },
-    { id: "supervisor-approve", type: "operate", name: "直属上级审核", position: { x: 540, y: 0 }, config: { nodeDh: "SUPERVISOR_APPROVE", czmc: "审核通过", assigneeMode: "receivers", pendingStatusName: "待审批", instruction: "审核员工请假申请" } },
-    { id: "supervisor-approved", type: "state", name: "直属上级已审核", position: { x: 720, y: 0 }, config: { nodeDh: "SUPERVISOR_APPROVED", jdmc: "已审核", flowStatus: "直接上级审核通过，待经理通过", stateColor: "#2563eb", stateType: "business" } },
-    {
-      id: "bind-manager-auto",
-      type: "operate",
-      name: "自动补充经理",
-      position: { x: 900, y: 0 },
-      config: {
-        nodeDh: "BIND_MANAGER",
-        czmc: "自动操作",
-        assigneeMode: "receivers",
-        instruction: "按当前发送方的上级权限部门自动补充经理",
-        sxsz: { zdglxgfsz: ["upperAuthUnitWord"], yrdbmsfkcz: "是", xzdzlcjywc: [] },
-        zdzx: { sfzdzx: "是", tjsz: [], code: [] },
-      },
-    },
-    { id: "manager-approve", type: "operate", name: "经理审核", position: { x: 1080, y: 0 }, config: { nodeDh: "MANAGER_APPROVE", czmc: "审核通过", assigneeMode: "receivers", pendingStatusName: "待审批", instruction: "完成经理级请假审核" } },
-    { id: "approved", type: "state", name: "申请通过", position: { x: 1260, y: 0 }, config: { nodeDh: "APPROVED", jdmc: "已审核", flowStatus: "申请通过", stateColor: "#16a34a", stateType: "business" } },
-    { id: "end", type: "end", name: "结束", position: { x: 1440, y: 0 }, config: { resultTemplate: { status: "{{nodes.approved.flowStatus}}", leaveReason: "{{vars.leaveReason}}" } } },
-  ],
-  edges: [
-    { id: "e1", sourceNodeId: "start", targetNodeId: "apply-auto" },
-    { id: "e2", sourceNodeId: "apply-auto", targetNodeId: "waiting-supervisor" },
-    { id: "e3", sourceNodeId: "waiting-supervisor", targetNodeId: "supervisor-approve" },
-    { id: "e4", sourceNodeId: "supervisor-approve", targetNodeId: "supervisor-approved" },
-    { id: "e5", sourceNodeId: "supervisor-approved", targetNodeId: "bind-manager-auto" },
-    { id: "e6", sourceNodeId: "bind-manager-auto", targetNodeId: "manager-approve" },
-    { id: "e7", sourceNodeId: "manager-approve", targetNodeId: "approved" },
-    { id: "e8", sourceNodeId: "approved", targetNodeId: "end" },
-  ],
-};
+const leaveDefinition = createLeaveApprovalDefinition() as Definition;
 
 function callerFor(user: any) {
   return appRouter.createCaller({ user, req: { headers: {}, protocol: "https" }, res: { cookie: () => undefined, clearCookie: () => undefined } } as unknown as TrpcContext);
@@ -149,9 +99,14 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
 
     const employeeWaiting = findRun(await callerFor(employee).task.instances({ view: "initiated" }), started.runId);
     expect(employeeWaiting).toMatchObject({ displayStatus: "等待审核", availableOperations: [] });
+    expect((await callerFor(employee).task.dashboard()).counts.initiated).toBe(1);
     const supervisorWaiting = findRun(await callerFor(supervisor).task.instances({ view: "all" }), started.runId);
     expect(supervisorWaiting).toMatchObject({ displayStatus: "待审批" });
     expect(supervisorWaiting.availableOperations).toEqual([{ taskId: started.taskId, name: "审核通过" }]);
+    const [initialStates] = await pool.query<mysql.RowDataPacket[]>("SELECT userId,stateName,sourceNodeId FROM workflow_participant_state WHERE runId=? ORDER BY userId", [started.runId]);
+    expect(initialStates).toHaveLength(2);
+    expect(initialStates.find(row => Number(row.userId) === employee.id)).toMatchObject({ stateName: "等待审核", sourceNodeId: "employee-waiting-supervisor" });
+    expect(initialStates.find(row => Number(row.userId) === supervisor.id)).toMatchObject({ stateName: "待审批", sourceNodeId: "supervisor-approve" });
 
     const supervisorResult: any = await callerFor(supervisor).task.execute({ taskId: started.taskId, result: { decision: "approved", comment: "同意" } });
     expect(supervisorResult.status).toBe("waiting");
@@ -161,6 +116,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
     expect(supervisorApproved).toMatchObject({ displayStatus: "已审核", availableOperations: [] });
     const employeeManagerWaiting = findRun(await callerFor(employee).task.instances({ view: "initiated" }), started.runId);
     expect(employeeManagerWaiting).toMatchObject({ displayStatus: "直接上级审核通过，待经理通过", availableOperations: [] });
+    expect((await callerFor(employee).task.dashboard()).counts.initiated).toBe(1);
 
     const managerTodo: any[] = await callerFor(manager).task.list({ view: "todo", projectId });
     expect(managerTodo).toHaveLength(1);
@@ -177,10 +133,13 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
 
     const observer = await mysql.createConnection(process.env.DATABASE_URL!);
     const [persisted] = await observer.query<mysql.RowDataPacket[]>("SELECT userId,stateName,flowStatus,availableOperationsJson FROM workflow_participant_state WHERE runId=? ORDER BY userId", [started.runId]);
+    const [nodeRuns] = await observer.query<mysql.RowDataPacket[]>("SELECT nodeId,status FROM workflow_node_run WHERE runId=?", [started.runId]);
     await observer.end();
     expect(persisted).toHaveLength(3);
     expect(persisted.find(row => Number(row.userId) === employee.id)).toMatchObject({ stateName: "申请通过", flowStatus: "申请通过" });
     expect(persisted.find(row => Number(row.userId) === supervisor.id)).toMatchObject({ stateName: "已审核" });
     expect(persisted.find(row => Number(row.userId) === manager.id)).toMatchObject({ stateName: "已审核" });
+    expect(nodeRuns.filter(row => String(row.nodeId).startsWith("route-after-")).map(row => row.nodeId).sort()).toEqual(["route-after-apply", "route-after-manager", "route-after-supervisor"]);
+    expect(nodeRuns.filter(row => String(row.nodeId).startsWith("route-after-")).every(row => row.status === "success")).toBe(true);
   }, 120_000);
 });

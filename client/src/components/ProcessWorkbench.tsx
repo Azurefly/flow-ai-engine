@@ -45,6 +45,11 @@ function badge(status: string) {
     success: "bg-emerald-100 text-emerald-700",
     failed: "bg-red-100 text-red-700",
     running: "bg-blue-100 text-blue-700",
+    等待审核: "bg-amber-100 text-amber-700",
+    待审批: "bg-amber-100 text-amber-700",
+    已审核: "bg-blue-100 text-blue-700",
+    "直接上级审核通过，待经理通过": "bg-indigo-100 text-indigo-700",
+    申请通过: "bg-emerald-100 text-emerald-700",
   };
   const names: Record<string, string> = {
     pending: "待处理",
@@ -401,6 +406,8 @@ export default function ProcessWorkbench() {
                   tasks={(tasks.data ?? []) as any[]}
                   loading={tasks.isLoading}
                   onTask={setSelectedTaskId}
+                  onExecute={taskId => execute.mutate({ taskId, result: { decision: "approved" } })}
+                  busy={busy}
                   selectedTaskIds={selectedTaskIds}
                   onToggle={taskId =>
                     setSelectedTaskIds(current =>
@@ -603,6 +610,8 @@ function TaskList({
   tasks,
   loading,
   onTask,
+  onExecute,
+  busy,
   selectedTaskIds,
   onToggle,
   selectable,
@@ -610,6 +619,8 @@ function TaskList({
   tasks: any[];
   loading: boolean;
   onTask: (id: string) => void;
+  onExecute: (id: string) => void;
+  busy: boolean;
   selectedTaskIds: string[];
   onToggle: (id: string) => void;
   selectable: boolean;
@@ -662,15 +673,10 @@ function TaskList({
               {date(task.createdAt)}
             </td>
             <td className="px-4 py-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-[#2d6bea]"
-                onClick={() => onTask(task.id)}
-              >
-                详情
-              </Button>
+              <div className="flex flex-wrap items-center gap-1">
+                {task.status === "pending" && <Button type="button" size="sm" className="h-7 bg-emerald-600 text-xs hover:bg-emerald-500" disabled={busy} onClick={() => onExecute(task.id)}>{busy && <Loader2 className="animate-spin" size={13} />}{task.operationName || "执行操作"}</Button>}
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs text-[#2d6bea]" onClick={() => onTask(task.id)}>详情</Button>
+              </div>
             </td>
           </tr>
         ))
@@ -711,15 +717,10 @@ function InstanceList({
               {date(run.createdAt)}
             </td>
             <td className="px-4 py-3">
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs text-[#2d6bea]"
-                onClick={() => onOpenRun(run.id)}
-              >
-                实例详情
-              </Button>
+              <div className="flex flex-col items-start gap-1">
+                {!(run.availableOperations ?? []).length && <span className="text-[10px] text-slate-400">无可执行操作</span>}
+                <Button type="button" variant="ghost" size="sm" className="h-7 px-0 text-xs text-[#2d6bea]" onClick={() => onOpenRun(run.id)}>实例详情</Button>
+              </div>
             </td>
           </tr>
         ))

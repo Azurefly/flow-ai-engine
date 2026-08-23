@@ -451,7 +451,8 @@ function runtimeNodeParticipants(context: JsonRecord, nodeId: string) {
 function setRuntimeNodeParticipants(context: JsonRecord, nodeId: string, userIds: number[]) {
   const runtime = asRecord(context.runtime);
   const byNode = asRecord(runtime.nodeParticipantUserIds);
-  byNode[nodeId] = Array.from(new Set(userIds.filter(id => Number.isInteger(id) && id > 0)));
+  const existing = Array.isArray(byNode[nodeId]) ? (byNode[nodeId] as unknown[]).map(Number) : [];
+  byNode[nodeId] = Array.from(new Set([...existing, ...userIds].filter(id => Number.isInteger(id) && id > 0)));
   runtime.nodeParticipantUserIds = byNode;
   context.runtime = runtime;
 }
@@ -538,7 +539,7 @@ async function persistStateNode(input: { runId: string; workflowId: string; node
   const stateColor = firstConfiguredString(config.stateColor);
 
   const currentParticipants = runtimeNodeParticipants(input.context, input.node.id);
-  const participantUserIds = Array.from(new Set([...currentParticipants, initiatorUserId, actorUserId].filter(id => Number.isInteger(id) && id > 0)));
+  const participantUserIds = currentParticipants.length ? currentParticipants : Array.from(new Set([initiatorUserId, actorUserId].filter(id => Number.isInteger(id) && id > 0)));
   const iamRoles = await resolveWorkflowUserRoleKeys(participantUserIds, input.workflowId);
   const boundRoles = configuredRoleKeys(config.bdjs);
   const availableOperations = stateConfiguredOperations(config);
@@ -828,7 +829,9 @@ export async function resumeWorkflowTask(input: { taskId: string; completedBy: W
   const runStartedAt = Date.now();
   try {
     const resumedWorkflow = { ...task, id: String(task.workflowId), name: String(task.workflowName) } as PersistedWorkflow;
-    const segment = await executeRunSegment({ runId: String(task.runId), workflow: resumedWorkflow, definition, context, queue: Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [] });
+    const continuationNodeIds = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
+    for (const nodeId of continuationNodeIds) setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
+    const segment = await executeRunSegment({ runId: String(task.runId), workflow: resumedWorkflow, definition, context, queue: continuationNodeIds });
     if (segment.status === "waiting") return { runId: String(task.runId), status: "waiting" as const, taskId: segment.taskId };
     await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(), task.runId]);
     return { runId: String(task.runId), status: "success" as const, output: segment.output };

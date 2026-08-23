@@ -146,7 +146,8 @@ describe("流程设计器界面回归约束", () => {
 
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain('grid-cols-1');
-    expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_320px]');
+    expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_420px]');
+    expect(canvasSource).toContain('lg:grid-cols-[minmax(0,1fr)_620px]');
     expect(canvasSource).toContain('border-t border-slate-200 bg-white lg:border-l lg:border-t-0');
   });
 
@@ -290,6 +291,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain('label: "自动执行"');
     expect(canvasSource).toContain('label: "原版路由设置"');
     expect(canvasSource).toContain('label: "当前安全路由规则"');
+    expect(canvasSource).toContain("流程身份（逗号分隔）");
+    expect(canvasSource).toContain("请从此路径句柄连线到目标状态节点");
+    expect(canvasSource).toContain("默认路径");
     expect(canvasSource).toContain('label: "流转方式"');
     expect(canvasSource).toContain('label: "入口映射"');
     expect(canvasSource).toContain('label: "出口映射"');
@@ -417,6 +421,10 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("最大化面板");
     expect(canvasSource).toContain("恢复配置面板");
     expect(canvasSource).toContain("最小化面板");
+    expect(canvasSource).toContain('role="tablist"');
+    expect(canvasSource).toContain('role="tabpanel"');
+    expect(canvasSource).toContain("rounded-xl border bg-white");
+    expect(canvasSource).toContain("画布说明");
     expect(canvasSource).toContain("RotateCcw");
     expect(canvasSource).toContain("若无元件，请添加元件。");
     expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
@@ -507,6 +515,9 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("trpc.task.handover.useMutation");
     expect(processWorkbenchSource).toContain("trpc.task.batchComplete.useMutation");
     expect(processWorkbenchSource).toContain('result: { decision: "approved" }');
+    expect(processWorkbenchSource).toContain('task.operationName || "执行操作"');
+    expect(processWorkbenchSource).toContain("无可执行操作");
+    expect(processWorkbenchSource).toContain("直接上级审核通过，待经理通过");
     expect(processWorkbenchSource).not.toContain("批量处理结果必须是合法 JSON 对象");
     expect(processWorkbenchSource).toContain("处理结果字段");
     expect(processWorkbenchSource).toContain("添加处理结果字段");

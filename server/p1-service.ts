@@ -181,11 +181,11 @@ export async function batchCompleteWorkflowTasks(user: User, taskIds: string[], 
 }
 
 export async function getTaskDashboard(user: User) {
-  const [todo, done, initiated, all] = await Promise.all([
-    listWorkflowTasks(user, { view: "todo", limit: 200 }), listWorkflowTasks(user, { view: "done", limit: 200 }), listWorkflowTasks(user, { view: "initiated", limit: 200 }), listWorkflowTasks(user, { view: "all", limit: 200 }),
+  const [todo, done, initiatedTasks, initiatedInstances, allInstances] = await Promise.all([
+    listWorkflowTasks(user, { view: "todo", limit: 200 }), listWorkflowTasks(user, { view: "done", limit: 200 }), listWorkflowTasks(user, { view: "initiated", limit: 200 }), listProcessInstances(user, { view: "initiated", limit: 200 }), listProcessInstances(user, { view: "all", limit: 200 }),
   ]);
-  const recent = Array.from(new Map([...todo, ...done, ...initiated].map(task => [String(task.id), task])).values()).sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime()).slice(0, 8);
-  return { counts: { todo: todo.length, done: done.length, initiated: initiated.length, all: all.length }, recent };
+  const recent = Array.from(new Map([...todo, ...done, ...initiatedTasks].map(task => [String(task.id), task])).values()).sort((a, b) => new Date(String(b.createdAt)).getTime() - new Date(String(a.createdAt)).getTime()).slice(0, 8);
+  return { counts: { todo: todo.length, done: done.length, initiated: initiatedInstances.length, all: allInstances.length }, recent };
 }
 
 export async function listProcessInstances(user: User, input: { view: "initiated" | "all"; limit?: number }) {
