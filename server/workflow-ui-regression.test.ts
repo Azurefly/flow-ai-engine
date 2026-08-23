@@ -230,6 +230,8 @@ describe("流程设计器界面回归约束", () => {
 
   it("画布工具与节点图例分行展示，并以圆角徽标保护图标和长文本", () => {
     expect(canvasSource).toContain("function NodeTypeGlyph");
+    expect(canvasSource).toContain('data-flow-node-glyph=""');
+    expect(canvasSource).toContain("place-items-center rounded-full border");
     expect(canvasSource).toContain('data-flow-node-palette=""');
     expect(canvasSource).toContain('data-flow-canvas-actions=""');
     expect(canvasSource).toContain("showCanvasActions = true");

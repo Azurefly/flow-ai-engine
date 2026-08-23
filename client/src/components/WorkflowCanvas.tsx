@@ -85,7 +85,7 @@ const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
 const palette: Array<FlowNodeDefinition & { icon: typeof Play; color: string }> = (Object.values(FLOW_NODE_DEFINITIONS) as FlowNodeDefinition[]).map(item => ({ ...item, ...nodeAppearance[item.type] }));
 
 function NodeTypeGlyph({ icon: Icon, color, size = "card" }: { icon: LucideIcon; color: string; size?: "card" | "palette" }) {
-  return <span aria-hidden="true" className={size === "card" ? "grid h-9 w-9 shrink-0 place-items-center rounded-xl border shadow-sm" : "grid h-7 w-7 shrink-0 place-items-center rounded-lg border"} style={{ color, borderColor: `${color}33`, backgroundColor: `${color}12` }}><Icon size={size === "card" ? 17 : 14} strokeWidth={2.2} /></span>;
+  return <span data-flow-node-glyph="" aria-hidden="true" className={size === "card" ? "grid h-9 w-9 shrink-0 place-items-center rounded-full border shadow-sm" : "grid h-7 w-7 shrink-0 place-items-center rounded-full border"} style={{ color, borderColor: `${color}33`, backgroundColor: `${color}12` }}><Icon size={size === "card" ? 17 : 14} strokeWidth={2.2} /></span>;
 }
 
 function nodeConfigState(kind: NodeKind, config: NodeConfig): ConfigState {
