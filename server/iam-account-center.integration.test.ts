@@ -109,6 +109,9 @@ describe("AI 批量用户与内部账号权限中心真实数据库闭环", () =
       expect(roleId).toBeTruthy();
 
       await caller.iam.assignSystemRole({ userId: userIds[0], roleCode });
+      await expect(
+        caller.iam.assignSystemRole({ userId: userIds[0], roleCode })
+      ).rejects.toThrow("请勿重复绑定");
       unitId = (
         await caller.config.createOrganizationUnit({
           code: `BATCH_${suffix.toUpperCase()}`,
@@ -162,6 +165,19 @@ describe("AI 批量用户与内部账号权限中心真实数据库闭环", () =
             Number(account.userId) === userIds[1] && account.unitId === unitId
         )
       ).toBe(true);
+
+      const assignmentId = String(
+        directUser.directRoles.find((item: any) => item.roleCode === roleCode)
+          ?.assignmentId
+      );
+      expect(assignmentId).toMatch(/[0-9a-f-]{36}/);
+      await caller.iam.revokeRoleAssignment({ assignmentId });
+      const revokedUser = await caller.iam.userAuthorizationDetails({
+        userId: userIds[0],
+      });
+      expect(
+        revokedUser.directRoles.some((item: any) => item.roleCode === roleCode)
+      ).toBe(false);
     },
     60_000
   );

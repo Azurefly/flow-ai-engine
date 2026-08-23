@@ -321,6 +321,14 @@ export async function assignRole(input: { userId: number; roleCode: string; scop
   const [roleRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,scope FROM iam_role WHERE code=? LIMIT 1", [input.roleCode]);
   const role = roleRows[0];
   if (!role || role.scope !== input.scopeType) throw new Error("角色不存在或授权范围不匹配。");
+  const [existingRows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT id FROM role_assignment
+      WHERE userId=? AND roleId=? AND scopeType=? AND scopeId <=> ?
+        AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())
+      LIMIT 1`,
+    [input.userId, role.id, input.scopeType, input.scopeId ?? null]
+  );
+  if (existingRows[0]) throw new Error("用户已拥有该作用域下的有效直接角色，请勿重复绑定。");
   await db().query(
     `INSERT INTO role_assignment (id,userId,roleId,scopeType,scopeId,effectiveFrom,expiresAt,revokedAt,grantedByUserId,note)
      VALUES (?,?,?,?,?,NOW(),?,NULL,?,?)`,

@@ -18,6 +18,7 @@ const instanceDetailSource = readFileSync(new URL("../client/src/components/Work
 const processDetailPageSource = readFileSync(new URL("../client/src/components/WorkflowDetailPage.tsx", import.meta.url), "utf8");
 const consoleRouteSource = readFileSync(new URL("../shared/console-route.ts", import.meta.url), "utf8");
 const routerSource = readFileSync(new URL("./routers.ts", import.meta.url), "utf8");
+const iamServiceSource = readFileSync(new URL("./iam-service.ts", import.meta.url), "utf8");
 const projectServiceSource = readFileSync(new URL("./project-service.ts", import.meta.url), "utf8");
 const styleSource = readFileSync(new URL("../client/src/index.css", import.meta.url), "utf8");
 
@@ -176,6 +177,16 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("roleAuthorizationDetails.useQuery");
     expect(homeSource).toContain("直接绑定用户");
     expect(homeSource).toContain("组织继承用户");
+    expect(homeSource).toContain("data-iam-user-workbench");
+    expect(homeSource).toContain("data-iam-role-workbench");
+    expect(homeSource).toContain('aria-label="搜索用户"');
+    expect(homeSource).toContain('aria-label="搜索角色"');
+    expect(homeSource).toContain("assignSystemRole.useMutation");
+    expect(homeSource).toContain("revokeRoleAssignment.useMutation");
+    expect(homeSource).toContain("为用户绑定角色");
+    expect(homeSource).toContain("为角色绑定用户");
+    expect(homeSource).toContain("min-[760px]:hidden");
+    expect(iamServiceSource).toContain("请勿重复绑定");
     expect(routerSource).toContain("previewUserBatch: adminProcedure");
     expect(routerSource).toContain("createUsersBatch: adminProcedure");
     expect(routerSource).toContain("userAuthorizationDetails: adminProcedure");
