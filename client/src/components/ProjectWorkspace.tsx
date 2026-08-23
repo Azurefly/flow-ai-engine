@@ -143,7 +143,7 @@ function ProcessCenter({ project, workflows, filters, setFilters, onApplyFilters
   const sourceNameById = new Map(dataSources.map(source => [source.id, source.name]));
 
   return <div>
-    <div className="mb-5 flex flex-col gap-3 border-b border-slate-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+    <div data-aiflow-context-header className="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
       <div><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">{project.code} · PROCESS DESIGN CENTER</p><h1 className="mt-1 text-xl font-semibold text-slate-800">流程设计中心</h1><p className="mt-1 text-sm text-slate-500">管理状态、控制和数据三类流程的审核、发布和执行生命周期。</p></div>
       <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={onOpenWarehouse}><Upload size={15} />上传仓库</Button>{workflows.length > 0 && <select aria-label="选择流程查看审批记录" className="h-9 max-w-48 rounded border border-slate-200 bg-white px-2 text-sm" value={auditWorkflowId ?? ""} onChange={event => setAuditWorkflowId(event.target.value || null)}><option value="">审批记录</option>{workflows.map(workflow => <option key={workflow.id} value={workflow.id}>{workflow.processCode || workflow.name}</option>)}</select>}{canCreate && <Button className="bg-[#2d6bea] hover:bg-[#255bc8]" onClick={() => setShowCreate(!showCreate)}><Plus size={16} />新增流程</Button>}</div>
     </div>

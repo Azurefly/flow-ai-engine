@@ -323,6 +323,18 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("overflow-x-auto border-b");
   });
 
+  it("统一核心子页面上下文标题栏并优化运行筛选窄屏布局", () => {
+    expect(projectWorkspaceSource).toContain("data-aiflow-context-header");
+    expect(processDetailPageSource).toContain("data-aiflow-context-header");
+    expect(homeSource).toContain("data-aiflow-context-header");
+    expect(runCenterSource).toContain("data-aiflow-context-header");
+    expect(homeSource).toContain("workflowName={selectedWorkflow?.name}");
+    expect(runCenterSource).toContain("当前流程：{workflowName");
+    expect(runCenterSource).toContain('className="h-9 w-full text-xs sm:w-36"');
+    expect(runCenterSource).toContain('className="w-full sm:w-auto"');
+    expect(homeSource).toContain("overflow-x-auto border-b border-slate-200");
+  });
+
   it("保留原始四页签、项目工作区和独立系统配置入口", () => {
     expect(homeSource).toContain('label: "已启动流程"');
     expect(homeSource).toContain('label: "流程仓库"');

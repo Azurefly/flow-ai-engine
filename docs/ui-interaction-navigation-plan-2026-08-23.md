@@ -52,3 +52,18 @@
 - Compose：应用与 MySQL 均为 healthy。
 - 部署恢复点：`/opt/flow-ai-engine/backups/20260823-110228-leave-approval`。
 - 待完成：登录后的真实点击和窄屏视觉验收。
+
+## 第二轮布局改造与验证
+
+- 项目流程中心、流程详情、设计器和运行监控统一使用上下文标题卡片视觉层级。
+- 运行监控标题补充当前流程名称与短 ID。
+- 375px 下运行状态、时间、触发者筛选和清除操作可换行并保持全宽可点击。
+- 已启动流程二级 Tab 支持横向滚动，不挤压标签。
+- 宽流程表继续使用显式横向滚动，保留创建、发布、取消发布等审计字段。
+- `pnpm check`：通过。
+- UI 回归：34 passed。
+- 全量测试：62 passed，22 skipped。
+- `pnpm build` 与 `git diff --check`：通过。
+- 线上生产资源已确认包含“当前流程：”和 `data-aiflow-context-header`。
+- 远程健康接口与 Compose：通过，应用和 MySQL 均为 healthy。
+- 第二轮部署恢复点：`/opt/flow-ai-engine/backups/20260823-111300-leave-approval`。

@@ -45,7 +45,7 @@ export function WorkflowDetailPage({
       className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"
     >
       <div className="mx-auto max-w-7xl">
-        <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div data-aiflow-context-header className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
               PROCESS DETAIL
