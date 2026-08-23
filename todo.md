@@ -322,6 +322,6 @@
 - [x] 增加工具栏分行、图标徽标、长文本、详情页去重及路由回退源码回归（38 项通过）。
 - [ ] 覆盖桌面、375px、长节点名、多路由规则、图标遮挡和工具栏横向滚动浏览器验收。
 - [x] 完成类型检查、UI 回归、87 项本地测试、生产构建及差异检查。
-- [x] 创建 checkpoint `b74d58c` 并完成备份式部署；线上 App/MySQL healthy，公网 `/healthz` 正常。
-- [x] 建立恢复点 `/opt/flow-ai-engine/backups/20260823-134010-canvas-ui` 和旧镜像 `flow-ai-engine:backup-20260823-134010-canvas-ui`。
+- [x] 创建视觉修复 checkpoint `b74d58c` 与圆形徽标修复 checkpoint `bf7349a`，并完成备份式部署；线上 App/MySQL healthy，公网 `/healthz` 正常。
+- [x] 建立最新恢复点 `/opt/flow-ai-engine/backups/20260823-135533-rounded-glyphs` 和旧镜像 `flow-ai-engine:backup-20260823-135533-rounded-glyphs`。
 - [ ] 登录后执行桌面与 375px 浏览器视觉验收；当前内置浏览器无有效登录会话。
