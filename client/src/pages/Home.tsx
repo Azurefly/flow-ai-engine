@@ -502,6 +502,8 @@ function IamCenter({
 
   useEffect(() => { if (selectedUserId === null && users[0]) setSelectedUserId(Number(users[0].id)); }, [selectedUserId, users]);
   useEffect(() => { if (selectedRoleId === null && roles[0]) setSelectedRoleId(Number(roles[0].id)); }, [roles, selectedRoleId]);
+  useEffect(() => { if (filteredUsers.length && !filteredUsers.some(account => Number(account.id) === selectedUserId)) setSelectedUserId(Number(filteredUsers[0].id)); }, [filteredUsers, selectedUserId]);
+  useEffect(() => { if (filteredRoles.length && !filteredRoles.some(role => Number(role.id) === selectedRoleId)) setSelectedRoleId(Number(filteredRoles[0].id)); }, [filteredRoles, selectedRoleId]);
   useEffect(() => { setSelectedPreviewUsers(new Set((aiPreview?.users ?? []).map(account => account.username))); setBatchResult(null); }, [aiPreview]);
 
   const submitNormalUser = async () => {

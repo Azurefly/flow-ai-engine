@@ -181,6 +181,8 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("data-iam-role-workbench");
     expect(homeSource).toContain('aria-label="搜索用户"');
     expect(homeSource).toContain('aria-label="搜索角色"');
+    expect(homeSource).toContain("filteredUsers.some(account => Number(account.id) === selectedUserId)");
+    expect(homeSource).toContain("filteredRoles.some(role => Number(role.id) === selectedRoleId)");
     expect(homeSource).toContain("assignSystemRole.useMutation");
     expect(homeSource).toContain("revokeRoleAssignment.useMutation");
     expect(homeSource).toContain("为用户绑定角色");
