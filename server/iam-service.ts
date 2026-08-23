@@ -1,14 +1,7 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 
-export const WORKFLOW_PERMISSIONS = [
-  "workflow:create",
-  "workflow:view",
-  "workflow:edit",
-  "workflow:publish",
-  "workflow:run",
-  "workflow:members:manage",
-] as const;
+export const WORKFLOW_PERMISSIONS = ["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage"] as const;
 
 export const SYSTEM_PERMISSIONS = ["iam:manage"] as const;
 export const ALL_PERMISSIONS = [...WORKFLOW_PERMISSIONS, ...SYSTEM_PERMISSIONS] as const;
@@ -26,22 +19,76 @@ type CatalogRole = {
 };
 
 const catalogRoles: CatalogRole[] = [
-  { code: "system_admin", name: "系统管理员", description: "拥有系统管理和所有流程操作权限。", scope: "system", permissions: ALL_PERMISSIONS },
-  { code: "workflow_creator", name: "流程创建者", description: "可以创建新的流程。", scope: "system", permissions: ["workflow:create"] },
-  { code: "owner", name: "流程所有者", description: "拥有指定流程的全部操作权限。", scope: "workflow", permissions: WORKFLOW_PERMISSIONS },
-  { code: "editor", name: "流程编辑者", description: "可以查看并编辑指定流程。", scope: "workflow", permissions: ["workflow:view", "workflow:edit"] },
-  { code: "operator", name: "流程运行者", description: "可以查看并运行指定流程。", scope: "workflow", permissions: ["workflow:view", "workflow:run"] },
-  { code: "viewer", name: "流程查看者", description: "可以查看指定流程。", scope: "workflow", permissions: ["workflow:view"] },
+  {
+    code: "system_admin",
+    name: "系统管理员",
+    description: "拥有系统管理和所有流程操作权限。",
+    scope: "system",
+    permissions: ALL_PERMISSIONS,
+  },
+  {
+    code: "workflow_creator",
+    name: "流程创建者",
+    description: "可以创建新的流程。",
+    scope: "system",
+    permissions: ["workflow:create"],
+  },
+  {
+    code: "owner",
+    name: "流程所有者",
+    description: "拥有指定流程的全部操作权限。",
+    scope: "workflow",
+    permissions: WORKFLOW_PERMISSIONS,
+  },
+  {
+    code: "editor",
+    name: "流程编辑者",
+    description: "可以查看并编辑指定流程。",
+    scope: "workflow",
+    permissions: ["workflow:view", "workflow:edit"],
+  },
+  {
+    code: "operator",
+    name: "流程运行者",
+    description: "可以查看并运行指定流程。",
+    scope: "workflow",
+    permissions: ["workflow:view", "workflow:run"],
+  },
+  {
+    code: "viewer",
+    name: "流程查看者",
+    description: "可以查看指定流程。",
+    scope: "workflow",
+    permissions: ["workflow:view"],
+  },
 ];
 
 const permissionCatalog: Record<PermissionCode, { name: string; description: string }> = {
   "workflow:create": { name: "创建流程", description: "创建流程定义。" },
-  "workflow:view": { name: "查看流程", description: "查看流程定义和运行状态。" },
-  "workflow:edit": { name: "编辑流程", description: "更新流程定义和基本信息。" },
-  "workflow:publish": { name: "发布流程", description: "发布可运行的流程版本。" },
-  "workflow:run": { name: "运行流程", description: "发起并查看可访问流程的运行。" },
-  "workflow:members:manage": { name: "管理流程成员", description: "授予、调整或撤销流程资源级角色。" },
-  "iam:manage": { name: "管理身份与权限", description: "管理系统用户、角色和系统级授权。" },
+  "workflow:view": {
+    name: "查看流程",
+    description: "查看流程定义和运行状态。",
+  },
+  "workflow:edit": {
+    name: "编辑流程",
+    description: "更新流程定义和基本信息。",
+  },
+  "workflow:publish": {
+    name: "发布流程",
+    description: "发布可运行的流程版本。",
+  },
+  "workflow:run": {
+    name: "运行流程",
+    description: "发起并查看可访问流程的运行。",
+  },
+  "workflow:members:manage": {
+    name: "管理流程成员",
+    description: "授予、调整或撤销流程资源级角色。",
+  },
+  "iam:manage": {
+    name: "管理身份与权限",
+    description: "管理系统用户、角色和系统级授权。",
+  },
 };
 
 const memberRolePermissions: Record<WorkflowMemberRole, readonly WorkflowPermission[]> = {
@@ -92,22 +139,21 @@ async function seedIamCatalog() {
     const [permissionRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,code FROM permission WHERE code IN (?)", [ALL_PERMISSIONS]);
     const roleIds = new Map(roleRows.map(row => [row.code, row.id]));
     const permissionIds = new Map(permissionRows.map(row => [row.code, row.id]));
-    const grantValues = catalogRoles.flatMap(role => role.permissions.map(permission => {
-      const roleId = roleIds.get(role.code);
-      const permissionId = permissionIds.get(permission);
-      if (!roleId || !permissionId) throw new Error(`无法初始化角色或权限映射：${role.code}/${permission}`);
-      return [roleId, permissionId];
-    }));
+    const grantValues = catalogRoles.flatMap(role =>
+      role.permissions.map(permission => {
+        const roleId = roleIds.get(role.code);
+        const permissionId = permissionIds.get(permission);
+        if (!roleId || !permissionId) throw new Error(`无法初始化角色或权限映射：${role.code}/${permission}`);
+        return [roleId, permissionId];
+      })
+    );
     const stalePermissionClauses: string[] = [];
     const stalePermissionArgs: unknown[] = [];
     for (const role of catalogRoles) {
       stalePermissionClauses.push(`(r.code=? AND p.code NOT IN (${role.permissions.map(() => "?").join(",")}))`);
       stalePermissionArgs.push(role.code, ...role.permissions);
     }
-    await connection.query(
-      `DELETE rp FROM role_permission rp JOIN iam_role r ON r.id=rp.roleId JOIN permission p ON p.id=rp.permissionId WHERE ${stalePermissionClauses.join(" OR ")}`,
-      stalePermissionArgs,
-    );
+    await connection.query(`DELETE rp FROM role_permission rp JOIN iam_role r ON r.id=rp.roleId JOIN permission p ON p.id=rp.permissionId WHERE ${stalePermissionClauses.join(" OR ")}`, stalePermissionArgs);
     if (grantValues.length) await connection.query("INSERT IGNORE INTO role_permission (roleId,permissionId) VALUES ?", [grantValues]);
     await connection.commit();
   } catch (error) {
@@ -121,19 +167,32 @@ async function seedIamCatalog() {
 type PermissionRow = mysql.RowDataPacket & { code: PermissionCode };
 
 async function assignedPermissions(userId: number, workflowId?: string) {
-  const scopeClause = workflowId
-    ? "(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))"
-    : "ra.scopeType='system'";
+  const scopeClause = workflowId ? "(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))" : "ra.scopeType='system'";
   const [rows] = await db().query<PermissionRow[]>(
     `SELECT DISTINCT p.code
-       FROM role_assignment ra
-       JOIN iam_role r ON r.id=ra.roleId
+       FROM (
+         SELECT ra.roleId
+           FROM role_assignment ra
+          WHERE ra.userId=? AND ra.revokedAt IS NULL
+            AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+            AND ${scopeClause}
+         UNION
+         SELECT our.roleId
+           FROM organization_membership om
+           JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+           JOIN organization_unit_role our ON our.unitId=ou.id
+          WHERE om.userId=?
+       ) effective_role
+       JOIN iam_role r ON r.id=effective_role.roleId
        JOIN role_permission rp ON rp.roleId=r.id
        JOIN permission p ON p.id=rp.permissionId
-      WHERE ra.userId=? AND ra.revokedAt IS NULL
-        AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
-        AND ${scopeClause}`,
-    workflowId ? [userId, workflowId] : [userId],
+      WHERE r.code<>'system_admin' OR EXISTS (
+        SELECT 1 FROM role_assignment admin_ra
+         WHERE admin_ra.userId=? AND admin_ra.roleId=r.id AND admin_ra.scopeType='system'
+           AND admin_ra.revokedAt IS NULL AND admin_ra.effectiveFrom<=NOW()
+           AND (admin_ra.expiresAt IS NULL OR admin_ra.expiresAt>NOW())
+      )`,
+    workflowId ? [userId, workflowId, userId, userId] : [userId, userId, userId]
   );
   return new Set(rows.map(row => row.code));
 }
@@ -148,25 +207,33 @@ export async function getWorkflowAccess(user: { id: number; role: "user" | "admi
   await ensureIamCatalog();
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT ownerUserId,projectId FROM workflow WHERE id=? LIMIT 1", [workflowId]);
   const workflow = workflowRows[0];
-  if (!workflow) return { exists: false, permissions: new Set<WorkflowPermission>(), memberRoles: [] as WorkflowMemberRole[], projectRoles: [] as ProjectMemberRole[] };
+  if (!workflow)
+    return {
+      exists: false,
+      permissions: new Set<WorkflowPermission>(),
+      memberRoles: [] as WorkflowMemberRole[],
+      projectRoles: [] as ProjectMemberRole[],
+    };
   if (user.role === "admin" || workflow.ownerUserId === user.id) {
-    return { exists: true, permissions: new Set<WorkflowPermission>(WORKFLOW_PERMISSIONS), memberRoles: ["owner"] as WorkflowMemberRole[], projectRoles: [] as ProjectMemberRole[] };
+    return {
+      exists: true,
+      permissions: new Set<WorkflowPermission>(WORKFLOW_PERMISSIONS),
+      memberRoles: ["owner"] as WorkflowMemberRole[],
+      projectRoles: [] as ProjectMemberRole[],
+    };
   }
   const [memberRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT role FROM workflow_member
       WHERE workflowId=? AND userId=? AND revokedAt IS NULL
         AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())`,
-    [workflowId, user.id],
+    [workflowId, user.id]
   );
   const memberRoles = memberRows.map(row => row.role as WorkflowMemberRole);
   const permissions = new Set<WorkflowPermission>();
   memberRoles.forEach(role => memberRolePermissions[role]?.forEach(permission => permissions.add(permission)));
   let projectRoles: ProjectMemberRole[] = [];
   if (workflow.projectId) {
-    const [projectMemberRows] = await db().query<mysql.RowDataPacket[]>(
-      "SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())",
-      [workflow.projectId, user.id],
-    );
+    const [projectMemberRows] = await db().query<mysql.RowDataPacket[]>("SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())", [workflow.projectId, user.id]);
     projectRoles = projectMemberRows.map(row => row.role as ProjectMemberRole);
     projectRoles.forEach(role => projectMemberWorkflowPermissions[role]?.forEach(permission => permissions.add(permission)));
   }
@@ -181,27 +248,11 @@ export async function hasWorkflowPermission(user: { id: number; role: "user" | "
   return access.exists && access.permissions.has(permission);
 }
 
-export async function recordAuthorizationAudit(input: {
-  actorUserId?: number | null;
-  targetUserId?: number | null;
-  action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked";
-  resourceType?: string;
-  resourceId?: string;
-  details?: Record<string, unknown>;
-}) {
-  await db().query(
-    "INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson) VALUES (?,?,?,?,?,?,?)",
-    [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null],
-  );
+export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked"; resourceType?: string; resourceId?: string; details?: Record<string, unknown> }) {
+  await db().query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson) VALUES (?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null]);
 }
 
-export async function grantWorkflowMember(input: {
-  workflowId: string;
-  userId: number;
-  role: WorkflowMemberRole;
-  grantedByUserId: number;
-  expiresAt?: Date | null;
-}) {
+export async function grantWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; grantedByUserId: number; expiresAt?: Date | null }) {
   if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
   const [userRows] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE id=? AND status='active' LIMIT 1", [input.userId]);
   if (!userRows[0]) throw new Error("目标用户不存在或已停用。");
@@ -209,7 +260,7 @@ export async function grantWorkflowMember(input: {
     `INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,expiresAt,revokedAt,grantedByUserId)
      VALUES (?,?,?,?,NOW(),?,NULL,?)
      ON DUPLICATE KEY UPDATE effectiveFrom=NOW(),expiresAt=VALUES(expiresAt),revokedAt=NULL,grantedByUserId=VALUES(grantedByUserId)`,
-    [randomUUID(), input.workflowId, input.userId, input.role, input.expiresAt ?? null, input.grantedByUserId],
+    [randomUUID(), input.workflowId, input.userId, input.role, input.expiresAt ?? null, input.grantedByUserId]
   );
   await recordAuthorizationAudit({
     actorUserId: input.grantedByUserId,
@@ -217,7 +268,10 @@ export async function grantWorkflowMember(input: {
     action: input.expiresAt ? "temporary_role_assigned" : "role_assigned",
     resourceType: "workflow",
     resourceId: input.workflowId,
-    details: { role: input.role, expiresAt: input.expiresAt?.toISOString() ?? null },
+    details: {
+      role: input.role,
+      expiresAt: input.expiresAt?.toISOString() ?? null,
+    },
   });
 }
 
@@ -227,14 +281,11 @@ export async function revokeWorkflowMember(input: { workflowId: string; userId: 
       `SELECT id FROM workflow_member
         WHERE workflowId=? AND role='owner' AND revokedAt IS NULL
           AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())`,
-      [input.workflowId],
+      [input.workflowId]
     );
     if (owners.length <= 1) throw new Error("流程必须保留至少一位有效所有者。");
   }
-  const [result] = await db().query<mysql.ResultSetHeader>(
-    "UPDATE workflow_member SET revokedAt=NOW() WHERE workflowId=? AND userId=? AND role=? AND revokedAt IS NULL",
-    [input.workflowId, input.userId, input.role],
-  );
+  const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_member SET revokedAt=NOW() WHERE workflowId=? AND userId=? AND role=? AND revokedAt IS NULL", [input.workflowId, input.userId, input.role]);
   if (!result.affectedRows) throw new Error("未找到可撤销的流程成员授权。");
   await recordAuthorizationAudit({
     actorUserId: input.revokedByUserId,
@@ -252,7 +303,7 @@ export async function listWorkflowMembers(workflowId: string) {
             u.username,u.name,u.email
        FROM workflow_member wm JOIN users u ON u.id=wm.userId
       WHERE wm.workflowId=? ORDER BY wm.role,wm.createdAt`,
-    [workflowId],
+    [workflowId]
   );
   return rows;
 }
@@ -262,15 +313,7 @@ export async function listActiveUsersForWorkflowAssignment() {
   return rows;
 }
 
-export async function assignRole(input: {
-  userId: number;
-  roleCode: string;
-  scopeType: "system" | "workflow";
-  scopeId?: string | null;
-  grantedByUserId: number;
-  expiresAt?: Date | null;
-  note?: string | null;
-}) {
+export async function assignRole(input: { userId: number; roleCode: string; scopeType: "system" | "workflow"; scopeId?: string | null; grantedByUserId: number; expiresAt?: Date | null; note?: string | null }) {
   if (input.scopeType === "system" && input.scopeId) throw new Error("系统角色不能绑定资源 ID。");
   if (input.scopeType === "workflow" && !input.scopeId) throw new Error("流程角色必须绑定流程 ID。");
   if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
@@ -281,7 +324,7 @@ export async function assignRole(input: {
   await db().query(
     `INSERT INTO role_assignment (id,userId,roleId,scopeType,scopeId,effectiveFrom,expiresAt,revokedAt,grantedByUserId,note)
      VALUES (?,?,?,?,?,NOW(),?,NULL,?,?)`,
-    [randomUUID(), input.userId, role.id, input.scopeType, input.scopeId ?? null, input.expiresAt ?? null, input.grantedByUserId, input.note ?? null],
+    [randomUUID(), input.userId, role.id, input.scopeType, input.scopeId ?? null, input.expiresAt ?? null, input.grantedByUserId, input.note ?? null]
   );
   await recordAuthorizationAudit({
     actorUserId: input.grantedByUserId,
@@ -289,7 +332,10 @@ export async function assignRole(input: {
     action: input.expiresAt ? "temporary_role_assigned" : "role_assigned",
     resourceType: input.scopeType,
     resourceId: input.scopeId ?? undefined,
-    details: { roleCode: input.roleCode, expiresAt: input.expiresAt?.toISOString() ?? null },
+    details: {
+      roleCode: input.roleCode,
+      expiresAt: input.expiresAt?.toISOString() ?? null,
+    },
   });
 }
 
@@ -332,7 +378,17 @@ export async function createCustomRole(input: { code: string; name: string; desc
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({ actorUserId: input.actorUserId, action: "user_updated", resourceType: "iam_role", resourceId: code, details: { operation: "custom_role_created", scope: input.scope, permissions } });
+  await recordAuthorizationAudit({
+    actorUserId: input.actorUserId,
+    action: "user_updated",
+    resourceType: "iam_role",
+    resourceId: code,
+    details: {
+      operation: "custom_role_created",
+      scope: input.scope,
+      permissions,
+    },
+  });
 }
 
 export async function updateCustomRole(input: { code: string; name?: string; description?: string | null; permissions?: PermissionCode[]; actorUserId: number }) {
@@ -354,7 +410,13 @@ export async function updateCustomRole(input: { code: string; name?: string; des
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({ actorUserId: input.actorUserId, action: "user_updated", resourceType: "iam_role", resourceId: code, details: { operation: "custom_role_updated" } });
+  await recordAuthorizationAudit({
+    actorUserId: input.actorUserId,
+    action: "user_updated",
+    resourceType: "iam_role",
+    resourceId: code,
+    details: { operation: "custom_role_updated" },
+  });
 }
 
 export async function deleteCustomRole(input: { code: string; actorUserId: number }) {
@@ -377,7 +439,13 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({ actorUserId: input.actorUserId, action: "user_updated", resourceType: "iam_role", resourceId: code, details: { operation: "custom_role_deleted" } });
+  await recordAuthorizationAudit({
+    actorUserId: input.actorUserId,
+    action: "user_updated",
+    resourceType: "iam_role",
+    resourceId: code,
+    details: { operation: "custom_role_deleted" },
+  });
 }
 
 export async function revokeRoleAssignment(input: { assignmentId: string; revokedByUserId: number }) {
@@ -388,7 +456,7 @@ export async function revokeRoleAssignment(input: { assignmentId: string; revoke
       `SELECT ra.id,ra.userId,ra.scopeType,ra.scopeId,r.code
          FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
         WHERE ra.id=? AND ra.revokedAt IS NULL FOR UPDATE`,
-      [input.assignmentId],
+      [input.assignmentId]
     );
     const assignment = rows[0];
     if (!assignment) throw new Error("未找到可撤销的角色授权。");
@@ -396,13 +464,20 @@ export async function revokeRoleAssignment(input: { assignmentId: string; revoke
       const [adminRows] = await connection.query<mysql.RowDataPacket[]>(
         `SELECT ra.id FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
           WHERE r.code='system_admin' AND ra.scopeType='system' AND ra.revokedAt IS NULL
-            AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())`,
+            AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())`
       );
       if (adminRows.length <= 1) throw new Error("系统必须保留至少一位有效系统管理员。");
     }
     await connection.query("UPDATE role_assignment SET revokedAt=NOW(),revokedByUserId=? WHERE id=?", [input.revokedByUserId, input.assignmentId]);
     await connection.commit();
-    await recordAuthorizationAudit({ actorUserId: input.revokedByUserId, targetUserId: assignment.userId, action: "role_revoked", resourceType: assignment.scopeType, resourceId: assignment.scopeId ?? undefined, details: { assignmentId: input.assignmentId, roleCode: assignment.code } });
+    await recordAuthorizationAudit({
+      actorUserId: input.revokedByUserId,
+      targetUserId: assignment.userId,
+      action: "role_revoked",
+      resourceType: assignment.scopeType,
+      resourceId: assignment.scopeId ?? undefined,
+      details: { assignmentId: input.assignmentId, roleCode: assignment.code },
+    });
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -421,7 +496,7 @@ export async function listRoles(scope?: "system" | "workflow") {
       WHERE (? IS NULL OR r.scope=?)
       GROUP BY r.id,r.code,r.name,r.description,r.scope,r.isSystem
       ORDER BY r.scope,r.code`,
-    [scope ?? null, scope ?? null],
+    [scope ?? null, scope ?? null]
   );
   return rows;
 }
@@ -433,7 +508,7 @@ export async function listAuthorizationAudit(limit = 100) {
        LEFT JOIN users actor ON actor.id=a.actorUserId
        LEFT JOIN users target ON target.id=a.targetUserId
       ORDER BY a.createdAt DESC LIMIT ?`,
-    [Math.min(Math.max(limit, 1), 200)],
+    [Math.min(Math.max(limit, 1), 200)]
   );
   return rows;
 }

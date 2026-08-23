@@ -1,81 +1,326 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { CreationDialog } from "@/components/CreationDialog";
 import { trpc } from "@/lib/trpc";
 import { Building2, CheckCircle2, ClipboardCheck, Gauge, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, SlidersHorizontal, Stamp, Workflow } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 type Tab = "general" | "approval" | "domain" | "organization" | "identity";
 
-export default function SystemConfigShell({ onOpenIdentity }: { onOpenIdentity: () => void }) {
+export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }: { onOpenIdentity: () => void; onOpenOrganization: () => void }) {
   const [tab, setTab] = useState<Tab>("general");
   const [collapsed, setCollapsed] = useState(false);
-  const items = [{ id: "general" as const, label: "通用设置", icon: SlidersHorizontal }, { id: "approval" as const, label: "审批配置", icon: ClipboardCheck }, { id: "domain" as const, label: "工作域配置", icon: Workflow }, { id: "organization" as const, label: "组织架构", icon: Building2 }, { id: "identity" as const, label: "身份与权限", icon: ShieldCheck }];
+  const items = [
+    { id: "general" as const, label: "通用设置", icon: SlidersHorizontal },
+    { id: "approval" as const, label: "审批配置", icon: ClipboardCheck },
+    { id: "domain" as const, label: "工作域配置", icon: Workflow },
+    { id: "organization" as const, label: "组织架构", icon: Building2 },
+    { id: "identity" as const, label: "身份与权限", icon: ShieldCheck },
+  ];
   const active = items.find(item => item.id === tab) ?? items[0];
-  return <div data-aiflow-system-config="" className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div className={`mx-auto grid max-w-6xl gap-4 ${collapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]"}`}><aside className="overflow-hidden rounded-lg border border-slate-200 bg-white p-2 shadow-sm"><div className={`flex items-start border-b border-slate-100 px-3 py-3 ${collapsed ? "justify-center" : "justify-between"}`}><div className={collapsed ? "hidden" : "block"}><p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">SYSTEM CONFIGURATION</p><h1 className="mt-1 text-base font-semibold text-slate-800">系统配置</h1></div><button type="button" title={collapsed ? "展开配置导航" : "收起配置导航"} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-[#245fc8]" onClick={() => setCollapsed(value => !value)}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div><nav className="mt-2 grid gap-1">{items.map(item => <button key={item.id} title={collapsed ? item.label : undefined} onClick={() => setTab(item.id)} className={`flex items-center gap-2 rounded px-3 py-2.5 text-left text-sm ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}><item.icon size={16} /><span className={collapsed ? "hidden" : "truncate"}>{item.label}</span></button>)}</nav></aside><section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 bg-slate-50 px-5 pt-3"><div role="tablist" aria-label="系统配置卡片页签" className="flex w-fit gap-1"><button id="system-config-active-tab" role="tab" aria-controls="system-config-card" aria-selected="true" className="flex items-center gap-2 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#245fc8]"><active.icon size={14} />{active.label}</button></div></div><div id="system-config-card" role="tabpanel" aria-labelledby="system-config-active-tab" className="p-5">{tab === "general" && <GeneralSettings />}{tab === "approval" && <ApprovalSettings />}{tab === "domain" && <DomainSettings />}{tab === "organization" && <OrganizationSettings />}{tab === "identity" && <IdentitySettings onOpenIdentity={onOpenIdentity} />}</div></section></div></div>;
+  return (
+    <div data-aiflow-system-config="" className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6">
+      <div className={`mx-auto grid max-w-6xl gap-4 ${collapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]"}`}>
+        <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+          <div className={`flex items-start border-b border-slate-100 px-3 py-3 ${collapsed ? "justify-center" : "justify-between"}`}>
+            <div className={collapsed ? "hidden" : "block"}>
+              <p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">SYSTEM CONFIGURATION</p>
+              <h1 className="mt-1 text-base font-semibold text-slate-800">系统配置</h1>
+            </div>
+            <button type="button" title={collapsed ? "展开配置导航" : "收起配置导航"} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-[#245fc8]" onClick={() => setCollapsed(value => !value)}>
+              {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+            </button>
+          </div>
+          <nav className="mt-2 grid gap-1">
+            {items.map(item => (
+              <button key={item.id} title={collapsed ? item.label : undefined} onClick={() => setTab(item.id)} className={`flex items-center gap-2 rounded px-3 py-2.5 text-left text-sm ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}>
+                <item.icon size={16} />
+                <span className={collapsed ? "hidden" : "truncate"}>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50 px-5 pt-3">
+            <div role="tablist" aria-label="系统配置卡片页签" className="flex w-fit gap-1">
+              <button id="system-config-active-tab" role="tab" aria-controls="system-config-card" aria-selected="true" className="flex items-center gap-2 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#245fc8]">
+                <active.icon size={14} />
+                {active.label}
+              </button>
+            </div>
+          </div>
+          <div id="system-config-card" role="tabpanel" aria-labelledby="system-config-active-tab" className="p-5">
+            {tab === "general" && <GeneralSettings />}
+            {tab === "approval" && <ApprovalSettings />}
+            {tab === "domain" && <DomainSettings />}
+            {tab === "organization" && <OrganizationEntry onOpen={onOpenOrganization} />}
+            {tab === "identity" && <IdentitySettings onOpenIdentity={onOpenIdentity} />}
+          </div>
+        </section>
+      </div>
+    </div>
+  );
 }
 
 function GeneralSettings() {
   const utils = trpc.useUtils();
   const settings = trpc.config.settings.useQuery();
-  const [form, setForm] = useState({ platformName: "Flow AI Engine", watermarkEnabled: false, watermarkText: "" });
-  useEffect(() => { if (settings.data?.general) setForm(settings.data.general); }, [settings.data]);
-  const update = trpc.config.updateSetting.useMutation({ onSuccess: () => { void utils.config.settings.invalidate(); void utils.config.publicGeneral.invalidate(); toast.success("通用设置已保存。 "); }, onError: error => toast.error(error.message) });
-  return <div><Header eyebrow="GENERAL SETTINGS" title="通用设置" description="系统级显示配置由管理员持久化管理；设置不会跨越项目与流程数据隔离边界。" /><div className="mt-6 grid gap-4 md:grid-cols-2"><ConfigCard icon={Gauge} title="平台名称" value={form.platformName || "Flow AI Engine"} description="在内部控制台中用于识别当前流程引擎。" /><ConfigCard icon={Stamp} title="系统水印" value={form.watermarkEnabled ? "已启用" : "未启用"} description={form.watermarkEnabled ? form.watermarkText || "未填写水印文字" : "管理员可在此配置预览水印。"} /></div><form className="mt-6 grid max-w-xl gap-4 rounded-lg border border-slate-200 p-4" onSubmit={event => { event.preventDefault(); update.mutate({ key: "general", value: form }); }}><label className="grid gap-2 text-sm font-medium text-slate-700">平台名称<Input value={form.platformName} onChange={event => setForm({ ...form, platformName: event.target.value })} maxLength={120} /></label><label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={form.watermarkEnabled} onChange={event => setForm({ ...form, watermarkEnabled: event.target.checked })} />启用系统水印</label><label className="grid gap-2 text-sm font-medium text-slate-700">水印文字<Input value={form.watermarkText} onChange={event => setForm({ ...form, watermarkText: event.target.value })} maxLength={120} disabled={!form.watermarkEnabled} /></label><Button className="w-fit bg-[#2d6bea] hover:bg-[#255bc8]" disabled={update.isPending}>{update.isPending && <Loader2 className="animate-spin" size={15} />}保存通用设置</Button></form></div>;
+  const [form, setForm] = useState({
+    platformName: "Flow AI Engine",
+    watermarkEnabled: false,
+    watermarkText: "",
+  });
+  useEffect(() => {
+    if (settings.data?.general) setForm(settings.data.general);
+  }, [settings.data]);
+  const update = trpc.config.updateSetting.useMutation({
+    onSuccess: () => {
+      void utils.config.settings.invalidate();
+      void utils.config.publicGeneral.invalidate();
+      toast.success("通用设置已保存。 ");
+    },
+    onError: error => toast.error(error.message),
+  });
+  return (
+    <div>
+      <Header eyebrow="GENERAL SETTINGS" title="通用设置" description="系统级显示配置由管理员持久化管理；设置不会跨越项目与流程数据隔离边界。" />
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <ConfigCard icon={Gauge} title="平台名称" value={form.platformName || "Flow AI Engine"} description="在内部控制台中用于识别当前流程引擎。" />
+        <ConfigCard icon={Stamp} title="系统水印" value={form.watermarkEnabled ? "已启用" : "未启用"} description={form.watermarkEnabled ? form.watermarkText || "未填写水印文字" : "管理员可在此配置预览水印。"} />
+      </div>
+      <form
+        className="mt-6 grid max-w-xl gap-4 rounded-lg border border-slate-200 p-4"
+        onSubmit={event => {
+          event.preventDefault();
+          update.mutate({ key: "general", value: form });
+        }}
+      >
+        <label className="grid gap-2 text-sm font-medium text-slate-700">
+          平台名称
+          <Input value={form.platformName} onChange={event => setForm({ ...form, platformName: event.target.value })} maxLength={120} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" checked={form.watermarkEnabled} onChange={event => setForm({ ...form, watermarkEnabled: event.target.checked })} />
+          启用系统水印
+        </label>
+        <label className="grid gap-2 text-sm font-medium text-slate-700">
+          水印文字
+          <Input value={form.watermarkText} onChange={event => setForm({ ...form, watermarkText: event.target.value })} maxLength={120} disabled={!form.watermarkEnabled} />
+        </label>
+        <Button className="w-fit bg-[#2d6bea] hover:bg-[#255bc8]" disabled={update.isPending}>
+          {update.isPending && <Loader2 className="animate-spin" size={15} />}
+          保存通用设置
+        </Button>
+      </form>
+    </div>
+  );
 }
 
 function ApprovalSettings() {
   const utils = trpc.useUtils();
   const settings = trpc.config.settings.useQuery();
   const [required, setRequired] = useState(true);
-  useEffect(() => { if (settings.data?.approval) setRequired(Boolean(settings.data.approval.requireProjectApproval)); }, [settings.data]);
-  const update = trpc.config.updateSetting.useMutation({ onSuccess: () => { void utils.config.settings.invalidate(); toast.success("审批规则已保存。 "); }, onError: error => toast.error(error.message) });
-  return <div><Header eyebrow="APPROVAL CONFIGURATION" title="审批配置" description="项目流程保持待审核、审核通过和审核驳回生命周期；发布门禁在服务端执行。" /><div className="mt-6 rounded-lg border border-[#cfe0ff] bg-[#f5f9ff] p-5"><div className="flex gap-3"><ClipboardCheck className="mt-0.5 text-[#2d6bea]" size={20} /><div className="flex-1"><p className="font-semibold text-slate-800">项目流程发布审批</p><p className="mt-1 text-sm leading-6 text-slate-600">仅项目所有者或系统管理员可完成审核；设计者不能绕过审批发布项目流程。</p><label className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-700"><input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />要求审核通过后发布</label><div className="mt-4 flex flex-wrap items-center gap-3"><Button className="bg-[#2d6bea] hover:bg-[#255bc8]" size="sm" disabled={update.isPending} onClick={() => update.mutate({ key: "approval", value: { requireProjectApproval: required, reviewerMode: "project_owner_or_admin" } })}>{update.isPending && <Loader2 className="animate-spin" size={14} />}保存审批规则</Button><span className="flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 size={14} />当前发布门禁由服务端强制执行</span></div></div></div></div></div>;
+  useEffect(() => {
+    if (settings.data?.approval) setRequired(Boolean(settings.data.approval.requireProjectApproval));
+  }, [settings.data]);
+  const update = trpc.config.updateSetting.useMutation({
+    onSuccess: () => {
+      void utils.config.settings.invalidate();
+      toast.success("审批规则已保存。 ");
+    },
+    onError: error => toast.error(error.message),
+  });
+  return (
+    <div>
+      <Header eyebrow="APPROVAL CONFIGURATION" title="审批配置" description="项目流程保持待审核、审核通过和审核驳回生命周期；发布门禁在服务端执行。" />
+      <div className="mt-6 rounded-lg border border-[#cfe0ff] bg-[#f5f9ff] p-5">
+        <div className="flex gap-3">
+          <ClipboardCheck className="mt-0.5 text-[#2d6bea]" size={20} />
+          <div className="flex-1">
+            <p className="font-semibold text-slate-800">项目流程发布审批</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">仅项目所有者或系统管理员可完成审核；设计者不能绕过审批发布项目流程。</p>
+            <label className="mt-4 flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />
+              要求审核通过后发布
+            </label>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                className="bg-[#2d6bea] hover:bg-[#255bc8]"
+                size="sm"
+                disabled={update.isPending}
+                onClick={() =>
+                  update.mutate({
+                    key: "approval",
+                    value: {
+                      requireProjectApproval: required,
+                      reviewerMode: "project_owner_or_admin",
+                    },
+                  })
+                }
+              >
+                {update.isPending && <Loader2 className="animate-spin" size={14} />}
+                保存审批规则
+              </Button>
+              <span className="flex items-center gap-1 text-xs text-emerald-700">
+                <CheckCircle2 size={14} />
+                当前发布门禁由服务端强制执行
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DomainSettings() {
   const utils = trpc.useUtils();
   const domains = trpc.config.workDomains.useQuery();
   const [form, setForm] = useState({ code: "", name: "", description: "" });
-  const create = trpc.config.createWorkDomain.useMutation({ onSuccess: () => { setForm({ code: "", name: "", description: "" }); void utils.config.workDomains.invalidate(); toast.success("工作域已创建。 "); }, onError: error => toast.error(error.message) });
-  const update = trpc.config.updateWorkDomain.useMutation({ onSuccess: () => { void utils.config.workDomains.invalidate(); toast.success("工作域已更新。 "); }, onError: error => toast.error(error.message) });
-  return <div><Header eyebrow="WORK DOMAIN" title="工作域配置" description="工作域用于管理员组织业务项目；项目自身仍是成员、流程与运行记录的数据隔离边界。" /><form className="mt-6 grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-[140px_1fr_1fr_auto]" onSubmit={event => { event.preventDefault(); create.mutate(form); }}><Input placeholder="域代号" value={form.code} onChange={event => setForm({ ...form, code: event.target.value.toUpperCase() })} required /><Input placeholder="工作域名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /><Input placeholder="说明（可选）" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /><Button className="bg-[#2d6bea] hover:bg-[#255bc8]" disabled={create.isPending}><Plus size={15} />新建工作域</Button></form><div className="mt-5 overflow-x-auto"><table className="w-full min-w-[650px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">代号</th><th className="px-4 py-3">名称 / 说明</th><th className="px-4 py-3">创建人</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">操作</th></tr></thead><tbody>{(domains.data ?? []).map((domain: any) => <tr key={domain.id} className="border-t border-slate-100"><td className="px-4 py-3 font-mono text-xs text-[#245fc8]">{domain.code}</td><td className="px-4 py-3"><p className="font-medium text-slate-800">{domain.name}</p><p className="mt-1 text-xs text-slate-400">{domain.description || "未填写说明"}</p></td><td className="px-4 py-3 text-xs text-slate-500">{domain.creatorName || domain.creatorUsername || "—"}</td><td className="px-4 py-3"><span className={`rounded px-2 py-1 text-xs ${domain.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{domain.status === "active" ? "启用" : "停用"}</span></td><td className="px-4 py-3"><Button type="button" size="sm" variant="outline" className="h-7 text-xs" disabled={update.isPending} onClick={() => update.mutate({ id: domain.id, status: domain.status === "active" ? "disabled" : "active" })}>{domain.status === "active" ? "停用" : "启用"}</Button></td></tr>)}{!domains.isLoading && !(domains.data ?? []).length && <tr><td colSpan={5} className="p-8 text-center text-sm text-slate-400">尚未配置工作域。</td></tr>}</tbody></table></div></div>;
+  const [createOpen, setCreateOpen] = useState(false);
+  const create = trpc.config.createWorkDomain.useMutation({
+    onSuccess: () => {
+      setCreateOpen(false);
+      setForm({ code: "", name: "", description: "" });
+      void utils.config.workDomains.invalidate();
+      toast.success("工作域已创建。 ");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const update = trpc.config.updateWorkDomain.useMutation({
+    onSuccess: () => {
+      void utils.config.workDomains.invalidate();
+      toast.success("工作域已更新。 ");
+    },
+    onError: error => toast.error(error.message),
+  });
+  return (
+    <div>
+      <Header
+        eyebrow="WORK DOMAIN"
+        title="工作域配置"
+        description="工作域用于管理员组织业务项目；项目自身仍是成员、流程与运行记录的数据隔离边界。"
+        action={
+          <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Plus size={15} />
+            新建工作域
+          </Button>
+        }
+      />
+      <div className="mt-5 overflow-x-auto">
+        <table className="w-full min-w-[650px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs text-slate-500">
+            <tr>
+              <th className="px-4 py-3">代号</th>
+              <th className="px-4 py-3">名称 / 说明</th>
+              <th className="px-4 py-3">创建人</th>
+              <th className="px-4 py-3">状态</th>
+              <th className="px-4 py-3">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(domains.data ?? []).map((domain: any) => (
+              <tr key={domain.id} className="border-t border-slate-100">
+                <td className="px-4 py-3 font-mono text-xs text-[#245fc8]">{domain.code}</td>
+                <td className="px-4 py-3">
+                  <p className="font-medium text-slate-800">{domain.name}</p>
+                  <p className="mt-1 text-xs text-slate-400">{domain.description || "未填写说明"}</p>
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">{domain.creatorName || domain.creatorUsername || "—"}</td>
+                <td className="px-4 py-3">
+                  <span className={`rounded px-2 py-1 text-xs ${domain.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{domain.status === "active" ? "启用" : "停用"}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={update.isPending}
+                    onClick={() =>
+                      update.mutate({
+                        id: domain.id,
+                        status: domain.status === "active" ? "disabled" : "active",
+                      })
+                    }
+                  >
+                    {domain.status === "active" ? "停用" : "启用"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+            {!domains.isLoading && !(domains.data ?? []).length && (
+              <tr>
+                <td colSpan={5} className="p-8 text-center text-sm text-slate-400">
+                  尚未配置工作域。
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <CreationDialog open={createOpen} onOpenChange={setCreateOpen} title="新建工作域" description="填写工作域信息后调用真实创建接口；取消不会保存。" pending={create.isPending} onSubmit={() => create.mutate(form)}>
+        <Input placeholder="域代号" value={form.code} onChange={event => setForm({ ...form, code: event.target.value.toUpperCase() })} required />
+        <Input placeholder="工作域名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required />
+        <Input placeholder="说明（可选）" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
+      </CreationDialog>
+    </div>
+  );
 }
 
-function OrganizationSettings() {
-  const utils = trpc.useUtils();
-  const organization = trpc.config.organization.useQuery();
-  const users = trpc.iam.users.useQuery();
-  const units = (organization.data?.units ?? []) as any[];
-  const members = (organization.data?.members ?? []) as any[];
-  const activeUsers = (users.data ?? []).filter((user: any) => user.status === "active");
-  const [unitForm, setUnitForm] = useState({ code: "", name: "", parentUnitId: "", managerUserId: "" });
-  const [memberForm, setMemberForm] = useState({ unitId: "", userId: "", title: "", isPrimary: true });
-  const refresh = () => void utils.config.organization.invalidate();
-  const createUnit = trpc.config.createOrganizationUnit.useMutation({ onSuccess: () => { setUnitForm({ code: "", name: "", parentUnitId: "", managerUserId: "" }); refresh(); toast.success("组织单元已创建。"); }, onError: error => toast.error(error.message) });
-  const updateUnit = trpc.config.updateOrganizationUnit.useMutation({ onSuccess: () => { refresh(); toast.success("组织单元已更新。"); }, onError: error => toast.error(error.message) });
-  const assignMember = trpc.config.assignOrganizationMember.useMutation({ onSuccess: () => { setMemberForm(form => ({ ...form, userId: "", title: "" })); refresh(); toast.success("组织成员关系已保存。"); }, onError: error => toast.error(error.message) });
-  const removeMember = trpc.config.removeOrganizationMember.useMutation({ onSuccess: () => { refresh(); toast.success("组织成员关系已移除。"); }, onError: error => toast.error(error.message) });
-
-  return <div><Header eyebrow="ORGANIZATION STRUCTURE" title="组织架构" description="维护部门层级、部门负责人和员工主部门。流程中的“直属上级”按员工主部门负责人解析；负责人本人继续向上级部门查找。" />
-    <form className="mt-6 grid gap-3 rounded-lg border border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-[130px_1fr_1fr_1fr_auto]" onSubmit={event => { event.preventDefault(); createUnit.mutate({ code: unitForm.code, name: unitForm.name, parentUnitId: unitForm.parentUnitId || null, managerUserId: unitForm.managerUserId ? Number(unitForm.managerUserId) : null }); }}>
-      <Input placeholder="部门代号" value={unitForm.code} onChange={event => setUnitForm({ ...unitForm, code: event.target.value.toUpperCase() })} required />
-      <Input placeholder="部门名称" value={unitForm.name} onChange={event => setUnitForm({ ...unitForm, name: event.target.value })} required />
-      <select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={unitForm.parentUnitId} onChange={event => setUnitForm({ ...unitForm, parentUnitId: event.target.value })}><option value="">无上级部门</option>{units.filter(unit => unit.status === "active").map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select>
-      <select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={unitForm.managerUserId} onChange={event => setUnitForm({ ...unitForm, managerUserId: event.target.value })}><option value="">未指定负责人</option>{activeUsers.map((user: any) => <option key={user.id} value={user.id}>{user.name || user.username}</option>)}</select>
-      <Button className="bg-[#2d6bea] hover:bg-[#255bc8]" disabled={createUnit.isPending}><Plus size={15} />新建部门</Button>
-    </form>
-    <form className="mt-4 grid gap-3 rounded-lg border border-blue-100 bg-blue-50/40 p-4 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_auto_auto]" onSubmit={event => { event.preventDefault(); assignMember.mutate({ unitId: memberForm.unitId, userId: Number(memberForm.userId), title: memberForm.title || undefined, isPrimary: memberForm.isPrimary }); }}>
-      <select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={memberForm.unitId} onChange={event => setMemberForm({ ...memberForm, unitId: event.target.value })} required><option value="">选择部门</option>{units.filter(unit => unit.status === "active").map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}</select>
-      <select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={memberForm.userId} onChange={event => setMemberForm({ ...memberForm, userId: event.target.value })} required><option value="">选择员工</option>{activeUsers.map((user: any) => <option key={user.id} value={user.id}>{user.name || user.username}（{user.username}）</option>)}</select>
-      <Input placeholder="职位（可选）" value={memberForm.title} onChange={event => setMemberForm({ ...memberForm, title: event.target.value })} />
-      <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={memberForm.isPrimary} onChange={event => setMemberForm({ ...memberForm, isPrimary: event.target.checked })} />主部门</label>
-      <Button variant="outline" disabled={assignMember.isPending}>保存成员</Button>
-    </form>
-    <div className="mt-5 overflow-x-auto"><table className="w-full min-w-[860px] text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-4 py-3">部门</th><th className="px-4 py-3">上级部门</th><th className="px-4 py-3">负责人</th><th className="px-4 py-3">成员</th><th className="px-4 py-3">状态 / 操作</th></tr></thead><tbody>{units.map(unit => <tr key={unit.id} className="border-t border-slate-100 align-top"><td className="px-4 py-3"><p className="font-medium text-slate-800">{unit.name}</p><code className="text-[10px] text-[#245fc8]">{unit.code}</code></td><td className="px-4 py-3 text-xs text-slate-500">{unit.parentName || "—"}</td><td className="px-4 py-3"><select aria-label={`设置 ${unit.name} 负责人`} className="h-8 rounded border border-slate-200 bg-white px-2 text-xs" value={unit.managerUserId || ""} onChange={event => updateUnit.mutate({ id: unit.id, managerUserId: event.target.value ? Number(event.target.value) : null })}><option value="">未指定</option>{activeUsers.map((user: any) => <option key={user.id} value={user.id}>{user.name || user.username}</option>)}</select></td><td className="px-4 py-3"><div className="flex max-w-[320px] flex-wrap gap-1">{members.filter(member => member.unitId === unit.id).map(member => <button type="button" key={member.id} className="rounded bg-slate-100 px-2 py-1 text-[11px] text-slate-600 hover:bg-red-50 hover:text-red-600" title="点击移除成员关系" onClick={() => removeMember.mutate({ unitId: unit.id, userId: member.userId })}>{member.name || member.username}{member.isPrimary ? " · 主部门" : ""}</button>)}{!members.some(member => member.unitId === unit.id) && <span className="text-xs text-slate-400">暂无成员</span>}</div></td><td className="px-4 py-3"><Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateUnit.mutate({ id: unit.id, status: unit.status === "active" ? "disabled" : "active" })}>{unit.status === "active" ? "停用" : "启用"}</Button></td></tr>)}{!organization.isLoading && !units.length && <tr><td colSpan={5} className="p-8 text-center text-sm text-slate-400">尚未配置组织架构。</td></tr>}</tbody></table></div>
-  </div>;
+function IdentitySettings({ onOpenIdentity }: { onOpenIdentity: () => void }) {
+  return (
+    <div>
+      <Header eyebrow="IDENTITY & AUTHORIZATION" title="身份与权限" description="系统用户、系统角色、流程角色、临时授权和授权审计均由内部 IAM 管理。" />
+      <Button className="mt-6 bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpenIdentity}>
+        <ShieldCheck size={16} />
+        打开身份与权限中心
+      </Button>
+    </div>
+  );
 }
-
-function IdentitySettings({ onOpenIdentity }: { onOpenIdentity: () => void }) { return <div><Header eyebrow="IDENTITY & AUTHORIZATION" title="身份与权限" description="系统用户、系统角色、流程角色、临时授权和授权审计均由内部 IAM 管理。" /><Button className="mt-6 bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpenIdentity}><ShieldCheck size={16} />打开身份与权限中心</Button></div>; }
-function Header({ eyebrow, title, description }: { eyebrow: string; title: string; description: string }) { return <div className="border-b border-slate-100 pb-4"><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">{eyebrow}</p><h2 className="mt-1 text-xl font-semibold text-slate-800">{title}</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</p></div>; }
-function ConfigCard({ icon: Icon, title, value, description }: { icon: typeof Gauge; title: string; value: string; description: string }) { return <div className="rounded-lg border border-slate-200 p-4"><Icon size={18} className="text-[#2d6bea]" /><p className="mt-3 text-sm font-semibold text-slate-800">{title}</p><p className="mt-1 text-sm text-[#245fc8]">{value}</p><p className="mt-2 text-xs leading-5 text-slate-500">{description}</p></div>; }
+function OrganizationEntry({ onOpen }: { onOpen: () => void }) {
+  return (
+    <div>
+      <Header eyebrow="ORGANIZATION STRUCTURE" title="组织架构" description="组织部门、负责人、成员岗位和部门权限组在独立管理页维护，并与请假流程共享同一套 MySQL 数据。" />
+      <div className="mt-6 rounded-lg border border-[#cfe0ff] bg-[#f5f9ff] p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <Building2 className="mt-0.5 shrink-0 text-[#2d6bea]" size={22} />
+            <div>
+              <p className="font-semibold text-slate-800">BDP 参考式组织管理</p>
+              <p className="mt-1 text-sm leading-6 text-slate-600">进入左侧机构树、右侧部门详情和成员/权限组 Tab；新增操作均在弹窗提交真实接口。</p>
+            </div>
+          </div>
+          <Button type="button" className="shrink-0 bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpen}>
+            <Building2 size={16} />
+            打开组织架构管理
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function Header({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">{eyebrow}</p>
+        <h2 className="mt-1 text-xl font-semibold text-slate-800">{title}</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{description}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+function ConfigCard({ icon: Icon, title, value, description }: { icon: typeof Gauge; title: string; value: string; description: string }) {
+  return (
+    <div className="rounded-lg border border-slate-200 p-4">
+      <Icon size={18} className="text-[#2d6bea]" />
+      <p className="mt-3 text-sm font-semibold text-slate-800">{title}</p>
+      <p className="mt-1 text-sm text-[#245fc8]">{value}</p>
+      <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+    </div>
+  );
+}

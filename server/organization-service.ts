@@ -8,37 +8,59 @@ type JsonRecord = Record<string, unknown>;
 let pool: mysql.Pool | undefined;
 const db = () => {
   if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return pool ??= mysql.createPool(process.env.DATABASE_URL);
+  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
 };
 
-const asRecord = (value: unknown): JsonRecord => value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
-const asStrings = (value: unknown) => Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+const asRecord = (value: unknown): JsonRecord => (value && typeof value === "object" && !Array.isArray(value) ? (value as JsonRecord) : {});
+const asStrings = (value: unknown) => (Array.isArray(value) ? value.map(String).filter(Boolean) : []);
+
+export type OrganizationUnitFields = {
+  name?: string;
+  parentUnitId?: string | null;
+  managerUserId?: number | null;
+  unitType?: string | null;
+  unitLevel?: number | null;
+  standardCode?: string | null;
+  areaCode?: string | null;
+  category?: string | null;
+  sortOrder?: number;
+  description?: string | null;
+  status?: "active" | "disabled";
+};
+
+const cleanOptional = (value: string | null | undefined) => (value === undefined ? undefined : value?.trim() || null);
 
 export async function listOrganization() {
-  const [units] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT ou.*,manager.name AS managerName,manager.username AS managerUsername,parent.name AS parentName FROM organization_unit ou LEFT JOIN users manager ON manager.id=ou.managerUserId LEFT JOIN organization_unit parent ON parent.id=ou.parentUnitId ORDER BY ou.status,ou.code",
-  );
-  const [members] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId ORDER BY ou.code,om.isPrimary DESC,u.name,u.username",
-  );
-  return { units, members };
+  const [units] = await db().query<mysql.RowDataPacket[]>("SELECT ou.*,manager.name AS managerName,manager.username AS managerUsername,parent.name AS parentName FROM organization_unit ou LEFT JOIN users manager ON manager.id=ou.managerUserId LEFT JOIN organization_unit parent ON parent.id=ou.parentUnitId ORDER BY ou.status,ou.sortOrder,ou.code");
+  const [members] = await db().query<mysql.RowDataPacket[]>("SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId ORDER BY ou.code,om.isPrimary DESC,u.name,u.username");
+  const [roleBindings] = await db().query<mysql.RowDataPacket[]>("SELECT our.id,our.unitId,our.roleId,our.createdByUserId,our.createdAt,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope FROM organization_unit_role our JOIN iam_role r ON r.id=our.roleId ORDER BY r.name,r.code");
+  return { units, members, roleBindings };
 }
 
-export async function createOrganizationUnit(user: User, input: { code: string; name: string; parentUnitId?: string | null; managerUserId?: number | null }) {
+export async function createOrganizationUnit(user: User, input: { code: string; name: string } & Omit<OrganizationUnitFields, "name" | "status">) {
   const code = input.code.trim().toUpperCase();
   if (!/^[A-Z][A-Z0-9_-]{1,63}$/.test(code)) throw new Error("组织单元代号须以字母开头，且仅包含大写字母、数字、下划线或连字符。");
+  let parentLevel: number | null = null;
   if (input.parentUnitId) {
-    const [parents] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM organization_unit WHERE id=? AND status='active' LIMIT 1", [input.parentUnitId]);
+    const [parents] = await db().query<mysql.RowDataPacket[]>("SELECT id,unitLevel FROM organization_unit WHERE id=? AND status='active' LIMIT 1", [input.parentUnitId]);
     if (!parents[0]) throw new Error("上级组织单元不存在或已停用。");
+    parentLevel = parents[0].unitLevel === null ? null : Number(parents[0].unitLevel);
   }
   if (input.managerUserId) await assertActiveUser(input.managerUserId, "负责人");
   const id = randomUUID();
-  await db().query("INSERT INTO organization_unit (id,code,name,parentUnitId,managerUserId,createdByUserId) VALUES (?,?,?,?,?,?)", [id, code, input.name.trim(), input.parentUnitId ?? null, input.managerUserId ?? null, user.id]);
-  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "organization_unit", resourceId: id, details: { operation: "organization_unit_created", code } });
+  const unitLevel = input.unitLevel ?? (parentLevel === null ? (input.parentUnitId ? 2 : 1) : parentLevel + 1);
+  await db().query("INSERT INTO organization_unit (id,code,name,parentUnitId,managerUserId,unitType,unitLevel,standardCode,areaCode,category,sortOrder,description,createdByUserId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", [id, code, input.name.trim(), input.parentUnitId ?? null, input.managerUserId ?? null, cleanOptional(input.unitType) ?? null, unitLevel, cleanOptional(input.standardCode) ?? null, cleanOptional(input.areaCode) ?? null, cleanOptional(input.category) ?? null, input.sortOrder ?? 0, cleanOptional(input.description) ?? null, user.id]);
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "user_updated",
+    resourceType: "organization_unit",
+    resourceId: id,
+    details: { operation: "organization_unit_created", code },
+  });
   return id;
 }
 
-export async function updateOrganizationUnit(user: User, input: { id: string; name?: string; parentUnitId?: string | null; managerUserId?: number | null; status?: "active" | "disabled" }) {
+export async function updateOrganizationUnit(user: User, input: { id: string } & OrganizationUnitFields) {
   const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT * FROM organization_unit WHERE id=? LIMIT 1", [input.id]);
   const unit = rows[0];
   if (!unit) throw new Error("组织单元不存在。");
@@ -55,8 +77,14 @@ export async function updateOrganizationUnit(user: User, input: { id: string; na
     }
   }
   if (input.managerUserId) await assertActiveUser(input.managerUserId, "负责人");
-  await db().query("UPDATE organization_unit SET name=?,parentUnitId=?,managerUserId=?,status=?,updatedAt=NOW() WHERE id=?", [input.name?.trim() || unit.name, input.parentUnitId === undefined ? unit.parentUnitId : input.parentUnitId, input.managerUserId === undefined ? unit.managerUserId : input.managerUserId, input.status ?? unit.status, input.id]);
-  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "organization_unit", resourceId: input.id, details: { operation: "organization_unit_updated" } });
+  await db().query("UPDATE organization_unit SET name=?,parentUnitId=?,managerUserId=?,unitType=?,unitLevel=?,standardCode=?,areaCode=?,category=?,sortOrder=?,description=?,status=?,updatedAt=NOW() WHERE id=?", [input.name?.trim() || unit.name, input.parentUnitId === undefined ? unit.parentUnitId : input.parentUnitId, input.managerUserId === undefined ? unit.managerUserId : input.managerUserId, cleanOptional(input.unitType) === undefined ? unit.unitType : cleanOptional(input.unitType), input.unitLevel === undefined ? unit.unitLevel : input.unitLevel, cleanOptional(input.standardCode) === undefined ? unit.standardCode : cleanOptional(input.standardCode), cleanOptional(input.areaCode) === undefined ? unit.areaCode : cleanOptional(input.areaCode), cleanOptional(input.category) === undefined ? unit.category : cleanOptional(input.category), input.sortOrder === undefined ? unit.sortOrder : input.sortOrder, cleanOptional(input.description) === undefined ? unit.description : cleanOptional(input.description), input.status ?? unit.status, input.id]);
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "user_updated",
+    resourceType: "organization_unit",
+    resourceId: input.id,
+    details: { operation: "organization_unit_updated" },
+  });
   return true;
 }
 
@@ -68,10 +96,7 @@ export async function assignOrganizationMember(user: User, input: { unitId: stri
   try {
     await connection.beginTransaction();
     if (input.isPrimary) await connection.query("UPDATE organization_membership SET isPrimary=0,updatedAt=NOW() WHERE userId=?", [input.userId]);
-    await connection.query(
-      "INSERT INTO organization_membership (id,unitId,userId,title,isPrimary) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title),isPrimary=VALUES(isPrimary),updatedAt=NOW()",
-      [randomUUID(), input.unitId, input.userId, input.title?.trim() || null, Boolean(input.isPrimary)],
-    );
+    await connection.query("INSERT INTO organization_membership (id,unitId,userId,title,isPrimary) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE title=VALUES(title),isPrimary=VALUES(isPrimary),updatedAt=NOW()", [randomUUID(), input.unitId, input.userId, input.title?.trim() || null, Boolean(input.isPrimary)]);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -79,14 +104,65 @@ export async function assignOrganizationMember(user: User, input: { unitId: stri
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: input.userId, action: "user_updated", resourceType: "organization_membership", resourceId: input.unitId + ":" + input.userId, details: { operation: "organization_member_assigned", isPrimary: Boolean(input.isPrimary) } });
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    targetUserId: input.userId,
+    action: "user_updated",
+    resourceType: "organization_membership",
+    resourceId: input.unitId + ":" + input.userId,
+    details: {
+      operation: "organization_member_assigned",
+      isPrimary: Boolean(input.isPrimary),
+    },
+  });
   return true;
 }
 
 export async function removeOrganizationMember(user: User, input: { unitId: string; userId: number }) {
   const [result] = await db().query<mysql.ResultSetHeader>("DELETE FROM organization_membership WHERE unitId=? AND userId=?", [input.unitId, input.userId]);
   if (!result.affectedRows) throw new Error("组织成员关系不存在。");
-  await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: input.userId, action: "user_updated", resourceType: "organization_membership", resourceId: input.unitId + ":" + input.userId, details: { operation: "organization_member_removed" } });
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    targetUserId: input.userId,
+    action: "user_updated",
+    resourceType: "organization_membership",
+    resourceId: input.unitId + ":" + input.userId,
+    details: { operation: "organization_member_removed" },
+  });
+  return true;
+}
+
+export async function bindOrganizationRole(user: User, input: { unitId: string; roleId: number }) {
+  const [units] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM organization_unit WHERE id=? AND status='active' LIMIT 1", [input.unitId]);
+  if (!units[0]) throw new Error("组织单元不存在或已停用。");
+  const [roles] = await db().query<mysql.RowDataPacket[]>("SELECT id,code,scope FROM iam_role WHERE id=? LIMIT 1", [input.roleId]);
+  const role = roles[0];
+  if (!role || role.scope !== "system" || role.code === "system_admin") throw new Error("仅可绑定系统范围且非系统管理员的权限组。");
+  await db().query("INSERT IGNORE INTO organization_unit_role (id,unitId,roleId,createdByUserId) VALUES (?,?,?,?)", [randomUUID(), input.unitId, input.roleId, user.id]);
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "role_assigned",
+    resourceType: "organization_unit",
+    resourceId: input.unitId,
+    details: {
+      operation: "organization_role_bound",
+      roleId: input.roleId,
+      roleCode: role.code,
+    },
+  });
+  return true;
+}
+
+export async function unbindOrganizationRole(user: User, input: { unitId: string; roleId: number }) {
+  const [result] = await db().query<mysql.ResultSetHeader>("DELETE FROM organization_unit_role WHERE unitId=? AND roleId=?", [input.unitId, input.roleId]);
+  if (!result.affectedRows) throw new Error("部门权限组绑定不存在。");
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "role_revoked",
+    resourceType: "organization_unit",
+    resourceId: input.unitId,
+    details: { operation: "organization_role_unbound", roleId: input.roleId },
+  });
   return true;
 }
 
@@ -96,10 +172,7 @@ async function assertActiveUser(userId: number, label: string) {
 }
 
 export async function resolveDirectManagerUserId(userId: number) {
-  const [memberships] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT om.unitId,ou.managerUserId,ou.parentUnitId FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId WHERE om.userId=? AND ou.status='active' ORDER BY om.isPrimary DESC,om.createdAt LIMIT 1",
-    [userId],
-  );
+  const [memberships] = await db().query<mysql.RowDataPacket[]>("SELECT om.unitId,ou.managerUserId,ou.parentUnitId FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId WHERE om.userId=? AND ou.status='active' ORDER BY om.isPrimary DESC,om.createdAt LIMIT 1", [userId]);
   let unit = memberships[0];
   if (!unit) return null;
   for (let depth = 0; unit && depth < 32; depth += 1) {
@@ -118,8 +191,21 @@ export async function resolveDirectManagerUserId(userId: number) {
 export async function resolveRoleCandidateUserIds(roleCode: string, workflowId: string) {
   if (!roleCode.trim()) return [];
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT DISTINCT u.id FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId JOIN users u ON u.id=ra.userId WHERE r.code=? AND u.status='active' AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?)) ORDER BY u.id",
-    [roleCode.trim(), workflowId],
+    `SELECT DISTINCT u.id
+       FROM users u
+       JOIN (
+         SELECT ra.userId FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
+          WHERE r.code=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+            AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))
+         UNION
+         SELECT om.userId FROM organization_membership om
+           JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+           JOIN organization_unit_role our ON our.unitId=ou.id
+           JOIN iam_role r ON r.id=our.roleId
+          WHERE r.code=?
+       ) eligible ON eligible.userId=u.id
+      WHERE u.status='active' ORDER BY u.id`,
+    [roleCode.trim(), workflowId, roleCode.trim()]
   );
   return rows.map(row => Number(row.id)).filter(id => Number.isInteger(id) && id > 0);
 }
@@ -130,8 +216,18 @@ export async function resolveWorkflowUserRoleKeys(userIds: number[], workflowId:
   if (!uniqueUserIds.length) return result;
   const placeholders = uniqueUserIds.map(() => "?").join(",");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT DISTINCT ra.userId,r.id AS roleId,r.code FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId JOIN users u ON u.id=ra.userId WHERE ra.userId IN (" + placeholders + ") AND u.status='active' AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))",
-    [...uniqueUserIds, workflowId],
+    `SELECT DISTINCT eligible.userId,r.id AS roleId,r.code
+       FROM (
+         SELECT ra.userId,ra.roleId FROM role_assignment ra
+          WHERE ra.userId IN (${placeholders}) AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+            AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))
+         UNION
+         SELECT om.userId,our.roleId FROM organization_membership om
+           JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+           JOIN organization_unit_role our ON our.unitId=ou.id
+          WHERE om.userId IN (${placeholders})
+       ) eligible JOIN iam_role r ON r.id=eligible.roleId JOIN users u ON u.id=eligible.userId AND u.status='active'`,
+    [...uniqueUserIds, workflowId, ...uniqueUserIds]
   );
   for (const row of rows) {
     const userId = Number(row.userId);
@@ -146,7 +242,11 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
   const initiatorUserId = Number(runtime.triggeredByUserId);
   const senderUserId = Number(runtime.lastActorUserId || runtime.triggeredByUserId);
   let mode = String(input.config.assigneeMode || "");
-  const legacyText = JSON.stringify({ qxkz: input.config.qxkz, bddx: input.config.bddx, sxsz: input.config.sxsz });
+  const legacyText = JSON.stringify({
+    qxkz: input.config.qxkz,
+    bddx: input.config.bddx,
+    sxsz: input.config.sxsz,
+  });
   if (!mode && /direct_manager|直属上级|upperAuthUnitWord/.test(legacyText)) mode = "initiator_manager";
   if (!mode) mode = input.config.assigneeUserId ? "user" : "receivers";
 
@@ -161,7 +261,11 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
   candidates = Array.from(new Set(candidates.filter(id => Number.isInteger(id) && id > 0)));
   if (mode !== "none" && candidates.length === 0) throw new Error("操作节点未解析到有效处理人，请检查上一步接收方、组织负责人或角色授权配置。");
   for (const candidate of candidates) await assertActiveUser(candidate, "操作候选人");
-  return { mode, assignedUserId: candidates.length === 1 ? candidates[0] : null, candidateUserIds: candidates };
+  return {
+    mode,
+    assignedUserId: candidates.length === 1 ? candidates[0] : null,
+    candidateUserIds: candidates,
+  };
 }
 
 export async function resolveAutoRelatedParticipantUserIds(config: JsonRecord, context: JsonRecord) {

@@ -9,7 +9,10 @@ import ProcessWorkbench from "@/components/ProcessWorkbench";
 import { BusinessCenter, ProjectWorkspace, type ProjectRecord } from "@/components/ProjectWorkspace";
 import WorkflowWarehouse from "@/components/WorkflowWarehouse";
 import SystemConfigShell from "@/components/SystemConfigShell";
+import OrganizationManagementPage from "@/components/OrganizationManagementPage";
+import { CreationDialog } from "@/components/CreationDialog";
 import { trpc } from "@/lib/trpc";
+import { formatConsoleRoute, parseConsoleRoute, type ConsoleRoute, type ConsoleSection } from "../../../shared/console-route";
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
 import type { Definition } from "../../../server/workflow-service";
 import {
@@ -39,19 +42,15 @@ import {
 import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
-type Section = "flows" | "runs" | "warehouse" | "system";
 type FlowEditorReturn = "center" | "workspace" | "detail" | "warehouse";
 type UserIdentity = { id: number; username: string | null; name: string | null; role: "user" | "admin" };
 type PublicGeneral = { platformName: string; watermarkEnabled: boolean; watermarkText: string };
-const consoleSections: Section[] = ["flows", "runs", "warehouse", "system"];
+type RequestedConsoleRoute = { route: ConsoleRoute; editorReturn?: FlowEditorReturn };
 
-function sectionFromHash(hash: string): Section {
-  const candidate = hash.replace(/^#\/?/, "").split(/[/?]/)[0] as Section;
-  return consoleSections.includes(candidate) ? candidate : "flows";
-}
-
-function sectionHash(section: Section) {
-  return `#/${section}`;
+function readConsoleRoute(): RequestedConsoleRoute {
+  if (typeof window === "undefined") return { route: { section: "flows", view: "center" } };
+  const editorReturn = window.history.state?.aiflowEditorReturn;
+  return { route: parseConsoleRoute(window.location.hash), ...(["center", "workspace", "detail", "warehouse"].includes(editorReturn) ? { editorReturn } : {}) };
 }
 
 function decodeJson(value: unknown) {
@@ -99,19 +98,22 @@ function LoginScreen({ platformName, credentials, setCredentials, pending, onSub
 
 function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general: PublicGeneral; onLogout: () => void }) {
   const utils = trpc.useUtils();
-  const [section, setSection] = useState<Section>(() => typeof window === "undefined" ? "flows" : sectionFromHash(window.location.hash));
-  const [systemView, setSystemView] = useState<"config" | "identity">("config");
-  const [flowView, setFlowView] = useState<"center" | "workspace" | "detail" | "editor">("center");
-  const [flowEditorReturn, setFlowEditorReturn] = useState<FlowEditorReturn>("center");
+  const [initialRoute] = useState(readConsoleRoute);
+  const [requestedRoute, setRequestedRoute] = useState<RequestedConsoleRoute>(initialRoute);
+  const [section, setSection] = useState<ConsoleSection>(initialRoute.route.section);
+  const [systemView, setSystemView] = useState<"config" | "identity" | "organization">(initialRoute.route.section === "system" ? initialRoute.route.view : "config");
+  const [flowView, setFlowView] = useState<"center" | "workspace" | "detail" | "editor">(initialRoute.route.section === "flows" ? initialRoute.route.view : "center");
+  const [flowEditorReturn, setFlowEditorReturn] = useState<FlowEditorReturn>(initialRoute.editorReturn ?? "center");
   const [selectedProject, setSelectedProject] = useState<ProjectRecord | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(() => { const route = initialRoute.route; return route.section === "flows" && (route.view === "detail" || route.view === "editor") ? route.workflowId : route.section === "runs" && route.view === "monitor" ? route.workflowId : null; });
   const [draftDefinition, setDraftDefinition] = useState<Definition | null>(null);
   const [draftName, setDraftName] = useState("");
   const [runInput, setRunInput] = useState<Record<string, unknown>>({ id: 2, prompt: "请总结输入内容" });
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [runView, setRunView] = useState<"workbench" | "monitor">("workbench");
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(initialRoute.route.section === "runs" && initialRoute.route.view === "monitor" ? initialRoute.route.runId ?? null : null);
+  const [runView, setRunView] = useState<"workbench" | "monitor">(initialRoute.route.section === "runs" ? initialRoute.route.view : "workbench");
   const [newFlowName, setNewFlowName] = useState("");
+  const [createFlowOpen, setCreateFlowOpen] = useState(false);
   const [userForm, setUserForm] = useState({ username: "", name: "", password: "", email: "", role: "user" as "user" | "admin" });
   const [aiUserForm, setAiUserForm] = useState({ username: "", name: "", email: "", password: "", role: "user" as "user" | "admin", organizationHint: "", managerHint: "" });
   const [aiPreview, setAiPreview] = useState<any>(null);
@@ -119,35 +121,36 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const editorActive = section === "flows" && flowView === "editor";
   const detailActive = section === "flows" && flowView === "detail";
   const identityActive = section === "system" && systemView === "identity" && user.role === "admin";
-  const navigateSection = useCallback((next: Section) => {
+  const navigateRoute = useCallback((route: ConsoleRoute, options?: { replace?: boolean; editorReturn?: FlowEditorReturn }) => {
+    setRequestedRoute({ route, ...(options?.editorReturn ? { editorReturn: options.editorReturn } : {}) });
+    if (typeof window !== "undefined") window.history[options?.replace ? "replaceState" : "pushState"]({ aiflowEditorReturn: options?.editorReturn ?? null }, "", formatConsoleRoute(route));
+  }, []);
+  const navigateSection = useCallback((next: ConsoleSection) => {
     const permitted = next !== "system" || user.role === "admin";
     const resolved = permitted ? next : "flows";
-    setSection(resolved);
-    if (resolved === "flows") setFlowView("center");
-    if (resolved === "runs") setRunView("workbench");
-    if (resolved === "system") setSystemView("config");
-    if (typeof window !== "undefined" && window.location.hash !== sectionHash(resolved)) window.history.pushState(null, "", sectionHash(resolved));
-  }, [user.role]);
+    navigateRoute(resolved === "flows" ? { section: "flows", view: "center" } : resolved === "runs" ? { section: "runs", view: "workbench" } : resolved === "warehouse" ? { section: "warehouse" } : { section: "system", view: "config" });
+  }, [navigateRoute, user.role]);
 
   const openFlowEditor = useCallback((workflowId: string, returnTo: FlowEditorReturn) => {
     setSelectedWorkflowId(workflowId);
-    setFlowEditorReturn(returnTo);
-    setSection("flows");
-    setFlowView("editor");
-    if (typeof window !== "undefined" && window.location.hash !== sectionHash("flows")) window.history.pushState(null, "", sectionHash("flows"));
-  }, []);
+    navigateRoute({ section: "flows", view: "editor", workflowId }, { editorReturn: returnTo });
+  }, [navigateRoute]);
 
   const returnFromFlowEditor = useCallback(() => {
     if (flowEditorReturn === "warehouse") {
-      navigateSection("warehouse");
+      navigateRoute({ section: "warehouse" });
       return;
     }
-    if (flowEditorReturn === "detail") {
-      setFlowView("detail");
+    if (flowEditorReturn === "detail" && selectedWorkflowId) {
+      navigateRoute({ section: "flows", view: "detail", workflowId: selectedWorkflowId });
       return;
     }
-    setFlowView(flowEditorReturn === "workspace" && selectedProject ? "workspace" : "center");
-  }, [flowEditorReturn, navigateSection, selectedProject]);
+    if (flowEditorReturn === "workspace" && selectedProject) {
+      navigateRoute({ section: "flows", view: "workspace", projectId: selectedProject.id });
+      return;
+    }
+    navigateRoute({ section: "flows", view: "center" });
+  }, [flowEditorReturn, navigateRoute, selectedProject, selectedWorkflowId]);
 
   const flowEditorReturnLabel = flowEditorReturn === "warehouse"
     ? "返回流程仓库"
@@ -158,32 +161,25 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
         : "返回业务中心";
 
   useEffect(() => {
-    const restoreHashSection = () => {
-      const requested = sectionFromHash(window.location.hash);
-      const resolved = requested === "system" && user.role !== "admin" ? "flows" : requested;
-      setSection(resolved);
-      if (resolved === "flows") setFlowView("center");
-      if (resolved === "runs") setRunView("workbench");
-      if (resolved === "system") setSystemView("config");
-      if (window.location.hash !== sectionHash(resolved)) window.history.replaceState(null, "", sectionHash(resolved));
-    };
-    restoreHashSection();
-    window.addEventListener("popstate", restoreHashSection);
-    window.addEventListener("hashchange", restoreHashSection);
-    return () => { window.removeEventListener("popstate", restoreHashSection); window.removeEventListener("hashchange", restoreHashSection); };
-  }, [user.role]);
+    const restoreConsoleRoute = () => setRequestedRoute(readConsoleRoute());
+    window.addEventListener("popstate", restoreConsoleRoute);
+    window.addEventListener("hashchange", restoreConsoleRoute);
+    return () => { window.removeEventListener("popstate", restoreConsoleRoute); window.removeEventListener("hashchange", restoreConsoleRoute); };
+  }, []);
 
   const workflows = trpc.workflow.list.useQuery();
   const projects = trpc.project.list.useQuery();
   const workflowItems = (workflows.data ?? []) as any[];
-  const selectedWorkflowFromList = workflowItems.find(workflow => workflow.id === selectedWorkflowId) ?? null;
-  const selectedWorkflowInput = useMemo(() => ({ id: selectedWorkflowId ?? "00000000" }), [selectedWorkflowId]);
-  const selectedWorkflowQuery = trpc.workflow.get.useQuery(selectedWorkflowInput, { enabled: Boolean((editorActive || detailActive) && selectedWorkflowId && !selectedWorkflowFromList), retry: false });
-  const selectedWorkflow = resolveSelectedWorkflow(workflowItems, selectedWorkflowId, selectedWorkflowQuery.data as any);
+  const routeWorkflowId = requestedRoute.route.section === "flows" && (requestedRoute.route.view === "detail" || requestedRoute.route.view === "editor") ? requestedRoute.route.workflowId : requestedRoute.route.section === "runs" && requestedRoute.route.view === "monitor" ? requestedRoute.route.workflowId : null;
+  const effectiveWorkflowId = routeWorkflowId ?? selectedWorkflowId;
+  const selectedWorkflowFromList = workflowItems.find(workflow => workflow.id === effectiveWorkflowId) ?? null;
+  const selectedWorkflowInput = useMemo(() => ({ id: effectiveWorkflowId ?? "00000000" }), [effectiveWorkflowId]);
+  const selectedWorkflowQuery = trpc.workflow.get.useQuery(selectedWorkflowInput, { enabled: Boolean(routeWorkflowId && !selectedWorkflowFromList), retry: false });
+  const selectedWorkflow = resolveSelectedWorkflow(workflowItems, effectiveWorkflowId, selectedWorkflowQuery.data as any);
   const selectedWorkflowDefinition = selectedWorkflow ? decodeJson(selectedWorkflow.definition) as Definition : null;
-  const selectedId = selectedWorkflowId ?? selectedWorkflow?.id ?? null;
+  const selectedId = selectedWorkflow?.id ?? null;
   const detailInput = useMemo(() => ({ runId: selectedRunId ?? "00000000-0000-0000-0000-000000000000" }), [selectedRunId]);
-  const runDetail = trpc.workflow.runDetail.useQuery(detailInput, { enabled: Boolean(selectedRunId) });
+  const runDetail = trpc.workflow.runDetail.useQuery(detailInput, { enabled: Boolean(selectedRunId && selectedWorkflow), retry: false });
   const accessInput = useMemo(() => ({ id: selectedId ?? "00000000" }), [selectedId]);
   const access = trpc.workflow.access.useQuery(accessInput, { enabled: Boolean(selectedId) });
   const members = trpc.workflow.members.useQuery(useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]), { enabled: Boolean(editorActive && selectedId), retry: false });
@@ -196,6 +192,44 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const audit = trpc.iam.authorizationAudit.useQuery({ limit: 20 }, { enabled: identityActive, retry: false });
 
   useEffect(() => {
+    const route = requestedRoute.route;
+    const replaceWith = (safeRoute: ConsoleRoute) => { setRequestedRoute({ route: safeRoute }); window.history.replaceState({ aiflowEditorReturn: null }, "", formatConsoleRoute(safeRoute)); };
+    const canonicalize = () => { const canonical = formatConsoleRoute(route); if (window.location.hash !== canonical) window.history.replaceState({ aiflowEditorReturn: requestedRoute.editorReturn ?? null }, "", canonical); };
+    if (route.section === "system") {
+      if (user.role !== "admin") { replaceWith({ section: "flows", view: "center" }); return; }
+      setSection("system"); setSystemView(route.view); canonicalize(); return;
+    }
+    if (route.section === "warehouse") { setSection("warehouse"); canonicalize(); return; }
+    if (route.section === "runs") {
+      if (route.view === "workbench") { setSection("runs"); setRunView("workbench"); setSelectedRunId(null); canonicalize(); return; }
+      setSection("runs"); setRunView("monitor");
+      if (!workflows.isSuccess) return;
+      if (!selectedWorkflowFromList && selectedWorkflowQuery.isPending) return;
+      const workflow = selectedWorkflow;
+      if (!workflow || workflow.id !== route.workflowId) { replaceWith({ section: "runs", view: "workbench" }); return; }
+      setSelectedWorkflowId(workflow.id);
+      if (projects.isSuccess) setSelectedProject(((projects.data ?? []) as ProjectRecord[]).find(project => project.id === workflow.projectId) ?? null);
+      setSelectedRunId(route.runId ?? null); setSection("runs"); setRunView("monitor"); canonicalize(); return;
+    }
+    if (route.view === "center") { setSection("flows"); setFlowView("center"); canonicalize(); return; }
+    if (route.view === "workspace") {
+      setSection("flows"); setFlowView("workspace");
+      if (!projects.isSuccess) return;
+      const project = ((projects.data ?? []) as ProjectRecord[]).find(item => item.id === route.projectId);
+      if (!project) { replaceWith({ section: "flows", view: "center" }); return; }
+      setSelectedProject(project); setSelectedWorkflowId(null); setSection("flows"); setFlowView("workspace"); canonicalize(); return;
+    }
+    setSection("flows"); setFlowView(route.view);
+    if (!workflows.isSuccess || !projects.isSuccess || (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)) return;
+    const workflow = selectedWorkflow;
+    if (!workflow || workflow.id !== route.workflowId) { replaceWith({ section: "flows", view: "center" }); return; }
+    const project = ((projects.data ?? []) as ProjectRecord[]).find(item => item.id === workflow.projectId) ?? null;
+    setSelectedWorkflowId(workflow.id); setSelectedProject(project); setSection("flows"); setFlowView(route.view);
+    if (route.view === "editor") setFlowEditorReturn(requestedRoute.editorReturn ?? (project ? "workspace" : "center"));
+    canonicalize();
+  }, [projects.data, projects.isSuccess, requestedRoute, selectedWorkflow, selectedWorkflowFromList, selectedWorkflowQuery.isPending, user.role, workflows.isSuccess]);
+
+  useEffect(() => {
     if (!selectedWorkflowId && workflowItems[0]) setSelectedWorkflowId(workflowItems[0].id);
   }, [selectedWorkflowId, workflowItems]);
 
@@ -206,8 +240,20 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
     }
   }, [selectedWorkflow?.id]);
 
+  useEffect(() => {
+    const route = requestedRoute.route;
+    const detail = runDetail.data as any;
+    if (route.section === "runs" && route.view === "monitor" && route.runId && (runDetail.isError || (detail && detail.workflowId !== route.workflowId))) navigateRoute({ section: "runs", view: "monitor", workflowId: route.workflowId }, { replace: true });
+  }, [navigateRoute, requestedRoute.route, runDetail.data, runDetail.isError]);
+
+  const routeRestoring = Boolean(
+    (routeWorkflowId && (!workflows.isSuccess || (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)))
+    || (requestedRoute.route.section === "flows" && requestedRoute.route.view === "workspace" && !projects.isSuccess)
+    || (requestedRoute.route.section === "flows" && (requestedRoute.route.view === "detail" || requestedRoute.route.view === "editor") && !projects.isSuccess),
+  );
+
   const createFlow = trpc.workflow.create.useMutation({
-    onSuccess: (workflow: any) => { void utils.workflow.list.invalidate(); setSelectedWorkflowId(workflow?.id ?? null); setNewFlowName(""); toast.success("已新建草稿流程。"); },
+    onSuccess: (workflow: any) => { void utils.workflow.list.invalidate(); setCreateFlowOpen(false); if (workflow?.id) openFlowEditor(workflow.id, selectedProject ? "workspace" : "center"); setNewFlowName(""); toast.success("已新建草稿流程。"); },
     onError: error => toast.error(error.message),
   });
   const saveFlow = trpc.workflow.update.useMutation({
@@ -215,12 +261,12 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
     onError: error => toast.error(error.message),
   });
   const publishFlow = trpc.workflow.publish.useMutation({ onSuccess: () => { void utils.workflow.list.invalidate(); toast.success("流程已发布。"); }, onError: error => toast.error(error.message) });
-  const duplicateFlow = trpc.workflow.duplicate.useMutation({ onSuccess: (workflow: any) => { void utils.workflow.list.invalidate(); setSelectedWorkflowId(workflow?.id ?? null); toast.success("已创建流程副本。"); }, onError: error => toast.error(error.message) });
+  const duplicateFlow = trpc.workflow.duplicate.useMutation({ onSuccess: (workflow: any) => { void utils.workflow.list.invalidate(); if (workflow?.id) openFlowEditor(workflow.id, flowEditorReturn); toast.success("已创建流程副本。"); }, onError: error => toast.error(error.message) });
   const deleteFlow = trpc.workflow.delete.useMutation({ onSuccess: () => { void utils.workflow.list.invalidate(); setSelectedWorkflowId(null); setDraftDefinition(null); returnFromFlowEditor(); toast.success("流程及其运行记录已删除。"); }, onError: error => toast.error(error.message) });
   const grantMember = trpc.workflow.grantMember.useMutation({ onSuccess: () => { void utils.workflow.members.invalidate(); toast.success("流程成员授权已更新。"); }, onError: error => toast.error(error.message) });
   const revokeMember = trpc.workflow.revokeMember.useMutation({ onSuccess: () => { void utils.workflow.members.invalidate(); toast.success("流程成员授权已撤销。"); }, onError: error => toast.error(error.message) });
   const runFlow = trpc.workflow.run.useMutation({
-    onSuccess: result => { void utils.workflow.runs.invalidate(); void utils.workflow.runMetrics.invalidate(); setSelectedRunId(result.runId); navigateSection("runs"); setRunView("monitor"); toast.success(`运行完成：${result.runId.slice(0, 8)}`); },
+    onSuccess: result => { void utils.workflow.runs.invalidate(); void utils.workflow.runMetrics.invalidate(); if (selectedId) navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId, runId: result.runId }); toast.success(`运行完成：${result.runId.slice(0, 8)}`); },
     onError: error => toast.error(error.message),
   });
   const runDataflow = trpc.data.run.useMutation({
@@ -234,7 +280,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const updateSubflow = trpc.workflow.updateSubflow.useMutation({ onSuccess: () => void utils.workflow.subflows.invalidate(), onError: error => toast.error(error.message) });
   const deleteSubflow = trpc.workflow.deleteSubflow.useMutation({ onSuccess: () => { void utils.workflow.subflows.invalidate(); toast.success("子流程已删除。"); }, onError: error => toast.error(error.message) });
   const createUser = trpc.iam.createUser.useMutation({
-    onSuccess: () => { setUserForm({ username: "", name: "", password: "", email: "", role: "user" }); void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); toast.success("内部账号已创建。"); },
+    onSuccess: () => { setUserForm({ username: "", name: "", password: "", email: "", role: "user" }); setAiUserForm({ username: "", name: "", email: "", password: "", role: "user", organizationHint: "", managerHint: "" }); setAiPreview(null); void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); toast.success("内部账号已创建。"); },
     onError: error => toast.error(error.message),
   });
   const updateUserStatus = trpc.iam.updateUserStatus.useMutation({ onSuccess: () => { void utils.iam.users.invalidate(); void utils.iam.authorizationAudit.invalidate(); }, onError: error => toast.error(error.message) });
@@ -299,23 +345,26 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
     <header className="sticky top-0 z-30 border-b border-[#d9e0e9] bg-white text-[#354052] shadow-sm">
       <div className="flex h-14 items-center"><button className="grid h-14 w-16 place-items-center border-r border-[#e0e6ee] text-slate-500 hover:bg-[#f2f6fc] hover:text-[#2469c7]" onClick={() => setSidebarOpen(value => !value)} aria-label="展开导航">{sidebarOpen ? <X size={19} /> : <Menu size={19} />}</button><div className="flex min-w-0 items-center gap-3 px-4"><div className="grid h-7 w-7 place-items-center rounded-sm bg-[#2d72cf] text-white"><Gauge size={16} /></div><div className="hidden sm:block"><p className="text-[10px] font-bold tracking-[.16em] text-[#2d72cf]">AI FLOW GRAPH</p><p className="text-sm font-semibold text-slate-700">{general.platformName}</p></div></div><div role="tablist" aria-label="流程工作台主导航" className="ml-4 hidden h-full items-end gap-1 md:flex">{nav.map(item => <button id={`aiflow-console-tab-${item.id}`} role="tab" aria-selected={section === item.id} aria-controls="aiflow-console-panel" key={item.id} onClick={() => navigateSection(item.id)} className={`flex h-full items-center gap-2 border-b-2 px-4 text-sm transition-colors ${section === item.id ? "border-[#3a82e4] bg-[#edf4ff] text-[#2469c7]" : "border-transparent text-slate-500 hover:bg-[#f2f6fc] hover:text-[#2469c7]"}`}><item.icon size={15} />{item.label}</button>)}</div><div className="ml-auto flex h-full items-center gap-3 px-4 text-xs"><span className="hidden text-slate-500 lg:inline">{user.name || user.username || "内部用户"}</span><span className="rounded-sm border border-[#e0e6ee] px-2 py-1 text-slate-600">{user.role === "admin" ? "系统管理员" : "成员"}</span><Button variant="ghost" size="sm" className="text-slate-600 hover:bg-[#f2f6fc] hover:text-[#2469c7]" onClick={onLogout}><LogOut size={15} />退出</Button></div></div>
     </header>
-    <div data-aiflow-mobile-workspace-nav className="border-b border-slate-200 bg-white px-3 py-2 md:hidden"><label className="flex items-center gap-2 text-xs font-medium text-slate-600"><span className="shrink-0">当前工作区</span><select className="h-8 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-400" value={section} aria-label="切换流程工作区" onChange={event => navigateSection(event.target.value as Section)}>{nav.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label></div>
+    <div data-aiflow-mobile-workspace-nav className="border-b border-slate-200 bg-white px-3 py-2 md:hidden"><label className="flex items-center gap-2 text-xs font-medium text-slate-600"><span className="shrink-0">当前工作区</span><select className="h-8 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-400" value={section} aria-label="切换流程工作区" onChange={event => navigateSection(event.target.value as ConsoleSection)}>{nav.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label></div>
     <div className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
       {section === "flows" && flowView === "editor" && <aside className={`${sidebarOpen ? "w-full md:w-72" : "h-0 w-full overflow-hidden md:h-auto md:w-0"} shrink-0 border-b border-slate-200 bg-white transition-[width,height] duration-200 md:border-b-0 md:border-r`}>
-        <div className="border-b border-slate-100 p-4"><div className="flex items-center justify-between"><div><p className="text-[10px] font-bold tracking-[.18em] text-slate-400">PROJECT WORKBENCH</p><h2 className="mt-1 text-sm font-semibold">流程仓库</h2></div><Button size="icon" variant="ghost" onClick={() => setNewFlowName(value => value || "新流程")}><Plus size={17} /></Button></div>{newFlowName && <form className="mt-3 flex gap-2" onSubmit={event => { event.preventDefault(); createFlow.mutate({ name: newFlowName }); }}><Input className="h-8 text-xs" value={newFlowName} onChange={event => setNewFlowName(event.target.value)} autoFocus /><Button type="submit" size="sm" className="h-8" disabled={createFlow.isPending}>新建</Button></form>}</div>
-        <div className="max-h-[calc(100vh-196px)] overflow-y-auto p-2">{workflows.isLoading && <div className="p-4 text-sm text-slate-400">正在读取项目流程…</div>}{workspaceWorkflows.map(workflow => { const definition = decodeJson(workflow.definition) as Definition; const selected = workflow.id === selectedId; return <button key={workflow.id} onClick={() => { setSelectedWorkflowId(workflow.id); setFlowView("editor"); }} className={`mb-1 w-full rounded-md border p-3 text-left transition-colors ${selected ? "border-blue-200 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"}`}><div className="flex items-start justify-between gap-2"><p className="truncate text-sm font-medium text-slate-800">{workflow.name}</p><span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${workflow.status === "published" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{workflow.status === "published" ? "已发布" : "草稿"}</span></div><div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400"><span>{definition?.nodes?.length ?? 0} 节点</span><span>v{workflow.definitionVersion}</span></div></button>; })}</div>
+        <div className="border-b border-slate-100 p-4"><div className="flex items-center justify-between"><div><p className="text-[10px] font-bold tracking-[.18em] text-slate-400">PROJECT WORKBENCH</p><h2 className="mt-1 text-sm font-semibold">流程仓库</h2></div><Button size="icon" variant="ghost" aria-label="新建流程" onClick={() => { setNewFlowName("新流程"); setCreateFlowOpen(true); }}><Plus size={17} /></Button></div></div>
+        <div className="max-h-[calc(100vh-196px)] overflow-y-auto p-2">{workflows.isLoading && <div className="p-4 text-sm text-slate-400">正在读取项目流程…</div>}{workspaceWorkflows.map(workflow => { const definition = decodeJson(workflow.definition) as Definition; const selected = workflow.id === selectedId; return <button key={workflow.id} onClick={() => openFlowEditor(workflow.id, flowEditorReturn)} className={`mb-1 w-full rounded-md border p-3 text-left transition-colors ${selected ? "border-blue-200 bg-blue-50" : "border-transparent hover:border-slate-200 hover:bg-slate-50"}`}><div className="flex items-start justify-between gap-2"><p className="truncate text-sm font-medium text-slate-800">{workflow.name}</p><span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${workflow.status === "published" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>{workflow.status === "published" ? "已发布" : "草稿"}</span></div><div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400"><span>{definition?.nodes?.length ?? 0} 节点</span><span>v{workflow.definitionVersion}</span></div></button>; })}</div>
       </aside>}
-      <section id="aiflow-console-panel" role="tabpanel" aria-labelledby={`aiflow-console-tab-${section}`} className="min-w-0 w-full flex-1">{section === "flows" && flowView === "center" && <BusinessCenter projects={(projects.data ?? []) as ProjectRecord[]} canCreate={user.role === "admin" || Boolean(access.data?.permissions?.has("workflow:create"))} onOpenProject={project => { setSelectedProject(project); setFlowView("workspace"); }} />}
-        {section === "flows" && flowView === "workspace" && selectedProject && <div><div data-aiflow-business-selector className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between"><label className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600"><span className="shrink-0">当前业务</span><select className="h-8 min-w-0 max-w-[320px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-400" value={selectedProject.id} aria-label="切换当前受权业务" onChange={event => { const next = ((projects.data ?? []) as ProjectRecord[]).find(project => project.id === event.target.value); if (next) { setSelectedProject(next); setSelectedWorkflowId(null); } }}>{((projects.data ?? []) as ProjectRecord[]).map(project => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>)}</select></label><span className="text-[11px] text-slate-400">仅显示当前账号具备查看权限的业务项目</span></div><ProjectWorkspace project={selectedProject} onBack={() => setFlowView("center")} onOpenWorkflow={workflowId => openFlowEditor(workflowId, "workspace")} onOpenDetail={workflowId => { setSelectedWorkflowId(workflowId); setFlowView("detail"); }} onOpenWarehouse={() => navigateSection("warehouse")} /></div>}
-        {section === "flows" && flowView === "detail" && <WorkflowDetailPage workflow={selectedWorkflow} definition={selectedWorkflowDefinition} canEdit={canEdit} canPublish={canPublish} onClose={() => setFlowView(selectedProject ? "workspace" : "center")} onOpen={() => selectedId && openFlowEditor(selectedId, "detail")} />}
-        {section === "flows" && flowView === "editor" && <FlowDesigner
+      <section id="aiflow-console-panel" role="tabpanel" aria-labelledby={`aiflow-console-tab-${section}`} className="min-w-0 w-full flex-1">{routeRestoring && <div data-aiflow-route-restoring className="grid min-h-[calc(100vh-56px)] place-items-center p-8 text-sm text-slate-500"><div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><Loader2 className="animate-spin text-[#2d6bea]" size={16} />正在恢复受权页面…</div></div>}{section === "flows" && flowView === "center" && <BusinessCenter projects={(projects.data ?? []) as ProjectRecord[]} canCreate={user.role === "admin" || Boolean(access.data?.permissions?.has("workflow:create"))} onOpenProject={project => navigateRoute({ section: "flows", view: "workspace", projectId: project.id })} />}
+        {section === "flows" && !routeRestoring && flowView === "workspace" && selectedProject && <div><div data-aiflow-business-selector className="flex flex-col gap-2 border-b border-slate-200 bg-white px-4 py-2 sm:flex-row sm:items-center sm:justify-between"><label className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600"><span className="shrink-0">当前业务</span><select className="h-8 min-w-0 max-w-[320px] rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-400" value={selectedProject.id} aria-label="切换当前受权业务" onChange={event => navigateRoute({ section: "flows", view: "workspace", projectId: event.target.value })}>{((projects.data ?? []) as ProjectRecord[]).map(project => <option key={project.id} value={project.id}>{project.code} · {project.name}</option>)}</select></label><span className="text-[11px] text-slate-400">仅显示当前账号具备查看权限的业务项目</span></div><ProjectWorkspace project={selectedProject} onBack={() => navigateRoute({ section: "flows", view: "center" })} onOpenWorkflow={workflowId => openFlowEditor(workflowId, "workspace")} onOpenDetail={workflowId => navigateRoute({ section: "flows", view: "detail", workflowId })} onOpenWarehouse={() => navigateRoute({ section: "warehouse" })} /></div>}
+        {section === "flows" && !routeRestoring && flowView === "detail" && <WorkflowDetailPage workflow={selectedWorkflow} definition={selectedWorkflowDefinition} canEdit={canEdit} canPublish={canPublish} onClose={() => navigateRoute(selectedProject ? { section: "flows", view: "workspace", projectId: selectedProject.id } : { section: "flows", view: "center" })} onOpen={() => selectedId && openFlowEditor(selectedId, "detail")} />}
+        {section === "flows" && !routeRestoring && flowView === "editor" && <FlowDesigner
         workflow={selectedWorkflow} definition={draftDefinition} name={draftName} setName={setDraftName} canEdit={canEdit} canPublish={canPublish} canRun={canRun} canManage={canManageMembers} members={(members.data ?? []) as any[]} candidates={(memberCandidates.data ?? []) as any[]} savePending={saveFlow.isPending} publishPending={publishFlow.isPending} runPending={runFlow.isPending} runInput={runInput} setRunInput={setRunInput} models={runtimeModels.data ?? []} templates={(templates.data ?? []) as any[]} subflows={(subflows.data ?? []) as any[]} onDefinitionChange={setDraftDefinition} backLabel={flowEditorReturnLabel} onBackToDesignCenter={returnFromFlowEditor} onSave={saveCurrent} onPublish={() => selectedId && publishFlow.mutate({ id: selectedId })} onRun={startRun} onExport={exportCurrent} onImport={() => importRef.current?.click()} onDuplicate={() => { if (selectedId) duplicateFlow.mutate({ id: selectedId, name: `${draftName} · 副本` }); }} onDelete={() => { if (selectedId && window.confirm(`确定删除“${draftName}”及其运行记录吗？`)) deleteFlow.mutate({ id: selectedId }); }} onSaveAsSubflow={() => { if (draftDefinition) createSubflow.mutate({ name: `${draftName || "未命名流程"} · 子流程`, definition: draftDefinition }); }} onCreateTemplate={input => createTemplate.mutate(input)} onUpdateTemplate={(template, updates) => updateTemplate.mutate({ id: template.id, ...updates })} onDeleteTemplate={id => deleteTemplate.mutate({ id })} onToggleSubflow={(subflow, isEnabled) => updateSubflow.mutate({ id: subflow.id, isEnabled })} onDeleteSubflow={id => deleteSubflow.mutate({ id })} onGrant={(userId, role, hours) => { if (selectedId) grantMember.mutate({ workflowId: selectedId, userId, role, expiresAt: hours ? new Date(Date.now() + hours * 60 * 60 * 1000) : undefined }); }} onRevoke={(userId, role) => { if (selectedId) revokeMember.mutate({ workflowId: selectedId, userId, role }); }} />}
-        {section === "runs" && <div><div data-aiflow-run-view-tabs role="tablist" aria-label="已启动流程视图" className="flex min-h-12 items-end gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4"><button type="button" role="tab" aria-selected={runView === "workbench"} className={`h-12 shrink-0 border-b-2 px-4 text-sm ${runView === "workbench" ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => setRunView("workbench")}>流程工作台</button><button type="button" role="tab" aria-selected={runView === "monitor"} className={`h-12 shrink-0 border-b-2 px-4 text-sm ${runView === "monitor" ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => setRunView("monitor")}>运行监控</button></div>{runView === "workbench" ? <ProcessWorkbench /> : <RunCenter workflowId={selectedId} workflowName={selectedWorkflow?.name} selectedRun={runDetail.data ?? null} onSelect={setSelectedRunId} />}</div>}
+        {section === "runs" && !routeRestoring && <div><div data-aiflow-run-view-tabs role="tablist" aria-label="已启动流程视图" className="flex min-h-12 items-end gap-1 overflow-x-auto border-b border-slate-200 bg-white px-4"><button type="button" role="tab" aria-selected={runView === "workbench"} className={`h-12 shrink-0 border-b-2 px-4 text-sm ${runView === "workbench" ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => navigateRoute({ section: "runs", view: "workbench" })}>流程工作台</button><button type="button" role="tab" aria-selected={runView === "monitor"} className={`h-12 shrink-0 border-b-2 px-4 text-sm ${runView === "monitor" ? "border-[#2d6bea] bg-blue-50 text-[#245fc8]" : "border-transparent text-slate-500 hover:bg-slate-50"}`} onClick={() => selectedId && navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId })}>运行监控</button></div>{runView === "workbench" ? <ProcessWorkbench /> : <RunCenter workflowId={selectedId} workflowName={selectedWorkflow?.name} selectedRun={runDetail.data ?? null} onSelect={runId => selectedId && navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId, runId })} />}</div>}
         {section === "warehouse" && <WorkflowWarehouse projects={(projects.data ?? []) as ProjectRecord[]} onOpenWorkflow={(project, workflowId) => { setSelectedProject(project); openFlowEditor(workflowId, "warehouse"); }} />}
-        {section === "system" && user.role === "admin" && (systemView === "config" ? <SystemConfigShell onOpenIdentity={() => setSystemView("identity")} /> : <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div className="mx-auto max-w-6xl"><button className="mb-4 text-sm text-[#2d6bea] hover:underline" onClick={() => setSystemView("config")}>← 返回系统配置</button><IamCenter users={users.data ?? []} roles={roles.data ?? []} audit={audit.data ?? []} form={userForm} setForm={setUserForm} onCreate={() => createUser.mutate({ ...userForm, email: userForm.email || undefined })} creating={createUser.isPending} onToggleStatus={(id, status) => updateUserStatus.mutate({ userId: id, status: status === "active" ? "disabled" : "active" })} aiForm={aiUserForm} setAiForm={setAiUserForm} aiPreview={aiPreview} onPreview={() => aiPreviewMutation.mutate({ ...aiUserForm, email: aiUserForm.email || undefined, organizationHint: aiUserForm.organizationHint || undefined, managerHint: aiUserForm.managerHint || undefined })} previewing={aiPreviewMutation.isPending} onConfirmPreview={() => { if (!aiPreview || aiUserForm.password.length < 12) { toast.error("请先填写至少 12 位确认密码"); return; } createUser.mutate({ username: aiPreview.username, name: aiPreview.displayName, password: aiUserForm.password, email: aiPreview.email || undefined, role: aiPreview.role }); }} /></div></div>)}
+        {section === "system" && user.role === "admin" && systemView === "config" && <SystemConfigShell onOpenIdentity={() => navigateRoute({ section: "system", view: "identity" })} onOpenOrganization={() => navigateRoute({ section: "system", view: "organization" })} />}
+        {section === "system" && user.role === "admin" && systemView === "organization" && <OrganizationManagementPage onBack={() => navigateRoute({ section: "system", view: "config" })} />}
+        {section === "system" && user.role === "admin" && systemView === "identity" && <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div className="mx-auto max-w-6xl"><button className="mb-4 text-sm text-[#2d6bea] hover:underline" onClick={() => navigateRoute({ section: "system", view: "config" })}>← 返回系统配置</button><IamCenter users={users.data ?? []} roles={roles.data ?? []} audit={audit.data ?? []} form={userForm} setForm={setUserForm} onCreate={() => createUser.mutateAsync({ ...userForm, email: userForm.email || undefined })} creating={createUser.isPending} onToggleStatus={(id, status) => updateUserStatus.mutate({ userId: id, status: status === "active" ? "disabled" : "active" })} aiForm={aiUserForm} setAiForm={setAiUserForm} aiPreview={aiPreview} onPreview={() => aiPreviewMutation.mutate({ ...aiUserForm, email: aiUserForm.email || undefined, organizationHint: aiUserForm.organizationHint || undefined, managerHint: aiUserForm.managerHint || undefined })} previewing={aiPreviewMutation.isPending} onConfirmPreview={() => { if (!aiPreview || aiUserForm.password.length < 12) { toast.error("请先填写至少 12 位确认密码"); return Promise.reject(new Error("用户信息尚未完成")); } return createUser.mutateAsync({ username: aiPreview.username, name: aiPreview.displayName, password: aiUserForm.password, email: aiPreview.email || undefined, role: aiPreview.role }); }} /></div></div>}
       </section>
     </div>
     <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={importDefinition} />
+    <CreationDialog open={createFlowOpen} onOpenChange={setCreateFlowOpen} title="新建流程" description="填写流程名称后调用真实创建接口；取消不会创建草稿。" submitLabel="新建并打开" pending={createFlow.isPending} onSubmit={() => createFlow.mutate({ name: newFlowName })}><Input autoFocus value={newFlowName} onChange={event => setNewFlowName(event.target.value)} placeholder="流程名称" required /></CreationDialog>
     {general.watermarkEnabled && general.watermarkText && <div aria-hidden="true" className="pointer-events-none fixed inset-0 z-20 grid grid-cols-2 content-around gap-24 overflow-hidden px-12 text-center text-3xl font-bold tracking-[.18em] text-slate-400/15 [transform:rotate(-24deg)_scale(1.25)] sm:grid-cols-3">{Array.from({ length: 15 }, (_, index) => <span key={index}>{general.watermarkText}</span>)}</div>}
   </main>;
 }
@@ -359,6 +408,170 @@ function LegacyRunCenter({ runs, selectedRun, onSelect }: { runs: any[]; selecte
 
 function LogBlock({ title, value }: { title: string; value: unknown }) { if (value === null || value === undefined) return null; return <div><p className="mb-1 font-semibold text-slate-500">{title}</p><pre className="max-h-48 overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-200">{JSON.stringify(value, null, 2)}</pre></div>; }
 
-function IamCenter({ users, roles, audit, form, setForm, onCreate, creating, onToggleStatus, aiForm, setAiForm, aiPreview, onPreview, previewing, onConfirmPreview }: { users: any[]; roles: any[]; audit: any[]; form: { username: string; name: string; password: string; email: string; role: "user" | "admin" }; setForm: (next: any) => void; onCreate: () => void; creating: boolean; onToggleStatus: (id: number, status: "active" | "disabled") => void; aiForm: { username: string; name: string; email: string; password: string; role: "user" | "admin"; organizationHint: string; managerHint: string }; setAiForm: (next: any) => void; aiPreview: any; onPreview: () => void; previewing: boolean; onConfirmPreview: () => void }) {
-  return <div className="space-y-5 p-4 lg:p-6"><div><p className="text-xs font-bold tracking-[.18em] text-blue-600">IDENTITY & AUTHORIZATION</p><h2 className="mt-1 text-xl font-semibold">内部账号与权限中心</h2></div><section className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold text-indigo-950">AI 辅助创建用户</h3><p className="mt-1 text-xs text-indigo-700">AI 只生成建议预览；管理员确认后才会写入用户表。</p></div><span className="rounded bg-white px-2 py-1 text-[10px] font-semibold text-indigo-600">预览 → 确认</span></div><div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4"><Input placeholder="用户名（可让 AI 建议）" value={aiForm.username} onChange={event => setAiForm({ ...aiForm, username: event.target.value })} /><Input placeholder="显示名称" value={aiForm.name} onChange={event => setAiForm({ ...aiForm, name: event.target.value })} required /><Input type="email" placeholder="邮箱（可选）" value={aiForm.email} onChange={event => setAiForm({ ...aiForm, email: event.target.value })} /><Input type="password" minLength={12} placeholder="确认时使用的至少 12 位密码" value={aiForm.password} onChange={event => setAiForm({ ...aiForm, password: event.target.value })} /></div><div className="mt-3 grid gap-3 md:grid-cols-3"><select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={aiForm.role} onChange={event => setAiForm({ ...aiForm, role: event.target.value as "user" | "admin" })}><option value="user">普通用户</option><option value="admin">管理员</option></select><Input placeholder="组织/部门提示（可选）" value={aiForm.organizationHint} onChange={event => setAiForm({ ...aiForm, organizationHint: event.target.value })} /><Input placeholder="直属上级提示（可选）" value={aiForm.managerHint} onChange={event => setAiForm({ ...aiForm, managerHint: event.target.value })} /></div><div className="mt-3 flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={previewing || !aiForm.name.trim()} onClick={onPreview}>{previewing && <Loader2 className="animate-spin" size={14} />}生成 AI 预览</Button>{aiPreview && <Button type="button" className="bg-indigo-600 hover:bg-indigo-500" disabled={creating} onClick={onConfirmPreview}>{creating && <Loader2 className="animate-spin" size={14} />}确认并创建用户</Button>}</div>{aiPreview && <div className="mt-4 rounded border border-indigo-200 bg-white p-3 text-xs text-slate-700"><div className="grid gap-1 sm:grid-cols-2"><p><span className="text-slate-400">用户名：</span><code>{aiPreview.username}</code></p><p><span className="text-slate-400">显示名：</span>{aiPreview.displayName}</p><p><span className="text-slate-400">角色：</span>{aiPreview.role}</p><p><span className="text-slate-400">生成方式：</span>{aiPreview.generatedBy}</p><p><span className="text-slate-400">组织建议：</span>{aiPreview.organizationSuggestion || "—"}</p><p><span className="text-slate-400">直属上级建议：</span>{aiPreview.managerSuggestion || "—"}</p></div><p className="mt-2 border-t border-slate-100 pt-2 text-slate-500">{aiPreview.rationale}</p></div>}</section><section className="rounded-lg border border-slate-200 bg-white p-5"><h3 className="font-semibold">创建内部账号</h3><form className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5" onSubmit={event => { event.preventDefault(); onCreate(); }}><Input placeholder="用户名" value={form.username} onChange={event => setForm({ ...form, username: event.target.value })} required /><Input placeholder="显示名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /><Input type="password" minLength={12} placeholder="至少 12 位密码" value={form.password} onChange={event => setForm({ ...form, password: event.target.value })} required /><Input type="email" placeholder="邮箱（可选）" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} /><Button disabled={creating}>{creating && <Loader2 className="animate-spin" size={14} />}创建账号</Button></form></section><div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]"><section className="overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-5 py-3 font-semibold">用户目录</div><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3">账号</th><th className="px-5 py-3">系统角色</th><th className="px-5 py-3">状态</th><th className="px-5 py-3">最后登录</th><th className="px-5 py-3" /></tr></thead><tbody>{users.map(account => <tr key={account.id} className="border-t border-slate-100"><td className="px-5 py-3"><p className="font-medium">{account.name || account.username}</p><p className="text-xs text-slate-400">{account.username}</p></td><td className="px-5 py-3">{account.role}</td><td className="px-5 py-3"><span className={`rounded px-2 py-1 text-xs ${account.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{account.status}</span></td><td className="px-5 py-3 text-xs text-slate-500">{formatTime(account.lastSignedIn)}</td><td className="px-5 py-3"><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onToggleStatus(account.id, account.status)}>{account.status === "active" ? "停用" : "启用"}</Button></td></tr>)}</tbody></table></div></section><section className="rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-5 py-3 font-semibold">角色目录</div><div className="max-h-80 overflow-y-auto p-4">{roles.map(role => <div key={role.id} className="mb-3 rounded border border-slate-100 bg-slate-50 p-3"><div className="flex items-center justify-between"><p className="font-mono text-xs font-semibold text-indigo-700">{role.code}</p><span className="text-[10px] text-slate-400">{role.scope}</span></div><p className="mt-1 text-xs text-slate-500">{role.name}</p></div>)}</div></section></div><section className="rounded-lg border border-slate-200 bg-white"><div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 font-semibold"><SlidersHorizontal size={15} />近期授权审计</div><div className="max-h-64 overflow-y-auto">{audit.map(item => <div key={item.id} className="flex items-center justify-between gap-4 border-b border-slate-50 px-5 py-3 text-xs"><div><span className="font-mono text-slate-500">{item.action}</span><span className="ml-3 text-slate-700">{item.actorUsername || "系统"} → {item.targetUsername || "—"}</span></div><span className="text-slate-400">{formatTime(item.createdAt)}</span></div>)}{!audit.length && <p className="p-5 text-sm text-slate-400">暂未记录授权事件。</p>}</div></section></div>;
+type InternalUserForm = {
+  username: string;
+  name: string;
+  password: string;
+  email: string;
+  role: "user" | "admin";
+};
+
+type AiInternalUserForm = InternalUserForm & {
+  organizationHint: string;
+  managerHint: string;
+};
+
+function IamCenter({
+  users,
+  roles,
+  audit,
+  form,
+  setForm,
+  onCreate,
+  creating,
+  onToggleStatus,
+  aiForm,
+  setAiForm,
+  aiPreview,
+  onPreview,
+  previewing,
+  onConfirmPreview,
+}: {
+  users: any[];
+  roles: any[];
+  audit: any[];
+  form: InternalUserForm;
+  setForm: (next: InternalUserForm) => void;
+  onCreate: () => Promise<unknown>;
+  creating: boolean;
+  onToggleStatus: (id: number, status: "active" | "disabled") => void;
+  aiForm: AiInternalUserForm;
+  setAiForm: (next: AiInternalUserForm) => void;
+  aiPreview: any;
+  onPreview: () => void;
+  previewing: boolean;
+  onConfirmPreview: () => Promise<unknown>;
+}) {
+  const [normalDialogOpen, setNormalDialogOpen] = useState(false);
+  const [aiDialogOpen, setAiDialogOpen] = useState(false);
+
+  const submitNormalUser = async () => {
+    await onCreate();
+    setNormalDialogOpen(false);
+  };
+
+  const submitAiUser = async () => {
+    if (!aiPreview) {
+      onPreview();
+      return;
+    }
+    await onConfirmPreview();
+    setAiDialogOpen(false);
+    setAiForm({
+      username: "",
+      name: "",
+      email: "",
+      password: "",
+      role: "user",
+      organizationHint: "",
+      managerHint: "",
+    });
+  };
+
+  return (
+    <div className="space-y-5 p-4 lg:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-xs font-bold tracking-[.18em] text-blue-600">IDENTITY & AUTHORIZATION</p>
+          <h2 className="mt-1 text-xl font-semibold">内部账号与权限中心</h2>
+          <p className="mt-1 text-xs text-slate-500">页面只展示管理入口；账号信息在弹窗中填写并提交至真实用户创建接口。</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" onClick={() => setAiDialogOpen(true)}>
+            AI 辅助创建
+          </Button>
+          <Button type="button" className="bg-[#2d6bea] hover:bg-[#255bc8]" onClick={() => setNormalDialogOpen(true)}>
+            <Plus size={15} />新增内部账号
+          </Button>
+        </div>
+      </div>
+
+      <CreationDialog
+        open={normalDialogOpen}
+        onOpenChange={setNormalDialogOpen}
+        title="新增内部账号"
+        description="填写账号信息后调用内部账号创建接口；取消不会写入用户表。"
+        submitLabel="创建账号"
+        pending={creating}
+        onSubmit={submitNormalUser}
+      >
+        <Input autoFocus placeholder="用户名" value={form.username} onChange={event => setForm({ ...form, username: event.target.value })} required />
+        <Input placeholder="显示名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required />
+        <Input type="password" minLength={12} placeholder="至少 12 位密码" value={form.password} onChange={event => setForm({ ...form, password: event.target.value })} required />
+        <Input type="email" placeholder="邮箱（可选）" value={form.email} onChange={event => setForm({ ...form, email: event.target.value })} />
+        <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={form.role} onChange={event => setForm({ ...form, role: event.target.value as InternalUserForm["role"] })}>
+          <option value="user">普通用户</option>
+          <option value="admin">管理员</option>
+        </select>
+      </CreationDialog>
+
+      <CreationDialog
+        open={aiDialogOpen}
+        onOpenChange={setAiDialogOpen}
+        title="AI 辅助创建用户"
+        description="先生成建议预览，管理员确认后才调用真实用户创建接口。"
+        submitLabel={aiPreview ? "确认并创建用户" : "生成 AI 预览"}
+        pending={previewing || creating}
+        onSubmit={submitAiUser}
+        className="max-w-2xl"
+      >
+        <div className="grid gap-3 md:grid-cols-2">
+          <Input placeholder="用户名（可让 AI 建议）" value={aiForm.username} onChange={event => setAiForm({ ...aiForm, username: event.target.value })} />
+          <Input autoFocus placeholder="显示名称" value={aiForm.name} onChange={event => setAiForm({ ...aiForm, name: event.target.value })} required />
+          <Input type="email" placeholder="邮箱（可选）" value={aiForm.email} onChange={event => setAiForm({ ...aiForm, email: event.target.value })} />
+          <Input type="password" minLength={12} placeholder="确认时使用的至少 12 位密码" value={aiForm.password} onChange={event => setAiForm({ ...aiForm, password: event.target.value })} required />
+          <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={aiForm.role} onChange={event => setAiForm({ ...aiForm, role: event.target.value as AiInternalUserForm["role"] })}>
+            <option value="user">普通用户</option>
+            <option value="admin">管理员</option>
+          </select>
+          <Input placeholder="组织/部门提示（可选）" value={aiForm.organizationHint} onChange={event => setAiForm({ ...aiForm, organizationHint: event.target.value })} />
+          <Input className="md:col-span-2" placeholder="直属上级提示（可选）" value={aiForm.managerHint} onChange={event => setAiForm({ ...aiForm, managerHint: event.target.value })} />
+        </div>
+        {aiPreview && (
+          <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-3 text-xs text-slate-700">
+            <p className="mb-2 font-semibold text-indigo-950">创建预览</p>
+            <div className="grid gap-1 sm:grid-cols-2">
+              <p><span className="text-slate-400">用户名：</span><code>{aiPreview.username}</code></p>
+              <p><span className="text-slate-400">显示名：</span>{aiPreview.displayName}</p>
+              <p><span className="text-slate-400">角色：</span>{aiPreview.role}</p>
+              <p><span className="text-slate-400">生成方式：</span>{aiPreview.generatedBy}</p>
+              <p><span className="text-slate-400">组织建议：</span>{aiPreview.organizationSuggestion || "—"}</p>
+              <p><span className="text-slate-400">直属上级建议：</span>{aiPreview.managerSuggestion || "—"}</p>
+            </div>
+            <p className="mt-2 border-t border-indigo-100 pt-2 text-slate-500">{aiPreview.rationale}</p>
+          </div>
+        )}
+      </CreationDialog>
+
+      <div className="grid gap-5 xl:grid-cols-[1.3fr_.7fr]">
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 px-5 py-3 font-semibold">用户目录</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-slate-50 text-xs text-slate-500"><tr><th className="px-5 py-3">账号</th><th className="px-5 py-3">系统角色</th><th className="px-5 py-3">状态</th><th className="px-5 py-3">最后登录</th><th className="px-5 py-3" /></tr></thead>
+              <tbody>{users.map(account => <tr key={account.id} className="border-t border-slate-100"><td className="px-5 py-3"><p className="font-medium">{account.name || account.username}</p><p className="text-xs text-slate-400">{account.username}</p></td><td className="px-5 py-3">{account.role}</td><td className="px-5 py-3"><span className={`rounded px-2 py-1 text-xs ${account.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{account.status}</span></td><td className="px-5 py-3 text-xs text-slate-500">{formatTime(account.lastSignedIn)}</td><td className="px-5 py-3"><Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => onToggleStatus(account.id, account.status)}>{account.status === "active" ? "停用" : "启用"}</Button></td></tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+        <section className="rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 px-5 py-3 font-semibold">角色目录</div>
+          <div className="max-h-80 overflow-y-auto p-4">{roles.map(role => <div key={role.id} className="mb-3 rounded border border-slate-100 bg-slate-50 p-3"><div className="flex items-center justify-between"><p className="font-mono text-xs font-semibold text-indigo-700">{role.code}</p><span className="text-[10px] text-slate-400">{role.scope}</span></div><p className="mt-1 text-xs text-slate-500">{role.name}</p></div>)}</div>
+        </section>
+      </div>
+      <section className="rounded-lg border border-slate-200 bg-white">
+        <div className="flex items-center gap-2 border-b border-slate-100 px-5 py-3 font-semibold"><SlidersHorizontal size={15} />近期授权审计</div>
+        <div className="max-h-64 overflow-y-auto">{audit.map(item => <div key={item.id} className="flex items-center justify-between gap-4 border-b border-slate-50 px-5 py-3 text-xs"><div><span className="font-mono text-slate-500">{item.action}</span><span className="ml-3 text-slate-700">{item.actorUsername || "系统"} → {item.targetUsername || "—"}</span></div><span className="text-slate-400">{formatTime(item.createdAt)}</span></div>)}{!audit.length && <p className="p-5 text-sm text-slate-400">暂未记录授权事件。</p>}</div>
+      </section>
+    </div>
+  );
 }
