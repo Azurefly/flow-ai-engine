@@ -4,6 +4,11 @@ services:
   mysql:
     image: mysql:8.4
     restart: unless-stopped
+    # 目标主机当前约 3.3 GiB 且无 Swap。限制核心容器合计为 2.25 GiB，
+    # 为宿主系统和运维进程保留余量，同时严格低于部署上限 8 GiB。
+    mem_limit: 1536m
+    mem_reservation: 768m
+    memswap_limit: 1536m
     environment:
       MYSQL_DATABASE: flow_ai_engine
       MYSQL_USER: flow_ai
@@ -29,6 +34,9 @@ services:
       dockerfile: Dockerfile
     image: flow-ai-engine:local
     restart: unless-stopped
+    mem_limit: 768m
+    mem_reservation: 256m
+    memswap_limit: 768m
     environment:
       NODE_ENV: production
       PORT: 3000
