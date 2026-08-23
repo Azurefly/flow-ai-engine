@@ -6,7 +6,7 @@ import { Building2, CheckCircle2, ClipboardCheck, Gauge, Loader2, PanelLeftClose
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-type Tab = "general" | "approval" | "domain" | "organization" | "identity";
+type Tab = "general" | "approval" | "domain" | "access";
 
 export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }: { onOpenIdentity: () => void; onOpenOrganization: () => void }) {
   const [tab, setTab] = useState<Tab>("general");
@@ -15,8 +15,7 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
     { id: "general" as const, label: "通用设置", icon: SlidersHorizontal },
     { id: "approval" as const, label: "审批配置", icon: ClipboardCheck },
     { id: "domain" as const, label: "工作域配置", icon: Workflow },
-    { id: "organization" as const, label: "组织架构", icon: Building2 },
-    { id: "identity" as const, label: "身份与权限", icon: ShieldCheck },
+    { id: "access" as const, label: "组织与权限", icon: ShieldCheck },
   ];
   const active = items.find(item => item.id === tab) ?? items[0];
   return (
@@ -54,8 +53,7 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
             {tab === "general" && <GeneralSettings />}
             {tab === "approval" && <ApprovalSettings />}
             {tab === "domain" && <DomainSettings />}
-            {tab === "organization" && <OrganizationEntry onOpen={onOpenOrganization} />}
-            {tab === "identity" && <IdentitySettings onOpenIdentity={onOpenIdentity} />}
+            {tab === "access" && <AccessSettings onOpenIdentity={onOpenIdentity} onOpenOrganization={onOpenOrganization} />}
           </div>
         </section>
       </div>
@@ -269,35 +267,29 @@ function DomainSettings() {
   );
 }
 
-function IdentitySettings({ onOpenIdentity }: { onOpenIdentity: () => void }) {
+function AccessSettings({ onOpenIdentity, onOpenOrganization }: { onOpenIdentity: () => void; onOpenOrganization: () => void }) {
   return (
     <div>
-      <Header eyebrow="IDENTITY & AUTHORIZATION" title="身份与权限" description="系统用户、系统角色、流程角色、临时授权和授权审计均由内部 IAM 管理。" />
-      <Button className="mt-6 bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpenIdentity}>
-        <ShieldCheck size={16} />
-        打开身份与权限中心
-      </Button>
-    </div>
-  );
-}
-function OrganizationEntry({ onOpen }: { onOpen: () => void }) {
-  return (
-    <div>
-      <Header eyebrow="ORGANIZATION STRUCTURE" title="组织架构" description="组织部门、负责人、成员岗位和部门权限组在独立管理页维护，并与请假流程共享同一套 MySQL 数据。" />
-      <div className="mt-6 rounded-lg border border-[#cfe0ff] bg-[#f5f9ff] p-5">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex gap-3">
-            <Building2 className="mt-0.5 shrink-0 text-[#2d6bea]" size={22} />
-            <div>
-              <p className="font-semibold text-slate-800">BDP 参考式组织管理</p>
-              <p className="mt-1 text-sm leading-6 text-slate-600">进入左侧机构树、右侧部门详情和成员/权限组 Tab；新增操作均在弹窗提交真实接口。</p>
-            </div>
-          </div>
-          <Button type="button" className="shrink-0 bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpen}>
+      <Header eyebrow="ORGANIZATION & AUTHORIZATION" title="组织与权限" description="组织、账号、角色和权限统一从一个入口管理，避免系统配置中出现功能重叠的并列菜单。" />
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <section className="flex min-w-0 flex-col rounded-lg border border-[#cfe0ff] bg-[#f5f9ff] p-5">
+          <Building2 className="text-[#2d6bea]" size={22} />
+          <h3 className="mt-4 font-semibold text-slate-800">组织架构</h3>
+          <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">维护部门树、负责人、成员岗位和组织权限组，并驱动直属上级与角色处理人解析。</p>
+          <Button type="button" variant="outline" className="mt-5 w-fit border-blue-200 text-[#245fc8] hover:bg-blue-50" onClick={onOpenOrganization}>
             <Building2 size={16} />
             打开组织架构管理
           </Button>
-        </div>
+        </section>
+        <section className="flex min-w-0 flex-col rounded-lg border border-slate-200 p-5">
+          <ShieldCheck className="text-[#2d6bea]" size={22} />
+          <h3 className="mt-4 font-semibold text-slate-800">账号与角色</h3>
+          <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">维护内部账号、系统角色、直接与临时授权，查看用户权限和角色绑定用户。</p>
+          <Button type="button" className="mt-5 w-fit bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpenIdentity}>
+            <ShieldCheck size={16} />
+            打开身份与权限中心
+          </Button>
+        </section>
       </div>
     </div>
   );

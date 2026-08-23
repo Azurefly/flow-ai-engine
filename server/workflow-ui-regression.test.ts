@@ -139,6 +139,11 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('view: "organization"');
     expect(systemConfigSource).toContain("打开组织架构管理");
     expect(systemConfigSource).toContain("onOpenOrganization");
+    expect(systemConfigSource).toContain('{ id: "access" as const, label: "组织与权限"');
+    expect(systemConfigSource).not.toContain('{ id: "organization" as const');
+    expect(systemConfigSource).not.toContain('{ id: "identity" as const');
+    expect(systemConfigSource).toContain("组织、账号、角色和权限统一从一个入口管理");
+    expect(systemConfigSource).toContain("打开身份与权限中心");
     expect(organizationPageSource).toContain('data-aiflow-organization-page=""');
     expect(organizationPageSource).toContain("新增根部门");
     expect(organizationPageSource).toContain("新增同级");
