@@ -104,4 +104,22 @@ describe("WorkflowCompiler", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics.map(item => item.code)).toContain(code);
   });
+
+  it("requires a connected failure branch when an LLM node declares one", () => {
+    const definition = base();
+    definition.nodes.splice(1, 0, {
+      id: "llm",
+      type: "llm",
+      name: "LLM",
+      position: { x: 120, y: 0 },
+      config: { systemPrompt: "system", prompt: "hello", failureHandle: "failed" },
+    });
+    definition.edges = [
+      { id: "start-llm", sourceNodeId: "start", targetNodeId: "llm" },
+      { id: "llm-end", sourceNodeId: "llm", targetNodeId: "end", sourceHandle: "default" },
+    ];
+    const result = analyzeWorkflowDefinition(definition, { executable: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.map(item => item.code)).toContain("WF_LLM_FAILURE_BRANCH_UNCONNECTED");
+  });
 });

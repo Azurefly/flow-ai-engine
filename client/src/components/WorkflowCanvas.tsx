@@ -89,6 +89,10 @@ function sourceHandles(kind: NodeKind, config: NodeConfig) {
     const configured = Array.isArray(config.routes) ? config.routes.map(route => route && typeof route === "object" ? String((route as NodeConfig).handle ?? "") : "").filter(Boolean) : [];
     return Array.from(new Set(["default", String(config.defaultRoute ?? ""), ...configured].filter(Boolean)));
   }
+  if (kind === "llm") {
+    const failureHandle = String(config.failureHandle ?? "").trim();
+    return failureHandle ? ["default", failureHandle] : ["default"];
+  }
   return ["default"];
 }
 
@@ -276,7 +280,7 @@ const ORIGINAL_OBJECT_FIELD_SPECS: Record<string, OriginalFieldSpec[]> = {
   bdcz: [
     { key: "bdcz", label: "绑定操作", kind: "structured" },
     { key: "bdczjs", label: "绑定操作角色", help: "发送方表示沿用上一步操作人，接收方表示沿用上一步接收人。", kind: "multi-select", options: [{ value: "sender", label: "发送方" }, { value: "acceptor", label: "接收方" }] },
-    { key: "hqhqsz", label: "签收方式", help: "或签任意一人通过即继续；会签达到配置比例后继续。", kind: "select", options: [{ value: "", label: "普通单人/领取处理" }, { value: "orSignFor", label: "或签" }, { value: "andSignFor", label: "会签" }] },
+    { key: "hqhqsz", label: "签收方式", help: "或签任意一人通过；会签按比例；顺序会签按指定人员顺序逐一处理。", kind: "select", options: [{ value: "", label: "普通单人/领取处理" }, { value: "orSignFor", label: "或签" }, { value: "andSignFor", label: "会签" }, { value: "sequentialSignFor", label: "顺序会签" }] },
     { key: "xzdfhq", label: "指定参与或签/会签的人员", help: "留空表示所有候选人；可填写内部用户 ID 列表或原版人员对象。", kind: "structured" },
     { key: "hqtgbfb", label: "会签通过百分比", help: "1 至 100；留空按 100% 全部通过。", kind: "number", min: 1, max: 100 },
   ],
@@ -564,7 +568,7 @@ export default function WorkflowCanvas({
   const selectedFieldGroups = selected && selectedDefinition ? configFieldGroups(selected.data.kind, selectedDefinition.fields) : [];
   const activeInspectorGroup = selectedFieldGroups.find(group => group.label === inspectorTab) ?? selectedFieldGroups[0];
   const inspectorDisabled = readOnly || inspectorLocked;
-  const displayedEdges = useMemo(() => edges.map(edge => { const source = nodes.find(node => node.id === edge.source); const routes = source?.data.kind === "router" && Array.isArray(source.data.config.routes) ? source.data.config.routes as NodeConfig[] : []; const route = routes.find(item => String(item.handle ?? "default") === String(edge.sourceHandle ?? "default")); const label = source?.data.kind === "router" ? String(route?.label ?? edge.sourceHandle ?? "默认路径") : undefined; return edge.id === selectedEdgeId ? { ...edge, label, selected: true, interactionWidth: 24, labelStyle: { fill: "#5b21b6", fontSize: 11, fontWeight: 600 }, labelBgStyle: { fill: "#f5f3ff", fillOpacity: 0.96 }, labelBgPadding: [5, 3] as [number, number], labelBgBorderRadius: 6, style: { ...edge.style, stroke: "#4f46e5", strokeWidth: 3 } } : { ...edge, label, selected: false, interactionWidth: 24, labelStyle: { fill: "#6d28d9", fontSize: 11, fontWeight: 600 }, labelBgStyle: { fill: "#ffffff", fillOpacity: 0.94 }, labelBgPadding: [5, 3] as [number, number], labelBgBorderRadius: 6 }; }), [edges, nodes, selectedEdgeId]);
+  const displayedEdges = useMemo(() => edges.map(edge => { const source = nodes.find(node => node.id === edge.source); const routes = source?.data.kind === "router" && Array.isArray(source.data.config.routes) ? source.data.config.routes as NodeConfig[] : []; const route = routes.find(item => String(item.handle ?? "default") === String(edge.sourceHandle ?? "default")); const label = source?.data.kind === "router" ? String(route?.label ?? edge.sourceHandle ?? "默认路径") : source?.data.kind === "llm" && edge.sourceHandle !== "default" ? `失败：${edge.sourceHandle}` : undefined; return edge.id === selectedEdgeId ? { ...edge, label, selected: true, interactionWidth: 24, labelStyle: { fill: "#5b21b6", fontSize: 11, fontWeight: 600 }, labelBgStyle: { fill: "#f5f3ff", fillOpacity: 0.96 }, labelBgPadding: [5, 3] as [number, number], labelBgBorderRadius: 6, style: { ...edge.style, stroke: "#4f46e5", strokeWidth: 3 } } : { ...edge, label, selected: false, interactionWidth: 24, labelStyle: { fill: "#6d28d9", fontSize: 11, fontWeight: 600 }, labelBgStyle: { fill: "#ffffff", fillOpacity: 0.94 }, labelBgPadding: [5, 3] as [number, number], labelBgBorderRadius: 6 }; }), [edges, nodes, selectedEdgeId]);
 
   useEffect(() => {
     setInspectorTab(selectedFieldGroups[0]?.label ?? "");

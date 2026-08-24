@@ -52,6 +52,24 @@ describe("原始节点配置统一契约", () => {
     expect(() => validateNodeConfig("condition", { left: "{{input.ok}}", operator: "invalid", right: true, trueHandle: "yes", falseHandle: "no" })).toThrow("条件节点操作符无效");
   });
 
+  it("严格限制 LLM 的 Token、超时、Schema 和失败分支配置", () => {
+    const valid = {
+      systemPrompt: "system",
+      prompt: "{{input.prompt}}",
+      maxTokens: 64,
+      timeoutMs: 1_000,
+      outputSchema: { name: "decision", schema: { type: "object" } },
+      failureHandle: "failed",
+    };
+    expect(() => validateNodeConfig("llm", valid)).not.toThrow();
+    expect(() => validateNodeConfig("llm", { ...valid, maxTokens: 63 })).toThrow("64 至 8,192");
+    expect(() => validateNodeConfig("llm", { ...valid, maxTokens: 8_193 })).toThrow("64 至 8,192");
+    expect(() => validateNodeConfig("llm", { ...valid, timeoutMs: 999 })).toThrow("1,000 至 120,000");
+    expect(() => validateNodeConfig("llm", { ...valid, timeoutMs: 120_001 })).toThrow("1,000 至 120,000");
+    expect(() => validateNodeConfig("llm", { ...valid, outputSchema: [] })).toThrow("Schema 必须是对象");
+    expect(() => validateNodeConfig("llm", { ...valid, failureHandle: 1 })).toThrow("失败分支句柄必须是字符串");
+  });
+
   it("接纳结构化原版权限配置，但继续阻止任意代码和未迁移路由被静默执行", () => {
     expect(() => validateNodeConfig("operate", withNodeConfigDefaults("operate", {
       nodeDh: "APPROVE",

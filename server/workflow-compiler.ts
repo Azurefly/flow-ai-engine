@@ -366,6 +366,17 @@ export function analyzeWorkflowDefinition(
           .filter(edge => !["true", "false"].includes(edge.sourceHandle?.trim() || "default"))
           .forEach(edge => diagnostics.push(diagnostic("WF_CONDITION_HANDLE_UNKNOWN", `条件节点存在未知分支句柄：${edge.sourceHandle || "default"}。`, { kind: "edge", edgeId: edge.id, field: "sourceHandle" })));
       }
+      if (node.type === "llm" && String(node.config.failureHandle ?? "").trim()) {
+        const failureHandle = String(node.config.failureHandle).trim();
+        if (!nodeOutgoing.some(edge => (edge.sourceHandle?.trim() || "default") === failureHandle))
+          diagnostics.push(diagnostic("WF_LLM_FAILURE_BRANCH_UNCONNECTED", `LLM 节点“${node.name}”配置的失败分支 ${failureHandle} 未连接目标节点。`, { kind: "node", nodeId: node.id, field: "config.failureHandle" }));
+      }
+      if (node.type === "llm") {
+        const allowedHandles = new Set(["default", String(node.config.failureHandle ?? "").trim()].filter(Boolean));
+        nodeOutgoing
+          .filter(edge => !allowedHandles.has(edge.sourceHandle?.trim() || "default"))
+          .forEach(edge => diagnostics.push(diagnostic("WF_LLM_HANDLE_UNKNOWN", `LLM 节点存在未知分支句柄：${edge.sourceHandle || "default"}。`, { kind: "edge", edgeId: edge.id, field: "sourceHandle" })));
+      }
       if (node.type === "router") {
         const routes = Array.isArray(node.config.routes) ? node.config.routes : [];
         const routeHandles = routes

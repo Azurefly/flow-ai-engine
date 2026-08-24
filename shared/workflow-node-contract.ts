@@ -216,12 +216,15 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   },
   llm: {
     type: "llm", label: "LLM", description: "调用运行时可用模型目录", flowTypes: ["state", "control"],
-    defaultConfig: { model: "", systemPrompt: "你是一名严谨的工作流助手。", prompt: "{{input.prompt}}", maxTokens: 1024 },
+    defaultConfig: { model: "", systemPrompt: "你是一名严谨的工作流助手。", prompt: "{{input.prompt}}", maxTokens: 1024, timeoutMs: 30000, failureHandle: "" },
     fields: [
-      { key: "model", label: "模型", help: "从运行时模型目录选择；未指定或不可用时使用目录中的可用模型。", kind: "text" },
+      { key: "model", label: "模型", help: "从运行时模型目录选择；留空使用目录首个模型，指定了目录外模型时运行失败。", kind: "text" },
       { key: "systemPrompt", label: "系统提示词", help: templateHelp, kind: "textarea", required: true },
       { key: "prompt", label: "用户提示词", help: templateHelp, kind: "textarea", required: true },
       { key: "maxTokens", label: "最大输出令牌", help: "服务端限制为 64 至 8,192。", kind: "number" },
+      { key: "timeoutMs", label: "超时（毫秒）", help: "单个 LLM 请求超时范围为 1,000 至 120,000 毫秒。", kind: "number" },
+      { key: "outputSchema", label: "结构化输出 Schema", help: "可选 { name, schema, strict } 对象；模型输出将解析为 structured 字段。", kind: "json" },
+      { key: "failureHandle", label: "失败分支句柄", help: "LLM 超时、Provider 或结构化解析失败时，沿此句柄进入补偿/人工处理分支。", kind: "text" },
     ],
   },
   subflow: {
@@ -395,7 +398,20 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
     case "sql": assertString(config.datasourceId, "SQL 节点必须选择数据源。"); assertString(config.statement, "SQL 节点必须配置 SQL 语句。"); break;
     case "transform": assertObject(config.mappings, "转换节点的字段映射必须是 JSON 对象。"); break;
     case "condition": assertString(config.left, "条件节点必须配置左值。"); if (!conditionOperators.some(item => item.value === String(config.operator))) throw new Error("条件节点操作符无效。"); assertString(config.trueHandle, "条件节点必须配置成立分支句柄。"); assertString(config.falseHandle, "条件节点必须配置不成立分支句柄。"); break;
-    case "llm": assertString(config.systemPrompt, "LLM 节点必须配置系统提示词。"); assertString(config.prompt ?? config.userPrompt, "LLM 节点必须配置提示词。"); assertOptionalNumber(config.maxTokens, "LLM 节点最大输出令牌必须在 64 至 8,192 之间。", 64, 8_192); break;
+    case "llm":
+      assertString(config.systemPrompt, "LLM 节点必须配置系统提示词。");
+      assertString(config.prompt ?? config.userPrompt, "LLM 节点必须配置提示词。");
+      assertOptionalNumber(config.maxTokens, "LLM 节点最大输出令牌必须在 64 至 8,192 之间。", 64, 8_192);
+      assertOptionalNumber(config.timeoutMs, "LLM 节点超时必须在 1,000 至 120,000 毫秒之间。", 1_000, 120_000);
+      if (config.outputSchema !== undefined) {
+        assertObject(config.outputSchema, "LLM 节点结构化输出 Schema 必须是对象。");
+        const outputSchema = config.outputSchema as NodeConfig;
+        assertString(outputSchema.name, "LLM 节点结构化输出 Schema 必须配置 name。");
+        assertObject(outputSchema.schema, "LLM 节点结构化输出 Schema 必须配置 schema 对象。");
+        if (outputSchema.strict !== undefined && typeof outputSchema.strict !== "boolean") throw new Error("LLM 节点结构化输出 Schema 的 strict 必须是布尔值。");
+      }
+      if (config.failureHandle !== undefined && config.failureHandle !== "") assertString(config.failureHandle, "LLM 节点失败分支句柄必须是字符串。");
+      break;
     case "subflow": assertString(firstNonBlank(config.subflowId), "子流程节点必须选择有效的当前子流程映射。"); break;
     case "source": case "table": assertString(config.assetId, "资源节点必须选择项目数据资源。"); break;
     case "filter": assertString(config.filterField, "筛选节点必须配置筛选字段。"); break;

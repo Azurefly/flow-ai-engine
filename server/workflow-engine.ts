@@ -11,7 +11,7 @@ import {
   normalizeReferenceRouterConfig,
   type NormalizedRouterRule,
 } from "../shared/reference-router-config";
-import { invokeLLM, listLLMModels } from "./_core/llm";
+import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
 import { currentRequestId } from "./_core/http-security";
 import {
@@ -32,6 +32,27 @@ type WorkflowUser = { id: number; role: "user" | "admin" };
 export type ApprovalDecision = "approved" | "rejected" | "abstained";
 type WorkflowNode = Definition["nodes"][number];
 type WorkflowEdge = Definition["edges"][number];
+
+export function resolveRuntimeLlmModel(
+  requestedModel: string | undefined,
+  catalog: Pick<ModelInfo, "id">[]
+): string | undefined {
+  if (requestedModel) {
+    if (!catalog.some(item => item.id === requestedModel)) {
+      throw new Error(`LLM 节点指定模型不在运行时白名单中：${requestedModel}。`);
+    }
+    return requestedModel;
+  }
+  return catalog[0]?.id;
+}
+
+export function parseStructuredLlmOutput(content: string): unknown {
+  try {
+    return JSON.parse(content);
+  } catch {
+    throw new Error("LLM 节点结构化输出不是合法 JSON。");
+  }
+}
 export type WorkflowRunDetail = {
   workflowId: string;
   nodeRuns: mysql.RowDataPacket[];
@@ -389,10 +410,7 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   const catalog = await listLLMModels();
   const requestedModel =
     typeof resolved.model === "string" ? resolved.model : undefined;
-  const model =
-    requestedModel && catalog.data.some(item => item.id === requestedModel)
-      ? requestedModel
-      : catalog.data[0]?.id;
+  const model = resolveRuntimeLlmModel(requestedModel, catalog.data);
   const systemPrompt = String(
     resolved.systemPrompt ?? "你是一名严谨的工作流助手。"
   );
@@ -402,23 +420,41 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
     typeof resolved.maxTokens === "number"
       ? Math.min(Math.max(Math.floor(resolved.maxTokens), 64), 8192)
       : undefined;
+  const timeoutMs = typeof resolved.timeoutMs === "number"
+    ? Math.min(Math.max(Math.floor(resolved.timeoutMs), 1_000), 120_000)
+    : 30_000;
+  const outputSchema = resolved.outputSchema && typeof resolved.outputSchema === "object" && !Array.isArray(resolved.outputSchema)
+    ? asRecord(resolved.outputSchema)
+    : undefined;
+  if (outputSchema && (typeof outputSchema.name !== "string" || !outputSchema.name.trim() || !outputSchema.schema || typeof outputSchema.schema !== "object"))
+    throw new Error("LLM 节点结构化输出 Schema 必须包含 name 和 schema 对象。");
+  const startedAt = Date.now();
   const response = await invokeLLM({
     model,
     maxTokens,
+    timeoutMs,
+    ...(outputSchema ? { outputSchema: { name: String(outputSchema.name), schema: outputSchema.schema as Record<string, unknown>, strict: outputSchema.strict === true } } : {}),
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: prompt },
     ],
   });
   const content = response.choices[0]?.message.content;
+  const contentText = Array.isArray(content)
+    ? content.map(part => ("text" in part ? part.text : JSON.stringify(part))).join("\n")
+    : (content ?? "");
+  let structured: unknown;
+  if (outputSchema) {
+    structured = parseStructuredLlmOutput(contentText);
+  }
   return {
     model: response.model || model,
-    content: Array.isArray(content)
-      ? content
-          .map(part => ("text" in part ? part.text : JSON.stringify(part)))
-          .join("\n")
-      : (content ?? ""),
+    content: contentText,
+    ...(structured === undefined ? {} : { structured }),
     usage: response.usage ?? null,
+    finishReason: response.choices[0]?.finish_reason ?? null,
+    durationMs: Date.now() - startedAt,
+    requestId: String(asRecord(context.runtime).requestId ?? currentRequestId() ?? "") || null,
   };
 }
 
@@ -1826,12 +1862,25 @@ async function executeRunSegment(input: {
         runtime.roleKeysByUser = rolesByUser;
         input.context.runtime = runtime;
       }
-      const result = await executeNode(
-        node,
-        input.context,
-        true,
-        Number(input.workflow.ownerUserId)
-      );
+      let nodeFailure: JsonRecord | undefined;
+      let result: { output: unknown; route?: string; routeTargets?: unknown[] };
+      try {
+        result = await executeNode(
+          node,
+          input.context,
+          true,
+          Number(input.workflow.ownerUserId)
+        );
+      } catch (error) {
+        const failureHandle = node.type === "llm" ? String(node.config.failureHandle ?? "").trim() : "";
+        if (!failureHandle) throw error;
+        nodeFailure = {
+          code: "LLM_NODE_FAILED",
+          message: error instanceof Error ? error.message : String(error),
+          failureHandle,
+        };
+        result = { output: { failed: true, ...nodeFailure }, route: failureHandle };
+      }
       const vars = asRecord(input.context.vars);
       const nodeOutputs = asRecord(input.context.nodes);
       vars[node.id] = result.output;
@@ -1850,7 +1899,7 @@ async function executeRunSegment(input: {
         reachedEnd = true;
         finalOutput = result.output;
       }
-      await finishNodeRun(nodeRunId, "success", startedAt, result.output);
+      await finishNodeRun(nodeRunId, nodeFailure ? "failed" : "success", startedAt, result.output, nodeFailure);
       const routed = result as { route?: string; routeTargets?: unknown[] };
       const routeTargets = Array.isArray(routed.routeTargets)
         ? routed.routeTargets.map(asRecord)
