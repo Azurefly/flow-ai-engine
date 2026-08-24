@@ -89,6 +89,8 @@ describe("原始节点配置统一契约", () => {
       nodeDh: "AUTO_CONDITION",
       zdzx: { sfzdzx: "是", tjsz: [{ left: "{{input.days}}", operator: "lessThan", right: 3 }], code: [] },
     }))).not.toThrow();
+    expect(() => validateNodeConfig("operate", { commandCode: "REVIEW", assigneeMode: "receivers", assigneeFallback: "owner", instruction: "请审核" })).not.toThrow();
+    expect(() => validateNodeConfig("operate", { commandCode: "REVIEW", assigneeMode: "receivers", assigneeFallback: "everyone", instruction: "请审核" })).toThrow("无人候选兜底方式无效");
     expect(() => validateNodeConfig("router", withNodeConfigDefaults("router", {
       nodeDh: "ROUTE1",
       lymc: "旧路由",

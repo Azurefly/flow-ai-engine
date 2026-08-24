@@ -516,7 +516,17 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
   else if (mode === "role") candidates = await resolveRoleCandidateUserIds(String(input.config.assigneeRoleCode || ""), input.workflowId);
 
   candidates = Array.from(new Set(candidates.filter(id => Number.isInteger(id) && id > 0)));
-  if (mode !== "none" && candidates.length === 0) throw new Error("操作节点未解析到有效处理人，请检查上一步接收方、组织负责人或角色授权配置。");
+  if (mode !== "none" && candidates.length === 0) {
+    const fallback = String(input.config.assigneeFallback ?? "error").trim();
+    if (fallback === "initiator" && Number.isInteger(initiatorUserId) && initiatorUserId > 0) {
+      candidates = [initiatorUserId];
+    } else if (fallback === "owner") {
+      const [ownerRows] = await db().query<mysql.RowDataPacket[]>("SELECT ownerUserId FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
+      const ownerUserId = Number(ownerRows[0]?.ownerUserId);
+      if (Number.isInteger(ownerUserId) && ownerUserId > 0) candidates = [ownerUserId];
+    }
+    if (candidates.length === 0) throw new Error("操作节点未解析到有效处理人，且未配置可用兜底策略。");
+  }
   for (const candidate of candidates) await assertActiveUser(candidate, "操作候选人");
   return {
     mode,

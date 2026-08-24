@@ -1747,7 +1747,7 @@ async function executeRunSegment(input: {
 }): Promise<RunSegmentResult> {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
-  let finalOutput = input.finalOutput ?? null;
+  let finalOutput: unknown = input.finalOutput ?? null;
   let reachedEnd = false;
   while (input.queue.length) {
     if (executed.size >= MAX_STEPS)
