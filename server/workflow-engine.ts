@@ -1296,6 +1296,108 @@ export async function controlWorkflowRun(input: {
   }
 }
 
+/** Pauses only at a persisted checkpoint; an actively executing node must finish first. */
+export async function pauseWorkflowRun(runId: string) {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,status,contextJson FROM workflow_run WHERE id=? FOR UPDATE",
+      [runId]
+    );
+    const run = rows[0];
+    if (!run) {
+      await connection.rollback();
+      return null;
+    }
+    const status = String(run.status);
+    if (status === "blocked") {
+      await connection.commit();
+      return { runId, status: "blocked" as const, changed: false };
+    }
+    if (!["queued", "waiting"].includes(status)) {
+      throw new Error(status === "running" ? "当前节点仍在执行，请稍后在 Checkpoint 后暂停。" : "当前流程状态不支持暂停。");
+    }
+    await connection.query(
+      "UPDATE workflow_run SET status='blocked',executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('queued','waiting')",
+      [runId]
+    );
+    await connection.query(
+      "UPDATE workflow_run_job SET status='cancelled',leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE runId=? AND status='queued'",
+      [runId]
+    );
+    await connection.commit();
+    return { runId, status: "blocked" as const, changed: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+/** Resumes a blocked run from its last durable queue/context snapshot. */
+export async function resumeWorkflowRun(runId: string) {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,status,contextJson,requestId FROM workflow_run WHERE id=? FOR UPDATE",
+      [runId]
+    );
+    const run = rows[0];
+    if (!run) {
+      await connection.rollback();
+      return null;
+    }
+    if (String(run.status) !== "blocked") {
+      await connection.commit();
+      return { runId, status: String(run.status), changed: false };
+    }
+    const context = asRecord(readJson(run.contextJson));
+    const runtime = asRecord(context.runtime);
+    const queue = Array.isArray(runtime.executionQueue) ? runtime.executionQueue.map(String).filter(Boolean) : [];
+    const [pendingTasks] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed') ORDER BY createdAt,id LIMIT 1",
+      [runId]
+    );
+    if (pendingTasks[0]) {
+      await connection.query("UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'", [runId]);
+      await connection.commit();
+      return { runId, status: "waiting" as const, taskId: String(pendingTasks[0].id), changed: true };
+    }
+    if (!queue.length) throw new Error("流程没有可恢复的持久化执行队列。");
+    const [existing] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow_run_job WHERE runId=? AND jobType='resume' AND status IN ('queued','leased') ORDER BY createdAt DESC LIMIT 1",
+      [runId]
+    );
+    if (existing[0]) {
+      await connection.query("UPDATE workflow_run SET status='queued',errorJson=NULL WHERE id=? AND status='blocked'", [runId]);
+      await connection.commit();
+      return { runId, status: "queued" as const, jobId: String(existing[0].id), changed: false };
+    }
+    const jobId = randomUUID();
+    const checkpoint: WorkflowCheckpoint = {
+      queue,
+      context,
+      finalOutput: runtime.executionFinalOutput,
+      currentNodeId: typeof runtime.executionCurrentNodeId === "string" ? runtime.executionCurrentNodeId : null,
+    };
+    await connection.query("UPDATE workflow_run SET status='queued',errorJson=NULL WHERE id=? AND status='blocked'", [runId]);
+    await connection.query(
+      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
+      [jobId, runId, `workflow:resume-control:${runId}:${jobId}`, JSON.stringify(checkpoint), WORKFLOW_JOB_MAX_ATTEMPTS, String(run.requestId ?? runtime.requestId ?? currentRequestId() ?? "") || null]
+    );
+    await connection.commit();
+    return { runId, status: "queued" as const, jobId, changed: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function executeWorkflow(input: {
   workflowId: string;
   triggeredBy: WorkflowUser;

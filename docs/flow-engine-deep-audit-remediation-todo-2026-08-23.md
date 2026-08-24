@@ -588,7 +588,7 @@ Human Task 服务
 
 - [ ] **T0201 [COR-004，依赖 T0121]** 引入 run token、node instance、attempt 和 join state。
 - [ ] **T0202 [COR-004]** 完成并行、汇聚、重复到达和受限循环的确定性测试。
-- [~] **T0210 [COR-005]** 已增加具备流程级权限、幂等语义和原因记录的取消/终止命令，并原子取消队列 Job 与人工任务；暂停/恢复命令仍需基于持久化 Checkpoint 完成并做真实 Worker 故障注入验收。
+- [~] **T0210 [COR-005]** 已增加具备流程级权限、幂等语义和原因记录的取消/终止命令，并原子取消队列 Job 与人工任务；暂停仅允许在 queued/waiting 的持久化边界执行，恢复从 durable Checkpoint 重建 resume Job。真实 Worker 故障注入和 running 节点暂停验收仍待完成。
 - [ ] **T0211 [COR-005]** 实现持久化 Timer、提醒、催办、升级和重启补触发。
 - [ ] **T0220 [APR-003]** 抽象 ParticipantResolver 注册表和解析解释结果。
 - [ ] **T0221 [APR-003]** 实现 N 级主管、部门负责人、岗位、项目角色、表单字段和表达式处理人。
