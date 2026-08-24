@@ -5,6 +5,7 @@ const scheduleBucketMigration = readFileSync(new URL("../drizzle/0006_thankful_b
 const signingMigration = readFileSync(new URL("../drizzle/0011_restore_signing_roles.sql", import.meta.url), "utf8");
 const organizationMigration = readFileSync(new URL("../drizzle/0012_greedy_firebird.sql", import.meta.url), "utf8");
 const nodeSequenceMigration = readFileSync(new URL("../drizzle/0013_node_run_sequence.sql", import.meta.url), "utf8");
+const workflowJobMigration = readFileSync(new URL("../drizzle/0014_tidy_bucky.sql", import.meta.url), "utf8");
 
 describe("database migration integrity", () => {
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
@@ -50,5 +51,15 @@ describe("database migration integrity", () => {
     expect(nodeSequenceMigration).toContain("ADD `nextNodeSequence` int DEFAULT 0 NOT NULL");
     expect(nodeSequenceMigration).toContain("ADD `sequenceNo` int");
     expect(nodeSequenceMigration).toContain("CONSTRAINT `workflow_node_run_sequence_unique` UNIQUE(`runId`,`sequenceNo`)");
+  });
+
+  it("creates a durable leased workflow execution queue", () => {
+    expect(workflowJobMigration).toContain("CREATE TABLE `workflow_run_job`");
+    expect(workflowJobMigration).toContain("`idempotencyKey` varchar(160) NOT NULL");
+    expect(workflowJobMigration).toContain("`leaseExpiresAt` timestamp");
+    expect(workflowJobMigration).toContain("`maxAttempts` int NOT NULL DEFAULT 3");
+    expect(workflowJobMigration).toContain("workflow_run_job_idempotency_unique");
+    expect(workflowJobMigration).toContain("workflow_run_job_claim_idx");
+    expect(workflowJobMigration).toContain("ON DELETE cascade");
   });
 });

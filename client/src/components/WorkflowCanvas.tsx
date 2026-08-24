@@ -19,7 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Braces, CircleDot, Database, Download, FileText, Filter, FolderTree, GitBranch, Globe2, LockKeyhole, Maximize2, Minimize2, MousePointer2, Move, Play, Plus, RotateCcw, Save, Sigma, Sparkles, Square, Table2, Trash2, Waypoints, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Definition } from "../../../server/workflow-service";
-import { createDefaultNodeConfig, FLOW_NODE_DEFINITIONS, getNodeConfigEvidence, type FlowNodeDefinition, type FlowNodeType, type FlowType, type NodeConfig, validateNodeConfig } from "@shared/workflow-node-contract";
+import { canConnectFlowNodeTypes, createDefaultNodeConfig, FLOW_NODE_ALLOWED_TARGETS, FLOW_NODE_DEFINITIONS, getNodeConfigEvidence, type FlowNodeDefinition, type FlowNodeType, type FlowType, type NodeConfig, validateNodeConfig } from "@shared/workflow-node-contract";
 
 type NodeKind = FlowNodeType;
 type FlowNodeData = { label: string; kind: NodeKind; config: NodeConfig };
@@ -30,25 +30,9 @@ type InspectorMode = "normal" | "compact" | "maximized";
 type ConfigState = "partial" | "editing" | "complete";
 type CanvasContextMenu = { x: number; y: number; kind: "node" | "edge" | "pane" | "group"; nodeId?: string; edgeId?: string } | null;
 
-/** The reference designer only exposes structurally valid targets from its context menu. */
-const allowedCanvasTargets: Partial<Record<NodeKind, NodeKind[]>> = {
-  start: ["state", "operate", "router", "rest", "method", "llm", "subflow"],
-  state: ["operate", "state", "router", "rest", "method", "llm", "subflow", "end"],
-  operate: ["state", "router", "rest", "method", "llm", "subflow", "end"],
-  router: ["state", "operate", "router", "rest", "method", "llm", "subflow", "end"],
-  rest: ["state", "operate", "router", "rest", "method", "llm", "subflow", "end"],
-  method: ["state", "router", "rest", "method", "llm", "subflow", "end"],
-  subflow: ["state", "router", "rest", "method", "llm", "end"],
-  condition: ["state", "operate", "router", "rest", "method", "llm", "subflow", "end"],
-  transform: ["state", "operate", "router", "condition", "transform", "llm", "end"],
-  http: ["state", "operate", "router", "condition", "llm", "end"],
-  llm: ["state", "operate", "router", "condition", "llm", "end"],
-};
-
 function canConnectCanvasNodes(source: CanvasNode, target: CanvasNode, edges: Edge[]) {
   if (source.id === target.id || source.data.kind === "end" || target.data.kind === "start") return false;
-  const targets = allowedCanvasTargets[source.data.kind];
-  if (targets && !targets.includes(target.data.kind)) return false;
+  if (!canConnectFlowNodeTypes(source.data.kind, target.data.kind)) return false;
   const outgoing = edges.filter(edge => edge.source === source.id);
   if (["start", "operate", "rest"].includes(source.data.kind) && outgoing.length > 0) return false;
   if (target.data.kind === "end" && edges.some(edge => edge.target === target.id)) return false;
@@ -859,7 +843,7 @@ export default function WorkflowCanvas({
               const targetNode = nodes.find(node => node.id === contextMenu.nodeId);
               if (!targetNode) return null;
               const canDelete = !readOnly && !["start", "end"].includes(targetNode.data.kind);
-              const allowed = allowedCanvasTargets[targetNode.data.kind] ?? palette.map(item => item.type); const addable = palette.filter(item => item.flowTypes.includes(flowType) && allowed.includes(item.type) && item.type !== "start");
+              const allowed = FLOW_NODE_ALLOWED_TARGETS[targetNode.data.kind] ?? palette.map(item => item.type); const addable = palette.filter(item => item.flowTypes.includes(flowType) && allowed.includes(item.type) && item.type !== "start");
               return <>
                 {!["start", "end"].includes(targetNode.data.kind) && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { setInspectorMode("normal"); setSelectedId(targetNode.id); closeContextMenu(); }}>编辑 / 查看配置</button>}
                 {(targetNode.data.kind === "start" || targetNode.data.kind === "end") && targetNode.data.label !== "默认开始" && !readOnly && <button type="button" className="block w-full px-3 py-2 text-left hover:bg-slate-100" onClick={() => { const name = window.prompt("修改节点名称", String(targetNode.data.label)); if (name?.trim()) setNodes(current => current.map(item => item.id === targetNode.id ? { ...item, data: { ...item.data, label: name.trim() } } : item)); closeContextMenu(); }}>修改名称</button>}

@@ -1,8 +1,15 @@
-import { createDefaultNodeConfig, getNodeConfigEvidence, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
+import { canConnectFlowNodeTypes, createDefaultNodeConfig, FLOW_NODE_ALLOWED_TARGETS, getNodeConfigEvidence, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
 import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
 
 describe("原始节点配置统一契约", () => {
+  it("由共享契约统一约束画布与发布时的节点连线", () => {
+    expect(FLOW_NODE_ALLOWED_TARGETS.start).toContain("llm");
+    expect(canConnectFlowNodeTypes("http", "llm")).toBe(true);
+    expect(canConnectFlowNodeTypes("llm", "condition")).toBe(true);
+    expect(canConnectFlowNodeTypes("end", "state")).toBe(false);
+    expect(canConnectFlowNodeTypes("state", "start")).toBe(false);
+  });
   it("为开始、结束、状态、操作、路由、REST、方法、表单、SQL、条件、LLM 和子流程提供可追溯默认字段", () => {
     expect(createDefaultNodeConfig("start")).toMatchObject({ initialVariables: {} });
     expect(createDefaultNodeConfig("end")).toMatchObject({ resultTemplate: "{{vars}}" });

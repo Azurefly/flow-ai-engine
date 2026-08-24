@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getWorkflowAccess, hasSystemPermission, recordAuthorizationAudit, type WorkflowPermission } from "./iam-service";
 import { isProjectApprovalRequired } from "./p1-service";
-import { FLOW_NODE_TYPES, isFlowNodeType, type FlowNodeType, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
+import { canConnectFlowNodeTypes, FLOW_NODE_TYPES, isFlowNodeType, type FlowNodeType, validateNodeConfig, withNodeConfigDefaults } from "@shared/workflow-node-contract";
 
 type Node = { id: string; type: FlowNodeType; name: string; position: { x: number; y: number }; config: Record<string, unknown> };
 type Edge = { id: string; sourceNodeId: string; sourceHandle?: string; targetNodeId: string };
@@ -26,6 +26,7 @@ export function validate(definition: unknown, executable = false): Definition {
   if (starts.length !== 1 || ends.length !== 1) throw new Error("流程必须且仅能包含一个开始节点和一个结束节点。");
   if (new Set(value.nodes.map(node => node.id)).size !== value.nodes.length) throw new Error("节点 ID 不可重复。");
   const nodeIds = new Set(value.nodes.map(node => node.id));
+  const nodesById = new Map(value.nodes.map(node => [node.id, node]));
   const edgeIds = new Set<string>();
   const edgeKeys = new Set<string>();
   const outgoing = new Map(value.nodes.map(node => [node.id, [] as Edge[]]));
@@ -35,6 +36,9 @@ export function validate(definition: unknown, executable = false): Definition {
     if (edgeIds.has(edge.id)) throw new Error(`流程连线 ID 不可重复：${edge.id}。`);
     edgeIds.add(edge.id);
     if (edge.sourceNodeId === edge.targetNodeId) throw new Error(`流程不允许节点自环：${edge.sourceNodeId}。`);
+    const sourceNode = nodesById.get(edge.sourceNodeId)!;
+    const targetNode = nodesById.get(edge.targetNodeId)!;
+    if (sourceNode.type !== "end" && targetNode.type !== "start" && !canConnectFlowNodeTypes(sourceNode.type, targetNode.type)) throw new Error(`节点类型不允许连接：${sourceNode.name}（${sourceNode.type}）→ ${targetNode.name}（${targetNode.type}）。`);
     const edgeKey = `${edge.sourceNodeId}|${edge.sourceHandle ?? "default"}|${edge.targetNodeId}`;
     if (edgeKeys.has(edgeKey)) throw new Error(`流程不允许重复连线：${edge.sourceNodeId} → ${edge.targetNodeId}。`);
     edgeKeys.add(edgeKey);
@@ -70,7 +74,6 @@ export function validate(definition: unknown, executable = false): Definition {
     const deadEnds = value.nodes.filter(node => !canReachEnd.has(node.id));
     if (deadEnds.length) throw new Error(`存在无法到达结束节点的路径：${deadEnds.map(node => node.name || node.id).join("、")}。`);
 
-    const nodesById = new Map(value.nodes.map(node => [node.id, node]));
     const visiting = new Set<string>();
     const visited = new Set<string>();
     const assertAcyclic = (nodeId: string) => {

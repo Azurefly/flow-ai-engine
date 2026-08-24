@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -83,7 +84,7 @@ describe("原始项目工作区 P0", () => {
     const visible = await designerCaller.project.workflows({ projectId, flowType: "control", auditStatus: "approved", status: "published" });
     expect(visible).toHaveLength(1);
     expect(visible[0]).toMatchObject({ id: workflowId, projectId, flowType: "control" });
-    const completedRun = await ownerCaller.workflow.run({ workflowId, input: { source: "unpublish-retention-test" } });
+    const completedRun = await settleWorkflowCommand(pool, await ownerCaller.workflow.run({ workflowId, input: { source: "unpublish-retention-test" } }));
     expect(completedRun.status).toBe("success");
     await expect(outsiderCaller.workflow.unpublish({ id: workflowId })).rejects.toThrow("流程不存在或无取消发布权限");
     const unpublished = await designerCaller.workflow.unpublish({ id: workflowId });

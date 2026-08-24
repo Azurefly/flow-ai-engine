@@ -5,6 +5,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { createProject, createProjectWorkflow, grantProjectMember, setProjectWorkflowAudit } from "./project-service";
 import { updateWorkflow, type Definition } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -55,7 +56,7 @@ describe("P0 原始流程类型与项目发起", () => {
     workflowId = workflow.id;
     await setProjectWorkflowAudit(owner, { projectId, workflowId, auditStatus: "approved" });
     await updateWorkflow(workflowId, owner, { publish: true });
-    const operatorRun = await callerFor(operator).workflow.run({ workflowId, input: { source: "project-launch" } });
+    const operatorRun = await settleWorkflowCommand(pool, await callerFor(operator).workflow.run({ workflowId, input: { source: "project-launch" } }));
     runId = operatorRun.runId;
     expect(operatorRun.status).toBe("success");
     expect(operatorRun.output).toEqual({ result: { state: "RECEIVED", source: "project-launch" } });
@@ -77,7 +78,7 @@ describe("P0 原始流程类型与项目发起", () => {
       ],
     };
     await updateWorkflow(workflowId, owner, { definition: routerDefinition });
-    const routerRun = await callerFor(operator).workflow.run({ workflowId, input: {} });
+    const routerRun = await settleWorkflowCommand(pool, await callerFor(operator).workflow.run({ workflowId, input: {} }));
     expect(routerRun.output).toEqual({ result: { route: "APPROVED" } });
     const [routerNodeRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT nodeId,status FROM workflow_node_run WHERE runId=? ORDER BY startedAt", [routerRun.runId]);
     expect(routerNodeRuns.map(row => row.nodeId).sort()).toEqual(["approved", "end", "router", "start"]);
@@ -89,7 +90,7 @@ describe("P0 原始流程类型与项目发起", () => {
     await expect(callerFor(operator).workflow.run({ workflowId: blockedWorkflowId, input: {} })).rejects.toThrow("流程尚未发布");
     const blockedDefinition: Definition = { ...executableDefinition, nodes: [...executableDefinition.nodes.slice(0, 1), { id: "operate", type: "operate", name: "人工审批", position: { x: 180, y: 0 }, config: {} }, executableDefinition.nodes[4]], edges: [{ id: "s-o", sourceNodeId: "start", targetNodeId: "operate" }, { id: "o-e", sourceNodeId: "operate", targetNodeId: "end" }] };
     await updateWorkflow(workflowId, owner, { definition: blockedDefinition });
-    const manualRun: any = await callerFor(operator).workflow.run({ workflowId, input: {} });
+    const manualRun: any = await settleWorkflowCommand(pool, await callerFor(operator).workflow.run({ workflowId, input: {} }));
     expect(manualRun).toMatchObject({ status: "waiting" });
     const [waitingRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT id,status FROM workflow_run WHERE id=?", [manualRun.runId]);
     blockedRunId = waitingRuns[0]?.id;

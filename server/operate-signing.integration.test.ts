@@ -11,6 +11,7 @@ import {
 } from "./project-service";
 import { appRouter } from "./routers";
 import { updateWorkflow, type Definition } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -241,28 +242,28 @@ describe("原版操作节点或签和会签运行语义", () => {
         });
 
       const orWorkflowId = await createSigningWorkflow("orSignFor");
-      const orStarted: any = await callerFor(owner).workflow.run({
+      const orStarted: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
         workflowId: orWorkflowId,
         input: {},
-      });
+      }));
       const orTodos: any[][] = await Promise.all(
         approvers.map(approver =>
           callerFor(approver).task.list({ view: "todo", projectId })
         )
       );
       expect(orTodos.map(items => items.length)).toEqual([1, 1, 1]);
-      const orRejected: any = await callerFor(approvers[0]).task.execute({
+      const orRejected: any = await settleWorkflowCommand(pool, await callerFor(approvers[0]).task.execute({
         taskId: orTodos[0][0].id,
         result: { decision: "rejected", comment: "需要其他审批人复核" },
-      });
+      }));
       expect(orRejected).toMatchObject({
         status: "waiting",
         approvalProgress: { approved: 0, rejected: 1, required: 1, total: 3 },
       });
-      const orResult: any = await callerFor(approvers[1]).task.execute({
+      const orResult: any = await settleWorkflowCommand(pool, await callerFor(approvers[1]).task.execute({
         taskId: orTodos[1][0].id,
         result: { decision: "approved" },
-      });
+      }));
       expect(orResult.status).toBe("success");
       const [orTasks] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status FROM workflow_task WHERE runId=? ORDER BY status",
@@ -273,21 +274,29 @@ describe("原版操作节点或签和会签运行语义", () => {
         "completed",
         "completed",
       ]);
+      const [orJobs] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT jobType,status FROM workflow_run_job WHERE runId=? ORDER BY createdAt,id",
+        [orStarted.runId]
+      );
+      expect(orJobs).toMatchObject([
+        { jobType: "start", status: "completed" },
+        { jobType: "resume", status: "completed" },
+      ]);
 
       const andWorkflowId = await createSigningWorkflow("andSignFor", 60);
-      const andStarted: any = await callerFor(owner).workflow.run({
+      const andStarted: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
         workflowId: andWorkflowId,
         input: {},
-      });
+      }));
       const andTodos: any[][] = await Promise.all(
         approvers.map(approver =>
           callerFor(approver).task.list({ view: "todo", projectId })
         )
       );
-      const first: any = await callerFor(approvers[0]).task.execute({
+      const first: any = await settleWorkflowCommand(pool, await callerFor(approvers[0]).task.execute({
         taskId: andTodos[0].find(item => item.runId === andStarted.runId).id,
         result: { decision: "approved" },
-      });
+      }));
       expect(first).toMatchObject({
         status: "waiting",
         approvalProgress: { completed: 1, required: 2, total: 3 },
@@ -295,22 +304,23 @@ describe("原版操作节点或签和会签运行语义", () => {
       const secondTask = andTodos[1].find(
         item => item.runId === andStarted.runId
       );
-      const second: any = await callerFor(approvers[1]).task.execute({
-        taskId: secondTask.id,
-        result: { decision: "rejected", comment: "保留意见" },
-      });
-      expect(second).toMatchObject({
-        status: "waiting",
-        approvalProgress: { approved: 1, rejected: 1, required: 2, total: 3 },
-      });
       const thirdTask = andTodos[2].find(
         item => item.runId === andStarted.runId
       );
-      const third: any = await callerFor(approvers[2]).task.execute({
-        taskId: thirdTask.id,
-        result: { decision: "approved" },
-      });
-      expect(third.status).toBe("success");
+      const concurrentResults = await Promise.allSettled([
+        callerFor(approvers[1]).task.execute({
+          taskId: secondTask.id,
+          result: { decision: "approved", comment: "并发审批 A" },
+        }).then(command => settleWorkflowCommand(pool!, command)),
+        callerFor(approvers[2]).task.execute({
+          taskId: thirdTask.id,
+          result: { decision: "approved", comment: "并发审批 B" },
+        }).then(command => settleWorkflowCommand(pool!, command)),
+      ]);
+      expect(concurrentResults.filter(result => result.status === "fulfilled")).toHaveLength(1);
+      expect(concurrentResults.filter(result => result.status === "rejected")).toHaveLength(1);
+      const completedResult = concurrentResults.find(result => result.status === "fulfilled");
+      expect(completedResult?.status === "fulfilled" ? (completedResult.value as any).status : null).toBe("success");
       const [groups] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status,totalApprovers,requiredApprovals FROM workflow_task_group WHERE runId=?",
         [andStarted.runId]
@@ -325,6 +335,14 @@ describe("原版操作节点或签和会签运行语义", () => {
         [andStarted.runId]
       );
       expect(Number(nodeRuns[0].count)).toBe(1);
+      const [andJobs] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT jobType,status FROM workflow_run_job WHERE runId=? ORDER BY createdAt,id",
+        [andStarted.runId]
+      );
+      expect(andJobs).toMatchObject([
+        { jobType: "start", status: "completed" },
+        { jobType: "resume", status: "completed" },
+      ]);
     },
     120_000
   );

@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { createWorkflow } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const ownerUsername = `govern_owner_${randomUUID().slice(0, 8)}`;
@@ -124,7 +125,7 @@ describe("流程版本、运行分析与节点复用", () => {
         ],
       },
     });
-    await expect(ownerCaller.workflow.run({ workflowId, input: {} })).resolves.toMatchObject({ status: "success", output: { result: "已复用" } });
+    await expect(settleWorkflowCommand(pool, await ownerCaller.workflow.run({ workflowId, input: {} }))).resolves.toMatchObject({ status: "success", output: { result: "已复用" } });
 
     await ownerCaller.workflow.update({
       id: workflowId,
@@ -141,7 +142,8 @@ describe("流程版本、运行分析与节点复用", () => {
         ],
       },
     });
-    await expect(ownerCaller.workflow.run({ workflowId, input: {} })).rejects.toThrow("拒绝私有");
+    const unsafeCommand = await ownerCaller.workflow.run({ workflowId, input: {} });
+    await expect(settleWorkflowCommand(pool, unsafeCommand)).rejects.toThrow("拒绝私有");
     const failedRuns = await ownerCaller.workflow.runs({ workflowId, status: "failed" });
     expect(failedRuns).toHaveLength(1);
     const metrics = await ownerCaller.workflow.runMetrics({ workflowId });

@@ -2,11 +2,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CreationDialog } from "@/components/CreationDialog";
 import { trpc } from "@/lib/trpc";
-import { Building2, CheckCircle2, ClipboardCheck, Gauge, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, SlidersHorizontal, Stamp, Workflow } from "lucide-react";
+import { Activity, Building2, CheckCircle2, ClipboardCheck, Gauge, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, SlidersHorizontal, Stamp, Workflow } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
-type Tab = "general" | "approval" | "domain" | "access";
+type Tab = "general" | "approval" | "domain" | "access" | "runtime";
 
 export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }: { onOpenIdentity: () => void; onOpenOrganization: () => void }) {
   const [tab, setTab] = useState<Tab>("general");
@@ -16,6 +16,7 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
     { id: "approval" as const, label: "审批配置", icon: ClipboardCheck },
     { id: "domain" as const, label: "工作域配置", icon: Workflow },
     { id: "access" as const, label: "组织与权限", icon: ShieldCheck },
+    { id: "runtime" as const, label: "运行诊断", icon: Activity },
   ];
   const active = items.find(item => item.id === tab) ?? items[0];
   return (
@@ -54,8 +55,38 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
             {tab === "approval" && <ApprovalSettings />}
             {tab === "domain" && <DomainSettings />}
             {tab === "access" && <AccessSettings onOpenIdentity={onOpenIdentity} onOpenOrganization={onOpenOrganization} />}
+            {tab === "runtime" && <RuntimeStatus />}
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+function RuntimeStatus() {
+  const runtime = trpc.config.runtimeInfo.useQuery(undefined, { refetchInterval: 10_000 });
+  if (runtime.isLoading) return <p className="text-sm text-slate-500">正在读取运行身份与能力状态…</p>;
+  if (runtime.error) return <p className="text-sm text-rose-600">{runtime.error.message}</p>;
+  const info = runtime.data;
+  if (!info) return null;
+  return (
+    <div>
+      <Header eyebrow="RUNTIME DIAGNOSTICS" title="运行诊断" description="这里显示服务端真实构建身份、迁移版本、Worker 状态和节点能力边界。" />
+      <dl className="mt-6 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-xs sm:grid-cols-2">
+        <div><dt className="text-slate-400">Git SHA</dt><dd className="mt-1 break-all font-mono text-slate-700">{info.gitSha}</dd></div>
+        <div><dt className="text-slate-400">构建时间</dt><dd className="mt-1 font-mono text-slate-700">{info.buildTime}</dd></div>
+        <div><dt className="text-slate-400">镜像 Digest</dt><dd className="mt-1 break-all font-mono text-slate-700">{info.imageDigest}</dd></div>
+        <div><dt className="text-slate-400">数据库迁移</dt><dd className="mt-1 font-mono text-slate-700">{info.migrationVersion}</dd></div>
+        <div><dt className="text-slate-400">Worker</dt><dd className="mt-1 text-slate-700">{info.worker.started ? info.worker.processing ? "执行中" : "已启动/空闲" : "未启动"}</dd></div>
+        <div><dt className="text-slate-400">已处理 Job</dt><dd className="mt-1 font-mono text-slate-700">{info.worker.processedJobs}</dd></div>
+      </dl>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        {info.capabilities.map(capability => (
+          <article key={capability.id} className="min-w-0 rounded-lg border border-slate-200 p-4">
+            <div className="flex min-w-0 items-center justify-between gap-2"><h3 className="min-w-0 break-words text-sm font-semibold text-slate-800">{capability.label}</h3><span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${capability.status === "beta" ? "bg-blue-100 text-blue-700" : capability.status === "experimental" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>{capability.status}</span></div>
+            <p className="mt-2 text-xs leading-5 text-slate-500">{capability.reason}</p>
+          </article>
+        ))}
       </div>
     </div>
   );

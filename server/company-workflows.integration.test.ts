@@ -7,6 +7,7 @@ import { appRouter } from "./routers";
 import { createProject, createProjectWorkflow, grantProjectMember, setProjectWorkflowAudit } from "./project-service";
 import { updateWorkflow, type Definition } from "./workflow-service";
 import { createAnnualLeaveApprovalDefinition, createReportingApprovalDefinition, createResignationApprovalDefinition } from "../shared/company-workflows";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -72,44 +73,43 @@ describe("公司组织多流程真实 MySQL 演示", () => {
     for (const user of [employee, approver1, approver2]) await grantProjectMember(owner, { projectId, userId: user.id, role: "operator" });
 
     const annualId = await createWorkflow(owner, "年假分支集成", createAnnualLeaveApprovalDefinition(roleCode) as Definition);
-    const shortRun: any = await callerFor(employee).workflow.run({ workflowId: annualId, input: { days: 3, reason: "短假" } });
+    const shortRun: any = await settleWorkflowCommand(pool, await callerFor(employee).workflow.run({ workflowId: annualId, input: { days: 3, reason: "短假" } }));
     expect(shortRun.status).toBe("waiting");
     const shortTodos: any[] = await callerFor(approver1).task.list({ view: "todo", projectId });
     const shortTask = shortTodos.find(item => item.runId === shortRun.runId);
     expect(shortTask).toBeTruthy();
-    const shortResult: any = await callerFor(approver1).task.execute({ taskId: shortTask.id, result: { decision: "approved" } });
+    const shortResult: any = await settleWorkflowCommand(pool, await callerFor(approver1).task.execute({ taskId: shortTask.id, result: { decision: "approved" } }));
     expect(shortResult.status).toBe("success");
 
-    const longRun: any = await callerFor(employee).workflow.run({ workflowId: annualId, input: { days: 5, reason: "长假" } });
+    const longRun: any = await settleWorkflowCommand(pool, await callerFor(employee).workflow.run({ workflowId: annualId, input: { days: 5, reason: "长假" } }));
     const longTodos: any[] = await callerFor(approver1).task.list({ view: "todo", projectId });
     const longSupervisorTask = longTodos.find(item => item.runId === longRun.runId);
     expect(longSupervisorTask).toBeTruthy();
-    const afterSupervisor: any = await callerFor(approver1).task.execute({ taskId: longSupervisorTask.id, result: { decision: "approved" } });
+    const afterSupervisor: any = await settleWorkflowCommand(pool, await callerFor(approver1).task.execute({ taskId: longSupervisorTask.id, result: { decision: "approved" } }));
     expect(afterSupervisor.status).toBe("waiting");
     const managerTodos: any[] = await callerFor(approver2).task.list({ view: "todo", projectId });
     const managerTask = managerTodos.find(item => item.runId === longRun.runId);
     expect(managerTask).toBeTruthy();
-    expect((await callerFor(approver2).task.execute({ taskId: managerTask.id, result: { decision: "approved" } })).status).toBe("success");
+    expect((await settleWorkflowCommand(pool, await callerFor(approver2).task.execute({ taskId: managerTask.id, result: { decision: "approved" } }))).status).toBe("success");
 
     const resignId = await createWorkflow(owner, "辞职会签集成", createResignationApprovalDefinition(roleCode) as Definition);
-    const resignRun: any = await callerFor(employee).workflow.run({ workflowId: resignId, input: { resignationReason: "职业规划" } });
+    const resignRun: any = await settleWorkflowCommand(pool, await callerFor(employee).workflow.run({ workflowId: resignId, input: { resignationReason: "职业规划" } }));
     const resignTodos1: any[] = await callerFor(approver1).task.list({ view: "todo", projectId });
     const resignTask1 = resignTodos1.find(item => item.runId === resignRun.runId);
     expect(resignTask1).toBeTruthy();
-    expect((await callerFor(approver1).task.execute({ taskId: resignTask1.id, result: { decision: "approved" } })).status).toBe("waiting");
+    expect((await settleWorkflowCommand(pool, await callerFor(approver1).task.execute({ taskId: resignTask1.id, result: { decision: "approved" } }))).status).toBe("waiting");
     const resignTodos2: any[] = await callerFor(approver2).task.list({ view: "todo", projectId });
     const resignTask2 = resignTodos2.find(item => item.runId === resignRun.runId);
     expect(resignTask2).toBeTruthy();
-    expect((await callerFor(approver2).task.execute({ taskId: resignTask2.id, result: { decision: "approved" } })).status).toBe("success");
+    expect((await settleWorkflowCommand(pool, await callerFor(approver2).task.execute({ taskId: resignTask2.id, result: { decision: "approved" } }))).status).toBe("success");
 
     const reportId = await createWorkflow(owner, "汇报或签集成", createReportingApprovalDefinition(roleCode) as Definition);
-    const reportRun: any = await callerFor(employee).workflow.run({ workflowId: reportId, input: { reportTitle: "季度汇报" } });
+    const reportRun: any = await settleWorkflowCommand(pool, await callerFor(employee).workflow.run({ workflowId: reportId, input: { reportTitle: "季度汇报" } }));
     const reportTodos: any[] = await callerFor(approver1).task.list({ view: "todo", projectId });
     const reportTask = reportTodos.find(item => item.runId === reportRun.runId);
     expect(reportTask).toBeTruthy();
-    expect((await callerFor(approver1).task.execute({ taskId: reportTask.id, result: { decision: "approved" } })).status).toBe("success");
+    expect((await settleWorkflowCommand(pool, await callerFor(approver1).task.execute({ taskId: reportTask.id, result: { decision: "approved" } }))).status).toBe("success");
     const [states] = await pool.query<mysql.RowDataPacket[]>("SELECT COUNT(*) AS total FROM workflow_participant_state WHERE runId IN (?,?,?)", [shortRun.runId, longRun.runId, resignRun.runId]);
     expect(Number(states[0].total)).toBeGreaterThan(0);
   }, 120_000);
 });
-

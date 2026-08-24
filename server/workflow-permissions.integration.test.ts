@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import type { Definition } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const workflowId = randomUUID();
@@ -63,7 +64,7 @@ describe("工作流资源级运行权限", () => {
     await pool.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?),(?,?,?,'viewer',NOW(),?)", [randomUUID(), workflowId, owner.id, owner.id, randomUUID(), workflowId, viewer.id, owner.id]);
 
     const ownerCaller = callerFor(owner);
-    const result = await ownerCaller.workflow.run({ workflowId, input: { trace: "resource-check" } });
+    const result = await settleWorkflowCommand(pool, await ownerCaller.workflow.run({ workflowId, input: { trace: "resource-check" } }));
     runId = result.runId;
     const viewerCaller = callerFor(viewer);
     const runs = await viewerCaller.workflow.runs({ workflowId });

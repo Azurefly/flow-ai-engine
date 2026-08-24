@@ -271,7 +271,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
   const grantMember = trpc.workflow.grantMember.useMutation({ onSuccess: () => { void utils.workflow.members.invalidate(); toast.success("流程成员授权已更新。"); }, onError: error => toast.error(error.message) });
   const revokeMember = trpc.workflow.revokeMember.useMutation({ onSuccess: () => { void utils.workflow.members.invalidate(); toast.success("流程成员授权已撤销。"); }, onError: error => toast.error(error.message) });
   const runFlow = trpc.workflow.run.useMutation({
-    onSuccess: result => { void utils.workflow.runs.invalidate(); void utils.workflow.runMetrics.invalidate(); if (selectedId) navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId, runId: result.runId }); toast.success(`运行完成：${result.runId.slice(0, 8)}`); },
+    onSuccess: result => { void utils.workflow.runs.invalidate(); void utils.workflow.runMetrics.invalidate(); if (selectedId) navigateRoute({ section: "runs", view: "monitor", workflowId: selectedId, runId: result.runId }); toast.success(`已进入持久化执行队列：${result.runId.slice(0, 8)}`); },
     onError: error => toast.error(error.message),
   });
   const runDataflow = trpc.data.run.useMutation({
@@ -338,7 +338,7 @@ function FlowConsole({ user, general, onLogout }: { user: UserIdentity; general:
     if (selectedWorkflow?.flowType === "data") {
       if (!selectedWorkflow.projectId) { toast.error("数据流缺少项目归属，无法运行。"); return; }
       runDataflow.mutate({ projectId: selectedWorkflow.projectId, workflowId: selectedId, data: runInput });
-    } else runFlow.mutate({ workflowId: selectedId, input: runInput });
+    } else runFlow.mutate({ workflowId: selectedId, input: runInput, idempotencyKey: crypto.randomUUID() });
   };
 
   const nav = [

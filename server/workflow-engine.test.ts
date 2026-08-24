@@ -6,6 +6,7 @@ import {
   normalizeApprovalResult,
   normalizeReferenceHttpConfig,
   selectRouterRoute,
+  withWorkflowIdempotencyHeader,
 } from "./workflow-engine";
 
 describe("工作流变量插值", () => {
@@ -37,6 +38,17 @@ describe("HTTP 节点 SSRF 防护", () => {
     await expect(assertSafeHttpUrl("ftp://example.com/file")).rejects.toThrow(
       "仅支持"
     );
+  });
+
+  it("为有副作用的请求注入稳定运行幂等键，并尊重显式配置", () => {
+    const context = { runtime: { executionRunId: "run-1", executionNodeId: "notify" } };
+    expect(withWorkflowIdempotencyHeader("POST", {}, context)).toEqual({
+      "Idempotency-Key": "flow:run-1:notify",
+    });
+    expect(withWorkflowIdempotencyHeader("GET", {}, context)).toEqual({});
+    expect(withWorkflowIdempotencyHeader("PATCH", { "idempotency-key": "business-key" }, context)).toEqual({
+      "idempotency-key": "business-key",
+    });
   });
 });
 

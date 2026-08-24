@@ -20,6 +20,18 @@ export type RunFilters = { status?: "queued" | "running" | "success" | "failed" 
 const MAX_STEPS = 100;
 const MAX_HTTP_RESPONSE_BYTES = 1_000_000;
 const HTTP_TIMEOUT_MS = 15_000;
+const WORKFLOW_JOB_MAX_ATTEMPTS = 3;
+
+export type WorkflowCheckpoint = {
+  queue: string[];
+  context: JsonRecord;
+  finalOutput?: unknown;
+  currentNodeId?: string | null;
+};
+
+export type WorkflowExecutionResult =
+  | { runId: string; status: "success"; output: unknown }
+  | { runId: string; status: "waiting"; taskId: string };
 
 let pool: mysql.Pool | undefined;
 function db() {
@@ -95,6 +107,23 @@ export async function assertSafeHttpUrl(rawUrl: string) {
   return url;
 }
 
+/**
+ * Adds a stable per-run/per-node key to mutating outbound calls. Remote services
+ * can use this header to collapse retries after a Worker lease loss or crash.
+ */
+export function withWorkflowIdempotencyHeader(method: string, headers: JsonRecord, context: JsonRecord) {
+  const normalizedHeaders = Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => [key, String(value)])
+  );
+  if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) return normalizedHeaders;
+  if (Object.keys(normalizedHeaders).some(key => key.toLowerCase() === "idempotency-key")) return normalizedHeaders;
+  const runtime = asRecord(context.runtime);
+  const runId = typeof runtime.executionRunId === "string" ? runtime.executionRunId.trim() : "";
+  const nodeId = typeof runtime.executionNodeId === "string" ? runtime.executionNodeId.trim() : "";
+  if (runId && nodeId) normalizedHeaders["Idempotency-Key"] = `flow:${runId}:${nodeId}`;
+  return normalizedHeaders;
+}
+
 async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   const resolved = asRecord(resolveTemplates(config, context));
   const url = await assertSafeHttpUrl(String(resolved.url ?? ""));
@@ -105,7 +134,11 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   const method = String(resolved.method ?? "GET").toUpperCase();
   if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(method)) throw new Error("HTTP 节点请求方法不受支持。");
   const headers = asRecord(resolved.headers);
-  const safeHeaders = Object.fromEntries(Object.entries(headers).filter(([key]) => !["host", "connection", "content-length"].includes(key.toLowerCase())).map(([key, value]) => [key, String(value)]));
+  const safeHeaders = withWorkflowIdempotencyHeader(
+    method,
+    Object.fromEntries(Object.entries(headers).filter(([key]) => !["host", "connection", "content-length"].includes(key.toLowerCase()))),
+    context
+  );
   const body = resolved.body;
   const serializedBody = body === undefined || body === null ? undefined : typeof body === "string" ? body : JSON.stringify(body);
   if (serializedBody && !Object.keys(safeHeaders).some(key => key.toLowerCase() === "content-type")) safeHeaders["content-type"] = "application/json";
@@ -433,51 +466,211 @@ async function createFailureAlerts(input: { workflowId: string; workflowName: st
   await notifyOwner({ title: "Flow AI Engine 运行失败", content: `流程：${input.workflowName}\n运行：${input.runId}\n原因：${String(input.details.message ?? "未知错误")}` }).catch(() => false);
 }
 
-export async function executeWorkflow(input: { workflowId: string; triggeredBy: WorkflowUser; workflowInput?: JsonRecord }) {
+export async function submitWorkflowRun(input: {
+  workflowId: string;
+  triggeredBy: WorkflowUser;
+  workflowInput?: JsonRecord;
+  idempotencyKey?: string;
+}) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,ownerUserId,name,projectId,status,auditStatus,definitionJson FROM workflow WHERE id=? LIMIT 1", [input.workflowId]);
   const workflow = workflowRows[0] as PersistedWorkflow | undefined;
   if (!workflow) throw new Error("流程不存在。");
   if (workflow.projectId && (workflow.status !== "published" || workflow.auditStatus !== "approved")) throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
   const definition = readJson(workflow.definitionJson) as Definition;
   if (!definition?.nodes?.length) throw new Error("流程定义为空。");
-  // 对持久化快照再次做可执行校验，防止历史草稿或直接写库绕过发布时的字段约束。
   const executableDefinition = (await import("./workflow-service")).validate(definition, true);
+  const requestedIdempotencyKey = input.idempotencyKey?.trim();
+  const jobIdempotencyKey = requestedIdempotencyKey
+    ? `workflow:start:${input.workflowId}:${input.triggeredBy.id}:${requestedIdempotencyKey}`
+    : `workflow:start:${randomUUID()}`;
+  const [existingJobs] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,runId,status FROM workflow_run_job WHERE idempotencyKey=? LIMIT 1",
+    [jobIdempotencyKey]
+  );
+  if (existingJobs[0]) {
+    return {
+      runId: String(existingJobs[0].runId),
+      jobId: String(existingJobs[0].id),
+      status: "queued" as const,
+      deduplicated: true,
+    };
+  }
 
   const runId = randomUUID();
+  const jobId = randomUUID();
+  const startNode = executableDefinition.nodes.find(node => node.type === "start");
+  if (!startNode) throw new Error("流程缺少开始节点。");
   const context: JsonRecord = {
     input: input.workflowInput ?? {},
     vars: {},
     nodes: {},
     runtime: {
+      executionRunId: runId,
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],
       roleKeysByUser: { [String(input.triggeredBy.id)]: ["default", "initiator", "sender"] },
+      executionQueue: [startNode.id],
+      executionCurrentNodeId: null,
     },
   };
-  const authorizationSnapshot = { userId: input.triggeredBy.id, userRole: input.triggeredBy.role, permission: "workflow:run", authorizedAt: new Date().toISOString() };
-  await db().query(
-    "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,startedAt) VALUES (?,?,?,?,?,'running',?,?,?,?,NOW())",
-    [runId, input.workflowId, workflow.ownerUserId, input.triggeredBy.id, "manual", JSON.stringify(executableDefinition), JSON.stringify(input.workflowInput ?? {}), JSON.stringify(context), JSON.stringify(authorizationSnapshot)],
-  );
-
-  const startNode = executableDefinition.nodes.find(node => node.type === "start");
-  if (!startNode) throw new Error("流程缺少开始节点。");
   setRuntimeNodeParticipants(context, startNode.id, [input.triggeredBy.id]);
-  const runStartedAt = Date.now();
+  const authorizationSnapshot = { userId: input.triggeredBy.id, userRole: input.triggeredBy.role, permission: "workflow:run", authorizedAt: new Date().toISOString() };
+  const checkpoint: WorkflowCheckpoint = { queue: [startNode.id], context, finalOutput: null, currentNodeId: null };
+  const connection = await db().getConnection();
   try {
-    const segment = await executeRunSegment({ runId, workflow, definition: executableDefinition, context, queue: [startNode.id] });
-    if (segment.status === "waiting") return { runId, status: "waiting" as const, taskId: segment.taskId };
-    await db().query("UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - runStartedAt, runId]);
-    return { runId, status: "success" as const, output: segment.output };
+    await connection.beginTransaction();
+    await connection.query(
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson) VALUES (?,?,?,?,?,'queued',?,?,?,?)",
+      [runId, input.workflowId, workflow.ownerUserId, input.triggeredBy.id, "manual", JSON.stringify(executableDefinition), JSON.stringify(input.workflowInput ?? {}), JSON.stringify(context), JSON.stringify(authorizationSnapshot)]
+    );
+    await connection.query(
+      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts) VALUES (?,?,'start','queued',?,?,?)",
+      [jobId, runId, jobIdempotencyKey, JSON.stringify(checkpoint), WORKFLOW_JOB_MAX_ATTEMPTS]
+    );
+    await connection.commit();
   } catch (error) {
-    const details = { message: error instanceof Error ? error.message : String(error) };
-    await db().query("UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?", [JSON.stringify(context), JSON.stringify(details), Date.now() - runStartedAt, runId]);
-    try {
-      await createFailureAlerts({ workflowId: input.workflowId, workflowName: String(workflow.name), runId, ownerUserId: Number(workflow.ownerUserId), triggeredByUserId: input.triggeredBy.id, details });
-    } catch (alertError) {
-      console.error("[Workflow] Failed to persist run alert", alertError);
+    await connection.rollback();
+    if (requestedIdempotencyKey) {
+      const [duplicates] = await db().query<mysql.RowDataPacket[]>(
+        "SELECT id,runId FROM workflow_run_job WHERE idempotencyKey=? LIMIT 1",
+        [jobIdempotencyKey]
+      );
+      if (duplicates[0]) return { runId: String(duplicates[0].runId), jobId: String(duplicates[0].id), status: "queued" as const, deduplicated: true };
     }
+    throw error;
+  } finally {
+    connection.release();
+  }
+  return { runId, jobId, status: "queued" as const, deduplicated: false };
+}
+
+export async function executePreparedWorkflowRun(input: {
+  runId: string;
+  leaseToken?: string;
+  checkpoint?: WorkflowCheckpoint;
+  onCheckpoint?: (checkpoint: WorkflowCheckpoint) => Promise<void>;
+}): Promise<WorkflowExecutionResult> {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT r.*,w.name,w.projectId FROM workflow_run r
+       JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1`,
+    [input.runId]
+  );
+  const run = rows[0] as PersistedWorkflow | undefined;
+  if (!run) throw new Error("流程运行不存在。");
+  if (["success", "failed", "cancelled"].includes(String(run.status))) throw new Error(`流程运行已结束：${run.status}。`);
+  const definition = readJson(run.definitionSnapshotJson) as Definition;
+  const persistedContext = asRecord(readJson(run.contextJson));
+  const context = input.checkpoint?.context ? asRecord(input.checkpoint.context) : persistedContext;
+  const runtime = asRecord(context.runtime);
+  const suppliedCheckpoint = input.checkpoint ?? {
+    queue: Array.isArray(runtime.executionQueue) ? runtime.executionQueue.map(String) : [],
+    context,
+    finalOutput: runtime.executionFinalOutput,
+    currentNodeId: typeof runtime.executionCurrentNodeId === "string" ? runtime.executionCurrentNodeId : null,
+  };
+  const startNode = definition.nodes.find(node => node.type === "start");
+  const queue = suppliedCheckpoint.queue.length ? [...suppliedCheckpoint.queue] : startNode ? [startNode.id] : [];
+  const runStartedAt = run.startedAt ? new Date(run.startedAt).getTime() : Date.now();
+  const persistCheckpoint = async (checkpoint: WorkflowCheckpoint) => {
+    const nextRuntime = asRecord(checkpoint.context.runtime);
+    nextRuntime.executionQueue = checkpoint.queue;
+    nextRuntime.executionCurrentNodeId = checkpoint.currentNodeId ?? null;
+    nextRuntime.executionFinalOutput = checkpoint.finalOutput ?? null;
+    checkpoint.context.runtime = nextRuntime;
+    if (input.onCheckpoint) {
+      await input.onCheckpoint(checkpoint);
+      return;
+    }
+    const params: unknown[] = [JSON.stringify(checkpoint.context), input.runId];
+    const leaseClause = input.leaseToken ? " AND executionLockToken=?" : "";
+    if (input.leaseToken) params.push(input.leaseToken);
+    const [updated] = await db().query<mysql.ResultSetHeader>(
+      `UPDATE workflow_run SET contextJson=? WHERE id=?${leaseClause}`,
+      params
+    );
+    if (!updated.affectedRows) throw new Error("工作流执行租约已失效，已停止当前 Worker。");
+  };
+
+  const segment = await executeRunSegment({
+    runId: input.runId,
+    workflow: run,
+    definition,
+    context,
+    queue,
+    finalOutput: suppliedCheckpoint.finalOutput,
+    checkpoint: persistCheckpoint,
+  });
+  if (segment.status === "waiting") return { runId: input.runId, status: "waiting", taskId: segment.taskId };
+  const params: unknown[] = [JSON.stringify(context), JSON.stringify(segment.output), Date.now() - runStartedAt, input.runId];
+  const leaseClause = input.leaseToken ? " AND executionLockToken=?" : "";
+  if (input.leaseToken) params.push(input.leaseToken);
+  const [finished] = await db().query<mysql.ResultSetHeader>(
+    `UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+    params
+  );
+  if (!finished.affectedRows) throw new Error("工作流执行租约已失效，禁止重复完成运行。");
+  return { runId: input.runId, status: "success", output: segment.output };
+}
+
+export async function markWorkflowRunFailed(runId: string, error: unknown, leaseToken?: string) {
+  const details = { message: error instanceof Error ? error.message : String(error) };
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT r.id,r.workflowId,r.ownerUserId,r.triggeredByUserId,r.startedAt,w.name
+       FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1`,
+    [runId]
+  );
+  const run = rows[0];
+  if (!run) return false;
+  const params: unknown[] = [JSON.stringify(details), run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0, runId];
+  const leaseClause = leaseToken ? " AND executionLockToken=?" : "";
+  if (leaseToken) params.push(leaseToken);
+  const [failed] = await db().query<mysql.ResultSetHeader>(
+    `UPDATE workflow_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+    params
+  );
+  if (!failed.affectedRows) return false;
+  await createFailureAlerts({ workflowId: String(run.workflowId), workflowName: String(run.name), runId, ownerUserId: Number(run.ownerUserId), triggeredByUserId: Number(run.triggeredByUserId), details }).catch(alertError => console.error("[Workflow] Failed to persist run alert", alertError));
+  return true;
+}
+
+export async function executeWorkflow(input: { workflowId: string; triggeredBy: WorkflowUser; workflowInput?: JsonRecord; idempotencyKey?: string }) {
+  const submitted = await submitWorkflowRun(input);
+  if (submitted.deduplicated) throw new Error("同步兼容执行不接受重复幂等命令；请查询原运行状态。");
+  const leaseToken = randomUUID().replaceAll("-", "").slice(0, 48);
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [leasedJob] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_run_job SET status='leased',attempt=attempt+1,leaseToken=?,leaseExpiresAt=DATE_ADD(NOW(),INTERVAL 2 MINUTE),workerId='inline' WHERE id=? AND status='queued'",
+      [leaseToken, submitted.jobId]
+    );
+    if (!leasedJob.affectedRows) throw new Error("同步兼容执行未能领取持久化 Job。");
+    const [leasedRun] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_run SET status='running',startedAt=COALESCE(startedAt,NOW()),executionLockToken=?,executionLockExpiresAt=DATE_ADD(NOW(),INTERVAL 2 MINUTE) WHERE id=? AND status IN ('queued','running')",
+      [leaseToken, submitted.runId]
+    );
+    if (!leasedRun.affectedRows) throw new Error("同步兼容执行未能取得运行租约。");
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  try {
+    const result = await executePreparedWorkflowRun({ runId: submitted.runId, leaseToken });
+    await db().query(
+      "UPDATE workflow_run_job SET status='completed',resultJson=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND leaseToken=?",
+      [JSON.stringify(result), submitted.jobId, leaseToken]
+    );
+    return result;
+  } catch (error) {
+    await markWorkflowRunFailed(submitted.runId, error, leaseToken);
+    await db().query(
+      "UPDATE workflow_run_job SET status='failed',lastErrorJson=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND leaseToken=?",
+      [JSON.stringify({ message: error instanceof Error ? error.message : String(error) }), submitted.jobId, leaseToken]
+    );
     throw error;
   }
 }
@@ -633,6 +826,7 @@ async function executeRunSegment(input: {
   context: JsonRecord;
   queue: string[];
   finalOutput?: unknown;
+  checkpoint?: (checkpoint: WorkflowCheckpoint) => Promise<void>;
 }): Promise<RunSegmentResult> {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
@@ -646,7 +840,17 @@ async function executeRunSegment(input: {
     const node = nodes.get(nodeId);
     if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
     executed.add(nodeId);
+    await input.checkpoint?.({
+      queue: [nodeId, ...input.queue],
+      context: input.context,
+      finalOutput,
+      currentNodeId: nodeId,
+    });
     const currentParticipants = runtimeNodeParticipants(input.context, node.id);
+    const executionRuntime = asRecord(input.context.runtime);
+    executionRuntime.executionRunId = input.runId;
+    executionRuntime.executionNodeId = node.id;
+    input.context.runtime = executionRuntime;
     setCurrentNodeParticipants(
       input.context,
       currentParticipants.length
@@ -721,6 +925,12 @@ async function executeRunSegment(input: {
               );
               input.queue.push(edge.targetNodeId);
             });
+          await input.checkpoint?.({
+            queue: [...input.queue],
+            context: input.context,
+            finalOutput,
+            currentNodeId: null,
+          });
           continue;
         }
 
@@ -866,10 +1076,12 @@ async function executeRunSegment(input: {
           candidateUserIds: approverUserIds,
           operationName,
         });
-        await db().query(
-          "UPDATE workflow_run SET status='running',contextJson=? WHERE id=?",
-          [JSON.stringify(input.context), input.runId]
-        );
+        await input.checkpoint?.({
+          queue: [],
+          context: input.context,
+          finalOutput,
+          currentNodeId: null,
+        });
         return { status: "waiting", taskId: taskIds[0] };
       }
       if (node.type === "router") {
@@ -968,6 +1180,15 @@ async function executeRunSegment(input: {
             input.queue.push(edge.targetNodeId);
           });
       }
+      const completedRuntime = asRecord(input.context.runtime);
+      completedRuntime.executionNodeId = null;
+      input.context.runtime = completedRuntime;
+      await input.checkpoint?.({
+        queue: [...input.queue],
+        context: input.context,
+        finalOutput,
+        currentNodeId: null,
+      });
     } catch (error) {
       const details = {
         message: error instanceof Error ? error.message : String(error),
@@ -978,6 +1199,12 @@ async function executeRunSegment(input: {
   }
   if (!reachedEnd)
     throw new Error("流程未到达结束节点，已阻止将不完整运行标记为成功。");
+  await input.checkpoint?.({
+    queue: [],
+    context: input.context,
+    finalOutput,
+    currentNodeId: null,
+  });
   return { status: "success", output: finalOutput };
 }
 
@@ -1182,7 +1409,6 @@ export async function resumeWorkflowTask(input: {
       [JSON.stringify([]), task.runId, ...gate.affectedUserIds]
     );
   }
-  const definition = readJson(task.definitionSnapshotJson) as Definition;
   const taskOutput = {
     taskId: input.taskId,
     approvalGroupId: task.approvalGroupId ?? null,
@@ -1211,23 +1437,29 @@ export async function resumeWorkflowTask(input: {
     "SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1",
     [task.runId, task.nodeId]
   );
-  if (nodeRuns[0])
-    await finishNodeRun(
-      nodeRuns[0].id,
-      "success",
-      new Date(nodeRuns[0].startedAt ?? Date.now()).getTime(),
-      taskOutput
-    );
+  const waitingNodeRun = nodeRuns[0];
+  if (!waitingNodeRun) throw new Error("人工任务对应的等待节点运行记录不存在。");
   if (gate.rejected) {
-    await db().query(
-      "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
-      [
-        JSON.stringify(context),
-        JSON.stringify(taskOutput),
-        Date.now() - new Date(task.startedAt ?? Date.now()).getTime(),
-        task.runId,
-      ]
-    );
+    const rejectionConnection = await db().getConnection();
+    try {
+      await rejectionConnection.beginTransaction();
+      const [finishedNode] = await rejectionConnection.query<mysql.ResultSetHeader>(
+        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
+        [JSON.stringify(taskOutput), Date.now() - new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(), waitingNodeRun.id]
+      );
+      if (!finishedNode.affectedRows) throw new Error("人工任务节点已被其他请求推进。");
+      const [cancelledRun] = await rejectionConnection.query<mysql.ResultSetHeader>(
+        "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status='running'",
+        [JSON.stringify(context), JSON.stringify(taskOutput), Date.now() - new Date(task.startedAt ?? Date.now()).getTime(), task.runId]
+      );
+      if (!cancelledRun.affectedRows) throw new Error("流程状态已变化，无法重复终止。");
+      await rejectionConnection.commit();
+    } catch (error) {
+      await rejectionConnection.rollback();
+      throw error;
+    } finally {
+      rejectionConnection.release();
+    }
     return {
       runId: String(task.runId),
       status: "cancelled" as const,
@@ -1235,68 +1467,197 @@ export async function resumeWorkflowTask(input: {
     };
   }
   const nextNodeIds = readJson(task.nextNodeIdsJson);
-  const runStartedAt = Date.now();
+  const continuationNodeIds = Array.isArray(nextNodeIds)
+    ? nextNodeIds.map(String)
+    : [];
+  for (const nodeId of continuationNodeIds)
+    setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
+  const resumeRuntime = asRecord(context.runtime);
+  resumeRuntime.executionRunId = String(task.runId);
+  resumeRuntime.executionQueue = continuationNodeIds;
+  resumeRuntime.executionCurrentNodeId = null;
+  context.runtime = resumeRuntime;
+  const checkpoint: WorkflowCheckpoint = {
+    queue: continuationNodeIds,
+    context,
+    finalOutput: null,
+    currentNodeId: null,
+  };
+  const jobId = randomUUID();
+  const resumeIdentity = String(task.approvalGroupId || task.id || input.taskId);
+  const idempotencyKey = `workflow:resume:${task.runId}:${resumeIdentity}`;
+  const continuationConnection = await db().getConnection();
   try {
-    const resumedWorkflow = {
-      ...task,
-      id: String(task.workflowId),
-      name: String(task.workflowName),
-    } as PersistedWorkflow;
-    const continuationNodeIds = Array.isArray(nextNodeIds)
-      ? nextNodeIds.map(String)
-      : [];
-    for (const nodeId of continuationNodeIds)
-      setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
-    const segment = await executeRunSegment({
-      runId: String(task.runId),
-      workflow: resumedWorkflow,
-      definition,
-      context,
-      queue: continuationNodeIds,
-    });
-    if (segment.status === "waiting")
-      return {
-        runId: String(task.runId),
-        status: "waiting" as const,
-        taskId: segment.taskId,
-      };
-    await db().query(
-      "UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
-      [
-        JSON.stringify(context),
-        JSON.stringify(segment.output),
-        Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(),
-        task.runId,
-      ]
+    await continuationConnection.beginTransaction();
+    const [finishedNode] = await continuationConnection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
+      [JSON.stringify(taskOutput), Date.now() - new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(), waitingNodeRun.id]
     );
+    if (!finishedNode.affectedRows) throw new Error("人工任务节点已被其他请求推进。");
+    const [queuedRun] = await continuationConnection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status='running'",
+      [JSON.stringify(context), task.runId]
+    );
+    if (!queuedRun.affectedRows) throw new Error("流程状态已变化，无法重复提交续跑命令。");
+    await continuationConnection.query(
+      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts) VALUES (?,?,'resume','queued',?,?,?)",
+      [jobId, task.runId, idempotencyKey, JSON.stringify(checkpoint), WORKFLOW_JOB_MAX_ATTEMPTS]
+    );
+    await continuationConnection.commit();
     return {
       runId: String(task.runId),
-      status: "success" as const,
-      output: segment.output,
+      jobId,
+      status: "queued" as const,
+      approvalProgress: taskOutput.approvalProgress,
     };
   } catch (error) {
-    const details = {
-      message: error instanceof Error ? error.message : String(error),
-    };
-    await db().query(
-      "UPDATE workflow_run SET status='failed',contextJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
-      [
-        JSON.stringify(context),
-        JSON.stringify(details),
-        Date.now() - new Date(task.startedAt ?? runStartedAt).getTime(),
-        task.runId,
-      ]
-    );
-    await createFailureAlerts({
-      workflowId: String(task.workflowId),
-      workflowName: String(task.workflowName),
-      runId: String(task.runId),
-      ownerUserId: Number(task.ownerUserId),
-      triggeredByUserId: input.completedBy.id,
-      details,
-    }).catch(() => undefined);
+    await continuationConnection.rollback();
     throw error;
+  } finally {
+    continuationConnection.release();
   }
+}
+
+/**
+ * Repairs the crash window after an approval decision commits but before its
+ * continuation command is persisted. A grace period keeps the reconciler away
+ * from an in-flight API request; row locks and the stable idempotency key make
+ * repeated scans safe.
+ */
+export async function reconcileWorkflowContinuations(limit = 20) {
+  const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
+  const [candidates] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT t.*,r.contextJson,r.startedAt AS runStartedAt,
+            nr.id AS nodeRunId,nr.startedAt AS nodeRunStartedAt,
+            g.status AS groupStatus,g.completedByTaskId,g.totalApprovers,g.requiredApprovals
+       FROM workflow_task t
+       JOIN workflow_run r ON r.id=t.runId AND r.status='running'
+       JOIN workflow_node_run nr ON nr.runId=t.runId AND nr.nodeId=t.nodeId AND nr.status='waiting'
+       LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
+      WHERE t.status='completed' AND t.completedAt<DATE_SUB(NOW(),INTERVAL 10 SECOND)
+        AND (t.approvalGroupId IS NULL OR g.completedByTaskId=t.id)
+      ORDER BY t.completedAt ASC,t.id ASC LIMIT ?`,
+    [safeLimit]
+  );
+  let repaired = 0;
+  for (const task of candidates) {
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [lockedRuns] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,contextJson,startedAt FROM workflow_run WHERE id=? AND status='running' FOR UPDATE",
+        [task.runId]
+      );
+      const run = lockedRuns[0];
+      if (!run) {
+        await connection.rollback();
+        continue;
+      }
+      const resumeIdentity = String(task.approvalGroupId || task.id);
+      const idempotencyKey = `workflow:resume:${task.runId}:${resumeIdentity}`;
+      const [existingJobs] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM workflow_run_job WHERE idempotencyKey=? LIMIT 1",
+        [idempotencyKey]
+      );
+      if (existingJobs[0]) {
+        await connection.rollback();
+        continue;
+      }
+      const [lockedNodeRuns] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,startedAt FROM workflow_node_run WHERE id=? AND status='waiting' FOR UPDATE",
+        [task.nodeRunId]
+      );
+      const nodeRun = lockedNodeRuns[0];
+      if (!nodeRun) {
+        await connection.rollback();
+        continue;
+      }
+      const [memberRows] = task.approvalGroupId
+        ? await connection.query<mysql.RowDataPacket[]>(
+            "SELECT id,assignedUserId,completedByUserId,roleKey,resultJson FROM workflow_task WHERE approvalGroupId=? AND status='completed' ORDER BY createdAt,id",
+            [task.approvalGroupId]
+          )
+        : [[task] as mysql.RowDataPacket[], undefined];
+      const groupResults = memberRows.map(member => readJson(member.resultJson));
+      const lastMember = memberRows[memberRows.length - 1] ?? task;
+      const rejected = task.approvalGroupId
+        ? task.groupStatus === "cancelled"
+        : normalizeApprovalResult(asRecord(readJson(task.resultJson))).decision === "rejected";
+      const approvedCount = groupResults.filter(item => normalizeApprovalResult(asRecord(item)).decision === "approved").length;
+      const rejectedCount = groupResults.length - approvedCount;
+      const taskOutput = {
+        taskId: String(task.id),
+        approvalGroupId: task.approvalGroupId ?? null,
+        signMode: task.signMode ?? "single",
+        completedByUserId: Number(lastMember.completedByUserId || lastMember.assignedUserId),
+        operationName: task.operationName ?? task.nodeName,
+        decision: rejected ? "rejected" : "approved",
+        result: readJson(task.resultJson),
+        groupResults,
+        approvalProgress: {
+          completed: approvedCount,
+          approved: approvedCount,
+          rejected: rejectedCount,
+          decided: groupResults.length,
+          required: Number(task.requiredApprovals ?? 1),
+          total: Number(task.totalApprovers ?? 1),
+        },
+        recoveredByWorker: true,
+      };
+      const context = asRecord(readJson(run.contextJson));
+      const runtime = asRecord(context.runtime);
+      runtime.lastActorUserId = taskOutput.completedByUserId;
+      context.runtime = runtime;
+      const vars = asRecord(context.vars);
+      const nodeOutputs = asRecord(context.nodes);
+      vars[String(task.nodeId)] = taskOutput;
+      nodeOutputs[String(task.nodeId)] = taskOutput;
+      context.vars = vars;
+      context.nodes = nodeOutputs;
+      await connection.query(
+        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=?",
+        [JSON.stringify(taskOutput), Date.now() - new Date(nodeRun.startedAt ?? Date.now()).getTime(), nodeRun.id]
+      );
+      if (task.approvalGroupId) {
+        await connection.query(
+          "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (SELECT assignedUserId FROM workflow_task WHERE approvalGroupId=?)",
+          [JSON.stringify([]), task.runId, task.approvalGroupId]
+        );
+      }
+      if (rejected) {
+        await connection.query(
+          "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+          [JSON.stringify(context), JSON.stringify(taskOutput), Date.now() - new Date(run.startedAt ?? Date.now()).getTime(), task.runId]
+        );
+      } else {
+        const nextNodeIds = readJson(task.nextNodeIdsJson);
+        const queue = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
+        for (const nodeId of queue) setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
+        const resumeRuntime = asRecord(context.runtime);
+        resumeRuntime.executionRunId = String(task.runId);
+        resumeRuntime.executionQueue = queue;
+        resumeRuntime.executionCurrentNodeId = null;
+        context.runtime = resumeRuntime;
+        const checkpoint: WorkflowCheckpoint = { queue, context, finalOutput: null, currentNodeId: null };
+        await connection.query(
+          "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+          [JSON.stringify(context), task.runId]
+        );
+        await connection.query(
+          "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts) VALUES (?,?,'resume','queued',?,?,?)",
+          [randomUUID(), task.runId, idempotencyKey, JSON.stringify(checkpoint), WORKFLOW_JOB_MAX_ATTEMPTS]
+        );
+      }
+      await connection.commit();
+      repaired += 1;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+  return repaired;
 }
 
 export async function listWorkflowRuns(workflowId: string, filters: RunFilters = {}) {

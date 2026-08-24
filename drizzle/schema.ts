@@ -294,6 +294,39 @@ export const workflowRuns = mysqlTable(
   table => [index("workflow_run_workflow_idx").on(table.workflowId, table.createdAt)]
 );
 
+/** Durable execution queue. A run can have multiple jobs over its lifetime (start, resume, retry). */
+export const workflowRunJobs = mysqlTable(
+  "workflow_run_job",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    jobType: mysqlEnum("jobType", ["start", "resume"]).default("start").notNull(),
+    status: mysqlEnum("status", ["queued", "leased", "completed", "failed", "cancelled"])
+      .default("queued")
+      .notNull(),
+    idempotencyKey: varchar("idempotencyKey", { length: 160 }).notNull(),
+    checkpointJson: json("checkpointJson").notNull(),
+    resultJson: json("resultJson"),
+    lastErrorJson: json("lastErrorJson"),
+    attempt: int("attempt").default(0).notNull(),
+    maxAttempts: int("maxAttempts").default(3).notNull(),
+    availableAt: timestamp("availableAt").defaultNow().notNull(),
+    leaseToken: varchar("leaseToken", { length: 48 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    workerId: varchar("workerId", { length: 120 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    finishedAt: timestamp("finishedAt"),
+  },
+  table => [
+    unique("workflow_run_job_idempotency_unique").on(table.idempotencyKey),
+    index("workflow_run_job_claim_idx").on(table.status, table.availableAt, table.leaseExpiresAt),
+    index("workflow_run_job_run_idx").on(table.runId, table.createdAt),
+  ]
+);
+
 export const workflowNodeRuns = mysqlTable(
   "workflow_node_run",
   {

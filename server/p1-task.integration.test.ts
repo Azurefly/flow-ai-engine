@@ -10,6 +10,7 @@ import {
   setProjectWorkflowAudit,
 } from "./project-service";
 import { updateWorkflow, type Definition } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -216,10 +217,10 @@ describe("P1 人工任务与服务端续跑", () => {
       });
       await updateWorkflow(workflowId, owner, { publish: true });
 
-      const waiting: any = await callerFor(owner).workflow.run({
+      const waiting: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
         workflowId,
         input: { applicant: "张三", assigneeUserId: operator.id },
-      });
+      }));
       expect(waiting).toMatchObject({ status: "waiting" });
       const todo = await callerFor(operator).task.list({ view: "todo" });
       expect(todo).toHaveLength(1);
@@ -274,12 +275,13 @@ describe("P1 人工任务与服务端续跑", () => {
         { taskIds: [waiting.taskId] }
       );
       expect(batchClaimed).toEqual([{ taskId: waiting.taskId, success: true }]);
-      const batchCompleted: any[] = await callerFor(
+      const batchCompletedRaw: any[] = await callerFor(
         handoverUser
       ).task.batchComplete({
         taskIds: [waiting.taskId],
         result: { decision: "approved", comment: "资料完整" },
       });
+      const batchCompleted: any[] = [await settleWorkflowCommand(pool, batchCompletedRaw[0])];
       expect(batchCompleted).toMatchObject([
         {
           taskId: waiting.taskId,
@@ -331,14 +333,14 @@ describe("P1 人工任务与服务端续跑", () => {
         ])
       );
 
-      const rejectedWaiting: any = await callerFor(owner).workflow.run({
+      const rejectedWaiting: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
         workflowId,
         input: { applicant: "李四", assigneeUserId: operator.id },
-      });
-      const rejected: any = await callerFor(operator).task.execute({
+      }));
+      const rejected: any = await settleWorkflowCommand(pool, await callerFor(operator).task.execute({
         taskId: rejectedWaiting.taskId,
         result: { decision: "rejected", comment: "资料不完整" },
-      });
+      }));
       expect(rejected).toMatchObject({
         status: "cancelled",
         output: { decision: "rejected" },

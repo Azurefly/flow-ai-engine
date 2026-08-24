@@ -9,6 +9,8 @@ import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleDataflowScheduleCallback } from "../p2-service";
+import { startWorkflowWorker, stopWorkflowWorker } from "../workflow-worker";
+import { checkReadiness, getRuntimeInfo } from "../runtime-info";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -36,6 +38,12 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
+  app.get("/livez", (_req, res) => res.status(200).json({ ok: true }));
+  app.get("/version", (_req, res) => res.status(200).json(getRuntimeInfo()));
+  app.get("/readyz", async (_req, res) => {
+    const readiness = await checkReadiness();
+    res.status(readiness.ready ? 200 : 503).json(readiness);
+  });
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   app.post("/api/scheduled/dataflow", handleDataflowScheduleCallback);
@@ -63,7 +71,14 @@ async function startServer() {
 
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
+    startWorkflowWorker();
   });
+
+  const shutdown = () => {
+    server.close(() => void stopWorkflowWorker());
+  };
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
 }
 
 startServer().catch(console.error);

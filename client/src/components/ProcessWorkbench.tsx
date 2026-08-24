@@ -154,7 +154,9 @@ export default function ProcessWorkbench() {
         toast.success(
           result.status === "waiting"
             ? "当前决定已记录，流程正在等待其他审批人。"
-            : "审批已通过，流程已由服务端继续执行。"
+            : result.status === "queued"
+              ? "审批已通过，后续节点已进入持久化续跑队列。"
+              : "审批已通过，流程已由服务端继续执行。"
         );
       setSelectedRunId(result.runId);
     },
@@ -169,7 +171,9 @@ export default function ProcessWorkbench() {
         toast.success(
           result.status === "waiting"
             ? "当前决定已记录，流程正在等待其他审批人。"
-            : "审批已通过，流程已完成。"
+            : result.status === "queued"
+              ? "审批已通过，后续节点已进入持久化续跑队列。"
+              : "审批已通过，流程已完成。"
         );
       setSelectedTaskId(null);
     },

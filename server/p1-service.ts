@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { hasWorkflowPermission, recordAuthorizationAudit } from "./iam-service";
 import { resumeWorkflowTask } from "./workflow-engine";
+import { wakeWorkflowWorker } from "./workflow-worker";
 
 type User = { id: number; role: "user" | "admin" };
 type TaskView = "todo" | "done" | "initiated" | "all";
@@ -135,6 +136,7 @@ export async function completeWorkflowTask(user: User, taskId: string, result: J
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true))) throw new Error("无权完成该人工任务。 ");
   const resumed = await resumeWorkflowTask({ taskId, completedBy: user, result });
+  if (resumed.status === "queued") wakeWorkflowWorker();
   await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: result.decision === "rejected" ? "task_rejected" : "task_approved", decision: result.decision, runId: resumed.runId, status: resumed.status } });
   return resumed;
 }

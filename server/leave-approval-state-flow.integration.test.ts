@@ -7,6 +7,7 @@ import { assignOrganizationMember, createOrganizationUnit } from "./organization
 import { createProject, createProjectWorkflow, grantProjectMember, setProjectWorkflowAudit } from "./project-service";
 import { appRouter } from "./routers";
 import { updateWorkflow, type Definition } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -88,7 +89,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
     await setProjectWorkflowAudit(owner, { projectId, workflowId, auditStatus: "approved" });
     await updateWorkflow(workflowId, owner, { publish: true });
 
-    const started: any = await callerFor(employee).workflow.run({ workflowId, input: { leaveReason: "家庭事务" } });
+    const started: any = await settleWorkflowCommand(pool, await callerFor(employee).workflow.run({ workflowId, input: { leaveReason: "家庭事务" } }));
     expect(started.status).toBe("waiting");
 
     const employeeTodo = await callerFor(employee).task.list({ view: "todo", projectId });
@@ -108,7 +109,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
     expect(initialStates.find(row => Number(row.userId) === employee.id)).toMatchObject({ stateName: "等待审核", sourceNodeId: "employee-waiting-supervisor" });
     expect(initialStates.find(row => Number(row.userId) === supervisor.id)).toMatchObject({ stateName: "待审批", sourceNodeId: "supervisor-approve" });
 
-    const supervisorResult: any = await callerFor(supervisor).task.execute({ taskId: started.taskId, result: { decision: "approved", comment: "同意" } });
+    const supervisorResult: any = await settleWorkflowCommand(pool, await callerFor(supervisor).task.execute({ taskId: started.taskId, result: { decision: "approved", comment: "同意" } }));
     expect(supervisorResult.status).toBe("waiting");
     const supervisorDone: any[] = await callerFor(supervisor).task.list({ view: "done", projectId });
     expect(supervisorDone[0]).toMatchObject({ id: started.taskId, displayStatus: "已审核", completedByUserId: supervisor.id });
@@ -121,7 +122,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
     const managerTodo: any[] = await callerFor(manager).task.list({ view: "todo", projectId });
     expect(managerTodo).toHaveLength(1);
     expect(managerTodo[0]).toMatchObject({ id: supervisorResult.taskId, operationName: "审核通过", displayStatus: "待审批", assignedUserId: manager.id });
-    const managerResult: any = await callerFor(manager).task.execute({ taskId: supervisorResult.taskId, result: { decision: "approved", comment: "批准" } });
+    const managerResult: any = await settleWorkflowCommand(pool, await callerFor(manager).task.execute({ taskId: supervisorResult.taskId, result: { decision: "approved", comment: "批准" } }));
     expect(managerResult.status).toBe("success");
 
     const managerDone: any[] = await callerFor(manager).task.list({ view: "done", projectId });

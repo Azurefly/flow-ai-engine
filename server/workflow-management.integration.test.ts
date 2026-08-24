@@ -5,6 +5,7 @@ import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { listWorkflowMembers } from "./iam-service";
 import { createWorkflow, deleteWorkflow, duplicateWorkflow } from "./workflow-service";
+import { settleWorkflowCommand } from "./workflow-command-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const ownerUsername = `repo_owner_${randomUUID().slice(0, 8)}`;
@@ -57,7 +58,7 @@ describe("流程仓库管理", () => {
     await expect(outsiderCaller.workflow.members({ workflowId: sourceId })).rejects.toThrow("无权查看流程成员");
     await expect(outsiderCaller.workflow.grantMember({ workflowId: sourceId, userId: member.id, role: "viewer" })).rejects.toThrow("无权管理流程成员");
     await expect((ownerCaller.workflow.run as any)({ workflowId: sourceId, input: ["not-an-object"] })).rejects.toMatchObject({ code: "BAD_REQUEST", message: expect.stringMatching(/record|object/i) });
-    await expect(ownerCaller.workflow.run({ workflowId: sourceId, input: {} })).resolves.toMatchObject({ status: "success" });
+    await expect(settleWorkflowCommand(pool, await ownerCaller.workflow.run({ workflowId: sourceId, input: {} }))).resolves.toMatchObject({ status: "success" });
     await pool.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,expiresAt,grantedByUserId) VALUES (?,?,?,'viewer',DATE_SUB(NOW(), INTERVAL 2 HOUR),DATE_SUB(NOW(), INTERVAL 1 HOUR),?)", [randomUUID(), sourceId, outsider.id, owner.id]);
     await expect(outsiderCaller.workflow.get({ id: sourceId })).rejects.toThrow("流程不存在或无访问权限");
     await expect(outsiderCaller.workflow.run({ workflowId: sourceId, input: {} })).rejects.toThrow("无权运行");

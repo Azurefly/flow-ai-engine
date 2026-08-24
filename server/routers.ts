@@ -6,7 +6,9 @@ import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { createUser, ensureBootstrapAdmin, FLOW_SESSION_COOKIE, listUsers, login, logout, setUserStatus } from "./internal-auth";
 import { assignRole, createCustomRole, deleteCustomRole, getRoleAuthorizationDetails, getUserAuthorizationDetails, getWorkflowAccess, grantWorkflowMember, listActiveUsersForWorkflowAssignment, listAuthorizationAudit, listRoles, listWorkflowMembers, recordAuthorizationAudit, revokeRoleAssignment, revokeWorkflowMember, updateCustomRole } from "./iam-service";
-import { executeWorkflow, getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
+import { getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
+import { submitWorkflowRun } from "./workflow-worker";
+import { getRuntimeInfo } from "./runtime-info";
 import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
 import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
 import { createFolder, createProject, createProjectWorkflow, deleteFolder, exportProjectWorkflows, getProjectAccess, grantProjectMember, listProjectMembers, listProjects, listProjectWorkflowAudit, listProjectWorkflows, listWarehouse, moveProjectWorkflow, resetProjectWorkflowAudit, setProjectWorkflowAudit, updateFolder, updateProjectWorkflowInfo } from "./project-service";
@@ -654,6 +656,7 @@ export const appRouter = router({
   }),
   config: router({
     publicGeneral: publicProcedure.query(() => getPublicGeneralSettings()),
+    runtimeInfo: adminProcedure.query(() => getRuntimeInfo()),
     settings: adminProcedure.query(() => getP1SystemSettings()),
     updateSetting: adminProcedure
       .input(
@@ -996,6 +999,7 @@ export const appRouter = router({
         z.object({
           workflowId: z.string().min(8).max(64),
           input: z.record(z.string(), z.unknown()).optional(),
+          idempotencyKey: z.string().trim().min(8).max(128).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -1005,10 +1009,11 @@ export const appRouter = router({
             message: "无权运行此流程。",
           });
         }
-        return executeWorkflow({
+        return submitWorkflowRun({
           workflowId: input.workflowId,
           triggeredBy: ctx.user,
           workflowInput: input.input,
+          idempotencyKey: input.idempotencyKey,
         });
       }),
     runs: protectedProcedure

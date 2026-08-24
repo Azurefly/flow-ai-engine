@@ -12,6 +12,38 @@ export const FLOW_NODE_TYPES = [
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
 export type NodeConfig = Record<string, unknown>;
 
+/** Shared source/target contract used by both the designer and publish-time validation. */
+export const FLOW_NODE_ALLOWED_TARGETS: Partial<Record<FlowNodeType, readonly FlowNodeType[]>> = {
+  start: ["state", "operate", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "sql", "source", "table", "filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  state: ["operate", "state", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  operate: ["state", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  router: ["state", "operate", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  rest: ["state", "operate", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  method: ["state", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  form: ["state", "operate", "router", "rest", "method", "transform", "condition", "http", "llm", "subflow", "end"],
+  subflow: ["state", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  condition: ["state", "operate", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  transform: ["state", "operate", "router", "rest", "method", "form", "transform", "condition", "http", "llm", "subflow", "filter", "map", "sink", "output", "end"],
+  http: ["state", "operate", "router", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  llm: ["state", "operate", "router", "form", "transform", "condition", "http", "llm", "subflow", "end"],
+  sql: ["transform", "condition", "filter", "map", "udf", "sink", "output", "end"],
+  source: ["table", "filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  table: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  filter: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  map: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  edit_sql: ["filter", "map", "udf", "sink", "output", "end"],
+  udf: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  sink: ["end"],
+  output: ["end"],
+  end: [],
+};
+
+export function canConnectFlowNodeTypes(source: FlowNodeType, target: FlowNodeType) {
+  if (source === "end" || target === "start") return false;
+  const allowed = FLOW_NODE_ALLOWED_TARGETS[source];
+  return !allowed || allowed.includes(target);
+}
+
 export type NodeField = {
   key: string;
   label: string;

@@ -36,6 +36,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        BUILD_SHA: ${BUILD_SHA:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
     image: flow-ai-engine:local
     restart: unless-stopped
     mem_limit: 768m
@@ -49,6 +52,8 @@ services:
       FLOW_BOOTSTRAP_ADMIN_PASSWORD: ${FLOW_BOOTSTRAP_ADMIN_PASSWORD:?FLOW_BOOTSTRAP_ADMIN_PASSWORD is required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
+      WORKFLOW_WORKER_ENABLED: ${WORKFLOW_WORKER_ENABLED:-true}
     depends_on:
       mysql:
         condition: service_healthy
@@ -65,7 +70,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3000/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3000/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 5s

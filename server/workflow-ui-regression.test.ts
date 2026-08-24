@@ -579,7 +579,9 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("恢复原版画布左右键、框选、拖放和路径菜单交互", () => {
-    expect(canvasSource).toContain("allowedCanvasTargets");
+    expect(canvasSource).toContain("FLOW_NODE_ALLOWED_TARGETS");
+    expect(canvasSource).toContain("canConnectFlowNodeTypes");
+    expect(nodeContractSource).toContain("FLOW_NODE_ALLOWED_TARGETS");
     expect(canvasSource).toContain("canConnectCanvasNodes");
     expect(canvasSource).toContain("onNodeSelectionClick");
     expect(canvasSource).toContain(

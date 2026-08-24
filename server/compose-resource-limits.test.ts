@@ -11,4 +11,10 @@ describe("生产 Compose 内存限制", () => {
     expect(compose).toMatch(/app:[\s\S]*?memswap_limit:\s*768m/);
     expect(1536 + 768).toBeLessThanOrEqual(8 * 1024);
   });
+
+  it("使用数据库、迁移和 Worker 就绪探针而非仅检查进程存活", () => {
+    expect(compose).toContain("127.0.0.1:3000/readyz");
+    expect(compose).toContain("WORKFLOW_WORKER_ENABLED");
+    expect(compose).toContain("BUILD_SHA");
+  });
 });
