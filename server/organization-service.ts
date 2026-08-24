@@ -445,6 +445,18 @@ export async function resolveDirectManagerUserId(userId: number) {
   return null;
 }
 
+/** Resolve the Nth active manager in the employee's organization chain. */
+export async function resolveNthManagerUserId(userId: number, level = 1) {
+  const depth = Math.min(Math.max(Math.trunc(Number(level) || 1), 1), 32);
+  let currentUserId = userId;
+  for (let index = 0; index < depth; index += 1) {
+    const managerUserId = await resolveDirectManagerUserId(currentUserId);
+    if (!managerUserId) return null;
+    currentUserId = managerUserId;
+  }
+  return currentUserId;
+}
+
 export async function resolveRoleCandidateUserIds(roleCode: string, workflowId: string) {
   if (!roleCode.trim()) return [];
   const [rows] = await db().query<mysql.RowDataPacket[]>(
@@ -513,6 +525,12 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
   else if (mode === "initiator") candidates = [initiatorUserId];
   else if (mode === "initiator_manager") candidates = [Number(await resolveDirectManagerUserId(initiatorUserId))];
   else if (mode === "sender_manager") candidates = [Number(await resolveDirectManagerUserId(senderUserId))];
+  else if (mode === "initiator_manager_n") candidates = [Number(await resolveNthManagerUserId(initiatorUserId, Number(input.config.managerLevel ?? input.config.supervisorLevel ?? 2)))];
+  else if (mode === "sender_manager_n") candidates = [Number(await resolveNthManagerUserId(senderUserId, Number(input.config.managerLevel ?? input.config.supervisorLevel ?? 2)))];
+  else if (/^(initiator|sender)_manager_[0-9]+$/.test(mode)) {
+    const [, subject, levelText] = mode.match(/^(initiator|sender)_manager_([0-9]+)$/) ?? [];
+    candidates = [Number(await resolveNthManagerUserId(subject === "sender" ? senderUserId : initiatorUserId, Number(levelText)))];
+  }
   else if (mode === "role") candidates = await resolveRoleCandidateUserIds(String(input.config.assigneeRoleCode || ""), input.workflowId);
 
   candidates = Array.from(new Set(candidates.filter(id => Number.isInteger(id) && id > 0)));
