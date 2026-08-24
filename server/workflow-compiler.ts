@@ -232,6 +232,15 @@ export function analyzeWorkflowDefinition(
       continue;
     }
     if (executable) {
+      if (node.type === "operate" && String(node.config.assigneeMode ?? "") === "none") {
+        diagnostics.push(
+          diagnostic(
+            "WF_OPERATE_OWNER_REQUIRED",
+            `人工操作“${node.name}”必须绑定明确处理人；不再允许全员开放领取。`,
+            { ...location, field: "config.assigneeMode" }
+          )
+        );
+      }
       try {
         validateNodeConfig(node.type, withNodeConfigDefaults(node.type, node.config));
       } catch (error) {

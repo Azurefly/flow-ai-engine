@@ -256,6 +256,32 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
           unitType: "department",
         })
       ).id;
+      await caller.config.moveOrganizationMember({
+        fromUnitId: unitId,
+        toUnitId: childUnitId,
+        userId: employee.id,
+        makePrimary: true,
+      });
+      expect(await hasSystemPermission(employee, "workflow:create")).toBe(true);
+      await caller.config.bindOrganizationRole({
+        unitId,
+        roleId,
+        includeDescendants: false,
+      });
+      expect(await hasSystemPermission(employee, "workflow:create")).toBe(false);
+      await caller.config.bindOrganizationRole({
+        unitId,
+        roleId,
+        includeDescendants: true,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      expect(await hasSystemPermission(employee, "workflow:create")).toBe(true);
+      await caller.config.moveOrganizationMember({
+        fromUnitId: childUnitId,
+        toUnitId: unitId,
+        userId: employee.id,
+        makePrimary: true,
+      });
       await expect(
         caller.config.deleteOrganizationUnit({ id: unitId })
       ).rejects.toThrow("子部门");

@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
+import { getP1SystemSettings, type ReviewerMode } from "./p1-service";
 import {
   createWorkflow,
   emptyDefinition,
@@ -41,7 +42,19 @@ const rolePermissions: Record<ProjectMemberRole, readonly ProjectPermission[]> =
     ],
   operator: ["project:view", "project:workflow:run"],
   viewer: ["project:view"],
-};
+  };
+
+export function assertWorkflowReviewerSeparation(input: {
+  reviewerMode: ReviewerMode;
+  actorUserId: number;
+  workflowOwnerUserId: number;
+}) {
+  if (
+    input.reviewerMode === "independent_reviewer" &&
+    input.actorUserId === input.workflowOwnerUserId
+  )
+    throw new Error("独立复核模式下，流程设计所有人不能审核自己的流程。");
+}
 
 export async function getProjectAccess(user: ProjectUser, projectId: string) {
   const [projects] = await db().query<mysql.RowDataPacket[]>(
@@ -346,6 +359,21 @@ export async function setProjectWorkflowAudit(
   }
 ) {
   await requireProjectPermission(user, input.projectId, "project:manage");
+  const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT ownerUserId,status FROM workflow WHERE id=? AND projectId=? AND archivedAt IS NULL LIMIT 1",
+    [input.workflowId, input.projectId]
+  );
+  const workflow = workflowRows[0];
+  if (!workflow)
+    throw new Error("项目流程不存在、已归档或不属于当前项目。");
+  if (String(workflow.status) !== "draft")
+    throw new Error("仅可审核当前未发布的流程草稿。");
+  const settings = await getP1SystemSettings();
+  assertWorkflowReviewerSeparation({
+    reviewerMode: settings.approval.reviewerMode,
+    actorUserId: user.id,
+    workflowOwnerUserId: Number(workflow.ownerUserId),
+  });
   const [result] = await db().query<mysql.ResultSetHeader>(
     "UPDATE workflow SET auditStatus=?,updatedAt=NOW() WHERE id=? AND projectId=? AND archivedAt IS NULL",
     [input.auditStatus, input.workflowId, input.projectId]

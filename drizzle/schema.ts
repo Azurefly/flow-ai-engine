@@ -130,6 +130,9 @@ export const organizationUnitRoles = mysqlTable(
     roleId: int("roleId")
       .notNull()
       .references(() => roles.id),
+    includeDescendants: boolean("includeDescendants").default(true).notNull(),
+    effectiveFrom: timestamp("effectiveFrom").defaultNow().notNull(),
+    expiresAt: timestamp("expiresAt"),
     createdByUserId: int("createdByUserId")
       .notNull()
       .references(() => users.id),
@@ -138,6 +141,10 @@ export const organizationUnitRoles = mysqlTable(
   table => [
     unique("organization_unit_role_unique").on(table.unitId, table.roleId),
     index("organization_unit_role_role_idx").on(table.roleId),
+    index("organization_unit_role_effective_idx").on(
+      table.effectiveFrom,
+      table.expiresAt
+    ),
   ]
 );
 

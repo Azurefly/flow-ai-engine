@@ -42,7 +42,7 @@ export function isCurrentTaskOperation(input: {
   const candidates = Array.isArray(input.task.candidateUserIdsJson)
     ? input.task.candidateUserIdsJson.map(Number).filter(id => Number.isInteger(id) && id > 0)
     : candidateIds(input.task as mysql.RowDataPacket);
-  if (!assigned && candidates.length === 0) return true;
+  if (!assigned && candidates.length === 0) return false;
   if (!input.state || String(input.state.sourceNodeId ?? "") !== String(input.task.nodeId)) return false;
   return input.operations.some(item => {
     const operation = item && typeof item === "object" ? item as Record<string, unknown> : {};
@@ -54,8 +54,7 @@ async function canAccessTask(user: User, task: mysql.RowDataPacket, write = fals
   if (user.role === "admin" && !write) return true;
   if (write) {
     if (isTaskActor(user.id, task)) return true;
-    const restricted = Boolean(task.assignedUserId) || candidateIds(task).length > 0;
-    return !restricted && hasWorkflowPermission(user, String(task.workflowId), "workflow:run");
+    return false;
   }
   if (isTaskActor(user.id, task) || Number(task.triggeredByUserId) === user.id) return true;
   return hasWorkflowPermission(user, String(task.workflowId), "workflow:view");
@@ -380,9 +379,11 @@ export async function getTaskCalendar(user: User, month: Date) {
   return tasks.filter(task => { const date = new Date(String(task.createdAt)); return date >= start && date < end; }).map(task => ({ id: task.id, title: `${task.workflowName} · ${task.nodeName}`, start: task.createdAt, status: task.status, workflowId: task.workflowId, runId: task.runId }));
 }
 
+export type ReviewerMode = "project_owner_or_admin" | "independent_reviewer";
+
 const defaultSettings = {
   general: { platformName: "Flow AI Engine", watermarkEnabled: false, watermarkText: "" },
-  approval: { requireProjectApproval: true, reviewerMode: "project_owner_or_admin" },
+  approval: { requireProjectApproval: true, reviewerMode: "project_owner_or_admin" as ReviewerMode },
 };
 
 export async function getP1SystemSettings() {
@@ -402,6 +403,14 @@ export async function isProjectApprovalRequired() {
 }
 
 export async function updateP1SystemSetting(user: User, key: "general" | "approval", value: JsonRecord) {
+  if (
+    key === "approval" &&
+    value.reviewerMode !== undefined &&
+    !["project_owner_or_admin", "independent_reviewer"].includes(
+      String(value.reviewerMode)
+    )
+  )
+    throw new Error("审核人模式无效。");
   const merged = { ...(defaultSettings[key] as JsonRecord), ...value };
   await db().query("INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId),updatedAt=NOW()", [key, JSON.stringify(merged), user.id]);
   await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "system_setting", resourceId: key, details: { operation: "setting_updated" } });

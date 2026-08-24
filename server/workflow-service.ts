@@ -387,6 +387,9 @@ export async function updateWorkflow(
     current.ownerUserId,
     executable
   );
+  const definitionChanged =
+    values.definition !== undefined &&
+    JSON.stringify(definition) !== JSON.stringify(current.definition);
   const compiled = executable ? compileWorkflowDefinition(definition) : null;
   const persistedDefinition = compiled?.definition ?? definition;
   const persistedExecutionPlan = values.unpublish
@@ -402,9 +405,13 @@ export async function updateWorkflow(
     values.publish &&
     current.projectId &&
     (await isProjectApprovalRequired()) &&
-    current.auditStatus !== "approved"
+    (current.auditStatus !== "approved" || definitionChanged)
   )
-    throw new Error("当前审批规则要求项目流程通过审核后才能发布。");
+    throw new Error(
+      definitionChanged
+        ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
+        : "当前审批规则要求项目流程通过审核后才能发布。"
+    );
   const nextName = values.name ?? current.name;
   const nextStatus = values.unpublish
     ? "draft"
@@ -416,12 +423,13 @@ export async function updateWorkflow(
   try {
     await connection.beginTransaction();
     await connection.query(
-      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
+      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
       [
         nextName,
         JSON.stringify(persistedDefinition),
         nextStatus,
         nextVersion,
+        Boolean(current.projectId && definitionChanged),
         values.unpublish
           ? null
           : persistedExecutionPlan === undefined

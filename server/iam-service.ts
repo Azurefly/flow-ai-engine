@@ -170,7 +170,18 @@ type PermissionRow = mysql.RowDataPacket & { code: PermissionCode };
 async function assignedPermissions(userId: number, workflowId?: string) {
   const scopeClause = workflowId ? "(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))" : "ra.scopeType='system'";
   const [rows] = await db().query<PermissionRow[]>(
-    `SELECT DISTINCT p.code
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om
+         JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+        WHERE om.userId=?
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu
+         JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT p.code
        FROM (
          SELECT ra.roleId
            FROM role_assignment ra
@@ -179,11 +190,11 @@ async function assignedPermissions(userId: number, workflowId?: string) {
             AND ${scopeClause}
          UNION
          SELECT our.roleId
-           FROM organization_membership om
-           JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
-           JOIN organization_unit_role our ON our.unitId=ou.id
-           JOIN users inherited_user ON inherited_user.id=om.userId AND inherited_user.status='active'
-          WHERE om.userId=?
+           FROM membership_units mu
+           JOIN organization_unit_role our ON our.unitId=mu.unitId
+             AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+           JOIN users inherited_user ON inherited_user.id=mu.userId AND inherited_user.status='active'
+          WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
        ) effective_role
        JOIN iam_role r ON r.id=effective_role.roleId
        JOIN role_permission rp ON rp.roleId=r.id
@@ -194,7 +205,9 @@ async function assignedPermissions(userId: number, workflowId?: string) {
            AND admin_ra.revokedAt IS NULL AND admin_ra.effectiveFrom<=NOW()
            AND (admin_ra.expiresAt IS NULL OR admin_ra.expiresAt>NOW())
       )`,
-    workflowId ? [userId, workflowId, userId, userId] : [userId, userId, userId]
+    workflowId
+      ? [userId, userId, workflowId, userId]
+      : [userId, userId, userId]
   );
   return new Set(rows.map(row => row.code));
 }
@@ -525,20 +538,42 @@ export async function getUserAuthorizationDetails(userId: number) {
       ORDER BY r.scope,r.name,r.code,ra.scopeId`, [userId]
   );
   const [inheritedRoles] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT ou.id AS unitId,ou.name AS unitName,r.id AS roleId,r.code AS roleCode,
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+        WHERE om.userId=?
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT ou.id AS unitId,ou.name AS unitName,r.id AS roleId,r.code AS roleCode,
             r.name AS roleName,r.description AS roleDescription,r.scope
-       FROM organization_membership om
-       JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
-       JOIN organization_unit_role our ON our.unitId=ou.id
+       FROM membership_units mu
+       JOIN organization_unit_role our ON our.unitId=mu.unitId
+         AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+       JOIN organization_unit ou ON ou.id=our.unitId
        JOIN iam_role r ON r.id=our.roleId
-      WHERE om.userId=? ORDER BY ou.name,r.name,r.code`, [userId]
+      WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
+      ORDER BY ou.name,r.name,r.code`, [userId]
   );
   const [permissionRows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT p.code,p.name,p.description
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+        WHERE om.userId=?
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT p.code,p.name,p.description
        FROM (
          SELECT ra.roleId FROM role_assignment ra WHERE ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
          UNION
-         SELECT our.roleId FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active' JOIN organization_unit_role our ON our.unitId=ou.id WHERE om.userId=?
+         SELECT our.roleId FROM membership_units mu JOIN organization_unit_role our ON our.unitId=mu.unitId
+           AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+          WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
        ) effective_role
        JOIN role_permission rp ON rp.roleId=effective_role.roleId JOIN permission p ON p.id=rp.permissionId ORDER BY p.code`, [userId, userId]
   );
@@ -561,12 +596,24 @@ export async function getRoleAuthorizationDetails(roleId: number) {
       ORDER BY u.name,u.username,ra.scopeType,ra.scopeId`, [roleId]
   );
   const [inheritedUsers] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT u.id AS userId,u.username,u.name,u.status,ou.id AS unitId,ou.name AS unitName
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT u.id AS userId,u.username,u.name,u.status,ou.id AS unitId,ou.name AS unitName
        FROM organization_unit_role our JOIN organization_unit ou ON ou.id=our.unitId AND ou.status='active'
-       JOIN organization_membership om ON om.unitId=ou.id JOIN users u ON u.id=om.userId
-      WHERE our.roleId=? ORDER BY ou.name,u.name,u.username`, [roleId]
+       JOIN membership_units mu ON mu.unitId=our.unitId
+       JOIN users u ON u.id=mu.userId
+      WHERE our.roleId=?
+        AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+        AND (mu.unitId=mu.memberUnitId OR our.includeDescendants=1)
+      ORDER BY ou.name,u.name,u.username`, [roleId]
   );
-  const [organizationUnits] = await db().query<mysql.RowDataPacket[]>("SELECT ou.id,ou.code,ou.name,ou.status FROM organization_unit_role our JOIN organization_unit ou ON ou.id=our.unitId WHERE our.roleId=? ORDER BY ou.name,ou.code", [roleId]);
+  const [organizationUnits] = await db().query<mysql.RowDataPacket[]>("SELECT ou.id,ou.code,ou.name,ou.status,our.includeDescendants,our.effectiveFrom,our.expiresAt FROM organization_unit_role our JOIN organization_unit ou ON ou.id=our.unitId WHERE our.roleId=? ORDER BY ou.name,ou.code", [roleId]);
   return { role, permissions, directUsers, inheritedUsers, organizationUnits };
 }
 

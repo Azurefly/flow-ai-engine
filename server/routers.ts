@@ -5,6 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import {
   adminProcedure,
+  iamManageProcedure,
   protectedProcedure,
   publicProcedure,
   router,
@@ -245,8 +246,8 @@ export const appRouter = router({
     }),
   }),
   iam: router({
-    users: adminProcedure.query(() => listUsers()),
-    previewUserCreation: adminProcedure
+    users: iamManageProcedure.query(() => listUsers()),
+    previewUserCreation: iamManageProcedure
       .input(
         z.object({
           username: z.string().trim().max(64).optional(),
@@ -258,7 +259,7 @@ export const appRouter = router({
         })
       )
       .mutation(({ input }) => previewUserCreation(input)),
-    previewUserBatch: adminProcedure
+    previewUserBatch: iamManageProcedure
       .input(
         z.object({
           goal: z.string().trim().min(3).max(2000),
@@ -267,7 +268,7 @@ export const appRouter = router({
         })
       )
       .mutation(({ input }) => previewUserBatch(input)),
-    createUser: adminProcedure
+    createUser: iamManageProcedure
       .input(
         z.object({
           username: z.string().trim().min(3).max(64),
@@ -288,7 +289,7 @@ export const appRouter = router({
         });
         return { success: true, userId };
       }),
-    createUsersBatch: adminProcedure
+    createUsersBatch: iamManageProcedure
       .input(
         z.object({
           users: z
@@ -338,7 +339,7 @@ export const appRouter = router({
           failed: results.filter(result => !result.success).length,
         };
       }),
-    updateUserStatus: adminProcedure
+    updateUserStatus: iamManageProcedure
       .input(
         z.object({
           userId: z.number().int().positive(),
@@ -358,20 +359,20 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    roles: adminProcedure
+    roles: iamManageProcedure
       .input(
         z
           .object({ scope: z.enum(["system", "workflow"]).optional() })
           .optional()
       )
       .query(async ({ input }) => listRoles(input?.scope)),
-    userAuthorizationDetails: adminProcedure
+    userAuthorizationDetails: iamManageProcedure
       .input(z.object({ userId: z.number().int().positive() }))
       .query(({ input }) => getUserAuthorizationDetails(input.userId)),
-    roleAuthorizationDetails: adminProcedure
+    roleAuthorizationDetails: iamManageProcedure
       .input(z.object({ roleId: z.number().int().positive() }))
       .query(({ input }) => getRoleAuthorizationDetails(input.roleId)),
-    assignSystemRole: adminProcedure
+    assignSystemRole: iamManageProcedure
       .input(
         z.object({
           userId: z.number().int().positive(),
@@ -391,13 +392,13 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    revokeRoleAssignment: adminProcedure
+    revokeRoleAssignment: iamManageProcedure
       .input(z.object({ assignmentId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
       await revokeRoleAssignment({ ...input, revokedByUserId: ctx.user.id });
       return { success: true };
     }),
-    createCustomRole: adminProcedure
+    createCustomRole: iamManageProcedure
       .input(
         z.object({
           code: z.string().min(10).max(68),
@@ -423,7 +424,7 @@ export const appRouter = router({
         await createCustomRole({ ...input, actorUserId: ctx.user.id });
         return { success: true };
       }),
-    updateCustomRole: adminProcedure
+    updateCustomRole: iamManageProcedure
       .input(
         z.object({
           code: z.string().min(10).max(68),
@@ -449,13 +450,13 @@ export const appRouter = router({
         await updateCustomRole({ ...input, actorUserId: ctx.user.id });
         return { success: true };
       }),
-    deleteCustomRole: adminProcedure
+    deleteCustomRole: iamManageProcedure
       .input(z.object({ code: z.string().min(10).max(68) }))
       .mutation(async ({ ctx, input }) => {
       await deleteCustomRole({ ...input, actorUserId: ctx.user.id });
       return { success: true };
     }),
-    authorizationAudit: adminProcedure
+    authorizationAudit: iamManageProcedure
       .input(
         z
           .object({ limit: z.number().int().min(1).max(200).default(100) })
@@ -1002,8 +1003,8 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await updateWorkDomain(ctx.user, input),
       })),
-    organization: adminProcedure.query(() => listOrganization()),
-    createOrganizationUnit: adminProcedure
+    organization: iamManageProcedure.query(() => listOrganization()),
+    createOrganizationUnit: iamManageProcedure
       .input(
         z.object({
           code: z.string().trim().min(2).max(64),
@@ -1022,7 +1023,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         id: await createOrganizationUnit(ctx.user, input),
       })),
-    updateOrganizationUnit: adminProcedure
+    updateOrganizationUnit: iamManageProcedure
       .input(
         z.object({
           id: z.string().uuid(),
@@ -1042,7 +1043,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await updateOrganizationUnit(ctx.user, input),
       })),
-    assignOrganizationMember: adminProcedure
+    assignOrganizationMember: iamManageProcedure
       .input(
         z.object({
           unitId: z.string().uuid(),
@@ -1054,7 +1055,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await assignOrganizationMember(ctx.user, input),
       })),
-    removeOrganizationMember: adminProcedure
+    removeOrganizationMember: iamManageProcedure
       .input(
         z.object({
           unitId: z.string().uuid(),
@@ -1064,7 +1065,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await removeOrganizationMember(ctx.user, input),
       })),
-    setPrimaryOrganizationMembership: adminProcedure
+    setPrimaryOrganizationMembership: iamManageProcedure
       .input(
         z.object({
           unitId: z.string().uuid(),
@@ -1074,7 +1075,7 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await setPrimaryOrganizationMembership(ctx.user, input),
       })),
-    moveOrganizationMember: adminProcedure
+    moveOrganizationMember: iamManageProcedure
       .input(
         z.object({
           fromUnitId: z.string().uuid(),
@@ -1087,22 +1088,25 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await moveOrganizationMember(ctx.user, input),
       })),
-    deleteOrganizationUnit: adminProcedure
+    deleteOrganizationUnit: iamManageProcedure
       .input(z.object({ id: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => ({
         success: await deleteOrganizationUnit(ctx.user, input),
       })),
-    bindOrganizationRole: adminProcedure
+    bindOrganizationRole: iamManageProcedure
       .input(
         z.object({
           unitId: z.string().uuid(),
           roleId: z.number().int().positive(),
+          includeDescendants: z.boolean().default(true),
+          effectiveFrom: z.date().optional(),
+          expiresAt: z.date().nullable().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => ({
         success: await bindOrganizationRole(ctx.user, input),
       })),
-    unbindOrganizationRole: adminProcedure
+    unbindOrganizationRole: iamManageProcedure
       .input(
         z.object({
           unitId: z.string().uuid(),

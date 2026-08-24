@@ -156,7 +156,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       { key: "fsfsz", label: "发送方设置", help: "原版发送方身份、固有操作和临时角色配置。", kind: "json" },
       { key: "jsfsz", label: "接收方设置", help: "原版接收方固有操作和临时角色配置。", kind: "json" },
       { key: "zdzx", label: "自动执行", help: "原版自动执行、条件和代码配置；任意旧代码不会直接执行。", kind: "json" },
-      { key: "assigneeMode", label: "处理人方式", help: "优先按上一步接收方流转，也可按权限角色、指定用户、发起人或组织上级解析待办对象。", kind: "select", required: true, options: [{ value: "receivers", label: "上一步接收方" }, { value: "role", label: "权限角色" }, { value: "user", label: "指定用户" }, { value: "initiator", label: "流程发起人" }, { value: "initiator_manager", label: "发起人直属上级" }, { value: "sender_manager", label: "当前操作人直属上级" }, { value: "none", label: "不指定（可领取）" }] },
+      { key: "assigneeMode", label: "处理人方式", help: "人工操作必须解析为明确的当前处理人或候选人，不允许全员开放领取。", kind: "select", required: true, options: [{ value: "receivers", label: "上一步接收方" }, { value: "role", label: "权限角色" }, { value: "user", label: "指定用户" }, { value: "initiator", label: "流程发起人" }, { value: "initiator_manager", label: "发起人直属上级" }, { value: "sender_manager", label: "当前操作人直属上级" }] },
       { key: "assigneeFallback", label: "无人候选兜底", help: "默认失败并阻塞流程；可安全回退到流程发起人或流程所有者，不会默认开放给所有用户。", kind: "select", options: [{ value: "error", label: "失败并阻塞" }, { value: "initiator", label: "回退发起人" }, { value: "owner", label: "回退流程所有者" }] },
       { key: "assigneeRoleCode", label: "处理人角色代号", help: "“权限角色”方式使用；匹配系统级或当前流程范围内的有效角色授权。", kind: "text" },
       { key: "instruction", label: "操作说明", help: templateHelp, kind: "textarea", required: true },

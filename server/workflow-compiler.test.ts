@@ -161,4 +161,31 @@ describe("WorkflowCompiler", () => {
     if (!loopPublish.ok)
       expect(loopPublish.diagnostics.map(item => item.code)).toContain("WF_RUNTIME_LOOP_UNSUPPORTED");
   });
+
+  it("keeps legacy open-claim nodes editable but requires an owner for publication", () => {
+    const definition = base();
+    definition.nodes.splice(1, 0, {
+      id: "open-task",
+      type: "operate",
+      name: "开放领取",
+      position: { x: 160, y: 0 },
+      config: {
+        nodeDh: "OPEN_TASK",
+        czmc: "处理",
+        assigneeMode: "none",
+        instruction: "处理任务",
+      },
+    });
+    definition.edges = [
+      { id: "start-open", sourceNodeId: "start", targetNodeId: "open-task" },
+      { id: "open-end", sourceNodeId: "open-task", targetNodeId: "end" },
+    ];
+    expect(analyzeWorkflowDefinition(definition, { executable: false }).ok).toBe(true);
+    const published = analyzeWorkflowDefinition(definition, { executable: true });
+    expect(published.ok).toBe(false);
+    if (!published.ok)
+      expect(published.diagnostics.map(item => item.code)).toContain(
+        "WF_OPERATE_OWNER_REQUIRED"
+      );
+  });
 });

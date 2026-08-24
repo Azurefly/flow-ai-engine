@@ -2,8 +2,8 @@ import mysql from "mysql2/promise";
 import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 
-export const DATABASE_MIGRATION_VERSION = "0020_durable_outbox";
-export const DATABASE_MIGRATION_EPOCH = 1787554000000;
+export const DATABASE_MIGRATION_VERSION = "0021_department_role_scope";
+export const DATABASE_MIGRATION_EPOCH = 1787560000000;
 
 let pool: mysql.Pool | undefined;
 
@@ -80,7 +80,8 @@ export async function checkReadiness() {
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
           (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId')) OR
-          (table_name='authorization_audit_log' AND column_name='requestId')
+          (table_name='authorization_audit_log' AND column_name='requestId') OR
+          (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
     );
     const [indexRows] = await db().query<mysql.RowDataPacket[]>(
@@ -95,7 +96,7 @@ export async function checkReadiness() {
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
       Number(tableRows[0]?.count ?? 0) === 3 &&
-      Number(columnRows[0]?.count ?? 0) === 9 &&
+      Number(columnRows[0]?.count ?? 0) === 12 &&
       Number(indexRows[0]?.count ?? 0) === 2;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }

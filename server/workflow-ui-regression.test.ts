@@ -305,10 +305,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("为角色绑定用户");
     expect(homeSource).toContain("min-[760px]:hidden");
     expect(iamServiceSource).toContain("请勿重复绑定");
-    expect(routerSource).toContain("previewUserBatch: adminProcedure");
-    expect(routerSource).toContain("createUsersBatch: adminProcedure");
-    expect(routerSource).toContain("userAuthorizationDetails: adminProcedure");
-    expect(routerSource).toContain("roleAuthorizationDetails: adminProcedure");
+    expect(routerSource).toContain("previewUserBatch: iamManageProcedure");
+    expect(routerSource).toContain("createUsersBatch: iamManageProcedure");
+    expect(routerSource).toContain("userAuthorizationDetails: iamManageProcedure");
+    expect(routerSource).toContain("roleAuthorizationDetails: iamManageProcedure");
   });
 
   it("实例详情按操作时间倒序展示必要字段，其余字段点击后以列表查看", () => {

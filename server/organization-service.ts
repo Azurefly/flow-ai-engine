@@ -62,7 +62,7 @@ export async function listOrganization() {
     "SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId ORDER BY ou.code,om.isPrimary DESC,u.name,u.username"
   );
   const [roleBindings] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT our.id,our.unitId,our.roleId,our.createdByUserId,our.createdAt,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope FROM organization_unit_role our JOIN iam_role r ON r.id=our.roleId ORDER BY r.name,r.code"
+    "SELECT our.id,our.unitId,our.roleId,our.includeDescendants,our.effectiveFrom,our.expiresAt,our.createdByUserId,our.createdAt,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope FROM organization_unit_role our JOIN iam_role r ON r.id=our.roleId ORDER BY r.name,r.code"
   );
   const [directRoleRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT ra.id AS assignmentId,ra.userId,ra.roleId,ra.scopeType,ra.scopeId,ra.expiresAt,
@@ -73,12 +73,24 @@ export async function listOrganization() {
       ORDER BY r.name,r.code`
   );
   const [inheritedRoleRows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT om.userId,our.unitId,ou.name AS unitName,our.roleId,
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om
+         JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu
+         JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT mu.userId,our.unitId,ou.name AS unitName,our.roleId,
             r.code AS roleCode,r.name AS roleName
-       FROM organization_membership om
-       JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
-       JOIN organization_unit_role our ON our.unitId=ou.id
+       FROM membership_units mu
+       JOIN organization_unit_role our ON our.unitId=mu.unitId
+         AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+       JOIN organization_unit ou ON ou.id=our.unitId
        JOIN iam_role r ON r.id=our.roleId
+      WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
       ORDER BY ou.name,r.name,r.code`
   );
   const directRolesByUser = new Map<number, mysql.RowDataPacket[]>();
@@ -389,13 +401,33 @@ export async function deleteOrganizationUnit(
   return true;
 }
 
-export async function bindOrganizationRole(user: User, input: { unitId: string; roleId: number }) {
+export async function bindOrganizationRole(user: User, input: {
+  unitId: string;
+  roleId: number;
+  includeDescendants?: boolean;
+  effectiveFrom?: Date;
+  expiresAt?: Date | null;
+}) {
   const [units] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM organization_unit WHERE id=? AND status='active' LIMIT 1", [input.unitId]);
   if (!units[0]) throw new Error("组织单元不存在或已停用。");
   const [roles] = await db().query<mysql.RowDataPacket[]>("SELECT id,code,scope FROM iam_role WHERE id=? LIMIT 1", [input.roleId]);
   const role = roles[0];
   if (!role || role.scope !== "system" || role.code === "system_admin") throw new Error("仅可绑定系统范围且非系统管理员的权限组。");
-  await db().query("INSERT IGNORE INTO organization_unit_role (id,unitId,roleId,createdByUserId) VALUES (?,?,?,?)", [randomUUID(), input.unitId, input.roleId, user.id]);
+  const effectiveFrom = input.effectiveFrom ?? new Date();
+  if (input.expiresAt && input.expiresAt <= effectiveFrom)
+    throw new Error("部门权限绑定到期时间必须晚于生效时间。");
+  await db().query(
+    "INSERT INTO organization_unit_role (id,unitId,roleId,includeDescendants,effectiveFrom,expiresAt,createdByUserId) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE includeDescendants=VALUES(includeDescendants),effectiveFrom=VALUES(effectiveFrom),expiresAt=VALUES(expiresAt),createdByUserId=VALUES(createdByUserId)",
+    [
+      randomUUID(),
+      input.unitId,
+      input.roleId,
+      input.includeDescendants ?? true,
+      effectiveFrom,
+      input.expiresAt ?? null,
+      user.id,
+    ]
+  );
   await recordAuthorizationAudit({
     actorUserId: user.id,
     action: "role_assigned",
@@ -405,6 +437,9 @@ export async function bindOrganizationRole(user: User, input: { unitId: string; 
       operation: "organization_role_bound",
       roleId: input.roleId,
       roleCode: role.code,
+      includeDescendants: input.includeDescendants ?? true,
+      effectiveFrom,
+      expiresAt: input.expiresAt ?? null,
     },
   });
   return true;
@@ -460,18 +495,28 @@ export async function resolveNthManagerUserId(userId: number, level = 1) {
 export async function resolveRoleCandidateUserIds(roleCode: string, workflowId: string) {
   if (!roleCode.trim()) return [];
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT u.id
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om
+         JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu
+         JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT u.id
        FROM users u
        JOIN (
          SELECT ra.userId FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
           WHERE r.code=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
             AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))
          UNION
-         SELECT om.userId FROM organization_membership om
-           JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
-           JOIN organization_unit_role our ON our.unitId=ou.id
+         SELECT mu.userId FROM membership_units mu
+           JOIN organization_unit_role our ON our.unitId=mu.unitId
+             AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
            JOIN iam_role r ON r.id=our.roleId
-          WHERE r.code=?
+          WHERE r.code=? AND (mu.unitId=mu.memberUnitId OR our.includeDescendants=1)
        ) eligible ON eligible.userId=u.id
       WHERE u.status='active' ORDER BY u.id`,
     [roleCode.trim(), workflowId, roleCode.trim()]
@@ -485,18 +530,29 @@ export async function resolveWorkflowUserRoleKeys(userIds: number[], workflowId:
   if (!uniqueUserIds.length) return result;
   const placeholders = uniqueUserIds.map(() => "?").join(",");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT eligible.userId,r.id AS roleId,r.code
+    `WITH RECURSIVE membership_units AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om
+         JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+        WHERE om.userId IN (${placeholders})
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu
+         JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT eligible.userId,r.id AS roleId,r.code
        FROM (
          SELECT ra.userId,ra.roleId FROM role_assignment ra
           WHERE ra.userId IN (${placeholders}) AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
             AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))
          UNION
-         SELECT om.userId,our.roleId FROM organization_membership om
-           JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
-           JOIN organization_unit_role our ON our.unitId=ou.id
-          WHERE om.userId IN (${placeholders})
+         SELECT mu.userId,our.roleId FROM membership_units mu
+           JOIN organization_unit_role our ON our.unitId=mu.unitId
+             AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+          WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
        ) eligible JOIN iam_role r ON r.id=eligible.roleId JOIN users u ON u.id=eligible.userId AND u.status='active'`,
-    [...uniqueUserIds, workflowId, ...uniqueUserIds]
+    [...uniqueUserIds, ...uniqueUserIds, workflowId]
   );
   for (const row of rows) {
     const userId = Number(row.userId);
@@ -518,6 +574,9 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
   });
   if (!mode && /direct_manager|直属上级|upperAuthUnitWord/.test(legacyText)) mode = "initiator_manager";
   if (!mode) mode = input.config.assigneeUserId ? "user" : "receivers";
+  // Legacy open-claim nodes are narrowed to the authenticated run initiator.
+  // A human task must always have an explicit current owner/candidate snapshot.
+  if (mode === "none") mode = "initiator";
 
   let candidates: number[] = [];
   if (mode === "receivers") candidates = Array.isArray(runtime.receiverUserIds) ? runtime.receiverUserIds.map(Number) : [];
@@ -534,7 +593,7 @@ export async function resolveOperateAssignees(input: { config: JsonRecord; conte
   else if (mode === "role") candidates = await resolveRoleCandidateUserIds(String(input.config.assigneeRoleCode || ""), input.workflowId);
 
   candidates = Array.from(new Set(candidates.filter(id => Number.isInteger(id) && id > 0)));
-  if (mode !== "none" && candidates.length === 0) {
+  if (candidates.length === 0) {
     const fallback = String(input.config.assigneeFallback ?? "error").trim();
     if (fallback === "initiator" && Number.isInteger(initiatorUserId) && initiatorUserId > 0) {
       candidates = [initiatorUserId];

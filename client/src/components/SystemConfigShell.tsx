@@ -150,8 +150,18 @@ function ApprovalSettings() {
   const utils = trpc.useUtils();
   const settings = trpc.config.settings.useQuery();
   const [required, setRequired] = useState(true);
+  const [reviewerMode, setReviewerMode] = useState<
+    "project_owner_or_admin" | "independent_reviewer"
+  >("project_owner_or_admin");
   useEffect(() => {
-    if (settings.data?.approval) setRequired(Boolean(settings.data.approval.requireProjectApproval));
+    if (settings.data?.approval) {
+      setRequired(Boolean(settings.data.approval.requireProjectApproval));
+      setReviewerMode(
+        settings.data.approval.reviewerMode === "independent_reviewer"
+          ? "independent_reviewer"
+          : "project_owner_or_admin"
+      );
+    }
   }, [settings.data]);
   const update = trpc.config.updateSetting.useMutation({
     onSuccess: () => {
@@ -173,6 +183,23 @@ function ApprovalSettings() {
               <input type="checkbox" checked={required} onChange={event => setRequired(event.target.checked)} />
               要求审核通过后发布
             </label>
+            <label className="mt-4 grid max-w-md gap-2 text-sm font-medium text-slate-700">
+              审核人隔离策略
+              <select
+                className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm"
+                value={reviewerMode}
+                onChange={event =>
+                  setReviewerMode(
+                    event.target.value === "independent_reviewer"
+                      ? "independent_reviewer"
+                      : "project_owner_or_admin"
+                  )
+                }
+              >
+                <option value="project_owner_or_admin">项目所有者或系统管理员</option>
+                <option value="independent_reviewer">独立复核（设计所有人不可自审）</option>
+              </select>
+            </label>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
                 className="bg-[#2d6bea] hover:bg-[#255bc8]"
@@ -183,7 +210,7 @@ function ApprovalSettings() {
                     key: "approval",
                     value: {
                       requireProjectApproval: required,
-                      reviewerMode: "project_owner_or_admin",
+                      reviewerMode,
                     },
                   })
                 }

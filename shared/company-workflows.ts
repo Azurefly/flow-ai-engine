@@ -50,7 +50,7 @@ export function createResignationApprovalDefinition(roleCode = "company_hr_appro
     nodes: [
       { id: "start", type: "start", name: "开始", position: { x: 0, y: 180 }, config: { initialVariables: { resignationReason: "{{input.resignationReason}}" } } },
       state("resignation-application", "辞职申请", "申请中", 180, 180),
-      { id: "submit", type: "operate", name: "提交辞职申请", position: { x: 390, y: 180 }, config: { nodeDh: "RESIGN_SUBMIT", czmc: "提交申请", assigneeMode: "none", instruction: "员工提交辞职申请", zdzx: { sfzdzx: "是" } } },
+      { id: "submit", type: "operate", name: "提交辞职申请", position: { x: 390, y: 180 }, config: { nodeDh: "RESIGN_SUBMIT", czmc: "提交申请", assigneeMode: "initiator", instruction: "员工提交辞职申请", zdzx: { sfzdzx: "是" } } },
       { id: "route-submit", type: "router", name: "辞职审批路由", position: { x: 610, y: 180 }, config: routeConfig("RESIGN_ROUTE", "辞职审批路由", [{ handle: "approver", label: "审批人状态", roleKeys: [roleCode], targetNodeId: "resign-pending", priority: 300 }, { handle: "employee", label: "员工状态", roleKeys: ["default"], targetNodeId: "employee-resign-wait", priority: 200 }]) },
       state("employee-resign-wait", "员工等待审批", "等待审核", 850, 60),
       state("resign-pending", "多人辞职待审批", "待审批", 850, 300),
@@ -85,7 +85,7 @@ export function createReportingApprovalDefinition(roleCode = "company_reporting_
     nodes: [
       { id: "start", type: "start", name: "开始", position: { x: 0, y: 180 }, config: { initialVariables: { reportTitle: "{{input.reportTitle}}" } } },
       state("report-application", "汇报申请", "申请中", 180, 180),
-      { id: "submit", type: "operate", name: "提交汇报", position: { x: 390, y: 180 }, config: { nodeDh: "REPORT_SUBMIT", czmc: "提交汇报", assigneeMode: "none", instruction: "员工提交多人汇报申请", zdzx: { sfzdzx: "是" } } },
+      { id: "submit", type: "operate", name: "提交汇报", position: { x: 390, y: 180 }, config: { nodeDh: "REPORT_SUBMIT", czmc: "提交汇报", assigneeMode: "initiator", instruction: "员工提交多人汇报申请", zdzx: { sfzdzx: "是" } } },
       { id: "route-submit", type: "router", name: "汇报人员路由", position: { x: 610, y: 180 }, config: routeConfig("REPORT_ROUTE", "汇报人员路由", [{ handle: "approver", label: "汇报审批人", roleKeys: [roleCode], targetNodeId: "report-pending", priority: 300 }, { handle: "employee", label: "员工查看", roleKeys: ["default"], targetNodeId: "employee-report-wait", priority: 200 }]) },
       state("employee-report-wait", "员工等待汇报审批", "等待审核", 850, 60),
       state("report-pending", "汇报待审批", "待审批", 850, 300),
@@ -125,7 +125,7 @@ export function createAnnualLeaveApprovalDefinition(roleCode = "company_leave_ap
     nodes: [
       { id: "start", type: "start", name: "开始", position: { x: 0, y: 180 }, config: { initialVariables: { days: "{{input.days}}", annualLeaveReason: "{{input.reason}}" } } },
       state("annual-application", "年假申请", "申请中", 180, 180),
-      { id: "submit", type: "operate", name: "提交年假申请", position: { x: 390, y: 180 }, config: { nodeDh: "ANNUAL_SUBMIT", czmc: "提交申请", assigneeMode: "none", instruction: "员工提交年假天数和事由", zdzx: { sfzdzx: "是" } } },
+      { id: "submit", type: "operate", name: "提交年假申请", position: { x: 390, y: 180 }, config: { nodeDh: "ANNUAL_SUBMIT", czmc: "提交申请", assigneeMode: "initiator", instruction: "员工提交年假天数和事由", zdzx: { sfzdzx: "是" } } },
       { id: "route-days", type: "router", name: "按天数分流", position: { x: 610, y: 180 }, config: routeConfig("ANNUAL_DAYS_ROUTE", "按天数分流", routes) },
       state("short-pending", "短假待审批", "待直属上级审批", 850, 60),
       state("long-pending", "长假待审批", "待直属上级和经理审批", 850, 300),

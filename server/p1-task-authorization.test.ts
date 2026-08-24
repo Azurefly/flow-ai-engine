@@ -22,7 +22,7 @@ describe("人工操作授权边界", () => {
     expect(isCurrentTaskOperation({ task, state: { sourceNodeId: "state-review" }, operations: [{ taskId: "task-2" }] })).toBe(false);
   });
 
-  it("显式无人指定模式仍允许具备流程运行权限的人员领取", () => {
-    expect(isCurrentTaskOperation({ task: { id: "open-1", nodeId: "state-review", assignedUserId: null, candidateUserIdsJson: [] }, operations: [] })).toBe(true);
+  it("拒绝无当前所有人且无候选人的开放领取任务", () => {
+    expect(isCurrentTaskOperation({ task: { id: "open-1", nodeId: "state-review", assignedUserId: null, candidateUserIdsJson: [] }, operations: [] })).toBe(false);
   });
 });

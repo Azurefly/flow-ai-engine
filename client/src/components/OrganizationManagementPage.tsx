@@ -95,6 +95,8 @@ export default function OrganizationManagementPage({
   });
   const [roleOpen, setRoleOpen] = useState(false);
   const [roleId, setRoleId] = useState("");
+  const [roleIncludesDescendants, setRoleIncludesDescendants] = useState(true);
+  const [roleExpiresAt, setRoleExpiresAt] = useState("");
   const [movingMember, setMovingMember] = useState<any | null>(null);
   const [moveForm, setMoveForm] = useState({
     toUnitId: "",
@@ -269,10 +271,14 @@ export default function OrganizationManagementPage({
       await bindRole.mutateAsync({
         unitId: selected.id,
         roleId: Number(roleId),
+        includeDescendants: roleIncludesDescendants,
+        expiresAt: roleExpiresAt ? new Date(roleExpiresAt) : null,
       });
       await refresh();
       setRoleOpen(false);
       setRoleId("");
+      setRoleIncludesDescendants(true);
+      setRoleExpiresAt("");
       toast.success("部门权限组已绑定，成员权限即时生效。 ");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "权限组绑定失败。");
@@ -963,7 +969,7 @@ export default function OrganizationManagementPage({
                   <div className="mt-5">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="text-sm text-slate-500">
-                        绑定后，当前部门所有启用成员即时继承权限；不复制逐用户授权。
+                        绑定后，部门启用成员按有效期实时继承权限；可选择是否覆盖子部门成员。
                       </p>
                       <Button type="button" onClick={() => setRoleOpen(true)}>
                         <KeyRound size={15} />
@@ -987,6 +993,14 @@ export default function OrganizationManagementPage({
                             </div>
                             <p className="mt-1 text-xs text-slate-500">
                               {binding.roleDescription || "未填写权限组说明"}
+                            </p>
+                            <p className="mt-2 text-xs text-slate-500">
+                              {binding.includeDescendants
+                                ? "当前部门及所有子部门成员"
+                                : "仅当前部门直接成员"}
+                              {binding.expiresAt
+                                ? ` · 有效至 ${new Date(binding.expiresAt).toLocaleString()}`
+                                : " · 长期有效"}
                             </p>
                           </div>
                           <Button
@@ -1424,7 +1438,7 @@ export default function OrganizationManagementPage({
         open={roleOpen}
         onOpenChange={setRoleOpen}
         title={`绑定${selected ? `“${selected.name}”` : "部门"}权限组`}
-        description="仅允许系统范围且非 system_admin 的角色；保存后部门成员即时继承。"
+        description="仅允许系统范围且非 system_admin 的角色；保存后按部门范围和有效期实时继承。"
         submitLabel="确认绑定"
         pending={bindRole.isPending}
         onSubmit={submitRole}
@@ -1451,6 +1465,22 @@ export default function OrganizationManagementPage({
                 </option>
               ))}
           </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={roleIncludesDescendants}
+            onChange={event => setRoleIncludesDescendants(event.target.checked)}
+          />
+          子部门成员同步继承
+        </label>
+        <label className="grid gap-1.5 text-sm font-medium text-slate-700">
+          到期时间（可选）
+          <Input
+            type="datetime-local"
+            value={roleExpiresAt}
+            onChange={event => setRoleExpiresAt(event.target.value)}
+          />
         </label>
       </CreationDialog>
     </div>
