@@ -26,6 +26,7 @@ import {
   updateOrganizationUnit,
 } from "./organization-service";
 import { activateDataflowSchedule, createDataAsset, createDataSource, createDataTag, createDataUdf, createProjectPlugin, deleteDataAsset, deleteDataSource, deleteDataTag, deleteDataUdf, deleteDataflowSchedule, deleteProjectPlugin, listDataflowRuns, listDataflowSchedules, listDataflows, listDataResources, pauseDataflowSchedule, runDataflow, saveDataflowScheduleDraft, updateDataAsset, updateDataSource, updateDataUdf, updateProjectPlugin } from "./p2-service";
+import { checkLoginRateLimit, clearLoginFailures, loginRateLimitKey, recordLoginFailure } from "./_core/login-rate-limit";
 
 const approvalResultSchema = z
   .object({
@@ -55,12 +56,22 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
+        const loginKey = loginRateLimitKey(input.username, ctx.req.ip ?? "unknown");
+        const rateLimit = checkLoginRateLimit(loginKey);
+        if (!rateLimit.allowed) {
+          ctx.res.setHeader("retry-after", String(rateLimit.retryAfterSeconds));
+          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `登录失败次数过多，请 ${rateLimit.retryAfterSeconds} 秒后重试。` });
+        }
         const result = await login(input.username, input.password, ctx.req.headers["user-agent"]);
-        if (!result)
+        if (!result) {
+          const failure = recordLoginFailure(loginKey);
+          if (!failure.allowed) ctx.res.setHeader("retry-after", String(failure.retryAfterSeconds));
           throw new TRPCError({
-            code: "UNAUTHORIZED",
-            message: "用户名或密码错误，或账号已停用。",
+            code: failure.allowed ? "UNAUTHORIZED" : "TOO_MANY_REQUESTS",
+            message: failure.allowed ? "用户名或密码错误，或账号已停用。" : `登录失败次数过多，请 ${failure.retryAfterSeconds} 秒后重试。`,
           });
+        }
+        clearLoginFailures(loginKey);
         ctx.res.cookie(FLOW_SESSION_COOKIE, result.token, {
           ...getSessionCookieOptions(ctx.req),
           httpOnly: true,
