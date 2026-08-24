@@ -1,10 +1,12 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import NotFound from "@/pages/NotFound";
+import { lazy, Suspense } from "react";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import Home from "./pages/Home";
+
+const Home = lazy(() => import("./pages/Home"));
+const NotFound = lazy(() => import("@/pages/NotFound"));
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -32,7 +34,17 @@ function App() {
       >
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Suspense
+            fallback={
+              <main className="grid min-h-screen place-items-center bg-white text-slate-600">
+                <div className="border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                  正在加载流程工作台…
+                </div>
+              </main>
+            }
+          >
+            <Router />
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

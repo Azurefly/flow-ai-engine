@@ -1,15 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import WorkflowCanvas from "@/components/WorkflowCanvas";
-import WorkflowGovernance from "@/components/WorkflowGovernance";
-import { WorkflowDetailPage } from "@/components/WorkflowDetailPage";
-import RunCenter from "@/components/RunCenter";
-import ProcessWorkbench from "@/components/ProcessWorkbench";
-import { BusinessCenter, ProjectWorkspace, type ProjectRecord } from "@/components/ProjectWorkspace";
-import WorkflowWarehouse from "@/components/WorkflowWarehouse";
-import SystemConfigShell from "@/components/SystemConfigShell";
-import OrganizationManagementPage from "@/components/OrganizationManagementPage";
+import type { ProjectRecord } from "@/components/ProjectWorkspace";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
@@ -44,8 +36,19 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+const WorkflowCanvas = lazy(() => import("@/components/WorkflowCanvas"));
+const WorkflowGovernance = lazy(() => import("@/components/WorkflowGovernance"));
+const WorkflowDetailPage = lazy(() => import("@/components/WorkflowDetailPage").then(module => ({ default: module.WorkflowDetailPage })));
+const RunCenter = lazy(() => import("@/components/RunCenter"));
+const ProcessWorkbench = lazy(() => import("@/components/ProcessWorkbench"));
+const BusinessCenter = lazy(() => import("@/components/ProjectWorkspace").then(module => ({ default: module.BusinessCenter })));
+const ProjectWorkspace = lazy(() => import("@/components/ProjectWorkspace").then(module => ({ default: module.ProjectWorkspace })));
+const WorkflowWarehouse = lazy(() => import("@/components/WorkflowWarehouse"));
+const SystemConfigShell = lazy(() => import("@/components/SystemConfigShell"));
+const OrganizationManagementPage = lazy(() => import("@/components/OrganizationManagementPage"));
 
 type FlowEditorReturn = "center" | "workspace" | "detail" | "warehouse";
 type UserIdentity = { id: number; username: string | null; name: string | null; role: "user" | "admin" };

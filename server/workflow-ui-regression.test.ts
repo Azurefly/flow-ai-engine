@@ -45,8 +45,32 @@ const routerSource = source("./routers.ts");
 const iamServiceSource = source("./iam-service.ts");
 const projectServiceSource = source("./project-service.ts");
 const styleSource = source("../client/src/index.css");
+const appSource = source("../client/src/App.tsx");
+const htmlSource = source("../client/index.html");
+const packageSource = source("../package.json");
+const bundleBudgetSource = source("../scripts/check-bundle-budget.mts");
 
 describe("流程设计器界面回归约束", () => {
+  it("中文可访问性基线、工作区拆包和 bundle budget 保持生效", () => {
+    expect(htmlSource).toContain('<html lang="zh-CN">');
+    expect(htmlSource).not.toContain("maximum-scale=1");
+    expect(appSource).toContain('lazy(() => import("./pages/Home"))');
+    expect(appSource).toContain("<Suspense");
+    expect(homeSource).toContain(
+      'lazy(() => import("@/components/WorkflowCanvas"))'
+    );
+    expect(homeSource).toContain(
+      'import("@/components/OrganizationManagementPage")'
+    );
+    expect(homeSource).toContain(
+      'import("@/components/ProjectWorkspace").then'
+    );
+    expect(packageSource).toContain('"check:bundle"');
+    expect(packageSource).toContain("pnpm check:bundle");
+    expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_300 * 1024");
+  });
+
   it("新建流程通过按钮打开创建弹窗，控制台壳层可在窄屏纵向收敛", () => {
     expect(homeSource).toContain("setCreateFlowOpen(true)");
     expect(homeSource).toContain('title="新建流程"');
