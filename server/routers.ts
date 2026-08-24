@@ -164,6 +164,13 @@ const approvalResultSchema = z
   })
   .catchall(z.unknown());
 
+function assertWorkflowRunController(user: { id: number }, run: unknown, action: string) {
+  const record = run as { triggeredByUserId?: unknown; ownerUserId?: unknown } | null;
+  if (!record || (Number(record.triggeredByUserId) !== user.id && Number(record.ownerUserId) !== user.id)) {
+    throw new TRPCError({ code: "FORBIDDEN", message: `仅流程发起人或流程所有者可${action}。` });
+  }
+}
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -1441,6 +1448,7 @@ export const appRouter = router({
         if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "无权取消此流程运行。" });
         }
+        assertWorkflowRunController(ctx.user, run, "取消此流程运行");
         return controlWorkflowRun({ runId: input.runId, action: "cancel" });
       }),
     terminateRun: protectedProcedure
@@ -1450,6 +1458,7 @@ export const appRouter = router({
         if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "无权终止此流程运行。" });
         }
+        assertWorkflowRunController(ctx.user, run, "终止此流程运行");
         return controlWorkflowRun({ runId: input.runId, action: "terminate", reason: input.reason });
       }),
     pauseRun: protectedProcedure
@@ -1459,6 +1468,7 @@ export const appRouter = router({
         if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "无权暂停此流程运行。" });
         }
+        assertWorkflowRunController(ctx.user, run, "暂停此流程运行");
         return pauseWorkflowRun(input.runId);
       }),
     resumeRun: protectedProcedure
@@ -1468,6 +1478,7 @@ export const appRouter = router({
         if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
           throw new TRPCError({ code: "FORBIDDEN", message: "无权恢复此流程运行。" });
         }
+        assertWorkflowRunController(ctx.user, run, "恢复此流程运行");
         return resumeWorkflowRun(input.runId);
       }),
     runs: protectedProcedure

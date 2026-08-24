@@ -34,8 +34,8 @@ export function isTaskActor(userId: number, task: mysql.RowDataPacket) {
 }
 
 export function isCurrentTaskOperation(input: {
-  task: { id: string; nodeId: string; assignedUserId?: unknown; candidateUserIdsJson?: unknown };
-  state?: { sourceNodeId?: unknown };
+  task: { id?: unknown; nodeId?: unknown; assignedUserId?: unknown; candidateUserIdsJson?: unknown } | mysql.RowDataPacket;
+  state?: { sourceNodeId?: unknown } | mysql.RowDataPacket;
   operations: unknown[];
 }) {
   const assigned = Number(input.task.assignedUserId ?? 0) > 0;
@@ -212,7 +212,8 @@ export async function handoverWorkflowTask(user: User, input: { taskId: string; 
   const task: any = await getWorkflowTask(user, input.taskId);
   if (!task || !(await canAccessTask(user, task, true))) throw new Error("人工任务不存在或无移交权限。 ");
   if (!["pending", "claimed"].includes(String(task.status)) || !["running", "waiting"].includes(String(task.runStatus))) throw new Error("仅可移交正在等待处理的人工任务。 ");
-  if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("仅当前处理人或系统管理员可移交已领取任务。 ");
+  if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id) throw new Error("仅当前处理人可移交已领取任务。 ");
+  await assertCurrentTaskOperation(user, task);
   const target = await getEligibleAssignee(task, input.targetUserId);
   const claimedCondition = task.status === "claimed" ? " AND claimedByUserId=?" : "";
   const params: unknown[] = [input.targetUserId, input.taskId, ...(task.status === "claimed" ? [Number(task.claimedByUserId)] : [])];
@@ -225,7 +226,8 @@ export async function handoverWorkflowTask(user: User, input: { taskId: string; 
 export async function returnWorkflowTaskToPending(user: User, taskId: string) {
   const task: any = await getWorkflowTask(user, taskId);
   if (!task || !(await canAccessTask(user, task, true))) throw new Error("人工任务不存在或无退回权限。 ");
-  if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("仅当前处理人或系统管理员可将已领取任务退回待处理。 ");
+  if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id) throw new Error("仅当前处理人可将已领取任务退回待处理。 ");
+  await assertCurrentTaskOperation(user, task);
   const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_task SET status='pending',claimedByUserId=NULL,claimedAt=NULL WHERE id=? AND status='claimed' AND claimedByUserId=?", [taskId, Number(task.claimedByUserId)]);
   if (!result.affectedRows) throw new Error("人工任务状态已变化，请刷新后重试。 ");
   await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: "task_returned_to_pending", assignedUserId: task.assignedUserId ?? null } });

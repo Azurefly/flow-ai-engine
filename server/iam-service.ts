@@ -182,6 +182,7 @@ async function assignedPermissions(userId: number, workflowId?: string) {
            FROM organization_membership om
            JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
            JOIN organization_unit_role our ON our.unitId=ou.id
+           JOIN users inherited_user ON inherited_user.id=om.userId AND inherited_user.status='active'
           WHERE om.userId=?
        ) effective_role
        JOIN iam_role r ON r.id=effective_role.roleId
