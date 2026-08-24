@@ -388,9 +388,12 @@ export const workflowRuns = mysqlTable(
     status: mysqlEnum("status", [
       "queued",
       "running",
+      "waiting",
+      "blocked",
       "success",
       "failed",
       "cancelled",
+      "terminated",
     ])
       .default("queued")
       .notNull(),

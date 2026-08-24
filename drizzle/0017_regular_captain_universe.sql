@@ -1,0 +1,1 @@
+ALTER TABLE `workflow_run` MODIFY COLUMN `status` enum('queued','running','waiting','blocked','success','failed','cancelled','terminated') NOT NULL DEFAULT 'queued';

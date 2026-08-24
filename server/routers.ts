@@ -1435,7 +1435,7 @@ export const appRouter = router({
         z.object({
           workflowId: z.string().min(8).max(64),
           status: z
-            .enum(["queued", "running", "success", "failed", "cancelled"])
+            .enum(["queued", "running", "waiting", "blocked", "success", "failed", "cancelled", "terminated"])
             .optional(),
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
@@ -1459,7 +1459,7 @@ export const appRouter = router({
         z.object({
           workflowId: z.string().min(8).max(64),
           status: z
-            .enum(["queued", "running", "success", "failed", "cancelled"])
+            .enum(["queued", "running", "waiting", "blocked", "success", "failed", "cancelled", "terminated"])
             .optional(),
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),

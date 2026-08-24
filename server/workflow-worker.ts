@@ -69,7 +69,7 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
          FROM workflow_run_job j
          JOIN workflow_run r ON r.id=j.runId
         WHERE j.attempt < j.maxAttempts
-          AND r.status IN ('queued','running')
+          AND r.status IN ('queued','running','waiting')
           AND ((j.status='queued' AND j.availableAt<=NOW())
             OR (j.status='leased' AND j.leaseExpiresAt<NOW()))
         ORDER BY j.availableAt ASC,j.createdAt ASC
@@ -94,7 +94,7 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
     const [leasedRun] = await connection.query<mysql.ResultSetHeader>(
       `UPDATE workflow_run
           SET status='running',startedAt=COALESCE(startedAt,NOW()),executionLockToken=?,executionLockExpiresAt=DATE_ADD(NOW(),INTERVAL ? SECOND)
-        WHERE id=? AND status IN ('queued','running')`,
+        WHERE id=? AND status IN ('queued','running','waiting')`,
       [leaseToken, leaseSeconds, row.runId]
     );
     if (!leasedRun.affectedRows) throw new Error("无法取得工作流运行租约。");

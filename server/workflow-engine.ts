@@ -36,8 +36,37 @@ export type WorkflowRunDetail = {
   nodeRuns: mysql.RowDataPacket[];
   [key: string]: unknown;
 };
+export const WORKFLOW_RUN_STATUSES = [
+  "queued",
+  "running",
+  "waiting",
+  "blocked",
+  "success",
+  "failed",
+  "cancelled",
+  "terminated",
+] as const;
+export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUSES)[number];
+const workflowRunTransitions: Record<WorkflowRunStatus, readonly WorkflowRunStatus[]> = {
+  queued: ["running", "blocked", "cancelled", "terminated"],
+  running: ["waiting", "success", "failed", "blocked", "cancelled", "terminated"],
+  waiting: ["queued", "blocked", "cancelled", "terminated"],
+  blocked: ["queued", "cancelled", "terminated"],
+  success: [],
+  failed: [],
+  cancelled: [],
+  terminated: [],
+};
+export function canTransitionWorkflowRunStatus(from: WorkflowRunStatus, to: WorkflowRunStatus) {
+  return from === to || workflowRunTransitions[from].includes(to);
+}
+export function assertWorkflowRunTransition(from: WorkflowRunStatus, to: WorkflowRunStatus) {
+  if (!canTransitionWorkflowRunStatus(from, to))
+    throw new Error(`运行状态不允许从 ${from} 迁移到 ${to}。`);
+  return to;
+}
 export type RunFilters = {
-  status?: "queued" | "running" | "success" | "failed" | "cancelled";
+  status?: WorkflowRunStatus;
   from?: Date;
   to?: Date;
   triggeredByUserId?: number;
@@ -1021,7 +1050,7 @@ export async function executePreparedWorkflowRun(input: {
   );
   const run = rows[0] as PersistedWorkflow | undefined;
   if (!run) throw new Error("流程运行不存在。");
-  if (["success", "failed", "cancelled"].includes(String(run.status)))
+  if (["success", "failed", "cancelled", "terminated"].includes(String(run.status)))
     throw new Error(`流程运行已结束：${run.status}。`);
   const definition = readJson(run.definitionSnapshotJson) as Definition;
   const persistedContext = asRecord(readJson(run.contextJson));
@@ -1079,8 +1108,17 @@ export async function executePreparedWorkflowRun(input: {
     finalOutput: suppliedCheckpoint.finalOutput,
     checkpoint: persistCheckpoint,
   });
-  if (segment.status === "waiting")
+  if (segment.status === "waiting") {
+    const waitingParams: unknown[] = [input.runId];
+    const waitingLeaseClause = input.leaseToken ? " AND executionLockToken=?" : "";
+    if (input.leaseToken) waitingParams.push(input.leaseToken);
+    const [waiting] = await db().query<mysql.ResultSetHeader>(
+      `UPDATE workflow_run SET status='waiting',executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${waitingLeaseClause} AND status='running'`,
+      waitingParams
+    );
+    if (!waiting.affectedRows) throw new Error("流程状态已变化，无法进入等待。 ");
     return { runId: input.runId, status: "waiting", taskId: segment.taskId };
+  }
   const params: unknown[] = [
     JSON.stringify(context),
     JSON.stringify(segment.output),
@@ -1158,7 +1196,7 @@ export async function executeWorkflow(input: {
     if (!leasedJob.affectedRows)
       throw new Error("同步兼容执行未能领取持久化 Job。");
     const [leasedRun] = await connection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow_run SET status='running',startedAt=COALESCE(startedAt,NOW()),executionLockToken=?,executionLockExpiresAt=DATE_ADD(NOW(),INTERVAL 2 MINUTE) WHERE id=? AND status IN ('queued','running')",
+      "UPDATE workflow_run SET status='running',startedAt=COALESCE(startedAt,NOW()),executionLockToken=?,executionLockExpiresAt=DATE_ADD(NOW(),INTERVAL 2 MINUTE) WHERE id=? AND status IN ('queued','running','waiting')",
       [leaseToken, submitted.runId]
     );
     if (!leasedRun.affectedRows)
@@ -2115,7 +2153,7 @@ export async function resumeWorkflowTask(input: {
         throw new Error("人工任务节点已被其他请求推进。");
       const [cancelledRun] =
         await rejectionConnection.query<mysql.ResultSetHeader>(
-        "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status='running'",
+      "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
           [
             JSON.stringify(context),
             JSON.stringify(taskOutput),
@@ -2177,7 +2215,7 @@ export async function resumeWorkflowTask(input: {
       throw new Error("人工任务节点已被其他请求推进。");
     const [queuedRun] =
       await continuationConnection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status='running'",
+      "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
       [JSON.stringify(context), task.runId]
     );
     if (!queuedRun.affectedRows)
@@ -2220,7 +2258,7 @@ export async function reconcileWorkflowContinuations(limit = 20) {
             nr.id AS nodeRunId,nr.startedAt AS nodeRunStartedAt,
             g.status AS groupStatus,g.completedByTaskId,g.totalApprovers,g.requiredApprovals
        FROM workflow_task t
-       JOIN workflow_run r ON r.id=t.runId AND r.status='running'
+       JOIN workflow_run r ON r.id=t.runId AND r.status IN ('running','waiting')
        JOIN workflow_node_run nr ON nr.runId=t.runId AND nr.nodeId=t.nodeId AND nr.status='waiting'
        LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
       WHERE t.status='completed' AND t.completedAt<DATE_SUB(NOW(),INTERVAL 10 SECOND)
@@ -2234,7 +2272,7 @@ export async function reconcileWorkflowContinuations(limit = 20) {
     try {
       await connection.beginTransaction();
       const [lockedRuns] = await connection.query<mysql.RowDataPacket[]>(
-        "SELECT id,contextJson,startedAt FROM workflow_run WHERE id=? AND status='running' FOR UPDATE",
+        "SELECT id,contextJson,startedAt FROM workflow_run WHERE id=? AND status IN ('running','waiting') FOR UPDATE",
         [task.runId]
       );
       const run = lockedRuns[0];
