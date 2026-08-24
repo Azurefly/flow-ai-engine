@@ -114,6 +114,9 @@
 }
 
 @layer base {
+  html {
+    text-size-adjust: 100%;
+  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -131,6 +134,27 @@
   input[type="radio"]:not(:disabled) {
     @apply cursor-pointer;
   }
+  :focus-visible {
+    outline: 3px solid #2563eb;
+    outline-offset: 2px;
+  }
+}
+
+.aiflow-skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 100;
+  transform: translateY(-160%);
+  border-radius: 4px;
+  background: #ffffff;
+  padding: 10px 14px;
+  color: #1d4ed8;
+  box-shadow: 0 2px 8px rgb(15 23 42 / 18%);
+}
+
+.aiflow-skip-link:focus-visible {
+  transform: translateY(0);
 }
 
 /* 数据资源页面用结构化表单替代历史 JSON 文本表单。 */

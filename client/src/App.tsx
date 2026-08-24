@@ -37,7 +37,7 @@ function App() {
           <Suspense
             fallback={
               <main className="grid min-h-screen place-items-center bg-white text-slate-600">
-                <div className="border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+                <div role="status" aria-live="polite" className="border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
                   正在加载流程工作台…
                 </div>
               </main>

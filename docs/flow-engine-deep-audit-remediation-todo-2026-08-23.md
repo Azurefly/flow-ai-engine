@@ -640,7 +640,7 @@ Human Task 服务
 - [~] **T0501 [PERF-001]** 按路由/工作区拆分 Home、Canvas、Organization、IAM 和 Monitor chunk。`Home`、`WorkflowCanvas`、`ProjectWorkspace`、`OrganizationManagementPage`、`ProcessWorkbench`、`RunCenter`、系统配置和流程仓库均通过 `React.lazy` 拆分；本地构建产物已确认入口约 400 KiB、画布约 281 KiB、Home 约 123 KiB。IAM 组件仍内嵌在 Home，需继续独立拆分。
 - [x] **T0502 [PERF-001]** 设置首屏和异步 chunk 的 CI bundle budget。`pnpm build` 在服务端打包前执行 `pnpm check:bundle`，限制单个 JS chunk 450 KiB、全部 JS 1300 KiB；当前构建总量约 1115 KiB。
 - [x] **T0510 [A11Y-001]** 将文档语言改为 `zh-CN`，移除禁止缩放设置。`client/index.html` 已改为中文文档语言并允许用户缩放。
-- [ ] **T0511 [A11Y-001]** 完成可见焦点、可访问名称、弹窗焦点圈和错误摘要。
+- [~] **T0511 [A11Y-001]** 完成可见焦点、可访问名称、弹窗焦点圈和错误摘要。已加入全局 `:focus-visible`、键盘跳转主要工作区、异步状态播报和登录错误摘要；全量图标按钮盘点、复杂表单错误汇总与真实读屏验收仍待完成。
 - [ ] **T0512 [A11Y-001]** 完成 200% 缩放、仅键盘、读屏和 WCAG 2.2 AA 关键页验收。
 - [ ] **T0520 [ORG-001]** 组织选择、候选预览、任务详情和审计统一显示完整路径与编码。
 - [ ] **T0530 [OPS-002]** 把迁移改为带数据库锁的独立部署 Job，采用 expand/migrate/contract。

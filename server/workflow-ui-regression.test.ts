@@ -331,10 +331,24 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("id={`aiflow-console-tab-${item.id}`}");
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
     expect(homeSource).toContain("aria-selected={section === item.id}");
-    expect(homeSource).toContain('id="aiflow-console-panel" role="tabpanel"');
+    expect(homeSource).toContain(
+      'id="aiflow-console-panel" tabIndex={-1} role="tabpanel"'
+    );
     expect(homeSource).toContain(
       "aria-labelledby={`aiflow-console-tab-${section}`}"
     );
+  });
+
+  it("提供键盘跳转、全局可见焦点和登录错误摘要", () => {
+    expect(homeSource).toContain('className="aiflow-skip-link"');
+    expect(homeSource).toContain('href="#aiflow-console-panel"');
+    expect(homeSource).toContain('id="aiflow-console-panel" tabIndex={-1}');
+    expect(homeSource).toContain('role="alert" aria-live="assertive"');
+    expect(homeSource).toContain('role="status" aria-live="polite"');
+    expect(styleSource).toContain(":focus-visible {");
+    expect(styleSource).toContain("outline: 3px solid #2563eb;");
+    expect(styleSource).toContain(".aiflow-skip-link:focus-visible");
+    expect(appSource).toContain('role="status" aria-live="polite"');
   });
 
   it("保留顶层与子页面哈希路由同步、异步权限恢复和安全回退", () => {
