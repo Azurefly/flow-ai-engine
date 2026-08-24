@@ -125,7 +125,34 @@ describe("流程版本、运行分析与节点复用", () => {
         ],
       },
     });
+    await ownerCaller.workflow.publish({ id: workflowId });
+    const [publishedRows] = await pool.query<mysql.RowDataPacket[]>(
+      "SELECT publishedExecutionPlanJson FROM workflow WHERE id=?",
+      [workflowId]
+    );
+    const publishedPlan =
+      typeof publishedRows[0].publishedExecutionPlanJson === "string"
+        ? JSON.parse(publishedRows[0].publishedExecutionPlanJson)
+        : publishedRows[0].publishedExecutionPlanJson;
+    expect(
+      publishedPlan.definition.nodes.find((node: any) => node.id === "call")
+        .config.resolvedSubflowDefinition
+    ).toMatchObject({ schemaVersion: 1 });
+    await ownerCaller.workflow.updateSubflow({
+      id: subflowId,
+      definition: {
+        ...subflowDefinition,
+        nodes: [
+          subflowDefinition.nodes[0],
+          {
+            ...subflowDefinition.nodes[1],
+            config: { resultTemplate: "已修改但不影响已发布快照" },
+          },
+        ],
+      },
+    });
     await expect(settleWorkflowCommand(pool, await ownerCaller.workflow.run({ workflowId, input: {} }))).resolves.toMatchObject({ status: "success", output: { result: "已复用" } });
+    await ownerCaller.workflow.unpublish({ id: workflowId });
 
     await ownerCaller.workflow.update({
       id: workflowId,

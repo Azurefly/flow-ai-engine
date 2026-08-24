@@ -1,6 +1,7 @@
 import mysql from "mysql2/promise";
 import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
+import { getRuntimeModels } from "./workflow-engine";
 
 export const DATABASE_MIGRATION_VERSION = "0021_department_role_scope";
 export const DATABASE_MIGRATION_EPOCH = 1787560000000;
@@ -113,9 +114,21 @@ export async function checkReadiness() {
     ? { ok: true, message: worker.processing ? "processing" : "idle" }
     : { ok: false, message: "worker is not started" };
   if (process.env.LLM_REQUIRED === "true") {
-    checks.llm = ENV.llmApiKey
-      ? { ok: true, message: "configured" }
-      : { ok: false, message: "OPENAI_API_KEY is required" };
+    if (!ENV.llmApiKey) {
+      checks.llm = { ok: false, message: "OPENAI_API_KEY is required" };
+    } else {
+      try {
+        const models = await getRuntimeModels();
+        checks.llm = models.length
+          ? { ok: true, message: `${models.length} model(s) available` }
+          : { ok: false, message: "provider returned no models" };
+      } catch (error) {
+        checks.llm = {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
+    }
   }
   return { ready: Object.values(checks).every(check => check.ok), checks, runtime: getRuntimeInfo() };
 }

@@ -169,7 +169,7 @@ export async function createDataSource(
   assertNoInlineSecret(input.connection);
   const sourceId = id();
   await db().query(
-    "INSERT INTO data_source (id,projectId,name,sourceType,connectionJson,credentialRef,status,lastTestedAt,createdByUserId) VALUES (?,?,?,?,?,?, 'verified',NOW(),?)",
+    "INSERT INTO data_source (id,projectId,name,sourceType,connectionJson,credentialRef,status,lastTestedAt,createdByUserId) VALUES (?,?,?,?,?,?,'draft',NULL,?)",
     [
       sourceId,
       input.projectId,
@@ -200,7 +200,7 @@ export async function updateDataSource(
     projectId: string;
     sourceId: string;
     name?: string;
-    status?: "draft" | "verified" | "disabled";
+    status?: "draft" | "disabled";
     connection?: JsonRecord;
     credentialRef?: string | null;
   }
@@ -213,15 +213,18 @@ export async function updateDataSource(
   );
   if (!rows[0]) throw new Error("数据源不存在或不属于当前项目。 ");
   const current = rows[0];
+  const configurationChanged =
+    input.connection !== undefined || input.credentialRef !== undefined;
   await db().query(
-    "UPDATE data_source SET name=?,status=?,connectionJson=?,credentialRef=?,updatedAt=NOW() WHERE id=? AND projectId=?",
+    "UPDATE data_source SET name=?,status=?,connectionJson=?,credentialRef=?,lastTestedAt=CASE WHEN ? THEN NULL ELSE lastTestedAt END,updatedAt=NOW() WHERE id=? AND projectId=?",
     [
       input.name?.trim() || current.name,
-      input.status ?? current.status,
+      configurationChanged ? "draft" : input.status ?? current.status,
       JSON.stringify(input.connection ?? parseJson(current.connectionJson, {})),
       input.credentialRef === undefined
         ? current.credentialRef
         : input.credentialRef?.trim() || null,
+      configurationChanged,
       input.sourceId,
       input.projectId,
     ]

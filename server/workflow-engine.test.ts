@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSafeHttpUrl,
+  assertJsonSchemaValue,
   evaluateApprovalResults,
   interpolate,
   normalizeApprovalResult,
   normalizeReferenceHttpConfig,
   selectRouterRoute,
   withWorkflowIdempotencyHeader,
+  redactSensitiveValues,
+  validateFormSubmission,
 } from "./workflow-engine";
 
 describe("工作流变量插值", () => {
@@ -27,6 +30,60 @@ describe("工作流变量插值", () => {
   });
 });
 
+describe("表单节点服务端校验", () => {
+  const fields = [
+    { key: "name", type: "text", required: true, maxLength: 10 },
+    { key: "days", type: "number", min: 1, max: 30 },
+    { key: "category", type: "select", options: ["annual", "sick"] },
+    { key: "internal", type: "text", readOnly: true, defaultValue: "fixed" },
+  ];
+
+  it("只输出声明字段并执行必填、类型、选项与只读校验", () => {
+    expect(
+      validateFormSubmission(fields, {
+        name: "张三",
+        days: 3,
+        category: "annual",
+        ignored: "drop",
+      })
+    ).toEqual({ name: "张三", days: 3, category: "annual", internal: "fixed" });
+    expect(() => validateFormSubmission(fields, { days: 3 })).toThrow("必填字段");
+    expect(() => validateFormSubmission(fields, { name: "张三", days: "3" })).toThrow("有限数值");
+    expect(() => validateFormSubmission(fields, { name: "张三", category: "other" })).toThrow("选项范围外");
+    expect(() => validateFormSubmission(fields, { name: "张三", internal: "changed" })).toThrow("只读");
+  });
+});
+
+describe("LLM 结构化输出边界", () => {
+  const schema = {
+    type: "object",
+    required: ["decision"],
+    additionalProperties: false,
+    properties: {
+      decision: { type: "string", enum: ["approved", "rejected"] },
+      score: { type: "number" },
+    },
+  };
+  it("校验必填字段、类型、枚举和额外字段", () => {
+    expect(() => assertJsonSchemaValue({ decision: "approved", score: 0.9 }, schema)).not.toThrow();
+    expect(() => assertJsonSchemaValue({}, schema)).toThrow("缺少必填字段");
+    expect(() => assertJsonSchemaValue({ decision: "maybe" }, schema)).toThrow("枚举值");
+    expect(() => assertJsonSchemaValue({ decision: "approved", extra: true }, schema)).toThrow("未允许字段");
+  });
+
+  it("持久化输入前递归脱敏凭据和授权字段", () => {
+    expect(
+      redactSensitiveValues({
+        authorization: "Bearer secret",
+        nested: { apiKey: "key", value: 7 },
+      })
+    ).toEqual({
+      authorization: "[REDACTED]",
+      nested: { apiKey: "[REDACTED]", value: 7 },
+    });
+  });
+});
+
 describe("HTTP 节点 SSRF 防护", () => {
   it("拒绝本机、私有网段和非 HTTP 协议", async () => {
     await expect(assertSafeHttpUrl("http://localhost/private")).rejects.toThrow(
@@ -35,6 +92,12 @@ describe("HTTP 节点 SSRF 防护", () => {
     await expect(assertSafeHttpUrl("http://127.0.0.1/private")).rejects.toThrow(
       "私有、环回"
     );
+    await expect(assertSafeHttpUrl("http://[::1]/private")).rejects.toThrow(
+      "私有、环回"
+    );
+    await expect(
+      assertSafeHttpUrl("http://[::ffff:172.16.0.1]/private")
+    ).rejects.toThrow("私有、环回");
     await expect(assertSafeHttpUrl("ftp://example.com/file")).rejects.toThrow(
       "仅支持"
     );

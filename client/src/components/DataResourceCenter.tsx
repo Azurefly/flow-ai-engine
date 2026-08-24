@@ -28,7 +28,7 @@ export default function DataResourceCenter({ projectId, onOpenWorkflow }: { proj
   const [scheduleForm, setScheduleForm] = useState({ workflowId: "", cronExpression: "0 0 9 * * *" });
 
   const invalidate = () => { void utils.data.resources.invalidate({ projectId }); void utils.data.flows.invalidate({ projectId }); void utils.data.runs.invalidate({ projectId }); };
-  const createSource = trpc.data.createSource.useMutation({ onSuccess: () => { invalidate(); toast.success("数据源已创建并完成元数据校验。"); }, onError: error => toast.error(error.message) });
+  const createSource = trpc.data.createSource.useMutation({ onSuccess: () => { invalidate(); toast.success("数据源草稿已创建；尚未执行真实连接测试。"); }, onError: error => toast.error(error.message) });
   const createAsset = trpc.data.createAsset.useMutation({ onSuccess: () => { invalidate(); toast.success("资源探查结果已保存。"); }, onError: error => toast.error(error.message) });
   const createUdf = trpc.data.createUdf.useMutation({ onSuccess: () => { setUdfForm({ name: "", udfType: "javascript", description: "", returnType: "unknown" }); invalidate(); toast.success("UDF 元数据已登记，需审核后可被数据流引用。"); }, onError: error => toast.error(error.message) });
   const createTag = trpc.data.createTag.useMutation({ onSuccess: () => { setTagName(""); invalidate(); toast.success("标签已创建。"); }, onError: error => toast.error(error.message) });
@@ -56,7 +56,7 @@ export default function DataResourceCenter({ projectId, onOpenWorkflow }: { proj
   ], [flows.data, resources.data]);
 
   return <div data-resource-center="">
-    <div className="mb-5 border-b border-slate-200 pb-4"><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">PROJECT RESOURCE CENTER</p><h1 className="mt-1 text-xl font-semibold text-slate-800">资源配置中心</h1><p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">参考原始数据流模块集中管理项目内数据源、资源目录、函数、标签和插件。连接凭据仅能以引用形式保存，页面不会返回明文秘密。</p></div>
+    <div className="mb-5 border-b border-slate-200 pb-4"><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">PROJECT RESOURCE CENTER</p><h1 className="mt-1 text-xl font-semibold text-slate-800">资源配置中心</h1><p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">参考原始数据流模块集中管理项目内数据源、资源目录、函数、标签和插件。连接凭据仅能以引用形式保存，页面不会返回明文秘密。当前数据流为实验性元数据/样例执行器，数据源保存成功不代表网络、凭据或查询权限已验证。</p></div>
     <div className="mb-4 flex flex-wrap gap-2">{entries.map(item => <button key={item.id} onClick={() => setTab(item.id)} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${tab === item.id ? "border-[#b9d2ff] bg-[#eaf1ff] font-semibold text-[#245fc8]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}><item.icon size={15} />{item.label}<span className="rounded bg-white/70 px-1.5 text-[10px] text-slate-400">{item.count}</span></button>)}</div>
     {tab === "flows" && <><DataFlowCanvasReferenceShell projectName={projectName} resources={resources.data as any} flows={(flows.data ?? []) as any[]} runs={(runs.data ?? []) as any[]} onOpenWorkflow={onOpenWorkflow} onTestRun={workflowId => run.mutate({ projectId, workflowId })} runPending={run.isPending} /><DataFlowTaskSummary flows={(flows.data ?? []) as any[]} runs={(runs.data ?? []) as any[]} schedules={(schedules.data ?? []) as any[]} /><DataflowCanvasUtilityActions flows={(flows.data ?? []) as any[]} onOpenWorkflow={onOpenWorkflow} /><DataflowOperationList runs={(runs.data ?? []) as any[]} /></>}
     {resources.isLoading && <div className="rounded-lg border border-slate-200 bg-white p-8 text-sm text-slate-400">正在读取项目资源目录…</div>}

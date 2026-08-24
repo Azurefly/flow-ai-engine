@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
+import http from "node:http";
+import https from "node:https";
 import { isIP } from "node:net";
 import mysql from "mysql2/promise";
 import {
@@ -51,6 +53,109 @@ export function parseStructuredLlmOutput(content: string): unknown {
   } catch {
     throw new Error("LLM 节点结构化输出不是合法 JSON。");
   }
+}
+
+export function assertJsonSchemaValue(
+  value: unknown,
+  schema: Record<string, unknown>,
+  path = "$"
+): void {
+  if (Array.isArray(schema.enum) && !schema.enum.some(item => JSON.stringify(item) === JSON.stringify(value)))
+    throw new Error(`LLM 结构化输出 ${path} 不在允许的枚举值中。`);
+  const type = typeof schema.type === "string" ? schema.type : undefined;
+  const matchesType =
+    !type ||
+    (type === "object" && Boolean(value) && typeof value === "object" && !Array.isArray(value)) ||
+    (type === "array" && Array.isArray(value)) ||
+    (type === "string" && typeof value === "string") ||
+    (type === "number" && typeof value === "number" && Number.isFinite(value)) ||
+    (type === "integer" && Number.isInteger(value)) ||
+    (type === "boolean" && typeof value === "boolean") ||
+    (type === "null" && value === null);
+  if (!matchesType)
+    throw new Error(`LLM 结构化输出 ${path} 类型不符合 ${type} 约束。`);
+  if (type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
+    const record = value as JsonRecord;
+    const required = Array.isArray(schema.required) ? schema.required.map(String) : [];
+    for (const key of required)
+      if (!(key in record) || record[key] === undefined || record[key] === null)
+        throw new Error(`LLM 结构化输出缺少必填字段：${path}.${key}。`);
+    const properties = asRecord(schema.properties);
+    for (const [key, childSchema] of Object.entries(properties)) {
+      if (record[key] !== undefined && childSchema && typeof childSchema === "object" && !Array.isArray(childSchema))
+        assertJsonSchemaValue(record[key], childSchema as Record<string, unknown>, `${path}.${key}`);
+    }
+    if (schema.additionalProperties === false) {
+      const unexpected = Object.keys(record).find(key => !(key in properties));
+      if (unexpected)
+        throw new Error(`LLM 结构化输出包含未允许字段：${path}.${unexpected}。`);
+    }
+  }
+  if (type === "array" && Array.isArray(value) && schema.items && typeof schema.items === "object" && !Array.isArray(schema.items))
+    value.forEach((item, index) => assertJsonSchemaValue(item, schema.items as Record<string, unknown>, `${path}[${index}]`));
+}
+
+export function validateFormSubmission(fields: unknown[], submittedValue: unknown) {
+  const submitted = asRecord(submittedValue);
+  const result: JsonRecord = {};
+  for (const rawField of fields) {
+    const field = asRecord(rawField);
+    const key = String(field.key ?? "").trim();
+    if (!key) throw new Error("表单字段缺少 key。");
+    const hasSubmitted = Object.prototype.hasOwnProperty.call(submitted, key);
+    let value = hasSubmitted ? submitted[key] : field.defaultValue;
+    if (field.readOnly === true && hasSubmitted && JSON.stringify(value) !== JSON.stringify(field.defaultValue))
+      throw new Error(`表单字段“${key}”为只读，不允许由调用方修改。`);
+    const empty = value === undefined || value === null || value === "";
+    if (field.required === true && empty)
+      throw new Error(`表单必填字段“${key}”缺失。`);
+    if (empty) continue;
+    const type = String(field.type ?? "text").toLowerCase();
+    if (["text", "string", "textarea", "email", "date", "select"].includes(type) && typeof value !== "string")
+      throw new Error(`表单字段“${key}”必须是字符串。`);
+    if (type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value)))
+      throw new Error(`表单字段“${key}”不是有效邮箱。`);
+    if (type === "date" && Number.isNaN(Date.parse(String(value))))
+      throw new Error(`表单字段“${key}”不是有效日期。`);
+    if (type === "number" && (typeof value !== "number" || !Number.isFinite(value)))
+      throw new Error(`表单字段“${key}”必须是有限数值。`);
+    if (type === "boolean" && typeof value !== "boolean")
+      throw new Error(`表单字段“${key}”必须是布尔值。`);
+    if (type === "multiselect" && !Array.isArray(value))
+      throw new Error(`表单字段“${key}”必须是数组。`);
+    const options = Array.isArray(field.options)
+      ? field.options.map(option => {
+          const record = asRecord(option);
+          return Object.keys(record).length ? record.value : option;
+        })
+      : [];
+    if (options.length) {
+      const values = type === "multiselect" ? value as unknown[] : [value];
+      if (values.some(item => !options.some(option => JSON.stringify(option) === JSON.stringify(item))))
+        throw new Error(`表单字段“${key}”包含选项范围外的值。`);
+    }
+    if (typeof value === "string" && Number.isFinite(Number(field.maxLength)) && value.length > Number(field.maxLength))
+      throw new Error(`表单字段“${key}”超过最大长度。`);
+    if (typeof value === "number" && Number.isFinite(Number(field.min)) && value < Number(field.min))
+      throw new Error(`表单字段“${key}”低于最小值。`);
+    if (typeof value === "number" && Number.isFinite(Number(field.max)) && value > Number(field.max))
+      throw new Error(`表单字段“${key}”超过最大值。`);
+    result[key] = value;
+  }
+  return result;
+}
+
+export function redactSensitiveValues(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSensitiveValues);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as JsonRecord).map(([key, item]) => [
+      key,
+      /(password|passwd|secret|token|api[_-]?key|authorization|cookie)/i.test(key)
+        ? "[REDACTED]"
+        : redactSensitiveValues(item),
+    ])
+  );
 }
 export type WorkflowRunDetail = {
   workflowId: string;
@@ -193,20 +298,30 @@ function blockedIp(address: string) {
     );
   }
   const normalized = address.toLowerCase();
+  if (normalized.startsWith("::ffff:")) {
+    const mapped = normalized.slice("::ffff:".length);
+    if (isIP(mapped) === 4) return blockedIp(mapped);
+    const hexadecimal = mapped.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hexadecimal) {
+      const high = Number.parseInt(hexadecimal[1], 16);
+      const low = Number.parseInt(hexadecimal[2], 16);
+      return blockedIp(
+        `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`
+      );
+    }
+  }
   return (
     normalized === "::" ||
     normalized === "::1" ||
     normalized.startsWith("fc") ||
     normalized.startsWith("fd") ||
     normalized.startsWith("fe80") ||
-    normalized.startsWith("::ffff:127.") ||
-    normalized.startsWith("::ffff:10.") ||
-    normalized.startsWith("::ffff:192.168.") ||
-    normalized.startsWith("::ffff:169.254.")
+    normalized.startsWith("ff") ||
+    normalized.startsWith("2001:db8")
   );
 }
 
-export async function assertSafeHttpUrl(rawUrl: string) {
+async function resolveSafeHttpTarget(rawUrl: string) {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -219,7 +334,7 @@ export async function assertSafeHttpUrl(rawUrl: string) {
     throw new Error("HTTP 节点 URL 不允许包含凭据。");
   if (url.port && !["80", "443"].includes(url.port))
     throw new Error("HTTP 节点仅允许 80 或 443 端口。");
-  const host = url.hostname.toLowerCase();
+  const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
     host === "localhost" ||
     host.endsWith(".localhost") ||
@@ -231,7 +346,92 @@ export async function assertSafeHttpUrl(rawUrl: string) {
     : await lookup(host, { all: true, verbatim: true });
   if (!addresses.length || addresses.some(item => blockedIp(item.address)))
     throw new Error("HTTP 节点拒绝私有、环回、链路本地或保留网络地址。");
-  return url;
+  const selected = addresses[0]!;
+  return {
+    url,
+    address: selected.address,
+    family: isIP(selected.address),
+  };
+}
+
+export async function assertSafeHttpUrl(rawUrl: string) {
+  return (await resolveSafeHttpTarget(rawUrl)).url;
+}
+
+function requestPinnedHttp(input: {
+  url: URL;
+  address: string;
+  family: number;
+  method: string;
+  headers: Record<string, string>;
+  body?: string;
+  timeoutMs: number;
+}) {
+  return new Promise<{
+    status: number;
+    statusText: string;
+    headers: Record<string, string>;
+    bytes: Uint8Array;
+  }>((resolve, reject) => {
+    const transport = input.url.protocol === "https:" ? https : http;
+    const request = transport.request(
+      {
+        protocol: input.url.protocol,
+        hostname: input.url.hostname,
+        port: input.url.port || (input.url.protocol === "https:" ? 443 : 80),
+        path: `${input.url.pathname}${input.url.search}`,
+        method: input.method,
+        headers: input.headers,
+        servername: input.url.hostname,
+        lookup: ((_hostname: string, _options: unknown, callback: (error: Error | null, address: string, family: number) => void) =>
+          callback(null, input.address, input.family)) as any,
+      },
+      response => {
+        const status = Number(response.statusCode ?? 0);
+        const contentLength = Number(response.headers["content-length"] ?? "0");
+        if (Number.isFinite(contentLength) && contentLength > MAX_HTTP_RESPONSE_BYTES) {
+          response.destroy();
+          reject(new Error("HTTP 节点响应超过 1MB 限制。"));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let size = 0;
+        response.on("data", chunk => {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          size += buffer.byteLength;
+          if (size > MAX_HTTP_RESPONSE_BYTES) {
+            response.destroy(new Error("HTTP 节点响应超过 1MB 限制。"));
+            return;
+          }
+          chunks.push(buffer);
+        });
+        response.once("error", reject);
+        response.once("end", () => {
+          if (status >= 300 && status < 400) {
+            reject(new Error("HTTP 节点禁止跟随重定向。"));
+            return;
+          }
+          resolve({
+            status,
+            statusText: String(response.statusMessage ?? ""),
+            headers: Object.fromEntries(
+              Object.entries(response.headers).map(([key, value]) => [
+                key,
+                Array.isArray(value) ? value.join(", ") : String(value ?? ""),
+              ])
+            ),
+            bytes: new Uint8Array(Buffer.concat(chunks)),
+          });
+        });
+      }
+    );
+    request.setTimeout(input.timeoutMs, () =>
+      request.destroy(new Error("HTTP 节点请求超时。"))
+    );
+    request.once("error", reject);
+    if (input.body !== undefined) request.write(input.body);
+    request.end();
+  });
 }
 
 /**
@@ -270,7 +470,8 @@ export function withWorkflowIdempotencyHeader(
 
 async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   const resolved = asRecord(resolveTemplates(config, context));
-  const url = await assertSafeHttpUrl(String(resolved.url ?? ""));
+  const target = await resolveSafeHttpTarget(String(resolved.url ?? ""));
+  const url = target.url;
   const query = asRecord(resolved.query);
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== null)
@@ -302,7 +503,6 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
     !Object.keys(safeHeaders).some(key => key.toLowerCase() === "content-type")
   )
     safeHeaders["content-type"] = "application/json";
-  const controller = new AbortController();
   const configuredTimeout =
     typeof resolved.timeout === "number" && Number.isFinite(resolved.timeout)
       ? resolved.timeout
@@ -311,26 +511,18 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
     Math.max(Math.floor(configuredTimeout), 1_000),
     HTTP_TIMEOUT_MS
   );
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method,
-      headers: safeHeaders,
-      body: ["GET", "DELETE"].includes(method) ? undefined : serializedBody,
-      redirect: "error",
-      signal: controller.signal,
-    });
-    const contentLength = Number(response.headers.get("content-length") ?? "0");
-    if (
-      Number.isFinite(contentLength) &&
-      contentLength > MAX_HTTP_RESPONSE_BYTES
-    )
-      throw new Error("HTTP 节点响应超过 1MB 限制。");
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_HTTP_RESPONSE_BYTES)
-      throw new Error("HTTP 节点响应超过 1MB 限制。");
+  const response = await requestPinnedHttp({
+    url,
+    address: target.address,
+    family: target.family,
+    method,
+    headers: safeHeaders,
+    body: ["GET", "DELETE"].includes(method) ? undefined : serializedBody,
+    timeoutMs,
+  });
+  const bytes = response.bytes;
     const text = new TextDecoder().decode(bytes);
-    const contentType = response.headers.get("content-type") ?? "";
+    const contentType = response.headers["content-type"] ?? "";
     let parsedBody: unknown = text;
     if (contentType.includes("application/json")) {
       try {
@@ -339,18 +531,17 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
         /* preserve malformed body as text */
     }
     }
-    if (!response.ok)
+    if (response.status < 200 || response.status >= 300)
       throw new Error(
         `HTTP 节点请求失败：${response.status} ${response.statusText}`
       );
     return {
       status: response.status,
-      headers: Object.fromEntries(response.headers.entries()),
+      headers: redactSensitiveValues(
+        response.headers
+      ),
       body: parsedBody,
     };
-  } finally {
-    clearTimeout(timeout);
-  }
 }
 
 function firstConfiguredString(...values: unknown[]) {
@@ -445,6 +636,10 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   let structured: unknown;
   if (outputSchema) {
     structured = parseStructuredLlmOutput(contentText);
+    assertJsonSchemaValue(
+      structured,
+      outputSchema.schema as Record<string, unknown>
+    );
   }
   return {
     model: response.model || model,
@@ -642,21 +837,38 @@ async function executeSubflowNode(
   context: JsonRecord,
   ownerUserId: number
 ) {
-  const resolved = asRecord(resolveTemplates(config, context));
+  const snapshot = config.resolvedSubflowDefinition;
+  const { resolvedSubflowDefinition: _snapshot, ...runtimeConfig } = config;
+  const resolved = asRecord(resolveTemplates(runtimeConfig, context));
   const subflowId = String(resolved.subflowId ?? "").trim();
   if (!subflowId) throw new Error("子流程节点缺少子流程标识。");
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,name,definitionJson,isEnabled FROM workflow_subflow WHERE id=? AND ownerUserId=? LIMIT 1",
-    [subflowId, ownerUserId]
-  );
-  const subflow = rows[0];
-  if (!subflow || !subflow.isEnabled)
-    throw new Error("引用的子流程不存在或已停用。");
-  const definition = readJson(subflow.definitionJson) as Definition;
+  let subflowName = String(resolved.resolvedSubflowName ?? "").trim();
+  let definition: Definition;
+  let snapshotUpdatedAt = resolved.resolvedSubflowUpdatedAt ?? null;
+  if (snapshot && typeof snapshot === "object" && !Array.isArray(snapshot)) {
+    definition = snapshot as Definition;
+  } else {
+    // Compatibility path for execution plans published before subflow snapshots.
+    const [rows] = await db().query<mysql.RowDataPacket[]>(
+      "SELECT id,name,definitionJson,isEnabled,updatedAt FROM workflow_subflow WHERE id=? AND ownerUserId=? LIMIT 1",
+      [subflowId, ownerUserId]
+    );
+    const subflow = rows[0];
+    if (!subflow || !subflow.isEnabled)
+      throw new Error("引用的子流程不存在或已停用。");
+    definition = readJson(subflow.definitionJson) as Definition;
+    subflowName = String(subflow.name);
+    snapshotUpdatedAt = subflow.updatedAt ?? null;
+  }
   if (!definition?.nodes?.length) throw new Error("引用的子流程定义为空。");
   const input = asRecord(resolved.input ?? context.input);
   const result = await executeInlineDefinition(definition, input);
-  return { subflowId, subflowName: subflow.name, result: result.output };
+  return {
+    subflowId,
+    subflowName,
+    snapshotUpdatedAt,
+    result: result.output,
+  };
 }
 
 async function executeNode(
@@ -696,16 +908,21 @@ async function executeNode(
           flowStatus: resolveTemplates(config.flowStatus, context),
         },
       };
-    case "form":
+    case "form": {
+      const submitted = validateFormSubmission(
+        Array.isArray(config.fields) ? config.fields : [],
+        context.input
+      );
       return {
         output: {
           fields: resolveTemplates(
             Array.isArray(config.fields) ? config.fields : [],
             context
           ),
-          submitted: asRecord(context.input),
+          submitted,
         },
       };
+    }
     case "router": {
       const runtime = asRecord(context.runtime);
       const participantUserIds = Array.isArray(
@@ -1774,10 +1991,10 @@ async function executeRunSegment(input: {
         ? currentParticipants
         : runtimeUserIds(input.context)
     );
-    const nodeInput = {
+    const nodeInput = redactSensitiveValues({
       context: JSON.parse(JSON.stringify(input.context)),
       config: node.config,
-    };
+    }) as JsonRecord;
     const nodeRunId = await insertNodeRun(
       input.runId,
       node,

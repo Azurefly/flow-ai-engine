@@ -642,7 +642,7 @@ export const appRouter = router({
           projectId: z.string().min(8).max(64),
           sourceId: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
-          status: z.enum(["draft", "verified", "disabled"]).optional(),
+          status: z.enum(["draft", "disabled"]).optional(),
           connection: z.record(z.string(), z.unknown()).optional(),
           credentialRef: z.string().trim().max(255).nullable().optional(),
         })

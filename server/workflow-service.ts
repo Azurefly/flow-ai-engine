@@ -153,7 +153,7 @@ async function resolveSubflowReferences(
   const subflowNodes = definition.nodes.filter(node => node.type === "subflow");
   if (!subflowNodes.length) return definition;
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,name,isEnabled FROM workflow_subflow WHERE ownerUserId=?",
+    "SELECT id,name,definitionJson,isEnabled,updatedAt FROM workflow_subflow WHERE ownerUserId=?",
     [ownerUserId]
   );
   const byId = new Map(rows.map(row => [String(row.id), row]));
@@ -186,11 +186,30 @@ async function resolveSubflowReferences(
     }
     if (executable && !Boolean(mapped.isEnabled))
       throw new Error("流程只能发布已启用的私有子流程引用。");
+    const mappedDefinition = parseJson(mapped.definitionJson) as Definition;
+    if (executable) {
+      validate(mappedDefinition, true);
+      const unsupported = mappedDefinition.nodes.find(item =>
+        ["operate", "sql", "source", "table", "filter", "map", "edit_sql", "udf", "sink", "output", "subflow"].includes(item.type)
+      );
+      if (unsupported)
+        throw new Error(
+          `子流程“${String(mapped.name)}”包含当前同步子流程运行时不支持的节点：${unsupported.name}（${unsupported.type}）。`
+        );
+    }
     return {
       ...node,
       config: {
         ...node.config,
         subflowId: String(mapped.id),
+        executionMode: "sync_snapshot",
+        ...(executable
+          ? {
+              resolvedSubflowName: String(mapped.name),
+              resolvedSubflowUpdatedAt: new Date(mapped.updatedAt).toISOString(),
+              resolvedSubflowDefinition: mappedDefinition,
+            }
+          : {}),
         zlcxz: Object.keys(legacy).length
           ? legacy
           : { id: String(mapped.id), text: String(mapped.name) },

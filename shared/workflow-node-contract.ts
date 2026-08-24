@@ -230,15 +230,16 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   },
   subflow: {
     type: "subflow", label: "子流程", description: "调用当前所有者的可复用私有流程", configEvidence: "reference-confirmed", flowTypes: ["state", "control", "data"],
-    defaultConfig: { zlcxz: { id: "", text: "" }, nodeDh: "", sfgqzlc: true, zlcfqf: "sender", gdtj: [], zlcrk: {}, zlcck: [{ connect: { id: "", text: "", yId: "" }, end: "" }], subflowId: "", input: "{{input}}" },
+    defaultConfig: { zlcxz: { id: "", text: "" }, nodeDh: "", sfgqzlc: true, zlcfqf: "sender", gdtj: [], zlcrk: {}, zlcck: [{ connect: { id: "", text: "", yId: "" }, end: "" }], executionMode: "sync_snapshot", subflowId: "", input: "{{input}}" },
     fields: [
       { key: "zlcxz", label: "原版流程选择", help: "原版子流程 ID 与名称；迁移时需映射为当前所有者的已启用私有子流程。", kind: "json", required: true },
       { key: "nodeDh", label: "子流程代号", help: "原版子流程节点代号，仅允许数字和字母。", kind: "text", required: true },
-      { key: "sfgqzlc", label: "挂起主流程", help: "原版是否挂起主流程发起子流程。", kind: "boolean", required: true },
-      { key: "zlcfqf", label: "子流程发起方", help: "原版 sender（发送方）或 receiver（接收方）。", kind: "select", required: true, options: [{ value: "sender", label: "基于发送方" }, { value: "receiver", label: "基于接收方" }] },
-      { key: "gdtj", label: "更多条件", help: "原版“解析业务字段进入子流程”等条件。", kind: "json" },
-      { key: "zlcrk", label: "子流程入口", help: "原版开始节点和入口操作映射。", kind: "json", required: true },
-      { key: "zlcck", label: "子流程出口", help: "原版连接节点与结束节点映射数组。", kind: "json" },
+      { key: "sfgqzlc", label: "挂起主流程（兼容字段）", help: "仅保留原版定义；当前运行时始终同步等待已发布快照。", kind: "boolean", required: true },
+      { key: "zlcfqf", label: "子流程发起方（兼容字段）", help: "仅保留原版 sender/receiver 定义；当前以父流程输入映射执行。", kind: "select", required: true, options: [{ value: "sender", label: "基于发送方" }, { value: "receiver", label: "基于接收方" }] },
+      { key: "gdtj", label: "更多条件（兼容字段）", help: "当前安全运行时不解释原版任意条件代码。", kind: "json" },
+      { key: "zlcrk", label: "子流程入口（兼容字段）", help: "当前请使用下方“传入数据”作为权威入口映射。", kind: "json", required: true },
+      { key: "zlcck", label: "子流程出口（兼容字段）", help: "当前子流程结果固定写入节点 result，不解释原版出口数组。", kind: "json" },
+      { key: "executionMode", label: "执行模式", help: "当前仅支持同步等待发布时固定的子流程快照。", kind: "select", required: true, options: [{ value: "sync_snapshot", label: "同步等待·固定快照" }] },
       { key: "subflowId", label: "当前子流程标识", help: "当前安全运行时使用；必须属于流程所有者且已启用。", kind: "text", required: true },
       { key: "input", label: "传入数据", help: templateHelp, kind: "json" },
     ],
@@ -414,7 +415,10 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       }
       if (config.failureHandle !== undefined && config.failureHandle !== "") assertString(config.failureHandle, "LLM 节点失败分支句柄必须是字符串。");
       break;
-    case "subflow": assertString(firstNonBlank(config.subflowId), "子流程节点必须选择有效的当前子流程映射。"); break;
+    case "subflow":
+      assertString(firstNonBlank(config.subflowId), "子流程节点必须选择有效的当前子流程映射。");
+      if (config.executionMode !== undefined && config.executionMode !== "sync_snapshot") throw new Error("子流程当前仅支持同步固定快照模式。");
+      break;
     case "source": case "table": assertString(config.assetId, "资源节点必须选择项目数据资源。"); break;
     case "filter": assertString(config.filterField, "筛选节点必须配置筛选字段。"); break;
     case "map": if (!Array.isArray(config.columns)) throw new Error("字段映射节点 columns 必须是数组。"); assertOptionalNumber(config.limit, "字段映射节点行数限制必须为正数。", 1, 100_000); break;
