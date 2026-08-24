@@ -73,6 +73,7 @@ function badge(status: string) {
 function approvalLabel(task: any) {
   if (task?.signMode === "orSignFor") return "或签";
   if (task?.signMode === "andSignFor") return "会签";
+  if (task?.signMode === "sequentialSignFor") return "顺序会签";
   return "";
 }
 
@@ -441,12 +442,12 @@ export default function ProcessWorkbench() {
           onClose={() => setSelectedTaskId(null)}
           onClaim={() => claim.mutate({ taskId: selectedTaskId })}
           onExecute={(result: {
-            decision: "approved" | "rejected";
+            decision: "approved" | "rejected" | "abstained";
             comment?: string;
             [key: string]: unknown;
           }) => execute.mutate({ taskId: selectedTaskId, result })}
           onComplete={(result: {
-            decision: "approved" | "rejected";
+            decision: "approved" | "rejected" | "abstained";
             comment?: string;
             [key: string]: unknown;
           }) => complete.mutate({ taskId: selectedTaskId, result })}
@@ -895,7 +896,7 @@ function TaskDrawer({
   onReturn,
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
-  const [decision, setDecision] = useState<"approved" | "rejected">("approved");
+  const [decision, setDecision] = useState<"approved" | "rejected" | "abstained">("approved");
   const [comment, setComment] = useState("");
   const [resultRows, setResultRows] = useState<
     Array<{ key: string; value: string }>
@@ -1031,9 +1032,9 @@ function TaskDrawer({
               <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
                 <p className="text-xs font-semibold text-slate-600">审批决定</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  明确选择同意或拒绝；拒绝时处理意见必填，服务端不会再把“任务完成”自动当作通过。
+                  明确选择同意、拒绝或弃权；拒绝时处理意见必填，弃权不会计入同意票。
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 grid grid-cols-3 gap-2">
                   <Button
                     type="button"
                     variant={decision === "approved" ? "default" : "outline"}
@@ -1058,6 +1059,14 @@ function TaskDrawer({
                   >
                     拒绝
                   </Button>
+                  <Button
+                    type="button"
+                    variant={decision === "abstained" ? "default" : "outline"}
+                    className={decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : ""}
+                    onClick={() => setDecision("abstained")}
+                  >
+                    弃权
+                  </Button>
                 </div>
                 <label className="mt-3 grid gap-1 text-xs font-medium text-slate-600">
                   处理意见{decision === "rejected" ? "（必填）" : "（可选）"}
@@ -1069,7 +1078,7 @@ function TaskDrawer({
                     placeholder={
                       decision === "rejected"
                         ? "请说明拒绝原因"
-                        : "可填写审批意见"
+                        : decision === "abstained" ? "可说明弃权原因" : "可填写审批意见"
                     }
                   />
                 </label>
@@ -1127,7 +1136,7 @@ function TaskDrawer({
                   </div>
                 </details>
                 <Button
-                  className={`mt-3 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
+                  className={`mt-3 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
                   disabled={
                     busy || (decision === "rejected" && !comment.trim())
                   }
@@ -1136,6 +1145,8 @@ function TaskDrawer({
                   {busy && <Loader2 className="animate-spin" size={15} />}
                   {decision === "rejected"
                     ? "拒绝并终止流程"
+                    : decision === "abstained"
+                      ? "提交弃权"
                     : task.operationName || "同意并继续流程"}
                 </Button>
                 {task.status === "pending" && (

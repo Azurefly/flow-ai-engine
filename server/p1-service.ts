@@ -52,7 +52,7 @@ function presentTask(row: mysql.RowDataPacket) {
     : status === "claimed"
       ? "处理中"
       : status === "completed"
-        ? result?.decision === "rejected" ? "已拒绝" : "已审核"
+        ? result?.decision === "rejected" ? "已拒绝" : result?.decision === "abstained" ? "已弃权" : "已审核"
         : "已取消";
   return {
     ...row,
@@ -117,6 +117,13 @@ export async function claimWorkflowTask(user: User, taskId: string) {
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true))) throw new Error("无权领取该人工任务。 ");
   if (task.assignedUserId && Number(task.assignedUserId) !== user.id && user.role !== "admin") throw new Error("该人工任务已指定其他处理人。 ");
+  if (task.approvalGroupId && task.signMode === "sequentialSignFor") {
+    const [prior] = await db().query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow_task WHERE approvalGroupId=? AND approvalOrder<? AND status<>'completed' LIMIT 1",
+      [task.approvalGroupId, Number(task.approvalOrder ?? 0)]
+    );
+    if (prior[0]) throw new Error("顺序会签尚未轮到当前审批人。 ");
+  }
   const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_task SET status='claimed',claimedByUserId=?,claimedAt=NOW() WHERE id=? AND status='pending'", [user.id, taskId]);
   if (!result.affectedRows) throw new Error("人工任务已被领取或已结束。 ");
   await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: "task_claimed" } });
@@ -167,7 +174,7 @@ export async function listWorkflowTaskAssignees(user: User, taskId: string) {
 export async function handoverWorkflowTask(user: User, input: { taskId: string; targetUserId: number }) {
   const task: any = await getWorkflowTask(user, input.taskId);
   if (!task || !(await canAccessTask(user, task, true))) throw new Error("人工任务不存在或无移交权限。 ");
-  if (!["pending", "claimed"].includes(String(task.status)) || task.runStatus !== "running") throw new Error("仅可移交正在等待处理的人工任务。 ");
+  if (!["pending", "claimed"].includes(String(task.status)) || !["running", "waiting"].includes(String(task.runStatus))) throw new Error("仅可移交正在等待处理的人工任务。 ");
   if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("仅当前处理人或系统管理员可移交已领取任务。 ");
   const target = await getEligibleAssignee(task, input.targetUserId);
   const claimedCondition = task.status === "claimed" ? " AND claimedByUserId=?" : "";

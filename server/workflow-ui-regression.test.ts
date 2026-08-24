@@ -970,7 +970,7 @@ describe("流程设计器界面回归约束", () => {
       "trpc.task.batchComplete.useMutation"
     );
     expect(processWorkbenchSource).toContain(
-      'decision, setDecision] = useState<"approved" | "rejected">'
+      'decision, setDecision] = useState<"approved" | "rejected" | "abstained">'
     );
     expect(processWorkbenchSource).toContain("拒绝并终止流程");
     expect(processWorkbenchSource).toContain("拒绝时处理意见必填");

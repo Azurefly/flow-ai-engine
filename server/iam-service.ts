@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { currentRequestId } from "./_core/http-security";
 
 export const WORKFLOW_PERMISSIONS = ["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage"] as const;
 
@@ -248,8 +249,8 @@ export async function hasWorkflowPermission(user: { id: number; role: "user" | "
   return access.exists && access.permissions.has(permission);
 }
 
-export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked"; resourceType?: string; resourceId?: string; details?: Record<string, unknown> }) {
-  await db().query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson) VALUES (?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null]);
+export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked"; resourceType?: string; resourceId?: string; details?: Record<string, unknown>; requestId?: string | null }) {
+  await db().query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson,requestId) VALUES (?,?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null, input.requestId ?? currentRequestId() ?? null]);
 }
 
 export async function grantWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; grantedByUserId: number; expiresAt?: Date | null }) {

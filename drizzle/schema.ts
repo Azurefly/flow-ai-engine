@@ -411,6 +411,7 @@ export const workflowRuns = mysqlTable(
     executionLockExpiresAt: timestamp("executionLockExpiresAt"),
     triggeredByUserId: int("triggeredByUserId").references(() => users.id),
     authorizationSnapshotJson: json("authorizationSnapshotJson"),
+    requestId: varchar("requestId", { length: 100 }),
     executionPlanJson: json("executionPlanJson"),
     executionPlanHash: varchar("executionPlanHash", { length: 64 }),
   },
@@ -452,6 +453,7 @@ export const workflowRunJobs = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
     finishedAt: timestamp("finishedAt"),
+    requestId: varchar("requestId", { length: 100 }),
   },
   table => [
     unique("workflow_run_job_idempotency_unique").on(table.idempotencyKey),
@@ -492,6 +494,7 @@ export const workflowNodeRuns = mysqlTable(
     finishedAt: timestamp("finishedAt"),
     durationMs: int("durationMs"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
+    requestId: varchar("requestId", { length: 100 }),
   },
   table => [
     unique("workflow_node_run_sequence_unique").on(
@@ -513,7 +516,7 @@ export const workflowTaskGroups = mysqlTable(
       .notNull()
       .references(() => workflowRuns.id),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
-    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor"])
+    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor", "sequentialSignFor"])
       .default("single")
       .notNull(),
     totalApprovers: int("totalApprovers").default(1).notNull(),
@@ -525,6 +528,7 @@ export const workflowTaskGroups = mysqlTable(
       .default("waiting")
       .notNull(),
     nextNodeIdsJson: json("nextNodeIdsJson").notNull(),
+    requestId: varchar("requestId", { length: 100 }),
     completedByTaskId: varchar("completedByTaskId", { length: 36 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     completedAt: timestamp("completedAt"),
@@ -565,9 +569,10 @@ export const workflowTasks = mysqlTable(
     approvalGroupId: varchar("approvalGroupId", { length: 36 }).references(
       () => workflowTaskGroups.id
     ),
-    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor"])
+    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor", "sequentialSignFor"])
       .default("single")
       .notNull(),
+    approvalOrder: int("approvalOrder").default(0).notNull(),
     roleKey: varchar("roleKey", { length: 160 }).default("default").notNull(),
     operationName: varchar("operationName", { length: 160 }),
     pendingStatusName: varchar("pendingStatusName", { length: 160 }),
@@ -577,6 +582,7 @@ export const workflowTasks = mysqlTable(
     payloadJson: json("payloadJson"),
     resultJson: json("resultJson"),
     nextNodeIdsJson: json("nextNodeIdsJson").notNull(),
+    requestId: varchar("requestId", { length: 100 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     claimedAt: timestamp("claimedAt"),
     completedAt: timestamp("completedAt"),
@@ -1061,6 +1067,7 @@ export const authorizationAuditLogs = mysqlTable("authorization_audit_log", {
   resourceType: varchar("resourceType", { length: 64 }),
   resourceId: varchar("resourceId", { length: 64 }),
   detailsJson: json("detailsJson"),
+  requestId: varchar("requestId", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 

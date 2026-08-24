@@ -13,6 +13,7 @@ import {
 } from "../shared/reference-router-config";
 import { invokeLLM, listLLMModels } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
+import { currentRequestId } from "./_core/http-security";
 import {
   assertWorkflowExecutionPlan,
   compileWorkflowDefinition,
@@ -28,7 +29,7 @@ import type { Definition } from "./workflow-service";
 
 type JsonRecord = Record<string, unknown>;
 type WorkflowUser = { id: number; role: "user" | "admin" };
-export type ApprovalDecision = "approved" | "rejected";
+export type ApprovalDecision = "approved" | "rejected" | "abstained";
 type WorkflowNode = Definition["nodes"][number];
 type WorkflowEdge = Definition["edges"][number];
 export type WorkflowRunDetail = {
@@ -764,7 +765,8 @@ async function executeNode(
 async function insertNodeRun(
   runId: string,
   node: WorkflowNode,
-  input: JsonRecord
+  input: JsonRecord,
+  requestId?: string | null
 ) {
   const nodeRunId = randomUUID();
   const connection = await db().getConnection();
@@ -783,7 +785,7 @@ async function insertNodeRun(
     if (!Number.isInteger(sequenceNo) || sequenceNo < 1)
       throw new Error("无法生成节点执行序号。");
     await connection.query(
-      "INSERT INTO workflow_node_run (id,runId,sequenceNo,nodeId,nodeType,nodeName,status,inputJson,startedAt) VALUES (?,?,?,?,?,?,'running',?,NOW())",
+      "INSERT INTO workflow_node_run (id,runId,sequenceNo,nodeId,nodeType,nodeName,status,inputJson,requestId,startedAt) VALUES (?,?,?,?,?,?,'running',?,?,NOW())",
       [
         nodeRunId,
         runId,
@@ -792,6 +794,7 @@ async function insertNodeRun(
         node.type,
         node.name,
         JSON.stringify(input),
+        requestId ?? currentRequestId() ?? null,
       ]
     );
     await connection.commit();
@@ -808,8 +811,8 @@ export function normalizeApprovalResult(result: JsonRecord) {
   const decision = String(result.decision ?? "")
     .trim()
     .toLowerCase();
-  if (decision !== "approved" && decision !== "rejected")
-    throw new Error("审批结果必须明确选择同意或拒绝。");
+  if (decision !== "approved" && decision !== "rejected" && decision !== "abstained")
+    throw new Error("审批结果必须明确选择同意或拒绝；也可选择弃权。");
   const comment =
     typeof result.comment === "string" ? result.comment.trim() : "";
   if (decision === "rejected" && !comment)
@@ -833,7 +836,8 @@ export function evaluateApprovalResults(input: {
   );
   const approved = decisions.filter(decision => decision === "approved").length;
   const rejected = decisions.filter(decision => decision === "rejected").length;
-  const completed = approved + rejected;
+  const abstained = decisions.filter(decision => decision === "abstained").length;
+  const completed = approved + rejected + abstained;
   const pending = Math.max(0, input.totalApprovers - completed);
   const outcome =
     approved >= input.requiredApprovals
@@ -845,6 +849,7 @@ export function evaluateApprovalResults(input: {
     outcome: outcome as ApprovalDecision | "waiting",
     approved,
     rejected,
+    abstained,
     completed,
     pending,
   };
@@ -907,6 +912,7 @@ export async function submitWorkflowRun(input: {
   triggeredBy: WorkflowUser;
   workflowInput?: JsonRecord;
   idempotencyKey?: string;
+  requestId?: string;
 }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT id,ownerUserId,name,projectId,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
@@ -958,6 +964,7 @@ export async function submitWorkflowRun(input: {
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],
+      requestId: input.requestId ?? currentRequestId() ?? null,
       roleKeysByUser: {
         [String(input.triggeredBy.id)]: ["default", "initiator", "sender"],
       },
@@ -989,7 +996,7 @@ export async function submitWorkflowRun(input: {
     if (lockedWorkflowRows[0].archivedAt)
       throw new Error("已归档流程不能发起运行，请先恢复流程。");
     await connection.query(
-      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?)",
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,requestId) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?)",
       [
         runId,
         input.workflowId,
@@ -1002,16 +1009,18 @@ export async function submitWorkflowRun(input: {
         JSON.stringify(authorizationSnapshot),
         JSON.stringify(executablePlan),
         hashWorkflowExecutionPlan(executablePlan),
+        input.requestId ?? currentRequestId() ?? null,
       ]
     );
     await connection.query(
-      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts) VALUES (?,?,'start','queued',?,?,?)",
+      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'start','queued',?,?,?,?)",
       [
         jobId,
         runId,
         jobIdempotencyKey,
         JSON.stringify(checkpoint),
         WORKFLOW_JOB_MAX_ATTEMPTS,
+        input.requestId ?? currentRequestId() ?? null,
       ]
     );
     await connection.commit();
@@ -1556,7 +1565,12 @@ async function executeRunSegment(input: {
       context: JSON.parse(JSON.stringify(input.context)),
       config: node.config,
     };
-    const nodeRunId = await insertNodeRun(input.runId, node, nodeInput);
+    const nodeRunId = await insertNodeRun(
+      input.runId,
+      node,
+      nodeInput,
+      String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null
+    );
     const startedAt = Date.now();
     try {
       if (node.type === "operate") {
@@ -1680,7 +1694,7 @@ async function executeRunSegment(input: {
             reference.passPercent
           );
           await db().query(
-            "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?)",
             [
               approvalGroupId,
               input.workflow.id,
@@ -1691,18 +1705,22 @@ async function executeRunSegment(input: {
               requiredApprovals,
               Math.round(reference.passPercent * 10000),
               JSON.stringify(nextNodeIds),
+              String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null,
             ]
           );
         }
+        const sequentialSign = reference.signMode === "sequentialSignFor";
         const taskAssignments = approvalGroupId
-          ? approverUserIds.map(userId => ({
+          ? approverUserIds.map((userId, approvalOrder) => ({
               assignedUserId: userId,
               candidateUserIds: [userId],
+              approvalOrder,
             }))
           : [
               {
                 assignedUserId: assignment.assignedUserId,
                 candidateUserIds: approverUserIds,
+                approvalOrder: 0,
               },
             ];
         const taskIds: string[] = [];
@@ -1710,7 +1728,7 @@ async function executeRunSegment(input: {
           const taskId = randomUUID();
           taskIds.push(taskId);
           await db().query(
-            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,roleKey,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
               taskId,
               input.workflow.id,
@@ -1724,6 +1742,7 @@ async function executeRunSegment(input: {
                 : null,
               approvalGroupId,
               reference.signMode,
+              taskAssignment.approvalOrder,
               taskRoleKey,
               operationName,
               pendingStatusName,
@@ -1737,6 +1756,7 @@ async function executeRunSegment(input: {
                 reference,
               }),
               JSON.stringify(nextNodeIds),
+              String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null,
             ]
           );
           for (const userId of taskAssignment.candidateUserIds) {
@@ -1756,7 +1776,10 @@ async function executeRunSegment(input: {
               stateName: pendingStatusName,
               flowStatus: pendingStatusName,
               sourceNodeId: node.id,
-              availableOperations: [availableOperation],
+              availableOperations:
+                !sequentialSign || taskAssignment.approvalOrder === 0
+                  ? [availableOperation]
+                  : [],
             });
           }
         }
@@ -1990,6 +2013,19 @@ async function completeTaskAndEvaluateApprovalGroup(
       results: groupResults,
     });
     if (progress.outcome === "waiting") {
+      if (String(task.signMode) === "sequentialSignFor") {
+        const [nextTasks] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT id,assignedUserId,operationName FROM workflow_task WHERE approvalGroupId=? AND status='pending' ORDER BY approvalOrder,id LIMIT 1",
+          [task.approvalGroupId]
+        );
+        const next = nextTasks[0];
+        if (next) {
+          await connection.query(
+            "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?",
+            [JSON.stringify([{ taskId: String(next.id), name: String(next.operationName ?? task.nodeName), signMode: "sequentialSignFor" }]), task.runId, Number(next.assignedUserId)]
+          );
+        }
+      }
       const pendingTaskId = String(
         members.find(
           row => row.status === "pending" || row.status === "claimed"
@@ -2056,7 +2092,7 @@ export async function resumeWorkflowTask(input: {
       input.completedBy.role !== "admin")
   )
     throw new Error("仅领取该任务的处理人可以完成操作。 ");
-  if (task.runStatus !== "running")
+  if (!["running", "waiting"].includes(String(task.runStatus)))
     throw new Error("所属流程实例不处于等待人工操作状态。 ");
   const gate = await completeTaskAndEvaluateApprovalGroup(task, {
     ...input,
@@ -2221,13 +2257,14 @@ export async function resumeWorkflowTask(input: {
     if (!queuedRun.affectedRows)
       throw new Error("流程状态已变化，无法重复提交续跑命令。");
     await continuationConnection.query(
-      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts) VALUES (?,?,'resume','queued',?,?,?)",
+      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
       [
         jobId,
         task.runId,
         idempotencyKey,
         JSON.stringify(checkpoint),
         WORKFLOW_JOB_MAX_ATTEMPTS,
+        String(task.requestId ?? currentRequestId() ?? "") || null,
       ]
     );
     await continuationConnection.commit();
@@ -2393,13 +2430,14 @@ export async function reconcileWorkflowContinuations(limit = 20) {
           [JSON.stringify(context), task.runId]
         );
         await connection.query(
-          "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts) VALUES (?,?,'resume','queued',?,?,?)",
+          "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
           [
             randomUUID(),
             task.runId,
             idempotencyKey,
             JSON.stringify(checkpoint),
             WORKFLOW_JOB_MAX_ATTEMPTS,
+            String(task.requestId ?? currentRequestId() ?? "") || null,
           ]
         );
       }

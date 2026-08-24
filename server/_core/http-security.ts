@@ -1,10 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 import type { NextFunction, Request, Response } from "express";
 
 export type CorrelatedRequest = Request & { requestId?: string };
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const requestIdPattern = /^[A-Za-z0-9._:-]{8,100}$/;
+const requestContext = new AsyncLocalStorage<{ requestId: string }>();
+export function currentRequestId() {
+  return requestContext.getStore()?.requestId;
+}
 
 function configuredOrigins() {
   return new Set(
@@ -34,7 +39,7 @@ export function requestCorrelation(
     supplied && requestIdPattern.test(supplied) ? supplied : randomUUID();
   req.requestId = requestId;
   res.setHeader("x-request-id", requestId);
-  next();
+  requestContext.run({ requestId }, next);
 }
 
 export function securityHeaders(

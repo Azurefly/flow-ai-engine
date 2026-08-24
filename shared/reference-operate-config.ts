@@ -1,6 +1,6 @@
 export type JsonRecord = Record<string, unknown>;
 
-export type ReferenceSignMode = "single" | "orSignFor" | "andSignFor";
+export type ReferenceSignMode = "single" | "orSignFor" | "andSignFor" | "sequentialSignFor";
 
 export type TemporaryRoleChange = {
   action: "add" | "remove";
@@ -116,7 +116,9 @@ export function normalizeReferenceOperateConfig(config: JsonRecord): NormalizedR
     ? "orSignFor"
     : signText === "andSignFor" || signText === "会签"
       ? "andSignFor"
-      : "single";
+      : signText === "sequentialSignFor" || signText === "顺序会签" || signText === "顺序会签"
+        ? "sequentialSignFor"
+        : "single";
   const selector = firstValue(
     signMode === "orSignFor" ? orSign.orSignForStaff : andSign.andSignForStaff,
     canvasBind.xzdfhq,
@@ -150,6 +152,7 @@ export function normalizeReferenceOperateConfig(config: JsonRecord): NormalizedR
 export function approvalRequirement(signMode: ReferenceSignMode, totalApprovers: number, passPercent: number) {
   if (totalApprovers <= 0) return 0;
   if (signMode === "orSignFor") return 1;
+  if (signMode === "sequentialSignFor") return totalApprovers;
   if (signMode === "andSignFor") return Math.max(1, Math.min(totalApprovers, Math.ceil(totalApprovers * passPercent)));
   return 1;
 }

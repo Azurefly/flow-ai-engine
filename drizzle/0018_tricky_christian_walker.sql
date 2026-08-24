@@ -1,0 +1,3 @@
+ALTER TABLE `workflow_task_group` MODIFY COLUMN `signMode` enum('single','orSignFor','andSignFor','sequentialSignFor') NOT NULL DEFAULT 'single';--> statement-breakpoint
+ALTER TABLE `workflow_task` MODIFY COLUMN `signMode` enum('single','orSignFor','andSignFor','sequentialSignFor') NOT NULL DEFAULT 'single';--> statement-breakpoint
+ALTER TABLE `workflow_task` ADD `approvalOrder` int DEFAULT 0 NOT NULL;

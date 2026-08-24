@@ -156,7 +156,7 @@ import {
 
 const approvalResultSchema = z
   .object({
-    decision: z.enum(["approved", "rejected"]),
+    decision: z.enum(["approved", "rejected", "abstained"]),
     comment: z.string().trim().max(2000).optional(),
   })
   .catchall(z.unknown());
@@ -1428,6 +1428,7 @@ export const appRouter = router({
           triggeredBy: ctx.user,
           workflowInput: input.input,
           idempotencyKey: input.idempotencyKey,
+          requestId: ctx.requestId,
         });
       }),
     runs: protectedProcedure

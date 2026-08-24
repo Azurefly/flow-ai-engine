@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { approvalRequirement, normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
+import { evaluateApprovalResults, normalizeApprovalResult } from "./workflow-engine";
 
 describe("original operate-node runtime compatibility", () => {
   it("maps the original canvas fields to the formal server contract", () => {
@@ -46,5 +47,12 @@ describe("original operate-node runtime compatibility", () => {
     expect(approvalRequirement("orSignFor", 4, 1)).toBe(1);
     expect(approvalRequirement("andSignFor", 4, 0.75)).toBe(3);
     expect(approvalRequirement("andSignFor", 3, 1)).toBe(3);
+    expect(approvalRequirement("sequentialSignFor", 3, 1)).toBe(3);
+  });
+
+  it("supports explicit abstention without treating it as approval", () => {
+    expect(normalizeApprovalResult({ decision: "abstained", comment: "利益冲突" })).toMatchObject({ decision: "abstained" });
+    expect(evaluateApprovalResults({ totalApprovers: 3, requiredApprovals: 2, results: [{ decision: "approved" }, { decision: "abstained" }] })).toMatchObject({ approved: 1, abstained: 1, completed: 2, outcome: "waiting" });
+    expect(evaluateApprovalResults({ totalApprovers: 2, requiredApprovals: 2, results: [{ decision: "approved" }, { decision: "abstained" }] }).outcome).toBe("rejected");
   });
 });
