@@ -18,7 +18,7 @@ import {
   UserRoundPlus,
   UsersRound,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type View = "board" | "calendar" | "todo" | "done" | "initiated" | "all";
@@ -91,6 +91,10 @@ export default function ProcessWorkbench() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [batchDecision, setBatchDecision] = useState<
+    "approved" | "rejected" | "abstained"
+  >("approved");
+  const [batchComment, setBatchComment] = useState("");
   const [month, setMonth] = useState(() => new Date());
   const dashboard = trpc.task.dashboard.useQuery(undefined, {
     refetchInterval: 10_000,
@@ -217,9 +221,10 @@ export default function ProcessWorkbench() {
           item.success && ["success", "cancelled"].includes(String(item.status))
       );
       if (completed?.runId) setSelectedRunId(completed.runId);
-      toast.success(
-        `批量通过已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`
-      );
+      const message = `批量处理已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`;
+      if (!success) toast.error(message);
+      else if (failed) toast.warning(message);
+      else toast.success(message);
     },
     onError: error => toast.error(error.message),
   });
@@ -263,9 +268,16 @@ export default function ProcessWorkbench() {
     invalidate();
   };
   const runBatchComplete = () => {
+    if (batchDecision === "rejected" && !batchComment.trim()) {
+      toast.error("批量拒绝必须填写处理意见。");
+      return;
+    }
     batchComplete.mutate({
       taskIds: selectedTaskIds,
-      result: { decision: "approved" },
+      result: {
+        decision: batchDecision,
+        ...(batchComment.trim() ? { comment: batchComment.trim() } : {}),
+      },
     });
   };
 
@@ -292,7 +304,7 @@ export default function ProcessWorkbench() {
                 sidebarCollapsed ? "展开已启动流程导航" : "收起已启动流程导航"
               }
               title={sidebarCollapsed ? "展开导航" : "收起导航"}
-              className={`rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 ${sidebarCollapsed ? "" : "absolute hidden lg:block"}`}
+              className={`min-h-11 min-w-11 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 ${sidebarCollapsed ? "" : "absolute hidden lg:block"}`}
               onClick={() => setSidebarCollapsed(value => !value)}
             >
               {sidebarCollapsed ? (
@@ -305,7 +317,7 @@ export default function ProcessWorkbench() {
               type="button"
               aria-label="移动端切换已启动流程导航"
               title="切换导航"
-              className="mt-2 rounded p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden"
+              className="mt-2 min-h-11 min-w-11 rounded p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden"
               onClick={() => setSidebarCollapsed(value => !value)}
             >
               {sidebarCollapsed ? (
@@ -319,9 +331,12 @@ export default function ProcessWorkbench() {
             {nav.map(item => (
               <button
                 key={item.id}
+                type="button"
+                aria-label={labels[item.id]}
+                aria-current={view === item.id ? "page" : undefined}
                 title={sidebarCollapsed ? labels[item.id] : undefined}
                 onClick={() => changeView(item.id)}
-                className={`flex rounded px-3 py-2.5 text-left text-sm transition-colors ${sidebarCollapsed ? "justify-center" : "items-center gap-2"} ${view === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
+                className={`flex min-h-11 rounded px-3 py-2.5 text-left text-sm transition-colors ${sidebarCollapsed ? "justify-center" : "items-center gap-2"} ${view === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
               >
                 <item.icon size={16} />
                 {!sidebarCollapsed && (
@@ -403,6 +418,10 @@ export default function ProcessWorkbench() {
                     batchClaim.mutate({ taskIds: selectedTaskIds })
                   }
                   onComplete={runBatchComplete}
+                  decision={batchDecision}
+                  comment={batchComment}
+                  onDecision={setBatchDecision}
+                  onComment={setBatchComment}
                 />
               )}
               {["todo", "done"].includes(view) && (
@@ -466,23 +485,67 @@ function TaskBatchBar({
   busy,
   onClaim,
   onComplete,
+  decision,
+  comment,
+  onDecision,
+  onComment,
 }: {
   count: number;
   busy: boolean;
   onClaim: () => void;
   onComplete: () => void;
+  decision: "approved" | "rejected" | "abstained";
+  comment: string;
+  onDecision: (value: "approved" | "rejected" | "abstained") => void;
+  onComment: (value: string) => void;
 }) {
+  const actionLabel =
+    decision === "rejected"
+      ? "批量拒绝"
+      : decision === "abstained"
+        ? "批量弃权"
+        : "批量同意";
   return (
-    <div className="flex flex-col gap-2 border-b border-slate-100 bg-slate-50 px-5 py-3 sm:flex-row sm:items-center">
-      <div className="flex-1 text-xs text-slate-500">
+    <div className="grid gap-3 border-b border-slate-100 bg-slate-50 px-3 py-3 sm:px-5 lg:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_auto] lg:items-end">
+      <div className="text-xs leading-5 text-slate-500">
         已选择 <strong className="text-slate-800">{count}</strong>{" "}
         项。批量处理对每项分别进行权限与状态校验，不会跨流程或跨项目执行。
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]">
+        <label className="grid gap-1 text-xs font-medium text-slate-600">
+          批量决定
+          <select
+            className="h-11 rounded border border-slate-200 bg-white px-2 text-sm"
+            value={decision}
+            onChange={event =>
+              onDecision(
+                event.target.value as "approved" | "rejected" | "abstained"
+              )
+            }
+          >
+            <option value="approved">同意</option>
+            <option value="rejected">拒绝</option>
+            <option value="abstained">弃权</option>
+          </select>
+        </label>
+        <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">
+          处理意见{decision === "rejected" ? "（必填）" : "（可选）"}
+          <input
+            className="h-11 min-w-0 rounded border border-slate-200 bg-white px-3 text-sm font-normal"
+            maxLength={2000}
+            value={comment}
+            onChange={event => onComment(event.target.value)}
+            placeholder={
+              decision === "rejected" ? "请说明拒绝原因" : "可填写统一处理意见"
+            }
+          />
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-2 lg:justify-end">
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          className="min-h-11"
           disabled={!count || busy}
           onClick={onClaim}
         >
@@ -491,13 +554,14 @@ function TaskBatchBar({
         </Button>
         <Button
           type="button"
-          size="sm"
-          className="bg-emerald-600 hover:bg-emerald-500"
-          disabled={!count || busy}
+          className={`min-h-11 ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
+          disabled={
+            !count || busy || (decision === "rejected" && !comment.trim())
+          }
           onClick={onComplete}
         >
           <CheckCheck size={14} />
-          批量通过
+          {actionLabel}
         </Button>
       </div>
     </div>
@@ -648,13 +712,17 @@ function TaskList({
           <tr key={task.id} className="border-t border-slate-100">
             {selectable && (
               <td className="px-4 py-3">
-                <input
+                <label
+                  className="grid min-h-11 min-w-11 cursor-pointer place-items-center"
                   aria-label={`选择任务 ${task.nodeName}`}
-                  type="checkbox"
-                  checked={selectedTaskIds.includes(task.id)}
-                  onChange={() => onToggle(task.id)}
-                  className="h-4 w-4 accent-[#2d6bea]"
-                />
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedTaskIds.includes(task.id)}
+                    onChange={() => onToggle(task.id)}
+                    className="h-5 w-5 accent-[#2d6bea]"
+                  />
+                </label>
               </td>
             )}
             <td className="px-4 py-3">
@@ -683,7 +751,7 @@ function TaskList({
                   <Button
                     type="button"
                     size="sm"
-                    className="h-7 bg-emerald-600 text-xs hover:bg-emerald-500"
+                    className="min-h-11 bg-emerald-600 text-xs hover:bg-emerald-500"
                     disabled={busy}
                     onClick={() => onExecute(task.id)}
                   >
@@ -695,7 +763,7 @@ function TaskList({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 text-xs text-[#2d6bea]"
+                  className="min-h-11 text-xs text-[#2d6bea]"
                   onClick={() => onTask(task.id)}
                 >
                   详情
@@ -751,7 +819,7 @@ function InstanceList({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-0 text-xs text-[#2d6bea]"
+                  className="min-h-11 px-2 text-xs text-[#2d6bea]"
                   onClick={() => onOpenRun(run.id)}
                 >
                   实例详情
@@ -896,11 +964,25 @@ function TaskDrawer({
   onReturn,
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
-  const [decision, setDecision] = useState<"approved" | "rejected" | "abstained">("approved");
+  const [decision, setDecision] = useState<
+    "approved" | "rejected" | "abstained"
+  >("approved");
   const [comment, setComment] = useState("");
   const [resultRows, setResultRows] = useState<
     Array<{ key: string; value: string }>
   >([]);
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [onClose]);
   const toValue = (value: string): unknown =>
     value === "true"
       ? true
@@ -938,6 +1020,10 @@ function TaskDrawer({
       className="fixed inset-0 z-50 flex justify-end bg-slate-900/25"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="workflow-task-drawer-title"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
     >
       <section className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -945,7 +1031,10 @@ function TaskDrawer({
             <p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">
               MANUAL TASK
             </p>
-            <h3 className="mt-1 text-lg font-semibold text-slate-800">
+            <h3
+              id="workflow-task-drawer-title"
+              className="mt-1 text-lg font-semibold text-slate-800"
+            >
               {task?.workflowName || "正在读取任务…"}
             </h3>
             <p className="mt-1 text-sm text-slate-500">
@@ -957,7 +1046,13 @@ function TaskDrawer({
               )}
             </p>
           </div>
-          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11 min-w-11"
+            onClick={onClose}
+            autoFocus
+          >
             关闭
           </Button>
         </div>
@@ -1038,11 +1133,11 @@ function TaskDrawer({
                   <Button
                     type="button"
                     variant={decision === "approved" ? "default" : "outline"}
-                    className={
+                    className={`min-h-11 ${
                       decision === "approved"
                         ? "bg-emerald-600 hover:bg-emerald-500"
                         : ""
-                    }
+                    }`}
                     onClick={() => setDecision("approved")}
                   >
                     同意
@@ -1050,11 +1145,11 @@ function TaskDrawer({
                   <Button
                     type="button"
                     variant={decision === "rejected" ? "default" : "outline"}
-                    className={
+                    className={`min-h-11 ${
                       decision === "rejected"
                         ? "bg-red-600 hover:bg-red-500"
                         : "border-red-200 text-red-700 hover:bg-red-50"
-                    }
+                    }`}
                     onClick={() => setDecision("rejected")}
                   >
                     拒绝
@@ -1062,7 +1157,7 @@ function TaskDrawer({
                   <Button
                     type="button"
                     variant={decision === "abstained" ? "default" : "outline"}
-                    className={decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : ""}
+                    className={`min-h-11 ${decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : ""}`}
                     onClick={() => setDecision("abstained")}
                   >
                     弃权
@@ -1078,7 +1173,9 @@ function TaskDrawer({
                     placeholder={
                       decision === "rejected"
                         ? "请说明拒绝原因"
-                        : decision === "abstained" ? "可说明弃权原因" : "可填写审批意见"
+                        : decision === "abstained"
+                          ? "可说明弃权原因"
+                          : "可填写审批意见"
                     }
                   />
                 </label>
@@ -1112,7 +1209,7 @@ function TaskDrawer({
                         />
                         <button
                           type="button"
-                          className="rounded px-2 text-slate-400 hover:text-red-600"
+                          className="min-h-11 min-w-11 rounded px-2 text-slate-400 hover:text-red-600"
                           onClick={() =>
                             setResultRows(rows =>
                               rows.filter((_, rowIndex) => rowIndex !== index)
@@ -1136,7 +1233,7 @@ function TaskDrawer({
                   </div>
                 </details>
                 <Button
-                  className={`mt-3 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
+                  className={`mt-3 min-h-11 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
                   disabled={
                     busy || (decision === "rejected" && !comment.trim())
                   }
@@ -1147,14 +1244,14 @@ function TaskDrawer({
                     ? "拒绝并终止流程"
                     : decision === "abstained"
                       ? "提交弃权"
-                    : task.operationName || "同意并继续流程"}
+                      : task.operationName || "同意并继续流程"}
                 </Button>
                 {task.status === "pending" && (
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="mt-2 w-full"
+                    className="mt-2 min-h-11 w-full"
                     disabled={busy}
                     onClick={onClaim}
                   >

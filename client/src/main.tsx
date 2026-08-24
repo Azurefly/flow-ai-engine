@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { COOKIE_NAME, UNAUTHED_ERR_MSG } from '@shared/const';
+import { COOKIE_NAME, UNAUTHED_ERR_MSG } from "@shared/const";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
@@ -9,6 +9,34 @@ import { startLogin } from "./const";
 import "./index.css";
 
 const queryClient = new QueryClient();
+
+export function installOptionalAnalytics(
+  endpoint = String(import.meta.env.VITE_ANALYTICS_ENDPOINT ?? "").trim(),
+  websiteId = String(import.meta.env.VITE_ANALYTICS_WEBSITE_ID ?? "").trim()
+) {
+  if (!endpoint || !websiteId) return false;
+  let source: URL;
+  try {
+    source = new URL(`${endpoint.replace(/\/+$/, "")}/umami`);
+  } catch {
+    console.warn(
+      "[analytics] VITE_ANALYTICS_ENDPOINT 不是有效 URL，已跳过统计脚本。"
+    );
+    return false;
+  }
+  if (!["http:", "https:"].includes(source.protocol)) {
+    console.warn("[analytics] 统计脚本仅允许 HTTP(S) URL，已跳过加载。");
+    return false;
+  }
+  const script = document.createElement("script");
+  script.defer = true;
+  script.src = source.href;
+  script.dataset.websiteId = websiteId;
+  document.head.appendChild(script);
+  return true;
+}
+
+installOptionalAnalytics();
 
 const redirectToLoginIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;

@@ -246,7 +246,7 @@ function LoginScreen({
           <label className="grid gap-2 text-xs font-medium text-slate-600">
             用户名
             <Input
-              className="border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#2d6bea]"
+              className="h-11 border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#2d6bea]"
               autoComplete="username"
               value={credentials.username}
               onChange={event =>
@@ -258,7 +258,7 @@ function LoginScreen({
           <label className="grid gap-2 text-xs font-medium text-slate-600">
             密码
             <Input
-              className="border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#2d6bea]"
+              className="h-11 border-slate-300 bg-white text-slate-800 placeholder:text-slate-400 focus-visible:ring-[#2d6bea]"
               type="password"
               autoComplete="current-password"
               minLength={12}
@@ -270,7 +270,7 @@ function LoginScreen({
             />
           </label>
           <Button
-            className="mt-2 bg-[#2d6bea] hover:bg-[#245fc8]"
+            className="mt-2 min-h-11 bg-[#2d6bea] hover:bg-[#245fc8]"
             disabled={pending}
           >
             {pending && <Loader2 className="animate-spin" />}登录流程引擎
@@ -2227,7 +2227,6 @@ function LegacyRunCenter({
     </div>
   );
 }
-
 function LogBlock({ title, value }: { title: string; value: unknown }) {
   if (value === null || value === undefined) return null;
   return (

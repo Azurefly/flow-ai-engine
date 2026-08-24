@@ -297,10 +297,12 @@ describe("P1 人工任务与服务端续跑", () => {
         assignedUserId: handoverUser.id,
         claimedByUserId: null,
       });
-      const batchClaimed: any[] = await callerFor(handoverUser).task.batchClaim(
-        { taskIds: [waiting.taskId] }
-      );
-      expect(batchClaimed).toEqual([{ taskId: waiting.taskId, success: true }]);
+      await expect(
+        callerFor(handoverUser).task.complete({
+          taskId: waiting.taskId,
+          result: { decision: "approved", comment: "绕过领取" },
+        })
+      ).rejects.toThrow("仅当前领取人");
       const batchCompletedRaw: any[] = await callerFor(
         handoverUser
       ).task.batchComplete({

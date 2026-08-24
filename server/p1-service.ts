@@ -33,6 +33,15 @@ export function isTaskActor(userId: number, task: mysql.RowDataPacket) {
   return [task.assignedUserId, task.claimedByUserId, task.completedByUserId].some(value => Number(value) === userId) || candidateIds(task).includes(userId);
 }
 
+export function isCurrentTaskOwner(userId: number, task: mysql.RowDataPacket) {
+  if (String(task.status) === "claimed") return Number(task.claimedByUserId) === userId;
+  if (String(task.status) === "pending") {
+    if (Number(task.assignedUserId) > 0) return Number(task.assignedUserId) === userId;
+    return candidateIds(task).includes(userId);
+  }
+  return false;
+}
+
 export function isCurrentTaskOperation(input: {
   task: { id?: unknown; nodeId?: unknown; assignedUserId?: unknown; candidateUserIdsJson?: unknown } | mysql.RowDataPacket;
   state?: { sourceNodeId?: unknown } | mysql.RowDataPacket;
@@ -53,7 +62,7 @@ export function isCurrentTaskOperation(input: {
 async function canAccessTask(user: User, task: mysql.RowDataPacket, write = false) {
   if (user.role === "admin" && !write) return true;
   if (write) {
-    if (isTaskActor(user.id, task)) return true;
+    if (isCurrentTaskOwner(user.id, task)) return true;
     return false;
   }
   if (isTaskActor(user.id, task) || Number(task.triggeredByUserId) === user.id) return true;
@@ -181,13 +190,15 @@ export async function executeWorkflowTask(user: User, taskId: string, result: Js
 }
 
 export async function completeWorkflowTask(user: User, taskId: string, result: JsonRecord) {
-  const task = await getWorkflowTask(user, taskId);
+  const task: any = await getWorkflowTask(user, taskId);
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true))) throw new Error("无权完成该人工任务。 ");
+  if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id) throw new Error("仅当前领取人可完成已领取的人工任务。 ");
   await assertCurrentTaskOperation(user, task);
   const resumed = await resumeWorkflowTask({ taskId, completedBy: user, result });
   if (resumed.status === "queued") wakeWorkflowWorker();
-  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: result.decision === "rejected" ? "task_rejected" : "task_approved", decision: result.decision, runId: resumed.runId, status: resumed.status } });
+  const auditOperation = result.decision === "rejected" ? "task_rejected" : result.decision === "abstained" ? "task_abstained" : "task_approved";
+  await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: auditOperation, decision: result.decision, runId: resumed.runId, status: resumed.status } });
   return resumed;
 }
 
@@ -336,7 +347,7 @@ export async function batchClaimWorkflowTasks(user: User, taskIds: string[]) {
 
 export async function batchCompleteWorkflowTasks(user: User, taskIds: string[], result: JsonRecord) {
   return Promise.all(taskIds.map(async taskId => {
-    try { const completed = await completeWorkflowTask(user, taskId, result); return { taskId, success: true as const, runId: completed.runId, status: completed.status }; }
+    try { const completed = await executeWorkflowTask(user, taskId, result); return { taskId, success: true as const, runId: completed.runId, status: completed.status }; }
     catch (error) { return { taskId, success: false as const, message: error instanceof Error ? error.message : String(error) }; }
   }));
 }

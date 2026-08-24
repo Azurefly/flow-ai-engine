@@ -50,6 +50,7 @@ const iamServiceSource = source("./iam-service.ts");
 const styleSource = source("../client/src/index.css");
 const appSource = source("../client/src/App.tsx");
 const htmlSource = source("../client/index.html");
+const mainSource = source("../client/src/main.tsx");
 const packageSource = source("../package.json");
 const bundleBudgetSource = source("../scripts/check-bundle-budget.mts");
 
@@ -57,6 +58,9 @@ describe("流程设计器界面回归约束", () => {
   it("中文可访问性基线、工作区拆包和 bundle budget 保持生效", () => {
     expect(htmlSource).toContain('<html lang="zh-CN">');
     expect(htmlSource).not.toContain("maximum-scale=1");
+    expect(htmlSource).not.toContain("%VITE_ANALYTICS_ENDPOINT%");
+    expect(mainSource).toContain("installOptionalAnalytics");
+    expect(mainSource).toContain("if (!endpoint || !websiteId) return false");
     expect(appSource).toContain('lazy(() => import("./pages/Home"))');
     expect(appSource).toContain("<Suspense");
     expect(homeSource).toContain(
@@ -307,8 +311,12 @@ describe("流程设计器界面回归约束", () => {
     expect(iamServiceSource).toContain("请勿重复绑定");
     expect(routerSource).toContain("previewUserBatch: iamManageProcedure");
     expect(routerSource).toContain("createUsersBatch: iamManageProcedure");
-    expect(routerSource).toContain("userAuthorizationDetails: iamManageProcedure");
-    expect(routerSource).toContain("roleAuthorizationDetails: iamManageProcedure");
+    expect(routerSource).toContain(
+      "userAuthorizationDetails: iamManageProcedure"
+    );
+    expect(routerSource).toContain(
+      "roleAuthorizationDetails: iamManageProcedure"
+    );
   });
 
   it("实例详情按操作时间倒序展示必要字段，其余字段点击后以列表查看", () => {
@@ -960,7 +968,10 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留已启动流程的任务移交、退回与逐项批量处理入口", () => {
     expect(processWorkbenchSource).toContain("批量领取");
-    expect(processWorkbenchSource).toContain("批量通过");
+    expect(processWorkbenchSource).toContain("批量同意");
+    expect(processWorkbenchSource).toContain("批量拒绝");
+    expect(processWorkbenchSource).toContain("批量弃权");
+    expect(processWorkbenchSource).toContain("批量拒绝必须填写处理意见");
     expect(processWorkbenchSource).toContain("任务移交与回退");
     expect(processWorkbenchSource).toContain("移交");
     expect(processWorkbenchSource).toContain("退回待处理");
@@ -969,8 +980,9 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain(
       "trpc.task.batchComplete.useMutation"
     );
+    expect(processWorkbenchSource).toContain("decision, setDecision");
     expect(processWorkbenchSource).toContain(
-      'decision, setDecision] = useState<"approved" | "rejected" | "abstained">'
+      '"approved" | "rejected" | "abstained"'
     );
     expect(processWorkbenchSource).toContain("拒绝并终止流程");
     expect(processWorkbenchSource).toContain("拒绝时处理意见必填");
@@ -1001,6 +1013,10 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(processWorkbenchSource).toContain("PanelLeftClose");
     expect(processWorkbenchSource).toContain("PanelLeftOpen");
+    expect(processWorkbenchSource).toContain(
+      'aria-labelledby="workflow-task-drawer-title"'
+    );
+    expect(processWorkbenchSource).toContain('event.key === "Escape"');
     expect(processWorkbenchSource).toContain("data-process-workbench-loading");
     expect(processWorkbenchSource).toContain("正在读取已启动流程");
     expect(processWorkbenchSource).toContain(

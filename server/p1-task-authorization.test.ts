@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isCurrentTaskOperation, isTaskActor } from "./p1-service";
+import { isCurrentTaskOperation, isCurrentTaskOwner, isTaskActor } from "./p1-service";
 
 describe("人工操作授权边界", () => {
   const task = {
@@ -24,5 +24,11 @@ describe("人工操作授权边界", () => {
 
   it("拒绝无当前所有人且无候选人的开放领取任务", () => {
     expect(isCurrentTaskOperation({ task: { id: "open-1", nodeId: "state-review", assignedUserId: null, candidateUserIdsJson: [] }, operations: [] })).toBe(false);
+  });
+
+  it("任务领取后仅当前领取人是操作所有人", () => {
+    expect(isCurrentTaskOwner(7, { ...task, status: "claimed" })).toBe(true);
+    expect(isCurrentTaskOwner(8, { ...task, status: "claimed" })).toBe(false);
+    expect(isCurrentTaskOwner(8, { ...task, status: "pending", assignedUserId: null })).toBe(true);
   });
 });
