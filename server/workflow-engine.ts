@@ -1248,6 +1248,54 @@ export async function markWorkflowRunFailed(
   }
 }
 
+export type WorkflowRunControlAction = "cancel" | "terminate";
+
+/** Idempotently stops queued/running/waiting work and prevents a leased worker from committing it. */
+export async function controlWorkflowRun(input: {
+  runId: string;
+  action: WorkflowRunControlAction;
+  reason?: string;
+}) {
+  const targetStatus = input.action === "terminate" ? "terminated" : "cancelled";
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,status FROM workflow_run WHERE id=? FOR UPDATE",
+      [input.runId]
+    );
+    const run = rows[0];
+    if (!run) {
+      await connection.rollback();
+      return null;
+    }
+    const currentStatus = String(run.status);
+    if (["success", "failed", "cancelled", "terminated"].includes(currentStatus)) {
+      await connection.commit();
+      return { runId: input.runId, status: currentStatus, changed: false };
+    }
+    await connection.query(
+      "UPDATE workflow_run SET status=?,errorJson=?,finishedAt=NOW(),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+      [targetStatus, input.reason ? JSON.stringify({ message: input.reason, controlledBy: input.action }) : null, input.runId]
+    );
+    await connection.query(
+      "UPDATE workflow_run_job SET status='cancelled',leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE runId=? AND status IN ('queued','leased')",
+      [input.runId]
+    );
+    await connection.query(
+      "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
+      [input.runId]
+    );
+    await connection.commit();
+    return { runId: input.runId, status: targetStatus, changed: true };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 export async function executeWorkflow(input: {
   workflowId: string;
   triggeredBy: WorkflowUser;

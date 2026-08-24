@@ -42,6 +42,7 @@ import {
   listRunAlerts,
   listWorkflowRuns,
   markRunAlertRead,
+  controlWorkflowRun,
 } from "./workflow-engine";
 import { submitWorkflowRun } from "./workflow-worker";
 import { getRuntimeInfo } from "./runtime-info";
@@ -1430,6 +1431,24 @@ export const appRouter = router({
           idempotencyKey: input.idempotencyKey,
           requestId: ctx.requestId,
         });
+      }),
+    cancelRun: protectedProcedure
+      .input(z.object({ runId: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        const run = await getWorkflowRun(input.runId);
+        if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "无权取消此流程运行。" });
+        }
+        return controlWorkflowRun({ runId: input.runId, action: "cancel" });
+      }),
+    terminateRun: protectedProcedure
+      .input(z.object({ runId: z.string().min(8).max(64), reason: z.string().trim().min(1).max(500) }))
+      .mutation(async ({ ctx, input }) => {
+        const run = await getWorkflowRun(input.runId);
+        if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "无权终止此流程运行。" });
+        }
+        return controlWorkflowRun({ runId: input.runId, action: "terminate", reason: input.reason });
       }),
     runs: protectedProcedure
       .input(
