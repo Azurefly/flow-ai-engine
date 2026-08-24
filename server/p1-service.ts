@@ -62,6 +62,13 @@ async function canAccessTask(user: User, task: mysql.RowDataPacket, write = fals
 }
 
 async function assertCurrentTaskOperation(user: User, task: mysql.RowDataPacket) {
+  const [actorRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT status FROM users WHERE id=? LIMIT 1",
+    [user.id]
+  );
+  if (String(actorRows[0]?.status ?? "") !== "active") {
+    throw new Error("当前账号已停用，不能执行人工操作。 ");
+  }
   if (!["running", "waiting"].includes(String(task.runStatus))) throw new Error("流程实例当前不在可操作状态。 ");
   if (!["pending", "claimed"].includes(String(task.status))) throw new Error("当前人工操作已结束或被取消。 ");
   const [states] = await db().query<mysql.RowDataPacket[]>(
