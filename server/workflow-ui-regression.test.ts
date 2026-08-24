@@ -351,6 +351,12 @@ describe("流程设计器界面回归约束", () => {
     expect(appSource).toContain('role="status" aria-live="polite"');
   });
 
+  it("组织选择和成员列表使用完整名称路径与编码路径", () => {
+    expect(organizationPageSource).toContain("unit.displayPath");
+    expect(organizationPageSource).toContain("member.unitDisplayPath");
+    expect(organizationPageSource).toContain('label="完整组织路径"');
+  });
+
   it("保留顶层与子页面哈希路由同步、异步权限恢复和安全回退", () => {
     expect(consoleRouteSource).toContain(
       "export const consoleSections: ConsoleSection[]"

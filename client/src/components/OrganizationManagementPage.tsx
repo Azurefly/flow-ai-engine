@@ -36,6 +36,9 @@ type Unit = Record<string, any> & {
   id: string;
   code: string;
   name: string;
+  pathName?: string;
+  pathCode?: string;
+  displayPath?: string;
   parentUnitId?: string | null;
   status: "active" | "disabled";
 };
@@ -147,7 +150,7 @@ export default function OrganizationManagementPage({
     const ids = new Set<string>();
     for (const unit of units) {
       if (
-        !`${unit.name} ${unit.code} ${unit.standardCode || ""}`
+        !`${unit.name} ${unit.code} ${unit.pathName || ""} ${unit.pathCode || ""} ${unit.standardCode || ""}`
           .toLowerCase()
           .includes(value)
       )
@@ -605,6 +608,10 @@ export default function OrganizationManagementPage({
                     <p className="mt-1 break-all font-mono text-xs text-[#2d6bea]">
                       {selected.code}
                     </p>
+                    <p className="mt-1 break-words text-xs text-slate-500">
+                      {selected.displayPath ||
+                        `${selected.name}（${selected.code}）`}
+                    </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -691,6 +698,13 @@ export default function OrganizationManagementPage({
                     <Info
                       label="上级部门"
                       value={selected.parentName || "根部门"}
+                    />
+                    <Info
+                      label="完整组织路径"
+                      value={
+                        selected.displayPath ||
+                        `${selected.name}（${selected.code}）`
+                      }
                     />
                     <Info
                       label="部门负责人"
@@ -826,7 +840,9 @@ export default function OrganizationManagementPage({
                                 {member.title || "未配置"}
                               </td>
                               <td className="px-4 py-3 text-slate-500">
-                                {member.unitName || "—"}
+                                {member.unitDisplayPath ||
+                                  member.unitName ||
+                                  "—"}
                               </td>
                               <td className="px-4 py-3">
                                 {member.isPrimary ? (
@@ -1081,7 +1097,7 @@ export default function OrganizationManagementPage({
                 )
                 .map(unit => (
                   <option key={unit.id} value={unit.id}>
-                    {unit.name}
+                    {unit.displayPath || `${unit.name}（${unit.code}）`}
                   </option>
                 ))}
             </select>
@@ -1311,7 +1327,7 @@ export default function OrganizationManagementPage({
               )
               .map(unit => (
                 <option key={unit.id} value={unit.id}>
-                  {unit.name}（{unit.code}）
+                  {unit.displayPath || `${unit.name}（${unit.code}）`}
                 </option>
               ))}
           </select>
@@ -1445,7 +1461,9 @@ function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border border-slate-200 p-4">
       <p className="text-xs font-medium text-slate-400">{label}</p>
-      <p className="mt-2 break-words text-sm font-medium text-slate-700">{value}</p>
+      <p className="mt-2 break-words text-sm font-medium text-slate-700">
+        {value}
+      </p>
     </div>
   );
 }

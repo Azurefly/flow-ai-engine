@@ -30,6 +30,30 @@ export type OrganizationUnitFields = {
 
 const cleanOptional = (value: string | null | undefined) => (value === undefined ? undefined : value?.trim() || null);
 
+export function attachOrganizationPaths<T>(units: T[]) {
+  const records = units as Array<Record<string, any>>;
+  const byId = new Map(records.map(unit => [String(unit.id), unit]));
+  const cache = new Map<string, { pathName: string; pathCode: string; displayPath: string }>();
+  const resolve = (unit: Record<string, any>, ancestors = new Set<string>()): { pathName: string; pathCode: string; displayPath: string } => {
+    const unitId = String(unit.id);
+    const cached = cache.get(unitId);
+    if (cached) return cached;
+    const name = String(unit.name ?? unitId);
+    const code = String(unit.code ?? unitId);
+    const parentId = unit.parentUnitId ? String(unit.parentUnitId) : null;
+    const parent = parentId && !ancestors.has(parentId) ? byId.get(parentId) : undefined;
+    const nextAncestors = new Set(ancestors);
+    nextAncestors.add(unitId);
+    const parentPath = parent ? resolve(parent, nextAncestors) : null;
+    const pathName = parentPath ? `${parentPath.pathName} / ${name}` : name;
+    const pathCode = parentPath ? `${parentPath.pathCode}/${code}` : code;
+    const result = { pathName, pathCode, displayPath: `${pathName}（${pathCode}）` };
+    cache.set(unitId, result);
+    return result;
+  };
+  return records.map(unit => ({ ...unit, ...resolve(unit) })) as T[];
+}
+
 export async function listOrganization() {
   const [units] = await db().query<mysql.RowDataPacket[]>(
     "SELECT ou.*,manager.name AS managerName,manager.username AS managerUsername,parent.name AS parentName FROM organization_unit ou LEFT JOIN users manager ON manager.id=ou.managerUserId LEFT JOIN organization_unit parent ON parent.id=ou.parentUnitId ORDER BY ou.status,ou.sortOrder,ou.code"
@@ -73,14 +97,28 @@ export async function listOrganization() {
       role,
     ]);
   }
+  const unitsWithPaths = attachOrganizationPaths(units) as Array<mysql.RowDataPacket & { pathName?: string; pathCode?: string; displayPath?: string }>;
+  const unitPaths = new Map(unitsWithPaths.map(unit => [String(unit.id), unit]));
   return {
-    units,
+    units: unitsWithPaths,
     members: members.map(member => ({
       ...member,
+      unitCode: unitPaths.get(String(member.unitId))?.code,
+      unitPathName: unitPaths.get(String(member.unitId))?.pathName,
+      unitPathCode: unitPaths.get(String(member.unitId))?.pathCode,
+      unitDisplayPath: unitPaths.get(String(member.unitId))?.displayPath,
       directRoles: directRolesByUser.get(Number(member.userId)) ?? [],
-      inheritedRoles: inheritedRolesByUser.get(Number(member.userId)) ?? [],
+      inheritedRoles: (inheritedRolesByUser.get(Number(member.userId)) ?? []).map(role => ({
+        ...role,
+        unitCode: unitPaths.get(String(role.unitId))?.code,
+        unitDisplayPath: unitPaths.get(String(role.unitId))?.displayPath,
+      })),
     })),
-    roleBindings,
+    roleBindings: roleBindings.map(binding => ({
+      ...binding,
+      unitCode: unitPaths.get(String(binding.unitId))?.code,
+      unitDisplayPath: unitPaths.get(String(binding.unitId))?.displayPath,
+    })),
   };
 }
 
