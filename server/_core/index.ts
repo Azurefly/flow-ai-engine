@@ -11,6 +11,11 @@ import { serveStatic, setupVite } from "./vite";
 import { handleDataflowScheduleCallback } from "../p2-service";
 import { startWorkflowWorker, stopWorkflowWorker } from "../workflow-worker";
 import { checkReadiness, getRuntimeInfo } from "../runtime-info";
+import {
+  enforceTrustedOrigin,
+  requestCorrelation,
+  securityHeaders,
+} from "./http-security";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -34,9 +39,11 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
-  // Configure body parser with larger size limit for file uploads
-  app.use(express.json({ limit: "50mb" }));
-  app.use(express.urlencoded({ limit: "50mb", extended: true }));
+  app.use(requestCorrelation);
+  app.use(securityHeaders);
+  app.use(enforceTrustedOrigin);
+  app.use(express.json({ limit: "2mb" }));
+  app.use(express.urlencoded({ limit: "256kb", extended: true }));
   app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
   app.get("/livez", (_req, res) => res.status(200).json({ ok: true }));
   app.get("/version", (_req, res) => res.status(200).json(getRuntimeInfo()));
