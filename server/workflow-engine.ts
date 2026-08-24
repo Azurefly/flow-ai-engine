@@ -14,6 +14,12 @@ import {
 import { invokeLLM, listLLMModels } from "./_core/llm";
 import { notifyOwner } from "./_core/notification";
 import {
+  assertWorkflowExecutionPlan,
+  compileWorkflowDefinition,
+  hashWorkflowExecutionPlan,
+  type WorkflowExecutionPlan,
+} from "./workflow-compiler";
+import {
   resolveAutoRelatedParticipantUserIds,
   resolveOperateAssignees,
   resolveWorkflowUserRoleKeys,
@@ -874,7 +880,7 @@ export async function submitWorkflowRun(input: {
   idempotencyKey?: string;
 }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,ownerUserId,name,projectId,status,auditStatus,archivedAt,definitionJson FROM workflow WHERE id=? LIMIT 1",
+    "SELECT id,ownerUserId,name,projectId,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
     [input.workflowId]
   );
   const workflow = workflowRows[0] as PersistedWorkflow | undefined;
@@ -886,12 +892,11 @@ export async function submitWorkflowRun(input: {
     (workflow.status !== "published" || workflow.auditStatus !== "approved")
   )
     throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
-  const definition = readJson(workflow.definitionJson) as Definition;
-  if (!definition?.nodes?.length) throw new Error("流程定义为空。");
-  const executableDefinition = (await import("./workflow-service")).validate(
-    definition,
-    true
-  );
+  const storedPlan = readJson(workflow.publishedExecutionPlanJson) as WorkflowExecutionPlan | null;
+  const executablePlan = storedPlan && workflow.publishedExecutionPlanHash
+    ? assertWorkflowExecutionPlan(storedPlan, String(workflow.publishedExecutionPlanHash))
+    : compileWorkflowDefinition(readJson(workflow.definitionJson)).plan;
+  const executableDefinition = executablePlan.definition;
   const requestedIdempotencyKey = input.idempotencyKey?.trim();
   const jobIdempotencyKey = requestedIdempotencyKey
     ? `workflow:start:${input.workflowId}:${input.triggeredBy.id}:${requestedIdempotencyKey}`
@@ -955,7 +960,7 @@ export async function submitWorkflowRun(input: {
     if (lockedWorkflowRows[0].archivedAt)
       throw new Error("已归档流程不能发起运行，请先恢复流程。");
     await connection.query(
-      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson) VALUES (?,?,?,?,?,'queued',?,?,?,?)",
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?)",
       [
         runId,
         input.workflowId,
@@ -966,6 +971,8 @@ export async function submitWorkflowRun(input: {
         JSON.stringify(input.workflowInput ?? {}),
         JSON.stringify(context),
         JSON.stringify(authorizationSnapshot),
+        JSON.stringify(executablePlan),
+        hashWorkflowExecutionPlan(executablePlan),
       ]
     );
     await connection.query(

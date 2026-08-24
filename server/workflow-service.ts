@@ -8,34 +8,19 @@ import {
 } from "./iam-service";
 import { isProjectApprovalRequired } from "./p1-service";
 import {
-  canConnectFlowNodeTypes,
-  FLOW_NODE_TYPES,
-  isFlowNodeType,
-  type FlowNodeType,
-  validateNodeConfig,
-  withNodeConfigDefaults,
-} from "@shared/workflow-node-contract";
+  analyzeWorkflowDefinition,
+  compileWorkflowDefinition,
+  validateWorkflowDefinition,
+  type WorkflowCompileResult,
+  type WorkflowCompileDiagnostic,
+  type WorkflowDefinition,
+  type WorkflowEdge,
+  type WorkflowNode,
+} from "./workflow-compiler";
 
-type Node = {
-  id: string;
-  type: FlowNodeType;
-  name: string;
-  position: { x: number; y: number };
-  config: Record<string, unknown>;
-};
-type Edge = {
-  id: string;
-  sourceNodeId: string;
-  sourceHandle?: string;
-  targetNodeId: string;
-};
-export type Definition = {
-  schemaVersion: 1;
-  viewport: { x: number; y: number; zoom: number };
-  nodes: Node[];
-  edges: Edge[];
-  settings: Record<string, unknown>;
-};
+type Node = WorkflowNode;
+type Edge = WorkflowEdge;
+export type Definition = WorkflowDefinition;
 const id = () => randomBytes(12).toString("base64url");
 let pool: mysql.Pool | undefined;
 const db = () => {
@@ -72,140 +57,7 @@ export const emptyDefinition = (): Definition => ({
   ],
 });
 export function validate(definition: unknown, executable = false): Definition {
-  const value = definition as Definition;
-  if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges))
-    throw new Error("流程定义格式无效。");
-  for (const node of value.nodes) {
-    if (
-      !node ||
-      typeof node.id !== "string" ||
-      !node.id.trim() ||
-      typeof node.name !== "string" ||
-      !isFlowNodeType(node.type)
-    )
-      throw new Error("流程节点格式或类型无效。");
-    if (
-      !node.position ||
-      !Number.isFinite(node.position.x) ||
-      !Number.isFinite(node.position.y)
-    )
-      throw new Error("流程节点位置无效。");
-    if (
-      !node.config ||
-      typeof node.config !== "object" ||
-      Array.isArray(node.config)
-    )
-      throw new Error("流程节点配置必须是 JSON 对象。");
-    // 原始画布以红/蓝/绿表示未完整配置、配置中和已配置；草稿必须可保存，
-    // 仅在发布或创建可执行子流程时阻断缺少执行必需字段的定义。
-    if (executable)
-      validateNodeConfig(
-        node.type,
-        withNodeConfigDefaults(node.type, node.config)
-      );
-  }
-  const starts = value.nodes.filter(node => node.type === "start"),
-    ends = value.nodes.filter(node => node.type === "end");
-  if (starts.length !== 1 || ends.length !== 1)
-    throw new Error("流程必须且仅能包含一个开始节点和一个结束节点。");
-  if (new Set(value.nodes.map(node => node.id)).size !== value.nodes.length)
-    throw new Error("节点 ID 不可重复。");
-  const nodeIds = new Set(value.nodes.map(node => node.id));
-  const nodesById = new Map(value.nodes.map(node => [node.id, node]));
-  const edgeIds = new Set<string>();
-  const edgeKeys = new Set<string>();
-  const outgoing = new Map(value.nodes.map(node => [node.id, [] as Edge[]]));
-  const incoming = new Map(value.nodes.map(node => [node.id, [] as Edge[]]));
-  for (const edge of value.edges) {
-    if (
-      !edge ||
-      typeof edge.id !== "string" ||
-      !edge.id.trim() ||
-      !nodeIds.has(edge.sourceNodeId) ||
-      !nodeIds.has(edge.targetNodeId)
-    )
-      throw new Error("流程连线引用了不存在的节点。");
-    if (edgeIds.has(edge.id))
-      throw new Error(`流程连线 ID 不可重复：${edge.id}。`);
-    edgeIds.add(edge.id);
-    if (edge.sourceNodeId === edge.targetNodeId)
-      throw new Error(`流程不允许节点自环：${edge.sourceNodeId}。`);
-    const sourceNode = nodesById.get(edge.sourceNodeId)!;
-    const targetNode = nodesById.get(edge.targetNodeId)!;
-    if (
-      sourceNode.type !== "end" &&
-      targetNode.type !== "start" &&
-      !canConnectFlowNodeTypes(sourceNode.type, targetNode.type)
-    )
-      throw new Error(
-        `节点类型不允许连接：${sourceNode.name}（${sourceNode.type}）→ ${targetNode.name}（${targetNode.type}）。`
-      );
-    const edgeKey = `${edge.sourceNodeId}|${edge.sourceHandle ?? "default"}|${edge.targetNodeId}`;
-    if (edgeKeys.has(edgeKey))
-      throw new Error(
-        `流程不允许重复连线：${edge.sourceNodeId} → ${edge.targetNodeId}。`
-      );
-    edgeKeys.add(edgeKey);
-    outgoing.get(edge.sourceNodeId)!.push(edge);
-    incoming.get(edge.targetNodeId)!.push(edge);
-  }
-  if (executable) {
-    const startId = starts[0].id;
-    const endId = ends[0].id;
-    if (incoming.get(startId)!.length)
-      throw new Error("开始节点不允许存在入边。");
-    if (outgoing.get(endId)!.length)
-      throw new Error("结束节点不允许存在出边。");
-    if (!outgoing.get(startId)!.length)
-      throw new Error("开始节点必须连接后继节点。");
-
-    const reachable = new Set<string>();
-    const visitQueue = [startId];
-    while (visitQueue.length) {
-      const nodeId = visitQueue.shift()!;
-      if (reachable.has(nodeId)) continue;
-      reachable.add(nodeId);
-      for (const edge of outgoing.get(nodeId) ?? [])
-        visitQueue.push(edge.targetNodeId);
-    }
-    const unreachable = value.nodes.filter(node => !reachable.has(node.id));
-    if (unreachable.length)
-      throw new Error(
-        `存在从开始节点不可达的节点：${unreachable.map(node => node.name || node.id).join("、")}。`
-      );
-
-    const canReachEnd = new Set<string>();
-    const reverseQueue = [endId];
-    while (reverseQueue.length) {
-      const nodeId = reverseQueue.shift()!;
-      if (canReachEnd.has(nodeId)) continue;
-      canReachEnd.add(nodeId);
-      for (const edge of incoming.get(nodeId) ?? [])
-        reverseQueue.push(edge.sourceNodeId);
-    }
-    const deadEnds = value.nodes.filter(node => !canReachEnd.has(node.id));
-    if (deadEnds.length)
-      throw new Error(
-        `存在无法到达结束节点的路径：${deadEnds.map(node => node.name || node.id).join("、")}。`
-      );
-
-    const visiting = new Set<string>();
-    const visited = new Set<string>();
-    const assertAcyclic = (nodeId: string) => {
-      if (visiting.has(nodeId))
-        throw new Error(
-          `流程存在未声明执行语义的循环：${nodesById.get(nodeId)?.name || nodeId}。`
-        );
-      if (visited.has(nodeId)) return;
-      visiting.add(nodeId);
-      for (const edge of outgoing.get(nodeId) ?? [])
-        assertAcyclic(edge.targetNodeId);
-      visiting.delete(nodeId);
-      visited.add(nodeId);
-    };
-    assertAcyclic(startId);
-  }
-  return value;
+  return validateWorkflowDefinition(definition, executable);
 }
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type VersionSource =
@@ -254,10 +106,12 @@ async function insertVersion(
     source: VersionSource;
     actorUserId: number;
     restoredFromVersion?: number | null;
+    executionPlan?: unknown;
+    executionPlanHash?: string | null;
   }
 ) {
   await connection.query(
-    "INSERT INTO workflow_version (id,workflowId,version,name,status,definitionJson,changeSource,restoredFromVersion,createdByUserId) VALUES (?,?,?,?,?,?,?,?,?)",
+    "INSERT INTO workflow_version (id,workflowId,version,name,status,definitionJson,executionPlanJson,executionPlanHash,changeSource,restoredFromVersion,createdByUserId) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     [
       id(),
       input.workflowId,
@@ -265,6 +119,8 @@ async function insertVersion(
       input.name,
       input.status,
       JSON.stringify(input.definition),
+      input.executionPlan === undefined ? null : JSON.stringify(input.executionPlan),
+      input.executionPlanHash ?? null,
       input.source,
       input.restoredFromVersion ?? null,
       input.actorUserId,
@@ -513,7 +369,8 @@ export async function updateWorkflow(
     current.ownerUserId,
     executable
   );
-  if (executable) validate(definition, true);
+  const compiled = executable ? compileWorkflowDefinition(definition) : null;
+  const persistedDefinition = compiled?.definition ?? definition;
   if (
     values.publish &&
     current.projectId &&
@@ -532,12 +389,18 @@ export async function updateWorkflow(
   try {
     await connection.beginTransaction();
     await connection.query(
-      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
+      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
       [
         nextName,
-        JSON.stringify(definition),
+        JSON.stringify(persistedDefinition),
         nextStatus,
         nextVersion,
+        values.unpublish
+          ? null
+          : compiled
+            ? JSON.stringify(compiled.plan)
+            : null,
+        values.unpublish ? null : compiled?.planHash ?? null,
         Boolean(values.publish),
         Boolean(values.unpublish),
         Boolean(values.unpublish),
@@ -549,13 +412,15 @@ export async function updateWorkflow(
       version: nextVersion,
       name: nextName,
       status: nextStatus,
-      definition,
+      definition: persistedDefinition,
       source: values.unpublish
         ? "unpublished"
         : values.publish
           ? "published"
           : "updated",
       actorUserId: user.id,
+      executionPlan: compiled?.plan,
+      executionPlanHash: compiled?.planHash,
     });
     await connection.commit();
   } catch (error) {
@@ -579,6 +444,41 @@ export async function updateWorkflow(
       },
     });
   return getWorkflow(workflowId, user);
+}
+
+export async function compileWorkflowDraft(
+  workflowId: string,
+  user: WorkflowUser,
+  candidateDefinition?: unknown
+): Promise<WorkflowCompileResult | null> {
+  if (!(await hasWorkflowPermission(user, workflowId, "workflow:publish")))
+    return null;
+  const current = (await getWorkflow(workflowId, user)) as {
+    ownerUserId: number;
+    archivedAt?: Date | string | null;
+    definition: Definition;
+  } | null;
+  if (!current) return null;
+  if (current.archivedAt)
+    throw new Error("已归档流程必须先恢复后才能编译发布。 ");
+  const draft = candidateDefinition ?? current.definition;
+  const structural = analyzeWorkflowDefinition(draft, { executable: true });
+  if (!structural.ok) return structural;
+  try {
+    const resolved = await resolveSubflowReferences(
+      structural.definition,
+      current.ownerUserId,
+      true
+    );
+    return compileWorkflowDefinition(resolved);
+  } catch (error) {
+    if (error && typeof error === "object" && "diagnostics" in error)
+      return {
+        ok: false,
+        diagnostics: (error as { diagnostics: WorkflowCompileDiagnostic[] }).diagnostics,
+      };
+    throw error;
+  }
 }
 
 export async function listWorkflowVersions(

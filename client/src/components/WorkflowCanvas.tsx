@@ -528,8 +528,9 @@ export default function WorkflowCanvas({
   }, []);
 
   useEffect(() => {
-    const inspect = () => {
-      const next = nodes.find(node => !["start", "end"].includes(node.data.kind)) ?? nodes[0];
+    const inspect = (event?: Event) => {
+      const requestedNodeId = (event as CustomEvent<{ nodeId?: string }> | undefined)?.detail?.nodeId;
+      const next = (requestedNodeId && nodes.find(node => node.id === requestedNodeId)) || nodes.find(node => !["start", "end"].includes(node.data.kind)) || nodes[0];
       if (!next) return;
       setSelectedId(next.id);
       setInspectorMode("normal");
@@ -538,6 +539,21 @@ export default function WorkflowCanvas({
     };
     window.addEventListener("flow:inspect-node", inspect);
     return () => window.removeEventListener("flow:inspect-node", inspect);
+  }, [nodes, reactFlow]);
+
+  useEffect(() => {
+    const focus = (event: Event) => {
+      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      if (!nodeId) return;
+      const node = nodes.find(item => item.id === nodeId);
+      if (!node) return;
+      setSelectedId(node.id);
+      setInspectorMode("normal");
+      canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      reactFlow?.fitView({ nodes: [node], padding: 0.6, duration: 180 });
+    };
+    window.addEventListener("flow:focus-node", focus);
+    return () => window.removeEventListener("flow:focus-node", focus);
   }, [nodes, reactFlow]);
 
   const selected = useMemo(() => nodes.find(node => node.id === selectedId), [nodes, selectedId]);

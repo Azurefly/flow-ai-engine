@@ -48,6 +48,7 @@ import { getRuntimeInfo } from "./runtime-info";
 import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
 import {
   archiveWorkflow,
+  compileWorkflowDraft,
   createNodeTemplate,
   createSubflow,
   createWorkflow,
@@ -1116,6 +1117,22 @@ export const appRouter = router({
       if (!workflow) throw new Error("流程不存在或无访问权限。");
       return workflow;
     }),
+    compile: protectedProcedure
+      .input(
+        z.object({
+          id: z.string().min(8).max(64),
+          definition: z.unknown().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const result = await compileWorkflowDraft(
+          input.id,
+          ctx.user,
+          input.definition
+        );
+        if (!result) throw new Error("流程不存在或无发布权限。");
+        return result;
+      }),
     access: protectedProcedure
       .input(z.object({ id: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => getWorkflowAccess(ctx.user, input.id)),
@@ -1143,9 +1160,17 @@ export const appRouter = router({
         return workflow;
       }),
     publish: protectedProcedure
-      .input(z.object({ id: z.string().min(8).max(64) }))
+      .input(
+        z.object({
+          id: z.string().min(8).max(64),
+          name: z.string().trim().min(1).max(160).optional(),
+          definition: z.unknown().optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
       const workflow = await updateWorkflow(input.id, ctx.user, {
+        name: input.name,
+        definition: input.definition,
         publish: true,
       });
       if (!workflow) throw new Error("流程不存在或无发布权限。");

@@ -318,6 +318,8 @@ export const workflows = mysqlTable(
     archivedByUserId: int("archivedByUserId"),
     definitionVersion: int("definitionVersion").default(1).notNull(),
     definitionJson: json("definitionJson").notNull(),
+    publishedExecutionPlanJson: json("publishedExecutionPlanJson"),
+    publishedExecutionPlanHash: varchar("publishedExecutionPlanHash", { length: 64 }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -406,6 +408,8 @@ export const workflowRuns = mysqlTable(
     executionLockExpiresAt: timestamp("executionLockExpiresAt"),
     triggeredByUserId: int("triggeredByUserId").references(() => users.id),
     authorizationSnapshotJson: json("authorizationSnapshotJson"),
+    executionPlanJson: json("executionPlanJson"),
+    executionPlanHash: varchar("executionPlanHash", { length: 64 }),
   },
   table => [
     index("workflow_run_workflow_idx").on(table.workflowId, table.createdAt),
@@ -929,6 +933,8 @@ export const workflowVersions = mysqlTable(
     name: varchar("name", { length: 160 }).notNull(),
     status: mysqlEnum("status", ["draft", "published"]).notNull(),
     definitionJson: json("definitionJson").notNull(),
+    executionPlanJson: json("executionPlanJson"),
+    executionPlanHash: varchar("executionPlanHash", { length: 64 }),
     changeSource: mysqlEnum("changeSource", [
       "created",
       "updated",

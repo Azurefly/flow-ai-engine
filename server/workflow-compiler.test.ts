@@ -1,0 +1,107 @@
+import { describe, expect, it } from "vitest";
+import {
+  analyzeWorkflowDefinition,
+  compileWorkflowDefinition,
+  hashWorkflowExecutionPlan,
+  type WorkflowDefinition,
+} from "./workflow-compiler";
+
+function base(): WorkflowDefinition {
+  return {
+    schemaVersion: 1,
+    viewport: { x: 0, y: 0, zoom: 1 },
+    settings: {},
+    nodes: [
+      { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
+      { id: "end", type: "end", name: "结束", position: { x: 240, y: 0 }, config: {} },
+    ],
+    edges: [{ id: "start-end", sourceNodeId: "start", targetNodeId: "end" }],
+  };
+}
+
+function state(id = "state") {
+  return { id, type: "state" as const, name: id, position: { x: 120, y: 0 }, config: { nodeDh: id, jdmc: id, flowStatus: id } };
+}
+
+describe("WorkflowCompiler", () => {
+  it("compiles a canonical immutable plan and produces a stable hash", () => {
+    const first = compileWorkflowDefinition(base());
+    const second = compileWorkflowDefinition({ ...base(), nodes: [...base().nodes].reverse(), edges: [...base().edges].reverse() });
+    expect(first.plan.entryNodeId).toBe("start");
+    expect(first.plan.terminalNodeIds).toEqual(["end"]);
+    expect(first.planHash).toBe(second.planHash);
+    expect(first.planHash).toBe(hashWorkflowExecutionPlan(first.plan));
+    expect(first.plan.topologicalOrder).toEqual(["start", "end"]);
+  });
+
+  it.each([
+    ["WF_DEF_INVALID", undefined],
+    ["WF_VIEWPORT_INVALID", { viewport: { x: 0, y: 0, zoom: 0 } }],
+    ["WF_NODE_ID_DUPLICATE", { nodes: [state("start"), state("start")] }],
+    ["WF_NODE_POSITION_INVALID", { node: { position: { x: Number.NaN, y: 0 } } }],
+    ["WF_NODE_CONFIG_INVALID", { node: { config: [] } }],
+    ["WF_START_END_CARDINALITY", { nodes: [state("only")] }],
+    ["WF_EDGE_DANGLING", { edge: { targetNodeId: "missing" } }],
+    ["WF_EDGE_ID_DUPLICATE", { duplicateEdge: true }],
+    ["WF_EDGE_SELF_LOOP", { selfLoop: true }],
+    ["WF_EDGE_TYPE_NOT_ALLOWED", { illegalType: true }],
+    ["WF_EDGE_DUPLICATE", { duplicateEdgeKey: true }],
+    ["WF_START_HAS_INCOMING", { startIncoming: true }],
+    ["WF_END_HAS_OUTGOING", { endOutgoing: true }],
+    ["WF_START_NO_OUTGOING", { noStartOutgoing: true }],
+    ["WF_NODE_UNREACHABLE", { unreachable: true }],
+    ["WF_NODE_CANNOT_REACH_END", { deadEnd: true }],
+    ["WF_CONDITION_BRANCH_INVALID", { conditionMissingBranch: true }],
+    ["WF_CONDITION_HANDLE_UNKNOWN", { conditionUnknownHandle: true }],
+    ["WF_ROUTER_HANDLE_DUPLICATE", { routerDuplicateHandle: true }],
+    ["WF_ROUTER_BRANCH_UNCONNECTED", { routerUnconnected: true }],
+    ["WF_ROUTER_HANDLE_UNKNOWN", { routerUnknown: true }],
+    ["WF_PARALLEL_BRANCHES_REQUIRED", { parallelSingleBranch: true }],
+    ["WF_PARALLEL_JOIN_REQUIRED", { parallelMissingJoin: true }],
+    ["WF_PARALLEL_JOIN_MISMATCH", { parallelJoinMismatch: true }],
+    ["WF_PARALLEL_JOIN_INPUTS_REQUIRED", { parallelJoinMissingInput: true }],
+    ["WF_PARALLEL_BRANCH_MISSES_JOIN", { parallelBranchMissesJoin: true }],
+    ["WF_LOOP_NOT_DECLARED", { undeclaredLoop: true }],
+    ["WF_LOOP_LIMIT_INVALID", { invalidLoopLimit: true }],
+    ["WF_LOOP_EDGE_NOT_CYCLIC", { nonCyclicLoop: true }],
+  ] as const)("exposes stable diagnostic code %s", (code, marker) => {
+    if (marker === undefined) {
+      const result = analyzeWorkflowDefinition(undefined, { executable: true });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.diagnostics.map(item => item.code)).toContain(code);
+      return;
+    }
+    const definition = base();
+    const item = marker as Record<string, unknown>;
+    if (item.viewport) definition.viewport = item.viewport as WorkflowDefinition["viewport"];
+    if (item.nodes) definition.nodes = item.nodes as WorkflowDefinition["nodes"];
+    if (item.node) (definition.nodes[0] as any) = { ...definition.nodes[0], ...(item.node as object) };
+    if (item.edge) definition.edges[0] = { ...definition.edges[0], ...(item.edge as object) };
+    if (item.duplicateEdge) definition.edges.push({ ...definition.edges[0], id: "start-end" });
+    if (item.selfLoop) definition.edges.push({ id: "self", sourceNodeId: "start", targetNodeId: "start" });
+    if (item.illegalType) { definition.nodes.splice(1, 0, { ...state("middle"), type: "state" }, { ...state("sink"), type: "sink" }); definition.edges = [{ id: "s-m", sourceNodeId: "start", targetNodeId: "middle" }, { id: "bad", sourceNodeId: "middle", targetNodeId: "sink" }, { id: "end", sourceNodeId: "sink", targetNodeId: "end" }]; }
+    if (item.duplicateEdgeKey) definition.edges.push({ id: "same-target", sourceNodeId: "start", targetNodeId: "end" });
+    if (item.startIncoming) definition.edges.push({ id: "into-start", sourceNodeId: "end", targetNodeId: "start" });
+    if (item.endOutgoing) { definition.nodes.push(state("after")); definition.edges.push({ id: "after-end", sourceNodeId: "end", targetNodeId: "after" }); }
+    if (item.noStartOutgoing) definition.edges = [];
+    if (item.unreachable) definition.nodes.push(state("orphan"));
+    if (item.deadEnd) { definition.nodes.splice(1, 0, state("dead")); definition.edges.push({ id: "dead-edge", sourceNodeId: "start", targetNodeId: "dead" }); }
+    if (item.conditionMissingBranch || item.conditionUnknownHandle) { definition.nodes.splice(1, 0, { ...state("condition"), type: "condition", config: {} }); definition.edges = [{ id: "s-c", sourceNodeId: "start", targetNodeId: "condition" }, { id: "c-e", sourceNodeId: "condition", sourceHandle: item.conditionUnknownHandle ? "other" : "true", targetNodeId: "end" }]; }
+    if (item.routerDuplicateHandle || item.routerUnconnected || item.routerUnknown || item.parallelSingleBranch || item.parallelMissingJoin || item.parallelJoinMismatch || item.parallelJoinMissingInput || item.parallelBranchMissesJoin) {
+      const routerConfig: Record<string, unknown> = { routes: [{ handle: "a" }, ...(item.routerDuplicateHandle ? [{ handle: "a" }] : [])], defaultRoute: "default", ...(item.parallelSingleBranch || item.parallelMissingJoin || item.parallelJoinMismatch || item.parallelJoinMissingInput || item.parallelBranchMissesJoin ? { gbms: true } : {}) };
+      const router = { ...state("router"), type: "router" as const, config: routerConfig };
+      definition.nodes = [{ ...definition.nodes[0] }, router, { ...definition.nodes[1] }];
+      definition.edges = [{ id: "s-r", sourceNodeId: "start", targetNodeId: "router" }, { id: "r-e", sourceNodeId: "router", sourceHandle: item.routerUnknown ? "unknown" : item.routerUnconnected ? "a" : "default", targetNodeId: "end" }];
+      if (item.routerUnconnected) (router.config as any).routes = [{ handle: "a" }, { handle: "b" }];
+      if (item.parallelSingleBranch) (router.config as any).parallelJoinNodeId = "end";
+      if (item.parallelMissingJoin) (router.config as any).parallelJoinNodeId = "missing";
+      if (item.parallelJoinMismatch || item.parallelJoinMissingInput || item.parallelBranchMissesJoin) { (router.config as any).parallelJoinNodeId = "join"; const join = { ...state("join"), config: item.parallelJoinMismatch ? {} : { parallelForNodeId: "router" } }; definition.nodes.splice(2, 0, join); if (item.parallelJoinMissingInput) definition.edges.push({ id: "j-e", sourceNodeId: "join", targetNodeId: "end" }); else if (item.parallelBranchMissesJoin) { definition.edges = [{ id: "s-r", sourceNodeId: "start", targetNodeId: "router" }, { id: "r-j", sourceNodeId: "router", sourceHandle: "a", targetNodeId: "join" }, { id: "r-end", sourceNodeId: "router", sourceHandle: "default", targetNodeId: "end" }, { id: "j-e", sourceNodeId: "join", targetNodeId: "end" }]; } else { definition.edges = [{ id: "s-r", sourceNodeId: "start", targetNodeId: "router" }, { id: "r-j", sourceNodeId: "router", targetNodeId: "join" }, { id: "j-e", sourceNodeId: "join", targetNodeId: "end" }]; } }
+    }
+    if (item.undeclaredLoop) { definition.nodes.splice(1, 0, state("a"), state("b")); definition.edges = [{ id: "s-a", sourceNodeId: "start", targetNodeId: "a" }, { id: "a-b", sourceNodeId: "a", targetNodeId: "b" }, { id: "b-a", sourceNodeId: "b", targetNodeId: "a" }, { id: "b-e", sourceNodeId: "b", targetNodeId: "end" }]; }
+    if (item.invalidLoopLimit) definition.edges[0] = { ...definition.edges[0], loop: { maxIterations: 0 } };
+    if (item.nonCyclicLoop) definition.edges[0] = { ...definition.edges[0], loop: { maxIterations: 2 } };
+    const result = analyzeWorkflowDefinition(definition, { executable: true });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.diagnostics.map(item => item.code)).toContain(code);
+  });
+});

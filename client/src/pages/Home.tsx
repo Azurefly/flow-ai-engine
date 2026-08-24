@@ -102,6 +102,11 @@ type RequestedConsoleRoute = {
   route: ConsoleRoute;
   editorReturn?: FlowEditorReturn;
 };
+type CompileDiagnostic = {
+  code: string;
+  message: string;
+  location: { kind: "definition" | "node" | "edge"; nodeId?: string; edgeId?: string; field?: string };
+};
 
 function readConsoleRoute(): RequestedConsoleRoute {
   if (typeof window === "undefined")
@@ -739,6 +744,8 @@ function FlowConsole({
     },
     onError: error => toast.error(error.message),
   });
+  const compileFlow = trpc.workflow.compile.useMutation();
+  const [compileDiagnostics, setCompileDiagnostics] = useState<CompileDiagnostic[]>([]);
   const duplicateFlow = trpc.workflow.duplicate.useMutation({
     onSuccess: (workflow: any) => {
       void utils.workflow.list.invalidate();
@@ -1249,6 +1256,8 @@ function FlowConsole({
               candidates={(memberCandidates.data ?? []) as any[]}
               savePending={saveFlow.isPending}
               publishPending={publishFlow.isPending}
+              compilePending={compileFlow.isPending}
+              compileDiagnostics={compileDiagnostics}
               runPending={runFlow.isPending}
               runInput={runInput}
               setRunInput={setRunInput}
@@ -1259,9 +1268,31 @@ function FlowConsole({
               backLabel={flowEditorReturnLabel}
               onBackToDesignCenter={returnFromFlowEditor}
               onSave={saveCurrent}
-              onPublish={() =>
-                selectedId && publishFlow.mutate({ id: selectedId })
-              }
+              onValidate={() => {
+                if (!selectedId || !draftDefinition) return;
+                compileFlow.mutate(
+                  { id: selectedId, definition: draftDefinition },
+                  { onSuccess: result => setCompileDiagnostics(result.ok ? [] : result.diagnostics) }
+                );
+              }}
+              onPublish={() => {
+                if (!selectedId || !draftDefinition) return;
+                compileFlow.mutate(
+                  { id: selectedId, definition: draftDefinition },
+                  {
+                    onSuccess: result => {
+                      if (!result.ok) {
+                        setCompileDiagnostics(result.diagnostics);
+                        toast.error(`编译未通过：${result.diagnostics.length} 项错误`);
+                        return;
+                      }
+                      setCompileDiagnostics([]);
+                      publishFlow.mutate({ id: selectedId, name: draftName.trim() || "未命名流程", definition: draftDefinition });
+                    },
+                    onError: error => toast.error(error.message),
+                  }
+                );
+              }}
               onRun={startRun}
               onExport={exportCurrent}
               onImport={() => importRef.current?.click()}
@@ -1518,6 +1549,8 @@ function FlowDesigner({
   candidates,
   savePending,
   publishPending,
+  compilePending,
+  compileDiagnostics,
   runPending,
   runInput,
   setRunInput,
@@ -1529,6 +1562,7 @@ function FlowDesigner({
   onBackToDesignCenter,
   onSave,
   onPublish,
+  onValidate,
   onRun,
   onExport,
   onImport,
@@ -1555,6 +1589,8 @@ function FlowDesigner({
   candidates: any[];
   savePending: boolean;
   publishPending: boolean;
+  compilePending: boolean;
+  compileDiagnostics: CompileDiagnostic[];
   runPending: boolean;
   runInput: Record<string, unknown>;
   setRunInput: (value: Record<string, unknown>) => void;
@@ -1566,6 +1602,7 @@ function FlowDesigner({
   onBackToDesignCenter: () => void;
   onSave: () => void;
   onPublish: () => void;
+  onValidate: () => void;
   onRun: () => void;
   onExport: () => void;
   onImport: () => void;
@@ -1696,10 +1733,21 @@ function FlowDesigner({
             size="sm"
             className="bg-emerald-600 hover:bg-emerald-500"
             onClick={onPublish}
-            disabled={!canPublish || publishPending}
+            disabled={!canPublish || publishPending || compilePending}
           >
             {publishPending && <Loader2 className="animate-spin" size={14} />}
             发布
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="border-violet-200 text-violet-700 hover:bg-violet-50"
+            onClick={onValidate}
+            disabled={!canPublish || compilePending}
+          >
+            {compilePending && <Loader2 className="animate-spin" size={14} />}
+            编译检查
           </Button>
           {canManage && (
             <>
@@ -1837,6 +1885,26 @@ function FlowDesigner({
           </form>
         )}
       </div>
+      {compileDiagnostics.length > 0 && (
+        <section className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3" aria-label="流程编译诊断">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-red-900">发布前检查未通过</p>
+              <p className="mt-1 text-xs text-red-700">共 {compileDiagnostics.length} 项问题；修复后重新执行编译检查。</p>
+            </div>
+            <button type="button" className="text-xs text-red-700 underline" onClick={() => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { nodeId: compileDiagnostics[0]?.location.nodeId } }))}>定位第一项</button>
+          </div>
+          <ul className="mt-2 grid gap-1.5 text-xs text-red-900">
+            {compileDiagnostics.map((item, index) => (
+              <li key={`${item.code}-${item.location.nodeId ?? item.location.edgeId ?? index}`} className="flex min-w-0 flex-wrap items-baseline gap-2 rounded border border-red-100 bg-white/70 px-2 py-1.5">
+                <code className="font-semibold">{item.code}</code>
+                <span className="min-w-0 flex-1">{item.message}</span>
+                {(item.location.nodeId || item.location.edgeId) && <button type="button" className="text-red-700 underline" onClick={() => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { nodeId: item.location.nodeId } }))}>{item.location.nodeId ? `节点 ${item.location.nodeId}` : `连线 ${item.location.edgeId}`}</button>}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <StructuredRunInput
         value={runInput}
         onChange={setRunInput}
