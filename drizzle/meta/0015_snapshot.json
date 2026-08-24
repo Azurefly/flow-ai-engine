@@ -1,0 +1,4246 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "8163d24a-44b0-4334-8e43-bc21f7d50777",
+  "prevId": "c4ee3e2d-eebe-4664-ab15-5fa08ce6de50",
+  "tables": {
+    "authorization_audit_log": {
+      "name": "authorization_audit_log",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actorUserId": {
+          "name": "actorUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "targetUserId": {
+          "name": "targetUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "action": {
+          "name": "action",
+          "type": "enum('login_success','login_failed','logout','user_created','user_updated','user_disabled','role_assigned','role_revoked','temporary_role_assigned','temporary_role_revoked')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resourceType": {
+          "name": "resourceType",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resourceId": {
+          "name": "resourceId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "detailsJson": {
+          "name": "detailsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "authorization_audit_log_actorUserId_users_id_fk": {
+          "name": "authorization_audit_log_actorUserId_users_id_fk",
+          "tableFrom": "authorization_audit_log",
+          "tableTo": "users",
+          "columnsFrom": ["actorUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "authorization_audit_log_targetUserId_users_id_fk": {
+          "name": "authorization_audit_log_targetUserId_users_id_fk",
+          "tableFrom": "authorization_audit_log",
+          "tableTo": "users",
+          "columnsFrom": ["targetUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "authorization_audit_log_id": {
+          "name": "authorization_audit_log_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "data_asset": {
+      "name": "data_asset",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceId": {
+          "name": "sourceId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "assetType": {
+          "name": "assetType",
+          "type": "enum('table','view','file','endpoint','dataset')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "schemaJson": {
+          "name": "schemaJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sampleJson": {
+          "name": "sampleJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "discoveredAt": {
+          "name": "discoveredAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "data_asset_project_updated_idx": {
+          "name": "data_asset_project_updated_idx",
+          "columns": ["projectId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "data_asset_projectId_flow_project_id_fk": {
+          "name": "data_asset_projectId_flow_project_id_fk",
+          "tableFrom": "data_asset",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "data_asset_sourceId_data_source_id_fk": {
+          "name": "data_asset_sourceId_data_source_id_fk",
+          "tableFrom": "data_asset",
+          "tableTo": "data_source",
+          "columnsFrom": ["sourceId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "data_asset_createdByUserId_users_id_fk": {
+          "name": "data_asset_createdByUserId_users_id_fk",
+          "tableFrom": "data_asset",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "data_asset_id": {
+          "name": "data_asset_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "data_asset_source_name_unique": {
+          "name": "data_asset_source_name_unique",
+          "columns": ["sourceId", "name"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "data_source": {
+      "name": "data_source",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sourceType": {
+          "name": "sourceType",
+          "type": "enum('jdbc','api','file','inline')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "connectionJson": {
+          "name": "connectionJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "credentialRef": {
+          "name": "credentialRef",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','verified','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "lastTestedAt": {
+          "name": "lastTestedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "data_source_project_updated_idx": {
+          "name": "data_source_project_updated_idx",
+          "columns": ["projectId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "data_source_projectId_flow_project_id_fk": {
+          "name": "data_source_projectId_flow_project_id_fk",
+          "tableFrom": "data_source",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "data_source_createdByUserId_users_id_fk": {
+          "name": "data_source_createdByUserId_users_id_fk",
+          "tableFrom": "data_source",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "data_source_id": {
+          "name": "data_source_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "data_source_project_name_unique": {
+          "name": "data_source_project_name_unique",
+          "columns": ["projectId", "name"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "data_tag": {
+      "name": "data_tag",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(80)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "color": {
+          "name": "color",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'#2d6bea'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "data_tag_projectId_flow_project_id_fk": {
+          "name": "data_tag_projectId_flow_project_id_fk",
+          "tableFrom": "data_tag",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "data_tag_createdByUserId_users_id_fk": {
+          "name": "data_tag_createdByUserId_users_id_fk",
+          "tableFrom": "data_tag",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "data_tag_id": {
+          "name": "data_tag_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "data_tag_project_name_unique": {
+          "name": "data_tag_project_name_unique",
+          "columns": ["projectId", "name"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "data_udf": {
+      "name": "data_udf",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "udfType": {
+          "name": "udfType",
+          "type": "enum('sql','javascript','python','jar')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "paramsJson": {
+          "name": "paramsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "returnType": {
+          "name": "returnType",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "artifactRef": {
+          "name": "artifactRef",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','approved','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "data_udf_project_updated_idx": {
+          "name": "data_udf_project_updated_idx",
+          "columns": ["projectId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "data_udf_projectId_flow_project_id_fk": {
+          "name": "data_udf_projectId_flow_project_id_fk",
+          "tableFrom": "data_udf",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "data_udf_createdByUserId_users_id_fk": {
+          "name": "data_udf_createdByUserId_users_id_fk",
+          "tableFrom": "data_udf",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "data_udf_id": {
+          "name": "data_udf_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "data_udf_project_name_unique": {
+          "name": "data_udf_project_name_unique",
+          "columns": ["projectId", "name"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "dataflow_run": {
+      "name": "dataflow_run",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "triggerType": {
+          "name": "triggerType",
+          "type": "enum('manual','schedule')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "scheduleBucket": {
+          "name": "scheduleBucket",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('queued','running','success','failed','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'queued'"
+        },
+        "definitionSnapshotJson": {
+          "name": "definitionSnapshotJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "inputJson": {
+          "name": "inputJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "outputJson": {
+          "name": "outputJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "errorJson": {
+          "name": "errorJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finishedAt": {
+          "name": "finishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "durationMs": {
+          "name": "durationMs",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "triggeredByUserId": {
+          "name": "triggeredByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "dataflow_run_project_created_idx": {
+          "name": "dataflow_run_project_created_idx",
+          "columns": ["projectId", "createdAt"],
+          "isUnique": false
+        },
+        "dataflow_run_workflow_created_idx": {
+          "name": "dataflow_run_workflow_created_idx",
+          "columns": ["workflowId", "createdAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "dataflow_run_projectId_flow_project_id_fk": {
+          "name": "dataflow_run_projectId_flow_project_id_fk",
+          "tableFrom": "dataflow_run",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dataflow_run_workflowId_workflow_id_fk": {
+          "name": "dataflow_run_workflowId_workflow_id_fk",
+          "tableFrom": "dataflow_run",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dataflow_run_triggeredByUserId_users_id_fk": {
+          "name": "dataflow_run_triggeredByUserId_users_id_fk",
+          "tableFrom": "dataflow_run",
+          "tableTo": "users",
+          "columnsFrom": ["triggeredByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dataflow_run_id": {
+          "name": "dataflow_run_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "dataflow_run_schedule_bucket_unique": {
+          "name": "dataflow_run_schedule_bucket_unique",
+          "columns": ["workflowId", "scheduleBucket"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "dataflow_schedule": {
+      "name": "dataflow_schedule",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cronExpression": {
+          "name": "cronExpression",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','paused','deleted')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'paused'"
+        },
+        "scheduleCronTaskUid": {
+          "name": "scheduleCronTaskUid",
+          "type": "varchar(65)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastTriggeredAt": {
+          "name": "lastTriggeredAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastRunId": {
+          "name": "lastRunId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "dataflow_schedule_project_status_idx": {
+          "name": "dataflow_schedule_project_status_idx",
+          "columns": ["projectId", "status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "dataflow_schedule_projectId_flow_project_id_fk": {
+          "name": "dataflow_schedule_projectId_flow_project_id_fk",
+          "tableFrom": "dataflow_schedule",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dataflow_schedule_workflowId_workflow_id_fk": {
+          "name": "dataflow_schedule_workflowId_workflow_id_fk",
+          "tableFrom": "dataflow_schedule",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dataflow_schedule_lastRunId_dataflow_run_id_fk": {
+          "name": "dataflow_schedule_lastRunId_dataflow_run_id_fk",
+          "tableFrom": "dataflow_schedule",
+          "tableTo": "dataflow_run",
+          "columnsFrom": ["lastRunId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "dataflow_schedule_createdByUserId_users_id_fk": {
+          "name": "dataflow_schedule_createdByUserId_users_id_fk",
+          "tableFrom": "dataflow_schedule",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "dataflow_schedule_id": {
+          "name": "dataflow_schedule_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "dataflow_schedule_workflow_unique": {
+          "name": "dataflow_schedule_workflow_unique",
+          "columns": ["workflowId"]
+        },
+        "dataflow_schedule_task_uid_unique": {
+          "name": "dataflow_schedule_task_uid_unique",
+          "columns": ["scheduleCronTaskUid"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "flow_project_member": {
+      "name": "flow_project_member",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('owner','designer','operator','viewer')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effectiveFrom": {
+          "name": "effectiveFrom",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grantedByUserId": {
+          "name": "grantedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "flow_project_member_user_idx": {
+          "name": "flow_project_member_user_idx",
+          "columns": ["userId", "projectId"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "flow_project_member_projectId_flow_project_id_fk": {
+          "name": "flow_project_member_projectId_flow_project_id_fk",
+          "tableFrom": "flow_project_member",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "flow_project_member_userId_users_id_fk": {
+          "name": "flow_project_member_userId_users_id_fk",
+          "tableFrom": "flow_project_member",
+          "tableTo": "users",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "flow_project_member_grantedByUserId_users_id_fk": {
+          "name": "flow_project_member_grantedByUserId_users_id_fk",
+          "tableFrom": "flow_project_member",
+          "tableTo": "users",
+          "columnsFrom": ["grantedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "flow_project_member_id": {
+          "name": "flow_project_member_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "flow_project_member_unique": {
+          "name": "flow_project_member_unique",
+          "columns": ["projectId", "userId", "role"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "flow_project": {
+      "name": "flow_project",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ownerUserId": {
+          "name": "ownerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "domainId": {
+          "name": "domainId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','archived')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "flow_project_owner_updated_idx": {
+          "name": "flow_project_owner_updated_idx",
+          "columns": ["ownerUserId", "updatedAt"],
+          "isUnique": false
+        },
+        "flow_project_domain_updated_idx": {
+          "name": "flow_project_domain_updated_idx",
+          "columns": ["domainId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "flow_project_ownerUserId_users_id_fk": {
+          "name": "flow_project_ownerUserId_users_id_fk",
+          "tableFrom": "flow_project",
+          "tableTo": "users",
+          "columnsFrom": ["ownerUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "flow_project_domainId_work_domain_id_fk": {
+          "name": "flow_project_domainId_work_domain_id_fk",
+          "tableFrom": "flow_project",
+          "tableTo": "work_domain",
+          "columnsFrom": ["domainId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "flow_project_id": {
+          "name": "flow_project_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "flow_project_owner_code_unique": {
+          "name": "flow_project_owner_code_unique",
+          "columns": ["ownerUserId", "code"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "organization_membership": {
+      "name": "organization_membership",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unitId": {
+          "name": "unitId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "isPrimary": {
+          "name": "isPrimary",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "organization_membership_user_primary_idx": {
+          "name": "organization_membership_user_primary_idx",
+          "columns": ["userId", "isPrimary"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "organization_membership_unitId_organization_unit_id_fk": {
+          "name": "organization_membership_unitId_organization_unit_id_fk",
+          "tableFrom": "organization_membership",
+          "tableTo": "organization_unit",
+          "columnsFrom": ["unitId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "organization_membership_userId_users_id_fk": {
+          "name": "organization_membership_userId_users_id_fk",
+          "tableFrom": "organization_membership",
+          "tableTo": "users",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "organization_membership_id": {
+          "name": "organization_membership_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "organization_membership_unit_user_unique": {
+          "name": "organization_membership_unit_user_unique",
+          "columns": ["unitId", "userId"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "organization_unit_role": {
+      "name": "organization_unit_role",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "unitId": {
+          "name": "unitId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "roleId": {
+          "name": "roleId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "organization_unit_role_role_idx": {
+          "name": "organization_unit_role_role_idx",
+          "columns": ["roleId"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "organization_unit_role_unitId_organization_unit_id_fk": {
+          "name": "organization_unit_role_unitId_organization_unit_id_fk",
+          "tableFrom": "organization_unit_role",
+          "tableTo": "organization_unit",
+          "columnsFrom": ["unitId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "organization_unit_role_roleId_iam_role_id_fk": {
+          "name": "organization_unit_role_roleId_iam_role_id_fk",
+          "tableFrom": "organization_unit_role",
+          "tableTo": "iam_role",
+          "columnsFrom": ["roleId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "organization_unit_role_createdByUserId_users_id_fk": {
+          "name": "organization_unit_role_createdByUserId_users_id_fk",
+          "tableFrom": "organization_unit_role",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "organization_unit_role_id": {
+          "name": "organization_unit_role_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "organization_unit_role_unique": {
+          "name": "organization_unit_role_unique",
+          "columns": ["unitId", "roleId"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "organization_unit": {
+      "name": "organization_unit",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parentUnitId": {
+          "name": "parentUnitId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "managerUserId": {
+          "name": "managerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unitType": {
+          "name": "unitType",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unitLevel": {
+          "name": "unitLevel",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "standardCode": {
+          "name": "standardCode",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "areaCode": {
+          "name": "areaCode",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category": {
+          "name": "category",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sortOrder": {
+          "name": "sortOrder",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "organization_unit_parent_idx": {
+          "name": "organization_unit_parent_idx",
+          "columns": ["parentUnitId"],
+          "isUnique": false
+        },
+        "organization_unit_manager_idx": {
+          "name": "organization_unit_manager_idx",
+          "columns": ["managerUserId"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "organization_unit_managerUserId_users_id_fk": {
+          "name": "organization_unit_managerUserId_users_id_fk",
+          "tableFrom": "organization_unit",
+          "tableTo": "users",
+          "columnsFrom": ["managerUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "organization_unit_createdByUserId_users_id_fk": {
+          "name": "organization_unit_createdByUserId_users_id_fk",
+          "tableFrom": "organization_unit",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "organization_unit_id": {
+          "name": "organization_unit_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "organization_unit_code_unique": {
+          "name": "organization_unit_code_unique",
+          "columns": ["code"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "permission": {
+      "name": "permission",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "permission_id": {
+          "name": "permission_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "permission_code_unique": {
+          "name": "permission_code_unique",
+          "columns": ["code"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "project_plugin": {
+      "name": "project_plugin",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pluginType": {
+          "name": "pluginType",
+          "type": "enum('transform','connector','visualization')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "configJson": {
+          "name": "configJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('enabled','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'enabled'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "project_plugin_project_updated_idx": {
+          "name": "project_plugin_project_updated_idx",
+          "columns": ["projectId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "project_plugin_projectId_flow_project_id_fk": {
+          "name": "project_plugin_projectId_flow_project_id_fk",
+          "tableFrom": "project_plugin",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "project_plugin_createdByUserId_users_id_fk": {
+          "name": "project_plugin_createdByUserId_users_id_fk",
+          "tableFrom": "project_plugin",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "project_plugin_id": {
+          "name": "project_plugin_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "project_plugin_project_name_unique": {
+          "name": "project_plugin_project_name_unique",
+          "columns": ["projectId", "name"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "role_assignment": {
+      "name": "role_assignment",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "roleId": {
+          "name": "roleId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopeType": {
+          "name": "scopeType",
+          "type": "enum('system','workflow')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scopeId": {
+          "name": "scopeId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "effectiveFrom": {
+          "name": "effectiveFrom",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grantedByUserId": {
+          "name": "grantedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revokedByUserId": {
+          "name": "revokedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "note": {
+          "name": "note",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "role_assignment_user_idx": {
+          "name": "role_assignment_user_idx",
+          "columns": ["userId"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "role_assignment_userId_users_id_fk": {
+          "name": "role_assignment_userId_users_id_fk",
+          "tableFrom": "role_assignment",
+          "tableTo": "users",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "role_assignment_roleId_iam_role_id_fk": {
+          "name": "role_assignment_roleId_iam_role_id_fk",
+          "tableFrom": "role_assignment",
+          "tableTo": "iam_role",
+          "columnsFrom": ["roleId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "role_assignment_grantedByUserId_users_id_fk": {
+          "name": "role_assignment_grantedByUserId_users_id_fk",
+          "tableFrom": "role_assignment",
+          "tableTo": "users",
+          "columnsFrom": ["grantedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "role_assignment_revokedByUserId_users_id_fk": {
+          "name": "role_assignment_revokedByUserId_users_id_fk",
+          "tableFrom": "role_assignment",
+          "tableTo": "users",
+          "columnsFrom": ["revokedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "role_assignment_id": {
+          "name": "role_assignment_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "role_permission": {
+      "name": "role_permission",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "roleId": {
+          "name": "roleId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "permissionId": {
+          "name": "permissionId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "role_permission_roleId_iam_role_id_fk": {
+          "name": "role_permission_roleId_iam_role_id_fk",
+          "tableFrom": "role_permission",
+          "tableTo": "iam_role",
+          "columnsFrom": ["roleId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "role_permission_permissionId_permission_id_fk": {
+          "name": "role_permission_permissionId_permission_id_fk",
+          "tableFrom": "role_permission",
+          "tableTo": "permission",
+          "columnsFrom": ["permissionId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "role_permission_id": {
+          "name": "role_permission_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "role_permission_unique_idx": {
+          "name": "role_permission_unique_idx",
+          "columns": ["roleId", "permissionId"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "iam_role": {
+      "name": "iam_role",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "enum('system','workflow')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isSystem": {
+          "name": "isSystem",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "iam_role_id": {
+          "name": "iam_role_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "iam_role_code_unique": {
+          "name": "iam_role_code_unique",
+          "columns": ["code"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "auth_session": {
+      "name": "auth_session",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "tokenHash": {
+          "name": "tokenHash",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastSeenAt": {
+          "name": "lastSeenAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "userAgent": {
+          "name": "userAgent",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "auth_session_user_idx": {
+          "name": "auth_session_user_idx",
+          "columns": ["userId"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "auth_session_userId_users_id_fk": {
+          "name": "auth_session_userId_users_id_fk",
+          "tableFrom": "auth_session",
+          "tableTo": "users",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "auth_session_id": {
+          "name": "auth_session_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "auth_session_tokenHash_unique": {
+          "name": "auth_session_tokenHash_unique",
+          "columns": ["tokenHash"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "system_setting": {
+      "name": "system_setting",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "varchar(96)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "valueJson": {
+          "name": "valueJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedByUserId": {
+          "name": "updatedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "system_setting_updatedByUserId_users_id_fk": {
+          "name": "system_setting_updatedByUserId_users_id_fk",
+          "tableFrom": "system_setting",
+          "tableTo": "users",
+          "columnsFrom": ["updatedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "system_setting_key": {
+          "name": "system_setting_key",
+          "columns": ["key"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "users": {
+      "name": "users",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": true
+        },
+        "openId": {
+          "name": "openId",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "username": {
+          "name": "username",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "passwordHash": {
+          "name": "passwordHash",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "loginMethod": {
+          "name": "loginMethod",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('user','admin')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'user'"
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "tokenVersion": {
+          "name": "tokenVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        },
+        "lastSignedIn": {
+          "name": "lastSignedIn",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "users_id": {
+          "name": "users_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "users_openId_unique": {
+          "name": "users_openId_unique",
+          "columns": ["openId"]
+        },
+        "users_username_unique": {
+          "name": "users_username_unique",
+          "columns": ["username"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "work_domain": {
+      "name": "work_domain",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "code": {
+          "name": "code",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('active','disabled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'active'"
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "work_domain_status_updated_idx": {
+          "name": "work_domain_status_updated_idx",
+          "columns": ["status", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "work_domain_createdByUserId_users_id_fk": {
+          "name": "work_domain_createdByUserId_users_id_fk",
+          "tableFrom": "work_domain",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "work_domain_id": {
+          "name": "work_domain_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "work_domain_code_unique": {
+          "name": "work_domain_code_unique",
+          "columns": ["code"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_folder": {
+      "name": "workflow_folder",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "parentId": {
+          "name": "parentId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_folder_project_idx": {
+          "name": "workflow_folder_project_idx",
+          "columns": ["projectId", "parentId"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_folder_projectId_flow_project_id_fk": {
+          "name": "workflow_folder_projectId_flow_project_id_fk",
+          "tableFrom": "workflow_folder",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_folder_createdByUserId_users_id_fk": {
+          "name": "workflow_folder_createdByUserId_users_id_fk",
+          "tableFrom": "workflow_folder",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_folder_id": {
+          "name": "workflow_folder_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_folder_project_parent_name_unique": {
+          "name": "workflow_folder_project_parent_name_unique",
+          "columns": ["projectId", "parentId", "name"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_member": {
+      "name": "workflow_member",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "enum('owner','editor','operator','viewer')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "effectiveFrom": {
+          "name": "effectiveFrom",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "grantedByUserId": {
+          "name": "grantedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "workflow_member_workflowId_workflow_id_fk": {
+          "name": "workflow_member_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_member",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_member_userId_users_id_fk": {
+          "name": "workflow_member_userId_users_id_fk",
+          "tableFrom": "workflow_member",
+          "tableTo": "users",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_member_grantedByUserId_users_id_fk": {
+          "name": "workflow_member_grantedByUserId_users_id_fk",
+          "tableFrom": "workflow_member",
+          "tableTo": "users",
+          "columnsFrom": ["grantedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_member_id": {
+          "name": "workflow_member_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_member_unique": {
+          "name": "workflow_member_unique",
+          "columns": ["workflowId", "userId", "role"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_node_run": {
+      "name": "workflow_node_run",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sequenceNo": {
+          "name": "sequenceNo",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nodeId": {
+          "name": "nodeId",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nodeType": {
+          "name": "nodeType",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nodeName": {
+          "name": "nodeName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','running','waiting','success','failed','skipped')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "inputJson": {
+          "name": "inputJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "outputJson": {
+          "name": "outputJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "errorJson": {
+          "name": "errorJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finishedAt": {
+          "name": "finishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "durationMs": {
+          "name": "durationMs",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "workflow_node_run_runId_workflow_run_id_fk": {
+          "name": "workflow_node_run_runId_workflow_run_id_fk",
+          "tableFrom": "workflow_node_run",
+          "tableTo": "workflow_run",
+          "columnsFrom": ["runId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_node_run_id": {
+          "name": "workflow_node_run_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_node_run_sequence_unique": {
+          "name": "workflow_node_run_sequence_unique",
+          "columns": ["runId", "sequenceNo"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_node_template": {
+      "name": "workflow_node_template",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ownerUserId": {
+          "name": "ownerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nodeType": {
+          "name": "nodeType",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "configJson": {
+          "name": "configJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_node_template_owner_updated_idx": {
+          "name": "workflow_node_template_owner_updated_idx",
+          "columns": ["ownerUserId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_node_template_ownerUserId_users_id_fk": {
+          "name": "workflow_node_template_ownerUserId_users_id_fk",
+          "tableFrom": "workflow_node_template",
+          "tableTo": "users",
+          "columnsFrom": ["ownerUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_node_template_id": {
+          "name": "workflow_node_template_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "workflow_participant_state": {
+      "name": "workflow_participant_state",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "userId": {
+          "name": "userId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "roleKey": {
+          "name": "roleKey",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'default'"
+        },
+        "stateCode": {
+          "name": "stateCode",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stateName": {
+          "name": "stateName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "flowStatus": {
+          "name": "flowStatus",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "stateColor": {
+          "name": "stateColor",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sourceNodeId": {
+          "name": "sourceNodeId",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "availableOperationsJson": {
+          "name": "availableOperationsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_participant_user_updated_idx": {
+          "name": "workflow_participant_user_updated_idx",
+          "columns": ["userId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_participant_state_runId_workflow_run_id_fk": {
+          "name": "workflow_participant_state_runId_workflow_run_id_fk",
+          "tableFrom": "workflow_participant_state",
+          "tableTo": "workflow_run",
+          "columnsFrom": ["runId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_participant_state_workflowId_workflow_id_fk": {
+          "name": "workflow_participant_state_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_participant_state",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_participant_state_userId_users_id_fk": {
+          "name": "workflow_participant_state_userId_users_id_fk",
+          "tableFrom": "workflow_participant_state",
+          "tableTo": "users",
+          "columnsFrom": ["userId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_participant_state_id": {
+          "name": "workflow_participant_state_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_participant_run_user_role_unique": {
+          "name": "workflow_participant_run_user_role_unique",
+          "columns": ["runId", "userId", "roleKey"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_run_alert": {
+      "name": "workflow_run_alert",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "recipientUserId": {
+          "name": "recipientUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "severity": {
+          "name": "severity",
+          "type": "enum('warning','critical')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'critical'"
+        },
+        "summary": {
+          "name": "summary",
+          "type": "varchar(320)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "detailsJson": {
+          "name": "detailsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "readAt": {
+          "name": "readAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_run_alert_recipient_idx": {
+          "name": "workflow_run_alert_recipient_idx",
+          "columns": ["recipientUserId", "readAt", "createdAt"],
+          "isUnique": false
+        },
+        "workflow_run_alert_workflow_idx": {
+          "name": "workflow_run_alert_workflow_idx",
+          "columns": ["workflowId", "createdAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_run_alert_workflowId_workflow_id_fk": {
+          "name": "workflow_run_alert_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_run_alert",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_run_alert_runId_workflow_run_id_fk": {
+          "name": "workflow_run_alert_runId_workflow_run_id_fk",
+          "tableFrom": "workflow_run_alert",
+          "tableTo": "workflow_run",
+          "columnsFrom": ["runId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_run_alert_recipientUserId_users_id_fk": {
+          "name": "workflow_run_alert_recipientUserId_users_id_fk",
+          "tableFrom": "workflow_run_alert",
+          "tableTo": "users",
+          "columnsFrom": ["recipientUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_run_alert_id": {
+          "name": "workflow_run_alert_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "workflow_run_job": {
+      "name": "workflow_run_job",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "jobType": {
+          "name": "jobType",
+          "type": "enum('start','resume')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'start'"
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('queued','leased','completed','failed','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'queued'"
+        },
+        "idempotencyKey": {
+          "name": "idempotencyKey",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "checkpointJson": {
+          "name": "checkpointJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "resultJson": {
+          "name": "resultJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "lastErrorJson": {
+          "name": "lastErrorJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attempt": {
+          "name": "attempt",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "maxAttempts": {
+          "name": "maxAttempts",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 3
+        },
+        "availableAt": {
+          "name": "availableAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "leaseToken": {
+          "name": "leaseToken",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "leaseExpiresAt": {
+          "name": "leaseExpiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "workerId": {
+          "name": "workerId",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        },
+        "finishedAt": {
+          "name": "finishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "workflow_run_job_claim_idx": {
+          "name": "workflow_run_job_claim_idx",
+          "columns": ["status", "availableAt", "leaseExpiresAt"],
+          "isUnique": false
+        },
+        "workflow_run_job_run_idx": {
+          "name": "workflow_run_job_run_idx",
+          "columns": ["runId", "createdAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_run_job_runId_workflow_run_id_fk": {
+          "name": "workflow_run_job_runId_workflow_run_id_fk",
+          "tableFrom": "workflow_run_job",
+          "tableTo": "workflow_run",
+          "columnsFrom": ["runId"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_run_job_id": {
+          "name": "workflow_run_job_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_run_job_idempotency_unique": {
+          "name": "workflow_run_job_idempotency_unique",
+          "columns": ["idempotencyKey"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_run": {
+      "name": "workflow_run",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ownerUserId": {
+          "name": "ownerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "triggerType": {
+          "name": "triggerType",
+          "type": "enum('manual','api','schedule')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('queued','running','success','failed','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'queued'"
+        },
+        "definitionSnapshotJson": {
+          "name": "definitionSnapshotJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "inputJson": {
+          "name": "inputJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contextJson": {
+          "name": "contextJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "finalOutputJson": {
+          "name": "finalOutputJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "errorJson": {
+          "name": "errorJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "startedAt": {
+          "name": "startedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "finishedAt": {
+          "name": "finishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "durationMs": {
+          "name": "durationMs",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "nextNodeSequence": {
+          "name": "nextNodeSequence",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "executionLockToken": {
+          "name": "executionLockToken",
+          "type": "varchar(48)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "executionLockExpiresAt": {
+          "name": "executionLockExpiresAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "triggeredByUserId": {
+          "name": "triggeredByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "authorizationSnapshotJson": {
+          "name": "authorizationSnapshotJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "workflow_run_workflow_idx": {
+          "name": "workflow_run_workflow_idx",
+          "columns": ["workflowId", "createdAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_run_workflowId_workflow_id_fk": {
+          "name": "workflow_run_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_run",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_run_ownerUserId_users_id_fk": {
+          "name": "workflow_run_ownerUserId_users_id_fk",
+          "tableFrom": "workflow_run",
+          "tableTo": "users",
+          "columnsFrom": ["ownerUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_run_triggeredByUserId_users_id_fk": {
+          "name": "workflow_run_triggeredByUserId_users_id_fk",
+          "tableFrom": "workflow_run",
+          "tableTo": "users",
+          "columnsFrom": ["triggeredByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_run_id": {
+          "name": "workflow_run_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "workflow_subflow": {
+      "name": "workflow_subflow",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ownerUserId": {
+          "name": "ownerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "definitionJson": {
+          "name": "definitionJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "isEnabled": {
+          "name": "isEnabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_subflow_owner_updated_idx": {
+          "name": "workflow_subflow_owner_updated_idx",
+          "columns": ["ownerUserId", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_subflow_ownerUserId_users_id_fk": {
+          "name": "workflow_subflow_ownerUserId_users_id_fk",
+          "tableFrom": "workflow_subflow",
+          "tableTo": "users",
+          "columnsFrom": ["ownerUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_subflow_id": {
+          "name": "workflow_subflow_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "workflow_task_group": {
+      "name": "workflow_task_group",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nodeId": {
+          "name": "nodeId",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "signMode": {
+          "name": "signMode",
+          "type": "enum('single','orSignFor','andSignFor')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'single'"
+        },
+        "totalApprovers": {
+          "name": "totalApprovers",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "requiredApprovals": {
+          "name": "requiredApprovals",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "passPercentBasisPoints": {
+          "name": "passPercentBasisPoints",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 10000
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('waiting','completed','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'waiting'"
+        },
+        "nextNodeIdsJson": {
+          "name": "nextNodeIdsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "completedByTaskId": {
+          "name": "completedByTaskId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "completedAt": {
+          "name": "completedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "workflow_task_group_run_status_idx": {
+          "name": "workflow_task_group_run_status_idx",
+          "columns": ["runId", "status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_task_group_workflowId_workflow_id_fk": {
+          "name": "workflow_task_group_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_task_group",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_group_runId_workflow_run_id_fk": {
+          "name": "workflow_task_group_runId_workflow_run_id_fk",
+          "tableFrom": "workflow_task_group",
+          "tableTo": "workflow_run",
+          "columnsFrom": ["runId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_task_group_id": {
+          "name": "workflow_task_group_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_task_group_run_node_unique": {
+          "name": "workflow_task_group_run_node_unique",
+          "columns": ["runId", "nodeId"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_task": {
+      "name": "workflow_task",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "runId": {
+          "name": "runId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nodeId": {
+          "name": "nodeId",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "nodeName": {
+          "name": "nodeName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "taskType": {
+          "name": "taskType",
+          "type": "enum('operate')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'operate'"
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','claimed','completed','cancelled')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "assignedUserId": {
+          "name": "assignedUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "candidateUserIdsJson": {
+          "name": "candidateUserIdsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approvalGroupId": {
+          "name": "approvalGroupId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "signMode": {
+          "name": "signMode",
+          "type": "enum('single','orSignFor','andSignFor')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'single'"
+        },
+        "roleKey": {
+          "name": "roleKey",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'default'"
+        },
+        "operationName": {
+          "name": "operationName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pendingStatusName": {
+          "name": "pendingStatusName",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "claimedByUserId": {
+          "name": "claimedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completedByUserId": {
+          "name": "completedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "instruction": {
+          "name": "instruction",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payloadJson": {
+          "name": "payloadJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "resultJson": {
+          "name": "resultJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nextNodeIdsJson": {
+          "name": "nextNodeIdsJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "claimedAt": {
+          "name": "claimedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completedAt": {
+          "name": "completedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "workflow_task_assignee_status_idx": {
+          "name": "workflow_task_assignee_status_idx",
+          "columns": ["assignedUserId", "status", "createdAt"],
+          "isUnique": false
+        },
+        "workflow_task_workflow_status_idx": {
+          "name": "workflow_task_workflow_status_idx",
+          "columns": ["workflowId", "status", "createdAt"],
+          "isUnique": false
+        },
+        "workflow_task_approval_group_idx": {
+          "name": "workflow_task_approval_group_idx",
+          "columns": ["approvalGroupId", "status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_task_workflowId_workflow_id_fk": {
+          "name": "workflow_task_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_projectId_flow_project_id_fk": {
+          "name": "workflow_task_projectId_flow_project_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_runId_workflow_run_id_fk": {
+          "name": "workflow_task_runId_workflow_run_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "workflow_run",
+          "columnsFrom": ["runId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_assignedUserId_users_id_fk": {
+          "name": "workflow_task_assignedUserId_users_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "users",
+          "columnsFrom": ["assignedUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_approvalGroupId_workflow_task_group_id_fk": {
+          "name": "workflow_task_approvalGroupId_workflow_task_group_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "workflow_task_group",
+          "columnsFrom": ["approvalGroupId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_claimedByUserId_users_id_fk": {
+          "name": "workflow_task_claimedByUserId_users_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "users",
+          "columnsFrom": ["claimedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_task_completedByUserId_users_id_fk": {
+          "name": "workflow_task_completedByUserId_users_id_fk",
+          "tableFrom": "workflow_task",
+          "tableTo": "users",
+          "columnsFrom": ["completedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_task_id": {
+          "name": "workflow_task_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_task_run_node_assignee_unique": {
+          "name": "workflow_task_run_node_assignee_unique",
+          "columns": ["runId", "nodeId", "assignedUserId"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow_version": {
+      "name": "workflow_version",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "workflowId": {
+          "name": "workflowId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version": {
+          "name": "version",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','published')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "definitionJson": {
+          "name": "definitionJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "changeSource": {
+          "name": "changeSource",
+          "type": "enum('created','updated','published','unpublished','rolled_back')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "restoredFromVersion": {
+          "name": "restoredFromVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdByUserId": {
+          "name": "createdByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_version_workflow_created_idx": {
+          "name": "workflow_version_workflow_created_idx",
+          "columns": ["workflowId", "createdAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_version_workflowId_workflow_id_fk": {
+          "name": "workflow_version_workflowId_workflow_id_fk",
+          "tableFrom": "workflow_version",
+          "tableTo": "workflow",
+          "columnsFrom": ["workflowId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_version_createdByUserId_users_id_fk": {
+          "name": "workflow_version_createdByUserId_users_id_fk",
+          "tableFrom": "workflow_version",
+          "tableTo": "users",
+          "columnsFrom": ["createdByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_version_id": {
+          "name": "workflow_version_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_version_workflow_version_unique": {
+          "name": "workflow_version_workflow_version_unique",
+          "columns": ["workflowId", "version"]
+        }
+      },
+      "checkConstraint": {}
+    },
+    "workflow": {
+      "name": "workflow",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ownerUserId": {
+          "name": "ownerUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "projectId": {
+          "name": "projectId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "folderId": {
+          "name": "folderId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "processCode": {
+          "name": "processCode",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(160)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "flowType": {
+          "name": "flowType",
+          "type": "enum('state','control','data')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'state'"
+        },
+        "creationSource": {
+          "name": "creationSource",
+          "type": "enum('manual','warehouse')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'manual'"
+        },
+        "dataSourceId": {
+          "name": "dataSourceId",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "auditStatus": {
+          "name": "auditStatus",
+          "type": "enum('init','approved','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'init'"
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('draft','published')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'draft'"
+        },
+        "publishedAt": {
+          "name": "publishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "unpublishedAt": {
+          "name": "unpublishedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "archivedAt": {
+          "name": "archivedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "archivedByUserId": {
+          "name": "archivedByUserId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "definitionVersion": {
+          "name": "definitionVersion",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 1
+        },
+        "definitionJson": {
+          "name": "definitionJson",
+          "type": "json",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "onUpdate": true,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "workflow_owner_updated_idx": {
+          "name": "workflow_owner_updated_idx",
+          "columns": ["ownerUserId", "updatedAt"],
+          "isUnique": false
+        },
+        "workflow_project_updated_idx": {
+          "name": "workflow_project_updated_idx",
+          "columns": ["projectId", "updatedAt"],
+          "isUnique": false
+        },
+        "workflow_folder_idx": {
+          "name": "workflow_folder_idx",
+          "columns": ["folderId"],
+          "isUnique": false
+        },
+        "workflow_data_source_idx": {
+          "name": "workflow_data_source_idx",
+          "columns": ["dataSourceId"],
+          "isUnique": false
+        },
+        "workflow_archived_idx": {
+          "name": "workflow_archived_idx",
+          "columns": ["archivedAt", "updatedAt"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "workflow_ownerUserId_users_id_fk": {
+          "name": "workflow_ownerUserId_users_id_fk",
+          "tableFrom": "workflow",
+          "tableTo": "users",
+          "columnsFrom": ["ownerUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_projectId_flow_project_id_fk": {
+          "name": "workflow_projectId_flow_project_id_fk",
+          "tableFrom": "workflow",
+          "tableTo": "flow_project",
+          "columnsFrom": ["projectId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_folderId_workflow_folder_id_fk": {
+          "name": "workflow_folderId_workflow_folder_id_fk",
+          "tableFrom": "workflow",
+          "tableTo": "workflow_folder",
+          "columnsFrom": ["folderId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "workflow_archived_by_user_fk": {
+          "name": "workflow_archived_by_user_fk",
+          "tableFrom": "workflow",
+          "tableTo": "users",
+          "columnsFrom": ["archivedByUserId"],
+          "columnsTo": ["id"],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "workflow_id": {
+          "name": "workflow_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "workflow_project_process_code_unique": {
+          "name": "workflow_project_process_code_unique",
+          "columns": ["projectId", "processCode"]
+        }
+      },
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

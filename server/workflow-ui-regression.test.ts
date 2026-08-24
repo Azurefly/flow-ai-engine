@@ -42,8 +42,11 @@ const processDetailPageSource = source(
 );
 const consoleRouteSource = source("../shared/console-route.ts");
 const routerSource = source("./routers.ts");
-const iamServiceSource = source("./iam-service.ts");
+const workflowServiceSource = source("./workflow-service.ts");
+const workflowEngineSource = source("./workflow-engine.ts");
 const projectServiceSource = source("./project-service.ts");
+const dataflowServiceSource = source("./p2-service.ts");
+const iamServiceSource = source("./iam-service.ts");
 const styleSource = source("../client/src/index.css");
 const appSource = source("../client/src/App.tsx");
 const htmlSource = source("../client/index.html");
@@ -535,7 +538,7 @@ describe("流程设计器界面回归约束", () => {
       /description:\s*z\.string\(\)\.trim\(\)\.max\(1200\)\.nullable\(\)\.optional\(\)/
     );
     expect(projectServiceSource).toContain(
-      'requireProjectPermission(user, input.projectId, "project:workflow:edit")'
+      'input.projectId, "project:workflow:edit"'
     );
     expect(projectServiceSource).toContain(
       "WHERE id=? AND projectId=? LIMIT 1"
@@ -792,9 +795,25 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("添加子级");
     expect(warehouseSource).toContain("确认删除");
     expect(warehouseSource).toContain("trpc.workflow.delete.useMutation");
-    expect(warehouseSource).toContain("删除流程");
+    expect(warehouseSource).toContain("归档流程");
     expect(warehouseSource).toContain(
-      "关联版本、运行与成员授权已由服务端按安全顺序清理"
+      "版本、运行、任务、成员授权和审计记录均会保留"
+    );
+    expect(warehouseSource).toContain("trpc.workflow.restore.useMutation");
+    expect(warehouseSource).toContain("可恢复归档流程");
+    expect(warehouseSource).toContain("canManageSelected");
+    expect(routerSource).toContain("archived: protectedProcedure");
+    expect(routerSource).toContain("restore: protectedProcedure");
+    expect(workflowServiceSource).toContain("status IN ('queued','running')");
+    expect(workflowServiceSource).toContain("数据流程仍有启用中的调度");
+    expect(workflowServiceSource).toContain("canRestore");
+    expect(workflowEngineSource).toContain("已归档流程不能发起运行");
+    expect(workflowEngineSource).toContain(
+      "SELECT archivedAt FROM workflow WHERE id=? LIMIT 1 FOR UPDATE"
+    );
+    expect(projectServiceSource).toContain("archivedAt IS NULL");
+    expect(dataflowServiceSource).toContain(
+      "archivedAt IS NULL LIMIT 1 FOR UPDATE"
     );
     expect(warehouseSource).toContain("取消高亮");
     expect(warehouseSource).toContain("保存为图片");

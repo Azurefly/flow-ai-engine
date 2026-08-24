@@ -20,40 +20,104 @@ let folderId: string | undefined;
 let approvalLock: mysql.PoolConnection | undefined;
 
 function callerFor(user: any) {
-  return appRouter.createCaller({ user, req: { headers: {}, protocol: "https" }, res: {} } as unknown as TrpcContext);
+  return appRouter.createCaller({
+    user,
+    req: { headers: {}, protocol: "https" },
+    res: {},
+  } as unknown as TrpcContext);
 }
 
 describe("原始项目工作区 P0", () => {
   afterAll(async () => {
     if (!pool) return;
     if (workflowId) {
-      await pool.query("DELETE FROM workflow_run_alert WHERE workflowId=?", [workflowId]);
-      await pool.query("DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?", [workflowId]);
-      await pool.query("DELETE FROM workflow_run WHERE workflowId=?", [workflowId]);
-      await pool.query("DELETE FROM workflow_version WHERE workflowId=?", [workflowId]);
-      await pool.query("DELETE FROM workflow_member WHERE workflowId=?", [workflowId]);
+      await pool.query("DELETE FROM workflow_run_alert WHERE workflowId=?", [
+        workflowId,
+      ]);
+      await pool.query(
+        "DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?",
+        [workflowId]
+      );
+      await pool.query("DELETE FROM workflow_run WHERE workflowId=?", [
+        workflowId,
+      ]);
+      await pool.query("DELETE FROM workflow_version WHERE workflowId=?", [
+        workflowId,
+      ]);
+      await pool.query("DELETE FROM workflow_member WHERE workflowId=?", [
+        workflowId,
+      ]);
       await pool.query("DELETE FROM workflow WHERE id=?", [workflowId]);
     }
     if (projectId) {
-      await pool.query("DELETE FROM workflow_folder WHERE projectId=?", [projectId]);
-      await pool.query("DELETE FROM flow_project_member WHERE projectId=?", [projectId]);
+      await pool.query("DELETE FROM workflow_folder WHERE projectId=?", [
+        projectId,
+      ]);
+      await pool.query("DELETE FROM flow_project_member WHERE projectId=?", [
+        projectId,
+      ]);
       await pool.query("DELETE FROM flow_project WHERE id=?", [projectId]);
     }
-    await pool.query("DELETE FROM authorization_audit_log WHERE actorUserId IN (?,?,?) OR targetUserId IN (?,?,?)", [owner?.id ?? 0, designer?.id ?? 0, outsider?.id ?? 0, owner?.id ?? 0, designer?.id ?? 0, outsider?.id ?? 0]);
-    await pool.query("DELETE FROM users WHERE username IN (?,?,?)", [ownerUsername, designerUsername, outsiderUsername]);
-    if (approvalLock) { await approvalLock.query("SELECT RELEASE_LOCK('flow_ai_engine_approval_test_lock')"); approvalLock.release(); }
+    await pool.query(
+      "DELETE FROM authorization_audit_log WHERE actorUserId IN (?,?,?) OR targetUserId IN (?,?,?)",
+      [
+        owner?.id ?? 0,
+        designer?.id ?? 0,
+        outsider?.id ?? 0,
+        owner?.id ?? 0,
+        designer?.id ?? 0,
+        outsider?.id ?? 0,
+      ]
+    );
+    await pool.query("DELETE FROM users WHERE username IN (?,?,?)", [
+      ownerUsername,
+      designerUsername,
+      outsiderUsername,
+    ]);
+    if (approvalLock) {
+      await approvalLock.query(
+        "SELECT RELEASE_LOCK('flow_ai_engine_approval_test_lock')"
+      );
+      approvalLock.release();
+    }
     await pool.end();
   });
 
-  runIntegration("项目成员仅能访问授权项目，并可完成流程审核、发布和仓库归档", async () => {
+  runIntegration(
+    "项目成员仅能访问授权项目，并可完成流程审核、发布和仓库归档",
+    async () => {
     pool = mysql.createPool(process.env.DATABASE_URL!);
     approvalLock = await pool.getConnection();
-    await approvalLock.query("SELECT GET_LOCK('flow_ai_engine_approval_test_lock', 90)");
+      await approvalLock.query(
+        "SELECT GET_LOCK('flow_ai_engine_approval_test_lock', 90)"
+      );
     await pool.query(
       "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW())",
-      [`test:${ownerUsername}`, ownerUsername, "项目所有者", "admin", "active", "internal", `test:${designerUsername}`, designerUsername, "项目设计者", "user", "active", "internal", `test:${outsiderUsername}`, outsiderUsername, "项目外部用户", "user", "active", "internal"],
+        [
+          `test:${ownerUsername}`,
+          ownerUsername,
+          "项目所有者",
+          "admin",
+          "active",
+          "internal",
+          `test:${designerUsername}`,
+          designerUsername,
+          "项目设计者",
+          "user",
+          "active",
+          "internal",
+          `test:${outsiderUsername}`,
+          outsiderUsername,
+          "项目外部用户",
+          "user",
+          "active",
+          "internal",
+        ]
+      );
+      const [users] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT * FROM users WHERE username IN (?,?,?)",
+        [ownerUsername, designerUsername, outsiderUsername]
     );
-    const [users] = await pool.query<mysql.RowDataPacket[]>("SELECT * FROM users WHERE username IN (?,?,?)", [ownerUsername, designerUsername, outsiderUsername]);
     owner = users.find(row => row.username === ownerUsername);
     designer = users.find(row => row.username === designerUsername);
     outsider = users.find(row => row.username === outsiderUsername);
@@ -61,68 +125,302 @@ describe("原始项目工作区 P0", () => {
     const designerCaller = callerFor(designer);
     const outsiderCaller = callerFor(outsider);
 
-    const project = await ownerCaller.project.create({ code: `OPS${suffix.slice(0, 4)}`.toUpperCase(), name: "原始项目工作区验收", description: "真实数据库 P0 验收" });
+      const project = await ownerCaller.project.create({
+        code: `OPS${suffix.slice(0, 4)}`.toUpperCase(),
+        name: "原始项目工作区验收",
+        description: "真实数据库 P0 验收",
+      });
     projectId = project.id;
-    await ownerCaller.project.grantMember({ projectId, userId: designer.id, role: "designer", expiresAt: new Date(Date.now() + 60 * 60 * 1000) });
-    await expect(outsiderCaller.project.workflows({ projectId })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
-    const created = await designerCaller.project.createWorkflow({ projectId, name: "控制流程验收", description: "项目内控制流程", flowType: "control" });
+      await ownerCaller.project.grantMember({
+        projectId,
+        userId: designer.id,
+        role: "designer",
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      await expect(
+        outsiderCaller.project.workflows({ projectId })
+      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      const created = await designerCaller.project.createWorkflow({
+        projectId,
+        name: "控制流程验收",
+        description: "项目内控制流程",
+        flowType: "control",
+      });
     workflowId = (created as any).id;
-    expect(created).toMatchObject({ projectId, flowType: "control", auditStatus: "init", status: "draft" });
-    await expect(outsiderCaller.project.updateWorkflowInfo({ projectId, workflowId, name: "越权更新", description: "不应写入" })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
-    await expect(designerCaller.project.updateWorkflowInfo({ projectId, workflowId, name: "控制流程基本信息已更新", description: "由项目设计者字段化更新" })).resolves.toEqual({ success: true });
-    const afterInfoUpdate = await ownerCaller.project.workflows({ projectId });
-    expect(afterInfoUpdate.find((workflow: any) => workflow.id === workflowId)).toMatchObject({ name: "控制流程基本信息已更新", description: "由项目设计者字段化更新" });
-    const [infoAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [designer.id, workflowId]);
-    const infoDetails = typeof infoAudits[0].detailsJson === "string" ? JSON.parse(infoAudits[0].detailsJson) : infoAudits[0].detailsJson;
-    expect(infoDetails).toMatchObject({ operation: "project_workflow_info_updated", projectId, fields: { nameChanged: true, descriptionChanged: true } });
-    await expect(designerCaller.workflow.publish({ id: workflowId })).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
-    await ownerCaller.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
-    const designerApprovalHistory = await designerCaller.project.workflowAudit({ projectId, workflowId });
-    expect(designerApprovalHistory.some((entry: any) => entry.operation === "workflow_audited" && entry.details.auditStatus === "approved")).toBe(true);
-    await expect(outsiderCaller.project.workflowAudit({ projectId, workflowId })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
-    await expect(designerCaller.workflow.publish({ id: workflowId })).resolves.toMatchObject({ status: "published", auditStatus: "approved" });
-    const visible = await designerCaller.project.workflows({ projectId, flowType: "control", auditStatus: "approved", status: "published" });
+      expect(created).toMatchObject({
+        projectId,
+        flowType: "control",
+        auditStatus: "init",
+        status: "draft",
+      });
+      await expect(
+        outsiderCaller.project.updateWorkflowInfo({
+          projectId,
+          workflowId,
+          name: "越权更新",
+          description: "不应写入",
+        })
+      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      await expect(
+        designerCaller.project.updateWorkflowInfo({
+          projectId,
+          workflowId,
+          name: "控制流程基本信息已更新",
+          description: "由项目设计者字段化更新",
+        })
+      ).resolves.toEqual({ success: true });
+      const afterInfoUpdate = await ownerCaller.project.workflows({
+        projectId,
+      });
+      expect(
+        afterInfoUpdate.find((workflow: any) => workflow.id === workflowId)
+      ).toMatchObject({
+        name: "控制流程基本信息已更新",
+        description: "由项目设计者字段化更新",
+      });
+      const [infoAudits] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        [designer.id, workflowId]
+      );
+      const infoDetails =
+        typeof infoAudits[0].detailsJson === "string"
+          ? JSON.parse(infoAudits[0].detailsJson)
+          : infoAudits[0].detailsJson;
+      expect(infoDetails).toMatchObject({
+        operation: "project_workflow_info_updated",
+        projectId,
+        fields: { nameChanged: true, descriptionChanged: true },
+      });
+      await expect(
+        designerCaller.workflow.publish({ id: workflowId })
+      ).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
+      await ownerCaller.project.auditWorkflow({
+        projectId,
+        workflowId,
+        auditStatus: "approved",
+      });
+      const designerApprovalHistory =
+        await designerCaller.project.workflowAudit({ projectId, workflowId });
+      expect(
+        designerApprovalHistory.some(
+          (entry: any) =>
+            entry.operation === "workflow_audited" &&
+            entry.details.auditStatus === "approved"
+        )
+      ).toBe(true);
+      await expect(
+        outsiderCaller.project.workflowAudit({ projectId, workflowId })
+      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      await expect(
+        designerCaller.workflow.publish({ id: workflowId })
+      ).resolves.toMatchObject({
+        status: "published",
+        auditStatus: "approved",
+      });
+      const visible = await designerCaller.project.workflows({
+        projectId,
+        flowType: "control",
+        auditStatus: "approved",
+        status: "published",
+      });
     expect(visible).toHaveLength(1);
-    expect(visible[0]).toMatchObject({ id: workflowId, projectId, flowType: "control" });
-    const completedRun = await settleWorkflowCommand(pool, await ownerCaller.workflow.run({ workflowId, input: { source: "unpublish-retention-test" } }));
+      expect(visible[0]).toMatchObject({
+        id: workflowId,
+        projectId,
+        flowType: "control",
+      });
+      const completedRun = await settleWorkflowCommand(
+        pool,
+        await ownerCaller.workflow.run({
+          workflowId,
+          input: { source: "unpublish-retention-test" },
+        })
+      );
     expect(completedRun.status).toBe("success");
-    await expect(outsiderCaller.workflow.unpublish({ id: workflowId })).rejects.toThrow("流程不存在或无取消发布权限");
-    const unpublished = await designerCaller.workflow.unpublish({ id: workflowId });
-    expect(unpublished).toMatchObject({ status: "draft", auditStatus: "approved", publishedAt: null });
+      await expect(
+        outsiderCaller.workflow.unpublish({ id: workflowId })
+      ).rejects.toThrow("流程不存在或无取消发布权限");
+      const unpublished = await designerCaller.workflow.unpublish({
+        id: workflowId,
+      });
+      expect(unpublished).toMatchObject({
+        status: "draft",
+        auditStatus: "approved",
+        publishedAt: null,
+      });
     expect(unpublished.unpublishedAt).toBeTruthy();
-    const [retainedRuns] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM workflow_run WHERE id=? AND workflowId=?", [completedRun.runId, workflowId]);
+      const [retainedRuns] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM workflow_run WHERE id=? AND workflowId=?",
+        [completedRun.runId, workflowId]
+      );
     expect(retainedRuns).toHaveLength(1);
-    const versionsAfterUnpublish: any[] = await ownerCaller.workflow.versions({ workflowId });
-    expect(versionsAfterUnpublish[0]).toMatchObject({ status: "draft", changeSource: "unpublished" });
-    const [unpublishAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [designer.id, workflowId]);
-    const unpublishDetails = typeof unpublishAudits[0].detailsJson === "string" ? JSON.parse(unpublishAudits[0].detailsJson) : unpublishAudits[0].detailsJson;
-    expect(unpublishDetails).toMatchObject({ operation: "workflow_unpublished", preservedRunHistory: true });
-    await expect(ownerCaller.workflow.run({ workflowId, input: {} })).rejects.toThrow("项目流程尚未发布或未通过审核，无法发起运行");
-    await ownerCaller.project.auditWorkflow({ projectId, workflowId, auditStatus: "rejected" });
-    await expect(designerCaller.project.resetWorkflowAudit({ projectId, workflowId })).rejects.toThrow("项目不存在或当前账号无权执行此操作");
-    await expect(ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })).resolves.toBe(true);
-    const afterReset = await ownerCaller.project.workflows({ projectId, auditStatus: "init", status: "draft" });
-    expect(afterReset.find((workflow: any) => workflow.id === workflowId)).toMatchObject({ auditStatus: "init", status: "draft" });
-    const [resetAudits] = await pool.query<mysql.RowDataPacket[]>("SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC", [owner.id, workflowId]);
-    const resetDetails = typeof resetAudits[0].detailsJson === "string" ? JSON.parse(resetAudits[0].detailsJson) : resetAudits[0].detailsJson;
-    expect(resetDetails).toMatchObject({ operation: "workflow_audit_reset", retainedDefinition: true });
-    const resetApprovalHistory = await designerCaller.project.workflowAudit({ projectId, workflowId });
-    expect(resetApprovalHistory.some((entry: any) => entry.operation === "workflow_audit_reset" && entry.details.retainedDefinition === true)).toBe(true);
-    await expect(ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })).rejects.toThrow("仅可重置当前项目中未发布且已驳回的流程");
-    const folder = await ownerCaller.project.createFolder({ projectId, name: "已发布流程", description: "仓库目录" });
+      const versionsAfterUnpublish: any[] = await ownerCaller.workflow.versions(
+        { workflowId }
+      );
+      expect(versionsAfterUnpublish[0]).toMatchObject({
+        status: "draft",
+        changeSource: "unpublished",
+      });
+      const [unpublishAudits] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        [designer.id, workflowId]
+      );
+      const unpublishDetails =
+        typeof unpublishAudits[0].detailsJson === "string"
+          ? JSON.parse(unpublishAudits[0].detailsJson)
+          : unpublishAudits[0].detailsJson;
+      expect(unpublishDetails).toMatchObject({
+        operation: "workflow_unpublished",
+        preservedRunHistory: true,
+      });
+      await expect(
+        ownerCaller.workflow.run({ workflowId, input: {} })
+      ).rejects.toThrow("项目流程尚未发布或未通过审核，无法发起运行");
+      await ownerCaller.project.auditWorkflow({
+        projectId,
+        workflowId,
+        auditStatus: "rejected",
+      });
+      await expect(
+        designerCaller.project.resetWorkflowAudit({ projectId, workflowId })
+      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      await expect(
+        ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })
+      ).resolves.toBe(true);
+      const afterReset = await ownerCaller.project.workflows({
+        projectId,
+        auditStatus: "init",
+        status: "draft",
+      });
+      expect(
+        afterReset.find((workflow: any) => workflow.id === workflowId)
+      ).toMatchObject({ auditStatus: "init", status: "draft" });
+      const [resetAudits] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        [owner.id, workflowId]
+      );
+      const resetDetails =
+        typeof resetAudits[0].detailsJson === "string"
+          ? JSON.parse(resetAudits[0].detailsJson)
+          : resetAudits[0].detailsJson;
+      expect(resetDetails).toMatchObject({
+        operation: "workflow_audit_reset",
+        retainedDefinition: true,
+      });
+      const resetApprovalHistory = await designerCaller.project.workflowAudit({
+        projectId,
+        workflowId,
+      });
+      expect(
+        resetApprovalHistory.some(
+          (entry: any) =>
+            entry.operation === "workflow_audit_reset" &&
+            entry.details.retainedDefinition === true
+        )
+      ).toBe(true);
+      await expect(
+        ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })
+      ).rejects.toThrow("仅可重置当前项目中未发布且已驳回的流程");
+      const folder = await ownerCaller.project.createFolder({
+        projectId,
+        name: "已发布流程",
+        description: "仓库目录",
+      });
     folderId = folder.id;
-    await ownerCaller.project.moveWorkflow({ projectId, workflowId, folderId });
+      await ownerCaller.project.moveWorkflow({
+        projectId,
+        workflowId,
+        folderId,
+      });
     const warehouse = await designerCaller.project.warehouse({ projectId });
-    expect(warehouse.folders.some((entry: any) => entry.id === folderId)).toBe(true);
-    expect(warehouse.workflows.find((entry: any) => entry.id === workflowId)).toMatchObject({ folderId, flowType: "control" });
-    const exported = await designerCaller.project.exportWorkflows({ projectId, workflowIds: [workflowId] });
-    expect(exported[0]).toMatchObject({ id: workflowId, flowType: "control" });
+      expect(
+        warehouse.folders.some((entry: any) => entry.id === folderId)
+      ).toBe(true);
+      expect(
+        warehouse.workflows.find((entry: any) => entry.id === workflowId)
+      ).toMatchObject({ folderId, flowType: "control" });
+      const exported = await designerCaller.project.exportWorkflows({
+        projectId,
+        workflowIds: [workflowId],
+      });
+      expect(exported[0]).toMatchObject({
+        id: workflowId,
+        flowType: "control",
+      });
     expect((exported[0] as any).definition.nodes).toHaveLength(2);
-    await ownerCaller.project.moveWorkflow({ projectId, workflowId, folderId: null });
+      await ownerCaller.project.moveWorkflow({
+        projectId,
+        workflowId,
+        folderId: null,
+      });
     await ownerCaller.project.deleteFolder({ projectId, folderId });
     const afterDelete = await ownerCaller.project.warehouse({ projectId });
-    expect(afterDelete.folders.some((entry: any) => entry.id === folderId)).toBe(false);
+      expect(
+        afterDelete.folders.some((entry: any) => entry.id === folderId)
+      ).toBe(false);
     folderId = undefined;
-    await expect(outsiderCaller.workflow.get({ id: workflowId })).rejects.toThrow("流程不存在或无访问权限");
-  }, 60_000);
+      await expect(
+        designerCaller.workflow.delete({ id: workflowId })
+      ).resolves.toMatchObject({ success: true, archived: true });
+      expect(
+        (await designerCaller.project.warehouse({ projectId })).workflows.some(
+          (entry: any) => entry.id === workflowId
+        )
+      ).toBe(false);
+      expect(
+        (await designerCaller.project.workflows({ projectId })).some(
+          (entry: any) => entry.id === workflowId
+        )
+      ).toBe(false);
+      const archived = await designerCaller.workflow.archived({ projectId });
+      expect(
+        archived.find((entry: any) => entry.id === workflowId)
+      ).toMatchObject({ id: workflowId, projectId, canRestore: true });
+      await expect(
+        designerCaller.workflow.run({ workflowId, input: {} })
+      ).rejects.toThrow("已归档流程不能发起运行");
+      await expect(
+        designerCaller.project.updateWorkflowInfo({
+          projectId,
+          workflowId,
+          name: "归档不应更新",
+        })
+      ).rejects.toThrow("已归档");
+      await expect(
+        designerCaller.workflow.restore({ id: workflowId })
+      ).resolves.toEqual({ success: true });
+      expect(
+        (await designerCaller.project.warehouse({ projectId })).workflows.some(
+          (entry: any) => entry.id === workflowId
+        )
+      ).toBe(true);
+      await ownerCaller.project.auditWorkflow({
+        projectId,
+        workflowId,
+        auditStatus: "approved",
+      });
+      await designerCaller.workflow.publish({ id: workflowId });
+      const queuedArchiveRun = await designerCaller.workflow.run({
+        workflowId,
+        input: { archiveGuard: true },
+      });
+      await expect(
+        designerCaller.workflow.delete({ id: workflowId })
+      ).rejects.toThrow("活动运行");
+      await pool.query(
+        "UPDATE workflow_run_job SET status='cancelled',finishedAt=NOW() WHERE runId=?",
+        [queuedArchiveRun.runId]
+      );
+      await pool.query(
+        "UPDATE workflow_run SET status='cancelled',finishedAt=NOW() WHERE id=?",
+        [queuedArchiveRun.runId]
+      );
+      await designerCaller.workflow.unpublish({ id: workflowId });
+      await designerCaller.workflow.delete({ id: workflowId });
+      await expect(
+        outsiderCaller.workflow.get({ id: workflowId })
+      ).rejects.toThrow("流程不存在或无访问权限");
+    },
+    60_000
+  );
 });

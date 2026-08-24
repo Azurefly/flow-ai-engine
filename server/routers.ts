@@ -3,16 +3,112 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { createUser, ensureBootstrapAdmin, FLOW_SESSION_COOKIE, listUsers, login, logout, setUserStatus } from "./internal-auth";
-import { assignRole, createCustomRole, deleteCustomRole, getRoleAuthorizationDetails, getUserAuthorizationDetails, getWorkflowAccess, grantWorkflowMember, listActiveUsersForWorkflowAssignment, listAuthorizationAudit, listRoles, listWorkflowMembers, recordAuthorizationAudit, revokeRoleAssignment, revokeWorkflowMember, updateCustomRole } from "./iam-service";
-import { getRuntimeModels, getWorkflowRun, getWorkflowRunMetrics, listRunAlerts, listWorkflowRuns, markRunAlertRead } from "./workflow-engine";
+import {
+  adminProcedure,
+  protectedProcedure,
+  publicProcedure,
+  router,
+} from "./_core/trpc";
+import {
+  createUser,
+  ensureBootstrapAdmin,
+  FLOW_SESSION_COOKIE,
+  listUsers,
+  login,
+  logout,
+  setUserStatus,
+} from "./internal-auth";
+import {
+  assignRole,
+  createCustomRole,
+  deleteCustomRole,
+  getRoleAuthorizationDetails,
+  getUserAuthorizationDetails,
+  getWorkflowAccess,
+  grantWorkflowMember,
+  listActiveUsersForWorkflowAssignment,
+  listAuthorizationAudit,
+  listRoles,
+  listWorkflowMembers,
+  recordAuthorizationAudit,
+  revokeRoleAssignment,
+  revokeWorkflowMember,
+  updateCustomRole,
+} from "./iam-service";
+import {
+  getRuntimeModels,
+  getWorkflowRun,
+  getWorkflowRunMetrics,
+  listRunAlerts,
+  listWorkflowRuns,
+  markRunAlertRead,
+} from "./workflow-engine";
 import { submitWorkflowRun } from "./workflow-worker";
 import { getRuntimeInfo } from "./runtime-info";
 import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
-import { createNodeTemplate, createSubflow, createWorkflow, deleteNodeTemplate, deleteSubflow, deleteWorkflow, diffWorkflowVersions, duplicateWorkflow, getWorkflow, hasWorkflowPermission, listNodeTemplates, listSubflows, listWorkflowVersions, listWorkflows, rollbackWorkflowVersion, updateNodeTemplate, updateSubflow, updateWorkflow } from "./workflow-service";
-import { createFolder, createProject, createProjectWorkflow, deleteFolder, exportProjectWorkflows, getProjectAccess, grantProjectMember, listProjectMembers, listProjects, listProjectWorkflowAudit, listProjectWorkflows, listWarehouse, moveProjectWorkflow, resetProjectWorkflowAudit, setProjectWorkflowAudit, updateFolder, updateProjectWorkflowInfo } from "./project-service";
-import { batchClaimWorkflowTasks, batchCompleteWorkflowTasks, claimWorkflowTask, completeWorkflowTask, executeWorkflowTask, createWorkDomain, getP1SystemSettings, getPublicGeneralSettings, getTaskCalendar, getTaskDashboard, getWorkflowTask, handoverWorkflowTask, listActiveWorkDomains, listProcessInstances, listWorkDomains, listWorkflowTaskAssignees, listWorkflowTasks, returnWorkflowTaskToPending, updateP1SystemSetting, updateWorkDomain } from "./p1-service";
+import {
+  archiveWorkflow,
+  createNodeTemplate,
+  createSubflow,
+  createWorkflow,
+  deleteNodeTemplate,
+  deleteSubflow,
+  diffWorkflowVersions,
+  duplicateWorkflow,
+  getWorkflow,
+  hasWorkflowPermission,
+  listArchivedWorkflows,
+  listNodeTemplates,
+  listSubflows,
+  listWorkflowVersions,
+  listWorkflows,
+  restoreWorkflow,
+  rollbackWorkflowVersion,
+  updateNodeTemplate,
+  updateSubflow,
+  updateWorkflow,
+} from "./workflow-service";
+import {
+  createFolder,
+  createProject,
+  createProjectWorkflow,
+  deleteFolder,
+  exportProjectWorkflows,
+  getProjectAccess,
+  grantProjectMember,
+  listProjectMembers,
+  listProjects,
+  listProjectWorkflowAudit,
+  listProjectWorkflows,
+  listWarehouse,
+  moveProjectWorkflow,
+  resetProjectWorkflowAudit,
+  setProjectWorkflowAudit,
+  updateFolder,
+  updateProjectWorkflowInfo,
+} from "./project-service";
+import {
+  batchClaimWorkflowTasks,
+  batchCompleteWorkflowTasks,
+  claimWorkflowTask,
+  completeWorkflowTask,
+  executeWorkflowTask,
+  createWorkDomain,
+  getP1SystemSettings,
+  getPublicGeneralSettings,
+  getTaskCalendar,
+  getTaskDashboard,
+  getWorkflowTask,
+  handoverWorkflowTask,
+  listActiveWorkDomains,
+  listProcessInstances,
+  listWorkDomains,
+  listWorkflowTaskAssignees,
+  listWorkflowTasks,
+  returnWorkflowTaskToPending,
+  updateP1SystemSetting,
+  updateWorkDomain,
+} from "./p1-service";
 import {
   assignOrganizationMember,
   bindOrganizationRole,
@@ -25,8 +121,37 @@ import {
   unbindOrganizationRole,
   updateOrganizationUnit,
 } from "./organization-service";
-import { activateDataflowSchedule, createDataAsset, createDataSource, createDataTag, createDataUdf, createProjectPlugin, deleteDataAsset, deleteDataSource, deleteDataTag, deleteDataUdf, deleteDataflowSchedule, deleteProjectPlugin, listDataflowRuns, listDataflowSchedules, listDataflows, listDataResources, pauseDataflowSchedule, runDataflow, saveDataflowScheduleDraft, updateDataAsset, updateDataSource, updateDataUdf, updateProjectPlugin } from "./p2-service";
-import { checkLoginRateLimit, clearLoginFailures, loginRateLimitKey, recordLoginFailure } from "./_core/login-rate-limit";
+import {
+  activateDataflowSchedule,
+  createDataAsset,
+  createDataSource,
+  createDataTag,
+  createDataUdf,
+  createProjectPlugin,
+  deleteDataAsset,
+  deleteDataSource,
+  deleteDataTag,
+  deleteDataUdf,
+  deleteDataflowSchedule,
+  deleteProjectPlugin,
+  listDataflowRuns,
+  listDataflowSchedules,
+  listDataflows,
+  listDataResources,
+  pauseDataflowSchedule,
+  runDataflow,
+  saveDataflowScheduleDraft,
+  updateDataAsset,
+  updateDataSource,
+  updateDataUdf,
+  updateProjectPlugin,
+} from "./p2-service";
+import {
+  checkLoginRateLimit,
+  clearLoginFailures,
+  loginRateLimitKey,
+  recordLoginFailure,
+} from "./_core/login-rate-limit";
 
 const approvalResultSchema = z
   .object({
@@ -41,7 +166,10 @@ export const appRouter = router({
     bootstrapStatus: publicProcedure.query(async () => {
       await ensureBootstrapAdmin();
       return {
-        configured: Boolean(process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME && process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD),
+        configured: Boolean(
+          process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME &&
+            process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD
+        ),
       };
     }),
     me: publicProcedure.query(async ({ ctx }) => {
@@ -56,19 +184,32 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const loginKey = loginRateLimitKey(input.username, ctx.req.ip ?? "unknown");
+        const loginKey = loginRateLimitKey(
+          input.username,
+          ctx.req.ip ?? "unknown"
+        );
         const rateLimit = checkLoginRateLimit(loginKey);
         if (!rateLimit.allowed) {
           ctx.res.setHeader("retry-after", String(rateLimit.retryAfterSeconds));
-          throw new TRPCError({ code: "TOO_MANY_REQUESTS", message: `登录失败次数过多，请 ${rateLimit.retryAfterSeconds} 秒后重试。` });
+          throw new TRPCError({
+            code: "TOO_MANY_REQUESTS",
+            message: `登录失败次数过多，请 ${rateLimit.retryAfterSeconds} 秒后重试。`,
+          });
         }
-        const result = await login(input.username, input.password, ctx.req.headers["user-agent"]);
+        const result = await login(
+          input.username,
+          input.password,
+          ctx.req.headers["user-agent"]
+        );
         if (!result) {
           const failure = recordLoginFailure(loginKey);
-          if (!failure.allowed) ctx.res.setHeader("retry-after", String(failure.retryAfterSeconds));
+          if (!failure.allowed)
+            ctx.res.setHeader("retry-after", String(failure.retryAfterSeconds));
           throw new TRPCError({
             code: failure.allowed ? "UNAUTHORIZED" : "TOO_MANY_REQUESTS",
-            message: failure.allowed ? "用户名或密码错误，或账号已停用。" : `登录失败次数过多，请 ${failure.retryAfterSeconds} 秒后重试。`,
+            message: failure.allowed
+              ? "用户名或密码错误，或账号已停用。"
+              : `登录失败次数过多，请 ${failure.retryAfterSeconds} 秒后重试。`,
           });
         }
         clearLoginFailures(loginKey);
@@ -81,7 +222,10 @@ export const appRouter = router({
         return result.user;
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
-      await logout(parse(ctx.req.headers.cookie ?? "")[FLOW_SESSION_COOKIE], ctx.user?.id);
+      await logout(
+        parse(ctx.req.headers.cookie ?? "")[FLOW_SESSION_COOKIE],
+        ctx.user?.id
+      );
       ctx.res.clearCookie(FLOW_SESSION_COOKIE, {
         ...getSessionCookieOptions(ctx.req),
         maxAge: -1,
@@ -104,7 +248,13 @@ export const appRouter = router({
       )
       .mutation(({ input }) => previewUserCreation(input)),
     previewUserBatch: adminProcedure
-      .input(z.object({ goal: z.string().trim().min(3).max(2000), maxUsers: z.number().int().min(1).max(30).default(10), defaultRole: z.enum(["user", "admin"]).default("user") }))
+      .input(
+        z.object({
+          goal: z.string().trim().min(3).max(2000),
+          maxUsers: z.number().int().min(1).max(30).default(10),
+          defaultRole: z.enum(["user", "admin"]).default("user"),
+        })
+      )
       .mutation(({ input }) => previewUserBatch(input)),
     createUser: adminProcedure
       .input(
@@ -128,19 +278,54 @@ export const appRouter = router({
         return { success: true, userId };
       }),
     createUsersBatch: adminProcedure
-      .input(z.object({ users: z.array(z.object({ username: z.string().trim().min(3).max(64), password: z.string().min(12).max(256), name: z.string().trim().min(1).max(160), email: z.string().email().optional(), role: z.enum(["user", "admin"]).default("user") })).min(1).max(30) }))
+      .input(
+        z.object({
+          users: z
+            .array(
+              z.object({
+                username: z.string().trim().min(3).max(64),
+                password: z.string().min(12).max(256),
+                name: z.string().trim().min(1).max(160),
+                email: z.string().email().optional(),
+                role: z.enum(["user", "admin"]).default("user"),
+              })
+            )
+            .min(1)
+            .max(30),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
-        const results: Array<{ username: string; success: boolean; userId?: number; error?: string }> = [];
+        const results: Array<{
+          username: string;
+          success: boolean;
+          userId?: number;
+          error?: string;
+        }> = [];
         for (const account of input.users) {
           try {
             const userId = await createUser(account);
-            await recordAuthorizationAudit({ actorUserId: ctx.user.id, targetUserId: userId, action: "user_created", resourceType: "user", resourceId: String(userId), details: { source: "ai_batch_preview" } });
+            await recordAuthorizationAudit({
+              actorUserId: ctx.user.id,
+              targetUserId: userId,
+              action: "user_created",
+              resourceType: "user",
+              resourceId: String(userId),
+              details: { source: "ai_batch_preview" },
+            });
             results.push({ username: account.username, success: true, userId });
           } catch (error) {
-            results.push({ username: account.username, success: false, error: error instanceof Error ? error.message : "创建失败" });
+            results.push({
+              username: account.username,
+              success: false,
+              error: error instanceof Error ? error.message : "创建失败",
+            });
           }
         }
-        return { results, created: results.filter(result => result.success).length, failed: results.filter(result => !result.success).length };
+        return {
+          results,
+          created: results.filter(result => result.success).length,
+          failed: results.filter(result => !result.success).length,
+        };
       }),
     updateUserStatus: adminProcedure
       .input(
@@ -154,16 +339,27 @@ export const appRouter = router({
         await recordAuthorizationAudit({
           actorUserId: ctx.user.id,
           targetUserId: input.userId,
-          action: input.status === "disabled" ? "user_disabled" : "user_updated",
+          action:
+            input.status === "disabled" ? "user_disabled" : "user_updated",
           resourceType: "user",
           resourceId: String(input.userId),
           details: { status: input.status },
         });
         return { success: true };
       }),
-    roles: adminProcedure.input(z.object({ scope: z.enum(["system", "workflow"]).optional() }).optional()).query(async ({ input }) => listRoles(input?.scope)),
-    userAuthorizationDetails: adminProcedure.input(z.object({ userId: z.number().int().positive() })).query(({ input }) => getUserAuthorizationDetails(input.userId)),
-    roleAuthorizationDetails: adminProcedure.input(z.object({ roleId: z.number().int().positive() })).query(({ input }) => getRoleAuthorizationDetails(input.roleId)),
+    roles: adminProcedure
+      .input(
+        z
+          .object({ scope: z.enum(["system", "workflow"]).optional() })
+          .optional()
+      )
+      .query(async ({ input }) => listRoles(input?.scope)),
+    userAuthorizationDetails: adminProcedure
+      .input(z.object({ userId: z.number().int().positive() }))
+      .query(({ input }) => getUserAuthorizationDetails(input.userId)),
+    roleAuthorizationDetails: adminProcedure
+      .input(z.object({ roleId: z.number().int().positive() }))
+      .query(({ input }) => getRoleAuthorizationDetails(input.roleId)),
     assignSystemRole: adminProcedure
       .input(
         z.object({
@@ -184,7 +380,9 @@ export const appRouter = router({
         });
         return { success: true };
       }),
-    revokeRoleAssignment: adminProcedure.input(z.object({ assignmentId: z.string().uuid() })).mutation(async ({ ctx, input }) => {
+    revokeRoleAssignment: adminProcedure
+      .input(z.object({ assignmentId: z.string().uuid() }))
+      .mutation(async ({ ctx, input }) => {
       await revokeRoleAssignment({ ...input, revokedByUserId: ctx.user.id });
       return { success: true };
     }),
@@ -195,7 +393,19 @@ export const appRouter = router({
           name: z.string().trim().min(1).max(120),
           description: z.string().max(2000).optional(),
           scope: z.enum(["system", "workflow"]),
-          permissions: z.array(z.enum(["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage", "iam:manage"])).min(1),
+          permissions: z
+            .array(
+              z.enum([
+                "workflow:create",
+                "workflow:view",
+                "workflow:edit",
+                "workflow:publish",
+                "workflow:run",
+                "workflow:members:manage",
+                "iam:manage",
+              ])
+            )
+            .min(1),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -209,7 +419,17 @@ export const appRouter = router({
           name: z.string().trim().min(1).max(120).optional(),
           description: z.string().max(2000).nullable().optional(),
           permissions: z
-            .array(z.enum(["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage", "iam:manage"]))
+            .array(
+              z.enum([
+                "workflow:create",
+                "workflow:view",
+                "workflow:edit",
+                "workflow:publish",
+                "workflow:run",
+                "workflow:members:manage",
+                "iam:manage",
+              ])
+            )
             .min(1)
             .optional(),
         })
@@ -218,15 +438,25 @@ export const appRouter = router({
         await updateCustomRole({ ...input, actorUserId: ctx.user.id });
         return { success: true };
       }),
-    deleteCustomRole: adminProcedure.input(z.object({ code: z.string().min(10).max(68) })).mutation(async ({ ctx, input }) => {
+    deleteCustomRole: adminProcedure
+      .input(z.object({ code: z.string().min(10).max(68) }))
+      .mutation(async ({ ctx, input }) => {
       await deleteCustomRole({ ...input, actorUserId: ctx.user.id });
       return { success: true };
     }),
-    authorizationAudit: adminProcedure.input(z.object({ limit: z.number().int().min(1).max(200).default(100) }).optional()).query(({ input }) => listAuthorizationAudit(input?.limit)),
+    authorizationAudit: adminProcedure
+      .input(
+        z
+          .object({ limit: z.number().int().min(1).max(200).default(100) })
+          .optional()
+      )
+      .query(({ input }) => listAuthorizationAudit(input?.limit)),
   }),
   project: router({
     list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user)),
-    access: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => getProjectAccess(ctx.user, input.projectId)),
+    access: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => getProjectAccess(ctx.user, input.projectId)),
     create: protectedProcedure
       .input(
         z.object({
@@ -250,7 +480,9 @@ export const appRouter = router({
           keyword: z.string().trim().max(160).optional(),
         })
       )
-      .query(({ ctx, input }) => listProjectWorkflows(ctx.user, input.projectId, input)),
+      .query(({ ctx, input }) =>
+        listProjectWorkflows(ctx.user, input.projectId, input)
+      ),
     createWorkflow: protectedProcedure
       .input(
         z.object({
@@ -303,7 +535,9 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listProjectWorkflowAudit(ctx.user, input)),
-    members: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => listProjectMembers(ctx.user, input.projectId)),
+    members: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => listProjectMembers(ctx.user, input.projectId)),
     grantMember: protectedProcedure
       .input(
         z.object({
@@ -316,7 +550,9 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await grantProjectMember(ctx.user, input),
       })),
-    warehouse: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => listWarehouse(ctx.user, input.projectId)),
+    warehouse: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => listWarehouse(ctx.user, input.projectId)),
     exportWorkflows: protectedProcedure
       .input(
         z.object({
@@ -372,7 +608,9 @@ export const appRouter = router({
       })),
   }),
   data: router({
-    resources: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => listDataResources(ctx.user, input.projectId)),
+    resources: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => listDataResources(ctx.user, input.projectId)),
     createSource: protectedProcedure
       .input(
         z.object({
@@ -408,7 +646,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => ({
-        success: await deleteDataSource(ctx.user, input.projectId, input.sourceId),
+        success: await deleteDataSource(
+          ctx.user,
+          input.projectId,
+          input.sourceId
+        ),
       })),
     createAsset: protectedProcedure
       .input(
@@ -446,7 +688,11 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => ({
-        success: await deleteDataAsset(ctx.user, input.projectId, input.assetId),
+        success: await deleteDataAsset(
+          ctx.user,
+          input.projectId,
+          input.assetId
+        ),
       })),
     createUdf: protectedProcedure
       .input(
@@ -546,9 +792,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => ({
-        success: await deleteProjectPlugin(ctx.user, input.projectId, input.pluginId),
+        success: await deleteProjectPlugin(
+          ctx.user,
+          input.projectId,
+          input.pluginId
+        ),
       })),
-    flows: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => listDataflows(ctx.user, input.projectId)),
+    flows: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => listDataflows(ctx.user, input.projectId)),
     run: protectedProcedure
       .input(
         z.object({
@@ -567,7 +819,11 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listDataflowRuns(ctx.user, input)),
-    schedules: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) })).query(({ ctx, input }) => listDataflowSchedules(ctx.user, input.projectId)),
+    schedules: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) =>
+        listDataflowSchedules(ctx.user, input.projectId)
+      ),
     saveScheduleDraft: protectedProcedure
       .input(
         z.object({
@@ -603,13 +859,17 @@ export const appRouter = router({
       .mutation(({ ctx, input }) => deleteDataflowSchedule(ctx.user, input)),
   }),
   task: router({
-    dashboard: protectedProcedure.query(({ ctx }) => getTaskDashboard(ctx.user)),
+    dashboard: protectedProcedure.query(({ ctx }) =>
+      getTaskDashboard(ctx.user)
+    ),
     list: protectedProcedure
       .input(
         z.object({
           view: z.enum(["todo", "done", "initiated", "all"]),
           projectId: z.string().min(8).max(64).optional(),
-          status: z.enum(["pending", "claimed", "completed", "cancelled"]).optional(),
+          status: z
+            .enum(["pending", "claimed", "completed", "cancelled"])
+            .optional(),
           limit: z.number().int().min(1).max(200).optional(),
         })
       )
@@ -622,14 +882,24 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listProcessInstances(ctx.user, input)),
-    calendar: protectedProcedure.input(z.object({ month: z.coerce.date() })).query(({ ctx, input }) => getTaskCalendar(ctx.user, input.month)),
-    get: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).query(async ({ ctx, input }) => {
+    calendar: protectedProcedure
+      .input(z.object({ month: z.coerce.date() }))
+      .query(({ ctx, input }) => getTaskCalendar(ctx.user, input.month)),
+    get: protectedProcedure
+      .input(z.object({ taskId: z.string().uuid() }))
+      .query(async ({ ctx, input }) => {
       const task = await getWorkflowTask(ctx.user, input.taskId);
       if (!task) throw new Error("人工任务不存在或无访问权限。 ");
       return task;
     }),
-    assignees: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).query(({ ctx, input }) => listWorkflowTaskAssignees(ctx.user, input.taskId)),
-    claim: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).mutation(({ ctx, input }) => claimWorkflowTask(ctx.user, input.taskId)),
+    assignees: protectedProcedure
+      .input(z.object({ taskId: z.string().uuid() }))
+      .query(({ ctx, input }) =>
+        listWorkflowTaskAssignees(ctx.user, input.taskId)
+      ),
+    claim: protectedProcedure
+      .input(z.object({ taskId: z.string().uuid() }))
+      .mutation(({ ctx, input }) => claimWorkflowTask(ctx.user, input.taskId)),
     complete: protectedProcedure
       .input(
         z.object({
@@ -637,7 +907,9 @@ export const appRouter = router({
           result: approvalResultSchema,
         })
       )
-      .mutation(({ ctx, input }) => completeWorkflowTask(ctx.user, input.taskId, input.result)),
+      .mutation(({ ctx, input }) =>
+        completeWorkflowTask(ctx.user, input.taskId, input.result)
+      ),
     execute: protectedProcedure
       .input(
         z.object({
@@ -645,7 +917,9 @@ export const appRouter = router({
           result: approvalResultSchema,
         })
       )
-      .mutation(({ ctx, input }) => executeWorkflowTask(ctx.user, input.taskId, input.result)),
+      .mutation(({ ctx, input }) =>
+        executeWorkflowTask(ctx.user, input.taskId, input.result)
+      ),
     handover: protectedProcedure
       .input(
         z.object({
@@ -654,8 +928,16 @@ export const appRouter = router({
         })
       )
       .mutation(({ ctx, input }) => handoverWorkflowTask(ctx.user, input)),
-    returnToPending: protectedProcedure.input(z.object({ taskId: z.string().uuid() })).mutation(({ ctx, input }) => returnWorkflowTaskToPending(ctx.user, input.taskId)),
-    batchClaim: protectedProcedure.input(z.object({ taskIds: z.array(z.string().uuid()).min(1).max(20) })).mutation(({ ctx, input }) => batchClaimWorkflowTasks(ctx.user, Array.from(new Set(input.taskIds)))),
+    returnToPending: protectedProcedure
+      .input(z.object({ taskId: z.string().uuid() }))
+      .mutation(({ ctx, input }) =>
+        returnWorkflowTaskToPending(ctx.user, input.taskId)
+      ),
+    batchClaim: protectedProcedure
+      .input(z.object({ taskIds: z.array(z.string().uuid()).min(1).max(20) }))
+      .mutation(({ ctx, input }) =>
+        batchClaimWorkflowTasks(ctx.user, Array.from(new Set(input.taskIds)))
+      ),
     batchComplete: protectedProcedure
       .input(
         z.object({
@@ -663,7 +945,13 @@ export const appRouter = router({
           result: approvalResultSchema,
         })
       )
-      .mutation(({ ctx, input }) => batchCompleteWorkflowTasks(ctx.user, Array.from(new Set(input.taskIds)), input.result)),
+      .mutation(({ ctx, input }) =>
+        batchCompleteWorkflowTasks(
+          ctx.user,
+          Array.from(new Set(input.taskIds)),
+          input.result
+        )
+      ),
   }),
   config: router({
     publicGeneral: publicProcedure.query(() => getPublicGeneralSettings()),
@@ -676,7 +964,9 @@ export const appRouter = router({
           value: z.record(z.string(), z.unknown()),
         })
       )
-      .mutation(({ ctx, input }) => updateP1SystemSetting(ctx.user, input.key, input.value)),
+      .mutation(({ ctx, input }) =>
+        updateP1SystemSetting(ctx.user, input.key, input.value)
+      ),
     workDomains: adminProcedure.query(() => listWorkDomains()),
     createWorkDomain: adminProcedure
       .input(
@@ -814,12 +1104,21 @@ export const appRouter = router({
   }),
   workflow: router({
     list: protectedProcedure.query(({ ctx }) => listWorkflows(ctx.user)),
-    get: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
+    archived: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) =>
+        listArchivedWorkflows(ctx.user, input.projectId)
+      ),
+    get: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .query(async ({ ctx, input }) => {
       const workflow = await getWorkflow(input.id, ctx.user);
       if (!workflow) throw new Error("流程不存在或无访问权限。");
       return workflow;
     }),
-    access: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).query(({ ctx, input }) => getWorkflowAccess(ctx.user, input.id)),
+    access: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => getWorkflowAccess(ctx.user, input.id)),
     create: protectedProcedure
       .input(
         z.object({
@@ -827,7 +1126,9 @@ export const appRouter = router({
           description: z.string().max(1200).optional(),
         })
       )
-      .mutation(async ({ ctx, input }) => createWorkflow(ctx.user, input.name, input.description)),
+      .mutation(async ({ ctx, input }) =>
+        createWorkflow(ctx.user, input.name, input.description)
+      ),
     update: protectedProcedure
       .input(
         z.object({
@@ -841,14 +1142,18 @@ export const appRouter = router({
         if (!workflow) throw new Error("流程不存在或无编辑权限。");
         return workflow;
       }),
-    publish: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => {
+    publish: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
       const workflow = await updateWorkflow(input.id, ctx.user, {
         publish: true,
       });
       if (!workflow) throw new Error("流程不存在或无发布权限。");
       return workflow;
     }),
-    unpublish: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => {
+    unpublish: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
       const workflow = await updateWorkflow(input.id, ctx.user, {
         unpublish: true,
       });
@@ -863,16 +1168,31 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const workflow = await duplicateWorkflow(input.id, ctx.user, input.name);
+        const workflow = await duplicateWorkflow(
+          input.id,
+          ctx.user,
+          input.name
+        );
         if (!workflow) throw new Error("流程不存在或无查看权限。");
         return workflow;
       }),
-    delete: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => {
-      const deleted = await deleteWorkflow(input.id, ctx.user);
-      if (!deleted) throw new Error("流程不存在或无删除权限。");
+    delete: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        const archived = await archiveWorkflow(input.id, ctx.user);
+        if (!archived) throw new Error("流程不存在或无归档权限。");
+        return { success: true, archived: true };
+      }),
+    restore: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        const restored = await restoreWorkflow(input.id, ctx.user);
+        if (!restored) throw new Error("流程不存在、未归档或无恢复权限。");
       return { success: true };
     }),
-    versions: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
+    versions: protectedProcedure
+      .input(z.object({ workflowId: z.string().min(8).max(64) }))
+      .query(async ({ ctx, input }) => {
       const versions = await listWorkflowVersions(input.workflowId, ctx.user);
       if (!versions) throw new Error("无权查看流程版本。");
       return versions;
@@ -886,7 +1206,12 @@ export const appRouter = router({
         })
       )
       .query(async ({ ctx, input }) => {
-        const diff = await diffWorkflowVersions(input.workflowId, input.fromVersion, input.toVersion, ctx.user);
+        const diff = await diffWorkflowVersions(
+          input.workflowId,
+          input.fromVersion,
+          input.toVersion,
+          ctx.user
+        );
         if (!diff) throw new Error("流程版本不存在或无查看权限。");
         return diff;
       }),
@@ -898,16 +1223,38 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const workflow = await rollbackWorkflowVersion(input.workflowId, input.targetVersion, ctx.user);
+        const workflow = await rollbackWorkflowVersion(
+          input.workflowId,
+          input.targetVersion,
+          ctx.user
+        );
         if (!workflow) throw new Error("流程版本不存在或无恢复权限。");
         return workflow;
       }),
-    members: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
-      if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程成员。");
+    members: protectedProcedure
+      .input(z.object({ workflowId: z.string().min(8).max(64) }))
+      .query(async ({ ctx, input }) => {
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:view"
+          ))
+        )
+          throw new Error("无权查看流程成员。");
       return listWorkflowMembers(input.workflowId);
     }),
-    memberCandidates: protectedProcedure.input(z.object({ workflowId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
-      if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:members:manage"))) throw new Error("无权管理流程成员。");
+    memberCandidates: protectedProcedure
+      .input(z.object({ workflowId: z.string().min(8).max(64) }))
+      .query(async ({ ctx, input }) => {
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:members:manage"
+          ))
+        )
+          throw new Error("无权管理流程成员。");
       return listActiveUsersForWorkflowAssignment();
     }),
     grantMember: protectedProcedure
@@ -920,13 +1267,21 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:members:manage"))) throw new Error("无权管理流程成员。");
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:members:manage"
+          ))
+        )
+          throw new Error("无权管理流程成员。");
         try {
           await grantWorkflowMember({ ...input, grantedByUserId: ctx.user.id });
         } catch (error) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: error instanceof Error ? error.message : "成员授权参数无效。",
+            message:
+              error instanceof Error ? error.message : "成员授权参数无效。",
           });
         }
         return { success: true };
@@ -940,12 +1295,21 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:members:manage"))) throw new Error("无权管理流程成员。");
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:members:manage"
+          ))
+        )
+          throw new Error("无权管理流程成员。");
         await revokeWorkflowMember({ ...input, revokedByUserId: ctx.user.id });
         return { success: true };
       }),
     runtimeModels: protectedProcedure.query(async () => getRuntimeModels()),
-    templates: protectedProcedure.query(({ ctx }) => listNodeTemplates(ctx.user)),
+    templates: protectedProcedure.query(({ ctx }) =>
+      listNodeTemplates(ctx.user)
+    ),
     createTemplate: protectedProcedure
       .input(
         z.object({
@@ -968,11 +1332,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!(await updateNodeTemplate(ctx.user, input))) throw new Error("节点模板不存在或无编辑权限。");
+        if (!(await updateNodeTemplate(ctx.user, input)))
+          throw new Error("节点模板不存在或无编辑权限。");
         return { success: true };
       }),
-    deleteTemplate: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => {
-      if (!(await deleteNodeTemplate(ctx.user, input.id))) throw new Error("节点模板不存在或无删除权限。");
+    deleteTemplate: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!(await deleteNodeTemplate(ctx.user, input.id)))
+          throw new Error("节点模板不存在或无删除权限。");
       return { success: true };
     }),
     subflows: protectedProcedure.query(({ ctx }) => listSubflows(ctx.user)),
@@ -998,11 +1366,15 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!(await updateSubflow(ctx.user, input))) throw new Error("子流程不存在或无编辑权限。");
+        if (!(await updateSubflow(ctx.user, input)))
+          throw new Error("子流程不存在或无编辑权限。");
         return { success: true };
       }),
-    deleteSubflow: protectedProcedure.input(z.object({ id: z.string().min(8).max(64) })).mutation(async ({ ctx, input }) => {
-      if (!(await deleteSubflow(ctx.user, input.id))) throw new Error("子流程不存在或无删除权限。");
+    deleteSubflow: protectedProcedure
+      .input(z.object({ id: z.string().min(8).max(64) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!(await deleteSubflow(ctx.user, input.id)))
+          throw new Error("子流程不存在或无删除权限。");
       return { success: true };
     }),
     run: protectedProcedure
@@ -1014,7 +1386,13 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:run"))) {
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:run"
+          ))
+        ) {
           throw new TRPCError({
             code: "FORBIDDEN",
             message: "无权运行此流程。",
@@ -1031,7 +1409,9 @@ export const appRouter = router({
       .input(
         z.object({
           workflowId: z.string().min(8).max(64),
-          status: z.enum(["queued", "running", "success", "failed", "cancelled"]).optional(),
+          status: z
+            .enum(["queued", "running", "success", "failed", "cancelled"])
+            .optional(),
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
           triggeredByUserId: z.number().int().positive().optional(),
@@ -1039,30 +1419,58 @@ export const appRouter = router({
         })
       )
       .query(async ({ ctx, input }) => {
-        if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程运行历史。");
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:view"
+          ))
+        )
+          throw new Error("无权查看流程运行历史。");
         return listWorkflowRuns(input.workflowId, input);
       }),
     runMetrics: protectedProcedure
       .input(
         z.object({
           workflowId: z.string().min(8).max(64),
-          status: z.enum(["queued", "running", "success", "failed", "cancelled"]).optional(),
+          status: z
+            .enum(["queued", "running", "success", "failed", "cancelled"])
+            .optional(),
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
           triggeredByUserId: z.number().int().positive().optional(),
         })
       )
       .query(async ({ ctx, input }) => {
-        if (!(await hasWorkflowPermission(ctx.user, input.workflowId, "workflow:view"))) throw new Error("无权查看流程运行分析。");
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:view"
+          ))
+        )
+          throw new Error("无权查看流程运行分析。");
         return getWorkflowRunMetrics(input.workflowId, input);
       }),
     alerts: protectedProcedure.query(({ ctx }) => listRunAlerts(ctx.user)),
-    markAlertRead: protectedProcedure.input(z.object({ alertId: z.string().uuid() })).mutation(async ({ ctx, input }) => ({
+    markAlertRead: protectedProcedure
+      .input(z.object({ alertId: z.string().uuid() }))
+      .mutation(async ({ ctx, input }) => ({
       success: await markRunAlertRead(input.alertId, ctx.user),
     })),
-    runDetail: protectedProcedure.input(z.object({ runId: z.string().min(8).max(64) })).query(async ({ ctx, input }) => {
+    runDetail: protectedProcedure
+      .input(z.object({ runId: z.string().min(8).max(64) }))
+      .query(async ({ ctx, input }) => {
       const run = await getWorkflowRun(input.runId);
-      if (!run || !(await hasWorkflowPermission(ctx.user, run.workflowId, "workflow:view"))) throw new Error("运行记录不存在或无访问权限。");
+        if (
+          !run ||
+          !(await hasWorkflowPermission(
+            ctx.user,
+            run.workflowId,
+            "workflow:view"
+          ))
+        )
+          throw new Error("运行记录不存在或无访问权限。");
       return run;
     }),
   }),
