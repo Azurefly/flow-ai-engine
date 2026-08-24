@@ -7,6 +7,7 @@ import {
   submitWorkflowRun as persistWorkflowRun,
   type WorkflowCheckpoint,
 } from "./workflow-engine";
+import { notifyOwner } from "./_core/notification";
 
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type JsonRecord = Record<string, unknown>;
@@ -18,6 +19,15 @@ type ClaimedJob = {
   attempt: number;
   maxAttempts: number;
   checkpoint: WorkflowCheckpoint;
+};
+
+type ClaimedOutboxEvent = {
+  id: string;
+  eventType: string;
+  attempt: number;
+  maxAttempts: number;
+  leaseToken: string;
+  payload: JsonRecord;
 };
 
 const workerId = `${process.pid}-${randomUUID().slice(0, 8)}`;
@@ -54,6 +64,10 @@ function parseJson<T>(value: unknown, fallback: T): T {
 
 export function retryDelayMs(attempt: number) {
   return Math.min(60_000, 1000 * 2 ** Math.max(0, attempt - 1));
+}
+
+export function outboxRetryDelaySeconds(attempt: number) {
+  return Math.min(3600, 5 * 2 ** Math.max(0, attempt - 1));
 }
 
 export function getWorkflowWorkerStatus() {
@@ -113,6 +127,104 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
   } finally {
     connection.release();
   }
+}
+
+async function claimNextOutboxEvent(): Promise<ClaimedOutboxEvent | null> {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT id,eventType,attempt,maxAttempts,payloadJson
+         FROM workflow_outbox_event
+        WHERE attempt < maxAttempts
+          AND ((status='queued' AND availableAt<=NOW())
+            OR (status='leased' AND leaseExpiresAt<NOW()))
+        ORDER BY availableAt ASC,createdAt ASC
+        LIMIT 1 FOR UPDATE SKIP LOCKED`
+    );
+    const row = rows[0];
+    if (!row) {
+      await connection.commit();
+      return null;
+    }
+    const leaseToken = randomUUID().replaceAll("-", "").slice(0, 48);
+    const [claimed] = await connection.query<mysql.ResultSetHeader>(
+      `UPDATE workflow_outbox_event
+          SET status='leased',attempt=attempt+1,leaseToken=?,leaseExpiresAt=DATE_ADD(NOW(),INTERVAL ? SECOND),lastErrorJson=NULL
+        WHERE id=? AND ((status='queued' AND availableAt<=NOW()) OR (status='leased' AND leaseExpiresAt<NOW()))`,
+      [leaseToken, leaseSeconds, row.id]
+    );
+    if (!claimed.affectedRows) {
+      await connection.rollback();
+      return null;
+    }
+    await connection.commit();
+    return {
+      id: String(row.id),
+      eventType: String(row.eventType),
+      attempt: Number(row.attempt ?? 0) + 1,
+      maxAttempts: Number(row.maxAttempts ?? 8),
+      leaseToken,
+      payload: parseJson<JsonRecord>(row.payloadJson, {}),
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function completeOutboxEvent(event: ClaimedOutboxEvent) {
+  const [completed] = await db().query<mysql.ResultSetHeader>(
+    `UPDATE workflow_outbox_event
+        SET status='delivered',leaseToken=NULL,leaseExpiresAt=NULL,deliveredAt=NOW()
+      WHERE id=? AND status='leased' AND leaseToken=?`,
+    [event.id, event.leaseToken]
+  );
+  if (!completed.affectedRows) throw new Error("Outbox 事件完成时租约已失效。");
+}
+
+async function failOutboxEvent(event: ClaimedOutboxEvent, error: unknown) {
+  const details = { message: error instanceof Error ? error.message : String(error) };
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const retryable = event.attempt < event.maxAttempts;
+    const delaySeconds = outboxRetryDelaySeconds(event.attempt);
+    const [updated] = await connection.query<mysql.ResultSetHeader>(
+      `UPDATE workflow_outbox_event
+          SET status=?,lastErrorJson=?,availableAt=IF(?='queued',DATE_ADD(NOW(),INTERVAL ? SECOND),availableAt),leaseToken=NULL,leaseExpiresAt=NULL
+        WHERE id=? AND status='leased' AND leaseToken=?`,
+      [retryable ? "queued" : "failed", JSON.stringify(details), retryable ? "queued" : "failed", delaySeconds, event.id, event.leaseToken]
+    );
+    if (!updated.affectedRows) throw new Error("Outbox 事件重试排队时租约已失效。");
+    await connection.commit();
+  } catch (releaseError) {
+    await connection.rollback();
+    throw releaseError;
+  } finally {
+    connection.release();
+  }
+}
+
+async function dispatchWorkflowOutboxOnce() {
+  const event = await claimNextOutboxEvent();
+  if (!event) return false;
+  try {
+    if (event.eventType !== "workflow.run.failed.notification") {
+      throw new Error(`不支持的 Outbox 事件类型：${event.eventType}`);
+    }
+    const title = String(event.payload.title ?? "").trim();
+    const content = String(event.payload.content ?? "").trim();
+    if (!title || !content) throw new Error("Outbox 通知事件缺少标题或内容。");
+    if (!(await notifyOwner({ title, content }))) throw new Error("通知服务未接受 Outbox 事件。");
+    await completeOutboxEvent(event);
+  } catch (error) {
+    state.lastError = error instanceof Error ? error.message : String(error);
+    await failOutboxEvent(event, error);
+  }
+  return true;
 }
 
 async function renewLease(job: ClaimedJob) {
@@ -249,9 +361,10 @@ export async function runWorkflowWorkerOnce() {
   state.processing = true;
   state.lastPollAt = new Date().toISOString();
   try {
+    const outboxProcessed = await dispatchWorkflowOutboxOnce();
     await reconcileWorkflowContinuations();
     const job = await claimNextJob();
-    if (!job) return false;
+    if (!job) return outboxProcessed;
     await processJob(job);
     return true;
   } finally {

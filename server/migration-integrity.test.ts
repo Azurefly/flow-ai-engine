@@ -29,6 +29,10 @@ const workflowArchiveSnapshot = readFileSync(
   new URL("../drizzle/meta/0015_snapshot.json", import.meta.url),
   "utf8"
 );
+const workflowOutboxMigration = readFileSync(
+  new URL("../drizzle/0020_durable_outbox.sql", import.meta.url),
+  "utf8"
+);
 
 describe("database migration integrity", () => {
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
@@ -127,5 +131,13 @@ describe("database migration integrity", () => {
     expect(workflowArchiveMigration).toContain("workflow_archived_idx");
     expect(workflowArchiveSnapshot).toContain('"workflow_archived_by_user_fk"');
     expect(workflowArchiveSnapshot).toContain('"onDelete": "set null"');
+  });
+
+  it("creates a deduplicated, leased and retryable workflow outbox", () => {
+    expect(workflowOutboxMigration).toContain("CREATE TABLE `workflow_outbox_event`");
+    expect(workflowOutboxMigration).toContain("enum('queued','leased','delivered','failed')");
+    expect(workflowOutboxMigration).toContain("workflow_outbox_dedupe_unique");
+    expect(workflowOutboxMigration).toContain("workflow_outbox_claim_idx");
+    expect(workflowOutboxMigration).toContain("`maxAttempts` int NOT NULL DEFAULT 8");
   });
 });

@@ -563,7 +563,7 @@ Human Task 服务
 - [~] **T0105 [COR-001]** 建立至少 25 类图定义测试和前端错误定位面板。已新增 30 类稳定诊断测试、编译检查入口、错误码列表和节点定位；真实浏览器操作验收仍待完成。
 - [x] **T0110 [COR-002，依赖 T0101]** 将运行成功条件改为合法终点到达，并保存结束原因。
 - [~] **T0111 [COR-002]** 增加 failed/blocked/waiting/cancelled/terminated 等明确状态迁移测试。已增加显式状态机、15 条迁移测试，并把人工任务等待/续跑链路改为 `running → waiting → queued`；真实 MySQL 并发/故障注入仍待验收。
-- [~] **T0120 [COR-003，依赖 T0110]** 建立 job/step/outbox 持久化模型和原子领取语句。Job、节点 Step 与 `FOR UPDATE SKIP LOCKED` 已实现；Outbox 尚未实现。
+- [~] **T0120 [COR-003，依赖 T0110]** Job、节点 Step 与 Outbox 均已有持久化模型和 `FOR UPDATE SKIP LOCKED` 原子领取；失败通知已改为去重、租约、指数退避的 Outbox 事件，由 Worker 派发。真实 MySQL migration/断电恢复验收仍待完成。
 - [~] **T0121 [COR-003]** 实现 Worker 租约、续租、超时回收、Attempt 和幂等键。实现与单元测试已完成，真实 MySQL 过期租约恢复测试已编写但尚未运行。
 - [x] **T0122 [COR-003]** 将 API 启动流程改为提交命令，不在请求内跑完整流程；人工审批通过后的续跑也提交 `resume` Job，由 Worker 执行。
 - [ ] **T0123 [COR-003]** 执行三类杀进程故障注入，证明重启后不丢失、不重复副作用。

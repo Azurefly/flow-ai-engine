@@ -12,7 +12,6 @@ import {
   type NormalizedRouterRule,
 } from "../shared/reference-router-config";
 import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
-import { notifyOwner } from "./_core/notification";
 import { currentRequestId } from "./_core/http-security";
 import {
   assertWorkflowExecutionPlan,
@@ -917,12 +916,12 @@ async function createFailureAlerts(input: {
   ownerUserId: number;
   triggeredByUserId: number;
   details: JsonRecord;
-}) {
+}, executor: mysql.Pool | mysql.PoolConnection = db()) {
   const recipients = Array.from(
     new Set([input.ownerUserId, input.triggeredByUserId])
   );
   if (recipients.length) {
-    await db().query(
+    await executor.query(
       "INSERT INTO workflow_run_alert (id,workflowId,runId,recipientUserId,severity,summary,detailsJson) VALUES ?",
       [
         recipients.map(recipientUserId => [
@@ -937,10 +936,24 @@ async function createFailureAlerts(input: {
       ]
     );
   }
-  await notifyOwner({
+  const notificationPayload = {
     title: "Flow AI Engine 运行失败",
     content: `流程：${input.workflowName}\n运行：${input.runId}\n原因：${String(input.details.message ?? "未知错误")}`,
-  }).catch(() => false);
+  };
+  await executor.query(
+    `INSERT INTO workflow_outbox_event
+      (id,eventType,aggregateType,aggregateId,dedupeKey,payloadJson,status,maxAttempts)
+      VALUES (?,?,?,?,?,?, 'queued', 8)
+      ON DUPLICATE KEY UPDATE id=id`,
+    [
+      randomUUID(),
+      "workflow.run.failed.notification",
+      "workflow_run",
+      input.runId,
+      `workflow-run-failed-notification:${input.runId}`,
+      JSON.stringify({ ...notificationPayload, workflowId: input.workflowId, runId: input.runId }),
+    ]
+  );
 }
 
 export async function submitWorkflowRun(input: {
@@ -1189,36 +1202,50 @@ export async function markWorkflowRunFailed(
   const details = {
     message: error instanceof Error ? error.message : String(error),
   };
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT r.id,r.workflowId,r.ownerUserId,r.triggeredByUserId,r.startedAt,w.name
-       FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1`,
-    [runId]
-  );
-  const run = rows[0];
-  if (!run) return false;
-  const params: unknown[] = [
-    JSON.stringify(details),
-    run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0,
-    runId,
-  ];
-  const leaseClause = leaseToken ? " AND executionLockToken=?" : "";
-  if (leaseToken) params.push(leaseToken);
-  const [failed] = await db().query<mysql.ResultSetHeader>(
-    `UPDATE workflow_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
-    params
-  );
-  if (!failed.affectedRows) return false;
-  await createFailureAlerts({
-    workflowId: String(run.workflowId),
-    workflowName: String(run.name),
-    runId,
-    ownerUserId: Number(run.ownerUserId),
-    triggeredByUserId: Number(run.triggeredByUserId),
-    details,
-  }).catch(alertError =>
-    console.error("[Workflow] Failed to persist run alert", alertError)
-  );
-  return true;
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT r.id,r.workflowId,r.ownerUserId,r.triggeredByUserId,r.startedAt,w.name
+         FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1 FOR UPDATE`,
+      [runId]
+    );
+    const run = rows[0];
+    if (!run) {
+      await connection.rollback();
+      return false;
+    }
+    const params: unknown[] = [
+      JSON.stringify(details),
+      run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0,
+      runId,
+    ];
+    const leaseClause = leaseToken ? " AND executionLockToken=?" : "";
+    if (leaseToken) params.push(leaseToken);
+    const [failed] = await connection.query<mysql.ResultSetHeader>(
+      `UPDATE workflow_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+      params
+    );
+    if (!failed.affectedRows) {
+      await connection.rollback();
+      return false;
+    }
+    await createFailureAlerts({
+      workflowId: String(run.workflowId),
+      workflowName: String(run.name),
+      runId,
+      ownerUserId: Number(run.ownerUserId),
+      triggeredByUserId: Number(run.triggeredByUserId),
+      details,
+    }, connection);
+    await connection.commit();
+    return true;
+  } catch (failureError) {
+    await connection.rollback();
+    throw failureError;
+  } finally {
+    connection.release();
+  }
 }
 
 export async function executeWorkflow(input: {

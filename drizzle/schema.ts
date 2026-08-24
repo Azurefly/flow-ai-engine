@@ -466,6 +466,36 @@ export const workflowRunJobs = mysqlTable(
   ]
 );
 
+/** Durable side effects emitted by workflow state changes. Dispatch is leased and retryable. */
+export const workflowOutboxEvents = mysqlTable(
+  "workflow_outbox_event",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    eventType: varchar("eventType", { length: 96 }).notNull(),
+    aggregateType: varchar("aggregateType", { length: 64 }).notNull(),
+    aggregateId: varchar("aggregateId", { length: 160 }).notNull(),
+    dedupeKey: varchar("dedupeKey", { length: 190 }).notNull(),
+    payloadJson: json("payloadJson").notNull(),
+    status: mysqlEnum("status", ["queued", "leased", "delivered", "failed"])
+      .default("queued")
+      .notNull(),
+    attempt: int("attempt").default(0).notNull(),
+    maxAttempts: int("maxAttempts").default(8).notNull(),
+    availableAt: timestamp("availableAt").defaultNow().notNull(),
+    leaseToken: varchar("leaseToken", { length: 48 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    lastErrorJson: json("lastErrorJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+    deliveredAt: timestamp("deliveredAt"),
+  },
+  table => [
+    unique("workflow_outbox_dedupe_unique").on(table.dedupeKey),
+    index("workflow_outbox_claim_idx").on(table.status, table.availableAt, table.leaseExpiresAt),
+    index("workflow_outbox_aggregate_idx").on(table.aggregateType, table.aggregateId, table.createdAt),
+  ]
+);
+
 export const workflowNodeRuns = mysqlTable(
   "workflow_node_run",
   {
