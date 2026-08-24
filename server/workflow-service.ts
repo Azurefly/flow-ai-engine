@@ -9,12 +9,14 @@ import {
 import { isProjectApprovalRequired } from "./p1-service";
 import {
   analyzeWorkflowDefinition,
+  assertWorkflowExecutionPlan,
   compileWorkflowDefinition,
   validateWorkflowDefinition,
   type WorkflowCompileResult,
   type WorkflowCompileDiagnostic,
   type WorkflowDefinition,
   type WorkflowEdge,
+  type WorkflowExecutionPlan,
   type WorkflowNode,
 } from "./workflow-compiler";
 
@@ -58,6 +60,21 @@ export const emptyDefinition = (): Definition => ({
 });
 export function validate(definition: unknown, executable = false): Definition {
   return validateWorkflowDefinition(definition, executable);
+}
+export function assertWorkflowUpdateTransition(
+  currentStatus: "draft" | "published",
+  values: { definition?: unknown; publish?: boolean; unpublish?: boolean }
+) {
+  if (
+    currentStatus === "published" &&
+    values.definition !== undefined &&
+    !values.publish &&
+    !values.unpublish
+  ) {
+    throw new Error(
+      "已发布流程不能直接修改定义；请先取消发布，或使用发布操作提交新版本。"
+    );
+  }
 }
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type VersionSource =
@@ -353,13 +370,14 @@ export async function updateWorkflow(
     status: "draft" | "published";
     definitionVersion: number;
     definition: Definition;
+    publishedExecutionPlanJson?: unknown;
+    publishedExecutionPlanHash?: string | null;
   } | null;
   if (!current) return null;
   if (current.archivedAt)
     throw new Error("已归档流程必须先恢复后才能编辑或发布。");
-  const executable =
-    Boolean(values.publish) ||
-    (current.status === "published" && !values.unpublish);
+  assertWorkflowUpdateTransition(current.status, values);
+  const executable = Boolean(values.publish);
   const draftDefinition =
     values.definition === undefined
       ? current.definition
@@ -371,6 +389,15 @@ export async function updateWorkflow(
   );
   const compiled = executable ? compileWorkflowDefinition(definition) : null;
   const persistedDefinition = compiled?.definition ?? definition;
+  const persistedExecutionPlan = values.unpublish
+    ? undefined
+    : compiled?.plan ??
+      (current.publishedExecutionPlanJson === undefined
+        ? undefined
+        : parseJson(current.publishedExecutionPlanJson));
+  const persistedExecutionPlanHash = values.unpublish
+    ? null
+    : compiled?.planHash ?? current.publishedExecutionPlanHash ?? null;
   if (
     values.publish &&
     current.projectId &&
@@ -397,10 +424,10 @@ export async function updateWorkflow(
         nextVersion,
         values.unpublish
           ? null
-          : compiled
-            ? JSON.stringify(compiled.plan)
-            : null,
-        values.unpublish ? null : compiled?.planHash ?? null,
+          : persistedExecutionPlan === undefined
+            ? null
+            : JSON.stringify(persistedExecutionPlan),
+        persistedExecutionPlanHash,
         Boolean(values.publish),
         Boolean(values.unpublish),
         Boolean(values.unpublish),
@@ -419,8 +446,8 @@ export async function updateWorkflow(
           ? "published"
           : "updated",
       actorUserId: user.id,
-      executionPlan: compiled?.plan,
-      executionPlanHash: compiled?.planHash,
+      executionPlan: persistedExecutionPlan,
+      executionPlanHash: persistedExecutionPlanHash,
     });
     await connection.commit();
   } catch (error) {
@@ -580,6 +607,8 @@ export async function rollbackWorkflowVersion(
     name: string;
     status: "draft" | "published";
     definition: Definition;
+    executionPlanJson?: unknown;
+    executionPlanHash?: string | null;
   } | null;
   if (!target) return null;
   if (
@@ -588,21 +617,49 @@ export async function rollbackWorkflowVersion(
   )
     throw new Error("恢复已发布版本需要发布权限。");
   const current = (await getWorkflow(workflowId, user)) as {
+    ownerUserId: number;
     name: string;
     definitionVersion: number;
   } | null;
   if (!current) return null;
+  let restoredDefinition = target.definition;
+  let restoredPlan: WorkflowExecutionPlan | undefined;
+  let restoredPlanHash: string | null = null;
+  if (target.status === "published") {
+    const storedPlan = parseJson(target.executionPlanJson);
+    if (storedPlan && target.executionPlanHash) {
+      restoredPlan = assertWorkflowExecutionPlan(
+        storedPlan,
+        String(target.executionPlanHash)
+      );
+      restoredPlanHash = String(target.executionPlanHash);
+    } else {
+      const resolvedDefinition = await resolveSubflowReferences(
+        target.definition,
+        current.ownerUserId,
+        true
+      );
+      const compiled = compileWorkflowDefinition(resolvedDefinition);
+      restoredPlan = compiled.plan;
+      restoredPlanHash = compiled.planHash;
+    }
+    restoredDefinition = restoredPlan.definition;
+  }
   const nextVersion = Number(current.definitionVersion) + 1;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
     await connection.query(
-      "UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,updatedAt=NOW() WHERE id=?",
+      "UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,publishedExecutionPlanJson=?,publishedExecutionPlanHash=?,publishedAt=?,unpublishedAt=?,updatedAt=NOW() WHERE id=?",
       [
         target.name,
-        JSON.stringify(target.definition),
+        JSON.stringify(restoredDefinition),
         target.status,
         nextVersion,
+        restoredPlan ? JSON.stringify(restoredPlan) : null,
+        restoredPlanHash,
+        target.status === "published" ? new Date() : null,
+        target.status === "draft" ? new Date() : null,
         workflowId,
       ]
     );
@@ -611,10 +668,12 @@ export async function rollbackWorkflowVersion(
       version: nextVersion,
       name: target.name,
       status: target.status,
-      definition: target.definition,
+      definition: restoredDefinition,
       source: "rolled_back",
       actorUserId: user.id,
       restoredFromVersion: targetVersion,
+      executionPlan: restoredPlan,
+      executionPlanHash: restoredPlanHash,
     });
     await connection.commit();
   } catch (error) {
@@ -919,13 +978,19 @@ export async function archiveWorkflow(workflowId: string, user: WorkflowUser) {
       return true;
     }
     const [activeRuns] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id FROM workflow_run WHERE workflowId=? AND status IN ('queued','running') LIMIT 1 FOR UPDATE",
+      "SELECT id FROM workflow_run WHERE workflowId=? AND status IN ('queued','running','waiting','blocked') LIMIT 1 FOR UPDATE",
       [workflowId]
     );
     if (activeRuns.length)
       throw new Error(
-        "流程存在排队中或运行中的实例，禁止归档；请先完成或取消活动运行。"
+        "流程存在排队、运行、等待人工处理或暂停中的实例，禁止归档；请先完成、恢复处理或取消活动运行。"
       );
+    const [activeTasks] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow_task WHERE workflowId=? AND status IN ('pending','claimed') LIMIT 1 FOR UPDATE",
+      [workflowId]
+    );
+    if (activeTasks.length)
+      throw new Error("流程仍有未结束的人工任务，禁止归档。 ");
     const [activeDataflowRuns] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM dataflow_run WHERE workflowId=? AND status IN ('queued','running') LIMIT 1 FOR UPDATE",
       [workflowId]

@@ -888,12 +888,16 @@ function FlowConsole({
   );
   const saveCurrent = useCallback(() => {
     if (!selectedId || !draftDefinition) return;
+    if (selectedWorkflow?.status === "published") {
+      toast.error("已发布流程请使用“发布”提交新版本，或先取消发布后再保存草稿。");
+      return;
+    }
     saveFlow.mutate({
       id: selectedId,
       name: draftName.trim() || "未命名流程",
       definition: draftDefinition,
     });
-  }, [draftDefinition, draftName, saveFlow, selectedId]);
+  }, [draftDefinition, draftName, saveFlow, selectedId, selectedWorkflow?.status]);
 
   const exportCurrent = () => {
     if (!selectedWorkflow || !draftDefinition) return;
@@ -1720,14 +1724,19 @@ function FlowDesigner({
             size="sm"
             variant="outline"
             onClick={onSave}
-            disabled={!canEdit || savePending}
+            disabled={!canEdit || savePending || workflow.status === "published"}
+            title={
+              workflow.status === "published"
+                ? "已发布流程请使用发布操作提交新版本，或先取消发布"
+                : "保存草稿画布"
+            }
           >
             {savePending ? (
               <Loader2 className="animate-spin" size={14} />
             ) : (
               <FileJson size={14} />
             )}
-            保存画布
+            {workflow.status === "published" ? "已发布" : "保存画布"}
           </Button>
           <Button
             size="sm"

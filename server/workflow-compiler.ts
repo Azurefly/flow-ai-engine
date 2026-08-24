@@ -396,6 +396,14 @@ export function analyzeWorkflowDefinition(
 
         const broadcast = node.config.gbms === true || node.config.gbms === "true" || node.config.broadcast === true || node.config.broadcast === "true";
         if (broadcast) {
+          if (executable)
+            diagnostics.push(
+              diagnostic(
+                "WF_RUNTIME_PARALLEL_UNSUPPORTED",
+                `并行路由“${node.name}”尚未启用可靠的分支令牌与汇聚状态，当前版本禁止发布。`,
+                { kind: "node", nodeId: node.id }
+              )
+            );
           const joinNodeId = String(node.config.parallelJoinNodeId ?? "").trim();
           if (nodeOutgoing.length < 2)
             diagnostics.push(diagnostic("WF_PARALLEL_BRANCHES_REQUIRED", `并行路由“${node.name}”至少需要两个分支。`, { kind: "node", nodeId: node.id }));
@@ -429,6 +437,14 @@ export function analyzeWorkflowDefinition(
     validEdges
       .filter(edge => edge.loop)
       .forEach(edge => {
+        if (executable)
+          diagnostics.push(
+            diagnostic(
+              "WF_RUNTIME_LOOP_UNSUPPORTED",
+              `循环边 ${edge.id} 尚未启用持久化迭代计数，当前版本禁止发布。`,
+              { kind: "edge", edgeId: edge.id, field: "loop" }
+            )
+          );
         const inCycle = components.some(component => component.length > 1 && component.includes(edge.sourceNodeId) && component.includes(edge.targetNodeId));
         if (!inCycle)
           diagnostics.push(diagnostic("WF_LOOP_EDGE_NOT_CYCLIC", `连线 ${edge.id} 配置了循环策略，但不属于任何循环。`, { kind: "edge", edgeId: edge.id, field: "loop" }));

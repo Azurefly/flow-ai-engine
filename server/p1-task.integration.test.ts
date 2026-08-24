@@ -253,6 +253,32 @@ describe("P1 人工任务与服务端续跑", () => {
         assignedUserId: handoverUser.id,
         claimedByUserId: null,
       });
+      const [participantStates] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT userId,sourceNodeId,availableOperationsJson FROM workflow_participant_state WHERE runId=? AND userId IN (?,?) ORDER BY userId",
+        [waiting.runId, operator.id, handoverUser.id]
+      );
+      const operationIds = (value: unknown) => {
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        return Array.isArray(parsed)
+          ? parsed.map(item => String(item?.taskId ?? item?.id ?? ""))
+          : [];
+      };
+      const previousState = participantStates.find(
+        state => Number(state.userId) === Number(operator.id)
+      );
+      const targetState = participantStates.find(
+        state => Number(state.userId) === Number(handoverUser.id)
+      );
+      expect(operationIds(previousState?.availableOperationsJson)).not.toContain(
+        waiting.taskId
+      );
+      expect(targetState).toMatchObject({ sourceNodeId: "operate" });
+      expect(operationIds(targetState?.availableOperationsJson)).toContain(
+        waiting.taskId
+      );
+      await expect(
+        callerFor(operator).task.claim({ taskId: waiting.taskId })
+      ).rejects.toThrow();
       expect(
         await callerFor(operator).task.list({ view: "todo" })
       ).toHaveLength(0);

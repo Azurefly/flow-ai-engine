@@ -122,4 +122,43 @@ describe("WorkflowCompiler", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.diagnostics.map(item => item.code)).toContain("WF_LLM_FAILURE_BRANCH_UNCONNECTED");
   });
+
+  it("keeps parallel and loop definitions editable but blocks publication until runtime semantics exist", () => {
+    const parallel = base();
+    parallel.nodes = [
+      parallel.nodes[0]!,
+      { ...state("router"), type: "router", config: { routes: [{ handle: "a" }, { handle: "b" }], defaultRoute: "b", gbms: true, parallelJoinNodeId: "join" } },
+      state("branch-a"),
+      state("branch-b"),
+      { ...state("join"), config: { nodeDh: "join", jdmc: "join", parallelForNodeId: "router" } },
+      parallel.nodes[1]!,
+    ];
+    parallel.edges = [
+      { id: "start-router", sourceNodeId: "start", targetNodeId: "router" },
+      { id: "router-a", sourceNodeId: "router", sourceHandle: "a", targetNodeId: "branch-a" },
+      { id: "router-b", sourceNodeId: "router", sourceHandle: "b", targetNodeId: "branch-b" },
+      { id: "a-join", sourceNodeId: "branch-a", targetNodeId: "join" },
+      { id: "b-join", sourceNodeId: "branch-b", targetNodeId: "join" },
+      { id: "join-end", sourceNodeId: "join", targetNodeId: "end" },
+    ];
+    expect(analyzeWorkflowDefinition(parallel, { executable: false }).ok).toBe(true);
+    const parallelPublish = analyzeWorkflowDefinition(parallel, { executable: true });
+    expect(parallelPublish.ok).toBe(false);
+    if (!parallelPublish.ok)
+      expect(parallelPublish.diagnostics.map(item => item.code)).toContain("WF_RUNTIME_PARALLEL_UNSUPPORTED");
+
+    const loop = base();
+    loop.nodes.splice(1, 0, state("a"), state("b"));
+    loop.edges = [
+      { id: "start-a", sourceNodeId: "start", targetNodeId: "a" },
+      { id: "a-b", sourceNodeId: "a", targetNodeId: "b" },
+      { id: "b-a", sourceNodeId: "b", targetNodeId: "a", loop: { maxIterations: 2 } },
+      { id: "b-end", sourceNodeId: "b", targetNodeId: "end" },
+    ];
+    expect(analyzeWorkflowDefinition(loop, { executable: false }).ok).toBe(true);
+    const loopPublish = analyzeWorkflowDefinition(loop, { executable: true });
+    expect(loopPublish.ok).toBe(false);
+    if (!loopPublish.ok)
+      expect(loopPublish.diagnostics.map(item => item.code)).toContain("WF_RUNTIME_LOOP_UNSUPPORTED");
+  });
 });

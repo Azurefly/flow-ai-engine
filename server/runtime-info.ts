@@ -2,7 +2,8 @@ import mysql from "mysql2/promise";
 import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 
-export const DATABASE_MIGRATION_VERSION = "0014_tidy_bucky";
+export const DATABASE_MIGRATION_VERSION = "0020_durable_outbox";
+export const DATABASE_MIGRATION_EPOCH = 1787554000000;
 
 let pool: mysql.Pool | undefined;
 
@@ -63,21 +64,45 @@ export async function checkReadiness() {
   try {
     await db().query("SELECT 1");
     checks.database = { ok: true, message: "connected" };
+    const [migrationRows] = await db().query<mysql.RowDataPacket[]>(
+      "SELECT MAX(created_at) AS latestMigrationAt FROM __drizzle_migrations"
+    );
+    const [tableRows] = await db().query<mysql.RowDataPacket[]>(
+      `SELECT COUNT(DISTINCT table_name) AS count
+         FROM information_schema.tables
+        WHERE table_schema=DATABASE()
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event')`
+    );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
          FROM information_schema.columns
-        WHERE table_schema=DATABASE() AND table_name='workflow_run_job'
-          AND column_name IN ('idempotencyKey','checkpointJson','leaseToken','leaseExpiresAt','maxAttempts')`
+        WHERE table_schema=DATABASE() AND (
+          (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
+          (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId')) OR
+          (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId')) OR
+          (table_name='authorization_audit_log' AND column_name='requestId')
+        )`
     );
     const [indexRows] = await db().query<mysql.RowDataPacket[]>(
-      `SELECT COUNT(*) AS count
+      `SELECT COUNT(DISTINCT CONCAT(table_name,':',index_name)) AS count
          FROM information_schema.statistics
-        WHERE table_schema=DATABASE() AND table_name='workflow_run_job'
-          AND index_name='workflow_run_job_idempotency_unique' AND non_unique=0`
+        WHERE table_schema=DATABASE() AND non_unique=0 AND (
+          (table_name='workflow_run_job' AND index_name='workflow_run_job_idempotency_unique') OR
+          (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique')
+        )`
     );
-    checks.migrations = Number(columnRows[0]?.count ?? 0) === 5 && Number(indexRows[0]?.count ?? 0) >= 1
+    const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
+    const complete =
+      latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
+      Number(tableRows[0]?.count ?? 0) === 3 &&
+      Number(columnRows[0]?.count ?? 0) === 9 &&
+      Number(indexRows[0]?.count ?? 0) === 2;
+    checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
-      : { ok: false, message: "workflow_run_job migration is incomplete" };
+      : {
+          ok: false,
+          message: `${DATABASE_MIGRATION_VERSION} migration is incomplete`,
+        };
   } catch (error) {
     checks.database = { ok: false, message: error instanceof Error ? error.message : String(error) };
     checks.migrations = { ok: false, message: "database check failed" };

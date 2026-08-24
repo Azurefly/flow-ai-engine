@@ -222,10 +222,97 @@ export async function handoverWorkflowTask(user: User, input: { taskId: string; 
   if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id) throw new Error("仅当前处理人可移交已领取任务。 ");
   await assertCurrentTaskOperation(user, task);
   const target = await getEligibleAssignee(task, input.targetUserId);
-  const claimedCondition = task.status === "claimed" ? " AND claimedByUserId=?" : "";
-  const params: unknown[] = [input.targetUserId, input.taskId, ...(task.status === "claimed" ? [Number(task.claimedByUserId)] : [])];
-  const [result] = await db().query<mysql.ResultSetHeader>(`UPDATE workflow_task SET assignedUserId=?,status='pending',claimedByUserId=NULL,claimedAt=NULL WHERE id=? AND status='${task.status}'${claimedCondition}`, params);
-  if (!result.affectedRows) throw new Error("人工任务状态已变化，请刷新后重试。 ");
+  const currentOwnerId = Number(task.claimedByUserId ?? task.assignedUserId ?? 0);
+  if (currentOwnerId === input.targetUserId)
+    throw new Error("目标处理人已经是当前任务处理人。 ");
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT * FROM workflow_task WHERE id=? FOR UPDATE",
+      [input.taskId]
+    );
+    const locked = lockedRows[0];
+    if (
+      !locked ||
+      String(locked.status) !== String(task.status) ||
+      (String(locked.status) === "claimed" &&
+        Number(locked.claimedByUserId) !== user.id)
+    ) {
+      throw new Error("人工任务状态已变化，请刷新后重试。 ");
+    }
+    if (locked.approvalGroupId) {
+      const [duplicates] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM workflow_task WHERE approvalGroupId=? AND id<>? AND assignedUserId=? LIMIT 1",
+        [locked.approvalGroupId, input.taskId, input.targetUserId]
+      );
+      if (duplicates[0])
+        throw new Error("目标处理人已经在当前或签/会签组中，不能重复移交。 ");
+    }
+    const previousUserIds = Array.from(
+      new Set(
+        [
+          Number(locked.assignedUserId),
+          Number(locked.claimedByUserId),
+          ...candidateIds(locked),
+        ].filter(id => Number.isInteger(id) && id > 0 && id !== input.targetUserId)
+      )
+    );
+    const roleKey = String(locked.roleKey || "default");
+    for (const previousUserId of previousUserIds) {
+      const [stateRows] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,availableOperationsJson FROM workflow_participant_state WHERE runId=? AND userId=? AND roleKey=? LIMIT 1 FOR UPDATE",
+        [locked.runId, previousUserId, roleKey]
+      );
+      const state = stateRows[0];
+      if (!state) continue;
+      const operations = parseJson(state.availableOperationsJson);
+      const remaining = Array.isArray(operations)
+        ? operations.filter(item => {
+            const operation = item && typeof item === "object" ? item as JsonRecord : {};
+            return String(operation.taskId ?? operation.id ?? "") !== input.taskId;
+          })
+        : [];
+      await connection.query(
+        "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE id=?",
+        [JSON.stringify(remaining), state.id]
+      );
+    }
+    const availableOperation = {
+      taskId: input.taskId,
+      name: String(locked.operationName ?? locked.nodeName ?? "人工操作"),
+      ...(String(locked.signMode ?? "single") === "single"
+        ? {}
+        : { signMode: String(locked.signMode) }),
+    };
+    await connection.query(
+      "INSERT INTO workflow_participant_state (id,runId,workflowId,userId,roleKey,stateCode,stateName,flowStatus,sourceNodeId,availableOperationsJson) VALUES (?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stateCode=VALUES(stateCode),stateName=VALUES(stateName),flowStatus=VALUES(flowStatus),sourceNodeId=VALUES(sourceNodeId),availableOperationsJson=VALUES(availableOperationsJson),updatedAt=NOW()",
+      [
+        randomUUID(),
+        locked.runId,
+        locked.workflowId,
+        input.targetUserId,
+        roleKey,
+        String(locked.nodeId),
+        String(locked.pendingStatusName ?? "待审批"),
+        String(locked.pendingStatusName ?? "待审批"),
+        String(locked.nodeId),
+        JSON.stringify([availableOperation]),
+      ]
+    );
+    const [result] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_task SET assignedUserId=?,candidateUserIdsJson=?,status='pending',claimedByUserId=NULL,claimedAt=NULL WHERE id=? AND status=?",
+      [input.targetUserId, JSON.stringify([input.targetUserId]), input.taskId, locked.status]
+    );
+    if (!result.affectedRows)
+      throw new Error("人工任务状态已变化，请刷新后重试。 ");
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: Number(target.id), action: "user_updated", resourceType: "workflow_task", resourceId: input.taskId, details: { operation: "task_handover", fromUserId: task.assignedUserId ?? task.claimedByUserId ?? null, toUserId: input.targetUserId } });
   return getWorkflowTask(user, input.taskId);
 }
