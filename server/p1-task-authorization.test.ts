@@ -1,0 +1,28 @@
+import { describe, expect, it } from "vitest";
+import { isCurrentTaskOperation, isTaskActor } from "./p1-service";
+
+describe("人工操作授权边界", () => {
+  const task = {
+    id: "task-1",
+    nodeId: "state-review",
+    assignedUserId: 7,
+    claimedByUserId: 7,
+    candidateUserIdsJson: [7, 8],
+  } as any;
+
+  it("只认当前任务的指定人/候选人，不因管理员身份自动变成操作人", () => {
+    expect(isTaskActor(7, task)).toBe(true);
+    expect(isTaskActor(8, task)).toBe(true);
+    expect(isTaskActor(99, task)).toBe(false);
+  });
+
+  it("要求用户当前状态与当前操作集合同时匹配", () => {
+    expect(isCurrentTaskOperation({ task, state: { sourceNodeId: "state-review" }, operations: [{ taskId: "task-1" }] })).toBe(true);
+    expect(isCurrentTaskOperation({ task, state: { sourceNodeId: "state-other" }, operations: [{ taskId: "task-1" }] })).toBe(false);
+    expect(isCurrentTaskOperation({ task, state: { sourceNodeId: "state-review" }, operations: [{ taskId: "task-2" }] })).toBe(false);
+  });
+
+  it("显式无人指定模式仍允许具备流程运行权限的人员领取", () => {
+    expect(isCurrentTaskOperation({ task: { id: "open-1", nodeId: "state-review", assignedUserId: null, candidateUserIdsJson: [] }, operations: [] })).toBe(true);
+  });
+});

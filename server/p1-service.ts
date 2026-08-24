@@ -29,12 +29,29 @@ function candidateIds(task: mysql.RowDataPacket) {
   return Array.isArray(parsed) ? parsed.map(Number).filter(id => Number.isInteger(id) && id > 0) : [];
 }
 
-function isTaskActor(userId: number, task: mysql.RowDataPacket) {
+export function isTaskActor(userId: number, task: mysql.RowDataPacket) {
   return [task.assignedUserId, task.claimedByUserId, task.completedByUserId].some(value => Number(value) === userId) || candidateIds(task).includes(userId);
 }
 
+export function isCurrentTaskOperation(input: {
+  task: { id: string; nodeId: string; assignedUserId?: unknown; candidateUserIdsJson?: unknown };
+  state?: { sourceNodeId?: unknown };
+  operations: unknown[];
+}) {
+  const assigned = Number(input.task.assignedUserId ?? 0) > 0;
+  const candidates = Array.isArray(input.task.candidateUserIdsJson)
+    ? input.task.candidateUserIdsJson.map(Number).filter(id => Number.isInteger(id) && id > 0)
+    : candidateIds(input.task as mysql.RowDataPacket);
+  if (!assigned && candidates.length === 0) return true;
+  if (!input.state || String(input.state.sourceNodeId ?? "") !== String(input.task.nodeId)) return false;
+  return input.operations.some(item => {
+    const operation = item && typeof item === "object" ? item as Record<string, unknown> : {};
+    return String(operation.taskId ?? operation.id ?? "") === String(input.task.id);
+  });
+}
+
 async function canAccessTask(user: User, task: mysql.RowDataPacket, write = false) {
-  if (user.role === "admin") return true;
+  if (user.role === "admin" && !write) return true;
   if (write) {
     if (isTaskActor(user.id, task)) return true;
     const restricted = Boolean(task.assignedUserId) || candidateIds(task).length > 0;
@@ -42,6 +59,23 @@ async function canAccessTask(user: User, task: mysql.RowDataPacket, write = fals
   }
   if (isTaskActor(user.id, task) || Number(task.triggeredByUserId) === user.id) return true;
   return hasWorkflowPermission(user, String(task.workflowId), "workflow:view");
+}
+
+async function assertCurrentTaskOperation(user: User, task: mysql.RowDataPacket) {
+  if (!["running", "waiting"].includes(String(task.runStatus))) throw new Error("流程实例当前不在可操作状态。 ");
+  if (!["pending", "claimed"].includes(String(task.status))) throw new Error("当前人工操作已结束或被取消。 ");
+  const [states] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT stateCode,sourceNodeId,availableOperationsJson
+       FROM workflow_participant_state
+      WHERE runId=? AND userId=? AND roleKey=?
+      ORDER BY updatedAt DESC,id DESC LIMIT 1`,
+    [task.runId, user.id, String(task.roleKey || "default")]
+  );
+  const state = states[0];
+  const operations = parseJson(state?.availableOperationsJson);
+  if (!isCurrentTaskOperation({ task, state, operations: Array.isArray(operations) ? operations : [] })) {
+    throw new Error(state ? "当前操作已不属于该用户的可执行操作集合，请刷新任务状态。 " : "当前用户不在该流程实例的当前状态，不能执行此操作。 ");
+  }
 }
 
 function presentTask(row: mysql.RowDataPacket) {
@@ -116,7 +150,8 @@ export async function claimWorkflowTask(user: User, taskId: string) {
   const task: any = await getWorkflowTask(user, taskId);
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true))) throw new Error("无权领取该人工任务。 ");
-  if (task.assignedUserId && Number(task.assignedUserId) !== user.id && user.role !== "admin") throw new Error("该人工任务已指定其他处理人。 ");
+  await assertCurrentTaskOperation(user, task);
+  if (task.assignedUserId && Number(task.assignedUserId) !== user.id) throw new Error("该人工任务已指定其他处理人。 ");
   if (task.approvalGroupId && task.signMode === "sequentialSignFor") {
     const [prior] = await db().query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_task WHERE approvalGroupId=? AND approvalOrder<? AND status<>'completed' LIMIT 1",
@@ -134,7 +169,8 @@ export async function executeWorkflowTask(user: User, taskId: string, result: Js
   const task: any = await getWorkflowTask(user, taskId);
   if (!task) throw new Error("人工任务不存在或无访问权限。");
   if (task.status === "pending") await claimWorkflowTask(user, taskId);
-  else if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id && user.role !== "admin") throw new Error("当前操作不可执行，请刷新任务状态。");
+  else if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id) throw new Error("当前操作不可执行，请刷新任务状态。");
+  await assertCurrentTaskOperation(user, task);
   return completeWorkflowTask(user, taskId, result);
 }
 
@@ -142,6 +178,7 @@ export async function completeWorkflowTask(user: User, taskId: string, result: J
   const task = await getWorkflowTask(user, taskId);
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true))) throw new Error("无权完成该人工任务。 ");
+  await assertCurrentTaskOperation(user, task);
   const resumed = await resumeWorkflowTask({ taskId, completedBy: user, result });
   if (resumed.status === "queued") wakeWorkflowWorker();
   await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow_task", resourceId: taskId, details: { operation: result.decision === "rejected" ? "task_rejected" : "task_approved", decision: result.decision, runId: resumed.runId, status: resumed.status } });

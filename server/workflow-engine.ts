@@ -2314,8 +2314,7 @@ export async function resumeWorkflowTask(input: {
   if (!task) throw new Error("人工任务不存在。 ");
   if (
     task.status !== "claimed" ||
-    (Number(task.claimedByUserId) !== input.completedBy.id &&
-      input.completedBy.role !== "admin")
+    Number(task.claimedByUserId) !== input.completedBy.id
   )
     throw new Error("仅领取该任务的处理人可以完成操作。 ");
   if (!["running", "waiting"].includes(String(task.runStatus)))
