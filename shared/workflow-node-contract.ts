@@ -17,6 +17,8 @@ export const FLOW_NODE_TYPES = [
   "rest",
   "method",
   "form",
+  "wait",
+  "message_catch",
   "sql",
   "source",
   "table",
@@ -273,6 +275,8 @@ export function canConnectFlowNodeTypes(
   target: FlowNodeType
 ) {
   if (source === "end" || target === "start") return false;
+  if (["wait", "message_catch"].includes(source)) return true;
+  if (["wait", "message_catch"].includes(target)) return true;
   const allowed = FLOW_NODE_ALLOWED_TARGETS[source];
   return !allowed || allowed.includes(target);
 }
@@ -917,6 +921,48 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "表单字段",
         help: "数组项包含 key、label、type、required，可选 placeholder、defaultValue、options。",
         kind: "json",
+        required: true,
+      },
+    ],
+  },
+  wait: {
+    type: "wait",
+    label: "等待",
+    description: "持久化等待指定时长后由 Worker 自动恢复",
+    flowTypes: ["state", "control"],
+    defaultConfig: { durationSeconds: 60 },
+    fields: [
+      {
+        key: "durationSeconds",
+        label: "等待时长（秒）",
+        help: "范围 1 秒至 30 天；到期事实存入数据库，服务重启后仍会补触发。",
+        kind: "number",
+        required: true,
+      },
+    ],
+  },
+  message_catch: {
+    type: "message_catch",
+    label: "消息等待",
+    description: "按运行实例、消息名称和相关键持久化等待外部消息",
+    flowTypes: ["state", "control"],
+    defaultConfig: {
+      messageName: "",
+      correlationKey: "{{input.businessKey}}",
+    },
+    fields: [
+      {
+        key: "messageName",
+        label: "消息名称",
+        help: "稳定业务事件名称，仅允许字母、数字、点、横线和下划线。",
+        kind: "text",
+        required: true,
+      },
+      {
+        key: "correlationKey",
+        label: "相关键",
+        help: "支持安全模板；消息触发时必须与运行实例中的固化值完全一致。",
+        kind: "template",
         required: true,
       },
     ],
@@ -1683,6 +1729,20 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       }
       break;
     }
+    case "wait":
+      assertOptionalInteger(
+        config.durationSeconds,
+        "等待节点时长必须是 1 至 2,592,000 秒的整数。",
+        1,
+        2_592_000
+      );
+      break;
+    case "message_catch":
+      assertString(config.messageName, "消息等待节点必须配置消息名称。");
+      if (!/^[A-Za-z0-9._-]{1,128}$/.test(String(config.messageName)))
+        throw new Error("消息等待节点名称格式无效。");
+      assertString(config.correlationKey, "消息等待节点必须配置相关键。");
+      break;
     case "router": {
       if (!Array.isArray(config.routes))
         throw new Error("路由节点的路由规则必须是数组。");

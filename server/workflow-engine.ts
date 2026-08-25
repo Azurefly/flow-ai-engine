@@ -1871,6 +1871,10 @@ export async function controlWorkflowRun(input: {
       "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
       [input.runId]
     );
+    await connection.query(
+      "UPDATE workflow_wait_subscription SET status='cancelled',triggeredAt=NOW() WHERE runId=? AND status='active'",
+      [input.runId]
+    );
     await connection.commit();
     return { runId: input.runId, status: targetStatus, changed: true };
   } catch (error) {
@@ -1962,6 +1966,23 @@ export async function resumeWorkflowRun(runId: string) {
         runId,
         status: "waiting" as const,
         taskId: String(pendingTasks[0].id),
+        changed: true,
+      };
+    }
+    const [activeWaits] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active' ORDER BY createdAt,id LIMIT 1",
+      [runId]
+    );
+    if (activeWaits[0]) {
+      await connection.query(
+        "UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'",
+        [runId]
+      );
+      await connection.commit();
+      return {
+        runId,
+        status: "waiting" as const,
+        waitId: String(activeWaits[0].id),
         changed: true,
       };
     }
@@ -2088,6 +2109,56 @@ type PersistedWorkflow = mysql.RowDataPacket & {
 type RunSegmentResult =
   | { status: "success"; output: unknown }
   | { status: "waiting"; taskId: string };
+
+async function persistWorkflowWait(input: {
+  runId: string;
+  workflowId: string;
+  node: WorkflowNode;
+  nodeRunId: string;
+  context: JsonRecord;
+  queue: string[];
+  finalOutput: unknown;
+}) {
+  const config = asRecord(resolveTemplates(input.node.config, input.context));
+  const waitType = input.node.type === "wait" ? "timer" : "message";
+  const durationSeconds = Math.max(1, Math.trunc(Number(config.durationSeconds ?? 60)));
+  const messageName = waitType === "message" ? String(config.messageName ?? "").trim() : null;
+  const correlationKey = waitType === "message" ? String(config.correlationKey ?? "").trim() : null;
+  if (waitType === "message" && (!messageName || !correlationKey))
+    throw new Error("消息等待节点未解析到有效消息名称和相关键。");
+  const checkpoint: WorkflowCheckpoint = {
+    queue: input.queue,
+    context: input.context,
+    finalOutput: input.finalOutput,
+    currentNodeId: null,
+  };
+  const waitId = randomUUID();
+  await db().query(
+    `INSERT INTO workflow_wait_subscription
+      (id,runId,workflowId,nodeId,nodeRunId,waitType,status,resumeAt,messageName,correlationKey,checkpointJson,requestId)
+      VALUES (?,?,?,?,?,?,'active',?,?,?,?,?)`,
+    [
+      waitId,
+      input.runId,
+      input.workflowId,
+      input.node.id,
+      input.nodeRunId,
+      waitType,
+      waitType === "timer"
+        ? new Date(Date.now() + durationSeconds * 1000)
+        : null,
+      messageName,
+      correlationKey,
+      JSON.stringify(checkpoint),
+      String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null,
+    ]
+  );
+  await db().query(
+    "UPDATE workflow_node_run SET status='waiting' WHERE id=? AND status='running'",
+    [input.nodeRunId]
+  );
+  return { waitId, checkpoint };
+}
 
 function runtimeUserIds(context: JsonRecord) {
   const runtime = asRecord(context.runtime);
@@ -2456,6 +2527,14 @@ async function executeRunSegment(input: {
     if (executed.has(nodeId)) continue;
     const node = nodes.get(nodeId);
     if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
+    if (["wait", "message_catch"].includes(node.type)) {
+      const [existingWaits] = await db().query<mysql.RowDataPacket[]>(
+        "SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND status='active' LIMIT 1",
+        [input.runId, node.id]
+      );
+      if (existingWaits[0])
+        return { status: "waiting", taskId: String(existingWaits[0].id) };
+    }
     executed.add(nodeId);
     await input.checkpoint?.({
       queue: [nodeId, ...input.queue],
@@ -2488,6 +2567,26 @@ async function executeRunSegment(input: {
     );
     const startedAt = Date.now();
     try {
+      if (node.type === "wait" || node.type === "message_catch") {
+        const nextNodeIds = input.definition.edges
+          .filter(edge => edge.sourceNodeId === node.id)
+          .map(edge => edge.targetNodeId);
+        for (const nextNodeId of nextNodeIds) {
+          setRuntimeNodeParticipants(input.context, nextNodeId, currentParticipants);
+          input.queue.push(nextNodeId);
+        }
+        const persisted = await persistWorkflowWait({
+          runId: input.runId,
+          workflowId: input.workflow.id,
+          node,
+          nodeRunId,
+          context: input.context,
+          queue: [...input.queue],
+          finalOutput,
+        });
+        await input.checkpoint?.(persisted.checkpoint);
+        return { status: "waiting", taskId: persisted.waitId };
+      }
       if (node.type === "operate") {
         const config = asRecord(resolveTemplates(node.config, input.context));
         const runtime = asRecord(input.context.runtime);
@@ -3294,6 +3393,113 @@ export async function resumeWorkflowTask(input: {
   } finally {
     connection.release();
   }
+}
+
+async function triggerWorkflowWaitSubscription(waitId: string, payload: JsonRecord) {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT s.*,r.status AS runStatus
+         FROM workflow_wait_subscription s
+         JOIN workflow_run r ON r.id=s.runId
+        WHERE s.id=? FOR UPDATE`,
+      [waitId]
+    );
+    const wait = rows[0];
+    if (!wait || wait.status !== "active") {
+      await connection.rollback();
+      return false;
+    }
+    if (wait.runStatus !== "waiting")
+      throw new Error("等待订阅所属流程当前不在等待状态。");
+    const checkpoint = readJson(wait.checkpointJson) as WorkflowCheckpoint;
+    const context = asRecord(checkpoint.context);
+    const output = {
+      waitId,
+      waitType: String(wait.waitType),
+      messageName: wait.messageName ?? null,
+      correlationKey: wait.correlationKey ?? null,
+      resumedAt: new Date().toISOString(),
+      payload,
+    };
+    const vars = asRecord(context.vars);
+    const nodeOutputs = asRecord(context.nodes);
+    vars[String(wait.nodeId)] = output;
+    nodeOutputs[String(wait.nodeId)] = output;
+    context.vars = vars;
+    context.nodes = nodeOutputs;
+    const runtime = asRecord(context.runtime);
+    runtime.executionQueue = checkpoint.queue;
+    runtime.executionCurrentNodeId = null;
+    context.runtime = runtime;
+    const resumeCheckpoint: WorkflowCheckpoint = {
+      ...checkpoint,
+      context,
+      currentNodeId: null,
+    };
+    const idempotencyKey = `workflow:wait:${waitId}`;
+    await connection.query(
+      "UPDATE workflow_wait_subscription SET status='triggered',triggerPayloadJson=?,triggeredAt=NOW() WHERE id=? AND status='active'",
+      [JSON.stringify(payload), waitId]
+    );
+    await connection.query(
+      "UPDATE workflow_node_run SET status='success',outputJson=?,finishedAt=NOW(),durationMs=TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000 WHERE id=? AND status='waiting'",
+      [JSON.stringify(output), wait.nodeRunId]
+    );
+    await connection.query(
+      "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status='waiting'",
+      [JSON.stringify(context), wait.runId]
+    );
+    await connection.query(
+      "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
+      [randomUUID(), wait.runId, idempotencyKey, JSON.stringify(resumeCheckpoint), WORKFLOW_JOB_MAX_ATTEMPTS, wait.requestId ?? null]
+    );
+    await connection.commit();
+    return true;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+export async function reconcileDueWorkflowWaits(limit = 50) {
+  const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 200);
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT s.id FROM workflow_wait_subscription s
+       JOIN workflow_run r ON r.id=s.runId AND r.status='waiting'
+      WHERE s.status='active' AND s.waitType='timer' AND s.resumeAt<=NOW()
+      ORDER BY s.resumeAt,s.id LIMIT ?`,
+    [safeLimit]
+  );
+  let triggered = 0;
+  for (const row of rows)
+    if (await triggerWorkflowWaitSubscription(String(row.id), { reason: "timer_elapsed" }))
+      triggered += 1;
+  return triggered;
+}
+
+export async function signalWorkflowMessage(input: {
+  runId: string;
+  messageName: string;
+  correlationKey: string;
+  payload?: JsonRecord;
+}) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT id FROM workflow_wait_subscription
+      WHERE runId=? AND status='active' AND waitType='message' AND messageName=? AND correlationKey=? LIMIT 2`,
+    [input.runId, input.messageName.trim(), input.correlationKey]
+  );
+  if (!rows.length) throw new Error("未找到匹配的活动消息等待订阅。");
+  if (rows.length > 1) throw new Error("消息相关键命中多个活动等待订阅，已拒绝不确定触发。");
+  const triggered = await triggerWorkflowWaitSubscription(
+    String(rows[0]!.id),
+    input.payload ?? {}
+  );
+  if (!triggered) throw new Error("消息等待订阅已由其他请求触发。");
+  return { waitId: String(rows[0]!.id), runId: input.runId, status: "queued" as const };
 }
 
 /**

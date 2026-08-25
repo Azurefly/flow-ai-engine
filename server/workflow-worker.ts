@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import {
   executePreparedWorkflowRun,
   markWorkflowRunFailed,
+  reconcileDueWorkflowWaits,
   reconcileWorkflowContinuations,
   submitWorkflowRun as persistWorkflowRun,
   type WorkflowCheckpoint,
@@ -362,9 +363,10 @@ export async function runWorkflowWorkerOnce() {
   state.lastPollAt = new Date().toISOString();
   try {
     const outboxProcessed = await dispatchWorkflowOutboxOnce();
+    const waitsTriggered = await reconcileDueWorkflowWaits();
     await reconcileWorkflowContinuations();
     const job = await claimNextJob();
-    if (!job) return outboxProcessed;
+    if (!job) return outboxProcessed || waitsTriggered > 0;
     await processJob(job);
     return true;
   } finally {

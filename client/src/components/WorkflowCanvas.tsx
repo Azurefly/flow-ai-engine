@@ -131,6 +131,8 @@ const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   rest: { icon: Globe2, color: "#ea580c" },
   method: { icon: Globe2, color: "#c2410c" },
   form: { icon: FileText, color: "#0f766e" },
+  wait: { icon: CircleDot, color: "#64748b" },
+  message_catch: { icon: Waypoints, color: "#0369a1" },
   sql: { icon: Braces, color: "#475569" },
   transform: { icon: Braces, color: "#0891b2" },
   condition: { icon: GitBranch, color: "#8b5cf6" },

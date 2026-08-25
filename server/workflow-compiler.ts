@@ -61,7 +61,7 @@ export type WorkflowCompileDiagnostic = {
 
 export type WorkflowExecutionPlan = {
   schemaVersion: 1;
-  compilerVersion: "1.0.0" | "1.1.0" | "1.2.0" | "1.3.0";
+  compilerVersion: "1.0.0" | "1.1.0" | "1.2.0" | "1.3.0" | "1.4.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -923,6 +923,17 @@ export function analyzeWorkflowDefinition(
       });
 
     for (const node of validNodes) {
+      if (
+        ["wait", "message_catch"].includes(node.type) &&
+        (outgoing.get(node.id) ?? []).length !== 1
+      )
+        diagnostics.push(
+          diagnostic(
+            "WF_WAIT_SINGLE_CONTINUATION_REQUIRED",
+            `等待节点“${node.name}”必须且只能连接一个后继节点。`,
+            { kind: "node", nodeId: node.id }
+          )
+        );
       const serviceTask = compileHttpServiceTask(node.type, node.config);
       if (!serviceTask || serviceTask.effect !== "write") continue;
       if (serviceTask.writeSafety === "unconfigured")
@@ -1030,7 +1041,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.3.0",
+    compilerVersion: "1.4.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,

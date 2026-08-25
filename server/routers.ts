@@ -46,8 +46,9 @@ import {
   controlWorkflowRun,
   pauseWorkflowRun,
   resumeWorkflowRun,
+  signalWorkflowMessage,
 } from "./workflow-engine";
-import { submitWorkflowRun } from "./workflow-worker";
+import { submitWorkflowRun, wakeWorkflowWorker } from "./workflow-worker";
 import { getRuntimeInfo } from "./runtime-info";
 import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
 import {
@@ -954,6 +955,31 @@ export const appRouter = router({
         const task = await getWorkflowTask(ctx.user, input.taskId);
         if (!task) throw new Error("人工任务不存在或无访问权限。 ");
         return task;
+      }),
+    signalMessage: protectedProcedure
+      .input(
+        z.object({
+          runId: z.string().min(8).max(64),
+          messageName: z.string().trim().min(1).max(128),
+          correlationKey: z.string().min(1).max(255),
+          payload: z.record(z.string(), z.unknown()).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const run = await getWorkflowRun(input.runId);
+        if (
+          !run ||
+          !(await hasWorkflowPermission(
+            ctx.user,
+            String(run.workflowId),
+            "workflow:run"
+          ))
+        )
+          throw new TRPCError({ code: "FORBIDDEN", message: "无权触发此流程消息。" });
+        assertWorkflowRunController(ctx.user, run, "触发此流程消息");
+        const result = await signalWorkflowMessage(input);
+        wakeWorkflowWorker();
+        return result;
       }),
     assignees: protectedProcedure
       .input(z.object({ taskId: z.string().uuid() }))

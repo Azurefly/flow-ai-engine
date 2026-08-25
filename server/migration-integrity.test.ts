@@ -41,8 +41,18 @@ const serviceEndpointMigration = readFileSync(
   new URL("../drizzle/0023_project_service_endpoints.sql", import.meta.url),
   "utf8"
 );
+const workflowWaitMigration = readFileSync(
+  new URL("../drizzle/0024_durable_workflow_waits.sql", import.meta.url),
+  "utf8"
+);
 
 describe("database migration integrity", () => {
+  it("persists timer and message waits with idempotent run-node identity", () => {
+    expect(workflowWaitMigration).toContain("CREATE TABLE `workflow_wait_subscription`");
+    expect(workflowWaitMigration).toContain("enum('timer','message')");
+    expect(workflowWaitMigration).toContain("workflow_wait_subscription_run_node_unique");
+    expect(workflowWaitMigration).toContain("`checkpointJson` json NOT NULL");
+  });
   it("creates project-scoped endpoint references without plaintext secret columns", () => {
     expect(serviceEndpointMigration).toContain("CREATE TABLE `project_service_endpoint`");
     expect(serviceEndpointMigration).toContain("`allowedHostsJson` json NOT NULL");

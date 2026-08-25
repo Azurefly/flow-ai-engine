@@ -751,6 +751,33 @@ export const workflowParticipantStates = mysqlTable(
   ]
 );
 
+/** Durable timer/message subscriptions resumed through idempotent workflow jobs. */
+export const workflowWaitSubscriptions = mysqlTable(
+  "workflow_wait_subscription",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    nodeId: varchar("nodeId", { length: 128 }).notNull(),
+    nodeRunId: varchar("nodeRunId", { length: 36 }).notNull().references(() => workflowNodeRuns.id),
+    waitType: mysqlEnum("waitType", ["timer", "message"]).notNull(),
+    status: mysqlEnum("status", ["active", "triggered", "cancelled"]).default("active").notNull(),
+    resumeAt: timestamp("resumeAt"),
+    messageName: varchar("messageName", { length: 128 }),
+    correlationKey: varchar("correlationKey", { length: 255 }),
+    checkpointJson: json("checkpointJson").notNull(),
+    triggerPayloadJson: json("triggerPayloadJson"),
+    requestId: varchar("requestId", { length: 96 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    triggeredAt: timestamp("triggeredAt"),
+  },
+  table => [
+    unique("workflow_wait_subscription_run_node_unique").on(table.runId, table.nodeId),
+    index("workflow_wait_subscription_timer_idx").on(table.status, table.waitType, table.resumeAt),
+    index("workflow_wait_subscription_message_idx").on(table.runId, table.status, table.messageName, table.correlationKey),
+  ]
+);
+
 /** Immutable state facts. The current state on workflow_run is advanced with the same sequence. */
 export const workflowStateTransitions = mysqlTable(
   "workflow_state_transition",
