@@ -3751,6 +3751,10 @@ export async function resumeWorkflowTask(input: {
     const context = asRecord(readJson(task.contextJson));
     const runtime = asRecord(context.runtime);
     runtime.lastActorUserId = input.completedBy.id;
+    runtime.responsibleUserId =
+      Number(task.responsibleUserId) || input.completedBy.id;
+    runtime.representedUserId = Number(task.representedUserId) || null;
+    runtime.delegationId = task.delegationId ?? null;
     context.runtime = runtime;
     updateRuntimeRoles(context, [input.completedBy.id], [], "sender");
     addRuntimeParticipants(context, [input.completedBy.id]);
@@ -3768,6 +3772,10 @@ export async function resumeWorkflowTask(input: {
       approvalGroupId: task.approvalGroupId ?? null,
       signMode: task.signMode ?? "single",
       completedByUserId: input.completedBy.id,
+      responsibleUserId:
+        Number(task.responsibleUserId) || input.completedBy.id,
+      representedUserId: Number(task.representedUserId) || null,
+      delegationId: task.delegationId ?? null,
       operationName: task.operationName ?? task.nodeName,
       operationCode: task.operationCode ?? task.nodeId,
       decision: gate.rejected ? "rejected" : "approved",
@@ -4103,6 +4111,10 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       const context = asRecord(readJson(run.contextJson));
       const runtime = asRecord(context.runtime);
       runtime.lastActorUserId = taskOutput.completedByUserId;
+      runtime.responsibleUserId =
+        Number(task.responsibleUserId) || taskOutput.completedByUserId;
+      runtime.representedUserId = Number(task.representedUserId) || null;
+      runtime.delegationId = task.delegationId ?? null;
       context.runtime = runtime;
       const vars = asRecord(context.vars);
       const nodeOutputs = asRecord(context.nodes);

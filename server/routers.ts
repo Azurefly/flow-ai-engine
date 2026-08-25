@@ -101,8 +101,10 @@ import {
 import {
   batchClaimWorkflowTasks,
   batchCompleteWorkflowTasks,
+  addWorkflowTaskSigner,
   claimWorkflowTask,
   completeWorkflowTask,
+  delegateWorkflowTask,
   executeWorkflowTask,
   createWorkDomain,
   getP1SystemSettings,
@@ -116,6 +118,7 @@ import {
   listWorkDomains,
   listWorkflowTaskAssignees,
   listWorkflowTasks,
+  removeWorkflowTaskSigner,
   returnWorkflowTaskToPending,
   updateP1SystemSetting,
   updateWorkDomain,
@@ -1017,6 +1020,32 @@ export const appRouter = router({
         })
       )
       .mutation(({ ctx, input }) => handoverWorkflowTask(ctx.user, input)),
+    delegate: protectedProcedure
+      .input(
+        z.object({
+          taskId: z.string().uuid(),
+          targetUserId: z.number().int().positive(),
+        })
+      )
+      .mutation(({ ctx, input }) => delegateWorkflowTask(ctx.user, input)),
+    addSigner: protectedProcedure
+      .input(
+        z.object({
+          taskId: z.string().uuid(),
+          targetUserId: z.number().int().positive(),
+          memberVersion: z.number().int().nonnegative(),
+        })
+      )
+      .mutation(({ ctx, input }) => addWorkflowTaskSigner(ctx.user, input)),
+    removeSigner: protectedProcedure
+      .input(
+        z.object({
+          taskId: z.string().uuid(),
+          memberTaskId: z.string().uuid(),
+          memberVersion: z.number().int().nonnegative(),
+        })
+      )
+      .mutation(({ ctx, input }) => removeWorkflowTaskSigner(ctx.user, input)),
     returnToPending: protectedProcedure
       .input(z.object({ taskId: z.string().uuid() }))
       .mutation(({ ctx, input }) =>

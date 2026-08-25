@@ -191,6 +191,27 @@ export default function ProcessWorkbench() {
     },
     onError: error => toast.error(error.message),
   });
+  const delegate = trpc.task.delegate.useMutation({
+    onSuccess: () => {
+      invalidate();
+      toast.success("任务已代理给指定处理人，已保留被代理主体审计。");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const addSigner = trpc.task.addSigner.useMutation({
+    onSuccess: () => {
+      invalidate();
+      toast.success("已加入新的审批人。");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const removeSigner = trpc.task.removeSigner.useMutation({
+    onSuccess: () => {
+      invalidate();
+      toast.success("已移除未处理的审批人。");
+    },
+    onError: error => toast.error(error.message),
+  });
   const returnToPending = trpc.task.returnToPending.useMutation({
     onSuccess: () => {
       invalidate();
@@ -233,6 +254,9 @@ export default function ProcessWorkbench() {
     complete.isPending ||
     execute.isPending ||
     handover.isPending ||
+    delegate.isPending ||
+    addSigner.isPending ||
+    removeSigner.isPending ||
     returnToPending.isPending ||
     batchClaim.isPending ||
     batchComplete.isPending;
@@ -472,6 +496,23 @@ export default function ProcessWorkbench() {
           }) => complete.mutate({ taskId: selectedTaskId, result })}
           onHandover={(targetUserId: number) =>
             handover.mutate({ taskId: selectedTaskId, targetUserId })
+          }
+          onDelegate={(targetUserId: number) =>
+            delegate.mutate({ taskId: selectedTaskId, targetUserId })
+          }
+          onAddSigner={(targetUserId: number, memberVersion: number) =>
+            addSigner.mutate({
+              taskId: selectedTaskId,
+              targetUserId,
+              memberVersion,
+            })
+          }
+          onRemoveSigner={(memberTaskId: string, memberVersion: number) =>
+            removeSigner.mutate({
+              taskId: selectedTaskId,
+              memberTaskId,
+              memberVersion,
+            })
           }
           onReturn={() => returnToPending.mutate({ taskId: selectedTaskId })}
         />
@@ -1013,9 +1054,13 @@ function TaskDrawer({
   onExecute,
   onComplete,
   onHandover,
+  onDelegate,
+  onAddSigner,
+  onRemoveSigner,
   onReturn,
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
+  const [removeMemberTaskId, setRemoveMemberTaskId] = useState("");
   const configuredOutcomes = useMemo(
     () => taskOutcomeOptions(task),
     [task?.outcomeHandlesJson]
@@ -1177,6 +1222,16 @@ function TaskDrawer({
                     指定处理人：{task.assignedName}
                   </span>
                 )}
+                {task.responsibleName && (
+                  <span className="text-xs text-slate-400">
+                    责任主体：{task.responsibleName}
+                  </span>
+                )}
+                {task.representedName && (
+                  <span className="text-xs text-indigo-500">
+                    代理关系：代表 {task.representedName} 办理
+                  </span>
+                )}
               </div>
             </div>
             {canManage && (
@@ -1185,7 +1240,7 @@ function TaskDrawer({
                   任务移交与回退
                 </p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  仅显示拥有该流程运行权限的内部用户。移交或退回不会推进流程，仍由服务端保留等待状态。
+                  仅显示拥有该流程运行权限的内部用户。移交变更责任人；代理同时保留被代理主体。两者都不会直接推进流程。
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <select
@@ -1211,7 +1266,81 @@ function TaskDrawer({
                     <UserRoundPlus size={14} />
                     移交
                   </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || !targetUserId}
+                    onClick={() => onDelegate(Number(targetUserId))}
+                  >
+                    <UsersRound size={14} />
+                    代理
+                  </Button>
                 </div>
+                {task.approvalGroupId && (
+                  <div className="mt-3 border-t border-blue-100 pt-3">
+                    <p className="text-xs font-semibold text-slate-600">
+                      加签与减签
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      成员变更使用任务组版本校验；已领取或已决定的成员不能减签。
+                    </p>
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || !targetUserId}
+                        onClick={() =>
+                          onAddSigner(
+                            Number(targetUserId),
+                            Number(task.memberVersion ?? 0)
+                          )
+                        }
+                      >
+                        <UserRoundPlus size={14} />
+                        加签
+                      </Button>
+                      <select
+                        aria-label="选择减签成员"
+                        value={removeMemberTaskId}
+                        onChange={event =>
+                          setRemoveMemberTaskId(event.target.value)
+                        }
+                        className="h-9 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-sm"
+                      >
+                        <option value="">选择未处理成员</option>
+                        {(task.approvalMembers ?? [])
+                          .filter(
+                            (member: any) =>
+                              member.id !== task.id &&
+                              member.status === "pending"
+                          )
+                          .map((member: any) => (
+                            <option key={member.id} value={member.id}>
+                              {member.assignedName ||
+                                member.assignedUsername ||
+                                member.assignedUserId}
+                            </option>
+                          ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || !removeMemberTaskId}
+                        onClick={() =>
+                          onRemoveSigner(
+                            removeMemberTaskId,
+                            Number(task.memberVersion ?? 0)
+                          )
+                        }
+                      >
+                        减签
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {task.status === "claimed" && (
                   <Button
                     type="button"
