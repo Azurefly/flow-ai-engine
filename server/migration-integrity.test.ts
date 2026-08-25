@@ -49,12 +49,27 @@ const workflowMilestoneMigration = readFileSync(
   new URL("../drizzle/0025_control_milestones.sql", import.meta.url),
   "utf8"
 );
+const workflowTaskScheduleMigration = readFileSync(
+  new URL("../drizzle/0026_durable_task_schedules.sql", import.meta.url),
+  "utf8"
+);
 const migrationJournal = readFileSync(
   new URL("../drizzle/meta/_journal.json", import.meta.url),
   "utf8"
 );
 
 describe("database migration integrity", () => {
+  it("persists idempotent human-task reminder and escalation schedules", () => {
+    expect(workflowTaskScheduleMigration).toContain(
+      "CREATE TABLE `workflow_task_schedule`"
+    );
+    expect(workflowTaskScheduleMigration).toContain(
+      "enum('reminder','due','escalation')"
+    );
+    expect(workflowTaskScheduleMigration).toContain(
+      "workflow_task_schedule_task_event_recipient_unique"
+    );
+  });
   it("persists idempotent control-flow milestones separately from business state", () => {
     expect(workflowMilestoneMigration).toContain("CREATE TABLE `workflow_milestone`");
     expect(workflowMilestoneMigration).toContain("workflow_milestone_run_node_unique");
@@ -65,12 +80,13 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-3).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-4).map(item => item.tag)).toEqual([
       "0023_project_service_endpoints",
       "0024_durable_workflow_waits",
       "0025_control_milestones",
+      "0026_durable_task_schedules",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(25);
+    expect(journal.entries.at(-1)?.idx).toBe(26);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain("CREATE TABLE `workflow_wait_subscription`");

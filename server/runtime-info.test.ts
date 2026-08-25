@@ -12,8 +12,8 @@ describe("runtime identity and readiness contract", () => {
   it("publishes stable build, migration, worker and capability fields without secrets", () => {
     const info = getRuntimeInfo();
     expect(info.migrationVersion).toBe(DATABASE_MIGRATION_VERSION);
-    expect(DATABASE_MIGRATION_VERSION).toBe("0025_control_milestones");
-    expect(DATABASE_MIGRATION_EPOCH).toBe(1787655600000);
+    expect(DATABASE_MIGRATION_VERSION).toBe("0026_durable_task_schedules");
+    expect(DATABASE_MIGRATION_EPOCH).toBe(1787659200000);
     expect(info.worker).toHaveProperty("started");
     expect(info.capabilities.map(item => item.id)).toEqual([
       "state-control-workflow",

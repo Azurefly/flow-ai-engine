@@ -751,6 +751,29 @@ export const workflowParticipantStates = mysqlTable(
   ]
 );
 
+/** Durable reminder, due and escalation events for human workflow tasks. */
+export const workflowTaskSchedules = mysqlTable(
+  "workflow_task_schedule",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    taskId: varchar("taskId", { length: 36 }).notNull().references(() => workflowTasks.id, { onDelete: "cascade" }),
+    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
+    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id, { onDelete: "cascade" }),
+    recipientUserId: int("recipientUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+    eventType: mysqlEnum("eventType", ["reminder", "due", "escalation"]).notNull(),
+    status: mysqlEnum("status", ["scheduled", "fired", "cancelled"]).default("scheduled").notNull(),
+    fireAt: timestamp("fireAt").notNull(),
+    payloadJson: json("payloadJson"),
+    requestId: varchar("requestId", { length: 100 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    firedAt: timestamp("firedAt"),
+  },
+  table => [
+    unique("workflow_task_schedule_task_event_recipient_unique").on(table.taskId, table.eventType, table.recipientUserId),
+    index("workflow_task_schedule_due_idx").on(table.status, table.fireAt),
+  ]
+);
+
 /** Durable control-flow markers. Milestones are auditable but never mutate business state. */
 export const workflowMilestones = mysqlTable(
   "workflow_milestone",

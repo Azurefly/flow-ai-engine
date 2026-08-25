@@ -2086,6 +2086,18 @@ export async function markWorkflowRunFailed(
       await connection.rollback();
       return false;
     }
+    await connection.query(
+      "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
+      [runId]
+    );
+    await connection.query(
+      "UPDATE workflow_task_schedule SET status='cancelled' WHERE runId=? AND status='scheduled'",
+      [runId]
+    );
+    await connection.query(
+      "UPDATE workflow_wait_subscription SET status='cancelled',triggeredAt=NOW() WHERE runId=? AND status='active'",
+      [runId]
+    );
     await createFailureAlerts(
       {
         workflowId: String(run.workflowId),
@@ -2155,6 +2167,10 @@ export async function controlWorkflowRun(input: {
     );
     await connection.query(
       "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
+      [input.runId]
+    );
+    await connection.query(
+      "UPDATE workflow_task_schedule SET status='cancelled' WHERE runId=? AND status='scheduled'",
       [input.runId]
     );
     await connection.query(
@@ -3034,6 +3050,14 @@ async function executeRunSegment(input: {
           0,
           Math.trunc(Number(config.dueAfterSeconds ?? 0) || 0)
         );
+        const reminderAfterSeconds = Math.max(
+          0,
+          Math.trunc(Number(config.reminderAfterSeconds ?? 0) || 0)
+        );
+        const escalationAfterSeconds = Math.max(
+          0,
+          Math.trunc(Number(config.escalationAfterSeconds ?? 0) || 0)
+        );
         const dueAt = dueAfterSeconds
           ? new Date(Date.now() + dueAfterSeconds * 1000)
           : null;
@@ -3123,7 +3147,9 @@ async function executeRunSegment(input: {
               JSON.stringify(outcomeContract),
               taskAssignment.assignedUserId,
               formSchemaVersion,
-              dueAt,
+              !sequentialSign || taskAssignment.approvalOrder === 0
+                ? dueAt
+                : null,
               JSON.stringify(nextNodeIds),
               String(
                 asRecord(input.context.runtime).requestId ??
@@ -3132,6 +3158,75 @@ async function executeRunSegment(input: {
               ) || null,
             ]
           );
+          if (!sequentialSign || taskAssignment.approvalOrder === 0) {
+            const taskRecipientUserIds = Array.from(
+              new Set(
+                [
+                  taskAssignment.assignedUserId,
+                  ...taskAssignment.candidateUserIds,
+                ]
+                  .map(Number)
+                  .filter(userId => Number.isInteger(userId) && userId > 0)
+              )
+            );
+            if (!taskRecipientUserIds.length)
+              taskRecipientUserIds.push(Number(input.workflow.ownerUserId));
+            const schedules: Array<{
+              eventType: "reminder" | "due" | "escalation";
+              seconds: number;
+              recipients: number[];
+            }> = [];
+            if (reminderAfterSeconds)
+              schedules.push({
+                eventType: "reminder",
+                seconds: reminderAfterSeconds,
+                recipients: taskRecipientUserIds,
+              });
+            if (dueAfterSeconds)
+              schedules.push({
+                eventType: "due",
+                seconds: dueAfterSeconds,
+                recipients: taskRecipientUserIds,
+              });
+            if (escalationAfterSeconds)
+              schedules.push({
+                eventType: "escalation",
+                seconds: escalationAfterSeconds,
+                recipients: Array.from(
+                  new Set([
+                    ...taskRecipientUserIds,
+                    Number(input.workflow.ownerUserId),
+                  ])
+                ),
+              });
+            for (const schedule of schedules)
+              for (const recipientUserId of schedule.recipients)
+                await db().query(
+                  `INSERT INTO workflow_task_schedule
+                    (id,taskId,runId,workflowId,recipientUserId,eventType,status,fireAt,payloadJson,requestId)
+                   VALUES (?,?,?,?,?,?,'scheduled',DATE_ADD(NOW(),INTERVAL ? SECOND),?,?)
+                   ON DUPLICATE KEY UPDATE id=id`,
+                  [
+                    randomUUID(),
+                    taskId,
+                    input.runId,
+                    input.workflow.id,
+                    recipientUserId,
+                    schedule.eventType,
+                    schedule.seconds,
+                    JSON.stringify({
+                      taskId,
+                      nodeId: node.id,
+                      operationName,
+                    }),
+                    String(
+                      asRecord(input.context.runtime).requestId ??
+                        currentRequestId() ??
+                        ""
+                    ) || null,
+                  ]
+                );
+          }
           for (const userId of taskAssignment.candidateUserIds) {
             const availableOperation = {
               taskId,
@@ -3373,6 +3468,10 @@ async function completeTaskAndEvaluateApprovalGroup(
       ]
     );
     if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
+    await connection.query(
+      "UPDATE workflow_task_schedule SET status='cancelled' WHERE taskId=? AND status='scheduled'",
+      [input.taskId]
+    );
     const progress = evaluateApprovalResults({
       totalApprovers: 1,
       requiredApprovals: 1,
@@ -3419,6 +3518,10 @@ async function completeTaskAndEvaluateApprovalGroup(
     "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
     [input.completedBy.id, JSON.stringify(result), input.taskId]
   );
+  await connection.query(
+    "UPDATE workflow_task_schedule SET status='cancelled' WHERE taskId=? AND status='scheduled'",
+    [input.taskId]
+  );
   const requiredApprovals = Number(group.requiredApprovals);
   const totalApprovers = Number(group.totalApprovers);
   const [members] = await connection.query<mysql.RowDataPacket[]>(
@@ -3443,11 +3546,79 @@ async function completeTaskAndEvaluateApprovalGroup(
   if (progress.outcome === "waiting") {
     if (String(task.signMode) === "sequentialSignFor") {
       const [nextTasks] = await connection.query<mysql.RowDataPacket[]>(
-        "SELECT id,assignedUserId,operationName FROM workflow_task WHERE approvalGroupId=? AND status='pending' ORDER BY approvalOrder,id LIMIT 1",
+        "SELECT id,workflowId,runId,nodeId,assignedUserId,operationName,payloadJson,requestId FROM workflow_task WHERE approvalGroupId=? AND status='pending' ORDER BY approvalOrder,id LIMIT 1",
         [task.approvalGroupId]
       );
       const next = nextTasks[0];
       if (next) {
+        const nextConfig = asRecord(asRecord(readJson(next.payloadJson)).config);
+        const nextDueAfterSeconds = Math.max(
+          0,
+          Math.trunc(Number(nextConfig.dueAfterSeconds ?? 0) || 0)
+        );
+        const nextReminderAfterSeconds = Math.max(
+          0,
+          Math.trunc(Number(nextConfig.reminderAfterSeconds ?? 0) || 0)
+        );
+        const nextEscalationAfterSeconds = Math.max(
+          0,
+          Math.trunc(Number(nextConfig.escalationAfterSeconds ?? 0) || 0)
+        );
+        if (nextDueAfterSeconds)
+          await connection.query(
+            "UPDATE workflow_task SET dueAt=DATE_ADD(NOW(),INTERVAL ? SECOND) WHERE id=? AND status='pending'",
+            [nextDueAfterSeconds, next.id]
+          );
+        const nextRecipientUserId = Number(next.assignedUserId);
+        const workflowOwnerUserId = Number(task.ownerUserId);
+        const nextSchedules: Array<{
+          eventType: "reminder" | "due" | "escalation";
+          seconds: number;
+          recipients: number[];
+        }> = [];
+        if (nextReminderAfterSeconds)
+          nextSchedules.push({
+            eventType: "reminder",
+            seconds: nextReminderAfterSeconds,
+            recipients: [nextRecipientUserId],
+          });
+        if (nextDueAfterSeconds)
+          nextSchedules.push({
+            eventType: "due",
+            seconds: nextDueAfterSeconds,
+            recipients: [nextRecipientUserId],
+          });
+        if (nextEscalationAfterSeconds)
+          nextSchedules.push({
+            eventType: "escalation",
+            seconds: nextEscalationAfterSeconds,
+            recipients: Array.from(
+              new Set([nextRecipientUserId, workflowOwnerUserId])
+            ).filter(userId => Number.isInteger(userId) && userId > 0),
+          });
+        for (const schedule of nextSchedules)
+          for (const recipientUserId of schedule.recipients)
+            await connection.query(
+              `INSERT INTO workflow_task_schedule
+                (id,taskId,runId,workflowId,recipientUserId,eventType,status,fireAt,payloadJson,requestId)
+               VALUES (?,?,?,?,?,?,'scheduled',DATE_ADD(NOW(),INTERVAL ? SECOND),?,?)
+               ON DUPLICATE KEY UPDATE id=id`,
+              [
+                randomUUID(),
+                next.id,
+                next.runId,
+                next.workflowId,
+                recipientUserId,
+                schedule.eventType,
+                schedule.seconds,
+                JSON.stringify({
+                  taskId: next.id,
+                  nodeId: next.nodeId,
+                  operationName: next.operationName,
+                }),
+                next.requestId ?? null,
+              ]
+            );
         await connection.query(
           "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?",
           [
@@ -3487,6 +3658,10 @@ async function completeTaskAndEvaluateApprovalGroup(
   );
   await connection.query(
     "UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')",
+    [task.approvalGroupId]
+  );
+  await connection.query(
+    "UPDATE workflow_task_schedule SET status='cancelled' WHERE taskId IN (SELECT id FROM workflow_task WHERE approvalGroupId=?) AND status='scheduled'",
     [task.approvalGroupId]
   );
   return {
@@ -4093,6 +4268,80 @@ export async function listRunAlerts(user: WorkflowUser) {
     [user.id]
   );
   return rows;
+}
+
+export async function reconcileDueWorkflowTaskSchedules(limit = 100) {
+  await db().query(
+    `UPDATE workflow_task_schedule s
+       JOIN workflow_task t ON t.id=s.taskId
+       JOIN workflow_run r ON r.id=s.runId
+        SET s.status='cancelled'
+      WHERE s.status='scheduled'
+        AND (t.status IN ('completed','cancelled') OR r.status NOT IN ('running','waiting'))`
+  );
+  let fired = 0;
+  while (fired < Math.max(1, Math.min(limit, 500))) {
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<mysql.RowDataPacket[]>(
+        `SELECT s.*,t.operationName,t.nodeName,t.dueAt,w.name AS workflowName
+           FROM workflow_task_schedule s
+           JOIN workflow_task t ON t.id=s.taskId
+           JOIN workflow w ON w.id=s.workflowId
+           JOIN workflow_run r ON r.id=s.runId
+          WHERE s.status='scheduled' AND s.fireAt<=NOW()
+            AND t.status IN ('pending','claimed')
+            AND r.status IN ('running','waiting')
+          ORDER BY s.fireAt,s.createdAt
+          LIMIT 1 FOR UPDATE SKIP LOCKED`
+      );
+      const schedule = rows[0];
+      if (!schedule) {
+        await connection.commit();
+        break;
+      }
+      const eventType = String(schedule.eventType);
+      const label =
+        eventType === "reminder"
+          ? "办理提醒"
+          : eventType === "due"
+            ? "任务已到期"
+            : "任务升级催办";
+      await connection.query(
+        "INSERT INTO workflow_run_alert (id,workflowId,runId,recipientUserId,severity,summary,detailsJson) VALUES (?,?,?,?,?,?,?)",
+        [
+          randomUUID(),
+          schedule.workflowId,
+          schedule.runId,
+          schedule.recipientUserId,
+          eventType === "escalation" ? "critical" : "warning",
+          `${label}：${schedule.operationName || schedule.nodeName}`.slice(0, 320),
+          JSON.stringify({
+            eventType,
+            taskId: schedule.taskId,
+            workflowName: schedule.workflowName,
+            dueAt: schedule.dueAt ?? null,
+            payload: readJson(schedule.payloadJson),
+          }),
+        ]
+      );
+      const [updated] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE workflow_task_schedule SET status='fired',firedAt=NOW() WHERE id=? AND status='scheduled'",
+        [schedule.id]
+      );
+      if (!updated.affectedRows)
+        throw new Error("人工任务提醒计划已被其他 Worker 处理。");
+      await connection.commit();
+      fired += 1;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+  return fired;
 }
 
 export async function markRunAlertRead(alertId: string, user: WorkflowUser) {

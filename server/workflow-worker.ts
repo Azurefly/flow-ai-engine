@@ -4,6 +4,7 @@ import {
   executePreparedWorkflowRun,
   markWorkflowRunFailed,
   reconcileDueWorkflowWaits,
+  reconcileDueWorkflowTaskSchedules,
   reconcileWorkflowContinuations,
   submitWorkflowRun as persistWorkflowRun,
   type WorkflowCheckpoint,
@@ -407,11 +408,17 @@ export async function runWorkflowWorkerOnce() {
   try {
     const outboxProcessed = await dispatchWorkflowOutboxOnce();
     const waitsTriggered = await reconcileDueWorkflowWaits();
+    const taskSchedulesFired = await reconcileDueWorkflowTaskSchedules();
     await reconcileWorkflowContinuations();
     const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
     const job = await claimNextJob();
     if (!job)
-      return outboxProcessed || waitsTriggered > 0 || terminalJobsReconciled > 0;
+      return (
+        outboxProcessed ||
+        waitsTriggered > 0 ||
+        taskSchedulesFired > 0 ||
+        terminalJobsReconciled > 0
+      );
     await processJob(job);
     return true;
   } finally {
