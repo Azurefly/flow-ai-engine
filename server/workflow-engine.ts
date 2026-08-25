@@ -405,6 +405,7 @@ export type WorkflowRunDetail = {
   workflowId: string;
   nodeRuns: mysql.RowDataPacket[];
   stateTransitions: mysql.RowDataPacket[];
+  milestones: mysql.RowDataPacket[];
   [key: string]: unknown;
 };
 export const WORKFLOW_RUN_STATUSES = [
@@ -1447,6 +1448,22 @@ async function executeNode(
           ),
           stateColor: resolveTemplates(config.stateColor, context),
           flowStatus: resolveTemplates(config.flowStatus, context),
+        },
+      };
+    case "milestone":
+      return {
+        output: {
+          milestoneCode: String(
+            resolveTemplates(config.milestoneCode, context)
+          ),
+          displayName: String(
+            resolveTemplates(config.displayName ?? node.name, context)
+          ),
+          category: String(
+            resolveTemplates(config.category ?? "business", context)
+          ),
+          details: resolveTemplates(asRecord(config.details), context),
+          occurredAt: new Date().toISOString(),
         },
       };
     case "form": {
@@ -2776,6 +2793,39 @@ async function persistStateNode(input: {
   addRuntimeParticipants(input.context, participantUserIds);
 }
 
+async function persistMilestoneNode(input: {
+  runId: string;
+  workflowId: string;
+  node: WorkflowNode;
+  context: JsonRecord;
+  output: unknown;
+}) {
+  const output = asRecord(input.output);
+  const runtime = asRecord(input.context.runtime);
+  const actorUserId = Number(
+    runtime.lastActorUserId || runtime.triggeredByUserId
+  );
+  await db().query(
+    `INSERT INTO workflow_milestone
+      (id,runId,workflowId,nodeId,milestoneCode,displayName,category,detailsJson,actorUserId,requestId,occurredAt)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE id=id`,
+    [
+      randomUUID(),
+      input.runId,
+      input.workflowId,
+      input.node.id,
+      String(output.milestoneCode),
+      String(output.displayName),
+      String(output.category || "business"),
+      JSON.stringify(asRecord(output.details)),
+      Number.isInteger(actorUserId) && actorUserId > 0 ? actorUserId : null,
+      String(runtime.requestId ?? currentRequestId() ?? "") || null,
+      output.occurredAt ? new Date(String(output.occurredAt)) : new Date(),
+    ]
+  );
+}
+
 async function executeRunSegment(input: {
   runId: string;
   workflow: PersistedWorkflow;
@@ -3197,6 +3247,14 @@ async function executeRunSegment(input: {
           workflowId: input.workflow.id,
           node,
           context: input.context,
+        });
+      if (node.type === "milestone")
+        await persistMilestoneNode({
+          runId: input.runId,
+          workflowId: input.workflow.id,
+          node,
+          context: input.context,
+          output: result.output,
         });
       if (node.type === "end") {
         reachedEnd = true;
@@ -4062,11 +4120,16 @@ export async function getWorkflowRun(
     "SELECT * FROM workflow_state_transition WHERE runId=? ORDER BY sequenceNo ASC",
     [runId]
   );
+  const [milestoneRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT * FROM workflow_milestone WHERE runId=? ORDER BY occurredAt ASC,id ASC",
+    [runId]
+  );
   return {
     ...run,
     workflowId: String(run.workflowId),
     nodeRuns: nodeRows,
     stateTransitions: transitionRows,
+    milestones: milestoneRows,
   };
 }
 

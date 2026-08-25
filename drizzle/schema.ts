@@ -751,6 +751,34 @@ export const workflowParticipantStates = mysqlTable(
   ]
 );
 
+/** Durable control-flow markers. Milestones are auditable but never mutate business state. */
+export const workflowMilestones = mysqlTable(
+  "workflow_milestone",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    workflowId: varchar("workflowId", { length: 36 })
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    milestoneCode: varchar("milestoneCode", { length: 96 }).notNull(),
+    displayName: varchar("displayName", { length: 160 }).notNull(),
+    category: mysqlEnum("category", ["business", "integration", "quality", "custom"])
+      .default("business")
+      .notNull(),
+    detailsJson: json("detailsJson"),
+    actorUserId: int("actorUserId"),
+    requestId: varchar("requestId", { length: 100 }),
+    occurredAt: timestamp("occurredAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("workflow_milestone_run_node_unique").on(table.runId, table.nodeId),
+    index("workflow_milestone_workflow_time_idx").on(table.workflowId, table.occurredAt),
+  ]
+);
+
 /** Durable timer/message subscriptions resumed through idempotent workflow jobs. */
 export const workflowWaitSubscriptions = mysqlTable(
   "workflow_wait_subscription",

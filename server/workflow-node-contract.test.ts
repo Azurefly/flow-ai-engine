@@ -54,6 +54,10 @@ describe("原始节点配置统一契约", () => {
       restAttributeMap: { valid: false, suspend: true, async: false },
     });
     expect(createDefaultNodeConfig("form")).toMatchObject({ fields: [] });
+    expect(createDefaultNodeConfig("milestone")).toMatchObject({
+      milestoneCode: "MILESTONE",
+      category: "business",
+    });
     expect(createDefaultNodeConfig("sql")).toMatchObject({
       datasourceId: "",
       statement: expect.stringContaining("SELECT"),

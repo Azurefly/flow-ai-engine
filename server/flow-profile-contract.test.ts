@@ -62,8 +62,45 @@ describe("flow profile contract", () => {
     expect(isRuntimeKindAllowed("data", "workflow")).toBe(false);
     expect(isFlowNodeAllowed("state", "state")).toBe(true);
     expect(isFlowNodeAllowed("control", "state")).toBe(false);
+    expect(isFlowNodeAllowed("control", "milestone")).toBe(true);
+    expect(isFlowNodeAllowed("state", "milestone")).toBe(false);
     expect(isFlowNodeAllowed("data", "http")).toBe(false);
     expect(isFlowNodeAllowed("data", "source")).toBe(true);
+  });
+
+  it("keeps control milestones distinct and rejects duplicate codes", () => {
+    const definition = withMiddle("milestone", {
+      milestoneCode: "SYNCED",
+      displayName: "同步完成",
+      category: "integration",
+      details: { target: "crm" },
+    });
+    expect(
+      analyzeWorkflowDefinition(definition, {
+        flowType: "control",
+        executable: true,
+      }).ok
+    ).toBe(true);
+    definition.nodes.splice(2, 0, {
+      id: "milestone-2",
+      type: "milestone",
+      name: "重复里程碑",
+      position: { x: 300, y: 0 },
+      config: {
+        milestoneCode: "SYNCED",
+        displayName: "重复",
+        category: "business",
+      },
+    });
+    const duplicate = analyzeWorkflowDefinition(definition, {
+      flowType: "control",
+      executable: true,
+    });
+    expect(duplicate.ok).toBe(false);
+    if (!duplicate.ok)
+      expect(duplicate.diagnostics.map(item => item.code)).toContain(
+        "WF_MILESTONE_CODE_DUPLICATE"
+      );
   });
 
   it.each([

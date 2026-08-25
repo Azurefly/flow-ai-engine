@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Clock3, Loader2 } from "lucide-react";
+import { ChevronDown, Clock3, Flag, Loader2 } from "lucide-react";
 
 function parse(value: unknown) {
   if (typeof value !== "string") return value;
@@ -130,6 +130,49 @@ export function RunDetailContent({ run }: { run: any }) {
         />
         <Summary label="状态版本" value={String(run.stateVersion ?? 0)} />
       </section>
+      {run.flowType === "control" && (
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">控制流程里程碑</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                里程碑是不可变执行标记，不会改变业务状态或参与人权限。
+              </p>
+            </div>
+            <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[10px] text-teal-700">
+              {(run.milestones ?? []).length} 个
+            </span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {(run.milestones ?? []).map((milestone: any) => (
+              <article
+                key={milestone.id}
+                className="min-w-0 rounded-lg border border-teal-100 bg-teal-50/50 p-3"
+              >
+                <div className="flex items-start gap-2">
+                  <Flag size={14} className="mt-0.5 shrink-0 text-teal-700" />
+                  <div className="min-w-0">
+                    <p className="break-words text-sm font-semibold text-slate-800">
+                      {milestone.displayName}
+                    </p>
+                    <p className="mt-0.5 break-all font-mono text-[10px] text-teal-700">
+                      {milestone.milestoneCode} · {milestone.category}
+                    </p>
+                    <p className="mt-1 text-[10px] text-slate-500">
+                      {formatTime(milestone.occurredAt)}
+                    </p>
+                  </div>
+                </div>
+              </article>
+            ))}
+            {!(run.milestones ?? []).length && (
+              <p className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 sm:col-span-2 xl:col-span-3">
+                当前控制流程尚未产生里程碑。
+              </p>
+            )}
+          </div>
+        </section>
+      )}
       {run.flowType === "state" && (
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

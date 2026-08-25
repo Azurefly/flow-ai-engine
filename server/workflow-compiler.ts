@@ -68,7 +68,8 @@ export type WorkflowExecutionPlan = {
     | "1.2.0"
     | "1.3.0"
     | "1.4.0"
-    | "1.5.0";
+    | "1.5.0"
+    | "1.6.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -515,6 +516,28 @@ export function analyzeWorkflowDefinition(
           nodeId: startId,
         })
       );
+
+    if (options.flowType === "control") {
+      const milestoneCodes = new Set<string>();
+      for (const milestone of validNodes.filter(
+        node => node.type === "milestone"
+      )) {
+        const code = String(milestone.config.milestoneCode ?? "").trim();
+        if (code && milestoneCodes.has(code))
+          diagnostics.push(
+            diagnostic(
+              "WF_MILESTONE_CODE_DUPLICATE",
+              `里程碑代号不可重复：${code}。`,
+              {
+                kind: "node",
+                nodeId: milestone.id,
+                field: "config.milestoneCode",
+              }
+            )
+          );
+        milestoneCodes.add(code);
+      }
+    }
 
     if (options.flowType === "state") {
       const stateNodes = validNodes.filter(node => node.type === "state");
@@ -1121,7 +1144,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.5.0",
+    compilerVersion: "1.6.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,

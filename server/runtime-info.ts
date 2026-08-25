@@ -3,8 +3,8 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 
-export const DATABASE_MIGRATION_VERSION = "0024_durable_workflow_waits";
-export const DATABASE_MIGRATION_EPOCH = 1787644800000;
+export const DATABASE_MIGRATION_VERSION = "0025_control_milestones";
+export const DATABASE_MIGRATION_EPOCH = 1787655600000;
 
 let pool: mysql.Pool | undefined;
 
@@ -72,7 +72,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -94,14 +94,15 @@ export async function checkReadiness() {
           (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_sequence_unique')
           OR (table_name='project_service_endpoint' AND index_name='project_service_endpoint_project_ref_unique')
           OR (table_name='workflow_wait_subscription' AND index_name='workflow_wait_subscription_run_node_unique')
+          OR (table_name='workflow_milestone' AND index_name='workflow_milestone_run_node_unique')
         )`
     );
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 6 &&
+      Number(tableRows[0]?.count ?? 0) === 7 &&
       Number(columnRows[0]?.count ?? 0) === 21 &&
-      Number(indexRows[0]?.count ?? 0) === 5;
+      Number(indexRows[0]?.count ?? 0) === 6;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {

@@ -19,6 +19,7 @@ export const FLOW_NODE_TYPES = [
   "form",
   "wait",
   "message_catch",
+  "milestone",
   "sql",
   "source",
   "table",
@@ -89,6 +90,7 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "sink",
     "output",
     "end",
+    "milestone",
   ],
   state: [
     "operate",
@@ -275,8 +277,8 @@ export function canConnectFlowNodeTypes(
   target: FlowNodeType
 ) {
   if (source === "end" || target === "start") return false;
-  if (["wait", "message_catch"].includes(source)) return true;
-  if (["wait", "message_catch"].includes(target)) return true;
+  if (["wait", "message_catch", "milestone"].includes(source)) return true;
+  if (["wait", "message_catch", "milestone"].includes(target)) return true;
   const allowed = FLOW_NODE_ALLOWED_TARGETS[source];
   return !allowed || allowed.includes(target);
 }
@@ -498,7 +500,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     label: "状态节点",
     description: "记录业务或系统状态",
     configEvidence: "reference-confirmed",
-    flowTypes: ["state", "control"],
+    flowTypes: ["state"],
     defaultConfig: {
       nodeDh: "",
       jdmc: "业务状态",
@@ -964,6 +966,53 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         help: "支持安全模板；消息触发时必须与运行实例中的固化值完全一致。",
         kind: "template",
         required: true,
+      },
+    ],
+  },
+  milestone: {
+    type: "milestone",
+    label: "里程碑",
+    description: "记录控制流程中的业务可读执行标记，但不改变业务状态",
+    flowTypes: ["control"],
+    defaultConfig: {
+      milestoneCode: "MILESTONE",
+      displayName: "流程里程碑",
+      category: "business",
+      details: {},
+    },
+    fields: [
+      {
+        key: "milestoneCode",
+        label: "里程碑代号",
+        help: "控制流程内唯一的稳定代号，仅用于审计和监控，不作为业务状态。",
+        kind: "text",
+        required: true,
+      },
+      {
+        key: "displayName",
+        label: "显示名称",
+        help: "运行详情中展示的里程碑名称。",
+        kind: "text",
+        required: true,
+      },
+      {
+        key: "category",
+        label: "分类",
+        help: "用于筛选里程碑。",
+        kind: "select",
+        options: [
+          { value: "business", label: "业务" },
+          { value: "integration", label: "集成" },
+          { value: "quality", label: "质量" },
+          { value: "custom", label: "自定义" },
+        ],
+        required: true,
+      },
+      {
+        key: "details",
+        label: "详情",
+        help: templateHelp,
+        kind: "json",
       },
     ],
   },
@@ -1756,6 +1805,20 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       if (!/^[A-Za-z0-9._-]{1,128}$/.test(String(config.messageName)))
         throw new Error("消息等待节点名称格式无效。");
       assertString(config.correlationKey, "消息等待节点必须配置相关键。");
+      break;
+    case "milestone":
+      assertString(config.milestoneCode, "里程碑节点必须配置代号。");
+      if (!/^[A-Za-z][A-Za-z0-9._-]{0,95}$/.test(String(config.milestoneCode)))
+        throw new Error("里程碑节点代号格式无效。");
+      assertString(config.displayName, "里程碑节点必须配置显示名称。");
+      if (
+        !["business", "integration", "quality", "custom"].includes(
+          String(config.category)
+        )
+      )
+        throw new Error("里程碑节点分类无效。");
+      if (config.details !== undefined)
+        assertObject(config.details, "里程碑节点详情必须是 JSON 对象。");
       break;
     case "router": {
       if (!Array.isArray(config.routes))

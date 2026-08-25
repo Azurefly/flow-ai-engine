@@ -45,8 +45,33 @@ const workflowWaitMigration = readFileSync(
   new URL("../drizzle/0024_durable_workflow_waits.sql", import.meta.url),
   "utf8"
 );
+const workflowMilestoneMigration = readFileSync(
+  new URL("../drizzle/0025_control_milestones.sql", import.meta.url),
+  "utf8"
+);
+const migrationJournal = readFileSync(
+  new URL("../drizzle/meta/_journal.json", import.meta.url),
+  "utf8"
+);
 
 describe("database migration integrity", () => {
+  it("persists idempotent control-flow milestones separately from business state", () => {
+    expect(workflowMilestoneMigration).toContain("CREATE TABLE `workflow_milestone`");
+    expect(workflowMilestoneMigration).toContain("workflow_milestone_run_node_unique");
+    expect(workflowMilestoneMigration).toContain("`milestoneCode` varchar(96) NOT NULL");
+    expect(workflowMilestoneMigration).not.toContain("currentStateCode");
+  });
+  it("registers every post-state migration in the standard Drizzle migration chain", () => {
+    const journal = JSON.parse(migrationJournal) as {
+      entries: Array<{ idx: number; tag: string }>;
+    };
+    expect(journal.entries.slice(-3).map(item => item.tag)).toEqual([
+      "0023_project_service_endpoints",
+      "0024_durable_workflow_waits",
+      "0025_control_milestones",
+    ]);
+    expect(journal.entries.at(-1)?.idx).toBe(25);
+  });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain("CREATE TABLE `workflow_wait_subscription`");
     expect(workflowWaitMigration).toContain("enum('timer','message')");
