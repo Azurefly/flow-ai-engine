@@ -37,8 +37,19 @@ const stateOutcomeMigration = readFileSync(
   new URL("../drizzle/0022_state_outcome_facts.sql", import.meta.url),
   "utf8"
 );
+const serviceEndpointMigration = readFileSync(
+  new URL("../drizzle/0023_project_service_endpoints.sql", import.meta.url),
+  "utf8"
+);
 
 describe("database migration integrity", () => {
+  it("creates project-scoped endpoint references without plaintext secret columns", () => {
+    expect(serviceEndpointMigration).toContain("CREATE TABLE `project_service_endpoint`");
+    expect(serviceEndpointMigration).toContain("`allowedHostsJson` json NOT NULL");
+    expect(serviceEndpointMigration).toContain("`secretRef` varchar(255)");
+    expect(serviceEndpointMigration).toContain("project_service_endpoint_project_ref_unique");
+    expect(serviceEndpointMigration).not.toMatch(/`(secretValue|password|apiKey)`/i);
+  });
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
     const statements = scheduleBucketMigration
       .split("--> statement-breakpoint")

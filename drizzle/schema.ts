@@ -484,6 +484,43 @@ export const workflowRunJobs = mysqlTable(
   ]
 );
 
+/** Project allowlisted outbound endpoints. Secret values remain external and are referenced only. */
+export const projectServiceEndpoints = mysqlTable(
+  "project_service_endpoint",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 })
+      .notNull()
+      .references(() => flowProjects.id),
+    refCode: varchar("refCode", { length: 64 }).notNull(),
+    name: varchar("name", { length: 160 }).notNull(),
+    baseUrl: varchar("baseUrl", { length: 2048 }).notNull(),
+    allowedHostsJson: json("allowedHostsJson").notNull(),
+    secretRef: varchar("secretRef", { length: 255 }),
+    authHeaderName: varchar("authHeaderName", { length: 128 }),
+    authScheme: varchar("authScheme", { length: 32 }),
+    status: mysqlEnum("status", ["active", "disabled"])
+      .default("active")
+      .notNull(),
+    createdByUserId: int("createdByUserId")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  },
+  table => [
+    unique("project_service_endpoint_project_ref_unique").on(
+      table.projectId,
+      table.refCode
+    ),
+    index("project_service_endpoint_project_status_idx").on(
+      table.projectId,
+      table.status,
+      table.updatedAt
+    ),
+  ]
+);
+
 /** Durable side effects emitted by workflow state changes. Dispatch is leased and retryable. */
 export const workflowOutboxEvents = mysqlTable(
   "workflow_outbox_event",

@@ -1086,6 +1086,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).not.toContain("NEBULA INSPIRED · V3");
     expect(canvasSource).toContain('data-aiflow-workflow-canvas=""');
     expect(projectWorkspaceSource).toContain('data-aiflow-business-center=""');
+    expect(projectWorkspaceSource).toContain('data-project-service-endpoints=""');
+    expect(projectWorkspaceSource).toContain("trpc.project.serviceEndpoints.useQuery");
+    expect(projectWorkspaceSource).toContain("SecretRef 只引用运行环境密钥");
     expect(warehouseSource).toContain('data-aiflow-warehouse=""');
     expect(styleSource).toContain('content: "AI FLOW GRAPH"');
     expect(styleSource).toContain("[data-aiflow-business-center]");

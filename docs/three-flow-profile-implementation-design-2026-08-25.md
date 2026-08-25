@@ -1968,7 +1968,7 @@ pnpm test:integration:provider
 ### P1：控制流程
 
 - [x] **3F-P1-020** REST/HTTP/METHOD 已编译为统一 HTTP ServiceTask 计划，执行计划固化 effect、幂等策略、重试分类与超时，运行时统一消费该映射。
-- [ ] **3F-P1-021** EndpointRef、SecretRef 和项目域名白名单。
+- [x] **3F-P1-021** 已增加项目级 EndpointRef 目录、域名允许列表和外部 SecretRef；项目流程发布/运行均禁止绕过目录，密钥值不进入数据库、定义、执行计划或审计。
 - [ ] **3F-P1-022** 服务任务分类重试、熔断和并发限制。
 - [ ] **3F-P1-023** 写操作幂等/补偿发布门禁。
 - [ ] **3F-P1-024** Wait 和 Message Catch 持久化。

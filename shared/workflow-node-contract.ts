@@ -333,6 +333,8 @@ const referenceHttpDefaultConfig = {
   },
   restScriptCode: "",
   endpoint: "",
+  endpointRef: "",
+  secretRef: "",
   method: "POST",
   headers: {},
   body: {},
@@ -366,6 +368,18 @@ const referenceHttpFields: NodeField[] = [
       value,
       label: value,
     })),
+  },
+  {
+    key: "endpointRef",
+    label: "项目 EndpointRef",
+    help: "项目流程必须引用项目服务端点目录；配置后接口地址只能填写相对路径。",
+    kind: "text",
+  },
+  {
+    key: "secretRef",
+    label: "SecretRef",
+    help: "仅保存外部密钥引用，不保存密钥值；必须与项目端点登记的引用一致。",
+    kind: "text",
   },
   {
     key: "restApi",
@@ -1136,11 +1150,25 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     defaultConfig: {
       method: "GET",
       url: "",
+      endpointRef: "",
+      secretRef: "",
       headers: {},
       body: {},
       timeout: 15000,
     },
     fields: [
+      {
+        key: "endpointRef",
+        label: "项目 EndpointRef",
+        help: "项目流程必须引用项目服务端点目录；配置后 URL 只能填写相对路径。",
+        kind: "text",
+      },
+      {
+        key: "secretRef",
+        label: "SecretRef",
+        help: "仅保存外部密钥引用，不保存密钥值；必须与项目端点登记的引用一致。",
+        kind: "text",
+      },
       {
         key: "url",
         label: "请求地址",
@@ -1663,6 +1691,30 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           : firstNonBlank(config.restApi, config.endpoint, config.url),
         `${referenceType} 节点必须配置请求地址。`
       );
+      if (
+        config.endpointRef !== undefined &&
+        config.endpointRef !== "" &&
+        !/^[A-Z][A-Z0-9_]{1,63}$/.test(String(config.endpointRef))
+      )
+        throw new Error(`${referenceType} 节点 EndpointRef 格式无效。`);
+      if (
+        config.secretRef !== undefined &&
+        config.secretRef !== "" &&
+        !/^env:FLOW_SECRET_[A-Z0-9_]{2,128}$/.test(String(config.secretRef))
+      )
+        throw new Error(`${referenceType} 节点 SecretRef 格式无效。`);
+      const configuredUrl = String(
+        type === "http"
+          ? config.url
+          : firstNonBlank(config.restApi, config.endpoint, config.url)
+      );
+      if (
+        config.endpointRef &&
+        /^[a-z][a-z0-9+.-]*:/i.test(configuredUrl)
+      )
+        throw new Error(
+          `${referenceType} 节点使用 EndpointRef 时只能配置相对路径。`
+        );
       const method =
         type === "http"
           ? config.method

@@ -12,7 +12,7 @@ describe("runtime identity and readiness contract", () => {
   it("publishes stable build, migration, worker and capability fields without secrets", () => {
     const info = getRuntimeInfo();
     expect(info.migrationVersion).toBe(DATABASE_MIGRATION_VERSION);
-    expect(DATABASE_MIGRATION_VERSION).toBe("0022_state_outcome_facts");
+    expect(DATABASE_MIGRATION_VERSION).toBe("0023_project_service_endpoints");
     expect(DATABASE_MIGRATION_EPOCH).toBe(1787644800000);
     expect(info.worker).toHaveProperty("started");
     expect(info.capabilities.map(item => item.id)).toEqual([

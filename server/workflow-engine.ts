@@ -27,6 +27,10 @@ import {
 } from "./workflow-compiler";
 import { compileHttpServiceTask } from "@shared/service-task-contract";
 import {
+  resolveExternalSecret,
+  resolveProjectServiceEndpoint,
+} from "./service-endpoint-service";
+import {
   resolveAutoRelatedParticipantUserIds,
   resolveOperateAssignees,
   resolveWorkflowUserRoleKeys,
@@ -715,6 +719,43 @@ export function serviceTaskPlanToRuntimeConfig(
   };
 }
 
+async function resolveServiceTaskRuntimeConfig(
+  nodeType: "http" | "rest" | "method",
+  config: JsonRecord,
+  projectId?: string
+) {
+  const plan = compileHttpServiceTask(nodeType, config);
+  if (!plan) throw new Error("节点无法编译为 HTTP ServiceTask。");
+  const runtimeConfig = serviceTaskPlanToRuntimeConfig(nodeType, config);
+  if (!projectId) {
+    if (plan.endpointRef || plan.secretRef)
+      throw new Error("非项目流程不能引用项目 EndpointRef 或 SecretRef。");
+    return runtimeConfig;
+  }
+  if (!plan.endpointRef)
+    throw new Error("项目流程服务任务缺少 EndpointRef，已拒绝直接网络调用。");
+  const endpoint = await resolveProjectServiceEndpoint(projectId, plan.endpointRef);
+  if (plan.secretRef && plan.secretRef !== endpoint.secretRef)
+    throw new Error("节点 SecretRef 与项目 EndpointRef 登记的密钥引用不一致。");
+  const relativePath = String(plan.urlTemplate || ".").trim();
+  if (/^[a-z][a-z0-9+.-]*:/i.test(relativePath) || relativePath.startsWith("//"))
+    throw new Error("EndpointRef 服务任务只允许相对路径。");
+  const resolvedUrl = new URL(relativePath || ".", endpoint.baseUrl);
+  if (!endpoint.allowedHosts.includes(resolvedUrl.hostname.toLowerCase()))
+    throw new Error("服务任务目标域名不在项目 Endpoint 允许列表中。");
+  const headers = asRecord(runtimeConfig.headers);
+  if (endpoint.secretRef) {
+    const secret = resolveExternalSecret(endpoint.secretRef);
+    const headerName = endpoint.authHeaderName || "Authorization";
+    if (Object.keys(headers).some(key => key.toLowerCase() === headerName.toLowerCase()))
+      throw new Error("节点请求头不能覆盖 EndpointRef 管理的认证请求头。");
+    headers[headerName] = endpoint.authScheme
+      ? `${endpoint.authScheme} ${secret}`
+      : secret;
+  }
+  return { ...runtimeConfig, url: resolvedUrl.toString(), headers };
+}
+
 async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   const resolved = asRecord(resolveTemplates(config, context));
   const catalog = await listLLMModels();
@@ -1017,7 +1058,8 @@ async function executeNode(
   node: WorkflowNode,
   context: JsonRecord,
   allowSubflow = true,
-  subflowOwnerUserId?: number
+  subflowOwnerUserId?: number,
+  projectId?: string
 ) {
   const config = asRecord(node.config);
   switch (node.type) {
@@ -1098,7 +1140,7 @@ async function executeNode(
     case "method":
       return {
         output: await executeHttpNode(
-          serviceTaskPlanToRuntimeConfig(node.type, config),
+          await resolveServiceTaskRuntimeConfig(node.type, config, projectId),
           context
         ),
       };
@@ -1134,7 +1176,7 @@ async function executeNode(
     case "http":
       return {
         output: await executeHttpNode(
-          serviceTaskPlanToRuntimeConfig("http", config),
+          await resolveServiceTaskRuntimeConfig("http", config, projectId),
           context
         ),
       };
@@ -2652,7 +2694,8 @@ async function executeRunSegment(input: {
           node,
           input.context,
           true,
-          Number(input.workflow.ownerUserId)
+          Number(input.workflow.ownerUserId),
+          input.workflow.projectId ? String(input.workflow.projectId) : undefined
         );
       } catch (error) {
         const failureHandle =

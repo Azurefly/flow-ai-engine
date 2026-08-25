@@ -24,6 +24,26 @@ import {
 type Node = WorkflowNode;
 type Edge = WorkflowEdge;
 export type Definition = WorkflowDefinition;
+
+export function assertProjectServiceTaskReferences(definition: Definition) {
+  for (const node of definition.nodes) {
+    if (!(["http", "rest", "method"] as string[]).includes(node.type)) continue;
+    const endpointRef = String(node.config.endpointRef ?? "").trim();
+    if (!endpointRef)
+      throw new Error(
+        `项目流程服务节点“${node.name}”必须配置项目 EndpointRef，不能直接调用任意地址。`
+      );
+    const rawUrl = String(
+      node.type === "http"
+        ? node.config.url ?? ""
+        : node.config.restApi ?? node.config.endpoint ?? node.config.url ?? ""
+    ).trim();
+    if (/^[a-z][a-z0-9+.-]*:/i.test(rawUrl) || rawUrl.startsWith("//"))
+      throw new Error(
+        `项目流程服务节点“${node.name}”使用 EndpointRef 时只能配置相对路径。`
+      );
+  }
+}
 const id = () => randomBytes(12).toString("base64url");
 let pool: mysql.Pool | undefined;
 const db = () => {
@@ -432,6 +452,8 @@ export async function updateWorkflow(
     executable,
     current.flowType
   );
+  if (values.publish && current.projectId)
+    assertProjectServiceTaskReferences(definition);
   const definitionChanged =
     values.definition !== undefined &&
     JSON.stringify(definition) !== JSON.stringify(current.definition);

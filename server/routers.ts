@@ -93,6 +93,11 @@ import {
   updateProjectWorkflowInfo,
 } from "./project-service";
 import {
+  createProjectServiceEndpoint,
+  listProjectServiceEndpoints,
+  setProjectServiceEndpointStatus,
+} from "./service-endpoint-service";
+import {
   batchClaimWorkflowTasks,
   batchCompleteWorkflowTasks,
   claimWorkflowTask,
@@ -484,6 +489,37 @@ export const appRouter = router({
     access: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => getProjectAccess(ctx.user, input.projectId)),
+    serviceEndpoints: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) =>
+        listProjectServiceEndpoints(ctx.user, input.projectId)
+      ),
+    createServiceEndpoint: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          refCode: z.string().trim().min(2).max(64),
+          name: z.string().trim().min(1).max(160),
+          baseUrl: z.string().trim().url().max(2048),
+          secretRef: z.string().trim().max(255).nullable().optional(),
+          authHeaderName: z.string().trim().max(128).nullable().optional(),
+          authScheme: z.string().trim().max(32).nullable().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        id: await createProjectServiceEndpoint(ctx.user, input),
+      })),
+    setServiceEndpointStatus: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          id: z.string().uuid(),
+          status: z.enum(["active", "disabled"]),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await setProjectServiceEndpointStatus(ctx.user, input),
+      })),
     create: protectedProcedure
       .input(
         z.object({

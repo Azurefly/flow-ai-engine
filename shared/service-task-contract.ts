@@ -3,6 +3,8 @@ import type { FlowNodeType, NodeConfig } from "./workflow-node-contract";
 export type HttpServiceTaskPlan = {
   kind: "http";
   sourceType: "http" | "rest" | "method";
+  endpointRef?: string;
+  secretRef?: string;
   method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   urlTemplate: string;
   headersTemplate: Record<string, unknown> | unknown[];
@@ -58,6 +60,12 @@ export function compileHttpServiceTask(
   return {
     kind: "http",
     sourceType,
+    ...(firstString(config.endpointRef)
+      ? { endpointRef: String(config.endpointRef).trim().toUpperCase() }
+      : {}),
+    ...(firstString(config.secretRef)
+      ? { secretRef: String(config.secretRef).trim() }
+      : {}),
     method,
     urlTemplate: String(
       reference

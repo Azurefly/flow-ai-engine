@@ -3,7 +3,7 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 
-export const DATABASE_MIGRATION_VERSION = "0022_state_outcome_facts";
+export const DATABASE_MIGRATION_VERSION = "0023_project_service_endpoints";
 export const DATABASE_MIGRATION_EPOCH = 1787644800000;
 
 let pool: mysql.Pool | undefined;
@@ -72,7 +72,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -92,14 +92,15 @@ export async function checkReadiness() {
           (table_name='workflow_run_job' AND index_name='workflow_run_job_idempotency_unique') OR
           (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique') OR
           (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_sequence_unique')
+          OR (table_name='project_service_endpoint' AND index_name='project_service_endpoint_project_ref_unique')
         )`
     );
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 4 &&
+      Number(tableRows[0]?.count ?? 0) === 5 &&
       Number(columnRows[0]?.count ?? 0) === 21 &&
-      Number(indexRows[0]?.count ?? 0) === 3;
+      Number(indexRows[0]?.count ?? 0) === 4;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {
