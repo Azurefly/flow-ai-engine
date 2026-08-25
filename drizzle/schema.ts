@@ -1087,6 +1087,9 @@ export const dataflowRuns = mysqlTable(
       .default("queued")
       .notNull(),
     definitionSnapshotJson: json("definitionSnapshotJson").notNull(),
+    executionPlanJson: json("executionPlanJson"),
+    executionPlanHash: varchar("executionPlanHash", { length: 64 }),
+    requestId: varchar("requestId", { length: 100 }),
     inputJson: json("inputJson").notNull(),
     outputJson: json("outputJson"),
     errorJson: json("errorJson"),

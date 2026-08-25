@@ -53,12 +53,27 @@ const workflowTaskScheduleMigration = readFileSync(
   new URL("../drizzle/0026_durable_task_schedules.sql", import.meta.url),
   "utf8"
 );
+const dataflowExecutionPlanMigration = readFileSync(
+  new URL("../drizzle/0027_dataflow_execution_plan.sql", import.meta.url),
+  "utf8"
+);
 const migrationJournal = readFileSync(
   new URL("../drizzle/meta/_journal.json", import.meta.url),
   "utf8"
 );
 
 describe("database migration integrity", () => {
+  it("persists immutable dataflow execution plans and request tracing", () => {
+    expect(dataflowExecutionPlanMigration).toContain(
+      "ALTER TABLE `dataflow_run` ADD `executionPlanJson` json"
+    );
+    expect(dataflowExecutionPlanMigration).toContain(
+      "ALTER TABLE `dataflow_run` ADD `executionPlanHash` varchar(64)"
+    );
+    expect(dataflowExecutionPlanMigration).toContain(
+      "ALTER TABLE `dataflow_run` ADD `requestId` varchar(100)"
+    );
+  });
   it("persists idempotent human-task reminder and escalation schedules", () => {
     expect(workflowTaskScheduleMigration).toContain(
       "CREATE TABLE `workflow_task_schedule`"
@@ -81,12 +96,12 @@ describe("database migration integrity", () => {
       entries: Array<{ idx: number; tag: string }>;
     };
     expect(journal.entries.slice(-4).map(item => item.tag)).toEqual([
-      "0023_project_service_endpoints",
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
+      "0027_dataflow_execution_plan",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(26);
+    expect(journal.entries.at(-1)?.idx).toBe(27);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain("CREATE TABLE `workflow_wait_subscription`");

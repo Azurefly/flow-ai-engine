@@ -1978,7 +1978,7 @@ pnpm test:integration:provider
 
 ### P1：数据流程 V2
 
-- [ ] **3F-P1-040** 数据 ExecutionPlan V2 和 plan hash。
+- [~] **3F-P1-040** 数据 ExecutionPlan V2 和 plan hash。已在发布阶段编译 dataflow profile 不可变计划，运行时校验 SHA-256 哈希并仅按计划拓扑顺序执行；dataflow_run 固化定义、计划、哈希和 requestId。待真实 MySQL 迁移与运行快照验收后完成。
 - [ ] **3F-P1-041** `dataflow_run_job / dataflow_node_run` 耐久运行表。
 - [ ] **3F-P1-042** Dataset Artifact、Checkpoint 和 Lineage。
 - [ ] **3F-P1-043** 数据源真实连接测试 Job 和证据模型。

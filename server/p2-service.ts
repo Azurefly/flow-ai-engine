@@ -9,6 +9,12 @@ import {
   updateHeartbeatJob,
 } from "./_core/heartbeat";
 import { sdk } from "./_core/sdk";
+import { currentRequestId } from "./_core/http-security";
+import {
+  assertWorkflowExecutionPlan,
+  compileWorkflowDefinition,
+  type WorkflowExecutionPlan,
+} from "./workflow-compiler";
 
 type JsonRecord = Record<string, unknown>;
 type ResourceKind = "source" | "asset" | "udf" | "tag" | "plugin";
@@ -550,7 +556,18 @@ function rowsFromInput(values: unknown[]) {
   );
 }
 
-async function runDataflowDefinition(projectId: string, definition: any) {
+export function compileDataflowExecutionPlan(definition: unknown) {
+  const compiled = compileWorkflowDefinition(definition, { flowType: "data" });
+  if (!compiled.plan.topologicalOrder)
+    throw new Error("数据流执行计划必须是无环 DAG。");
+  return { plan: compiled.plan, planHash: compiled.planHash };
+}
+
+async function runDataflowDefinition(
+  projectId: string,
+  executionPlan: WorkflowExecutionPlan
+) {
+  const definition = executionPlan.definition;
   const nodes: any[] = Array.isArray(definition?.nodes) ? definition.nodes : [];
   const edges: any[] = Array.isArray(definition?.edges) ? definition.edges : [];
   if (!nodes.length) throw new Error("数据流定义没有节点。 ");
@@ -569,9 +586,9 @@ async function runDataflowDefinition(projectId: string, definition: any) {
       incoming.get(target)?.push(source);
     }
   });
-  const queue = nodes
-    .filter((node: any) => !incoming.get(String(node.id))?.length)
-    .map((node: any) => String(node.id));
+  if (!executionPlan.topologicalOrder)
+    throw new Error("数据流执行计划缺少稳定拓扑顺序。");
+  const queue = [...executionPlan.topologicalOrder];
   const outputs = new Map<string, JsonRecord>();
   const executed: JsonRecord[] = [];
   while (queue.length) {
@@ -667,10 +684,6 @@ async function runDataflowDefinition(projectId: string, definition: any) {
       rowCount: normalizeRows(output.rows).length,
       output,
     });
-    (outgoing.get(nodeId) ?? []).forEach(next => {
-      if ((incoming.get(next) ?? []).every(parent => outputs.has(parent)))
-        queue.push(next);
-    });
   }
   if (outputs.size !== nodes.length)
     throw new Error("数据流存在循环依赖或不可达节点。 ");
@@ -698,6 +711,8 @@ export async function runDataflow(
   );
   const runId = id();
   let definition: any;
+  let executionPlan: WorkflowExecutionPlan;
+  let executionPlanHash: string;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
@@ -708,9 +723,24 @@ export async function runDataflow(
     const workflow = workflows[0];
     if (!workflow)
       throw new Error("数据流不存在、已归档、未发布或不属于当前项目。 ");
-    definition = parseJson(workflow.definitionJson, { nodes: [], edges: [] });
+    const publishedPlan = parseJson(workflow.publishedExecutionPlanJson, null);
+    if (publishedPlan && workflow.publishedExecutionPlanHash) {
+      executionPlan = assertWorkflowExecutionPlan(
+        publishedPlan,
+        String(workflow.publishedExecutionPlanHash),
+        "data"
+      );
+      executionPlanHash = String(workflow.publishedExecutionPlanHash);
+    } else {
+      const compiled = compileDataflowExecutionPlan(
+        parseJson(workflow.definitionJson, { nodes: [], edges: [] })
+      );
+      executionPlan = compiled.plan;
+      executionPlanHash = compiled.planHash;
+    }
+    definition = executionPlan.definition;
     await connection.query(
-      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,inputJson,startedAt,triggeredByUserId) VALUES (?,?,?,?,?, 'running',?,?,NOW(),?)",
+      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,requestId,inputJson,startedAt,triggeredByUserId) VALUES (?,?,?,?,?, 'running',?,?,?,?,?,NOW(),?)",
       [
         runId,
         input.projectId,
@@ -718,6 +748,9 @@ export async function runDataflow(
         input.triggerType ?? "manual",
         input.scheduleBucket ?? null,
         JSON.stringify(definition),
+        JSON.stringify(executionPlan),
+        executionPlanHash,
+        currentRequestId() ?? null,
         JSON.stringify(input.data ?? {}),
         user.id,
       ]
@@ -731,7 +764,7 @@ export async function runDataflow(
   }
   const started = Date.now();
   try {
-    const output = await runDataflowDefinition(input.projectId, definition);
+    const output = await runDataflowDefinition(input.projectId, executionPlan!);
     await db().query(
       "UPDATE dataflow_run SET status='success',outputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
       [JSON.stringify(output), Date.now() - started, runId]

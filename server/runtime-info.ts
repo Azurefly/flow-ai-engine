@@ -3,8 +3,8 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 
-export const DATABASE_MIGRATION_VERSION = "0026_durable_task_schedules";
-export const DATABASE_MIGRATION_EPOCH = 1787659200000;
+export const DATABASE_MIGRATION_VERSION = "0027_dataflow_execution_plan";
+export const DATABASE_MIGRATION_EPOCH = 1787662800000;
 
 let pool: mysql.Pool | undefined;
 
@@ -81,6 +81,7 @@ export async function checkReadiness() {
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
           (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
+          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId')) OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -102,7 +103,7 @@ export async function checkReadiness() {
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
       Number(tableRows[0]?.count ?? 0) === 8 &&
-      Number(columnRows[0]?.count ?? 0) === 21 &&
+      Number(columnRows[0]?.count ?? 0) === 24 &&
       Number(indexRows[0]?.count ?? 0) === 7;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
