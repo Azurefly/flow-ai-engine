@@ -25,6 +25,7 @@ import {
   hashWorkflowExecutionPlan,
   type WorkflowExecutionPlan,
 } from "./workflow-compiler";
+import { compileHttpServiceTask } from "@shared/service-task-contract";
 import {
   resolveAutoRelatedParticipantUserIds,
   resolveOperateAssignees,
@@ -698,6 +699,22 @@ export function normalizeReferenceHttpConfig(config: JsonRecord): JsonRecord {
   };
 }
 
+export function serviceTaskPlanToRuntimeConfig(
+  nodeType: "http" | "rest" | "method",
+  config: JsonRecord
+): JsonRecord {
+  const plan = compileHttpServiceTask(nodeType, config);
+  if (!plan) throw new Error("节点无法编译为 HTTP ServiceTask。");
+  return {
+    url: plan.urlTemplate,
+    method: plan.method,
+    headers: keyValueEntries(plan.headersTemplate),
+    query: keyValueEntries(plan.queryTemplate),
+    body: plan.bodyTemplate,
+    timeout: plan.timeoutMs,
+  };
+}
+
 async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   const resolved = asRecord(resolveTemplates(config, context));
   const catalog = await listLLMModels();
@@ -1081,7 +1098,7 @@ async function executeNode(
     case "method":
       return {
         output: await executeHttpNode(
-          normalizeReferenceHttpConfig(config),
+          serviceTaskPlanToRuntimeConfig(node.type, config),
           context
         ),
       };
@@ -1115,7 +1132,12 @@ async function executeNode(
       };
     }
     case "http":
-      return { output: await executeHttpNode(config, context) };
+      return {
+        output: await executeHttpNode(
+          serviceTaskPlanToRuntimeConfig("http", config),
+          context
+        ),
+      };
     case "llm":
       return { output: await executeLlmNode(config, context) };
     case "subflow": {

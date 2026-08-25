@@ -13,6 +13,10 @@ import {
   type FlowType,
   type FlowNodeType,
 } from "@shared/workflow-node-contract";
+import {
+  compileHttpServiceTask,
+  type HttpServiceTaskPlan,
+} from "@shared/service-task-contract";
 
 export type WorkflowNode = {
   id: string;
@@ -57,7 +61,7 @@ export type WorkflowCompileDiagnostic = {
 
 export type WorkflowExecutionPlan = {
   schemaVersion: 1;
-  compilerVersion: "1.0.0" | "1.1.0";
+  compilerVersion: "1.0.0" | "1.1.0" | "1.2.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -86,6 +90,7 @@ export type WorkflowExecutionPlan = {
     targetNodeId: string;
     maxIterations: number;
   }>;
+  serviceTasks?: Record<string, HttpServiceTaskPlan>;
 };
 
 export type WorkflowCompileResult =
@@ -976,7 +981,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.1.0",
+    compilerVersion: "1.2.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,
@@ -1023,6 +1028,12 @@ export function analyzeWorkflowDefinition(
         targetNodeId: edge.targetNodeId,
         maxIterations: edge.loop.maxIterations,
       })),
+    serviceTasks: Object.fromEntries(
+      normalized.nodes.flatMap(node => {
+        const task = compileHttpServiceTask(node.type, node.config);
+        return task ? [[node.id, task]] : [];
+      })
+    ),
   };
   return {
     ok: true,

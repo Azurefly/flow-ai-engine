@@ -1967,7 +1967,7 @@ pnpm test:integration:provider
 
 ### P1：控制流程
 
-- [ ] **3F-P1-020** REST/HTTP/METHOD 编译为统一 ServiceTask 计划。
+- [x] **3F-P1-020** REST/HTTP/METHOD 已编译为统一 HTTP ServiceTask 计划，执行计划固化 effect、幂等策略、重试分类与超时，运行时统一消费该映射。
 - [ ] **3F-P1-021** EndpointRef、SecretRef 和项目域名白名单。
 - [ ] **3F-P1-022** 服务任务分类重试、熔断和并发限制。
 - [ ] **3F-P1-023** 写操作幂等/补偿发布门禁。
