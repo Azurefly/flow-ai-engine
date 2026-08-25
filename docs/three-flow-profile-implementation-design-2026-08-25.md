@@ -1974,7 +1974,7 @@ pnpm test:integration:provider
 - [x] **3F-P1-024** Wait 和 Message Catch 已持久化订阅、Checkpoint、Timer 补触发及相关键消息触发；触发命令通过唯一 resume job 恢复，服务重启不丢等待事实。
 - [x] **3F-P1-025** LLM 已增加可信模型定价目录、调用前最坏费用门禁、实际 usage/费用审计、数据分类与字段级敏感白名单；凭据永不放行、响应再次脱敏。确定性 Schema/允许值由服务端复核，启用人工复核时编译器强制直连非自动人工操作节点。未实现的 `prompt_hash` 缓存会被明确拒绝。
 - [x] **3F-P1-026** 控制流程目录不再提供业务状态节点，新增独立 Milestone 节点；里程碑代号在控制流程内唯一，运行时写入幂等的不可变里程碑事实并在实例详情展示，但不会修改 `currentStateCode`、参与人或操作权限。
-- [ ] **3F-P1-027** Worker 故障注入和副作用不重复证据。
+- [~] **3F-P1-027** 已增加仅测试环境可启用的“执行完成、Job 完成前崩溃”注入点，并新增终态 Run 与残留 queued/leased Job 的自动对账；MySQL 集成用例验证恢复时不会再次写入 Milestone。当前环境未配置 `DATABASE_URL`，真实故障注入用例尚未执行，完成前不得升级为 production。
 
 ### P1：数据流程 V2
 

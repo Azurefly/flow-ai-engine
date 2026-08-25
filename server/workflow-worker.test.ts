@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { outboxRetryDelaySeconds, retryDelayMs } from "./workflow-worker";
+import {
+  injectWorkflowWorkerFault,
+  outboxRetryDelaySeconds,
+  retryDelayMs,
+} from "./workflow-worker";
 
 describe("workflow worker retry policy", () => {
   it("uses bounded exponential backoff", () => {
@@ -20,5 +24,28 @@ describe("workflow worker retry policy", () => {
     expect(outboxRetryDelaySeconds(2)).toBe(10);
     expect(outboxRetryDelaySeconds(3)).toBe(20);
     expect(outboxRetryDelaySeconds(99)).toBe(3600);
+  });
+
+  it("enables crash injection only in the test runtime", () => {
+    const previousPoint = process.env.WORKFLOW_WORKER_FAULT_POINT;
+    const previousNodeEnv = process.env.NODE_ENV;
+    try {
+      process.env.WORKFLOW_WORKER_FAULT_POINT =
+        "after_execute_before_complete";
+      process.env.NODE_ENV = "production";
+      expect(() =>
+        injectWorkflowWorkerFault("after_execute_before_complete")
+      ).not.toThrow();
+      process.env.NODE_ENV = "test";
+      expect(() =>
+        injectWorkflowWorkerFault("after_execute_before_complete")
+      ).toThrow("Injected workflow worker crash");
+    } finally {
+      if (previousPoint === undefined)
+        delete process.env.WORKFLOW_WORKER_FAULT_POINT;
+      else process.env.WORKFLOW_WORKER_FAULT_POINT = previousPoint;
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 });

@@ -48,6 +48,23 @@ const state = {
   processedJobs: 0,
 };
 
+export type WorkflowWorkerFaultPoint = "after_execute_before_complete";
+
+class WorkflowWorkerInjectedCrash extends Error {
+  constructor(point: WorkflowWorkerFaultPoint) {
+    super(`Injected workflow worker crash at ${point}`);
+    this.name = "WorkflowWorkerInjectedCrash";
+  }
+}
+
+export function injectWorkflowWorkerFault(point: WorkflowWorkerFaultPoint) {
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.WORKFLOW_WORKER_FAULT_POINT === point
+  )
+    throw new WorkflowWorkerInjectedCrash(point);
+}
+
 function db() {
   if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
   return (pool ??= mysql.createPool(process.env.DATABASE_URL));
@@ -294,6 +311,30 @@ async function completeJob(job: ClaimedJob, result: unknown) {
   }
 }
 
+/**
+ * Closes the narrow crash window where workflow_run reached a terminal state
+ * but the owning durable job did not get its terminal update.
+ */
+export async function reconcileTerminalWorkflowJobs() {
+  const [result] = await db().query<mysql.ResultSetHeader>(
+    `UPDATE workflow_run_job j
+       JOIN workflow_run r ON r.id=j.runId
+        SET j.status=CASE
+              WHEN r.status='success' THEN 'completed'
+              WHEN r.status='failed' THEN 'failed'
+              ELSE 'cancelled'
+            END,
+            j.resultJson=CASE WHEN r.status='success' THEN r.finalOutputJson ELSE j.resultJson END,
+            j.lastErrorJson=CASE WHEN r.status='failed' THEN r.errorJson ELSE j.lastErrorJson END,
+            j.leaseToken=NULL,
+            j.leaseExpiresAt=NULL,
+            j.finishedAt=COALESCE(j.finishedAt,NOW())
+      WHERE j.status IN ('queued','leased')
+        AND r.status IN ('success','failed','cancelled','terminated')`
+  );
+  return Number(result.affectedRows ?? 0);
+}
+
 async function handleJobFailure(job: ClaimedJob, error: unknown) {
   const details = { message: error instanceof Error ? error.message : String(error) };
   if (job.attempt < job.maxAttempts) {
@@ -345,11 +386,13 @@ async function processJob(job: ClaimedJob) {
       checkpoint: job.checkpoint,
       onCheckpoint: checkpoint => saveCheckpoint(job, checkpoint),
     });
+    injectWorkflowWorkerFault("after_execute_before_complete");
     await completeJob(job, result);
     state.lastSuccessAt = new Date().toISOString();
     state.processedJobs += 1;
   } catch (error) {
     state.lastError = error instanceof Error ? error.message : String(error);
+    if (error instanceof WorkflowWorkerInjectedCrash) throw error;
     await handleJobFailure(job, error);
   } finally {
     clearInterval(heartbeat);
@@ -365,8 +408,10 @@ export async function runWorkflowWorkerOnce() {
     const outboxProcessed = await dispatchWorkflowOutboxOnce();
     const waitsTriggered = await reconcileDueWorkflowWaits();
     await reconcileWorkflowContinuations();
+    const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
     const job = await claimNextJob();
-    if (!job) return outboxProcessed || waitsTriggered > 0;
+    if (!job)
+      return outboxProcessed || waitsTriggered > 0 || terminalJobsReconciled > 0;
     await processJob(job);
     return true;
   } finally {
