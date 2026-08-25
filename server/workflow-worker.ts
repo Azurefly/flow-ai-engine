@@ -10,6 +10,7 @@ import {
   type WorkflowCheckpoint,
 } from "./workflow-engine";
 import { notifyOwner } from "./_core/notification";
+import { runDataflowJobOnce } from "./p2-service";
 
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type JsonRecord = Record<string, unknown>;
@@ -33,8 +34,14 @@ type ClaimedOutboxEvent = {
 };
 
 const workerId = `${process.pid}-${randomUUID().slice(0, 8)}`;
-const pollIntervalMs = Math.max(200, Number(process.env.WORKFLOW_WORKER_POLL_MS ?? 1000));
-const leaseSeconds = Math.max(30, Number(process.env.WORKFLOW_WORKER_LEASE_SECONDS ?? 120));
+const pollIntervalMs = Math.max(
+  200,
+  Number(process.env.WORKFLOW_WORKER_POLL_MS ?? 1000)
+);
+const leaseSeconds = Math.max(
+  30,
+  Number(process.env.WORKFLOW_WORKER_LEASE_SECONDS ?? 120)
+);
 let pool: mysql.Pool | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 let processing = false;
@@ -138,7 +145,10 @@ async function claimNextJob(): Promise<ClaimedJob | null> {
       leaseToken,
       attempt: Number(row.attempt ?? 0) + 1,
       maxAttempts: Number(row.maxAttempts ?? 3),
-      checkpoint: parseJson<WorkflowCheckpoint>(row.checkpointJson, { queue: [], context: {} }),
+      checkpoint: parseJson<WorkflowCheckpoint>(row.checkpointJson, {
+        queue: [],
+        context: {},
+      }),
     };
   } catch (error) {
     await connection.rollback();
@@ -205,7 +215,9 @@ async function completeOutboxEvent(event: ClaimedOutboxEvent) {
 }
 
 async function failOutboxEvent(event: ClaimedOutboxEvent, error: unknown) {
-  const details = { message: error instanceof Error ? error.message : String(error) };
+  const details = {
+    message: error instanceof Error ? error.message : String(error),
+  };
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
@@ -215,9 +227,17 @@ async function failOutboxEvent(event: ClaimedOutboxEvent, error: unknown) {
       `UPDATE workflow_outbox_event
           SET status=?,lastErrorJson=?,availableAt=IF(?='queued',DATE_ADD(NOW(),INTERVAL ? SECOND),availableAt),leaseToken=NULL,leaseExpiresAt=NULL
         WHERE id=? AND status='leased' AND leaseToken=?`,
-      [retryable ? "queued" : "failed", JSON.stringify(details), retryable ? "queued" : "failed", delaySeconds, event.id, event.leaseToken]
+      [
+        retryable ? "queued" : "failed",
+        JSON.stringify(details),
+        retryable ? "queued" : "failed",
+        delaySeconds,
+        event.id,
+        event.leaseToken,
+      ]
     );
-    if (!updated.affectedRows) throw new Error("Outbox 事件重试排队时租约已失效。");
+    if (!updated.affectedRows)
+      throw new Error("Outbox 事件重试排队时租约已失效。");
     await connection.commit();
   } catch (releaseError) {
     await connection.rollback();
@@ -237,7 +257,8 @@ async function dispatchWorkflowOutboxOnce() {
     const title = String(event.payload.title ?? "").trim();
     const content = String(event.payload.content ?? "").trim();
     if (!title || !content) throw new Error("Outbox 通知事件缺少标题或内容。");
-    if (!(await notifyOwner({ title, content }))) throw new Error("通知服务未接受 Outbox 事件。");
+    if (!(await notifyOwner({ title, content })))
+      throw new Error("通知服务未接受 Outbox 事件。");
     await completeOutboxEvent(event);
   } catch (error) {
     state.lastError = error instanceof Error ? error.message : String(error);
@@ -254,7 +275,8 @@ async function renewLease(job: ClaimedJob) {
       WHERE j.id=? AND j.leaseToken=? AND j.status='leased' AND r.executionLockToken=?`,
     [leaseSeconds, leaseSeconds, job.id, job.leaseToken, job.leaseToken]
   );
-  if (!renewed.affectedRows) throw new Error("无法续租工作流任务，当前执行已失去所有权。");
+  if (!renewed.affectedRows)
+    throw new Error("无法续租工作流任务，当前执行已失去所有权。");
 }
 
 async function saveCheckpoint(job: ClaimedJob, checkpoint: WorkflowCheckpoint) {
@@ -270,7 +292,8 @@ async function saveCheckpoint(job: ClaimedJob, checkpoint: WorkflowCheckpoint) {
         FOR UPDATE`,
       [job.id, job.leaseToken, job.runId, job.leaseToken]
     );
-    if (!ownedRows[0]) throw new Error("工作流任务租约已失效，Checkpoint 未写入。");
+    if (!ownedRows[0])
+      throw new Error("工作流任务租约已失效，Checkpoint 未写入。");
     await connection.query(
       "UPDATE workflow_run_job SET checkpointJson=? WHERE id=? AND status='leased' AND leaseToken=?",
       [JSON.stringify(checkpoint), job.id, job.leaseToken]
@@ -298,7 +321,8 @@ async function completeJob(job: ClaimedJob, result: unknown) {
         WHERE id=? AND status='leased' AND leaseToken=?`,
       [JSON.stringify(result), job.id, job.leaseToken]
     );
-    if (!completed.affectedRows) throw new Error("工作流任务完成时租约已失效。");
+    if (!completed.affectedRows)
+      throw new Error("工作流任务完成时租约已失效。");
     await connection.query(
       "UPDATE workflow_run SET executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND executionLockToken=?",
       [job.runId, job.leaseToken]
@@ -337,9 +361,14 @@ export async function reconcileTerminalWorkflowJobs() {
 }
 
 async function handleJobFailure(job: ClaimedJob, error: unknown) {
-  const details = { message: error instanceof Error ? error.message : String(error) };
+  const details = {
+    message: error instanceof Error ? error.message : String(error),
+  };
   if (job.attempt < job.maxAttempts) {
-    const delaySeconds = Math.max(1, Math.ceil(retryDelayMs(job.attempt) / 1000));
+    const delaySeconds = Math.max(
+      1,
+      Math.ceil(retryDelayMs(job.attempt) / 1000)
+    );
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
@@ -349,7 +378,8 @@ async function handleJobFailure(job: ClaimedJob, error: unknown) {
           WHERE id=? AND status='leased' AND leaseToken=?`,
         [JSON.stringify(details), delaySeconds, job.id, job.leaseToken]
       );
-      if (!released.affectedRows) throw new Error("工作流重试排队时租约已失效。");
+      if (!released.affectedRows)
+        throw new Error("工作流重试排队时租约已失效。");
       await connection.query(
         "UPDATE workflow_run SET status='queued',errorJson=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND executionLockToken=?",
         [JSON.stringify(details), job.runId, job.leaseToken]
@@ -374,11 +404,15 @@ async function handleJobFailure(job: ClaimedJob, error: unknown) {
 }
 
 async function processJob(job: ClaimedJob) {
-  const heartbeat = setInterval(() => {
-    void renewLease(job).catch(error => {
-      state.lastError = error instanceof Error ? error.message : String(error);
-    });
-  }, Math.max(10_000, Math.floor((leaseSeconds * 1000) / 3)));
+  const heartbeat = setInterval(
+    () => {
+      void renewLease(job).catch(error => {
+        state.lastError =
+          error instanceof Error ? error.message : String(error);
+      });
+    },
+    Math.max(10_000, Math.floor((leaseSeconds * 1000) / 3))
+  );
   heartbeat.unref?.();
   try {
     const result = await executePreparedWorkflowRun({
@@ -411,12 +445,14 @@ export async function runWorkflowWorkerOnce() {
     const taskSchedulesFired = await reconcileDueWorkflowTaskSchedules();
     await reconcileWorkflowContinuations();
     const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
+    const dataflowProcessed = await runDataflowJobOnce();
     const job = await claimNextJob();
     if (!job)
       return (
         outboxProcessed ||
         waitsTriggered > 0 ||
         taskSchedulesFired > 0 ||
+        dataflowProcessed ||
         terminalJobsReconciled > 0
       );
     await processJob(job);
@@ -434,13 +470,22 @@ export async function drainWorkflowJobs(maxJobs = 100) {
 }
 
 export function wakeWorkflowWorker() {
-  queueMicrotask(() => void runWorkflowWorkerOnce().catch(error => {
-    state.lastError = error instanceof Error ? error.message : String(error);
-  }));
+  queueMicrotask(
+    () =>
+      void runWorkflowWorkerOnce().catch(error => {
+        state.lastError =
+          error instanceof Error ? error.message : String(error);
+      })
+  );
 }
 
 export function startWorkflowWorker() {
-  if (state.started || process.env.WORKFLOW_WORKER_ENABLED === "false" || !process.env.DATABASE_URL) return;
+  if (
+    state.started ||
+    process.env.WORKFLOW_WORKER_ENABLED === "false" ||
+    !process.env.DATABASE_URL
+  )
+    return;
   state.started = true;
   timer = setInterval(() => wakeWorkflowWorker(), pollIntervalMs);
   timer.unref?.();

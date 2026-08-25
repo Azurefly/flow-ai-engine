@@ -21,6 +21,11 @@ type ResourceKind = "source" | "asset" | "udf" | "tag" | "plugin";
 type DataflowUser = ProjectUser;
 
 const id = () => randomBytes(12).toString("base64url");
+const dataflowWorkerId = `${process.pid}-${randomUUID().slice(0, 8)}`;
+const dataflowLeaseSeconds = Math.max(
+  30,
+  Number(process.env.DATAFLOW_WORKER_LEASE_SECONDS ?? 120)
+);
 let pool: mysql.Pool | undefined;
 const db = () => {
   if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
@@ -565,7 +570,9 @@ export function compileDataflowExecutionPlan(definition: unknown) {
 
 async function runDataflowDefinition(
   projectId: string,
-  executionPlan: WorkflowExecutionPlan
+  executionPlan: WorkflowExecutionPlan,
+  runId: string,
+  requestId: string | null
 ) {
   const definition = executionPlan.definition;
   const nodes: any[] = Array.isArray(definition?.nodes) ? definition.nodes : [];
@@ -599,91 +606,133 @@ async function runDataflowDefinition(
       .map(parentId => outputs.get(parentId))
       .filter(Boolean) as JsonRecord[];
     const config = nodeConfig(node);
+    const nodeStartedAt = Date.now();
+    const sequenceNo = executed.length;
+    await db().query(
+      `INSERT INTO dataflow_node_run
+        (id,runId,nodeId,sequenceNo,nodeType,status,attempt,inputJson,requestId,startedAt)
+       VALUES (?,?,?,?,?,'running',1,?,?,NOW())
+       ON DUPLICATE KEY UPDATE status='running',attempt=attempt+1,inputJson=VALUES(inputJson),outputJson=NULL,errorJson=NULL,rowCount=NULL,requestId=VALUES(requestId),startedAt=NOW(),finishedAt=NULL,durationMs=NULL`,
+      [
+        id(),
+        runId,
+        nodeId,
+        sequenceNo,
+        String(node.type),
+        JSON.stringify(inputs),
+        requestId,
+      ]
+    );
     let output: JsonRecord;
-    if (["start", "begin"].includes(String(node.type)))
-      output = { rows: rowsFromInput(inputs), stage: "start" };
-    else if (["source", "data_source", "table"].includes(String(node.type))) {
-      const assetId = String(config.assetId ?? "");
-      const [assets] = await db().query<mysql.RowDataPacket[]>(
-        "SELECT * FROM data_asset WHERE id=? AND projectId=? AND status='active' LIMIT 1",
-        [assetId, projectId]
-      );
-      if (!assets[0])
-        throw new Error(
-          `节点 ${node.name ?? node.data?.label ?? nodeId} 引用的数据资源不存在、已停用或不属于当前项目。`
+    try {
+      if (["start", "begin"].includes(String(node.type)))
+        output = { rows: rowsFromInput(inputs), stage: "start" };
+      else if (["source", "data_source", "table"].includes(String(node.type))) {
+        const assetId = String(config.assetId ?? "");
+        const [assets] = await db().query<mysql.RowDataPacket[]>(
+          "SELECT * FROM data_asset WHERE id=? AND projectId=? AND status='active' LIMIT 1",
+          [assetId, projectId]
         );
-      output = {
-        assetId,
-        assetName: assets[0].name,
-        rows: normalizeRows(parseJson(assets[0].sampleJson, [])),
-        schema: parseJson(assets[0].schemaJson, []),
-      };
-    } else if (["transform", "filter", "map"].includes(String(node.type))) {
-      let rows = rowsFromInput(inputs);
-      if (
-        config.filterField &&
-        Object.prototype.hasOwnProperty.call(config, "filterValue")
-      )
-        rows = rows.filter(
-          row =>
-            String(row[String(config.filterField)]) ===
-            String(config.filterValue)
-        );
-      const columns = Array.isArray(config.columns)
-        ? config.columns.map(column => String(column))
-        : [];
-      if (columns.length)
-        rows = rows.map(row =>
-          Object.fromEntries(columns.map(column => [column, row[column]]))
-        );
-      const limit = Number(config.limit ?? 200);
-      output = {
-        rows: rows.slice(
-          0,
-          Number.isFinite(limit) ? Math.max(1, Math.min(limit, 200)) : 200
-        ),
-        operation: "safe_transform",
-      };
-    } else if (["sql", "edit_sql"].includes(String(node.type))) {
-      const statement = String(
-        config.statement ?? config.sql ?? config.query ?? ""
-      ).trim();
-      if (
-        !/^select\s+/i.test(statement) ||
-        /;|\b(insert|update|delete|drop|alter|create|grant|revoke)\b/i.test(
-          statement
+        if (!assets[0])
+          throw new Error(
+            `节点 ${node.name ?? node.data?.label ?? nodeId} 引用的数据资源不存在、已停用或不属于当前项目。`
+          );
+        output = {
+          assetId,
+          assetName: assets[0].name,
+          rows: normalizeRows(parseJson(assets[0].sampleJson, [])),
+          schema: parseJson(assets[0].schemaJson, []),
+        };
+      } else if (["transform", "filter", "map"].includes(String(node.type))) {
+        let rows = rowsFromInput(inputs);
+        if (
+          config.filterField &&
+          Object.prototype.hasOwnProperty.call(config, "filterValue")
         )
-      )
-        throw new Error(
-          "SQL 节点仅支持单条只读 SELECT 计划；禁止写入和 DDL。 "
+          rows = rows.filter(
+            row =>
+              String(row[String(config.filterField)]) ===
+              String(config.filterValue)
+          );
+        const columns = Array.isArray(config.columns)
+          ? config.columns.map(column => String(column))
+          : [];
+        if (columns.length)
+          rows = rows.map(row =>
+            Object.fromEntries(columns.map(column => [column, row[column]]))
+          );
+        const limit = Number(config.limit ?? 200);
+        output = {
+          rows: rows.slice(
+            0,
+            Number.isFinite(limit) ? Math.max(1, Math.min(limit, 200)) : 200
+          ),
+          operation: "safe_transform",
+        };
+      } else if (["sql", "edit_sql"].includes(String(node.type))) {
+        const statement = String(
+          config.statement ?? config.sql ?? config.query ?? ""
+        ).trim();
+        if (
+          !/^select\s+/i.test(statement) ||
+          /;|\b(insert|update|delete|drop|alter|create|grant|revoke)\b/i.test(
+            statement
+          )
+        )
+          throw new Error(
+            "SQL 节点仅支持单条只读 SELECT 计划；禁止写入和 DDL。 "
+          );
+        output = {
+          rows: rowsFromInput(inputs),
+          statement,
+          execution: "validated_read_plan",
+        };
+      } else if (String(node.type) === "udf") {
+        const udfId = String(config.udfId ?? "");
+        const [udfs] = await db().query<mysql.RowDataPacket[]>(
+          "SELECT name,udfType FROM data_udf WHERE id=? AND projectId=? AND status='approved' LIMIT 1",
+          [udfId, projectId]
         );
-      output = {
-        rows: rowsFromInput(inputs),
-        statement,
-        execution: "validated_read_plan",
-      };
-    } else if (String(node.type) === "udf") {
-      const udfId = String(config.udfId ?? "");
-      const [udfs] = await db().query<mysql.RowDataPacket[]>(
-        "SELECT name,udfType FROM data_udf WHERE id=? AND projectId=? AND status='approved' LIMIT 1",
-        [udfId, projectId]
+        if (!udfs[0]) throw new Error("UDF 不存在、未审核或不属于当前项目。 ");
+        output = {
+          rows: rowsFromInput(inputs),
+          udf: { name: udfs[0].name, type: udfs[0].udfType },
+          execution: "metadata_safe",
+        };
+      } else if (["end", "sink", "output"].includes(String(node.type)))
+        output = { rows: rowsFromInput(inputs), stage: "output" };
+      else throw new Error(`数据流节点类型 ${String(node.type)} 尚未启用。`);
+      outputs.set(nodeId, output);
+      executed.push({
+        nodeId,
+        nodeType: node.type,
+        rowCount: normalizeRows(output.rows).length,
+        output,
+      });
+      await db().query(
+        "UPDATE dataflow_node_run SET status='success',outputJson=?,rowCount=?,finishedAt=NOW(),durationMs=? WHERE runId=? AND nodeId=? AND status='running'",
+        [
+          JSON.stringify(output),
+          normalizeRows(output.rows).length,
+          Date.now() - nodeStartedAt,
+          runId,
+          nodeId,
+        ]
       );
-      if (!udfs[0]) throw new Error("UDF 不存在、未审核或不属于当前项目。 ");
-      output = {
-        rows: rowsFromInput(inputs),
-        udf: { name: udfs[0].name, type: udfs[0].udfType },
-        execution: "metadata_safe",
-      };
-    } else if (["end", "sink", "output"].includes(String(node.type)))
-      output = { rows: rowsFromInput(inputs), stage: "output" };
-    else throw new Error(`数据流节点类型 ${String(node.type)} 尚未启用。`);
-    outputs.set(nodeId, output);
-    executed.push({
-      nodeId,
-      nodeType: node.type,
-      rowCount: normalizeRows(output.rows).length,
-      output,
-    });
+    } catch (error) {
+      await db().query(
+        "UPDATE dataflow_node_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=? WHERE runId=? AND nodeId=? AND status='running'",
+        [
+          JSON.stringify({
+            message: error instanceof Error ? error.message : String(error),
+          }),
+          Date.now() - nodeStartedAt,
+          runId,
+          nodeId,
+        ]
+      );
+      throw error;
+    }
   }
   if (outputs.size !== nodes.length)
     throw new Error("数据流存在循环依赖或不可达节点。 ");
@@ -692,6 +741,200 @@ async function runDataflowDefinition(
     .map((node: any) => outputs.get(String(node.id)))
     .filter(Boolean);
   return { terminals: terminal, nodes: executed };
+}
+
+type ClaimedDataflowJob = {
+  id: string;
+  runId: string;
+  projectId: string;
+  leaseToken: string;
+  attempt: number;
+  maxAttempts: number;
+  executionPlan: WorkflowExecutionPlan;
+  executionPlanHash: string;
+  requestId: string | null;
+};
+
+async function claimDataflowJob(
+  onlyRunId?: string
+): Promise<ClaimedDataflowJob | null> {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const params: unknown[] = [];
+    const runFilter = onlyRunId ? " AND j.runId=?" : "";
+    if (onlyRunId) params.push(onlyRunId);
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT j.id,j.runId,j.attempt,j.maxAttempts,r.projectId,r.executionPlanJson,r.executionPlanHash,r.requestId
+         FROM dataflow_run_job j JOIN dataflow_run r ON r.id=j.runId
+        WHERE j.attempt<j.maxAttempts AND r.status IN ('queued','running')${runFilter}
+          AND ((j.status='queued' AND j.availableAt<=NOW()) OR (j.status='leased' AND j.leaseExpiresAt<NOW()))
+        ORDER BY j.availableAt,j.createdAt LIMIT 1 FOR UPDATE SKIP LOCKED`,
+      params
+    );
+    const row = rows[0];
+    if (!row) {
+      await connection.commit();
+      return null;
+    }
+    const executionPlanHash = String(row.executionPlanHash ?? "");
+    let executionPlan: WorkflowExecutionPlan;
+    try {
+      executionPlan = assertWorkflowExecutionPlan(
+        parseJson(row.executionPlanJson, null),
+        executionPlanHash,
+        "data"
+      );
+    } catch (error) {
+      const details = JSON.stringify({
+        message: error instanceof Error ? error.message : String(error),
+        code: "DATAFLOW_EXECUTION_PLAN_INVALID",
+      });
+      await connection.query(
+        "UPDATE dataflow_run_job SET status='failed',lastErrorJson=?,finishedAt=NOW(),leaseToken=NULL,leaseExpiresAt=NULL,workerId=NULL WHERE id=?",
+        [details, row.id]
+      );
+      await connection.query(
+        "UPDATE dataflow_run SET status='failed',errorJson=?,finishedAt=NOW() WHERE id=? AND status IN ('queued','running')",
+        [details, row.runId]
+      );
+      await connection.commit();
+      return null;
+    }
+    const leaseToken = randomUUID().replaceAll("-", "").slice(0, 48);
+    const [claimed] = await connection.query<mysql.ResultSetHeader>(
+      `UPDATE dataflow_run_job
+          SET status='leased',attempt=attempt+1,leaseToken=?,leaseExpiresAt=DATE_ADD(NOW(),INTERVAL ? SECOND),workerId=?,lastErrorJson=NULL
+        WHERE id=? AND ((status='queued' AND availableAt<=NOW()) OR (status='leased' AND leaseExpiresAt<NOW()))`,
+      [leaseToken, dataflowLeaseSeconds, dataflowWorkerId, row.id]
+    );
+    if (!claimed.affectedRows) {
+      await connection.rollback();
+      return null;
+    }
+    const [leasedRun] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE dataflow_run SET status='running',startedAt=COALESCE(startedAt,NOW()) WHERE id=? AND status IN ('queued','running')",
+      [row.runId]
+    );
+    if (!leasedRun.affectedRows) throw new Error("无法取得数据流运行租约。");
+    await connection.commit();
+    return {
+      id: String(row.id),
+      runId: String(row.runId),
+      projectId: String(row.projectId),
+      leaseToken,
+      attempt: Number(row.attempt ?? 0) + 1,
+      maxAttempts: Number(row.maxAttempts ?? 3),
+      executionPlan,
+      executionPlanHash,
+      requestId: row.requestId ? String(row.requestId) : null,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function processDataflowJob(job: ClaimedDataflowJob) {
+  const renewer = setInterval(
+    () => {
+      void db()
+        .query(
+          "UPDATE dataflow_run_job SET leaseExpiresAt=DATE_ADD(NOW(),INTERVAL ? SECOND) WHERE id=? AND status='leased' AND leaseToken=?",
+          [dataflowLeaseSeconds, job.id, job.leaseToken]
+        )
+        .catch(() => undefined);
+    },
+    Math.max(10_000, Math.floor((dataflowLeaseSeconds * 1000) / 3))
+  );
+  renewer.unref?.();
+  const startedAt = Date.now();
+  try {
+    const output = await runDataflowDefinition(
+      job.projectId,
+      job.executionPlan,
+      job.runId,
+      job.requestId
+    );
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [completed] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE dataflow_run_job SET status='completed',resultJson=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND status='leased' AND leaseToken=?",
+        [JSON.stringify(output), job.id, job.leaseToken]
+      );
+      if (!completed.affectedRows)
+        throw new Error("数据流 Job 完成时租约已失效。");
+      const [completedRun] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE dataflow_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='running'",
+        [JSON.stringify(output), Date.now() - startedAt, job.runId]
+      );
+      if (!completedRun.affectedRows)
+        throw new Error("数据流运行完成时状态已改变。");
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    const details = {
+      message: error instanceof Error ? error.message : String(error),
+    };
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const retry = job.attempt < job.maxAttempts;
+      const delaySeconds = Math.min(60, 2 ** Math.max(0, job.attempt - 1));
+      const [updated] = await connection.query<mysql.ResultSetHeader>(
+        `UPDATE dataflow_run_job
+            SET status=?,lastErrorJson=?,availableAt=IF(?='queued',DATE_ADD(NOW(),INTERVAL ? SECOND),availableAt),leaseToken=NULL,leaseExpiresAt=NULL,workerId=NULL,finishedAt=IF(?='failed',NOW(),NULL)
+          WHERE id=? AND status='leased' AND leaseToken=?`,
+        [
+          retry ? "queued" : "failed",
+          JSON.stringify(details),
+          retry ? "queued" : "failed",
+          delaySeconds,
+          retry ? "queued" : "failed",
+          job.id,
+          job.leaseToken,
+        ]
+      );
+      if (!updated.affectedRows)
+        throw new Error("数据流 Job 失败处理时租约已失效。");
+      const [updatedRun] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE dataflow_run SET status=?,errorJson=?,finishedAt=IF(?='failed',NOW(),NULL),durationMs=IF(?='failed',?,NULL) WHERE id=? AND status='running'",
+        [
+          retry ? "queued" : "failed",
+          JSON.stringify(details),
+          retry ? "queued" : "failed",
+          retry ? "queued" : "failed",
+          Date.now() - startedAt,
+          job.runId,
+        ]
+      );
+      if (!updatedRun.affectedRows)
+        throw new Error("数据流运行失败处理时状态已改变。");
+      await connection.commit();
+    } catch (failureError) {
+      await connection.rollback();
+      throw failureError;
+    } finally {
+      connection.release();
+    }
+  } finally {
+    clearInterval(renewer);
+  }
+}
+
+export async function runDataflowJobOnce(onlyRunId?: string) {
+  const job = await claimDataflowJob(onlyRunId);
+  if (!job) return false;
+  await processDataflowJob(job);
+  return true;
 }
 
 export async function runDataflow(
@@ -739,8 +982,9 @@ export async function runDataflow(
       executionPlanHash = compiled.planHash;
     }
     definition = executionPlan.definition;
+    const requestId = currentRequestId() ?? null;
     await connection.query(
-      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,requestId,inputJson,startedAt,triggeredByUserId) VALUES (?,?,?,?,?, 'running',?,?,?,?,?,NOW(),?)",
+      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,requestId,inputJson,triggeredByUserId) VALUES (?,?,?,?,?, 'queued',?,?,?,?,?,?)",
       [
         runId,
         input.projectId,
@@ -750,10 +994,14 @@ export async function runDataflow(
         JSON.stringify(definition),
         JSON.stringify(executionPlan),
         executionPlanHash,
-        currentRequestId() ?? null,
+        requestId,
         JSON.stringify(input.data ?? {}),
         user.id,
       ]
+    );
+    await connection.query(
+      "INSERT INTO dataflow_run_job (id,runId,status,maxAttempts,requestId) VALUES (?,?,'queued',3,?)",
+      [id(), runId, requestId]
     );
     await connection.commit();
   } catch (error) {
@@ -762,24 +1010,26 @@ export async function runDataflow(
   } finally {
     connection.release();
   }
-  const started = Date.now();
-  try {
-    const output = await runDataflowDefinition(input.projectId, executionPlan!);
-    await db().query(
-      "UPDATE dataflow_run SET status='success',outputJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
-      [JSON.stringify(output), Date.now() - started, runId]
+  await runDataflowJobOnce(runId);
+  const [runRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT status,outputJson,errorJson FROM dataflow_run WHERE id=? LIMIT 1",
+    [runId]
+  );
+  const persisted = runRows[0];
+  if (persisted?.status === "failed")
+    throw new Error(
+      String(
+        parseJson(persisted.errorJson, { message: "数据流执行失败。" }).message
+      )
     );
-    return { runId, status: "success" as const, output };
-  } catch (error) {
-    const details = {
-      message: error instanceof Error ? error.message : "数据流执行失败。",
-    };
-    await db().query(
-      "UPDATE dataflow_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
-      [JSON.stringify(details), Date.now() - started, runId]
-    );
-    throw new Error(details.message);
-  }
+  return {
+    runId,
+    status: String(persisted?.status ?? "queued") as
+      | "queued"
+      | "running"
+      | "success",
+    output: parseJson(persisted?.outputJson, null),
+  };
 }
 
 export async function listDataflowRuns(

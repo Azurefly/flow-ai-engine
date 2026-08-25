@@ -38,7 +38,7 @@ export default function DataResourceCenter({ projectId, onOpenWorkflow }: { proj
   const removeUdf = trpc.data.deleteUdf.useMutation({ onSuccess: invalidate, onError: error => toast.error(error.message) });
   const removeTag = trpc.data.deleteTag.useMutation({ onSuccess: invalidate, onError: error => toast.error(error.message) });
   const removePlugin = trpc.data.deletePlugin.useMutation({ onSuccess: invalidate, onError: error => toast.error(error.message) });
-  const run = trpc.data.run.useMutation({ onSuccess: result => { invalidate(); toast.success(`数据流运行成功：${result.runId.slice(0, 8)}`); }, onError: error => toast.error(error.message) });
+  const run = trpc.data.run.useMutation({ onSuccess: result => { invalidate(); toast.success(`${result.status === "success" ? "数据流运行完成" : "数据流已进入持久化执行队列"}：${result.runId.slice(0, 8)}`); }, onError: error => toast.error(error.message) });
   const refreshSchedules = () => { void utils.data.schedules.invalidate({ projectId }); void utils.data.flows.invalidate({ projectId }); };
   const saveSchedule = trpc.data.saveScheduleDraft.useMutation({ onSuccess: () => { refreshSchedules(); toast.success("调度草稿已保存；可在本页启用后台触发。 "); }, onError: error => toast.error(error.message) });
   const activateSchedule = trpc.data.activateSchedule.useMutation({ onSuccess: () => { refreshSchedules(); toast.success("托管计划已启用。 "); }, onError: error => toast.error(error.message) });

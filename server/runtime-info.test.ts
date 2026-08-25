@@ -6,14 +6,17 @@ import {
   getRuntimeInfo,
 } from "./runtime-info";
 
-const serverSource = readFileSync(new URL("./_core/index.ts", import.meta.url), "utf8");
+const serverSource = readFileSync(
+  new URL("./_core/index.ts", import.meta.url),
+  "utf8"
+);
 
 describe("runtime identity and readiness contract", () => {
   it("publishes stable build, migration, worker and capability fields without secrets", () => {
     const info = getRuntimeInfo();
     expect(info.migrationVersion).toBe(DATABASE_MIGRATION_VERSION);
-    expect(DATABASE_MIGRATION_VERSION).toBe("0027_dataflow_execution_plan");
-    expect(DATABASE_MIGRATION_EPOCH).toBe(1787662800000);
+    expect(DATABASE_MIGRATION_VERSION).toBe("0028_durable_dataflow_worker");
+    expect(DATABASE_MIGRATION_EPOCH).toBe(1787666400000);
     expect(info.worker).toHaveProperty("started");
     expect(info.capabilities.map(item => item.id)).toEqual([
       "state-control-workflow",
@@ -21,7 +24,9 @@ describe("runtime identity and readiness contract", () => {
       "llm-node",
       "dataflow",
     ]);
-    expect(JSON.stringify(info)).not.toContain(process.env.OPENAI_API_KEY || "never-match-empty-secret");
+    expect(JSON.stringify(info)).not.toContain(
+      process.env.OPENAI_API_KEY || "never-match-empty-secret"
+    );
   });
 
   it("separates liveness, readiness and version endpoints", () => {

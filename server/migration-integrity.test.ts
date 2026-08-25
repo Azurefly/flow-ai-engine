@@ -57,12 +57,39 @@ const dataflowExecutionPlanMigration = readFileSync(
   new URL("../drizzle/0027_dataflow_execution_plan.sql", import.meta.url),
   "utf8"
 );
+const durableDataflowWorkerMigration = readFileSync(
+  new URL("../drizzle/0028_durable_dataflow_worker.sql", import.meta.url),
+  "utf8"
+);
 const migrationJournal = readFileSync(
   new URL("../drizzle/meta/_journal.json", import.meta.url),
   "utf8"
 );
 
 describe("database migration integrity", () => {
+  it("persists leased dataflow jobs and ordered node execution facts", () => {
+    expect(durableDataflowWorkerMigration).toContain(
+      "CREATE TABLE `dataflow_run_job`"
+    );
+    expect(durableDataflowWorkerMigration).toContain(
+      "dataflow_run_job_run_unique"
+    );
+    expect(durableDataflowWorkerMigration).toContain(
+      "dataflow_run_job_claim_idx"
+    );
+    expect(durableDataflowWorkerMigration).toContain(
+      "CREATE TABLE `dataflow_node_run`"
+    );
+    expect(durableDataflowWorkerMigration).toContain(
+      "dataflow_node_run_run_node_unique"
+    );
+    expect(durableDataflowWorkerMigration).toContain(
+      "dataflow_node_run_run_sequence_unique"
+    );
+    expect(
+      durableDataflowWorkerMigration.match(/ON DELETE cascade/g)
+    ).toHaveLength(2);
+  });
   it("persists immutable dataflow execution plans and request tracing", () => {
     expect(dataflowExecutionPlanMigration).toContain(
       "ALTER TABLE `dataflow_run` ADD `executionPlanJson` json"
@@ -86,35 +113,54 @@ describe("database migration integrity", () => {
     );
   });
   it("persists idempotent control-flow milestones separately from business state", () => {
-    expect(workflowMilestoneMigration).toContain("CREATE TABLE `workflow_milestone`");
-    expect(workflowMilestoneMigration).toContain("workflow_milestone_run_node_unique");
-    expect(workflowMilestoneMigration).toContain("`milestoneCode` varchar(96) NOT NULL");
+    expect(workflowMilestoneMigration).toContain(
+      "CREATE TABLE `workflow_milestone`"
+    );
+    expect(workflowMilestoneMigration).toContain(
+      "workflow_milestone_run_node_unique"
+    );
+    expect(workflowMilestoneMigration).toContain(
+      "`milestoneCode` varchar(96) NOT NULL"
+    );
     expect(workflowMilestoneMigration).not.toContain("currentStateCode");
   });
   it("registers every post-state migration in the standard Drizzle migration chain", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-4).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-5).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
       "0027_dataflow_execution_plan",
+      "0028_durable_dataflow_worker",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(27);
+    expect(journal.entries.at(-1)?.idx).toBe(28);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
-    expect(workflowWaitMigration).toContain("CREATE TABLE `workflow_wait_subscription`");
+    expect(workflowWaitMigration).toContain(
+      "CREATE TABLE `workflow_wait_subscription`"
+    );
     expect(workflowWaitMigration).toContain("enum('timer','message')");
-    expect(workflowWaitMigration).toContain("workflow_wait_subscription_run_node_unique");
+    expect(workflowWaitMigration).toContain(
+      "workflow_wait_subscription_run_node_unique"
+    );
     expect(workflowWaitMigration).toContain("`checkpointJson` json NOT NULL");
   });
   it("creates project-scoped endpoint references without plaintext secret columns", () => {
-    expect(serviceEndpointMigration).toContain("CREATE TABLE `project_service_endpoint`");
-    expect(serviceEndpointMigration).toContain("`allowedHostsJson` json NOT NULL");
+    expect(serviceEndpointMigration).toContain(
+      "CREATE TABLE `project_service_endpoint`"
+    );
+    expect(serviceEndpointMigration).toContain(
+      "`allowedHostsJson` json NOT NULL"
+    );
     expect(serviceEndpointMigration).toContain("`secretRef` varchar(255)");
-    expect(serviceEndpointMigration).toContain("project_service_endpoint_project_ref_unique");
-    expect(serviceEndpointMigration).not.toMatch(/`(secretValue|password|apiKey)`/i);
+    expect(serviceEndpointMigration).toContain(
+      "project_service_endpoint_project_ref_unique"
+    );
+    expect(serviceEndpointMigration).not.toMatch(
+      /`(secretValue|password|apiKey)`/i
+    );
   });
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
     const statements = scheduleBucketMigration
@@ -215,11 +261,17 @@ describe("database migration integrity", () => {
   });
 
   it("creates a deduplicated, leased and retryable workflow outbox", () => {
-    expect(workflowOutboxMigration).toContain("CREATE TABLE `workflow_outbox_event`");
-    expect(workflowOutboxMigration).toContain("enum('queued','leased','delivered','failed')");
+    expect(workflowOutboxMigration).toContain(
+      "CREATE TABLE `workflow_outbox_event`"
+    );
+    expect(workflowOutboxMigration).toContain(
+      "enum('queued','leased','delivered','failed')"
+    );
     expect(workflowOutboxMigration).toContain("workflow_outbox_dedupe_unique");
     expect(workflowOutboxMigration).toContain("workflow_outbox_claim_idx");
-    expect(workflowOutboxMigration).toContain("`maxAttempts` int NOT NULL DEFAULT 8");
+    expect(workflowOutboxMigration).toContain(
+      "`maxAttempts` int NOT NULL DEFAULT 8"
+    );
   });
 
   it("adds durable workflow state facts and explicit human-task outcomes", () => {
@@ -235,13 +287,11 @@ describe("database migration integrity", () => {
     expect(stateOutcomeMigration).toContain(
       "ADD `stateVersion` int DEFAULT 0 NOT NULL"
     );
-    expect(stateOutcomeMigration).toContain(
-      "ADD `outcomeHandlesJson` json"
-    );
-    expect(stateOutcomeMigration).toContain(
-      "ADD `groupOutcome` varchar(96)"
-    );
-    expect(stateOutcomeMigration.indexOf("UPDATE `workflow_run` r JOIN")).toBeLessThan(
+    expect(stateOutcomeMigration).toContain("ADD `outcomeHandlesJson` json");
+    expect(stateOutcomeMigration).toContain("ADD `groupOutcome` varchar(96)");
+    expect(
+      stateOutcomeMigration.indexOf("UPDATE `workflow_run` r JOIN")
+    ).toBeLessThan(
       stateOutcomeMigration.indexOf(
         "MODIFY `flowType` enum('state','control','data') NOT NULL"
       )
