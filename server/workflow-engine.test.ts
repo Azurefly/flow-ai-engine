@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   assertSafeHttpUrl,
+  assertDeterministicLlmAllowedValues,
+  calculateLlmCostMicros,
   assertJsonSchemaValue,
   evaluateApprovalResults,
   interpolate,
   normalizeApprovalResult,
   normalizeReferenceHttpConfig,
+  parseLlmModelPricingCatalog,
+  prepareLlmContext,
+  redactLlmOutput,
   selectRouterRoute,
   withWorkflowIdempotencyHeader,
   redactSensitiveValues,
@@ -83,6 +88,74 @@ describe("LLM 结构化输出边界", () => {
       authorization: "[REDACTED]",
       nested: { apiKey: "[REDACTED]", value: 7 },
     });
+  });
+
+  it("只向 LLM 放行显式白名单中的敏感业务字段且永不放行凭据", () => {
+    const prepared = prepareLlmContext(
+      {
+        input: {
+          customer: {
+            email: "allowed@example.com",
+            phone: "13800000000",
+            apiKey: "never-send",
+          },
+        },
+        vars: {},
+        nodes: {},
+      },
+      ["input.customer.email", "input.customer.apiKey"]
+    );
+    expect(prepared.context).toMatchObject({
+      input: {
+        customer: {
+          email: "allowed@example.com",
+          phone: "[REDACTED]",
+          apiKey: "[REDACTED]",
+        },
+      },
+    });
+    expect(prepared.allowedSensitiveValues).toEqual(["allowed@example.com"]);
+    expect(
+      redactLlmOutput(
+        {
+          summary: "联系 allowed@example.com，token=abc123",
+          email: "allowed@example.com",
+        },
+        prepared.allowedSensitiveValues
+      )
+    ).toEqual({
+      summary: "联系 [REDACTED]，token=[REDACTED]",
+      email: "[REDACTED]",
+    });
+  });
+
+  it("使用可信模型定价计算微货币成本并执行确定性允许值", () => {
+    const catalog = parseLlmModelPricingCatalog(
+      JSON.stringify({
+        "model-a": {
+          inputMicrosPerMillionTokens: 1_000_000,
+          outputMicrosPerMillionTokens: 2_000_000,
+        },
+      })
+    );
+    expect(
+      calculateLlmCostMicros(
+        { prompt_tokens: 100, completion_tokens: 50 },
+        catalog["model-a"]
+      )
+    ).toBe(200);
+    expect(() =>
+      assertDeterministicLlmAllowedValues(
+        { decision: "approved" },
+        { decision: ["approved", "rejected"] }
+      )
+    ).not.toThrow();
+    expect(() =>
+      assertDeterministicLlmAllowedValues(
+        { decision: "unknown" },
+        { decision: ["approved", "rejected"] }
+      )
+    ).toThrow("不在允许值中");
   });
 });
 

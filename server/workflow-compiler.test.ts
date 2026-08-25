@@ -381,6 +381,63 @@ describe("WorkflowCompiler", () => {
       );
   });
 
+  it("requires a real non-automatic operate gate when LLM human review is enabled", () => {
+    const definition = base();
+    definition.nodes.splice(1, 0, {
+      id: "llm",
+      type: "llm",
+      name: "LLM",
+      position: { x: 120, y: 0 },
+      config: {
+        systemPrompt: "system",
+        prompt: "hello",
+        governance: {
+          dataClassification: "internal",
+          allowSensitiveFields: [],
+          cachePolicy: "none",
+          humanReviewRequired: true,
+        },
+      },
+    });
+    definition.edges = [
+      { id: "start-llm", sourceNodeId: "start", targetNodeId: "llm" },
+      { id: "llm-end", sourceNodeId: "llm", targetNodeId: "end" },
+    ];
+    const invalid = analyzeWorkflowDefinition(definition, {
+      flowType: "control",
+      executable: true,
+    });
+    expect(invalid.ok).toBe(false);
+    if (!invalid.ok)
+      expect(invalid.diagnostics.map(item => item.code)).toContain(
+        "WF_LLM_HUMAN_REVIEW_GATE_REQUIRED"
+      );
+
+    definition.nodes.splice(2, 0, {
+      id: "review",
+      type: "operate",
+      name: "人工复核",
+      position: { x: 240, y: 0 },
+      config: {
+        nodeDh: "REVIEW",
+        assigneeMode: "initiator",
+        instruction: "复核 LLM 输出",
+        outcomeMode: "legacy_cancel",
+        autoExecute: false,
+      },
+    });
+    definition.edges = [
+      { id: "start-llm", sourceNodeId: "start", targetNodeId: "llm" },
+      { id: "llm-review", sourceNodeId: "llm", targetNodeId: "review" },
+      { id: "review-end", sourceNodeId: "review", targetNodeId: "end" },
+    ];
+    const valid = analyzeWorkflowDefinition(definition, {
+      flowType: "control",
+      executable: true,
+    });
+    expect(valid.ok).toBe(true);
+  });
+
   it("keeps parallel and loop definitions editable but blocks publication until runtime semantics exist", () => {
     const parallel = base();
     parallel.nodes = [

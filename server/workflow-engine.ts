@@ -18,6 +18,7 @@ import {
   readOperateOutcomes,
 } from "../shared/workflow-node-contract";
 import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
+import { ENV } from "./_core/env";
 import { currentRequestId } from "./_core/http-security";
 import {
   assertWorkflowExecutionPlan,
@@ -237,13 +238,168 @@ export function redactSensitiveValues(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as JsonRecord).map(([key, item]) => [
       key,
-      /(password|passwd|secret|token|api[_-]?key|authorization|cookie)/i.test(
+      /(password|passwd|secret|token|api[_-]?key|authorization|cookie|e-?mail|phone|mobile|id[_-]?card|ssn|bank[_-]?(account|card)|card[_-]?number)/i.test(
         key
       )
         ? "[REDACTED]"
         : redactSensitiveValues(item),
     ])
   );
+}
+
+const LLM_CREDENTIAL_FIELD =
+  /(password|passwd|secret|token|api[_-]?key|authorization|cookie)/i;
+const LLM_GUARDED_FIELD =
+  /(e-?mail|phone|mobile|id[_-]?card|ssn|bank[_-]?(account|card)|card[_-]?number)/i;
+
+function pathMatches(pattern: string, path: string) {
+  const patternParts = pattern.split(".");
+  const pathParts = path.split(".");
+  return (
+    patternParts.length === pathParts.length &&
+    patternParts.every(
+      (part, index) => part === "*" || part === pathParts[index]
+    )
+  );
+}
+
+function collectPrimitiveStrings(value: unknown, target: Set<string>) {
+  if (Array.isArray(value)) {
+    value.forEach(item => collectPrimitiveStrings(item, target));
+    return;
+  }
+  if (value && typeof value === "object") {
+    Object.values(value as JsonRecord).forEach(item =>
+      collectPrimitiveStrings(item, target)
+    );
+    return;
+  }
+  if (typeof value === "string" && value.length >= 3) target.add(value);
+  if (typeof value === "number" && Number.isFinite(value))
+    target.add(String(value));
+}
+
+export function prepareLlmContext(
+  context: JsonRecord,
+  allowSensitiveFields: string[]
+): { context: JsonRecord; allowedSensitiveValues: string[] } {
+  const allowedValues = new Set<string>();
+  const visit = (value: unknown, path: string): unknown => {
+    if (Array.isArray(value))
+      return value.map((item, index) => visit(item, `${path}.${index}`));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(
+      Object.entries(value as JsonRecord).map(([key, item]) => {
+        const fieldPath = path ? `${path}.${key}` : key;
+        if (LLM_CREDENTIAL_FIELD.test(key)) return [key, "[REDACTED]"];
+        if (LLM_GUARDED_FIELD.test(key)) {
+          const allowed = allowSensitiveFields.some(pattern =>
+            pathMatches(pattern, fieldPath)
+          );
+          if (!allowed) return [key, "[REDACTED]"];
+          collectPrimitiveStrings(item, allowedValues);
+        }
+        return [key, visit(item, fieldPath)];
+      })
+    );
+  };
+  return {
+    context: visit(context, "") as JsonRecord,
+    allowedSensitiveValues: Array.from(allowedValues).sort(
+      (left, right) => right.length - left.length
+    ),
+  };
+}
+
+export function redactLlmOutput(
+  value: unknown,
+  sensitiveValues: string[]
+): unknown {
+  if (typeof value === "string") {
+    let redacted = value
+      .replace(/Bearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [REDACTED]")
+      .replace(
+        /(api[_-]?key|password|secret|token)\s*[:=]\s*\S+/gi,
+        "$1=[REDACTED]"
+      );
+    for (const sensitive of sensitiveValues)
+      redacted = redacted.replaceAll(sensitive, "[REDACTED]");
+    return redacted;
+  }
+  if (Array.isArray(value))
+    return value.map(item => redactLlmOutput(item, sensitiveValues));
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as JsonRecord).map(([key, item]) => [
+      key,
+      LLM_CREDENTIAL_FIELD.test(key) || LLM_GUARDED_FIELD.test(key)
+        ? "[REDACTED]"
+        : redactLlmOutput(item, sensitiveValues),
+    ])
+  );
+}
+
+export type LlmModelPricing = {
+  inputMicrosPerMillionTokens: number;
+  outputMicrosPerMillionTokens: number;
+};
+
+export function parseLlmModelPricingCatalog(
+  raw: string
+): Record<string, LlmModelPricing> {
+  if (!raw.trim()) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("LLM_MODEL_PRICING_JSON 不是合法 JSON。");
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("LLM_MODEL_PRICING_JSON 必须是模型到定价的对象。");
+  return Object.fromEntries(
+    Object.entries(parsed as JsonRecord).map(([model, value]) => {
+      const pricing = asRecord(value);
+      const input = Number(pricing.inputMicrosPerMillionTokens);
+      const output = Number(pricing.outputMicrosPerMillionTokens);
+      if (
+        !model.trim() ||
+        !Number.isFinite(input) ||
+        input < 0 ||
+        !Number.isFinite(output) ||
+        output < 0
+      )
+        throw new Error(`LLM 模型 ${model || "<empty>"} 的定价配置无效。`);
+      return [
+        model,
+        {
+          inputMicrosPerMillionTokens: input,
+          outputMicrosPerMillionTokens: output,
+        },
+      ];
+    })
+  );
+}
+
+export function calculateLlmCostMicros(
+  usage: { prompt_tokens: number; completion_tokens: number },
+  pricing: LlmModelPricing
+) {
+  return Math.ceil(
+    (usage.prompt_tokens * pricing.inputMicrosPerMillionTokens +
+      usage.completion_tokens * pricing.outputMicrosPerMillionTokens) /
+      1_000_000
+  );
+}
+
+export function assertDeterministicLlmAllowedValues(
+  value: unknown,
+  allowedValues: Record<string, unknown[]>
+) {
+  for (const [path, allowed] of Object.entries(allowedValues)) {
+    const actual = getPath(asRecord(value), path.replace(/^\$\.?/, ""));
+    if (!allowed.some(item => JSON.stringify(item) === JSON.stringify(actual)))
+      throw new Error(`LLM 确定性校验字段 ${path} 不在允许值中。`);
+  }
 }
 export type WorkflowRunDetail = {
   workflowId: string;
@@ -845,7 +1001,27 @@ async function resolveServiceTaskRuntimeConfig(
 }
 
 async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
-  const resolved = asRecord(resolveTemplates(config, context));
+  const configuredGovernance = asRecord(config.governance);
+  const providerRef = String(
+    configuredGovernance.providerRef ?? "runtime-default"
+  );
+  if (providerRef !== "runtime-default")
+    throw new Error(`LLM ProviderRef 当前不可用：${providerRef}。`);
+  const dataClassification = String(
+    configuredGovernance.dataClassification ?? "internal"
+  );
+  const allowSensitiveFields = Array.isArray(
+    configuredGovernance.allowSensitiveFields
+  )
+    ? configuredGovernance.allowSensitiveFields.map(String)
+    : [];
+  if (dataClassification === "public" && allowSensitiveFields.length)
+    throw new Error("public 数据分类不允许向 LLM 放行敏感字段。");
+  const preparedContext = prepareLlmContext(context, allowSensitiveFields);
+  const resolved = asRecord(
+    resolveTemplates(config, preparedContext.context)
+  );
+  const governance = asRecord(resolved.governance);
   const catalog = await listLLMModels();
   const requestedModel =
     typeof resolved.model === "string" ? resolved.model : undefined;
@@ -869,25 +1045,72 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
     !Array.isArray(resolved.outputSchema)
       ? asRecord(resolved.outputSchema)
       : undefined;
+  const deterministicValidation = asRecord(
+    governance.deterministicValidation
+  );
+  const deterministicSchema =
+    deterministicValidation.schema &&
+    typeof deterministicValidation.schema === "object" &&
+    !Array.isArray(deterministicValidation.schema)
+      ? asRecord(deterministicValidation.schema)
+      : undefined;
+  const effectiveOutputSchema =
+    outputSchema ??
+    (deterministicSchema
+      ? {
+          name: "llm_governed_output",
+          schema: deterministicSchema,
+          strict: true,
+        }
+      : undefined);
   if (
-    outputSchema &&
-    (typeof outputSchema.name !== "string" ||
-      !outputSchema.name.trim() ||
-      !outputSchema.schema ||
-      typeof outputSchema.schema !== "object")
+    effectiveOutputSchema &&
+    (typeof effectiveOutputSchema.name !== "string" ||
+      !effectiveOutputSchema.name.trim() ||
+      !effectiveOutputSchema.schema ||
+      typeof effectiveOutputSchema.schema !== "object")
   )
     throw new Error("LLM 节点结构化输出 Schema 必须包含 name 和 schema 对象。");
+  const maxCostMicros = Number(governance.maxCostMicros);
+  const hasCostLimit = Number.isInteger(maxCostMicros) && maxCostMicros > 0;
+  const pricingCatalog = ENV.llmModelPricingJson.trim()
+    ? parseLlmModelPricingCatalog(ENV.llmModelPricingJson)
+    : {};
+  const pricing = model ? pricingCatalog[model] : undefined;
+  if (hasCostLimit && !pricing)
+    throw new Error(
+      `LLM 模型 ${model ?? "<unknown>"} 未配置可信定价，无法执行费用上限。`
+    );
+  const promptTokenUpperBound =
+    Buffer.byteLength(`${systemPrompt}\n${prompt}`, "utf8") + 256;
+  const projectedCostMicros = pricing
+    ? calculateLlmCostMicros(
+        {
+          prompt_tokens: promptTokenUpperBound,
+          completion_tokens: maxTokens ?? 8_192,
+        },
+        pricing
+      )
+    : null;
+  if (
+    hasCostLimit &&
+    projectedCostMicros !== null &&
+    projectedCostMicros > maxCostMicros
+  )
+    throw new Error(
+      `LLM 节点最坏费用 ${projectedCostMicros} micros 超过上限 ${maxCostMicros} micros。`
+    );
   const startedAt = Date.now();
   const response = await invokeLLM({
     model,
     maxTokens,
     timeoutMs,
-    ...(outputSchema
+    ...(effectiveOutputSchema
       ? {
           outputSchema: {
-            name: String(outputSchema.name),
-            schema: outputSchema.schema as Record<string, unknown>,
-            strict: outputSchema.strict === true,
+            name: String(effectiveOutputSchema.name),
+            schema: effectiveOutputSchema.schema as Record<string, unknown>,
+            strict: effectiveOutputSchema.strict === true,
           },
         }
       : {}),
@@ -903,18 +1126,64 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
         .join("\n")
     : (content ?? "");
   let structured: unknown;
-  if (outputSchema) {
+  if (effectiveOutputSchema) {
     structured = parseStructuredLlmOutput(contentText);
     assertJsonSchemaValue(
       structured,
-      outputSchema.schema as Record<string, unknown>
+      effectiveOutputSchema.schema as Record<string, unknown>
     );
   }
+  if (deterministicSchema && structured !== undefined)
+    assertJsonSchemaValue(structured, deterministicSchema);
+  const allowedValues = asRecord(deterministicValidation.allowedValues);
+  if (Object.keys(allowedValues).length) {
+    if (structured === undefined)
+      throw new Error("LLM 确定性允许值校验需要结构化输出。");
+    assertDeterministicLlmAllowedValues(
+      structured,
+      Object.fromEntries(
+        Object.entries(allowedValues).map(([path, values]) => [
+          path,
+          Array.isArray(values) ? values : [],
+        ])
+      )
+    );
+  }
+  const actualModel = response.model || model;
+  const actualPricing = actualModel ? pricingCatalog[actualModel] : undefined;
+  const actualCostMicros =
+    response.usage && actualPricing
+      ? calculateLlmCostMicros(response.usage, actualPricing)
+      : null;
+  if (hasCostLimit && (!response.usage || !actualPricing))
+    throw new Error("LLM Provider 未返回可计费 usage 或实际模型缺少可信定价。");
+  if (
+    hasCostLimit &&
+    actualCostMicros !== null &&
+    actualCostMicros > maxCostMicros
+  )
+    throw new Error(
+      `LLM 节点实际费用 ${actualCostMicros} micros 超过上限 ${maxCostMicros} micros。`
+    );
+  const redactedContent = redactLlmOutput(
+    contentText,
+    preparedContext.allowedSensitiveValues
+  );
+  const redactedStructured =
+    structured === undefined
+      ? undefined
+      : redactLlmOutput(structured, preparedContext.allowedSensitiveValues);
   return {
-    model: response.model || model,
-    content: contentText,
-    ...(structured === undefined ? {} : { structured }),
+    model: actualModel,
+    content: redactedContent,
+    ...(redactedStructured === undefined
+      ? {}
+      : { structured: redactedStructured }),
     usage: response.usage ?? null,
+    costMicros: actualCostMicros,
+    maxCostMicros: hasCostLimit ? maxCostMicros : null,
+    dataClassification,
+    humanReviewRequired: governance.humanReviewRequired === true,
     finishReason: response.choices[0]?.finish_reason ?? null,
     durationMs: Date.now() - startedAt,
     requestId:

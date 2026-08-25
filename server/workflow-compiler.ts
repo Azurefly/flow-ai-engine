@@ -17,6 +17,7 @@ import {
   compileHttpServiceTask,
   type HttpServiceTaskPlan,
 } from "@shared/service-task-contract";
+import { normalizeReferenceOperateConfig } from "@shared/reference-operate-config";
 
 export type WorkflowNode = {
   id: string;
@@ -61,7 +62,13 @@ export type WorkflowCompileDiagnostic = {
 
 export type WorkflowExecutionPlan = {
   schemaVersion: 1;
-  compilerVersion: "1.0.0" | "1.1.0" | "1.2.0" | "1.3.0" | "1.4.0";
+  compilerVersion:
+    | "1.0.0"
+    | "1.1.0"
+    | "1.2.0"
+    | "1.3.0"
+    | "1.4.0"
+    | "1.5.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -716,6 +723,79 @@ export function analyzeWorkflowDefinition(
           );
       }
       if (node.type === "llm") {
+        const governance =
+          node.config.governance &&
+          typeof node.config.governance === "object" &&
+          !Array.isArray(node.config.governance)
+            ? (node.config.governance as Record<string, unknown>)
+            : {};
+        const humanReviewRequired = governance.humanReviewRequired === true;
+        const deterministicValidation =
+          governance.deterministicValidation &&
+          typeof governance.deterministicValidation === "object" &&
+          !Array.isArray(governance.deterministicValidation);
+        const defaultEdges = nodeOutgoing.filter(
+          edge => (edge.sourceHandle?.trim() || "default") === "default"
+        );
+        if (humanReviewRequired) {
+          const reviewNode =
+            defaultEdges.length === 1
+              ? nodesById.get(defaultEdges[0].targetNodeId)
+              : undefined;
+          const validReviewNode =
+            reviewNode?.type === "operate" &&
+            !normalizeReferenceOperateConfig(reviewNode.config).autoExecute;
+          if (!validReviewNode)
+            diagnostics.push(
+              diagnostic(
+                "WF_LLM_HUMAN_REVIEW_GATE_REQUIRED",
+                `LLM 节点“${node.name}”要求人工复核，default 分支必须且仅能直连一个非自动执行的人工操作节点。`,
+                {
+                  kind: "node",
+                  nodeId: node.id,
+                  field: "config.governance.humanReviewRequired",
+                }
+              )
+            );
+        }
+        if (
+          options.flowType === "state" &&
+          !humanReviewRequired &&
+          !deterministicValidation
+        ) {
+          const visited = new Set<string>();
+          const queue = defaultEdges.map(edge => edge.targetNodeId);
+          let reachesDecisionBeforeReview = false;
+          while (queue.length && !reachesDecisionBeforeReview) {
+            const candidateId = queue.shift()!;
+            if (visited.has(candidateId)) continue;
+            visited.add(candidateId);
+            const candidate = nodesById.get(candidateId);
+            if (!candidate || candidate.type === "operate") continue;
+            if (
+              ["condition", "router", "state", "end"].includes(
+                candidate.type
+              )
+            ) {
+              reachesDecisionBeforeReview = true;
+              break;
+            }
+            for (const edge of outgoing.get(candidateId) ?? [])
+              queue.push(edge.targetNodeId);
+          }
+          if (reachesDecisionBeforeReview)
+            diagnostics.push(
+              diagnostic(
+                "WF_LLM_STATE_DECISION_GUARD_REQUIRED",
+                `状态流程中的 LLM 节点“${node.name}”会在人工闸门前影响状态或决策，必须配置确定性校验或人工复核。`,
+                {
+                  kind: "node",
+                  nodeId: node.id,
+                  field: "config.governance",
+                }
+              )
+            );
+        }
         const allowedHandles = new Set(
           ["default", String(node.config.failureHandle ?? "").trim()].filter(
             Boolean
@@ -1041,7 +1121,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.4.0",
+    compilerVersion: "1.5.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,

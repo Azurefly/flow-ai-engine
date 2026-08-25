@@ -245,6 +245,13 @@ function FlowNodeCard({ data, selected }: NodeProps) {
           item => item && typeof item === "object"
         ) as NodeConfig[])
       : [];
+  const llmGovernance =
+    nodeData.kind === "llm" &&
+    nodeData.config.governance &&
+    typeof nodeData.config.governance === "object" &&
+    !Array.isArray(nodeData.config.governance)
+      ? (nodeData.config.governance as NodeConfig)
+      : {};
   return (
     <div
       className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-white px-4 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all ${selected ? "-translate-y-0.5 ring-4 ring-indigo-100 shadow-[0_12px_30px_rgba(79,70,229,0.16)]" : "hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,0.12)]"}`}
@@ -280,6 +287,31 @@ function FlowNodeCard({ data, selected }: NodeProps) {
           }
         />
       </div>
+      {nodeData.kind === "llm" && (
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2.5 text-[10px] font-semibold">
+          <span className="rounded-md bg-indigo-50 px-1.5 py-1 text-indigo-700">
+            {String(nodeData.config.model || "自动模型")}
+          </span>
+          <span className="rounded-md bg-slate-100 px-1.5 py-1 text-slate-600">
+            {String(llmGovernance.dataClassification || "internal")}
+          </span>
+          {nodeData.config.outputSchema ? (
+            <span className="rounded-md bg-emerald-50 px-1.5 py-1 text-emerald-700">
+              结构化输出
+            </span>
+          ) : null}
+          {llmGovernance.humanReviewRequired === true ? (
+            <span className="rounded-md bg-amber-50 px-1.5 py-1 text-amber-700">
+              人工复核
+            </span>
+          ) : null}
+          {Number(llmGovernance.maxCostMicros) > 0 ? (
+            <span className="rounded-md bg-rose-50 px-1.5 py-1 text-rose-700">
+              ≤ {Number(llmGovernance.maxCostMicros)} μ
+            </span>
+          ) : null}
+        </div>
+      )}
       {routeItems.length > 0 && (
         <div className="mt-3 grid gap-1.5 border-t border-slate-100 pt-2.5">
           {routeItems.map((route, index) => {

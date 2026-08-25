@@ -11,4 +11,5 @@ export const ENV = {
     process.env.OPENAI_BASE_URL ?? process.env.BUILT_IN_FORGE_API_URL ?? "",
   llmApiKey:
     process.env.OPENAI_API_KEY ?? process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  llmModelPricingJson: process.env.LLM_MODEL_PRICING_JSON ?? "",
 };

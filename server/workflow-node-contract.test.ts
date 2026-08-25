@@ -207,6 +207,18 @@ describe("原始节点配置统一契约", () => {
       timeoutMs: 1_000,
       outputSchema: { name: "decision", schema: { type: "object" } },
       failureHandle: "failed",
+      governance: {
+        providerRef: "runtime-default",
+        maxCostMicros: 10_000,
+        dataClassification: "confidential",
+        allowSensitiveFields: ["input.customer.email"],
+        cachePolicy: "none",
+        deterministicValidation: {
+          schema: { type: "object" },
+          allowedValues: { decision: ["approved", "rejected"] },
+        },
+        humanReviewRequired: true,
+      },
     };
     expect(() => validateNodeConfig("llm", valid)).not.toThrow();
     expect(() =>
@@ -227,6 +239,30 @@ describe("原始节点配置统一契约", () => {
     expect(() =>
       validateNodeConfig("llm", { ...valid, failureHandle: 1 })
     ).toThrow("失败分支句柄必须是字符串");
+    expect(() =>
+      validateNodeConfig("llm", {
+        ...valid,
+        governance: {
+          ...valid.governance,
+          dataClassification: "public",
+        },
+      })
+    ).toThrow("public 数据分类");
+    expect(() =>
+      validateNodeConfig("llm", {
+        ...valid,
+        governance: {
+          ...valid.governance,
+          allowSensitiveFields: ["runtime.secret"],
+        },
+      })
+    ).toThrow("安全字段路径");
+    expect(() =>
+      validateNodeConfig("llm", {
+        ...valid,
+        governance: { ...valid.governance, cachePolicy: "prompt_hash" },
+      })
+    ).toThrow("尚未启用");
   });
 
   it("接纳结构化原版权限配置，但继续阻止任意代码和未迁移路由被静默执行", () => {

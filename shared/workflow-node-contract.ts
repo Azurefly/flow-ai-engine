@@ -1078,6 +1078,13 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       maxTokens: 1024,
       timeoutMs: 30000,
       failureHandle: "",
+      governance: {
+        providerRef: "runtime-default",
+        dataClassification: "internal",
+        allowSensitiveFields: [],
+        cachePolicy: "none",
+        humanReviewRequired: false,
+      },
     },
     fields: [
       {
@@ -1123,6 +1130,13 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "失败分支句柄",
         help: "LLM 超时、Provider 或结构化解析失败时，沿此句柄进入补偿/人工处理分支。",
         kind: "text",
+      },
+      {
+        key: "governance",
+        label: "LLM 治理策略",
+        help: "配置 providerRef、maxCostMicros、数据分类、敏感字段白名单、确定性校验与人工复核；费用上限依赖服务端可信模型定价目录。",
+        kind: "json",
+        required: true,
       },
     ],
   },
@@ -1963,6 +1977,79 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           config.failureHandle,
           "LLM 节点失败分支句柄必须是字符串。"
         );
+      if (config.governance !== undefined) {
+        assertObject(config.governance, "LLM 治理策略必须是对象。");
+        const governance = config.governance as NodeConfig;
+        if (
+          governance.providerRef !== undefined &&
+          governance.providerRef !== "runtime-default"
+        )
+          throw new Error("LLM 节点当前仅支持 runtime-default ProviderRef。");
+        if (
+          governance.maxCostMicros !== undefined &&
+          (!Number.isInteger(governance.maxCostMicros) ||
+            Number(governance.maxCostMicros) < 1 ||
+            Number(governance.maxCostMicros) > 1_000_000_000_000)
+        )
+          throw new Error(
+            "LLM 节点费用上限必须是 1 至 1,000,000,000,000 的整数微货币单位。"
+          );
+        const classification = String(
+          governance.dataClassification ?? "internal"
+        );
+        if (!["public", "internal", "confidential"].includes(classification))
+          throw new Error("LLM 节点数据分类无效。");
+        const allowSensitiveFields = governance.allowSensitiveFields ?? [];
+        if (!Array.isArray(allowSensitiveFields))
+          throw new Error("LLM 节点敏感字段白名单必须是数组。");
+        for (const path of allowSensitiveFields) {
+          if (
+            typeof path !== "string" ||
+            !/^(input|vars|nodes)(\.[A-Za-z0-9_*:-]+)+$/.test(path)
+          )
+            throw new Error(
+              "LLM 节点敏感字段白名单必须使用 input、vars 或 nodes 开头的安全字段路径。"
+            );
+        }
+        if (classification === "public" && allowSensitiveFields.length)
+          throw new Error("public 数据分类不允许向 LLM 放行敏感字段。");
+        if (
+          governance.cachePolicy !== undefined &&
+          governance.cachePolicy !== "none"
+        )
+          throw new Error("LLM 节点 prompt_hash 缓存尚未启用，当前仅支持 none。");
+        if (
+          governance.humanReviewRequired !== undefined &&
+          typeof governance.humanReviewRequired !== "boolean"
+        )
+          throw new Error("LLM 节点人工复核开关必须是布尔值。");
+        if (governance.deterministicValidation !== undefined) {
+          assertObject(
+            governance.deterministicValidation,
+            "LLM 节点确定性校验策略必须是对象。"
+          );
+          const deterministic =
+            governance.deterministicValidation as NodeConfig;
+          assertObject(
+            deterministic.schema,
+            "LLM 节点确定性校验必须配置 Schema 对象。"
+          );
+          if (deterministic.allowedValues !== undefined) {
+            assertObject(
+              deterministic.allowedValues,
+              "LLM 节点确定性允许值必须是字段路径到数组的对象。"
+            );
+            for (const [path, values] of Object.entries(
+              deterministic.allowedValues as NodeConfig
+            )) {
+              if (!path.trim() || !Array.isArray(values))
+                throw new Error(
+                  "LLM 节点确定性允许值必须是字段路径到数组的对象。"
+                );
+            }
+          }
+        }
+      }
       break;
     case "subflow":
       assertString(
