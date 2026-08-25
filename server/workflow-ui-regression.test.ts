@@ -6,6 +6,7 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 const canvasSource = source("../client/src/components/WorkflowCanvas.tsx");
 const nodeContractSource = source("../shared/workflow-node-contract.ts");
+const flowProfileSource = source("../shared/flow-profile-contract.ts");
 const governanceSource = source(
   "../client/src/components/WorkflowGovernance.tsx"
 );
@@ -817,7 +818,7 @@ describe("流程设计器界面回归约束", () => {
     expect(workflowServiceSource).toContain("canRestore");
     expect(workflowEngineSource).toContain("已归档流程不能发起运行");
     expect(workflowEngineSource).toContain(
-      "SELECT archivedAt FROM workflow WHERE id=? LIMIT 1 FOR UPDATE"
+      "SELECT archivedAt,flowType FROM workflow WHERE id=? LIMIT 1 FOR UPDATE"
     );
     expect(projectServiceSource).toContain("archivedAt IS NULL");
     expect(dataflowServiceSource).toContain(
@@ -826,6 +827,16 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain("取消高亮");
     expect(warehouseSource).toContain("保存为图片");
     expect(warehouseSource).toContain("全屏");
+  });
+
+  it("让三类流程目录和服务端运行边界共用 FlowProfile 合同", () => {
+    expect(flowProfileSource).toContain("STATE_NODE_TYPES");
+    expect(flowProfileSource).toContain("CONTROL_NODE_TYPES");
+    expect(flowProfileSource).toContain("DATA_NODE_TYPES");
+    expect(canvasSource).toContain("isFlowNodeAllowed(flowType, item.type)");
+    expect(workflowEngineSource).toContain(
+      "数据流程必须通过数据流运行入口启动"
+    );
   });
 
   it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {

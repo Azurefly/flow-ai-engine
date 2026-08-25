@@ -40,7 +40,9 @@ export function resolveRuntimeLlmModel(
 ): string | undefined {
   if (requestedModel) {
     if (!catalog.some(item => item.id === requestedModel)) {
-      throw new Error(`LLM 节点指定模型不在运行时白名单中：${requestedModel}。`);
+      throw new Error(
+        `LLM 节点指定模型不在运行时白名单中：${requestedModel}。`
+      );
     }
     return requestedModel;
   }
@@ -60,42 +62,83 @@ export function assertJsonSchemaValue(
   schema: Record<string, unknown>,
   path = "$"
 ): void {
-  if (Array.isArray(schema.enum) && !schema.enum.some(item => JSON.stringify(item) === JSON.stringify(value)))
+  if (
+    Array.isArray(schema.enum) &&
+    !schema.enum.some(item => JSON.stringify(item) === JSON.stringify(value))
+  )
     throw new Error(`LLM 结构化输出 ${path} 不在允许的枚举值中。`);
   const type = typeof schema.type === "string" ? schema.type : undefined;
   const matchesType =
     !type ||
-    (type === "object" && Boolean(value) && typeof value === "object" && !Array.isArray(value)) ||
+    (type === "object" &&
+      Boolean(value) &&
+      typeof value === "object" &&
+      !Array.isArray(value)) ||
     (type === "array" && Array.isArray(value)) ||
     (type === "string" && typeof value === "string") ||
-    (type === "number" && typeof value === "number" && Number.isFinite(value)) ||
+    (type === "number" &&
+      typeof value === "number" &&
+      Number.isFinite(value)) ||
     (type === "integer" && Number.isInteger(value)) ||
     (type === "boolean" && typeof value === "boolean") ||
     (type === "null" && value === null);
   if (!matchesType)
     throw new Error(`LLM 结构化输出 ${path} 类型不符合 ${type} 约束。`);
-  if (type === "object" && value && typeof value === "object" && !Array.isArray(value)) {
+  if (
+    type === "object" &&
+    value &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  ) {
     const record = value as JsonRecord;
-    const required = Array.isArray(schema.required) ? schema.required.map(String) : [];
+    const required = Array.isArray(schema.required)
+      ? schema.required.map(String)
+      : [];
     for (const key of required)
       if (!(key in record) || record[key] === undefined || record[key] === null)
         throw new Error(`LLM 结构化输出缺少必填字段：${path}.${key}。`);
     const properties = asRecord(schema.properties);
     for (const [key, childSchema] of Object.entries(properties)) {
-      if (record[key] !== undefined && childSchema && typeof childSchema === "object" && !Array.isArray(childSchema))
-        assertJsonSchemaValue(record[key], childSchema as Record<string, unknown>, `${path}.${key}`);
+      if (
+        record[key] !== undefined &&
+        childSchema &&
+        typeof childSchema === "object" &&
+        !Array.isArray(childSchema)
+      )
+        assertJsonSchemaValue(
+          record[key],
+          childSchema as Record<string, unknown>,
+          `${path}.${key}`
+        );
     }
     if (schema.additionalProperties === false) {
       const unexpected = Object.keys(record).find(key => !(key in properties));
       if (unexpected)
-        throw new Error(`LLM 结构化输出包含未允许字段：${path}.${unexpected}。`);
+        throw new Error(
+          `LLM 结构化输出包含未允许字段：${path}.${unexpected}。`
+        );
     }
   }
-  if (type === "array" && Array.isArray(value) && schema.items && typeof schema.items === "object" && !Array.isArray(schema.items))
-    value.forEach((item, index) => assertJsonSchemaValue(item, schema.items as Record<string, unknown>, `${path}[${index}]`));
+  if (
+    type === "array" &&
+    Array.isArray(value) &&
+    schema.items &&
+    typeof schema.items === "object" &&
+    !Array.isArray(schema.items)
+  )
+    value.forEach((item, index) =>
+      assertJsonSchemaValue(
+        item,
+        schema.items as Record<string, unknown>,
+        `${path}[${index}]`
+      )
+    );
 }
 
-export function validateFormSubmission(fields: unknown[], submittedValue: unknown) {
+export function validateFormSubmission(
+  fields: unknown[],
+  submittedValue: unknown
+) {
   const submitted = asRecord(submittedValue);
   const result: JsonRecord = {};
   for (const rawField of fields) {
@@ -104,20 +147,32 @@ export function validateFormSubmission(fields: unknown[], submittedValue: unknow
     if (!key) throw new Error("表单字段缺少 key。");
     const hasSubmitted = Object.prototype.hasOwnProperty.call(submitted, key);
     let value = hasSubmitted ? submitted[key] : field.defaultValue;
-    if (field.readOnly === true && hasSubmitted && JSON.stringify(value) !== JSON.stringify(field.defaultValue))
+    if (
+      field.readOnly === true &&
+      hasSubmitted &&
+      JSON.stringify(value) !== JSON.stringify(field.defaultValue)
+    )
       throw new Error(`表单字段“${key}”为只读，不允许由调用方修改。`);
     const empty = value === undefined || value === null || value === "";
     if (field.required === true && empty)
       throw new Error(`表单必填字段“${key}”缺失。`);
     if (empty) continue;
     const type = String(field.type ?? "text").toLowerCase();
-    if (["text", "string", "textarea", "email", "date", "select"].includes(type) && typeof value !== "string")
+    if (
+      ["text", "string", "textarea", "email", "date", "select"].includes(
+        type
+      ) &&
+      typeof value !== "string"
+    )
       throw new Error(`表单字段“${key}”必须是字符串。`);
     if (type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value)))
       throw new Error(`表单字段“${key}”不是有效邮箱。`);
     if (type === "date" && Number.isNaN(Date.parse(String(value))))
       throw new Error(`表单字段“${key}”不是有效日期。`);
-    if (type === "number" && (typeof value !== "number" || !Number.isFinite(value)))
+    if (
+      type === "number" &&
+      (typeof value !== "number" || !Number.isFinite(value))
+    )
       throw new Error(`表单字段“${key}”必须是有限数值。`);
     if (type === "boolean" && typeof value !== "boolean")
       throw new Error(`表单字段“${key}”必须是布尔值。`);
@@ -130,15 +185,34 @@ export function validateFormSubmission(fields: unknown[], submittedValue: unknow
         })
       : [];
     if (options.length) {
-      const values = type === "multiselect" ? value as unknown[] : [value];
-      if (values.some(item => !options.some(option => JSON.stringify(option) === JSON.stringify(item))))
+      const values = type === "multiselect" ? (value as unknown[]) : [value];
+      if (
+        values.some(
+          item =>
+            !options.some(
+              option => JSON.stringify(option) === JSON.stringify(item)
+            )
+        )
+      )
         throw new Error(`表单字段“${key}”包含选项范围外的值。`);
     }
-    if (typeof value === "string" && Number.isFinite(Number(field.maxLength)) && value.length > Number(field.maxLength))
+    if (
+      typeof value === "string" &&
+      Number.isFinite(Number(field.maxLength)) &&
+      value.length > Number(field.maxLength)
+    )
       throw new Error(`表单字段“${key}”超过最大长度。`);
-    if (typeof value === "number" && Number.isFinite(Number(field.min)) && value < Number(field.min))
+    if (
+      typeof value === "number" &&
+      Number.isFinite(Number(field.min)) &&
+      value < Number(field.min)
+    )
       throw new Error(`表单字段“${key}”低于最小值。`);
-    if (typeof value === "number" && Number.isFinite(Number(field.max)) && value > Number(field.max))
+    if (
+      typeof value === "number" &&
+      Number.isFinite(Number(field.max)) &&
+      value > Number(field.max)
+    )
       throw new Error(`表单字段“${key}”超过最大值。`);
     result[key] = value;
   }
@@ -151,7 +225,9 @@ export function redactSensitiveValues(value: unknown): unknown {
   return Object.fromEntries(
     Object.entries(value as JsonRecord).map(([key, item]) => [
       key,
-      /(password|passwd|secret|token|api[_-]?key|authorization|cookie)/i.test(key)
+      /(password|passwd|secret|token|api[_-]?key|authorization|cookie)/i.test(
+        key
+      )
         ? "[REDACTED]"
         : redactSensitiveValues(item),
     ])
@@ -173,9 +249,19 @@ export const WORKFLOW_RUN_STATUSES = [
   "terminated",
 ] as const;
 export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUSES)[number];
-const workflowRunTransitions: Record<WorkflowRunStatus, readonly WorkflowRunStatus[]> = {
+const workflowRunTransitions: Record<
+  WorkflowRunStatus,
+  readonly WorkflowRunStatus[]
+> = {
   queued: ["running", "blocked", "cancelled", "terminated"],
-  running: ["waiting", "success", "failed", "blocked", "cancelled", "terminated"],
+  running: [
+    "waiting",
+    "success",
+    "failed",
+    "blocked",
+    "cancelled",
+    "terminated",
+  ],
   waiting: ["queued", "blocked", "cancelled", "terminated"],
   blocked: ["queued", "cancelled", "terminated"],
   success: [],
@@ -183,10 +269,16 @@ const workflowRunTransitions: Record<WorkflowRunStatus, readonly WorkflowRunStat
   cancelled: [],
   terminated: [],
 };
-export function canTransitionWorkflowRunStatus(from: WorkflowRunStatus, to: WorkflowRunStatus) {
+export function canTransitionWorkflowRunStatus(
+  from: WorkflowRunStatus,
+  to: WorkflowRunStatus
+) {
   return from === to || workflowRunTransitions[from].includes(to);
 }
-export function assertWorkflowRunTransition(from: WorkflowRunStatus, to: WorkflowRunStatus) {
+export function assertWorkflowRunTransition(
+  from: WorkflowRunStatus,
+  to: WorkflowRunStatus
+) {
   if (!canTransitionWorkflowRunStatus(from, to))
     throw new Error(`运行状态不允许从 ${from} 迁移到 ${to}。`);
   return to;
@@ -305,9 +397,7 @@ function blockedIp(address: string) {
     if (hexadecimal) {
       const high = Number.parseInt(hexadecimal[1], 16);
       const low = Number.parseInt(hexadecimal[2], 16);
-      return blockedIp(
-        `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`
-      );
+      return blockedIp(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`);
     }
   }
   return (
@@ -383,13 +473,23 @@ function requestPinnedHttp(input: {
         method: input.method,
         headers: input.headers,
         servername: input.url.hostname,
-        lookup: ((_hostname: string, _options: unknown, callback: (error: Error | null, address: string, family: number) => void) =>
-          callback(null, input.address, input.family)) as any,
+        lookup: ((
+          _hostname: string,
+          _options: unknown,
+          callback: (
+            error: Error | null,
+            address: string,
+            family: number
+          ) => void
+        ) => callback(null, input.address, input.family)) as any,
       },
       response => {
         const status = Number(response.statusCode ?? 0);
         const contentLength = Number(response.headers["content-length"] ?? "0");
-        if (Number.isFinite(contentLength) && contentLength > MAX_HTTP_RESPONSE_BYTES) {
+        if (
+          Number.isFinite(contentLength) &&
+          contentLength > MAX_HTTP_RESPONSE_BYTES
+        ) {
           response.destroy();
           reject(new Error("HTTP 节点响应超过 1MB 限制。"));
           return;
@@ -521,27 +621,25 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
     timeoutMs,
   });
   const bytes = response.bytes;
-    const text = new TextDecoder().decode(bytes);
-    const contentType = response.headers["content-type"] ?? "";
-    let parsedBody: unknown = text;
-    if (contentType.includes("application/json")) {
-      try {
-        parsedBody = JSON.parse(text);
-      } catch {
-        /* preserve malformed body as text */
+  const text = new TextDecoder().decode(bytes);
+  const contentType = response.headers["content-type"] ?? "";
+  let parsedBody: unknown = text;
+  if (contentType.includes("application/json")) {
+    try {
+      parsedBody = JSON.parse(text);
+    } catch {
+      /* preserve malformed body as text */
     }
-    }
-    if (response.status < 200 || response.status >= 300)
-      throw new Error(
-        `HTTP 节点请求失败：${response.status} ${response.statusText}`
-      );
-    return {
-      status: response.status,
-      headers: redactSensitiveValues(
-        response.headers
-      ),
-      body: parsedBody,
-    };
+  }
+  if (response.status < 200 || response.status >= 300)
+    throw new Error(
+      `HTTP 节点请求失败：${response.status} ${response.statusText}`
+    );
+  return {
+    status: response.status,
+    headers: redactSensitiveValues(response.headers),
+    body: parsedBody,
+  };
 }
 
 function firstConfiguredString(...values: unknown[]) {
@@ -610,20 +708,38 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
     typeof resolved.maxTokens === "number"
       ? Math.min(Math.max(Math.floor(resolved.maxTokens), 64), 8192)
       : undefined;
-  const timeoutMs = typeof resolved.timeoutMs === "number"
-    ? Math.min(Math.max(Math.floor(resolved.timeoutMs), 1_000), 120_000)
-    : 30_000;
-  const outputSchema = resolved.outputSchema && typeof resolved.outputSchema === "object" && !Array.isArray(resolved.outputSchema)
-    ? asRecord(resolved.outputSchema)
-    : undefined;
-  if (outputSchema && (typeof outputSchema.name !== "string" || !outputSchema.name.trim() || !outputSchema.schema || typeof outputSchema.schema !== "object"))
+  const timeoutMs =
+    typeof resolved.timeoutMs === "number"
+      ? Math.min(Math.max(Math.floor(resolved.timeoutMs), 1_000), 120_000)
+      : 30_000;
+  const outputSchema =
+    resolved.outputSchema &&
+    typeof resolved.outputSchema === "object" &&
+    !Array.isArray(resolved.outputSchema)
+      ? asRecord(resolved.outputSchema)
+      : undefined;
+  if (
+    outputSchema &&
+    (typeof outputSchema.name !== "string" ||
+      !outputSchema.name.trim() ||
+      !outputSchema.schema ||
+      typeof outputSchema.schema !== "object")
+  )
     throw new Error("LLM 节点结构化输出 Schema 必须包含 name 和 schema 对象。");
   const startedAt = Date.now();
   const response = await invokeLLM({
     model,
     maxTokens,
     timeoutMs,
-    ...(outputSchema ? { outputSchema: { name: String(outputSchema.name), schema: outputSchema.schema as Record<string, unknown>, strict: outputSchema.strict === true } } : {}),
+    ...(outputSchema
+      ? {
+          outputSchema: {
+            name: String(outputSchema.name),
+            schema: outputSchema.schema as Record<string, unknown>,
+            strict: outputSchema.strict === true,
+          },
+        }
+      : {}),
     messages: [
       { role: "system", content: systemPrompt },
       { role: "user", content: prompt },
@@ -631,7 +747,9 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   });
   const content = response.choices[0]?.message.content;
   const contentText = Array.isArray(content)
-    ? content.map(part => ("text" in part ? part.text : JSON.stringify(part))).join("\n")
+    ? content
+        .map(part => ("text" in part ? part.text : JSON.stringify(part)))
+        .join("\n")
     : (content ?? "");
   let structured: unknown;
   if (outputSchema) {
@@ -648,7 +766,9 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
     usage: response.usage ?? null,
     finishReason: response.choices[0]?.finish_reason ?? null,
     durationMs: Date.now() - startedAt,
-    requestId: String(asRecord(context.runtime).requestId ?? currentRequestId() ?? "") || null,
+    requestId:
+      String(asRecord(context.runtime).requestId ?? currentRequestId() ?? "") ||
+      null,
   };
 }
 
@@ -694,7 +814,7 @@ function routerRuleMatches(
         condition.operator,
         interpolate(condition.right, context)
       )
-  );
+    );
   if (rule.relation === "or" && (hasRoleFilter || hasConditions)) {
     return (
       (hasRoleFilter && roleMatched) || (hasConditions && conditionsMatched)
@@ -1063,7 +1183,11 @@ export function normalizeApprovalResult(result: JsonRecord) {
   const decision = String(result.decision ?? "")
     .trim()
     .toLowerCase();
-  if (decision !== "approved" && decision !== "rejected" && decision !== "abstained")
+  if (
+    decision !== "approved" &&
+    decision !== "rejected" &&
+    decision !== "abstained"
+  )
     throw new Error("审批结果必须明确选择同意或拒绝；也可选择弃权。");
   const comment =
     typeof result.comment === "string" ? result.comment.trim() : "";
@@ -1088,7 +1212,9 @@ export function evaluateApprovalResults(input: {
   );
   const approved = decisions.filter(decision => decision === "approved").length;
   const rejected = decisions.filter(decision => decision === "rejected").length;
-  const abstained = decisions.filter(decision => decision === "abstained").length;
+  const abstained = decisions.filter(
+    decision => decision === "abstained"
+  ).length;
   const completed = approved + rejected + abstained;
   const pending = Math.max(0, input.totalApprovers - completed);
   const outcome =
@@ -1126,14 +1252,17 @@ async function finishNodeRun(
   );
 }
 
-async function createFailureAlerts(input: {
-  workflowId: string;
-  workflowName: string;
-  runId: string;
-  ownerUserId: number;
-  triggeredByUserId: number;
-  details: JsonRecord;
-}, executor: mysql.Pool | mysql.PoolConnection = db()) {
+async function createFailureAlerts(
+  input: {
+    workflowId: string;
+    workflowName: string;
+    runId: string;
+    ownerUserId: number;
+    triggeredByUserId: number;
+    details: JsonRecord;
+  },
+  executor: mysql.Pool | mysql.PoolConnection = db()
+) {
   const recipients = Array.from(
     new Set([input.ownerUserId, input.triggeredByUserId])
   );
@@ -1168,7 +1297,11 @@ async function createFailureAlerts(input: {
       "workflow_run",
       input.runId,
       `workflow-run-failed-notification:${input.runId}`,
-      JSON.stringify({ ...notificationPayload, workflowId: input.workflowId, runId: input.runId }),
+      JSON.stringify({
+        ...notificationPayload,
+        workflowId: input.workflowId,
+        runId: input.runId,
+      }),
     ]
   );
 }
@@ -1181,11 +1314,13 @@ export async function submitWorkflowRun(input: {
   requestId?: string;
 }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,ownerUserId,name,projectId,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
+    "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
     [input.workflowId]
   );
   const workflow = workflowRows[0] as PersistedWorkflow | undefined;
   if (!workflow) throw new Error("流程不存在。");
+  if (workflow.flowType === "data")
+    throw new Error("数据流程必须通过数据流运行入口启动。");
   if (workflow.archivedAt)
     throw new Error("已归档流程不能发起运行，请先恢复流程。");
   if (
@@ -1193,10 +1328,19 @@ export async function submitWorkflowRun(input: {
     (workflow.status !== "published" || workflow.auditStatus !== "approved")
   )
     throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
-  const storedPlan = readJson(workflow.publishedExecutionPlanJson) as WorkflowExecutionPlan | null;
-  const executablePlan = storedPlan && workflow.publishedExecutionPlanHash
-    ? assertWorkflowExecutionPlan(storedPlan, String(workflow.publishedExecutionPlanHash))
-    : compileWorkflowDefinition(readJson(workflow.definitionJson)).plan;
+  const storedPlan = readJson(
+    workflow.publishedExecutionPlanJson
+  ) as WorkflowExecutionPlan | null;
+  const executablePlan =
+    storedPlan && workflow.publishedExecutionPlanHash
+      ? assertWorkflowExecutionPlan(
+          storedPlan,
+          String(workflow.publishedExecutionPlanHash),
+          workflow.flowType
+        )
+      : compileWorkflowDefinition(readJson(workflow.definitionJson), {
+          flowType: workflow.flowType,
+        }).plan;
   const executableDefinition = executablePlan.definition;
   const requestedIdempotencyKey = input.idempotencyKey?.trim();
   const jobIdempotencyKey = requestedIdempotencyKey
@@ -1255,12 +1399,14 @@ export async function submitWorkflowRun(input: {
   try {
     await connection.beginTransaction();
     const [lockedWorkflowRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT archivedAt FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+      "SELECT archivedAt,flowType FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
       [input.workflowId]
     );
     if (!lockedWorkflowRows[0]) throw new Error("流程不存在。");
     if (lockedWorkflowRows[0].archivedAt)
       throw new Error("已归档流程不能发起运行，请先恢复流程。");
+    if (String(lockedWorkflowRows[0].flowType) === "data")
+      throw new Error("数据流程必须通过数据流运行入口启动。");
     await connection.query(
       "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,requestId) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?)",
       [
@@ -1325,7 +1471,11 @@ export async function executePreparedWorkflowRun(input: {
   );
   const run = rows[0] as PersistedWorkflow | undefined;
   if (!run) throw new Error("流程运行不存在。");
-  if (["success", "failed", "cancelled", "terminated"].includes(String(run.status)))
+  if (
+    ["success", "failed", "cancelled", "terminated"].includes(
+      String(run.status)
+    )
+  )
     throw new Error(`流程运行已结束：${run.status}。`);
   const definition = readJson(run.definitionSnapshotJson) as Definition;
   const persistedContext = asRecord(readJson(run.contextJson));
@@ -1385,13 +1535,16 @@ export async function executePreparedWorkflowRun(input: {
   });
   if (segment.status === "waiting") {
     const waitingParams: unknown[] = [input.runId];
-    const waitingLeaseClause = input.leaseToken ? " AND executionLockToken=?" : "";
+    const waitingLeaseClause = input.leaseToken
+      ? " AND executionLockToken=?"
+      : "";
     if (input.leaseToken) waitingParams.push(input.leaseToken);
     const [waiting] = await db().query<mysql.ResultSetHeader>(
       `UPDATE workflow_run SET status='waiting',executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${waitingLeaseClause} AND status='running'`,
       waitingParams
     );
-    if (!waiting.affectedRows) throw new Error("流程状态已变化，无法进入等待。 ");
+    if (!waiting.affectedRows)
+      throw new Error("流程状态已变化，无法进入等待。 ");
     return { runId: input.runId, status: "waiting", taskId: segment.taskId };
   }
   const params: unknown[] = [
@@ -1447,14 +1600,17 @@ export async function markWorkflowRunFailed(
       await connection.rollback();
       return false;
     }
-    await createFailureAlerts({
-      workflowId: String(run.workflowId),
-      workflowName: String(run.name),
-      runId,
-      ownerUserId: Number(run.ownerUserId),
-      triggeredByUserId: Number(run.triggeredByUserId),
-      details,
-    }, connection);
+    await createFailureAlerts(
+      {
+        workflowId: String(run.workflowId),
+        workflowName: String(run.name),
+        runId,
+        ownerUserId: Number(run.ownerUserId),
+        triggeredByUserId: Number(run.triggeredByUserId),
+        details,
+      },
+      connection
+    );
     await connection.commit();
     return true;
   } catch (failureError) {
@@ -1473,7 +1629,8 @@ export async function controlWorkflowRun(input: {
   action: WorkflowRunControlAction;
   reason?: string;
 }) {
-  const targetStatus = input.action === "terminate" ? "terminated" : "cancelled";
+  const targetStatus =
+    input.action === "terminate" ? "terminated" : "cancelled";
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
@@ -1487,13 +1644,24 @@ export async function controlWorkflowRun(input: {
       return null;
     }
     const currentStatus = String(run.status);
-    if (["success", "failed", "cancelled", "terminated"].includes(currentStatus)) {
+    if (
+      ["success", "failed", "cancelled", "terminated"].includes(currentStatus)
+    ) {
       await connection.commit();
       return { runId: input.runId, status: currentStatus, changed: false };
     }
     await connection.query(
       "UPDATE workflow_run SET status=?,errorJson=?,finishedAt=NOW(),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
-      [targetStatus, input.reason ? JSON.stringify({ message: input.reason, controlledBy: input.action }) : null, input.runId]
+      [
+        targetStatus,
+        input.reason
+          ? JSON.stringify({
+              message: input.reason,
+              controlledBy: input.action,
+            })
+          : null,
+        input.runId,
+      ]
     );
     await connection.query(
       "UPDATE workflow_run_job SET status='cancelled',leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE runId=? AND status IN ('queued','leased')",
@@ -1533,7 +1701,11 @@ export async function pauseWorkflowRun(runId: string) {
       return { runId, status: "blocked" as const, changed: false };
     }
     if (!["queued", "waiting"].includes(status)) {
-      throw new Error(status === "running" ? "当前节点仍在执行，请稍后在 Checkpoint 后暂停。" : "当前流程状态不支持暂停。");
+      throw new Error(
+        status === "running"
+          ? "当前节点仍在执行，请稍后在 Checkpoint 后暂停。"
+          : "当前流程状态不支持暂停。"
+      );
     }
     await connection.query(
       "UPDATE workflow_run SET status='blocked',executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('queued','waiting')",
@@ -1573,15 +1745,25 @@ export async function resumeWorkflowRun(runId: string) {
     }
     const context = asRecord(readJson(run.contextJson));
     const runtime = asRecord(context.runtime);
-    const queue = Array.isArray(runtime.executionQueue) ? runtime.executionQueue.map(String).filter(Boolean) : [];
+    const queue = Array.isArray(runtime.executionQueue)
+      ? runtime.executionQueue.map(String).filter(Boolean)
+      : [];
     const [pendingTasks] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed') ORDER BY createdAt,id LIMIT 1",
       [runId]
     );
     if (pendingTasks[0]) {
-      await connection.query("UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'", [runId]);
+      await connection.query(
+        "UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'",
+        [runId]
+      );
       await connection.commit();
-      return { runId, status: "waiting" as const, taskId: String(pendingTasks[0].id), changed: true };
+      return {
+        runId,
+        status: "waiting" as const,
+        taskId: String(pendingTasks[0].id),
+        changed: true,
+      };
     }
     if (!queue.length) throw new Error("流程没有可恢复的持久化执行队列。");
     const [existing] = await connection.query<mysql.RowDataPacket[]>(
@@ -1589,21 +1771,44 @@ export async function resumeWorkflowRun(runId: string) {
       [runId]
     );
     if (existing[0]) {
-      await connection.query("UPDATE workflow_run SET status='queued',errorJson=NULL WHERE id=? AND status='blocked'", [runId]);
+      await connection.query(
+        "UPDATE workflow_run SET status='queued',errorJson=NULL WHERE id=? AND status='blocked'",
+        [runId]
+      );
       await connection.commit();
-      return { runId, status: "queued" as const, jobId: String(existing[0].id), changed: false };
+      return {
+        runId,
+        status: "queued" as const,
+        jobId: String(existing[0].id),
+        changed: false,
+      };
     }
     const jobId = randomUUID();
     const checkpoint: WorkflowCheckpoint = {
       queue,
       context,
       finalOutput: runtime.executionFinalOutput,
-      currentNodeId: typeof runtime.executionCurrentNodeId === "string" ? runtime.executionCurrentNodeId : null,
+      currentNodeId:
+        typeof runtime.executionCurrentNodeId === "string"
+          ? runtime.executionCurrentNodeId
+          : null,
     };
-    await connection.query("UPDATE workflow_run SET status='queued',errorJson=NULL WHERE id=? AND status='blocked'", [runId]);
+    await connection.query(
+      "UPDATE workflow_run SET status='queued',errorJson=NULL WHERE id=? AND status='blocked'",
+      [runId]
+    );
     await connection.query(
       "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
-      [jobId, runId, `workflow:resume-control:${runId}:${jobId}`, JSON.stringify(checkpoint), WORKFLOW_JOB_MAX_ATTEMPTS, String(run.requestId ?? runtime.requestId ?? currentRequestId() ?? "") || null]
+      [
+        jobId,
+        runId,
+        `workflow:resume-control:${runId}:${jobId}`,
+        JSON.stringify(checkpoint),
+        WORKFLOW_JOB_MAX_ATTEMPTS,
+        String(
+          run.requestId ?? runtime.requestId ?? currentRequestId() ?? ""
+        ) || null,
+      ]
     );
     await connection.commit();
     return { runId, status: "queued" as const, jobId, changed: true };
@@ -1678,6 +1883,7 @@ type PersistedWorkflow = mysql.RowDataPacket & {
   ownerUserId: number;
   projectId?: string | null;
   name: string;
+  flowType: "state" | "control" | "data";
 };
 type RunSegmentResult =
   | { status: "success"; output: unknown }
@@ -1795,7 +2001,7 @@ function configuredRoleKeys(value: unknown) {
         .map(item => {
           if (typeof item === "string" || typeof item === "number")
             return String(item).trim();
-    const record = asRecord(item);
+          const record = asRecord(item);
           return String(
             record.roleCode ??
               record.roleKey ??
@@ -1999,7 +2205,9 @@ async function executeRunSegment(input: {
       input.runId,
       node,
       nodeInput,
-      String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null
+      String(
+        asRecord(input.context.runtime).requestId ?? currentRequestId() ?? ""
+      ) || null
     );
     const startedAt = Date.now();
     try {
@@ -2135,7 +2343,11 @@ async function executeRunSegment(input: {
               requiredApprovals,
               Math.round(reference.passPercent * 10000),
               JSON.stringify(nextNodeIds),
-              String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null,
+              String(
+                asRecord(input.context.runtime).requestId ??
+                  currentRequestId() ??
+                  ""
+              ) || null,
             ]
           );
         }
@@ -2186,7 +2398,11 @@ async function executeRunSegment(input: {
                 reference,
               }),
               JSON.stringify(nextNodeIds),
-              String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null,
+              String(
+                asRecord(input.context.runtime).requestId ??
+                  currentRequestId() ??
+                  ""
+              ) || null,
             ]
           );
           for (const userId of taskAssignment.candidateUserIds) {
@@ -2266,14 +2482,20 @@ async function executeRunSegment(input: {
           Number(input.workflow.ownerUserId)
         );
       } catch (error) {
-        const failureHandle = node.type === "llm" ? String(node.config.failureHandle ?? "").trim() : "";
+        const failureHandle =
+          node.type === "llm"
+            ? String(node.config.failureHandle ?? "").trim()
+            : "";
         if (!failureHandle) throw error;
         nodeFailure = {
           code: "LLM_NODE_FAILED",
           message: error instanceof Error ? error.message : String(error),
           failureHandle,
         };
-        result = { output: { failed: true, ...nodeFailure }, route: failureHandle };
+        result = {
+          output: { failed: true, ...nodeFailure },
+          route: failureHandle,
+        };
       }
       const vars = asRecord(input.context.vars);
       const nodeOutputs = asRecord(input.context.nodes);
@@ -2293,7 +2515,13 @@ async function executeRunSegment(input: {
         reachedEnd = true;
         finalOutput = result.output;
       }
-      await finishNodeRun(nodeRunId, nodeFailure ? "failed" : "success", startedAt, result.output, nodeFailure);
+      await finishNodeRun(
+        nodeRunId,
+        nodeFailure ? "failed" : "success",
+        startedAt,
+        result.output,
+        nodeFailure
+      );
       const routed = result as { route?: string; routeTargets?: unknown[] };
       const routeTargets = Array.isArray(routed.routeTargets)
         ? routed.routeTargets.map(asRecord)
@@ -2465,7 +2693,17 @@ async function completeTaskAndEvaluateApprovalGroup(
         if (next) {
           await connection.query(
             "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?",
-            [JSON.stringify([{ taskId: String(next.id), name: String(next.operationName ?? task.nodeName), signMode: "sequentialSignFor" }]), task.runId, Number(next.assignedUserId)]
+            [
+              JSON.stringify([
+                {
+                  taskId: String(next.id),
+                  name: String(next.operationName ?? task.nodeName),
+                  signMode: "sequentialSignFor",
+                },
+              ]),
+              task.runId,
+              Number(next.assignedUserId),
+            ]
           );
         }
       }
@@ -2619,26 +2857,26 @@ export async function resumeWorkflowTask(input: {
       await rejectionConnection.beginTransaction();
       const [finishedNode] =
         await rejectionConnection.query<mysql.ResultSetHeader>(
-        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
+          "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
           [
             JSON.stringify(taskOutput),
             Date.now() -
               new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(),
             waitingNodeRun.id,
           ]
-      );
+        );
       if (!finishedNode.affectedRows)
         throw new Error("人工任务节点已被其他请求推进。");
       const [cancelledRun] =
         await rejectionConnection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
+          "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
           [
             JSON.stringify(context),
             JSON.stringify(taskOutput),
             Date.now() - new Date(task.startedAt ?? Date.now()).getTime(),
             task.runId,
           ]
-      );
+        );
       if (!cancelledRun.affectedRows)
         throw new Error("流程状态已变化，无法重复终止。");
       await rejectionConnection.commit();
@@ -2681,21 +2919,21 @@ export async function resumeWorkflowTask(input: {
     await continuationConnection.beginTransaction();
     const [finishedNode] =
       await continuationConnection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
+        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
         [
           JSON.stringify(taskOutput),
           Date.now() -
             new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(),
           waitingNodeRun.id,
         ]
-    );
+      );
     if (!finishedNode.affectedRows)
       throw new Error("人工任务节点已被其他请求推进。");
     const [queuedRun] =
       await continuationConnection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
-      [JSON.stringify(context), task.runId]
-    );
+        "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
+        [JSON.stringify(context), task.runId]
+      );
     if (!queuedRun.affectedRows)
       throw new Error("流程状态已变化，无法重复提交续跑命令。");
     await continuationConnection.query(

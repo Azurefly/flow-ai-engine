@@ -1,21 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
 
+const validateState = (definition: unknown, executable = false) =>
+  validate(definition, { flowType: "state", executable });
+
 describe("流程定义输入边界", () => {
   it("拒绝缺少节点、未知节点类型、非法位置、数组配置和悬挂连线", () => {
-    expect(() => validate({})).toThrow("流程定义格式无效");
+    expect(() => validateState({})).toThrow("流程定义格式无效");
     const unknownType = emptyDefinition();
     (unknownType.nodes[0] as any).type = "shell";
-    expect(() => validate(unknownType)).toThrow("节点格式或类型无效");
+    expect(() => validateState(unknownType)).toThrow("节点格式或类型无效");
     const invalidPosition = emptyDefinition();
     (invalidPosition.nodes[0] as any).position = { x: "bad", y: 0 };
-    expect(() => validate(invalidPosition)).toThrow("节点位置无效");
+    expect(() => validateState(invalidPosition)).toThrow("节点位置无效");
     const invalidConfig = emptyDefinition();
     (invalidConfig.nodes[0] as any).config = [];
-    expect(() => validate(invalidConfig)).toThrow("节点配置必须是 JSON 对象");
+    expect(() => validateState(invalidConfig)).toThrow(
+      "节点配置必须是 JSON 对象"
+    );
     const danglingEdge = emptyDefinition();
     danglingEdge.edges[0]!.targetNodeId = "missing";
-    expect(() => validate(danglingEdge)).toThrow("连线引用了不存在的节点");
+    expect(() => validateState(danglingEdge)).toThrow("连线引用了不存在的节点");
   });
 
   it("拒绝重复连线、自环和非法的起止节点方向", () => {
@@ -31,7 +36,9 @@ describe("流程定义输入边界", () => {
       { id: "same", sourceNodeId: "start", targetNodeId: "middle" },
       { id: "same", sourceNodeId: "middle", targetNodeId: "end" },
     ];
-    expect(() => validate(duplicateEdgeId, true)).toThrow("连线 ID 不可重复");
+    expect(() => validateState(duplicateEdgeId, true)).toThrow(
+      "连线 ID 不可重复"
+    );
 
     const selfLoop = emptyDefinition();
     selfLoop.edges.push({
@@ -39,7 +46,7 @@ describe("流程定义输入边界", () => {
       sourceNodeId: "start",
       targetNodeId: "start",
     });
-    expect(() => validate(selfLoop, true)).toThrow("不允许节点自环");
+    expect(() => validateState(selfLoop, true)).toThrow("不允许节点自环");
 
     const startIncoming = emptyDefinition();
     startIncoming.edges.push({
@@ -47,7 +54,7 @@ describe("流程定义输入边界", () => {
       sourceNodeId: "end",
       targetNodeId: "start",
     });
-    expect(() => validate(startIncoming, true)).toThrow(
+    expect(() => validateState(startIncoming, true)).toThrow(
       "开始节点不允许存在入边"
     );
 
@@ -68,7 +75,9 @@ describe("流程定义输入边界", () => {
       sourceNodeId: "end",
       targetNodeId: "after-end",
     });
-    expect(() => validate(endOutgoing, true)).toThrow("结束节点不允许存在出边");
+    expect(() => validateState(endOutgoing, true)).toThrow(
+      "结束节点不允许存在出边"
+    );
   });
 
   it("发布时拒绝不可达节点、无法到达终点的死路和循环", () => {
@@ -80,8 +89,8 @@ describe("流程定义输入边界", () => {
       position: { x: 260, y: 320 },
       config: { nodeDh: "ORPHAN", jdmc: "孤立节点", flowStatus: "孤立节点" },
     });
-    expect(() => validate(unreachable, true)).toThrow("从开始节点不可达");
-    expect(() => validate(unreachable, false)).not.toThrow();
+    expect(() => validateState(unreachable, true)).toThrow("从开始节点不可达");
+    expect(() => validateState(unreachable, false)).not.toThrow();
 
     const deadEnd = emptyDefinition();
     deadEnd.nodes.splice(1, 0, {
@@ -96,7 +105,7 @@ describe("流程定义输入边界", () => {
       sourceNodeId: "start",
       targetNodeId: "dead",
     });
-    expect(() => validate(deadEnd, true)).toThrow("无法到达结束节点");
+    expect(() => validateState(deadEnd, true)).toThrow("无法到达结束节点");
 
     const cyclic = emptyDefinition();
     cyclic.nodes.splice(
@@ -123,7 +132,7 @@ describe("流程定义输入边界", () => {
       { id: "b-a", sourceNodeId: "b", targetNodeId: "a" },
       { id: "b-end", sourceNodeId: "b", targetNodeId: "end" },
     ];
-    expect(() => validate(cyclic, true)).toThrow(
+    expect(() => validateState(cyclic, true)).toThrow(
       "流程存在未声明执行语义的循环"
     );
   });

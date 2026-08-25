@@ -40,8 +40,8 @@ const rolePermissions: Record<ProjectMemberRole, readonly ProjectPermission[]> =
       "project:workflow:create",
       "project:workflow:edit",
     ],
-  operator: ["project:view", "project:workflow:run"],
-  viewer: ["project:view"],
+    operator: ["project:view", "project:workflow:run"],
+    viewer: ["project:view"],
   };
 
 export function assertWorkflowReviewerSeparation(input: {
@@ -287,7 +287,10 @@ export async function createProjectWorkflow(
   });
   if (input.definition && workflow)
     await updateWorkflow((workflow as any).id, user, {
-      definition: validate(input.definition),
+      definition: validate(input.definition, {
+        flowType: input.flowType,
+        executable: false,
+      }),
     });
   await recordAuthorizationAudit({
     actorUserId: user.id,
@@ -364,8 +367,7 @@ export async function setProjectWorkflowAudit(
     [input.workflowId, input.projectId]
   );
   const workflow = workflowRows[0];
-  if (!workflow)
-    throw new Error("项目流程不存在、已归档或不属于当前项目。");
+  if (!workflow) throw new Error("项目流程不存在、已归档或不属于当前项目。");
   if (String(workflow.status) !== "draft")
     throw new Error("仅可审核当前未发布的流程草稿。");
   const settings = await getP1SystemSettings();
@@ -444,7 +446,7 @@ export async function listProjectWorkflowAudit(
         typeof row.detailsJson === "string"
           ? JSON.parse(row.detailsJson)
           : (row.detailsJson ?? {});
-    return { ...row, details, operation: details.operation ?? "" };
+      return { ...row, details, operation: details.operation ?? "" };
     })
     .filter(row =>
       ["workflow_audited", "workflow_audit_reset"].includes(
@@ -664,5 +666,6 @@ export async function moveProjectWorkflow(
   return true;
 }
 
-export const emptyProjectFlowDefinition = (): Definition =>
-  validate(emptyDefinition());
+export const emptyProjectFlowDefinition = (
+  flowType: "state" | "control" | "data" = "state"
+): Definition => validate(emptyDefinition(), { flowType, executable: false });

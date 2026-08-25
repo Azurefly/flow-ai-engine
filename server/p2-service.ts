@@ -219,7 +219,7 @@ export async function updateDataSource(
     "UPDATE data_source SET name=?,status=?,connectionJson=?,credentialRef=?,lastTestedAt=CASE WHEN ? THEN NULL ELSE lastTestedAt END,updatedAt=NOW() WHERE id=? AND projectId=?",
     [
       input.name?.trim() || current.name,
-      configurationChanged ? "draft" : input.status ?? current.status,
+      configurationChanged ? "draft" : (input.status ?? current.status),
       JSON.stringify(input.connection ?? parseJson(current.connectionJson, {})),
       input.credentialRef === undefined
         ? current.credentialRef
@@ -628,7 +628,9 @@ async function runDataflowDefinition(projectId: string, definition: any) {
         operation: "safe_transform",
       };
     } else if (["sql", "edit_sql"].includes(String(node.type))) {
-      const statement = String(config.sql ?? config.query ?? "").trim();
+      const statement = String(
+        config.statement ?? config.sql ?? config.query ?? ""
+      ).trim();
       if (
         !/^select\s+/i.test(statement) ||
         /;|\b(insert|update|delete|drop|alter|create|grant|revoke)\b/i.test(

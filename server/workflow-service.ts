@@ -15,6 +15,7 @@ import {
   type WorkflowCompileResult,
   type WorkflowCompileDiagnostic,
   type WorkflowDefinition,
+  type WorkflowAnalysisOptions,
   type WorkflowEdge,
   type WorkflowExecutionPlan,
   type WorkflowNode,
@@ -58,8 +59,11 @@ export const emptyDefinition = (): Definition => ({
     },
   ],
 });
-export function validate(definition: unknown, executable = false): Definition {
-  return validateWorkflowDefinition(definition, executable);
+export function validate(
+  definition: unknown,
+  options: WorkflowAnalysisOptions
+): Definition {
+  return validateWorkflowDefinition(definition, options);
 }
 export function assertWorkflowUpdateTransition(
   currentStatus: "draft" | "published",
@@ -136,7 +140,9 @@ async function insertVersion(
       input.name,
       input.status,
       JSON.stringify(input.definition),
-      input.executionPlan === undefined ? null : JSON.stringify(input.executionPlan),
+      input.executionPlan === undefined
+        ? null
+        : JSON.stringify(input.executionPlan),
       input.executionPlanHash ?? null,
       input.source,
       input.restoredFromVersion ?? null,
@@ -148,7 +154,8 @@ async function insertVersion(
 async function resolveSubflowReferences(
   definition: Definition,
   ownerUserId: number,
-  executable: boolean
+  executable: boolean,
+  flowType: "state" | "control" | "data"
 ) {
   const subflowNodes = definition.nodes.filter(node => node.type === "subflow");
   if (!subflowNodes.length) return definition;
@@ -188,9 +195,21 @@ async function resolveSubflowReferences(
       throw new Error("流程只能发布已启用的私有子流程引用。");
     const mappedDefinition = parseJson(mapped.definitionJson) as Definition;
     if (executable) {
-      validate(mappedDefinition, true);
+      validate(mappedDefinition, { flowType, executable: true });
       const unsupported = mappedDefinition.nodes.find(item =>
-        ["operate", "sql", "source", "table", "filter", "map", "edit_sql", "udf", "sink", "output", "subflow"].includes(item.type)
+        [
+          "operate",
+          "sql",
+          "source",
+          "table",
+          "filter",
+          "map",
+          "edit_sql",
+          "udf",
+          "sink",
+          "output",
+          "subflow",
+        ].includes(item.type)
       );
       if (unsupported)
         throw new Error(
@@ -206,7 +225,9 @@ async function resolveSubflowReferences(
         ...(executable
           ? {
               resolvedSubflowName: String(mapped.name),
-              resolvedSubflowUpdatedAt: new Date(mapped.updatedAt).toISOString(),
+              resolvedSubflowUpdatedAt: new Date(
+                mapped.updatedAt
+              ).toISOString(),
               resolvedSubflowDefinition: mappedDefinition,
             }
           : {}),
@@ -388,6 +409,7 @@ export async function updateWorkflow(
     name: string;
     status: "draft" | "published";
     definitionVersion: number;
+    flowType: "state" | "control" | "data";
     definition: Definition;
     publishedExecutionPlanJson?: unknown;
     publishedExecutionPlanHash?: string | null;
@@ -400,26 +422,32 @@ export async function updateWorkflow(
   const draftDefinition =
     values.definition === undefined
       ? current.definition
-      : validate(values.definition, false);
+      : validate(values.definition, {
+          flowType: current.flowType,
+          executable: false,
+        });
   const definition = await resolveSubflowReferences(
     draftDefinition,
     current.ownerUserId,
-    executable
+    executable,
+    current.flowType
   );
   const definitionChanged =
     values.definition !== undefined &&
     JSON.stringify(definition) !== JSON.stringify(current.definition);
-  const compiled = executable ? compileWorkflowDefinition(definition) : null;
+  const compiled = executable
+    ? compileWorkflowDefinition(definition, { flowType: current.flowType })
+    : null;
   const persistedDefinition = compiled?.definition ?? definition;
   const persistedExecutionPlan = values.unpublish
     ? undefined
-    : compiled?.plan ??
+    : (compiled?.plan ??
       (current.publishedExecutionPlanJson === undefined
         ? undefined
-        : parseJson(current.publishedExecutionPlanJson));
+        : parseJson(current.publishedExecutionPlanJson)));
   const persistedExecutionPlanHash = values.unpublish
     ? null
-    : compiled?.planHash ?? current.publishedExecutionPlanHash ?? null;
+    : (compiled?.planHash ?? current.publishedExecutionPlanHash ?? null);
   if (
     values.publish &&
     current.projectId &&
@@ -511,25 +539,33 @@ export async function compileWorkflowDraft(
     ownerUserId: number;
     archivedAt?: Date | string | null;
     definition: Definition;
+    flowType: "state" | "control" | "data";
   } | null;
   if (!current) return null;
   if (current.archivedAt)
     throw new Error("已归档流程必须先恢复后才能编译发布。 ");
   const draft = candidateDefinition ?? current.definition;
-  const structural = analyzeWorkflowDefinition(draft, { executable: true });
+  const structural = analyzeWorkflowDefinition(draft, {
+    flowType: current.flowType,
+    executable: true,
+  });
   if (!structural.ok) return structural;
   try {
     const resolved = await resolveSubflowReferences(
       structural.definition,
       current.ownerUserId,
-      true
+      true,
+      current.flowType
     );
-    return compileWorkflowDefinition(resolved);
+    return compileWorkflowDefinition(resolved, {
+      flowType: current.flowType,
+    });
   } catch (error) {
     if (error && typeof error === "object" && "diagnostics" in error)
       return {
         ok: false,
-        diagnostics: (error as { diagnostics: WorkflowCompileDiagnostic[] }).diagnostics,
+        diagnostics: (error as { diagnostics: WorkflowCompileDiagnostic[] })
+          .diagnostics,
       };
     throw error;
   }
@@ -647,6 +683,7 @@ export async function rollbackWorkflowVersion(
     ownerUserId: number;
     name: string;
     definitionVersion: number;
+    flowType: "state" | "control" | "data";
   } | null;
   if (!current) return null;
   let restoredDefinition = target.definition;
@@ -657,16 +694,20 @@ export async function rollbackWorkflowVersion(
     if (storedPlan && target.executionPlanHash) {
       restoredPlan = assertWorkflowExecutionPlan(
         storedPlan,
-        String(target.executionPlanHash)
+        String(target.executionPlanHash),
+        current.flowType
       );
       restoredPlanHash = String(target.executionPlanHash);
     } else {
       const resolvedDefinition = await resolveSubflowReferences(
         target.definition,
         current.ownerUserId,
-        true
+        true,
+        current.flowType
       );
-      const compiled = compileWorkflowDefinition(resolvedDefinition);
+      const compiled = compileWorkflowDefinition(resolvedDefinition, {
+        flowType: current.flowType,
+      });
       restoredPlan = compiled.plan;
       restoredPlanHash = compiled.planHash;
     }
@@ -825,7 +866,10 @@ export async function createSubflow(
   user: WorkflowUser,
   input: { name: string; description?: string; definition: unknown }
 ) {
-  const definition = validate(input.definition, true);
+  const definition = validate(input.definition, {
+    flowType: "state",
+    executable: true,
+  });
   if (definition.nodes.some(node => node.type === "subflow"))
     throw new Error("子流程暂不支持嵌套子流程调用。");
   const subflowId = id();
@@ -868,7 +912,10 @@ export async function updateSubflow(
   const definition =
     input.definition === undefined
       ? (parseJson(subflow.definitionJson) as Definition)
-      : validate(input.definition, true);
+      : validate(input.definition, {
+          flowType: "state",
+          executable: true,
+        });
   if (definition.nodes.some(node => node.type === "subflow"))
     throw new Error("子流程暂不支持嵌套子流程调用。");
   await db().query(
