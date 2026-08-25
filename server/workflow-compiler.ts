@@ -6,6 +6,8 @@ import {
 import {
   canConnectFlowNodeTypes,
   isFlowNodeType,
+  readOperateOutcomeMode,
+  readOperateOutcomes,
   validateNodeConfig,
   withNodeConfigDefaults,
   type FlowType,
@@ -502,6 +504,78 @@ export function analyzeWorkflowDefinition(
         })
       );
 
+    if (options.flowType === "state") {
+      const stateNodes = validNodes.filter(node => node.type === "state");
+      if (!stateNodes.length)
+        diagnostics.push(
+          diagnostic(
+            "WF_STATE_REQUIRED",
+            "状态流程必须至少包含一个状态节点。"
+          )
+        );
+
+      const stateCodes = new Map<string, string>();
+      for (const stateNode of stateNodes) {
+        const stateCode = String(
+          stateNode.config.stateCode ?? stateNode.config.nodeDh ?? ""
+        ).trim();
+        const previousNodeId = stateCodes.get(stateCode);
+        if (stateCode && previousNodeId)
+          diagnostics.push(
+            diagnostic(
+              "WF_STATE_CODE_DUPLICATE",
+              `状态代号不可重复：${stateCode}。`,
+              {
+                kind: "node",
+                nodeId: stateNode.id,
+                field: "config.stateCode",
+              }
+            )
+          );
+        else if (stateCode) stateCodes.set(stateCode, stateNode.id);
+      }
+
+      const initialStateIds = new Set<string>();
+      const initialQueue = (outgoing.get(startId) ?? []).map(
+        edge => edge.targetNodeId
+      );
+      const initialVisited = new Set<string>();
+      while (initialQueue.length) {
+        const nodeId = initialQueue.shift()!;
+        if (initialVisited.has(nodeId) || nodeId === endId) continue;
+        initialVisited.add(nodeId);
+        const node = nodesById.get(nodeId);
+        if (!node) continue;
+        if (node.type === "state") {
+          initialStateIds.add(node.id);
+          continue;
+        }
+        for (const edge of outgoing.get(nodeId) ?? [])
+          initialQueue.push(edge.targetNodeId);
+      }
+      if (initialStateIds.size !== 1)
+        diagnostics.push(
+          diagnostic(
+            "WF_STATE_INITIAL_AMBIGUOUS",
+            "状态流程必须从开始节点确定唯一初始状态。",
+            { kind: "node", nodeId: startId }
+          )
+        );
+
+      const terminalStates = stateNodes.filter(
+        node =>
+          String(node.config.stateType ?? "") === "terminal" ||
+          (outgoing.get(node.id) ?? []).some(edge => edge.targetNodeId === endId)
+      );
+      if (!terminalStates.length)
+        diagnostics.push(
+          diagnostic(
+            "WF_STATE_TERMINAL_REQUIRED",
+            "状态流程必须至少包含一个进入结束节点的业务终态。"
+          )
+        );
+    }
+
     const reachable = new Set<string>();
     const visitQueue = [startId];
     while (visitQueue.length) {
@@ -546,6 +620,47 @@ export function analyzeWorkflowDefinition(
 
     for (const node of validNodes) {
       const nodeOutgoing = outgoing.get(node.id) ?? [];
+      if (
+        node.type === "operate" &&
+        readOperateOutcomeMode(node.config) === "explicit"
+      ) {
+        const outcomes = readOperateOutcomes(node.config);
+        const configuredHandles = new Set(
+          outcomes.map(outcome => outcome.sourceHandle)
+        );
+        for (const outcome of outcomes) {
+          const matching = nodeOutgoing.filter(
+            edge =>
+              (edge.sourceHandle?.trim() || "default") === outcome.sourceHandle
+          );
+          if (matching.length !== 1)
+            diagnostics.push(
+              diagnostic(
+                "WF_OPERATE_OUTCOME_BRANCH_INVALID",
+                `人工操作“${node.name}”的结果 ${outcome.code} 必须且仅能连接一个 ${outcome.sourceHandle} 分支。`,
+                {
+                  kind: "node",
+                  nodeId: node.id,
+                  field: `outcome:${outcome.code}`,
+                }
+              )
+            );
+        }
+        nodeOutgoing
+          .filter(
+            edge =>
+              !configuredHandles.has(edge.sourceHandle?.trim() || "default")
+          )
+          .forEach(edge =>
+            diagnostics.push(
+              diagnostic(
+                "WF_OPERATE_OUTCOME_HANDLE_UNKNOWN",
+                `人工操作存在未配置的结果分支：${edge.sourceHandle || "default"}。`,
+                { kind: "edge", edgeId: edge.id, field: "sourceHandle" }
+              )
+            )
+          );
+      }
       if (node.type === "condition") {
         for (const handle of ["true", "false"]) {
           const matching = nodeOutgoing.filter(

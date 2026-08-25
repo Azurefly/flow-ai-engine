@@ -109,7 +109,7 @@ export function RunDetailContent({ run }: { run: any }) {
   const actions = sortInstanceActions(run.nodeRuns ?? [], run.definitionSnapshotJson);
   return (
     <div className="space-y-4 p-5">
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Summary label="实例状态" value={statusLabel(run.status)} />
         <Summary
           label="发起人"
@@ -124,7 +124,53 @@ export function RunDetailContent({ run }: { run: any }) {
           value={formatTime(run.startedAt ?? run.createdAt)}
         />
         <Summary label="结束时间" value={formatTime(run.finishedAt)} />
+        <Summary
+          label="当前业务状态"
+          value={run.currentStateCode || (run.flowType === "state" ? "尚未进入状态" : "不适用")}
+        />
+        <Summary label="状态版本" value={String(run.stateVersion ?? 0)} />
       </section>
+      {run.flowType === "state" && (
+        <section>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800">状态迁移历史</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                以服务端不可变迁移事实为准，不从任务状态反向推断。
+              </p>
+            </div>
+            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] text-blue-700">
+              {(run.stateTransitions ?? []).length} 次迁移
+            </span>
+          </div>
+          <div className="grid gap-2">
+            {(run.stateTransitions ?? []).map((transition: any) => (
+              <article
+                key={transition.id}
+                className="grid min-w-0 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_150px] sm:items-center"
+              >
+                <span className="font-mono font-semibold text-blue-700">
+                  #{transition.sequenceNo}
+                </span>
+                <span className="min-w-0 break-words text-slate-500">
+                  {transition.fromStateCode || "流程启动"}
+                </span>
+                <span className="min-w-0 break-words font-semibold text-slate-800">
+                  → {transition.toStateCode}
+                </span>
+                <span className="text-slate-500">
+                  {formatTime(transition.createdAt)}
+                </span>
+              </article>
+            ))}
+            {!(run.stateTransitions ?? []).length && (
+              <p className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
+                当前实例尚未写入状态迁移事实。
+              </p>
+            )}
+          </div>
+        </section>
+      )}
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>

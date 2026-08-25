@@ -33,6 +33,10 @@ const workflowOutboxMigration = readFileSync(
   new URL("../drizzle/0020_durable_outbox.sql", import.meta.url),
   "utf8"
 );
+const stateOutcomeMigration = readFileSync(
+  new URL("../drizzle/0022_state_outcome_facts.sql", import.meta.url),
+  "utf8"
+);
 
 describe("database migration integrity", () => {
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {
@@ -139,5 +143,40 @@ describe("database migration integrity", () => {
     expect(workflowOutboxMigration).toContain("workflow_outbox_dedupe_unique");
     expect(workflowOutboxMigration).toContain("workflow_outbox_claim_idx");
     expect(workflowOutboxMigration).toContain("`maxAttempts` int NOT NULL DEFAULT 8");
+  });
+
+  it("adds durable workflow state facts and explicit human-task outcomes", () => {
+    expect(stateOutcomeMigration).toContain(
+      "CREATE TABLE `workflow_state_transition`"
+    );
+    expect(stateOutcomeMigration).toContain(
+      "workflow_state_transition_run_sequence_unique"
+    );
+    expect(stateOutcomeMigration).toContain(
+      "ADD `currentStateCode` varchar(160)"
+    );
+    expect(stateOutcomeMigration).toContain(
+      "ADD `stateVersion` int DEFAULT 0 NOT NULL"
+    );
+    expect(stateOutcomeMigration).toContain(
+      "ADD `outcomeHandlesJson` json"
+    );
+    expect(stateOutcomeMigration).toContain(
+      "ADD `groupOutcome` varchar(96)"
+    );
+    expect(stateOutcomeMigration.indexOf("UPDATE `workflow_run` r JOIN")).toBeLessThan(
+      stateOutcomeMigration.indexOf(
+        "MODIFY `flowType` enum('state','control','data') NOT NULL"
+      )
+    );
+    expect(
+      stateOutcomeMigration.indexOf(
+        "UPDATE `workflow_task` SET `operationCode`=`nodeId`"
+      )
+    ).toBeLessThan(
+      stateOutcomeMigration.indexOf(
+        "MODIFY `operationCode` varchar(160) NOT NULL"
+      )
+    );
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
+import { analyzeWorkflowDefinition } from "./workflow-compiler";
 
 const validateState = (definition: unknown, executable = false) =>
   validate(definition, { flowType: "state", executable });
@@ -89,7 +90,15 @@ describe("流程定义输入边界", () => {
       position: { x: 260, y: 320 },
       config: { nodeDh: "ORPHAN", jdmc: "孤立节点", flowStatus: "孤立节点" },
     });
-    expect(() => validateState(unreachable, true)).toThrow("从开始节点不可达");
+    const unreachableResult = analyzeWorkflowDefinition(unreachable, {
+      flowType: "state",
+      executable: true,
+    });
+    expect(unreachableResult.ok).toBe(false);
+    if (!unreachableResult.ok)
+      expect(unreachableResult.diagnostics.map(item => item.code)).toContain(
+        "WF_NODE_UNREACHABLE"
+      );
     expect(() => validateState(unreachable, false)).not.toThrow();
 
     const deadEnd = emptyDefinition();
@@ -105,7 +114,15 @@ describe("流程定义输入边界", () => {
       sourceNodeId: "start",
       targetNodeId: "dead",
     });
-    expect(() => validateState(deadEnd, true)).toThrow("无法到达结束节点");
+    const deadEndResult = analyzeWorkflowDefinition(deadEnd, {
+      flowType: "state",
+      executable: true,
+    });
+    expect(deadEndResult.ok).toBe(false);
+    if (!deadEndResult.ok)
+      expect(deadEndResult.diagnostics.map(item => item.code)).toContain(
+        "WF_NODE_CANNOT_REACH_END"
+      );
 
     const cyclic = emptyDefinition();
     cyclic.nodes.splice(
@@ -132,8 +149,14 @@ describe("流程定义输入边界", () => {
       { id: "b-a", sourceNodeId: "b", targetNodeId: "a" },
       { id: "b-end", sourceNodeId: "b", targetNodeId: "end" },
     ];
-    expect(() => validateState(cyclic, true)).toThrow(
-      "流程存在未声明执行语义的循环"
-    );
+    const cyclicResult = analyzeWorkflowDefinition(cyclic, {
+      flowType: "state",
+      executable: true,
+    });
+    expect(cyclicResult.ok).toBe(false);
+    if (!cyclicResult.ok)
+      expect(cyclicResult.diagnostics.map(item => item.code)).toContain(
+        "WF_LOOP_NOT_DECLARED"
+      );
   });
 });

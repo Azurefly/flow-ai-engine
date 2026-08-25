@@ -43,14 +43,14 @@ function state(id = "state") {
 
 describe("WorkflowCompiler", () => {
   it("compiles a canonical immutable plan and produces a stable hash", () => {
-    const first = compileWorkflowDefinition(base(), { flowType: "state" });
+    const first = compileWorkflowDefinition(base(), { flowType: "control" });
     const second = compileWorkflowDefinition(
       {
         ...base(),
         nodes: [...base().nodes].reverse(),
         edges: [...base().edges].reverse(),
       },
-      { flowType: "state" }
+      { flowType: "control" }
     );
     expect(first.plan.entryNodeId).toBe("start");
     expect(first.plan.terminalNodeIds).toEqual(["end"]);

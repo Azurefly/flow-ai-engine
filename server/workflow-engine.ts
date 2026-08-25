@@ -13,6 +13,10 @@ import {
   normalizeReferenceRouterConfig,
   type NormalizedRouterRule,
 } from "../shared/reference-router-config";
+import {
+  readOperateOutcomeMode,
+  readOperateOutcomes,
+} from "../shared/workflow-node-contract";
 import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
 import { currentRequestId } from "./_core/http-security";
 import {
@@ -236,6 +240,7 @@ export function redactSensitiveValues(value: unknown): unknown {
 export type WorkflowRunDetail = {
   workflowId: string;
   nodeRuns: mysql.RowDataPacket[];
+  stateTransitions: mysql.RowDataPacket[];
   [key: string]: unknown;
 };
 export const WORKFLOW_RUN_STATUSES = [
@@ -1196,8 +1201,42 @@ export function normalizeApprovalResult(result: JsonRecord) {
   return {
     ...result,
     decision: decision as ApprovalDecision,
+    outcome: String(result.outcome ?? decision).trim() || decision,
     ...(comment ? { comment } : {}),
   };
+}
+
+export function resolveOperateOutcomeRouting(
+  contractValue: unknown,
+  outcome: string
+) {
+  const contract = asRecord(readJson(contractValue));
+  if (contract.mode !== "explicit")
+    return { mode: "legacy_cancel" as const, handle: undefined };
+  const handles = asRecord(contract.handles);
+  const handle = String(handles[outcome] ?? "").trim();
+  if (!handle) throw new Error(`人工操作结果 ${outcome} 没有配置运行分支。`);
+  return { mode: "explicit" as const, handle };
+}
+
+export function validateOperateOutcomeSubmission(
+  contractValue: unknown,
+  result: JsonRecord
+) {
+  const contract = asRecord(readJson(contractValue));
+  if (contract.mode !== "explicit") return;
+  const outcome = String(result.outcome ?? result.decision ?? "").trim();
+  resolveOperateOutcomeRouting(contract, outcome);
+  const configuredOutcome = Array.isArray(contract.outcomes)
+    ? contract.outcomes
+        .map(asRecord)
+        .find(item => String(item.code ?? "").trim() === outcome)
+    : undefined;
+  if (
+    configuredOutcome?.requireComment === true &&
+    !String(result.comment ?? "").trim()
+  )
+    throw new Error(`操作结果“${outcome}”必须填写处理意见。`);
 }
 
 export function evaluateApprovalResults(input: {
@@ -1408,12 +1447,13 @@ export async function submitWorkflowRun(input: {
     if (String(lockedWorkflowRows[0].flowType) === "data")
       throw new Error("数据流程必须通过数据流运行入口启动。");
     await connection.query(
-      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,requestId) VALUES (?,?,?,?,?,'queued',?,?,?,?,?,?,?)",
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,requestId) VALUES (?,?,?,?,?,?,'queued',?,?,?,?,?,?,?)",
       [
         runId,
         input.workflowId,
         workflow.ownerUserId,
         input.triggeredBy.id,
+        workflow.flowType,
         "manual",
         JSON.stringify(executableDefinition),
         JSON.stringify(input.workflowInput ?? {}),
@@ -1556,7 +1596,7 @@ export async function executePreparedWorkflowRun(input: {
   const leaseClause = input.leaseToken ? " AND executionLockToken=?" : "";
   if (input.leaseToken) params.push(input.leaseToken);
   const [finished] = await db().query<mysql.ResultSetHeader>(
-    `UPDATE workflow_run SET status='success',contextJson=?,finalOutputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+    `UPDATE workflow_run SET status='success',endReason='completed',contextJson=?,finalOutputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
     params
   );
   if (!finished.affectedRows)
@@ -1593,7 +1633,7 @@ export async function markWorkflowRunFailed(
     const leaseClause = leaseToken ? " AND executionLockToken=?" : "";
     if (leaseToken) params.push(leaseToken);
     const [failed] = await connection.query<mysql.ResultSetHeader>(
-      `UPDATE workflow_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+      `UPDATE workflow_run SET status='failed',endReason='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
       params
     );
     if (!failed.affectedRows) {
@@ -2050,8 +2090,9 @@ async function upsertParticipantState(input: {
   stateColor?: string;
   sourceNodeId?: string;
   availableOperations?: unknown[];
+  executor?: mysql.Pool | mysql.PoolConnection;
 }) {
-  await db().query(
+  await (input.executor ?? db()).query(
     "INSERT INTO workflow_participant_state (id,runId,workflowId,userId,roleKey,stateCode,stateName,flowStatus,stateColor,sourceNodeId,availableOperationsJson) VALUES (?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stateCode=VALUES(stateCode),stateName=VALUES(stateName),flowStatus=VALUES(flowStatus),stateColor=VALUES(stateColor),sourceNodeId=VALUES(sourceNodeId),availableOperationsJson=VALUES(availableOperationsJson),updatedAt=NOW()",
     [
       randomUUID(),
@@ -2131,31 +2172,107 @@ async function persistStateNode(input: {
   );
   const boundRoles = configuredRoleKeys(config.bdjs);
   const availableOperations = stateConfiguredOperations(config);
-  for (const userId of participantUserIds) {
-    const roles = Array.from(
-      new Set([
-        ...(iamRoles.get(userId) ?? ["default"]),
-        ...runtimeRoleKeys(input.context, userId),
-      ])
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [runRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT currentStateCode,currentStateNodeId,stateVersion FROM workflow_run WHERE id=? FOR UPDATE",
+      [input.runId]
     );
-    const stateRoles = boundRoles.length
-      ? roles.filter(role => boundRoles.includes(role))
-      : ["default"];
-    for (const roleKey of stateRoles) {
-      await upsertParticipantState({
-        runId: input.runId,
-        workflowId: input.workflowId,
-        userId,
-        roleKey,
-        stateCode,
-        stateName: userId === initiatorUserId ? flowStatus : stateName,
-        flowStatus,
-        stateColor,
-        sourceNodeId: input.node.id,
-        availableOperations,
-      });
+    const run = runRows[0];
+    if (!run) throw new Error("状态流程运行实例不存在。");
+    const currentVersion = Number(run.stateVersion ?? 0);
+    if (String(run.currentStateNodeId ?? "") !== input.node.id) {
+      const nextVersion = currentVersion + 1;
+      const [advanced] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE workflow_run SET currentStateCode=?,currentStateNodeId=?,stateVersion=? WHERE id=? AND stateVersion=?",
+        [stateCode, input.node.id, nextVersion, input.runId, currentVersion]
+      );
+      if (!advanced.affectedRows)
+        throw new Error("状态版本已变化，无法重复推进当前状态。");
+      const transitionCode = String(
+        runtime.pendingTransitionCode ?? `enter:${input.node.id}`
+      );
+      const transitionId = randomUUID();
+      const transitionResult = runtime.pendingTransitionResult ?? null;
+      await connection.query(
+        "INSERT INTO workflow_state_transition (id,runId,workflowId,sequenceNo,fromStateCode,toStateCode,transitionCode,taskId,actorUserId,responsibleUserId,representedUserId,payloadJson,resultJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [
+          transitionId,
+          input.runId,
+          input.workflowId,
+          nextVersion,
+          run.currentStateCode ?? null,
+          stateCode,
+          transitionCode,
+          runtime.pendingTransitionTaskId ?? null,
+          Number.isInteger(actorUserId) && actorUserId > 0 ? actorUserId : null,
+          Number(runtime.responsibleUserId || actorUserId) || null,
+          Number(runtime.representedUserId) || null,
+          JSON.stringify({ nodeId: input.node.id, stateName, flowStatus }),
+          transitionResult === null ? null : JSON.stringify(transitionResult),
+          String(runtime.requestId ?? currentRequestId() ?? "") || null,
+        ]
+      );
+      await connection.query(
+        `INSERT INTO workflow_outbox_event
+          (id,eventType,aggregateType,aggregateId,dedupeKey,payloadJson,status,maxAttempts)
+          VALUES (?,?,?,?,?,?, 'queued', 8)
+          ON DUPLICATE KEY UPDATE id=id`,
+        [
+          randomUUID(),
+          "workflow.state.changed",
+          "workflow_run",
+          input.runId,
+          `workflow-state-changed:${input.runId}:${nextVersion}`,
+          JSON.stringify({
+            workflowId: input.workflowId,
+            runId: input.runId,
+            sequenceNo: nextVersion,
+            fromStateCode: run.currentStateCode ?? null,
+            toStateCode: stateCode,
+            transitionCode,
+          }),
+        ]
+      );
     }
+    for (const userId of participantUserIds) {
+      const roles = Array.from(
+        new Set([
+          ...(iamRoles.get(userId) ?? ["default"]),
+          ...runtimeRoleKeys(input.context, userId),
+        ])
+      );
+      const stateRoles = boundRoles.length
+        ? roles.filter(role => boundRoles.includes(role))
+        : ["default"];
+      for (const roleKey of stateRoles) {
+        await upsertParticipantState({
+          runId: input.runId,
+          workflowId: input.workflowId,
+          userId,
+          roleKey,
+          stateCode,
+          stateName: userId === initiatorUserId ? flowStatus : stateName,
+          flowStatus,
+          stateColor,
+          sourceNodeId: input.node.id,
+          availableOperations,
+          executor: connection,
+        });
+      }
+    }
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
   }
+  delete runtime.pendingTransitionCode;
+  delete runtime.pendingTransitionTaskId;
+  delete runtime.pendingTransitionResult;
+  input.context.runtime = runtime;
   addRuntimeParticipants(input.context, participantUserIds);
 }
 
@@ -2316,6 +2433,18 @@ async function executeRunSegment(input: {
             config.description
           ) ?? node.name
         );
+        const operationCode = String(
+          firstConfiguredString(config.nodeDh, config.commandCode) ?? node.id
+        );
+        const outcomeMode = readOperateOutcomeMode(config);
+        const outcomes = readOperateOutcomes(config);
+        const outcomeContract = {
+          mode: outcomeMode,
+          outcomes,
+          handles: Object.fromEntries(
+            outcomes.map(outcome => [outcome.code, outcome.sourceHandle])
+          ),
+        };
         const pendingStatusName = String(
           firstConfiguredString(config.pendingStatusName) ?? "待审批"
         );
@@ -2370,7 +2499,7 @@ async function executeRunSegment(input: {
           const taskId = randomUUID();
           taskIds.push(taskId);
           await db().query(
-            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,pendingStatusName,instruction,payloadJson,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
               taskId,
               input.workflow.id,
@@ -2387,6 +2516,7 @@ async function executeRunSegment(input: {
               taskAssignment.approvalOrder,
               taskRoleKey,
               operationName,
+              operationCode,
               pendingStatusName,
               String(
                 firstConfiguredString(config.instruction) ?? operationName
@@ -2397,6 +2527,13 @@ async function executeRunSegment(input: {
                 assignmentMode: assignment.mode,
                 reference,
               }),
+              JSON.stringify({
+                mode: assignment.mode,
+                candidateUserIds: taskAssignment.candidateUserIds,
+                resolvedAt: new Date().toISOString(),
+              }),
+              JSON.stringify(outcomeContract),
+              taskAssignment.assignedUserId,
               JSON.stringify(nextNodeIds),
               String(
                 asRecord(input.context.runtime).requestId ??
@@ -2412,6 +2549,8 @@ async function executeRunSegment(input: {
               ...(reference.signMode === "single"
                 ? {}
                 : { signMode: reference.signMode }),
+              outcomeMode,
+              outcomes,
             };
             await upsertParticipantState({
               runId: input.runId,
@@ -2600,6 +2739,7 @@ async function executeRunSegment(input: {
 type ApprovalGateResult = {
   continueFlow: boolean;
   rejected: boolean;
+  outcome?: string;
   completedApprovals: number;
   rejectedApprovals: number;
   completedDecisions: number;
@@ -2611,22 +2751,37 @@ type ApprovalGateResult = {
 };
 
 async function completeTaskAndEvaluateApprovalGroup(
+  connection: mysql.PoolConnection,
   task: mysql.RowDataPacket,
   input: { taskId: string; completedBy: WorkflowUser; result: JsonRecord }
 ): Promise<ApprovalGateResult> {
   const result = normalizeApprovalResult(input.result);
   if (!task.approvalGroupId) {
-    const [claim] = await db().query<mysql.ResultSetHeader>(
-      "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed'",
-      [input.completedBy.id, JSON.stringify(result), input.taskId]
+    const [claim] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=? AND status='claimed' AND claimedByUserId=?",
+      [
+        input.completedBy.id,
+        JSON.stringify(result),
+        input.taskId,
+        input.completedBy.id,
+      ]
     );
     if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
-    const rejected = result.decision === "rejected";
+    const progress = evaluateApprovalResults({
+      totalApprovers: 1,
+      requiredApprovals: 1,
+      results: [result],
+    });
+    const rejected = progress.outcome === "rejected";
     return {
       continueFlow: !rejected,
       rejected,
-      completedApprovals: rejected ? 0 : 1,
-      rejectedApprovals: rejected ? 1 : 0,
+      outcome:
+        typeof input.result.outcome === "string" && input.result.outcome.trim()
+          ? input.result.outcome.trim()
+          : String(progress.outcome),
+      completedApprovals: progress.approved,
+      rejectedApprovals: progress.rejected,
       completedDecisions: 1,
       requiredApprovals: 1,
       totalApprovers: 1,
@@ -2635,123 +2790,111 @@ async function completeTaskAndEvaluateApprovalGroup(
     };
   }
 
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT * FROM workflow_task WHERE id=? FOR UPDATE",
-      [input.taskId]
-    );
-    const lockedTask = lockedTasks[0];
-    if (
-      !lockedTask ||
-      lockedTask.status !== "claimed" ||
-      (Number(lockedTask.claimedByUserId) !== input.completedBy.id &&
-        input.completedBy.role !== "admin")
-    ) {
-      throw new Error("人工任务已被其他操作处理。 ");
-    }
-    const [groups] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT * FROM workflow_task_group WHERE id=? FOR UPDATE",
-      [task.approvalGroupId]
-    );
-    const group = groups[0];
-    if (!group || group.status !== "waiting")
-      throw new Error("或签/会签任务组已结束。 ");
-    await connection.query(
-      "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
-      [input.completedBy.id, JSON.stringify(result), input.taskId]
-    );
-    const requiredApprovals = Number(group.requiredApprovals);
-    const totalApprovers = Number(group.totalApprovers);
-    const [members] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id,assignedUserId,status,resultJson FROM workflow_task WHERE approvalGroupId=? ORDER BY createdAt,id",
-      [task.approvalGroupId]
-    );
-    const affectedUserIds = Array.from(
-      new Set(
-        members
-          .map(row => Number(row.assignedUserId))
-          .filter(id => Number.isInteger(id) && id > 0)
-      )
-    );
-    const groupResults = members
-      .filter(row => row.status === "completed")
-      .map(row => readJson(row.resultJson));
-    const progress = evaluateApprovalResults({
-      totalApprovers,
-      requiredApprovals,
-      results: groupResults,
-    });
-    if (progress.outcome === "waiting") {
-      if (String(task.signMode) === "sequentialSignFor") {
-        const [nextTasks] = await connection.query<mysql.RowDataPacket[]>(
-          "SELECT id,assignedUserId,operationName FROM workflow_task WHERE approvalGroupId=? AND status='pending' ORDER BY approvalOrder,id LIMIT 1",
-          [task.approvalGroupId]
-        );
-        const next = nextTasks[0];
-        if (next) {
-          await connection.query(
-            "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?",
-            [
-              JSON.stringify([
-                {
-                  taskId: String(next.id),
-                  name: String(next.operationName ?? task.nodeName),
-                  signMode: "sequentialSignFor",
-                },
-              ]),
-              task.runId,
-              Number(next.assignedUserId),
-            ]
-          );
-        }
-      }
-      const pendingTaskId = String(
-        members.find(
-          row => row.status === "pending" || row.status === "claimed"
-        )?.id ?? ""
+  const [groups] = await connection.query<mysql.RowDataPacket[]>(
+    "SELECT * FROM workflow_task_group WHERE id=? FOR UPDATE",
+    [task.approvalGroupId]
+  );
+  const group = groups[0];
+  if (!group || group.status !== "waiting")
+    throw new Error("或签/会签任务组已结束。 ");
+  const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>(
+    "SELECT * FROM workflow_task WHERE id=? FOR UPDATE",
+    [input.taskId]
+  );
+  const lockedTask = lockedTasks[0];
+  if (
+    !lockedTask ||
+    lockedTask.status !== "claimed" ||
+    Number(lockedTask.claimedByUserId) !== input.completedBy.id
+  ) {
+    throw new Error("人工任务已被其他操作处理。 ");
+  }
+  await connection.query(
+    "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
+    [input.completedBy.id, JSON.stringify(result), input.taskId]
+  );
+  const requiredApprovals = Number(group.requiredApprovals);
+  const totalApprovers = Number(group.totalApprovers);
+  const [members] = await connection.query<mysql.RowDataPacket[]>(
+    "SELECT id,assignedUserId,status,resultJson FROM workflow_task WHERE approvalGroupId=? ORDER BY createdAt,id FOR UPDATE",
+    [task.approvalGroupId]
+  );
+  const affectedUserIds = Array.from(
+    new Set(
+      members
+        .map(row => Number(row.assignedUserId))
+        .filter(id => Number.isInteger(id) && id > 0)
+    )
+  );
+  const groupResults = members
+    .filter(row => row.status === "completed")
+    .map(row => readJson(row.resultJson));
+  const progress = evaluateApprovalResults({
+    totalApprovers,
+    requiredApprovals,
+    results: groupResults,
+  });
+  if (progress.outcome === "waiting") {
+    if (String(task.signMode) === "sequentialSignFor") {
+      const [nextTasks] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,assignedUserId,operationName FROM workflow_task WHERE approvalGroupId=? AND status='pending' ORDER BY approvalOrder,id LIMIT 1",
+        [task.approvalGroupId]
       );
-      await connection.commit();
-      return {
-        continueFlow: false,
-        rejected: false,
-        completedApprovals: progress.approved,
-        rejectedApprovals: progress.rejected,
-        completedDecisions: progress.completed,
-        requiredApprovals,
-        totalApprovers,
-        affectedUserIds: [input.completedBy.id],
-        pendingTaskId: pendingTaskId || undefined,
-      };
+      const next = nextTasks[0];
+      if (next) {
+        await connection.query(
+          "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?",
+          [
+            JSON.stringify([
+              {
+                taskId: String(next.id),
+                name: String(next.operationName ?? task.nodeName),
+                signMode: "sequentialSignFor",
+              },
+            ]),
+            task.runId,
+            Number(next.assignedUserId),
+          ]
+        );
+      }
     }
-    const rejected = progress.outcome === "rejected";
-    await connection.query(
-      "UPDATE workflow_task_group SET status=?,completedByTaskId=?,completedAt=NOW() WHERE id=? AND status='waiting'",
-      [rejected ? "cancelled" : "completed", input.taskId, task.approvalGroupId]
+    const pendingTaskId = String(
+      members.find(row => row.status === "pending" || row.status === "claimed")
+        ?.id ?? ""
     );
-    await connection.query(
-      "UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')",
-      [task.approvalGroupId]
-    );
-    await connection.commit();
     return {
-      continueFlow: !rejected,
-      rejected,
+      continueFlow: false,
+      rejected: false,
       completedApprovals: progress.approved,
       rejectedApprovals: progress.rejected,
       completedDecisions: progress.completed,
       requiredApprovals,
       totalApprovers,
-      affectedUserIds,
-      groupResults,
+      affectedUserIds: [input.completedBy.id],
+      pendingTaskId: pendingTaskId || undefined,
     };
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
   }
+  const rejected = progress.outcome === "rejected";
+  await connection.query(
+    "UPDATE workflow_task_group SET status='completed',groupOutcome=?,completedByTaskId=?,completedAt=NOW() WHERE id=? AND status='waiting'",
+    [rejected ? "rejected" : "approved", input.taskId, task.approvalGroupId]
+  );
+  await connection.query(
+    "UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')",
+    [task.approvalGroupId]
+  );
+  return {
+    continueFlow: !rejected,
+    rejected,
+    outcome: rejected ? "rejected" : "approved",
+    completedApprovals: progress.approved,
+    rejectedApprovals: progress.rejected,
+    completedDecisions: progress.completed,
+    requiredApprovals,
+    totalApprovers,
+    affectedUserIds,
+    groupResults,
+  };
 }
 
 export async function resumeWorkflowTask(input: {
@@ -2760,41 +2903,96 @@ export async function resumeWorkflowTask(input: {
   result: JsonRecord;
 }) {
   const normalizedResult = normalizeApprovalResult(input.result);
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,r.contextJson,r.definitionSnapshotJson,r.status AS runStatus,r.startedAt,w.ownerUserId,w.name AS workflowName,w.projectId
-       FROM workflow_task t JOIN workflow_run r ON r.id=t.runId JOIN workflow w ON w.id=t.workflowId WHERE t.id=? LIMIT 1`,
-    [input.taskId]
-  );
-  const task = rows[0] as PersistedWorkflow & mysql.RowDataPacket;
-  if (!task) throw new Error("人工任务不存在。 ");
-  if (
-    task.status !== "claimed" ||
-    Number(task.claimedByUserId) !== input.completedBy.id
-  )
-    throw new Error("仅领取该任务的处理人可以完成操作。 ");
-  if (!["running", "waiting"].includes(String(task.runStatus)))
-    throw new Error("所属流程实例不处于等待人工操作状态。 ");
-  const gate = await completeTaskAndEvaluateApprovalGroup(task, {
-    ...input,
-    result: normalizedResult,
-  });
-  const individualDecision = normalizedResult.decision as ApprovalDecision;
-  await db().query(
-    "UPDATE workflow_participant_state SET stateName=?,flowStatus=?,availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=? AND roleKey=?",
-    [
-      individualDecision === "rejected" ? "已拒绝" : "已审核",
-      individualDecision === "rejected" ? "已拒绝" : "已审核",
-      JSON.stringify([]),
-      task.runId,
-      input.completedBy.id,
-      String(task.roleKey || "default"),
-    ]
-  );
-  if (!gate.continueFlow && !gate.rejected) {
-    return {
-      runId: String(task.runId),
-      status: "waiting" as const,
-      taskId: gate.pendingTaskId ?? input.taskId,
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT t.*,r.contextJson,r.definitionSnapshotJson,r.status AS runStatus,r.startedAt,w.ownerUserId,w.name AS workflowName,w.projectId
+         FROM workflow_task t JOIN workflow_run r ON r.id=t.runId JOIN workflow w ON w.id=t.workflowId WHERE t.id=? LIMIT 1`,
+      [input.taskId]
+    );
+    const task = rows[0] as PersistedWorkflow & mysql.RowDataPacket;
+    if (!task) throw new Error("人工任务不存在。 ");
+    const [lockedRuns] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT status FROM workflow_run WHERE id=? FOR UPDATE",
+      [task.runId]
+    );
+    task.runStatus = lockedRuns[0]?.status;
+    if (
+      task.status !== "claimed" ||
+      Number(task.claimedByUserId) !== input.completedBy.id
+    )
+      throw new Error("仅领取该任务的处理人可以完成操作。 ");
+    if (!["running", "waiting"].includes(String(task.runStatus)))
+      throw new Error("所属流程实例不处于等待人工操作状态。 ");
+    validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalizedResult);
+    if (
+      task.approvalGroupId &&
+      !["approved", "rejected", "abstained"].includes(
+        String(normalizedResult.outcome)
+      )
+    )
+      throw new Error(
+        "多人签署暂不支持自定义退回结果，请使用同意、拒绝或弃权。"
+      );
+    const gate = await completeTaskAndEvaluateApprovalGroup(connection, task, {
+      ...input,
+      result: normalizedResult,
+    });
+    const individualDecision = normalizedResult.decision as ApprovalDecision;
+    await connection.query(
+      "UPDATE workflow_participant_state SET stateName=?,flowStatus=?,availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=? AND roleKey=?",
+      [
+        individualDecision === "rejected" ? "已拒绝" : "已审核",
+        individualDecision === "rejected" ? "已拒绝" : "已审核",
+        JSON.stringify([]),
+        task.runId,
+        input.completedBy.id,
+        String(task.roleKey || "default"),
+      ]
+    );
+    if (!gate.continueFlow && !gate.rejected) {
+      await connection.commit();
+      return {
+        runId: String(task.runId),
+        status: "waiting" as const,
+        taskId: gate.pendingTaskId ?? input.taskId,
+        approvalProgress: {
+          completed: gate.completedApprovals,
+          approved: gate.completedApprovals,
+          rejected: gate.rejectedApprovals,
+          decided: gate.completedDecisions,
+          required: gate.requiredApprovals,
+          total: gate.totalApprovers,
+        },
+      };
+    }
+    const context = asRecord(readJson(task.contextJson));
+    const runtime = asRecord(context.runtime);
+    runtime.lastActorUserId = input.completedBy.id;
+    context.runtime = runtime;
+    updateRuntimeRoles(context, [input.completedBy.id], [], "sender");
+    addRuntimeParticipants(context, [input.completedBy.id]);
+    if (gate.affectedUserIds.length) {
+      const placeholders = gate.affectedUserIds.map(() => "?").join(",");
+      await connection.query(
+        "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (" +
+          placeholders +
+          ")",
+        [JSON.stringify([]), task.runId, ...gate.affectedUserIds]
+      );
+    }
+    const taskOutput = {
+      taskId: input.taskId,
+      approvalGroupId: task.approvalGroupId ?? null,
+      signMode: task.signMode ?? "single",
+      completedByUserId: input.completedBy.id,
+      operationName: task.operationName ?? task.nodeName,
+      operationCode: task.operationCode ?? task.nodeId,
+      decision: gate.rejected ? "rejected" : "approved",
+      outcome: gate.outcome ?? (gate.rejected ? "rejected" : "approved"),
+      result: normalizedResult,
+      groupResults: gate.groupResults ?? [normalizedResult],
       approvalProgress: {
         completed: gate.completedApprovals,
         approved: gate.completedApprovals,
@@ -2804,139 +3002,95 @@ export async function resumeWorkflowTask(input: {
         total: gate.totalApprovers,
       },
     };
-  }
-  const context = asRecord(readJson(task.contextJson));
-  const runtime = asRecord(context.runtime);
-  runtime.lastActorUserId = input.completedBy.id;
-  context.runtime = runtime;
-  updateRuntimeRoles(context, [input.completedBy.id], [], "sender");
-  addRuntimeParticipants(context, [input.completedBy.id]);
-  if (gate.affectedUserIds.length) {
-    const placeholders = gate.affectedUserIds.map(() => "?").join(",");
-    await db().query(
-      "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (" +
-        placeholders +
-        ")",
-      [JSON.stringify([]), task.runId, ...gate.affectedUserIds]
+    const vars = asRecord(context.vars);
+    const nodeOutputs = asRecord(context.nodes);
+    vars[String(task.nodeId)] = taskOutput;
+    nodeOutputs[String(task.nodeId)] = taskOutput;
+    context.vars = vars;
+    context.nodes = nodeOutputs;
+    const [nodeRuns] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1 FOR UPDATE",
+      [task.runId, task.nodeId]
     );
-  }
-  const taskOutput = {
-    taskId: input.taskId,
-    approvalGroupId: task.approvalGroupId ?? null,
-    signMode: task.signMode ?? "single",
-    completedByUserId: input.completedBy.id,
-    operationName: task.operationName ?? task.nodeName,
-    decision: gate.rejected ? "rejected" : "approved",
-    result: normalizedResult,
-    groupResults: gate.groupResults ?? [normalizedResult],
-    approvalProgress: {
-      completed: gate.completedApprovals,
-      approved: gate.completedApprovals,
-      rejected: gate.rejectedApprovals,
-      decided: gate.completedDecisions,
-      required: gate.requiredApprovals,
-      total: gate.totalApprovers,
-    },
-  };
-  const vars = asRecord(context.vars);
-  const nodeOutputs = asRecord(context.nodes);
-  vars[String(task.nodeId)] = taskOutput;
-  nodeOutputs[String(task.nodeId)] = taskOutput;
-  context.vars = vars;
-  context.nodes = nodeOutputs;
-  const [nodeRuns] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1",
-    [task.runId, task.nodeId]
-  );
-  const waitingNodeRun = nodeRuns[0];
-  if (!waitingNodeRun)
-    throw new Error("人工任务对应的等待节点运行记录不存在。");
-  if (gate.rejected) {
-    const rejectionConnection = await db().getConnection();
-    try {
-      await rejectionConnection.beginTransaction();
-      const [finishedNode] =
-        await rejectionConnection.query<mysql.ResultSetHeader>(
-          "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
-          [
-            JSON.stringify(taskOutput),
-            Date.now() -
-              new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(),
-            waitingNodeRun.id,
-          ]
-        );
-      if (!finishedNode.affectedRows)
-        throw new Error("人工任务节点已被其他请求推进。");
-      const [cancelledRun] =
-        await rejectionConnection.query<mysql.ResultSetHeader>(
-          "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
-          [
-            JSON.stringify(context),
-            JSON.stringify(taskOutput),
-            Date.now() - new Date(task.startedAt ?? Date.now()).getTime(),
-            task.runId,
-          ]
-        );
-      if (!cancelledRun.affectedRows)
-        throw new Error("流程状态已变化，无法重复终止。");
-      await rejectionConnection.commit();
-    } catch (error) {
-      await rejectionConnection.rollback();
-      throw error;
-    } finally {
-      rejectionConnection.release();
-    }
-    return {
-      runId: String(task.runId),
-      status: "cancelled" as const,
-      output: taskOutput,
-    };
-  }
-  const nextNodeIds = readJson(task.nextNodeIdsJson);
-  const continuationNodeIds = Array.isArray(nextNodeIds)
-    ? nextNodeIds.map(String)
-    : [];
-  for (const nodeId of continuationNodeIds)
-    setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
-  const resumeRuntime = asRecord(context.runtime);
-  resumeRuntime.executionRunId = String(task.runId);
-  resumeRuntime.executionQueue = continuationNodeIds;
-  resumeRuntime.executionCurrentNodeId = null;
-  context.runtime = resumeRuntime;
-  const checkpoint: WorkflowCheckpoint = {
-    queue: continuationNodeIds,
-    context,
-    finalOutput: null,
-    currentNodeId: null,
-  };
-  const jobId = randomUUID();
-  const resumeIdentity = String(
-    task.approvalGroupId || task.id || input.taskId
-  );
-  const idempotencyKey = `workflow:resume:${task.runId}:${resumeIdentity}`;
-  const continuationConnection = await db().getConnection();
-  try {
-    await continuationConnection.beginTransaction();
-    const [finishedNode] =
-      await continuationConnection.query<mysql.ResultSetHeader>(
-        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
-        [
-          JSON.stringify(taskOutput),
-          Date.now() -
-            new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(),
-          waitingNodeRun.id,
-        ]
-      );
+    const waitingNodeRun = nodeRuns[0];
+    if (!waitingNodeRun)
+      throw new Error("人工任务对应的等待节点运行记录不存在。");
+    const [finishedNode] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
+      [
+        JSON.stringify(taskOutput),
+        Date.now() - new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(),
+        waitingNodeRun.id,
+      ]
+    );
     if (!finishedNode.affectedRows)
       throw new Error("人工任务节点已被其他请求推进。");
-    const [queuedRun] =
-      await continuationConnection.query<mysql.ResultSetHeader>(
-        "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
-        [JSON.stringify(context), task.runId]
+    const outcomeRouting = resolveOperateOutcomeRouting(
+      task.outcomeHandlesJson,
+      taskOutput.outcome
+    );
+    if (gate.rejected && outcomeRouting.mode === "legacy_cancel") {
+      const [cancelledRun] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE workflow_run SET status='cancelled',endReason='legacy_rejected',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
+        [
+          JSON.stringify(context),
+          JSON.stringify(taskOutput),
+          Date.now() - new Date(task.startedAt ?? Date.now()).getTime(),
+          task.runId,
+        ]
       );
+      if (!cancelledRun.affectedRows)
+        throw new Error("流程状态已变化，无法重复终止。");
+      await connection.commit();
+      return {
+        runId: String(task.runId),
+        status: "cancelled" as const,
+        output: taskOutput,
+      };
+    }
+    const nextNodeIds = readJson(task.nextNodeIdsJson);
+    let continuationNodeIds = Array.isArray(nextNodeIds)
+      ? nextNodeIds.map(String)
+      : [];
+    if (outcomeRouting.mode === "explicit") {
+      const definition = readJson(task.definitionSnapshotJson) as Definition;
+      const outcomeEdges = definition.edges.filter(
+        edge =>
+          edge.sourceNodeId === String(task.nodeId) &&
+          (edge.sourceHandle?.trim() || "default") === outcomeRouting.handle
+      );
+      if (outcomeEdges.length !== 1)
+        throw new Error(
+          `人工操作结果分支 ${outcomeRouting.handle} 必须且仅能命中一个后继节点。`
+        );
+      continuationNodeIds = [outcomeEdges[0]!.targetNodeId];
+    }
+    for (const nodeId of continuationNodeIds)
+      setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
+    const resumeRuntime = asRecord(context.runtime);
+    resumeRuntime.executionRunId = String(task.runId);
+    resumeRuntime.executionQueue = continuationNodeIds;
+    resumeRuntime.executionCurrentNodeId = null;
+    resumeRuntime.pendingTransitionCode = taskOutput.outcome;
+    resumeRuntime.pendingTransitionTaskId = String(task.id);
+    resumeRuntime.pendingTransitionResult = taskOutput;
+    context.runtime = resumeRuntime;
+    const checkpoint: WorkflowCheckpoint = {
+      queue: continuationNodeIds,
+      context,
+      finalOutput: null,
+      currentNodeId: null,
+    };
+    const jobId = randomUUID();
+    const resumeIdentity = String(task.approvalGroupId || task.id);
+    const idempotencyKey = `workflow:resume:${task.runId}:${resumeIdentity}`;
+    const [queuedRun] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_run SET status='queued',contextJson=?,errorJson=NULL,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
+      [JSON.stringify(context), task.runId]
+    );
     if (!queuedRun.affectedRows)
       throw new Error("流程状态已变化，无法重复提交续跑命令。");
-    await continuationConnection.query(
+    await connection.query(
       "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
       [
         jobId,
@@ -2947,7 +3101,7 @@ export async function resumeWorkflowTask(input: {
         String(task.requestId ?? currentRequestId() ?? "") || null,
       ]
     );
-    await continuationConnection.commit();
+    await connection.commit();
     return {
       runId: String(task.runId),
       jobId,
@@ -2955,10 +3109,10 @@ export async function resumeWorkflowTask(input: {
       approvalProgress: taskOutput.approvalProgress,
     };
   } catch (error) {
-    await continuationConnection.rollback();
+    await connection.rollback();
     throw error;
   } finally {
-    continuationConnection.release();
+    connection.release();
   }
 }
 
@@ -2971,9 +3125,9 @@ export async function resumeWorkflowTask(input: {
 export async function reconcileWorkflowContinuations(limit = 20) {
   const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 100);
   const [candidates] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,r.contextJson,r.startedAt AS runStartedAt,
+    `SELECT t.*,r.contextJson,r.definitionSnapshotJson,r.startedAt AS runStartedAt,
             nr.id AS nodeRunId,nr.startedAt AS nodeRunStartedAt,
-            g.status AS groupStatus,g.completedByTaskId,g.totalApprovers,g.requiredApprovals
+            g.status AS groupStatus,g.groupOutcome,g.completedByTaskId,g.totalApprovers,g.requiredApprovals
        FROM workflow_task t
        JOIN workflow_run r ON r.id=t.runId AND r.status IN ('running','waiting')
        JOIN workflow_node_run nr ON nr.runId=t.runId AND nr.nodeId=t.nodeId AND nr.status='waiting'
@@ -3027,7 +3181,7 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       );
       const lastMember = memberRows[memberRows.length - 1] ?? task;
       const rejected = task.approvalGroupId
-        ? task.groupStatus === "cancelled"
+        ? task.groupOutcome === "rejected" || task.groupStatus === "cancelled"
         : normalizeApprovalResult(asRecord(readJson(task.resultJson)))
             .decision === "rejected";
       const approvedCount = groupResults.filter(
@@ -3043,6 +3197,9 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         ),
         operationName: task.operationName ?? task.nodeName,
         decision: rejected ? "rejected" : "approved",
+        outcome: String(
+          task.groupOutcome || (rejected ? "rejected" : "approved")
+        ),
         result: readJson(task.resultJson),
         groupResults,
         approvalProgress: {
@@ -3079,9 +3236,13 @@ export async function reconcileWorkflowContinuations(limit = 20) {
           [JSON.stringify([]), task.runId, task.approvalGroupId]
         );
       }
-      if (rejected) {
+      const outcomeRouting = resolveOperateOutcomeRouting(
+        task.outcomeHandlesJson,
+        taskOutput.outcome
+      );
+      if (rejected && outcomeRouting.mode === "legacy_cancel") {
         await connection.query(
-          "UPDATE workflow_run SET status='cancelled',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+          "UPDATE workflow_run SET status='cancelled',endReason='legacy_rejected',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
           [
             JSON.stringify(context),
             JSON.stringify(taskOutput),
@@ -3091,13 +3252,31 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         );
       } else {
         const nextNodeIds = readJson(task.nextNodeIdsJson);
-        const queue = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
+        let queue = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
+        if (outcomeRouting.mode === "explicit") {
+          const definition = readJson(
+            task.definitionSnapshotJson
+          ) as Definition;
+          const outcomeEdges = definition.edges.filter(
+            edge =>
+              edge.sourceNodeId === String(task.nodeId) &&
+              (edge.sourceHandle?.trim() || "default") === outcomeRouting.handle
+          );
+          if (outcomeEdges.length !== 1)
+            throw new Error(
+              `人工操作结果分支 ${outcomeRouting.handle} 必须且仅能命中一个后继节点。`
+            );
+          queue = [outcomeEdges[0]!.targetNodeId];
+        }
         for (const nodeId of queue)
           setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
         const resumeRuntime = asRecord(context.runtime);
         resumeRuntime.executionRunId = String(task.runId);
         resumeRuntime.executionQueue = queue;
         resumeRuntime.executionCurrentNodeId = null;
+        resumeRuntime.pendingTransitionCode = taskOutput.outcome;
+        resumeRuntime.pendingTransitionTaskId = String(task.id);
+        resumeRuntime.pendingTransitionResult = taskOutput;
         context.runtime = resumeRuntime;
         const checkpoint: WorkflowCheckpoint = {
           queue,
@@ -3224,7 +3403,16 @@ export async function getWorkflowRun(
     "SELECT * FROM workflow_node_run WHERE runId=? ORDER BY createdAt ASC,sequenceNo ASC,id ASC",
     [runId]
   );
-  return { ...run, workflowId: String(run.workflowId), nodeRuns: nodeRows };
+  const [transitionRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT * FROM workflow_state_transition WHERE runId=? ORDER BY sequenceNo ASC",
+    [runId]
+  );
+  return {
+    ...run,
+    workflowId: String(run.workflowId),
+    nodeRuns: nodeRows,
+    stateTransitions: transitionRows,
+  };
 }
 
 export async function getRuntimeModels() {

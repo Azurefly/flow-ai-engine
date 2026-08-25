@@ -3,8 +3,8 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 
-export const DATABASE_MIGRATION_VERSION = "0021_department_role_scope";
-export const DATABASE_MIGRATION_EPOCH = 1787560000000;
+export const DATABASE_MIGRATION_VERSION = "0022_state_outcome_facts";
+export const DATABASE_MIGRATION_EPOCH = 1787644800000;
 
 let pool: mysql.Pool | undefined;
 
@@ -72,15 +72,15 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
          FROM information_schema.columns
         WHERE table_schema=DATABASE() AND (
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
-          (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId')) OR
-          (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId')) OR
+          (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
+          (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -90,15 +90,16 @@ export async function checkReadiness() {
          FROM information_schema.statistics
         WHERE table_schema=DATABASE() AND non_unique=0 AND (
           (table_name='workflow_run_job' AND index_name='workflow_run_job_idempotency_unique') OR
-          (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique')
+          (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique') OR
+          (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_sequence_unique')
         )`
     );
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 3 &&
-      Number(columnRows[0]?.count ?? 0) === 12 &&
-      Number(indexRows[0]?.count ?? 0) === 2;
+      Number(tableRows[0]?.count ?? 0) === 4 &&
+      Number(columnRows[0]?.count ?? 0) === 21 &&
+      Number(indexRows[0]?.count ?? 0) === 3;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {

@@ -952,6 +952,37 @@ function Calendar({
   );
 }
 
+function taskOutcomeOptions(task: any): Array<{
+  code: string;
+  label: string;
+  requireComment?: boolean;
+}> {
+  let contract = task?.outcomeHandlesJson;
+  if (typeof contract === "string") {
+    try {
+      contract = JSON.parse(contract);
+    } catch {
+      contract = null;
+    }
+  }
+  if (contract?.mode === "explicit" && Array.isArray(contract.outcomes)) {
+    const outcomes = contract.outcomes
+      .filter((item: any) => item && typeof item === "object")
+      .map((item: any) => ({
+        code: String(item.code ?? "").trim(),
+        label: String(item.label ?? item.code ?? "").trim(),
+        ...(item.requireComment === true ? { requireComment: true } : {}),
+      }))
+      .filter((item: any) => item.code && item.label);
+    if (outcomes.length) return outcomes;
+  }
+  return [
+    { code: "approved", label: "同意" },
+    { code: "rejected", label: "拒绝", requireComment: true },
+    { code: "abstained", label: "弃权" },
+  ];
+}
+
 function TaskDrawer({
   task,
   assignees,
@@ -964,9 +995,24 @@ function TaskDrawer({
   onReturn,
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
-  const [decision, setDecision] = useState<
-    "approved" | "rejected" | "abstained"
-  >("approved");
+  const configuredOutcomes = useMemo(
+    () => taskOutcomeOptions(task),
+    [task?.outcomeHandlesJson]
+  );
+  const [outcome, setOutcome] = useState("approved");
+  const selectedOutcome =
+    configuredOutcomes.find(item => item.code === outcome) ??
+    configuredOutcomes[0];
+  const decision: "approved" | "rejected" | "abstained" =
+    selectedOutcome?.code === "abstained"
+        ? "abstained"
+        : ["rejected", "returned", "cancelled"].includes(
+              selectedOutcome?.code ?? ""
+            )
+          ? "rejected"
+          : "approved";
+  const commentRequired =
+    selectedOutcome?.requireComment === true || decision === "rejected";
   const [comment, setComment] = useState("");
   const [resultRows, setResultRows] = useState<
     Array<{ key: string; value: string }>
@@ -983,6 +1029,10 @@ function TaskDrawer({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [onClose]);
+  useEffect(() => {
+    if (!configuredOutcomes.some(item => item.code === outcome))
+      setOutcome(configuredOutcomes[0]?.code ?? "approved");
+  }, [configuredOutcomes, outcome]);
   const toValue = (value: string): unknown =>
     value === "true"
       ? true
@@ -1001,6 +1051,7 @@ function TaskDrawer({
         .map(row => [row.key, toValue(row.value)])
     ),
     decision,
+    outcome: selectedOutcome?.code ?? decision,
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   });
   const canManage = task?.status === "pending" || task?.status === "claimed";
@@ -1127,51 +1178,30 @@ function TaskDrawer({
               <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
                 <p className="text-xs font-semibold text-slate-600">审批决定</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
-                  明确选择同意、拒绝或弃权；拒绝时处理意见必填，弃权不会计入同意票。
+                  仅展示当前操作合同允许的结果，提交后由服务端选择唯一后继分支。
                 </p>
-                <div className="mt-3 grid grid-cols-3 gap-2">
-                  <Button
-                    type="button"
-                    variant={decision === "approved" ? "default" : "outline"}
-                    className={`min-h-11 ${
-                      decision === "approved"
-                        ? "bg-emerald-600 hover:bg-emerald-500"
-                        : ""
-                    }`}
-                    onClick={() => setDecision("approved")}
-                  >
-                    同意
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={decision === "rejected" ? "default" : "outline"}
-                    className={`min-h-11 ${
-                      decision === "rejected"
-                        ? "bg-red-600 hover:bg-red-500"
-                        : "border-red-200 text-red-700 hover:bg-red-50"
-                    }`}
-                    onClick={() => setDecision("rejected")}
-                  >
-                    拒绝
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={decision === "abstained" ? "default" : "outline"}
-                    className={`min-h-11 ${decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : ""}`}
-                    onClick={() => setDecision("abstained")}
-                  >
-                    弃权
-                  </Button>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {configuredOutcomes.map(item => (
+                    <Button
+                      key={item.code}
+                      type="button"
+                      variant={outcome === item.code ? "default" : "outline"}
+                      className={`min-h-11 ${outcome === item.code ? (item.code === "approved" ? "bg-emerald-600 hover:bg-emerald-500" : item.code === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-red-600 hover:bg-red-500") : ""}`}
+                      onClick={() => setOutcome(item.code)}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
                 </div>
                 <label className="mt-3 grid gap-1 text-xs font-medium text-slate-600">
-                  处理意见{decision === "rejected" ? "（必填）" : "（可选）"}
+                  处理意见{commentRequired ? "（必填）" : "（可选）"}
                   <textarea
                     className="min-h-20 resize-y rounded border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
                     maxLength={2000}
                     value={comment}
                     onChange={event => setComment(event.target.value)}
                     placeholder={
-                      decision === "rejected"
+                      commentRequired
                         ? "请说明拒绝原因"
                         : decision === "abstained"
                           ? "可说明弃权原因"
@@ -1235,16 +1265,12 @@ function TaskDrawer({
                 <Button
                   className={`mt-3 min-h-11 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
                   disabled={
-                    busy || (decision === "rejected" && !comment.trim())
+                    busy || (commentRequired && !comment.trim())
                   }
                   onClick={submitResult}
                 >
                   {busy && <Loader2 className="animate-spin" size={15} />}
-                  {decision === "rejected"
-                    ? "拒绝并终止流程"
-                    : decision === "abstained"
-                      ? "提交弃权"
-                      : task.operationName || "同意并继续流程"}
+                  {`提交${selectedOutcome?.label ?? task.operationName ?? "操作结果"}`}
                 </Button>
                 {task.status === "pending" && (
                   <Button

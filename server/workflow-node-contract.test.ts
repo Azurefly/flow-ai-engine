@@ -433,4 +433,21 @@ describe("原始节点配置统一契约", () => {
       })
     ).not.toThrow();
   });
+
+  it("为新操作提供显式结果出口并保留历史拒绝取消语义", () => {
+    expect(createDefaultNodeConfig("operate")).toMatchObject({
+      outcomeMode: "explicit",
+      outcomes: [
+        expect.objectContaining({ code: "approved", sourceHandle: "approved" }),
+        expect.objectContaining({ code: "rejected", sourceHandle: "rejected" }),
+      ],
+    });
+    expect(
+      withNodeConfigDefaults("operate", {
+        nodeDh: "LEGACY_REVIEW",
+        instruction: "请审核",
+        assigneeMode: "initiator",
+      })
+    ).toMatchObject({ outcomeMode: "legacy_cancel", outcomes: [] });
+  });
 });

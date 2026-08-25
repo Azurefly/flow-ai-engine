@@ -333,6 +333,9 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).toContain("flattenInstanceFields");
     expect(instanceDetailSource).toContain("输入字段");
     expect(instanceDetailSource).toContain("输出字段");
+    expect(instanceDetailSource).toContain("当前业务状态");
+    expect(instanceDetailSource).toContain("状态迁移历史");
+    expect(instanceDetailSource).toContain("stateTransitions");
     expect(instanceDetailSource).not.toContain("JSON.stringify");
   });
 
@@ -837,6 +840,12 @@ describe("流程设计器界面回归约束", () => {
     expect(workflowEngineSource).toContain(
       "数据流程必须通过数据流运行入口启动"
     );
+    expect(canvasSource).toContain("readOperateOutcomes");
+    expect(canvasSource).toContain("拒绝即取消实例");
+    expect(workflowEngineSource).toContain("resolveOperateOutcomeRouting");
+    expect(workflowEngineSource).toContain("workflow_state_transition");
+    expect(processWorkbenchSource).toContain("taskOutcomeOptions");
+    expect(processWorkbenchSource).toContain("仅展示当前操作合同允许的结果");
   });
 
   it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {
@@ -991,12 +1000,13 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain(
       "trpc.task.batchComplete.useMutation"
     );
-    expect(processWorkbenchSource).toContain("decision, setDecision");
+    expect(processWorkbenchSource).toContain("outcome, setOutcome");
     expect(processWorkbenchSource).toContain(
       '"approved" | "rejected" | "abstained"'
     );
-    expect(processWorkbenchSource).toContain("拒绝并终止流程");
-    expect(processWorkbenchSource).toContain("拒绝时处理意见必填");
+    expect(processWorkbenchSource).toContain("taskOutcomeOptions");
+    expect(processWorkbenchSource).toContain("commentRequired");
+    expect(processWorkbenchSource).not.toContain("拒绝并终止流程");
     expect(processWorkbenchSource).toContain("处理审批");
     expect(processWorkbenchSource).toContain("无可执行操作");
     expect(processWorkbenchSource).toContain("直接上级审核通过，待经理通过");

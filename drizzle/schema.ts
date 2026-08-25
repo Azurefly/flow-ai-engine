@@ -389,6 +389,12 @@ export const workflowRuns = mysqlTable(
     ownerUserId: int("ownerUserId")
       .notNull()
       .references(() => users.id),
+    flowType: mysqlEnum("flowType", ["state", "control", "data"]).notNull(),
+    businessKey: varchar("businessKey", { length: 160 }),
+    currentStateCode: varchar("currentStateCode", { length: 160 }),
+    currentStateNodeId: varchar("currentStateNodeId", { length: 160 }),
+    stateVersion: int("stateVersion").default(0).notNull(),
+    endReason: varchar("endReason", { length: 96 }),
     triggerType: mysqlEnum("triggerType", ["manual", "api", "schedule"])
       .default("manual")
       .notNull(),
@@ -424,6 +430,11 @@ export const workflowRuns = mysqlTable(
   },
   table => [
     index("workflow_run_workflow_idx").on(table.workflowId, table.createdAt),
+    index("workflow_run_state_idx").on(
+      table.workflowId,
+      table.currentStateCode,
+      table.status
+    ),
   ]
 );
 
@@ -561,6 +572,16 @@ export const workflowTaskGroups = mysqlTable(
     passPercentBasisPoints: int("passPercentBasisPoints")
       .default(10000)
       .notNull(),
+    rejectionPolicy: mysqlEnum("rejectionPolicy", [
+      "any_reject",
+      "threshold_impossible",
+      "collect_all",
+    ])
+      .default("threshold_impossible")
+      .notNull(),
+    allowAbstain: boolean("allowAbstain").default(true).notNull(),
+    groupOutcome: varchar("groupOutcome", { length: 96 }),
+    memberVersion: int("memberVersion").default(0).notNull(),
     status: mysqlEnum("status", ["waiting", "completed", "cancelled"])
       .default("waiting")
       .notNull(),
@@ -612,6 +633,15 @@ export const workflowTasks = mysqlTable(
     approvalOrder: int("approvalOrder").default(0).notNull(),
     roleKey: varchar("roleKey", { length: 160 }).default("default").notNull(),
     operationName: varchar("operationName", { length: 160 }),
+    operationCode: varchar("operationCode", { length: 160 }).notNull(),
+    ownerVersion: int("ownerVersion").default(0).notNull(),
+    participantSnapshotJson: json("participantSnapshotJson"),
+    outcomeHandlesJson: json("outcomeHandlesJson"),
+    formSchemaVersion: int("formSchemaVersion"),
+    dueAt: timestamp("dueAt"),
+    responsibleUserId: int("responsibleUserId"),
+    representedUserId: int("representedUserId"),
+    delegationId: varchar("delegationId", { length: 36 }),
     pendingStatusName: varchar("pendingStatusName", { length: 160 }),
     claimedByUserId: int("claimedByUserId").references(() => users.id),
     completedByUserId: int("completedByUserId").references(() => users.id),
@@ -680,6 +710,42 @@ export const workflowParticipantStates = mysqlTable(
     index("workflow_participant_user_updated_idx").on(
       table.userId,
       table.updatedAt
+    ),
+  ]
+);
+
+/** Immutable state facts. The current state on workflow_run is advanced with the same sequence. */
+export const workflowStateTransitions = mysqlTable(
+  "workflow_state_transition",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    workflowId: varchar("workflowId", { length: 36 })
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    sequenceNo: int("sequenceNo").notNull(),
+    fromStateCode: varchar("fromStateCode", { length: 160 }),
+    toStateCode: varchar("toStateCode", { length: 160 }).notNull(),
+    transitionCode: varchar("transitionCode", { length: 160 }).notNull(),
+    taskId: varchar("taskId", { length: 36 }),
+    actorUserId: int("actorUserId"),
+    responsibleUserId: int("responsibleUserId"),
+    representedUserId: int("representedUserId"),
+    payloadJson: json("payloadJson"),
+    resultJson: json("resultJson"),
+    requestId: varchar("requestId", { length: 100 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("workflow_state_transition_run_sequence_unique").on(
+      table.runId,
+      table.sequenceNo
+    ),
+    index("workflow_state_transition_workflow_idx").on(
+      table.workflowId,
+      table.createdAt
     ),
   ]
 );

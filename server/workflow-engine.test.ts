@@ -9,6 +9,8 @@ import {
   selectRouterRoute,
   withWorkflowIdempotencyHeader,
   redactSensitiveValues,
+  resolveOperateOutcomeRouting,
+  validateOperateOutcomeSubmission,
   validateFormSubmission,
 } from "./workflow-engine";
 
@@ -281,5 +283,42 @@ describe("人工审批决定与多人签署门槛", () => {
       rejected: 2,
       pending: 1,
     });
+  });
+
+  it("新操作按组结果选择显式分支，旧任务继续使用拒绝取消兼容模式", () => {
+    const contract = {
+      mode: "explicit",
+      handles: { approved: "pass", rejected: "deny" },
+    };
+    expect(resolveOperateOutcomeRouting(contract, "approved")).toEqual({
+      mode: "explicit",
+      handle: "pass",
+    });
+    expect(resolveOperateOutcomeRouting(contract, "rejected")).toEqual({
+      mode: "explicit",
+      handle: "deny",
+    });
+    expect(resolveOperateOutcomeRouting(null, "rejected")).toEqual({
+      mode: "legacy_cancel",
+      handle: undefined,
+    });
+    expect(() => resolveOperateOutcomeRouting(contract, "returned")).toThrow(
+      "没有配置运行分支"
+    );
+    expect(() =>
+      validateOperateOutcomeSubmission(
+        {
+          ...contract,
+          outcomes: [
+            {
+              code: "rejected",
+              sourceHandle: "deny",
+              requireComment: true,
+            },
+          ],
+        },
+        { decision: "rejected", outcome: "rejected" }
+      )
+    ).toThrow("必须填写处理意见");
   });
 });

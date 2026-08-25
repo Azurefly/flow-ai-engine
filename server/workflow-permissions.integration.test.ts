@@ -71,7 +71,7 @@ describe("工作流资源级运行权限", () => {
     const detail = await viewerCaller.workflow.runDetail({ runId });
     legacyRunId = `legacy-run-${randomUUID().slice(0, 8)}`;
     await pool.query(
-      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggerType,status,definitionSnapshotJson,inputJson,contextJson,finalOutputJson,startedAt,finishedAt,durationMs,triggeredByUserId) VALUES (?,?,?,'manual','success',?,?,?,?,NOW(),NOW(),0,?)",
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,finalOutputJson,startedAt,finishedAt,durationMs,triggeredByUserId) VALUES (?,?,?,'state','manual','success',?,?,?,?,NOW(),NOW(),0,?)",
       [legacyRunId, workflowId, owner.id, JSON.stringify(definition), JSON.stringify({ legacy: true }), JSON.stringify({}), JSON.stringify({ legacy: true }), owner.id],
     );
     await pool.query(

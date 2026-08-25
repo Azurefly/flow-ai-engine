@@ -31,6 +31,36 @@ export const FLOW_NODE_TYPES = [
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
 export type NodeConfig = Record<string, unknown>;
 
+export type OperateOutcome = {
+  code: string;
+  label: string;
+  sourceHandle: string;
+  requireComment?: boolean;
+};
+
+export type OperateOutcomeMode = "explicit" | "legacy_cancel";
+
+export function readOperateOutcomeMode(config: NodeConfig): OperateOutcomeMode {
+  return config.outcomeMode === "explicit" && Array.isArray(config.outcomes)
+    ? "explicit"
+    : "legacy_cancel";
+}
+
+export function readOperateOutcomes(config: NodeConfig): OperateOutcome[] {
+  if (readOperateOutcomeMode(config) !== "explicit") return [];
+  return (config.outcomes as unknown[])
+    .filter(item => item && typeof item === "object" && !Array.isArray(item))
+    .map(item => {
+      const outcome = item as NodeConfig;
+      return {
+        code: String(outcome.code ?? "").trim(),
+        label: String(outcome.label ?? outcome.code ?? "").trim(),
+        sourceHandle: String(outcome.sourceHandle ?? outcome.code ?? "").trim(),
+        ...(outcome.requireComment === true ? { requireComment: true } : {}),
+      };
+    });
+}
+
 /** Shared source/target contract used by both the designer and publish-time validation. */
 export const FLOW_NODE_ALLOWED_TARGETS: Partial<
   Record<FlowNodeType, readonly FlowNodeType[]>
@@ -499,6 +529,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         options: [
           { value: "business", label: "业务状态" },
           { value: "system", label: "系统状态" },
+          { value: "terminal", label: "业务终态" },
         ],
         required: true,
       },
@@ -538,6 +569,20 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       assigneeMode: "receivers",
       assigneeRoleCode: "",
       instruction: "请完成此项流程操作。",
+      outcomeMode: "explicit",
+      outcomes: [
+        {
+          code: "approved",
+          label: "同意",
+          sourceHandle: "approved",
+        },
+        {
+          code: "rejected",
+          label: "拒绝",
+          sourceHandle: "rejected",
+          requireComment: true,
+        },
+      ],
     },
     fields: [
       {
@@ -659,6 +704,23 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "指定处理人 ID",
         help: "仅“指定用户”方式需要；必须为可用内部账号。",
         kind: "number",
+      },
+      {
+        key: "outcomeMode",
+        label: "结果路由模式",
+        help: "新流程使用显式结果出口；旧流程可暂时保留拒绝即取消的兼容行为。",
+        kind: "select",
+        required: true,
+        options: [
+          { value: "explicit", label: "显式结果出口" },
+          { value: "legacy_cancel", label: "旧版拒绝即取消" },
+        ],
+      },
+      {
+        key: "outcomes",
+        label: "操作结果出口",
+        help: "每项配置 code、label、sourceHandle，可用 requireComment 强制填写意见。",
+        kind: "json",
       },
     ],
   },
@@ -1221,6 +1283,10 @@ export function withNodeConfigDefaults(
       merged.statement
     );
   }
+  if (type === "operate" && config.outcomes === undefined) {
+    merged.outcomeMode = "legacy_cancel";
+    merged.outcomes = [];
+  }
   return merged;
 }
 
@@ -1297,6 +1363,10 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         firstNonBlank(config.jdmc, config.displayName),
         "状态节点必须配置状态名称。"
       );
+      if (
+        !["business", "system", "terminal"].includes(String(config.stateType))
+      )
+        throw new Error("状态节点类型必须是业务状态、系统状态或业务终态。");
       break;
     case "operate": {
       assertString(
@@ -1339,6 +1409,29 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         throw new Error("操作节点权限控制必须是数组。");
       if (config.bddx !== undefined && !Array.isArray(config.bddx))
         throw new Error("操作节点绑定对象必须是数组。");
+      if (config.outcomes !== undefined && !Array.isArray(config.outcomes))
+        throw new Error("操作节点结果出口必须是数组。");
+      if (
+        config.outcomeMode !== undefined &&
+        !["explicit", "legacy_cancel"].includes(String(config.outcomeMode))
+      )
+        throw new Error("操作节点结果路由模式无效。");
+      const outcomes = readOperateOutcomes(config);
+      if (config.outcomeMode === "explicit" && !outcomes.length)
+        throw new Error("显式结果路由必须至少配置一个结果出口。");
+      const outcomeCodes = new Set<string>();
+      const outcomeHandles = new Set<string>();
+      for (const outcome of outcomes) {
+        assertString(outcome.code, "操作结果必须配置结果代号。");
+        assertString(outcome.label, "操作结果必须配置显示名称。");
+        assertString(outcome.sourceHandle, "操作结果必须配置分支句柄。");
+        if (outcomeCodes.has(outcome.code))
+          throw new Error("操作结果代号不可重复。");
+        if (outcomeHandles.has(outcome.sourceHandle))
+          throw new Error("操作结果分支句柄不可重复。");
+        outcomeCodes.add(outcome.code);
+        outcomeHandles.add(outcome.sourceHandle);
+      }
       for (const key of ["bdcz", "sxsz", "fsfsz", "jsfsz", "zdzx"])
         if (config[key] !== undefined)
           assertObject(config[key], "操作节点" + key + "配置必须是对象。");

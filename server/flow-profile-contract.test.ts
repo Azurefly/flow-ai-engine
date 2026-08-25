@@ -137,10 +137,65 @@ describe("flow profile contract", () => {
   });
 
   it("includes the flow profile in the immutable plan hash", () => {
-    const state = compileWorkflowDefinition(base(), { flowType: "state" });
-    const control = compileWorkflowDefinition(base(), {
-      flowType: "control",
+    const control = compileWorkflowDefinition(base(), { flowType: "control" });
+    const data = compileWorkflowDefinition(base(), {
+      flowType: "data",
     });
-    expect(state.planHash).not.toBe(control.planHash);
+    expect(control.planHash).not.toBe(data.planHash);
+  });
+
+  it("enforces state facts and a unique initial and terminal state", () => {
+    const missingState = analyzeWorkflowDefinition(base(), {
+      flowType: "state",
+      executable: true,
+    });
+    expect(missingState.ok).toBe(false);
+    if (!missingState.ok)
+      expect(missingState.diagnostics.map(item => item.code)).toEqual(
+        expect.arrayContaining([
+          "WF_STATE_REQUIRED",
+          "WF_STATE_INITIAL_AMBIGUOUS",
+          "WF_STATE_TERMINAL_REQUIRED",
+        ])
+      );
+
+    const validState = withMiddle("state", {
+      nodeDh: "APPROVED",
+      jdmc: "已通过",
+      stateType: "terminal",
+    });
+    expect(
+      analyzeWorkflowDefinition(validState, {
+        flowType: "state",
+        executable: true,
+      }).ok
+    ).toBe(true);
+  });
+
+  it("requires every explicit operate outcome to have one matching branch", () => {
+    const definition = withMiddle("operate", {
+      nodeDh: "REVIEW",
+      instruction: "请审核",
+      assigneeMode: "initiator",
+      outcomeMode: "explicit",
+      outcomes: [
+        { code: "approved", label: "同意", sourceHandle: "approved" },
+        { code: "rejected", label: "拒绝", sourceHandle: "rejected" },
+      ],
+    });
+    definition.edges[1]!.sourceHandle = "approved";
+    const result = analyzeWorkflowDefinition(definition, {
+      flowType: "control",
+      executable: true,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok)
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "WF_OPERATE_OUTCOME_BRANCH_INVALID",
+          }),
+        ])
+      );
   });
 });

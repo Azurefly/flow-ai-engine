@@ -51,6 +51,8 @@ import {
   FLOW_NODE_ALLOWED_TARGETS,
   FLOW_NODE_DEFINITIONS,
   getNodeConfigEvidence,
+  readOperateOutcomeMode,
+  readOperateOutcomes,
   type FlowNodeDefinition,
   type FlowNodeType,
   type FlowType,
@@ -218,6 +220,8 @@ function sourceHandles(kind: NodeKind, config: NodeConfig) {
     const failureHandle = String(config.failureHandle ?? "").trim();
     return failureHandle ? ["default", failureHandle] : ["default"];
   }
+  if (kind === "operate" && readOperateOutcomeMode(config) === "explicit")
+    return readOperateOutcomes(config).map(outcome => outcome.sourceHandle);
   return ["default"];
 }
 
@@ -2046,9 +2050,19 @@ export default function WorkflowCanvas({
             String(item.handle ?? "default") ===
             String(edge.sourceHandle ?? "default")
         );
+        const operateOutcome =
+          source?.data.kind === "operate"
+            ? readOperateOutcomes(source.data.config).find(
+                item =>
+                  item.sourceHandle ===
+                  String(edge.sourceHandle ?? "default")
+              )
+            : undefined;
         const label =
           source?.data.kind === "router"
             ? String(route?.label ?? edge.sourceHandle ?? "默认路径")
+            : source?.data.kind === "operate" && operateOutcome
+              ? operateOutcome.label
             : source?.data.kind === "llm" && edge.sourceHandle !== "default"
               ? `失败：${edge.sourceHandle}`
               : undefined;
@@ -2227,6 +2241,10 @@ export default function WorkflowCanvas({
           ? "true"
           : source.data.kind === "router"
             ? String(source.data.config.defaultRoute ?? "default")
+            : source.data.kind === "operate" &&
+                readOperateOutcomeMode(source.data.config) === "explicit"
+              ? (readOperateOutcomes(source.data.config)[0]?.sourceHandle ??
+                "default")
             : "default";
       const nextEdge: Edge = {
         id: `edge-${Date.now()}`,
@@ -3196,6 +3214,13 @@ export default function WorkflowCanvas({
                         : "已配置"}
                   </p>
                 </div>
+                {selected.data.kind === "operate" &&
+                  readOperateOutcomeMode(selectedConfig) ===
+                    "legacy_cancel" && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                      该历史操作仍使用“拒绝即取消实例”的兼容语义。请将结果路由模式改为显式出口，并分别连接同意、拒绝分支。
+                    </div>
+                  )}
               </div>
               <div
                 role="tablist"
