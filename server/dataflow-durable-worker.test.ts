@@ -42,6 +42,22 @@ describe("durable dataflow worker contract", () => {
     expect(dataflowSource).toContain("SET status='failed',errorJson=?");
   });
 
+  it("commits artifact, lineage and checkpoint only while the job lease is owned", () => {
+    expect(dataflowSource).toContain("assertDataflowJobLease(");
+    expect(dataflowSource).toContain("jobLeaseToken=VALUES(jobLeaseToken)");
+    expect(dataflowSource).toContain("INSERT INTO dataflow_dataset_artifact");
+    expect(dataflowSource).toContain(
+      "INSERT IGNORE INTO dataflow_lineage_edge"
+    );
+    expect(dataflowSource).toContain(
+      "UPDATE dataflow_run SET checkpointJson=?"
+    );
+    expect(dataflowSource).toContain("loadDataflowCheckpoint(runId)");
+    expect(dataflowSource).toContain(
+      'injectDataflowWorkerFault("after_nodes_before_complete")'
+    );
+  });
+
   it("is polled by the process worker instead of relying on request lifetime", () => {
     expect(workerSource).toContain(
       'import { runDataflowJobOnce } from "./p2-service"'

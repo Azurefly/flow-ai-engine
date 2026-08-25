@@ -3,7 +3,7 @@ import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { runDataflow } from "./p2-service";
+import { runDataflow, runDataflowJobOnce } from "./p2-service";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -265,12 +265,68 @@ describe("P2 项目数据资源与数据流", () => {
           row => row.status === "success" && Number(row.attempt) === 1
         )
       ).toBe(true);
+      const lineage = await owner.data.runLineage({
+        projectId,
+        runId: run.runId,
+      });
+      expect(lineage.artifacts).toHaveLength(5);
+      expect(lineage.lineage).toHaveLength(4);
+      expect(lineage.run.checkpoint.completedNodeIds).toEqual([
+        "start",
+        "source",
+        "transform",
+        "sql",
+        "end",
+      ]);
+      expect(lineage.artifacts.map((artifact: any) => artifact.nodeId)).toEqual(
+        ["start", "source", "transform", "sql", "end"]
+      );
       const runs = await owner.data.runs({ projectId, workflowId });
       expect(runs[0]).toMatchObject({
         id: run.runId,
         status: "success",
         triggerType: "manual",
       });
+      const faultBucket = `fault:${suffix}`;
+      process.env.DATAFLOW_WORKER_FAULT_POINT = "after_nodes_before_complete";
+      try {
+        await expect(
+          runDataflow(admin, {
+            projectId,
+            workflowId,
+            triggerType: "schedule",
+            scheduleBucket: faultBucket,
+          })
+        ).rejects.toThrow("Injected dataflow worker crash");
+      } finally {
+        delete process.env.DATAFLOW_WORKER_FAULT_POINT;
+      }
+      const [faultRuns] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT id,status FROM dataflow_run WHERE workflowId=? AND scheduleBucket=?",
+        [workflowId, faultBucket]
+      );
+      expect(faultRuns[0].status).toBe("running");
+      const faultRunId = String(faultRuns[0].id);
+      await pool.query(
+        "UPDATE dataflow_run_job SET leaseExpiresAt=DATE_SUB(NOW(),INTERVAL 1 SECOND) WHERE runId=? AND status='leased'",
+        [faultRunId]
+      );
+      await expect(runDataflowJobOnce(faultRunId)).resolves.toBe(true);
+      const [recoveredRuns] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT status FROM dataflow_run WHERE id=?",
+        [faultRunId]
+      );
+      expect(recoveredRuns[0].status).toBe("success");
+      const [recoveredNodes] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT status,attempt FROM dataflow_node_run WHERE runId=? ORDER BY sequenceNo",
+        [faultRunId]
+      );
+      expect(recoveredNodes).toHaveLength(5);
+      expect(
+        recoveredNodes.every(
+          row => row.status === "success" && Number(row.attempt) === 1
+        )
+      ).toBe(true);
       const scheduleBucket = `trusted-task:${new Date().toISOString().slice(0, 16)}`;
       const scheduled = await runDataflow(admin, {
         projectId,

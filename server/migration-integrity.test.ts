@@ -61,12 +61,34 @@ const durableDataflowWorkerMigration = readFileSync(
   new URL("../drizzle/0028_durable_dataflow_worker.sql", import.meta.url),
   "utf8"
 );
+const dataflowArtifactMigration = readFileSync(
+  new URL("../drizzle/0029_dataflow_artifact_lineage.sql", import.meta.url),
+  "utf8"
+);
 const migrationJournal = readFileSync(
   new URL("../drizzle/meta/_journal.json", import.meta.url),
   "utf8"
 );
 
 describe("database migration integrity", () => {
+  it("persists dataflow checkpoints, immutable artifacts and lineage edges", () => {
+    expect(dataflowArtifactMigration).toContain(
+      "ALTER TABLE `dataflow_run` ADD `checkpointJson` json"
+    );
+    expect(dataflowArtifactMigration).toContain(
+      "ALTER TABLE `dataflow_node_run` ADD `jobLeaseToken` varchar(48)"
+    );
+    expect(dataflowArtifactMigration).toContain(
+      "CREATE TABLE `dataflow_dataset_artifact`"
+    );
+    expect(dataflowArtifactMigration).toContain(
+      "dataflow_dataset_artifact_node_run_unique"
+    );
+    expect(dataflowArtifactMigration).toContain(
+      "CREATE TABLE `dataflow_lineage_edge`"
+    );
+    expect(dataflowArtifactMigration).toContain("dataflow_lineage_edge_unique");
+  });
   it("persists leased dataflow jobs and ordered node execution facts", () => {
     expect(durableDataflowWorkerMigration).toContain(
       "CREATE TABLE `dataflow_run_job`"
@@ -128,14 +150,15 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-5).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-6).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
       "0027_dataflow_execution_plan",
       "0028_durable_dataflow_worker",
+      "0029_dataflow_artifact_lineage",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(28);
+    expect(journal.entries.at(-1)?.idx).toBe(29);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain(

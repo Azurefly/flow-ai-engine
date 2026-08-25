@@ -3,8 +3,8 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 
-export const DATABASE_MIGRATION_VERSION = "0028_durable_dataflow_worker";
-export const DATABASE_MIGRATION_EPOCH = 1787666400000;
+export const DATABASE_MIGRATION_VERSION = "0029_dataflow_artifact_lineage";
+export const DATABASE_MIGRATION_EPOCH = 1787670000000;
 
 let pool: mysql.Pool | undefined;
 
@@ -46,7 +46,8 @@ export function getCapabilityStatus() {
       id: "dataflow",
       label: "数据流",
       status: "experimental",
-      reason: "当前仅适合样例和受控试验，尚无生产 Connector/Checkpoint 验收。",
+      reason:
+        "耐久 Job、内联 Artifact 和 Checkpoint 已接入；尚无生产 Connector、外部存储和真实重启验收。",
     },
   ] as const;
 }
@@ -80,7 +81,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -89,7 +90,8 @@ export async function checkReadiness() {
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
           (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
-          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId')) OR
+          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson')) OR
+          (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -108,14 +110,17 @@ export async function checkReadiness() {
           OR (table_name='dataflow_run_job' AND index_name='dataflow_run_job_run_unique')
           OR (table_name='dataflow_node_run' AND index_name='dataflow_node_run_run_node_unique')
           OR (table_name='dataflow_node_run' AND index_name='dataflow_node_run_run_sequence_unique')
+          OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_node_run_unique')
+          OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_run_node_unique')
+          OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
         )`
     );
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 10 &&
-      Number(columnRows[0]?.count ?? 0) === 24 &&
-      Number(indexRows[0]?.count ?? 0) === 10;
+      Number(tableRows[0]?.count ?? 0) === 12 &&
+      Number(columnRows[0]?.count ?? 0) === 31 &&
+      Number(indexRows[0]?.count ?? 0) === 13;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {

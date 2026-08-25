@@ -149,6 +149,7 @@ import {
   deleteDataUdf,
   deleteDataflowSchedule,
   deleteProjectPlugin,
+  getDataflowRunLineage,
   listDataflowRuns,
   listDataflowSchedules,
   listDataflows,
@@ -886,6 +887,14 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listDataflowRuns(ctx.user, input)),
+    runLineage: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          runId: z.string().min(8).max(64),
+        })
+      )
+      .query(({ ctx, input }) => getDataflowRunLineage(ctx.user, input)),
     schedules: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) =>
@@ -978,7 +987,10 @@ export const appRouter = router({
             "workflow:run"
           ))
         )
-          throw new TRPCError({ code: "FORBIDDEN", message: "无权触发此流程消息。" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权触发此流程消息。",
+          });
         assertWorkflowRunController(ctx.user, run, "触发此流程消息");
         const result = await signalWorkflowMessage(input);
         wakeWorkflowWorker();

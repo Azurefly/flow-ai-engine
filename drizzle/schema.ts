@@ -1156,6 +1156,9 @@ export const dataflowRuns = mysqlTable(
     executionPlanJson: json("executionPlanJson"),
     executionPlanHash: varchar("executionPlanHash", { length: 64 }),
     requestId: varchar("requestId", { length: 100 }),
+    checkpointJson: json("checkpointJson"),
+    watermarkInputJson: json("watermarkInputJson"),
+    watermarkOutputJson: json("watermarkOutputJson"),
     inputJson: json("inputJson").notNull(),
     outputJson: json("outputJson"),
     errorJson: json("errorJson"),
@@ -1236,6 +1239,10 @@ export const dataflowNodeRuns = mysqlTable(
     inputJson: json("inputJson"),
     outputJson: json("outputJson"),
     errorJson: json("errorJson"),
+    inputArtifactsJson: json("inputArtifactsJson"),
+    outputArtifactsJson: json("outputArtifactsJson"),
+    metricsJson: json("metricsJson"),
+    jobLeaseToken: varchar("jobLeaseToken", { length: 48 }),
     rowCount: int("rowCount"),
     requestId: varchar("requestId", { length: 100 }),
     startedAt: timestamp("startedAt").defaultNow().notNull(),
@@ -1249,6 +1256,71 @@ export const dataflowNodeRuns = mysqlTable(
       table.sequenceNo
     ),
     index("dataflow_node_run_status_idx").on(table.runId, table.status),
+  ]
+);
+
+export const dataflowDatasetArtifacts = mysqlTable(
+  "dataflow_dataset_artifact",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => dataflowRuns.id, { onDelete: "cascade" }),
+    nodeRunId: varchar("nodeRunId", { length: 36 })
+      .notNull()
+      .references(() => dataflowNodeRuns.id, { onDelete: "cascade" }),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    schemaJson: json("schemaJson").notNull(),
+    schemaHash: varchar("schemaHash", { length: 64 }).notNull(),
+    storageRef: varchar("storageRef", { length: 512 }).notNull(),
+    format: mysqlEnum("format", ["inline_json", "json", "parquet", "csv"])
+      .default("inline_json")
+      .notNull(),
+    dataJson: json("dataJson"),
+    partitionJson: json("partitionJson"),
+    rowCount: int("rowCount").default(0).notNull(),
+    byteCount: int("byteCount").default(0).notNull(),
+    watermarkJson: json("watermarkJson"),
+    sampleJson: json("sampleJson"),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("dataflow_dataset_artifact_node_run_unique").on(table.nodeRunId),
+    unique("dataflow_dataset_artifact_run_node_unique").on(
+      table.runId,
+      table.nodeId
+    ),
+    index("dataflow_dataset_artifact_run_idx").on(table.runId, table.createdAt),
+  ]
+);
+
+export const dataflowLineageEdges = mysqlTable(
+  "dataflow_lineage_edge",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => dataflowRuns.id, { onDelete: "cascade" }),
+    sourceArtifactId: varchar("sourceArtifactId", { length: 36 })
+      .notNull()
+      .references(() => dataflowDatasetArtifacts.id, { onDelete: "cascade" }),
+    targetArtifactId: varchar("targetArtifactId", { length: 36 })
+      .notNull()
+      .references(() => dataflowDatasetArtifacts.id, { onDelete: "cascade" }),
+    nodeRunId: varchar("nodeRunId", { length: 36 })
+      .notNull()
+      .references(() => dataflowNodeRuns.id, { onDelete: "cascade" }),
+    columnMappingJson: json("columnMappingJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("dataflow_lineage_edge_unique").on(
+      table.sourceArtifactId,
+      table.targetArtifactId,
+      table.nodeRunId
+    ),
+    index("dataflow_lineage_edge_run_idx").on(table.runId, table.createdAt),
   ]
 );
 

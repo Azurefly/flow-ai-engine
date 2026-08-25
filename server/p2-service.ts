@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
 import { recordAuthorizationAudit } from "./iam-service";
@@ -26,6 +26,23 @@ const dataflowLeaseSeconds = Math.max(
   30,
   Number(process.env.DATAFLOW_WORKER_LEASE_SECONDS ?? 120)
 );
+
+export type DataflowWorkerFaultPoint = "after_nodes_before_complete";
+
+class DataflowWorkerInjectedCrash extends Error {
+  constructor(point: DataflowWorkerFaultPoint) {
+    super(`Injected dataflow worker crash at ${point}`);
+    this.name = "DataflowWorkerInjectedCrash";
+  }
+}
+
+export function injectDataflowWorkerFault(point: DataflowWorkerFaultPoint) {
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.DATAFLOW_WORKER_FAULT_POINT === point
+  )
+    throw new DataflowWorkerInjectedCrash(point);
+}
 let pool: mysql.Pool | undefined;
 const db = () => {
   if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
@@ -568,11 +585,74 @@ export function compileDataflowExecutionPlan(definition: unknown) {
   return { plan: compiled.plan, planHash: compiled.planHash };
 }
 
+type DataflowJobOwnership = {
+  id: string;
+  leaseToken: string;
+};
+
+function inferDatasetSchema(output: JsonRecord) {
+  if (Array.isArray(output.schema)) return output.schema;
+  const rows = normalizeRows(output.rows);
+  const sample = rows[0] ?? {};
+  return Object.keys(sample)
+    .sort()
+    .map(name => ({
+      name,
+      type:
+        sample[name] === null
+          ? "null"
+          : Array.isArray(sample[name])
+            ? "array"
+            : typeof sample[name],
+    }));
+}
+
+async function assertDataflowJobLease(
+  connection: mysql.PoolConnection,
+  ownership: DataflowJobOwnership
+) {
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
+    "SELECT id FROM dataflow_run_job WHERE id=? AND status='leased' AND leaseToken=? AND leaseExpiresAt>NOW() LIMIT 1 FOR UPDATE",
+    [ownership.id, ownership.leaseToken]
+  );
+  if (!rows[0]) throw new Error("数据流 Job 租约已失效，拒绝提交节点结果。");
+}
+
+async function loadDataflowCheckpoint(runId: string) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT nr.nodeId,nr.nodeType,nr.sequenceNo,nr.outputJson,a.id AS artifactId
+       FROM dataflow_node_run nr
+       JOIN dataflow_dataset_artifact a ON a.nodeRunId=nr.id
+      WHERE nr.runId=? AND nr.status='success'
+      ORDER BY nr.sequenceNo`,
+    [runId]
+  );
+  const outputs = new Map<string, JsonRecord>();
+  const artifacts = new Map<string, string>();
+  const executed: JsonRecord[] = [];
+  for (const row of rows) {
+    const nodeId = String(row.nodeId);
+    const output = parseJson(row.outputJson, {}) as JsonRecord;
+    outputs.set(nodeId, output);
+    artifacts.set(nodeId, String(row.artifactId));
+    executed.push({
+      nodeId,
+      nodeType: row.nodeType,
+      rowCount: normalizeRows(output.rows).length,
+      output,
+      artifactId: String(row.artifactId),
+      checkpointRestored: true,
+    });
+  }
+  return { outputs, artifacts, executed };
+}
+
 async function runDataflowDefinition(
   projectId: string,
   executionPlan: WorkflowExecutionPlan,
   runId: string,
-  requestId: string | null
+  requestId: string | null,
+  ownership: DataflowJobOwnership
 ) {
   const definition = executionPlan.definition;
   const nodes: any[] = Array.isArray(definition?.nodes) ? definition.nodes : [];
@@ -596,8 +676,10 @@ async function runDataflowDefinition(
   if (!executionPlan.topologicalOrder)
     throw new Error("数据流执行计划缺少稳定拓扑顺序。");
   const queue = [...executionPlan.topologicalOrder];
-  const outputs = new Map<string, JsonRecord>();
-  const executed: JsonRecord[] = [];
+  const checkpoint = await loadDataflowCheckpoint(runId);
+  const outputs = checkpoint.outputs;
+  const artifactByNode = checkpoint.artifacts;
+  const executed = checkpoint.executed;
   while (queue.length) {
     const nodeId = queue.shift()!;
     if (outputs.has(nodeId)) continue;
@@ -607,22 +689,38 @@ async function runDataflowDefinition(
       .filter(Boolean) as JsonRecord[];
     const config = nodeConfig(node);
     const nodeStartedAt = Date.now();
-    const sequenceNo = executed.length;
-    await db().query(
-      `INSERT INTO dataflow_node_run
-        (id,runId,nodeId,sequenceNo,nodeType,status,attempt,inputJson,requestId,startedAt)
-       VALUES (?,?,?,?,?,'running',1,?,?,NOW())
-       ON DUPLICATE KEY UPDATE status='running',attempt=attempt+1,inputJson=VALUES(inputJson),outputJson=NULL,errorJson=NULL,rowCount=NULL,requestId=VALUES(requestId),startedAt=NOW(),finishedAt=NULL,durationMs=NULL`,
-      [
-        id(),
-        runId,
-        nodeId,
-        sequenceNo,
-        String(node.type),
-        JSON.stringify(inputs),
-        requestId,
-      ]
-    );
+    const sequenceNo = executionPlan.topologicalOrder.indexOf(nodeId);
+    const inputArtifactIds = (incoming.get(nodeId) ?? [])
+      .map(parentId => artifactByNode.get(parentId))
+      .filter(Boolean) as string[];
+    const startConnection = await db().getConnection();
+    try {
+      await startConnection.beginTransaction();
+      await assertDataflowJobLease(startConnection, ownership);
+      await startConnection.query(
+        `INSERT INTO dataflow_node_run
+          (id,runId,nodeId,sequenceNo,nodeType,status,attempt,inputJson,inputArtifactsJson,jobLeaseToken,requestId,startedAt)
+         VALUES (?,?,?,?,?,'running',1,?,?,?,?,NOW())
+         ON DUPLICATE KEY UPDATE status='running',attempt=attempt+1,inputJson=VALUES(inputJson),inputArtifactsJson=VALUES(inputArtifactsJson),outputJson=NULL,outputArtifactsJson=NULL,metricsJson=NULL,errorJson=NULL,rowCount=NULL,jobLeaseToken=VALUES(jobLeaseToken),requestId=VALUES(requestId),startedAt=NOW(),finishedAt=NULL,durationMs=NULL`,
+        [
+          id(),
+          runId,
+          nodeId,
+          sequenceNo,
+          String(node.type),
+          JSON.stringify(inputs),
+          JSON.stringify(inputArtifactIds),
+          ownership.leaseToken,
+          requestId,
+        ]
+      );
+      await startConnection.commit();
+    } catch (error) {
+      await startConnection.rollback();
+      throw error;
+    } finally {
+      startConnection.release();
+    }
     let output: JsonRecord;
     try {
       if (["start", "begin"].includes(String(node.type)))
@@ -702,26 +800,109 @@ async function runDataflowDefinition(
       } else if (["end", "sink", "output"].includes(String(node.type)))
         output = { rows: rowsFromInput(inputs), stage: "output" };
       else throw new Error(`数据流节点类型 ${String(node.type)} 尚未启用。`);
+      const outputRows = normalizeRows(output.rows);
+      const schema = inferDatasetSchema(output);
+      const schemaHash = createHash("sha256")
+        .update(JSON.stringify(schema))
+        .digest("hex");
+      const serializedOutput = JSON.stringify(output);
+      const artifactId = id();
+      const finishConnection = await db().getConnection();
+      try {
+        await finishConnection.beginTransaction();
+        await assertDataflowJobLease(finishConnection, ownership);
+        const [nodeRows] = await finishConnection.query<mysql.RowDataPacket[]>(
+          "SELECT id,attempt FROM dataflow_node_run WHERE runId=? AND nodeId=? AND status='running' AND jobLeaseToken=? LIMIT 1 FOR UPDATE",
+          [runId, nodeId, ownership.leaseToken]
+        );
+        const nodeRun = nodeRows[0];
+        if (!nodeRun) throw new Error("数据流节点 Attempt 已失去所有权。");
+        await finishConnection.query(
+          `INSERT INTO dataflow_dataset_artifact
+            (id,runId,nodeRunId,nodeId,schemaJson,schemaHash,storageRef,format,dataJson,partitionJson,rowCount,byteCount,watermarkJson,sampleJson)
+           VALUES (?,?,?,?,?,?,?,'inline_json',?,NULL,?,?,NULL,?)`,
+          [
+            artifactId,
+            runId,
+            nodeRun.id,
+            nodeId,
+            JSON.stringify(schema),
+            schemaHash,
+            `inline://dataflow/${runId}/${nodeId}`,
+            serializedOutput,
+            outputRows.length,
+            Buffer.byteLength(serializedOutput, "utf8"),
+            JSON.stringify(outputRows.slice(0, 20)),
+          ]
+        );
+        for (const sourceArtifactId of inputArtifactIds) {
+          await finishConnection.query(
+            "INSERT IGNORE INTO dataflow_lineage_edge (id,runId,sourceArtifactId,targetArtifactId,nodeRunId,columnMappingJson) VALUES (?,?,?,?,?,?)",
+            [
+              id(),
+              runId,
+              sourceArtifactId,
+              artifactId,
+              nodeRun.id,
+              JSON.stringify({ mode: "input_dependency" }),
+            ]
+          );
+        }
+        const metrics = {
+          rowCount: outputRows.length,
+          byteCount: Buffer.byteLength(serializedOutput, "utf8"),
+          durationMs: Date.now() - nodeStartedAt,
+          attempt: Number(nodeRun.attempt),
+        };
+        const [completedNode] =
+          await finishConnection.query<mysql.ResultSetHeader>(
+            "UPDATE dataflow_node_run SET status='success',outputJson=?,outputArtifactsJson=?,metricsJson=?,rowCount=?,finishedAt=NOW(),durationMs=? WHERE id=? AND status='running' AND jobLeaseToken=?",
+            [
+              serializedOutput,
+              JSON.stringify([artifactId]),
+              JSON.stringify(metrics),
+              outputRows.length,
+              metrics.durationMs,
+              nodeRun.id,
+              ownership.leaseToken,
+            ]
+          );
+        if (!completedNode.affectedRows)
+          throw new Error("数据流节点完成时 Attempt 已失去所有权。");
+        const checkpointJson = {
+          completedNodeIds: [...Array.from(outputs.keys()), nodeId],
+          artifacts: Object.fromEntries([
+            ...Array.from(artifactByNode.entries()),
+            [nodeId, artifactId],
+          ]),
+          updatedAt: new Date().toISOString(),
+        };
+        const [checkpointed] =
+          await finishConnection.query<mysql.ResultSetHeader>(
+            "UPDATE dataflow_run SET checkpointJson=? WHERE id=? AND status='running'",
+            [JSON.stringify(checkpointJson), runId]
+          );
+        if (!checkpointed.affectedRows)
+          throw new Error("数据流运行状态已改变，Checkpoint 未提交。");
+        await finishConnection.commit();
+      } catch (error) {
+        await finishConnection.rollback();
+        throw error;
+      } finally {
+        finishConnection.release();
+      }
       outputs.set(nodeId, output);
+      artifactByNode.set(nodeId, artifactId);
       executed.push({
         nodeId,
         nodeType: node.type,
-        rowCount: normalizeRows(output.rows).length,
+        rowCount: outputRows.length,
         output,
+        artifactId,
       });
-      await db().query(
-        "UPDATE dataflow_node_run SET status='success',outputJson=?,rowCount=?,finishedAt=NOW(),durationMs=? WHERE runId=? AND nodeId=? AND status='running'",
-        [
-          JSON.stringify(output),
-          normalizeRows(output.rows).length,
-          Date.now() - nodeStartedAt,
-          runId,
-          nodeId,
-        ]
-      );
     } catch (error) {
       await db().query(
-        "UPDATE dataflow_node_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=? WHERE runId=? AND nodeId=? AND status='running'",
+        "UPDATE dataflow_node_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=? WHERE runId=? AND nodeId=? AND status='running' AND jobLeaseToken=?",
         [
           JSON.stringify({
             message: error instanceof Error ? error.message : String(error),
@@ -729,6 +910,7 @@ async function runDataflowDefinition(
           Date.now() - nodeStartedAt,
           runId,
           nodeId,
+          ownership.leaseToken,
         ]
       );
       throw error;
@@ -740,7 +922,11 @@ async function runDataflowDefinition(
     .filter((node: any) => !(outgoing.get(String(node.id)) ?? []).length)
     .map((node: any) => outputs.get(String(node.id)))
     .filter(Boolean);
-  return { terminals: terminal, nodes: executed };
+  const terminalArtifacts = nodes
+    .filter((node: any) => !(outgoing.get(String(node.id)) ?? []).length)
+    .map((node: any) => artifactByNode.get(String(node.id)))
+    .filter(Boolean);
+  return { terminals: terminal, terminalArtifacts, nodes: executed };
 }
 
 type ClaimedDataflowJob = {
@@ -856,8 +1042,10 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
       job.projectId,
       job.executionPlan,
       job.runId,
-      job.requestId
+      job.requestId,
+      { id: job.id, leaseToken: job.leaseToken }
     );
+    injectDataflowWorkerFault("after_nodes_before_complete");
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
@@ -881,6 +1069,7 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
       connection.release();
     }
   } catch (error) {
+    if (error instanceof DataflowWorkerInjectedCrash) throw error;
     const details = {
       message: error instanceof Error ? error.message : String(error),
     };
@@ -1053,10 +1242,71 @@ export async function listDataflowRuns(
     input: parseJson(row.inputJson, {}),
     output: parseJson(row.outputJson, null),
     error: parseJson(row.errorJson, null),
+    checkpoint: parseJson(row.checkpointJson, null),
+    watermarkInput: parseJson(row.watermarkInputJson, null),
+    watermarkOutput: parseJson(row.watermarkOutputJson, null),
     inputJson: undefined,
     outputJson: undefined,
     errorJson: undefined,
+    checkpointJson: undefined,
+    watermarkInputJson: undefined,
+    watermarkOutputJson: undefined,
   }));
+}
+
+export async function getDataflowRunLineage(
+  user: DataflowUser,
+  input: { projectId: string; runId: string }
+) {
+  await requireProjectAccess(user, input.projectId, "view");
+  const [runs] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,status,checkpointJson,watermarkInputJson,watermarkOutputJson FROM dataflow_run WHERE id=? AND projectId=? LIMIT 1",
+    [input.runId, input.projectId]
+  );
+  if (!runs[0]) throw new Error("数据流运行不存在或不属于当前项目。");
+  const [artifacts, lineage] = await Promise.all([
+    db().query<mysql.RowDataPacket[]>(
+      `SELECT a.id,a.nodeId,a.nodeRunId,a.schemaJson,a.schemaHash,a.storageRef,a.format,a.partitionJson,a.rowCount,a.byteCount,a.watermarkJson,a.sampleJson,a.expiresAt,a.createdAt,n.sequenceNo,n.nodeType,n.attempt
+         FROM dataflow_dataset_artifact a JOIN dataflow_node_run n ON n.id=a.nodeRunId
+        WHERE a.runId=? ORDER BY n.sequenceNo`,
+      [input.runId]
+    ),
+    db().query<mysql.RowDataPacket[]>(
+      `SELECT l.id,l.sourceArtifactId,l.targetArtifactId,l.nodeRunId,l.columnMappingJson,l.createdAt,
+              source.nodeId AS sourceNodeId,target.nodeId AS targetNodeId
+         FROM dataflow_lineage_edge l
+         JOIN dataflow_dataset_artifact source ON source.id=l.sourceArtifactId
+         JOIN dataflow_dataset_artifact target ON target.id=l.targetArtifactId
+        WHERE l.runId=? ORDER BY l.createdAt,l.id`,
+      [input.runId]
+    ),
+  ]);
+  const run = runs[0];
+  return {
+    run: {
+      id: run.id,
+      status: run.status,
+      checkpoint: parseJson(run.checkpointJson, null),
+      watermarkInput: parseJson(run.watermarkInputJson, null),
+      watermarkOutput: parseJson(run.watermarkOutputJson, null),
+    },
+    artifacts: artifacts[0].map(row => ({
+      ...row,
+      schema: parseJson(row.schemaJson, []),
+      partition: parseJson(row.partitionJson, null),
+      watermark: parseJson(row.watermarkJson, null),
+      sample: parseJson(row.sampleJson, []),
+      schemaJson: undefined,
+      partitionJson: undefined,
+      watermarkJson: undefined,
+      sampleJson: undefined,
+    })),
+    lineage: lineage[0].map(row => ({
+      ...row,
+      columnMapping: parseJson(row.columnMappingJson, null),
+      columnMappingJson: undefined,
+    })),
+  };
 }
 
 function validateScheduleCron(cronExpression: string) {

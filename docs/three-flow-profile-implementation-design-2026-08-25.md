@@ -1980,7 +1980,7 @@ pnpm test:integration:provider
 
 - [~] **3F-P1-040** 数据 ExecutionPlan V2 和 plan hash。已在发布阶段编译 dataflow profile 不可变计划，运行时校验 SHA-256 哈希并仅按计划拓扑顺序执行；dataflow_run 固化定义、计划、哈希和 requestId。待真实 MySQL 迁移与运行快照验收后完成。
 - [~] **3F-P1-041** 已增加 `dataflow_run_job / dataflow_node_run` 耐久运行表：运行与根 Job 同事务创建，Worker 通过 `FOR UPDATE SKIP LOCKED`、租约、续租、过期回收和有界退避执行；每个节点固化稳定顺序、输入、输出、行数、耗时、Attempt 和失败事实，损坏计划会终止对应 Job 而不会永久毒化队列。待真实 MySQL 迁移、并发领取、进程重启和租约故障注入验收后完成。
-- [ ] **3F-P1-042** Dataset Artifact、Checkpoint 和 Lineage。
+- [~] **3F-P1-042** 已实现逐节点 Dataset Artifact、Run Checkpoint 和 Artifact 级 Lineage：节点提交在有效 Job 租约下原子写入 NodeRun、Artifact、依赖边与 Checkpoint，租约交接后的旧 Worker 不能覆盖新 Attempt；重试从成功 Artifact 恢复并跳过已提交节点，运行审计提供项目权限保护的 Artifact/Lineage 查询。当前仅支持有界 `inline_json` Artifact 和节点依赖级血缘；外部对象存储、列级映射、水位提交及真实 MySQL 崩溃恢复验收仍待完成。
 - [ ] **3F-P1-043** 数据源真实连接测试 Job 和证据模型。
 - [ ] **3F-P1-044** Inline 与 MySQL 只读 Connector。
 - [ ] **3F-P1-045** 真实 SQL Source、参数绑定和 Schema 推断。
