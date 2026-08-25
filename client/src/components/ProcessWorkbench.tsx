@@ -983,6 +983,27 @@ function taskOutcomeOptions(task: any): Array<{
   ];
 }
 
+function taskFormFields(task: any): Array<{
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  defaultValue: string;
+}> {
+  const fields = task?.payload?.config?.formSchema?.fields;
+  if (!Array.isArray(fields)) return [];
+  return fields
+    .filter((item: any) => item && typeof item === "object")
+    .map((item: any) => ({
+      key: String(item.key ?? "").trim(),
+      label: String(item.label ?? item.key ?? "").trim(),
+      type: String(item.type ?? "text"),
+      required: item.required === true,
+      defaultValue: String(item.defaultValue ?? ""),
+    }))
+    .filter((item: any) => item.key && item.label);
+}
+
 function TaskDrawer({
   task,
   assignees,
@@ -1005,18 +1026,22 @@ function TaskDrawer({
     configuredOutcomes[0];
   const decision: "approved" | "rejected" | "abstained" =
     selectedOutcome?.code === "abstained"
-        ? "abstained"
-        : ["rejected", "returned", "cancelled"].includes(
-              selectedOutcome?.code ?? ""
-            )
-          ? "rejected"
-          : "approved";
+      ? "abstained"
+      : ["rejected", "returned", "cancelled"].includes(
+            selectedOutcome?.code ?? ""
+          )
+        ? "rejected"
+        : "approved";
   const commentRequired =
     selectedOutcome?.requireComment === true || decision === "rejected";
   const [comment, setComment] = useState("");
   const [resultRows, setResultRows] = useState<
     Array<{ key: string; value: string }>
   >([]);
+  const formFields = useMemo(
+    () => taskFormFields(task),
+    [task?.id, task?.formSchemaVersion, task?.payload]
+  );
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -1033,6 +1058,11 @@ function TaskDrawer({
     if (!configuredOutcomes.some(item => item.code === outcome))
       setOutcome(configuredOutcomes[0]?.code ?? "approved");
   }, [configuredOutcomes, outcome]);
+  useEffect(() => {
+    setResultRows(
+      formFields.map(field => ({ key: field.key, value: field.defaultValue }))
+    );
+  }, [task?.id, task?.formSchemaVersion]);
   const toValue = (value: string): unknown =>
     value === "true"
       ? true
@@ -1055,6 +1085,19 @@ function TaskDrawer({
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   });
   const canManage = task?.status === "pending" || task?.status === "claimed";
+  const missingRequiredFormField = formFields.some(field => {
+    if (!field.required) return false;
+    return !resultRows.find(row => row.key === field.key)?.value.trim();
+  });
+  const setFormFieldValue = (key: string, value: string) =>
+    setResultRows(rows => {
+      const index = rows.findIndex(row => row.key === key);
+      return index < 0
+        ? [...rows, { key, value }]
+        : rows.map((row, rowIndex) =>
+            rowIndex === index ? { ...row, value } : row
+          );
+    });
   const submitResult = () => {
     const payload = createPayload(resultRows);
     if (task.status === "pending") onExecute(payload);
@@ -1119,6 +1162,16 @@ function TaskDrawer({
                 <span className="text-xs text-slate-400">
                   创建于 {date(task.createdAt)}
                 </span>
+                {task.formSchemaVersion && (
+                  <span className="text-xs text-slate-400">
+                    表单版本 v{task.formSchemaVersion}
+                  </span>
+                )}
+                {task.dueAt && (
+                  <span className="text-xs text-slate-400">
+                    截止于 {date(task.dueAt)}
+                  </span>
+                )}
                 {task.assignedName && (
                   <span className="text-xs text-slate-400">
                     指定处理人：{task.assignedName}
@@ -1176,6 +1229,48 @@ function TaskDrawer({
             )}
             {(task.status === "pending" || task.status === "claimed") && (
               <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+                {formFields.length > 0 && (
+                  <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3">
+                    <p className="text-xs font-semibold text-slate-600">
+                      任务表单 · v{task.formSchemaVersion ?? 1}
+                    </p>
+                    <div className="mt-3 grid gap-3">
+                      {formFields.map(field => (
+                        <label
+                          key={field.key}
+                          className="grid gap-1 text-xs font-medium text-slate-600"
+                        >
+                          {field.label}
+                          {field.required ? "（必填）" : "（可选）"}
+                          {field.type === "textarea" ? (
+                            <textarea
+                              className="min-h-20 resize-y rounded border border-slate-200 px-3 py-2 text-sm font-normal"
+                              value={
+                                resultRows.find(row => row.key === field.key)
+                                  ?.value ?? ""
+                              }
+                              onChange={event =>
+                                setFormFieldValue(field.key, event.target.value)
+                              }
+                            />
+                          ) : (
+                            <input
+                              type={field.type === "number" ? "number" : "text"}
+                              className="h-9 rounded border border-slate-200 px-3 text-sm font-normal"
+                              value={
+                                resultRows.find(row => row.key === field.key)
+                                  ?.value ?? ""
+                              }
+                              onChange={event =>
+                                setFormFieldValue(field.key, event.target.value)
+                              }
+                            />
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <p className="text-xs font-semibold text-slate-600">审批决定</p>
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   仅展示当前操作合同允许的结果，提交后由服务端选择唯一后继分支。
@@ -1265,7 +1360,9 @@ function TaskDrawer({
                 <Button
                   className={`mt-3 min-h-11 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
                   disabled={
-                    busy || (commentRequired && !comment.trim())
+                    busy ||
+                    missingRequiredFormField ||
+                    (commentRequired && !comment.trim())
                   }
                   onClick={submitResult}
                 >

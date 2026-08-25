@@ -569,6 +569,11 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       assigneeMode: "receivers",
       assigneeRoleCode: "",
       instruction: "请完成此项流程操作。",
+      formSchemaVersion: 1,
+      formSchema: { fields: [] },
+      dueAfterSeconds: 0,
+      reminderAfterSeconds: 0,
+      escalationAfterSeconds: 0,
       outcomeMode: "explicit",
       outcomes: [
         {
@@ -673,6 +678,11 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
           { value: "initiator", label: "流程发起人" },
           { value: "initiator_manager", label: "发起人直属上级" },
           { value: "sender_manager", label: "当前操作人直属上级" },
+          { value: "initiator_manager_n", label: "发起人 N 级主管" },
+          { value: "sender_manager_n", label: "当前操作人 N 级主管" },
+          { value: "department", label: "指定部门成员" },
+          { value: "department_manager", label: "部门负责人" },
+          { value: "form_user", label: "表单用户字段" },
         ],
       },
       {
@@ -700,10 +710,65 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         required: true,
       },
       {
+        key: "formSchemaVersion",
+        label: "表单版本",
+        help: "任务创建时固化的表单 Schema 版本，发布后已有任务不会跟随草稿变化。",
+        kind: "number",
+        required: true,
+      },
+      {
+        key: "formSchema",
+        label: "任务表单 Schema",
+        help: "JSON 格式的字段定义；任务创建时连同版本一起固化到任务快照。",
+        kind: "json",
+      },
+      {
+        key: "dueAfterSeconds",
+        label: "办理时限（秒）",
+        help: "大于 0 时从任务创建时间计算截止时间；0 表示不设时限。",
+        kind: "number",
+      },
+      {
+        key: "reminderAfterSeconds",
+        label: "提醒时间（秒）",
+        help: "预留给提醒调度器；必须不晚于办理时限。0 表示不提醒。",
+        kind: "number",
+      },
+      {
+        key: "escalationAfterSeconds",
+        label: "升级时间（秒）",
+        help: "预留给升级调度器；必须不早于提醒时间。0 表示不升级。",
+        kind: "number",
+      },
+      {
         key: "assigneeUserId",
         label: "指定处理人 ID",
         help: "仅“指定用户”方式需要；必须为可用内部账号。",
         kind: "number",
+      },
+      {
+        key: "managerLevel",
+        label: "主管层级",
+        help: "N 级主管方式使用，范围 1 至 32。",
+        kind: "number",
+      },
+      {
+        key: "assigneeUnitIds",
+        label: "处理部门 ID",
+        help: "指定部门成员或部门负责人方式使用。",
+        kind: "json",
+      },
+      {
+        key: "includeDescendants",
+        label: "包含后代部门",
+        help: "指定部门成员时是否递归包含所有启用的后代部门。",
+        kind: "boolean",
+      },
+      {
+        key: "assigneeFormField",
+        label: "表单用户字段",
+        help: "表单用户方式使用，例如 input.approverUserId。",
+        kind: "text",
       },
       {
         key: "outcomeMode",
@@ -1335,6 +1400,22 @@ function assertOptionalNumber(
     throw new Error(message);
 }
 
+function assertOptionalInteger(
+  value: unknown,
+  message: string,
+  min: number,
+  max: number
+) {
+  assertOptionalNumber(value, message, min, max);
+  if (
+    value !== undefined &&
+    value !== null &&
+    value !== "" &&
+    !Number.isInteger(value)
+  )
+    throw new Error(message);
+}
+
 /** Validates documented properties without deleting unknown keys from an imported historical definition. */
 export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
   switch (type) {
@@ -1388,13 +1469,18 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           "initiator",
           "initiator_manager",
           "sender_manager",
+          "initiator_manager_n",
+          "sender_manager_n",
+          "department",
+          "department_manager",
+          "form_user",
           "none",
         ].includes(String(config.assigneeMode))
       )
         throw new Error("操作节点处理人方式无效。");
       assertString(config.instruction, "操作节点必须配置操作说明。");
       if (config.assigneeMode === "user")
-        assertOptionalNumber(
+        assertOptionalInteger(
           config.assigneeUserId,
           "操作节点指定处理人必须是有效的内部账号 ID。",
           1,
@@ -1405,6 +1491,64 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           config.assigneeRoleCode,
           "操作节点按权限角色分配时必须配置角色代号。"
         );
+      if (
+        ["initiator_manager_n", "sender_manager_n"].includes(
+          String(config.assigneeMode)
+        )
+      )
+        assertOptionalInteger(
+          config.managerLevel,
+          "操作节点主管层级必须是 1 至 32 的整数。",
+          1,
+          32
+        );
+      if (
+        ["department", "department_manager"].includes(
+          String(config.assigneeMode)
+        ) &&
+        config.assigneeUnitIds !== undefined &&
+        !Array.isArray(config.assigneeUnitIds)
+      )
+        throw new Error("操作节点处理部门必须是 ID 数组。");
+      if (
+        config.assigneeMode === "department" &&
+        (!Array.isArray(config.assigneeUnitIds) ||
+          !config.assigneeUnitIds.length)
+      )
+        throw new Error("操作节点按部门分配时必须至少配置一个部门。");
+      if (config.assigneeMode === "form_user")
+        assertString(
+          config.assigneeFormField,
+          "操作节点按表单用户分配时必须配置用户字段。"
+        );
+      assertOptionalInteger(
+        config.formSchemaVersion,
+        "操作节点表单版本必须是正整数。",
+        1,
+        Number.MAX_SAFE_INTEGER
+      );
+      for (const [value, message] of [
+        [config.dueAfterSeconds, "操作节点办理时限必须是非负秒数。"],
+        [config.reminderAfterSeconds, "操作节点提醒时间必须是非负秒数。"],
+        [config.escalationAfterSeconds, "操作节点升级时间必须是非负秒数。"],
+      ] as const)
+        assertOptionalInteger(value, message, 0, Number.MAX_SAFE_INTEGER);
+      if (config.formSchema !== undefined)
+        assertObject(
+          config.formSchema,
+          "操作节点任务表单 Schema 必须是 JSON 对象。"
+        );
+      const dueAfterSeconds = Number(config.dueAfterSeconds ?? 0);
+      const reminderAfterSeconds = Number(config.reminderAfterSeconds ?? 0);
+      const escalationAfterSeconds = Number(config.escalationAfterSeconds ?? 0);
+      if (dueAfterSeconds > 0 && reminderAfterSeconds > dueAfterSeconds)
+        throw new Error("操作节点提醒时间不能晚于办理时限。");
+      if (
+        escalationAfterSeconds > 0 &&
+        reminderAfterSeconds > 0 &&
+        escalationAfterSeconds < reminderAfterSeconds
+      )
+        throw new Error("操作节点升级时间不能早于提醒时间。");
       if (config.qxkz !== undefined && !Array.isArray(config.qxkz))
         throw new Error("操作节点权限控制必须是数组。");
       if (config.bddx !== undefined && !Array.isArray(config.bddx))

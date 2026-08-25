@@ -2448,6 +2448,17 @@ async function executeRunSegment(input: {
         const pendingStatusName = String(
           firstConfiguredString(config.pendingStatusName) ?? "待审批"
         );
+        const formSchemaVersion = Math.max(
+          1,
+          Math.trunc(Number(config.formSchemaVersion ?? 1) || 1)
+        );
+        const dueAfterSeconds = Math.max(
+          0,
+          Math.trunc(Number(config.dueAfterSeconds ?? 0) || 0)
+        );
+        const dueAt = dueAfterSeconds
+          ? new Date(Date.now() + dueAfterSeconds * 1000)
+          : null;
         const taskRoleKey =
           assignment.mode === "role"
             ? String(config.assigneeRoleCode || "default")
@@ -2499,7 +2510,7 @@ async function executeRunSegment(input: {
           const taskId = randomUUID();
           taskIds.push(taskId);
           await db().query(
-            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
               taskId,
               input.workflow.id,
@@ -2528,12 +2539,13 @@ async function executeRunSegment(input: {
                 reference,
               }),
               JSON.stringify({
-                mode: assignment.mode,
+                ...assignment,
                 candidateUserIds: taskAssignment.candidateUserIds,
-                resolvedAt: new Date().toISOString(),
               }),
               JSON.stringify(outcomeContract),
               taskAssignment.assignedUserId,
+              formSchemaVersion,
+              dueAt,
               JSON.stringify(nextNodeIds),
               String(
                 asRecord(input.context.runtime).requestId ??

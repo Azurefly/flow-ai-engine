@@ -122,6 +122,7 @@ import {
   listOrganization,
   moveOrganizationMember,
   removeOrganizationMember,
+  resolveOperateAssignees,
   setPrimaryOrganizationMembership,
   unbindOrganizationRole,
   updateOrganizationUnit,
@@ -165,10 +166,24 @@ const approvalResultSchema = z
   })
   .catchall(z.unknown());
 
-function assertWorkflowRunController(user: { id: number }, run: unknown, action: string) {
-  const record = run as { triggeredByUserId?: unknown; ownerUserId?: unknown } | null;
-  if (!record || (Number(record.triggeredByUserId) !== user.id && Number(record.ownerUserId) !== user.id)) {
-    throw new TRPCError({ code: "FORBIDDEN", message: `仅流程发起人或流程所有者可${action}。` });
+function assertWorkflowRunController(
+  user: { id: number },
+  run: unknown,
+  action: string
+) {
+  const record = run as {
+    triggeredByUserId?: unknown;
+    ownerUserId?: unknown;
+  } | null;
+  if (
+    !record ||
+    (Number(record.triggeredByUserId) !== user.id &&
+      Number(record.ownerUserId) !== user.id)
+  ) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: `仅流程发起人或流程所有者可${action}。`,
+    });
   }
 }
 
@@ -395,9 +410,9 @@ export const appRouter = router({
     revokeRoleAssignment: iamManageProcedure
       .input(z.object({ assignmentId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
-      await revokeRoleAssignment({ ...input, revokedByUserId: ctx.user.id });
-      return { success: true };
-    }),
+        await revokeRoleAssignment({ ...input, revokedByUserId: ctx.user.id });
+        return { success: true };
+      }),
     createCustomRole: iamManageProcedure
       .input(
         z.object({
@@ -453,9 +468,9 @@ export const appRouter = router({
     deleteCustomRole: iamManageProcedure
       .input(z.object({ code: z.string().min(10).max(68) }))
       .mutation(async ({ ctx, input }) => {
-      await deleteCustomRole({ ...input, actorUserId: ctx.user.id });
-      return { success: true };
-    }),
+        await deleteCustomRole({ ...input, actorUserId: ctx.user.id });
+        return { success: true };
+      }),
     authorizationAudit: iamManageProcedure
       .input(
         z
@@ -900,10 +915,10 @@ export const appRouter = router({
     get: protectedProcedure
       .input(z.object({ taskId: z.string().uuid() }))
       .query(async ({ ctx, input }) => {
-      const task = await getWorkflowTask(ctx.user, input.taskId);
-      if (!task) throw new Error("人工任务不存在或无访问权限。 ");
-      return task;
-    }),
+        const task = await getWorkflowTask(ctx.user, input.taskId);
+        if (!task) throw new Error("人工任务不存在或无访问权限。 ");
+        return task;
+      }),
     assignees: protectedProcedure
       .input(z.object({ taskId: z.string().uuid() }))
       .query(({ ctx, input }) =>
@@ -1127,10 +1142,10 @@ export const appRouter = router({
     get: protectedProcedure
       .input(z.object({ id: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
-      const workflow = await getWorkflow(input.id, ctx.user);
-      if (!workflow) throw new Error("流程不存在或无访问权限。");
-      return workflow;
-    }),
+        const workflow = await getWorkflow(input.id, ctx.user);
+        if (!workflow) throw new Error("流程不存在或无访问权限。");
+        return workflow;
+      }),
     compile: protectedProcedure
       .input(
         z.object({
@@ -1146,6 +1161,44 @@ export const appRouter = router({
         );
         if (!result) throw new Error("流程不存在或无发布权限。");
         return result;
+      }),
+    previewParticipants: protectedProcedure
+      .input(
+        z.object({
+          workflowId: z.string().min(8).max(64),
+          config: z.record(z.string(), z.unknown()),
+          initiatorUserId: z.number().int().positive().optional(),
+          senderUserId: z.number().int().positive().optional(),
+          formData: z.record(z.string(), z.unknown()).optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:edit"
+          ))
+        )
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权预览该流程的参与人。",
+          });
+        const initiatorUserId = input.initiatorUserId ?? ctx.user.id;
+        return resolveOperateAssignees({
+          workflowId: input.workflowId,
+          config: input.config,
+          context: {
+            input: input.formData ?? {},
+            vars: {},
+            nodes: {},
+            runtime: {
+              triggeredByUserId: initiatorUserId,
+              lastActorUserId: input.senderUserId ?? initiatorUserId,
+              receiverUserIds: [],
+            },
+          },
+        });
       }),
     access: protectedProcedure
       .input(z.object({ id: z.string().min(8).max(64) }))
@@ -1182,23 +1235,23 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-      const workflow = await updateWorkflow(input.id, ctx.user, {
-        name: input.name,
-        definition: input.definition,
-        publish: true,
-      });
-      if (!workflow) throw new Error("流程不存在或无发布权限。");
-      return workflow;
-    }),
+        const workflow = await updateWorkflow(input.id, ctx.user, {
+          name: input.name,
+          definition: input.definition,
+          publish: true,
+        });
+        if (!workflow) throw new Error("流程不存在或无发布权限。");
+        return workflow;
+      }),
     unpublish: protectedProcedure
       .input(z.object({ id: z.string().min(8).max(64) }))
       .mutation(async ({ ctx, input }) => {
-      const workflow = await updateWorkflow(input.id, ctx.user, {
-        unpublish: true,
-      });
-      if (!workflow) throw new Error("流程不存在或无取消发布权限。");
-      return workflow;
-    }),
+        const workflow = await updateWorkflow(input.id, ctx.user, {
+          unpublish: true,
+        });
+        if (!workflow) throw new Error("流程不存在或无取消发布权限。");
+        return workflow;
+      }),
     duplicate: protectedProcedure
       .input(
         z.object({
@@ -1227,15 +1280,15 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const restored = await restoreWorkflow(input.id, ctx.user);
         if (!restored) throw new Error("流程不存在、未归档或无恢复权限。");
-      return { success: true };
-    }),
+        return { success: true };
+      }),
     versions: protectedProcedure
       .input(z.object({ workflowId: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
-      const versions = await listWorkflowVersions(input.workflowId, ctx.user);
-      if (!versions) throw new Error("无权查看流程版本。");
-      return versions;
-    }),
+        const versions = await listWorkflowVersions(input.workflowId, ctx.user);
+        if (!versions) throw new Error("无权查看流程版本。");
+        return versions;
+      }),
     versionDiff: protectedProcedure
       .input(
         z.object({
@@ -1281,8 +1334,8 @@ export const appRouter = router({
           ))
         )
           throw new Error("无权查看流程成员。");
-      return listWorkflowMembers(input.workflowId);
-    }),
+        return listWorkflowMembers(input.workflowId);
+      }),
     memberCandidates: protectedProcedure
       .input(z.object({ workflowId: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
@@ -1294,8 +1347,8 @@ export const appRouter = router({
           ))
         )
           throw new Error("无权管理流程成员。");
-      return listActiveUsersForWorkflowAssignment();
-    }),
+        return listActiveUsersForWorkflowAssignment();
+      }),
     grantMember: protectedProcedure
       .input(
         z.object({
@@ -1380,8 +1433,8 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (!(await deleteNodeTemplate(ctx.user, input.id)))
           throw new Error("节点模板不存在或无删除权限。");
-      return { success: true };
-    }),
+        return { success: true };
+      }),
     subflows: protectedProcedure.query(({ ctx }) => listSubflows(ctx.user)),
     createSubflow: protectedProcedure
       .input(
@@ -1414,8 +1467,8 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (!(await deleteSubflow(ctx.user, input.id)))
           throw new Error("子流程不存在或无删除权限。");
-      return { success: true };
-    }),
+        return { success: true };
+      }),
     run: protectedProcedure
       .input(
         z.object({
@@ -1449,28 +1502,67 @@ export const appRouter = router({
       .input(z.object({ runId: z.string().min(8).max(64) }))
       .mutation(async ({ ctx, input }) => {
         const run = await getWorkflowRun(input.runId);
-        if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "无权取消此流程运行。" });
+        if (
+          !run ||
+          !(await hasWorkflowPermission(
+            ctx.user,
+            String(run.workflowId),
+            "workflow:run"
+          ))
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权取消此流程运行。",
+          });
         }
         assertWorkflowRunController(ctx.user, run, "取消此流程运行");
         return controlWorkflowRun({ runId: input.runId, action: "cancel" });
       }),
     terminateRun: protectedProcedure
-      .input(z.object({ runId: z.string().min(8).max(64), reason: z.string().trim().min(1).max(500) }))
+      .input(
+        z.object({
+          runId: z.string().min(8).max(64),
+          reason: z.string().trim().min(1).max(500),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
         const run = await getWorkflowRun(input.runId);
-        if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "无权终止此流程运行。" });
+        if (
+          !run ||
+          !(await hasWorkflowPermission(
+            ctx.user,
+            String(run.workflowId),
+            "workflow:run"
+          ))
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权终止此流程运行。",
+          });
         }
         assertWorkflowRunController(ctx.user, run, "终止此流程运行");
-        return controlWorkflowRun({ runId: input.runId, action: "terminate", reason: input.reason });
+        return controlWorkflowRun({
+          runId: input.runId,
+          action: "terminate",
+          reason: input.reason,
+        });
       }),
     pauseRun: protectedProcedure
       .input(z.object({ runId: z.string().min(8).max(64) }))
       .mutation(async ({ ctx, input }) => {
         const run = await getWorkflowRun(input.runId);
-        if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "无权暂停此流程运行。" });
+        if (
+          !run ||
+          !(await hasWorkflowPermission(
+            ctx.user,
+            String(run.workflowId),
+            "workflow:run"
+          ))
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权暂停此流程运行。",
+          });
         }
         assertWorkflowRunController(ctx.user, run, "暂停此流程运行");
         return pauseWorkflowRun(input.runId);
@@ -1479,8 +1571,18 @@ export const appRouter = router({
       .input(z.object({ runId: z.string().min(8).max(64) }))
       .mutation(async ({ ctx, input }) => {
         const run = await getWorkflowRun(input.runId);
-        if (!run || !(await hasWorkflowPermission(ctx.user, String(run.workflowId), "workflow:run"))) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "无权恢复此流程运行。" });
+        if (
+          !run ||
+          !(await hasWorkflowPermission(
+            ctx.user,
+            String(run.workflowId),
+            "workflow:run"
+          ))
+        ) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权恢复此流程运行。",
+          });
         }
         assertWorkflowRunController(ctx.user, run, "恢复此流程运行");
         return resumeWorkflowRun(input.runId);
@@ -1490,7 +1592,16 @@ export const appRouter = router({
         z.object({
           workflowId: z.string().min(8).max(64),
           status: z
-            .enum(["queued", "running", "waiting", "blocked", "success", "failed", "cancelled", "terminated"])
+            .enum([
+              "queued",
+              "running",
+              "waiting",
+              "blocked",
+              "success",
+              "failed",
+              "cancelled",
+              "terminated",
+            ])
             .optional(),
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
@@ -1514,7 +1625,16 @@ export const appRouter = router({
         z.object({
           workflowId: z.string().min(8).max(64),
           status: z
-            .enum(["queued", "running", "waiting", "blocked", "success", "failed", "cancelled", "terminated"])
+            .enum([
+              "queued",
+              "running",
+              "waiting",
+              "blocked",
+              "success",
+              "failed",
+              "cancelled",
+              "terminated",
+            ])
             .optional(),
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
@@ -1536,12 +1656,12 @@ export const appRouter = router({
     markAlertRead: protectedProcedure
       .input(z.object({ alertId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => ({
-      success: await markRunAlertRead(input.alertId, ctx.user),
-    })),
+        success: await markRunAlertRead(input.alertId, ctx.user),
+      })),
     runDetail: protectedProcedure
       .input(z.object({ runId: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
-      const run = await getWorkflowRun(input.runId);
+        const run = await getWorkflowRun(input.runId);
         if (
           !run ||
           !(await hasWorkflowPermission(
@@ -1551,8 +1671,8 @@ export const appRouter = router({
           ))
         )
           throw new Error("运行记录不存在或无访问权限。");
-      return run;
-    }),
+        return run;
+      }),
   }),
 });
 

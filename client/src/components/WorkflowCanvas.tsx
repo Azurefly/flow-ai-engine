@@ -44,6 +44,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { trpc } from "@/lib/trpc";
 import type { Definition } from "../../../server/workflow-service";
 import {
   canConnectFlowNodeTypes,
@@ -1914,6 +1915,7 @@ export default function WorkflowCanvas({
     Edge
   > | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const participantPreview = trpc.workflow.previewParticipants.useMutation();
   const canvasRegionRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<Definition>(initial);
   const appliedDefinitionRef = useRef("");
@@ -2022,6 +2024,9 @@ export default function WorkflowCanvas({
       })()
     : null;
   const selectedConfig = (selected?.data.config ?? {}) as NodeConfig;
+  useEffect(() => {
+    participantPreview.reset();
+  }, [selectedId]);
   const selectedDefaults = selected
     ? createDefaultNodeConfig(selected.data.kind)
     : {};
@@ -2054,8 +2059,7 @@ export default function WorkflowCanvas({
           source?.data.kind === "operate"
             ? readOperateOutcomes(source.data.config).find(
                 item =>
-                  item.sourceHandle ===
-                  String(edge.sourceHandle ?? "default")
+                  item.sourceHandle === String(edge.sourceHandle ?? "default")
               )
             : undefined;
         const label =
@@ -2063,9 +2067,9 @@ export default function WorkflowCanvas({
             ? String(route?.label ?? edge.sourceHandle ?? "默认路径")
             : source?.data.kind === "operate" && operateOutcome
               ? operateOutcome.label
-            : source?.data.kind === "llm" && edge.sourceHandle !== "default"
-              ? `失败：${edge.sourceHandle}`
-              : undefined;
+              : source?.data.kind === "llm" && edge.sourceHandle !== "default"
+                ? `失败：${edge.sourceHandle}`
+                : undefined;
         return edge.id === selectedEdgeId
           ? {
               ...edge,
@@ -2245,7 +2249,7 @@ export default function WorkflowCanvas({
                 readOperateOutcomeMode(source.data.config) === "explicit"
               ? (readOperateOutcomes(source.data.config)[0]?.sourceHandle ??
                 "default")
-            : "default";
+              : "default";
       const nextEdge: Edge = {
         id: `edge-${Date.now()}`,
         source: sourceId,
@@ -3221,6 +3225,53 @@ export default function WorkflowCanvas({
                       该历史操作仍使用“拒绝即取消实例”的兼容语义。请将结果路由模式改为显式出口，并分别连接同意、拒绝分支。
                     </div>
                   )}
+                {selected.data.kind === "operate" && workflowId && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-xs leading-5 text-blue-900">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <p className="font-semibold">参与人解析预览</p>
+                        <p className="text-blue-700">
+                          以当前登录用户模拟发起人与当前操作人；运行时会再次解析并固化快照。
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={participantPreview.isPending}
+                        onClick={() =>
+                          participantPreview.mutate({
+                            workflowId,
+                            config: selectedConfig,
+                          })
+                        }
+                      >
+                        {participantPreview.isPending
+                          ? "解析中…"
+                          : "预览候选人"}
+                      </Button>
+                    </div>
+                    {participantPreview.data && (
+                      <div className="mt-2 rounded border border-blue-100 bg-white/80 px-2 py-1.5">
+                        <p>
+                          方式：{participantPreview.data.mode}；候选用户 ID：
+                          {participantPreview.data.candidateUserIds.join(", ")}
+                        </p>
+                        {participantPreview.data.fallbackApplied && (
+                          <p className="text-amber-700">
+                            已使用兜底：
+                            {participantPreview.data.fallbackApplied}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {participantPreview.error && (
+                      <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+                        {participantPreview.error.message}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div
                 role="tablist"

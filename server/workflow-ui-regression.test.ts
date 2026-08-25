@@ -1026,6 +1026,12 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain(
       "const payload = createPayload(resultRows)"
     );
+    expect(processWorkbenchSource).toContain("任务表单 · v");
+    expect(processWorkbenchSource).toContain("missingRequiredFormField");
+    expect(canvasSource).toContain(
+      "trpc.workflow.previewParticipants.useMutation"
+    );
+    expect(canvasSource).toContain("预览候选人");
     expect(processWorkbenchSource).toContain("onComplete(payload)");
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");
