@@ -59,6 +59,42 @@ describe("WorkflowCompiler", () => {
     expect(first.plan.topologicalOrder).toEqual(["start", "end"]);
   });
 
+  it("blocks unsafe write service tasks and validates compensation routing", () => {
+    const definition = base();
+    definition.nodes.splice(1, 0, {
+      id: "write",
+      type: "http",
+      name: "写入外部系统",
+      position: { x: 120, y: 0 },
+      config: { method: "POST", url: "https://example.com/items" },
+    });
+    definition.edges = [
+      { id: "start-write", sourceNodeId: "start", targetNodeId: "write" },
+      { id: "write-end", sourceNodeId: "write", targetNodeId: "end" },
+    ];
+    const unsafe = analyzeWorkflowDefinition(definition, {
+      flowType: "control",
+      executable: true,
+    });
+    expect(unsafe.ok).toBe(false);
+    if (!unsafe.ok)
+      expect(unsafe.diagnostics.map(item => item.code)).toContain(
+        "WF_SERVICE_WRITE_SAFETY_REQUIRED"
+      );
+
+    definition.nodes[1]!.config = {
+      ...definition.nodes[1]!.config,
+      writeSafety: "idempotent",
+      retryMaxAttempts: 3,
+    };
+    const safe = compileWorkflowDefinition(definition, { flowType: "control" });
+    expect(safe.plan.serviceTasks?.write).toMatchObject({
+      effect: "write",
+      writeSafety: "idempotent",
+      retry: { maxAttempts: 3 },
+    });
+  });
+
   it.each([
     ["WF_DEF_INVALID", undefined],
     ["WF_VIEWPORT_INVALID", { viewport: { x: 0, y: 0, zoom: 0 } }],

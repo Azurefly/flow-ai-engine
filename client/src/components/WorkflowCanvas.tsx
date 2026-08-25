@@ -221,6 +221,11 @@ function sourceHandles(kind: NodeKind, config: NodeConfig) {
     const failureHandle = String(config.failureHandle ?? "").trim();
     return failureHandle ? ["default", failureHandle] : ["default"];
   }
+  if (
+    ["http", "rest", "method"].includes(kind) &&
+    config.writeSafety === "compensated"
+  )
+    return ["default", "compensation"];
   if (kind === "operate" && readOperateOutcomeMode(config) === "explicit")
     return readOperateOutcomes(config).map(outcome => outcome.sourceHandle);
   return ["default"];

@@ -25,7 +25,10 @@ import {
   hashWorkflowExecutionPlan,
   type WorkflowExecutionPlan,
 } from "./workflow-compiler";
-import { compileHttpServiceTask } from "@shared/service-task-contract";
+import {
+  compileHttpServiceTask,
+  type HttpServiceTaskPlan,
+} from "@shared/service-task-contract";
 import {
   resolveExternalSecret,
   resolveProjectServiceEndpoint,
@@ -652,6 +655,91 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   };
 }
 
+type ServiceCircuitState = { failures: number; openUntil: number };
+type ServiceConcurrencyState = { active: number; waiters: Array<() => void> };
+const serviceCircuits = new Map<string, ServiceCircuitState>();
+const serviceConcurrency = new Map<string, ServiceConcurrencyState>();
+
+export function isRetryableServiceTaskError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:timeout|timed out|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|请求超时|\b429\b|\b5\d\d\b)/i.test(
+    message
+  );
+}
+
+export function serviceTaskRetryDelay(baseDelayMs: number, attempt: number) {
+  return Math.min(10_000, Math.max(50, baseDelayMs) * 2 ** Math.max(0, attempt - 1));
+}
+
+async function acquireServiceConcurrency(key: string, limit: number) {
+  const state = serviceConcurrency.get(key) ?? { active: 0, waiters: [] };
+  serviceConcurrency.set(key, state);
+  if (state.active >= limit) {
+    await new Promise<void>(resolve => state.waiters.push(resolve));
+  } else {
+    state.active += 1;
+  }
+  return () => {
+    const next = state.waiters.shift();
+    if (next) next();
+    else state.active = Math.max(0, state.active - 1);
+    if (!state.active && !state.waiters.length) serviceConcurrency.delete(key);
+  };
+}
+
+async function executeHttpServiceTask(
+  plan: HttpServiceTaskPlan,
+  runtimeConfig: JsonRecord,
+  context: JsonRecord
+) {
+  const url = new URL(String(runtimeConfig.url));
+  const policyKey = plan.concurrency.key || plan.endpointRef || url.hostname.toLowerCase();
+  const retryAllowed =
+    plan.retryClass === "safe_read" || plan.writeSafety === "idempotent";
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= plan.retry.maxAttempts; attempt += 1) {
+    const circuit = serviceCircuits.get(policyKey);
+    if (circuit && circuit.openUntil > Date.now())
+      throw new Error(`服务任务熔断中，请在 ${new Date(circuit.openUntil).toISOString()} 后重试。`);
+    if (circuit && circuit.openUntil <= Date.now()) serviceCircuits.delete(policyKey);
+    const release = await acquireServiceConcurrency(
+      policyKey,
+      plan.concurrency.limit
+    );
+    try {
+      const output = await executeHttpNode(runtimeConfig, context);
+      serviceCircuits.delete(policyKey);
+      return output;
+    } catch (error) {
+      lastError = error;
+      const previous = serviceCircuits.get(policyKey) ?? {
+        failures: 0,
+        openUntil: 0,
+      };
+      const failures = previous.failures + 1;
+      serviceCircuits.set(policyKey, {
+        failures,
+        openUntil:
+          failures >= plan.circuit.failureThreshold
+            ? Date.now() + plan.circuit.resetAfterMs
+            : 0,
+      });
+      if (
+        attempt >= plan.retry.maxAttempts ||
+        !retryAllowed ||
+        !isRetryableServiceTaskError(error)
+      )
+        throw error;
+    } finally {
+      release();
+    }
+    await new Promise(resolve =>
+      setTimeout(resolve, serviceTaskRetryDelay(plan.retry.baseDelayMs, attempt))
+    );
+  }
+  throw lastError;
+}
+
 function firstConfiguredString(...values: unknown[]) {
   return values.find(value => typeof value === "string" && value.trim()) as
     | string
@@ -1138,12 +1226,16 @@ async function executeNode(
     }
     case "rest":
     case "method":
-      return {
-        output: await executeHttpNode(
-          await resolveServiceTaskRuntimeConfig(node.type, config, projectId),
-          context
-        ),
-      };
+      {
+        const plan = compileHttpServiceTask(node.type, config)!;
+        return {
+          output: await executeHttpServiceTask(
+            plan,
+            await resolveServiceTaskRuntimeConfig(node.type, config, projectId),
+            context
+          ),
+        };
+      }
     case "operate":
       throw new Error(
         "操作节点需要 P1 人工任务工作台；当前运行已安全阻断，未执行任何外部操作。"
@@ -1174,12 +1266,16 @@ async function executeNode(
       };
     }
     case "http":
-      return {
-        output: await executeHttpNode(
-          await resolveServiceTaskRuntimeConfig("http", config, projectId),
-          context
-        ),
-      };
+      {
+        const plan = compileHttpServiceTask("http", config)!;
+        return {
+          output: await executeHttpServiceTask(
+            plan,
+            await resolveServiceTaskRuntimeConfig("http", config, projectId),
+            context
+          ),
+        };
+      }
     case "llm":
       return { output: await executeLlmNode(config, context) };
     case "subflow": {
@@ -2698,13 +2794,20 @@ async function executeRunSegment(input: {
           input.workflow.projectId ? String(input.workflow.projectId) : undefined
         );
       } catch (error) {
-        const failureHandle =
-          node.type === "llm"
+        const serviceTask = compileHttpServiceTask(node.type, node.config);
+        const compensatedServiceFailure =
+          serviceTask?.effect === "write" &&
+          serviceTask.writeSafety === "compensated";
+        const failureHandle = compensatedServiceFailure
+          ? "compensation"
+          : node.type === "llm"
             ? String(node.config.failureHandle ?? "").trim()
             : "";
         if (!failureHandle) throw error;
         nodeFailure = {
-          code: "LLM_NODE_FAILED",
+          code: compensatedServiceFailure
+            ? "SERVICE_TASK_COMPENSATION_REQUIRED"
+            : "LLM_NODE_FAILED",
           message: error instanceof Error ? error.message : String(error),
           failureHandle,
         };

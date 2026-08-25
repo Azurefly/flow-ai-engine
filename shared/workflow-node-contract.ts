@@ -339,6 +339,14 @@ const referenceHttpDefaultConfig = {
   headers: {},
   body: {},
   timeout: 15000,
+  writeSafety: "unconfigured",
+  compensationNodeId: "",
+  retryMaxAttempts: 1,
+  retryBaseDelayMs: 250,
+  circuitFailureThreshold: 5,
+  circuitResetMs: 30000,
+  concurrencyKey: "",
+  concurrencyLimit: 5,
 };
 
 const referenceHttpFields: NodeField[] = [
@@ -428,6 +436,24 @@ const referenceHttpFields: NodeField[] = [
     help: "当前安全扩展，服务端限制为 1,000 至 15,000 毫秒。",
     kind: "number",
   },
+  {
+    key: "writeSafety",
+    label: "写操作安全策略",
+    help: "POST/PUT/PATCH/DELETE 发布前必须声明远端幂等或配置补偿节点。",
+    kind: "select",
+    options: [
+      { value: "unconfigured", label: "尚未配置" },
+      { value: "idempotent", label: "远端支持幂等键" },
+      { value: "compensated", label: "失败时进入补偿节点" },
+    ],
+  },
+  { key: "compensationNodeId", label: "补偿节点 ID", help: "写操作选择补偿策略时必须指向当前流程中的后继补偿节点。", kind: "text" },
+  { key: "retryMaxAttempts", label: "最大尝试次数", help: "范围 1 至 5；包含首次执行。", kind: "number" },
+  { key: "retryBaseDelayMs", label: "重试基础延迟", help: "指数退避基础延迟，范围 50 至 5,000 毫秒。", kind: "number" },
+  { key: "circuitFailureThreshold", label: "熔断失败阈值", help: "同一并发键连续失败达到阈值后临时熔断。", kind: "number" },
+  { key: "circuitResetMs", label: "熔断恢复时间", help: "范围 1,000 至 300,000 毫秒。", kind: "number" },
+  { key: "concurrencyKey", label: "并发限制键", help: "相同键的任务共享并发配额；留空按 EndpointRef 或域名分组。", kind: "text" },
+  { key: "concurrencyLimit", label: "并发上限", help: "单 Worker 范围 1 至 50。", kind: "number" },
 ];
 
 export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
@@ -1155,6 +1181,14 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       headers: {},
       body: {},
       timeout: 15000,
+      writeSafety: "unconfigured",
+      compensationNodeId: "",
+      retryMaxAttempts: 1,
+      retryBaseDelayMs: 250,
+      circuitFailureThreshold: 5,
+      circuitResetMs: 30000,
+      concurrencyKey: "",
+      concurrencyLimit: 5,
     },
     fields: [
       {
@@ -1195,6 +1229,14 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         help: "服务端限制为 1,000 至 15,000 毫秒。",
         kind: "number",
       },
+      { key: "writeSafety", label: "写操作安全策略", help: "写请求发布前必须声明远端幂等或配置补偿节点。", kind: "select", options: [{ value: "unconfigured", label: "尚未配置" }, { value: "idempotent", label: "远端支持幂等键" }, { value: "compensated", label: "失败时进入补偿节点" }] },
+      { key: "compensationNodeId", label: "补偿节点 ID", help: "补偿策略使用。", kind: "text" },
+      { key: "retryMaxAttempts", label: "最大尝试次数", help: "范围 1 至 5。", kind: "number" },
+      { key: "retryBaseDelayMs", label: "重试基础延迟", help: "范围 50 至 5,000 毫秒。", kind: "number" },
+      { key: "circuitFailureThreshold", label: "熔断失败阈值", help: "范围 1 至 20。", kind: "number" },
+      { key: "circuitResetMs", label: "熔断恢复时间", help: "范围 1,000 至 300,000 毫秒。", kind: "number" },
+      { key: "concurrencyKey", label: "并发限制键", help: "留空按 EndpointRef 或域名分组。", kind: "text" },
+      { key: "concurrencyLimit", label: "并发上限", help: "单 Worker 范围 1 至 50。", kind: "number" },
     ],
   },
   source: {
@@ -1740,6 +1782,26 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         1_000,
         15_000
       );
+      if (
+        config.writeSafety !== undefined &&
+        !["unconfigured", "idempotent", "compensated"].includes(
+          String(config.writeSafety)
+        )
+      )
+        throw new Error(`${referenceType} 节点写操作安全策略无效。`);
+      if (config.writeSafety === "compensated")
+        assertString(
+          config.compensationNodeId,
+          `${referenceType} 节点补偿策略必须配置补偿节点 ID。`
+        );
+      for (const [value, message, min, max] of [
+        [config.retryMaxAttempts, `${referenceType} 节点最大尝试次数必须是 1 至 5 的整数。`, 1, 5],
+        [config.retryBaseDelayMs, `${referenceType} 节点重试延迟必须是 50 至 5,000 毫秒的整数。`, 50, 5_000],
+        [config.circuitFailureThreshold, `${referenceType} 节点熔断阈值必须是 1 至 20 的整数。`, 1, 20],
+        [config.circuitResetMs, `${referenceType} 节点熔断恢复时间必须是 1,000 至 300,000 毫秒的整数。`, 1_000, 300_000],
+        [config.concurrencyLimit, `${referenceType} 节点并发上限必须是 1 至 50 的整数。`, 1, 50],
+      ] as const)
+        assertOptionalInteger(value, message, min, max);
       const attributes =
         config.restAttributeMap &&
         typeof config.restAttributeMap === "object" &&

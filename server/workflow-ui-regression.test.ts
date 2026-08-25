@@ -1032,6 +1032,7 @@ describe("流程设计器界面回归约束", () => {
       "trpc.workflow.previewParticipants.useMutation"
     );
     expect(canvasSource).toContain("预览候选人");
+    expect(canvasSource).toContain('["default", "compensation"]');
     expect(processWorkbenchSource).toContain("onComplete(payload)");
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");

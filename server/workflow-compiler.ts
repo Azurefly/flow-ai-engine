@@ -61,7 +61,7 @@ export type WorkflowCompileDiagnostic = {
 
 export type WorkflowExecutionPlan = {
   schemaVersion: 1;
-  compilerVersion: "1.0.0" | "1.1.0" | "1.2.0";
+  compilerVersion: "1.0.0" | "1.1.0" | "1.2.0" | "1.3.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -921,6 +921,55 @@ export function analyzeWorkflowDefinition(
             )
           );
       });
+
+    for (const node of validNodes) {
+      const serviceTask = compileHttpServiceTask(node.type, node.config);
+      if (!serviceTask || serviceTask.effect !== "write") continue;
+      if (serviceTask.writeSafety === "unconfigured")
+        diagnostics.push(
+          diagnostic(
+            "WF_SERVICE_WRITE_SAFETY_REQUIRED",
+            `写服务任务“${node.name}”必须声明远端幂等或补偿策略后才能发布。`,
+            { kind: "node", nodeId: node.id, field: "config.writeSafety" }
+          )
+        );
+      if (
+        serviceTask.writeSafety !== "idempotent" &&
+        serviceTask.retry.maxAttempts > 1
+      )
+        diagnostics.push(
+          diagnostic(
+            "WF_SERVICE_WRITE_RETRY_UNSAFE",
+            `写服务任务“${node.name}”只有在远端支持幂等键时才能自动重试。`,
+            { kind: "node", nodeId: node.id, field: "config.retryMaxAttempts" }
+          )
+        );
+      if (serviceTask.writeSafety === "compensated") {
+        const compensationNodeId = serviceTask.compensationNodeId ?? "";
+        if (!nodesById.has(compensationNodeId))
+          diagnostics.push(
+            diagnostic(
+              "WF_SERVICE_COMPENSATION_NODE_INVALID",
+              `写服务任务“${node.name}”配置的补偿节点不存在。`,
+              { kind: "node", nodeId: node.id, field: "config.compensationNodeId" }
+            )
+          );
+        const compensationEdge = validEdges.some(
+          edge =>
+            edge.sourceNodeId === node.id &&
+            edge.targetNodeId === compensationNodeId &&
+            (edge.sourceHandle ?? "default") === "compensation"
+        );
+        if (!compensationEdge)
+          diagnostics.push(
+            diagnostic(
+              "WF_SERVICE_COMPENSATION_EDGE_REQUIRED",
+              `写服务任务“${node.name}”必须通过 compensation 出口连接补偿节点。`,
+              { kind: "node", nodeId: node.id, field: "config.compensationNodeId" }
+            )
+          );
+      }
+    }
   }
 
   if (diagnostics.length) return { ok: false, diagnostics };
@@ -981,7 +1030,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.2.0",
+    compilerVersion: "1.3.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,

@@ -14,6 +14,11 @@ export type HttpServiceTaskPlan = {
   effect: "read" | "write";
   idempotency: "none" | "workflow_node_key";
   retryClass: "safe_read" | "idempotent_write";
+  writeSafety: "unconfigured" | "idempotent" | "compensated";
+  compensationNodeId?: string;
+  retry: { maxAttempts: number; baseDelayMs: number };
+  circuit: { failureThreshold: number; resetAfterMs: number };
+  concurrency: { key: string; limit: number };
 };
 
 function firstString(...values: unknown[]) {
@@ -53,6 +58,13 @@ export function compileHttpServiceTask(
     15000
   );
   const effect = method === "GET" ? "read" : "write";
+  const writeSafety = String(
+    config.writeSafety ?? (effect === "read" ? "idempotent" : "unconfigured")
+  ) as HttpServiceTaskPlan["writeSafety"];
+  const boundedInteger = (value: unknown, fallback: number, min: number, max: number) => {
+    const parsed = Number(value);
+    return Math.min(Math.max(Number.isFinite(parsed) ? Math.trunc(parsed) : fallback, min), max);
+  };
   const attributes =
     config.restAttributeMap && typeof config.restAttributeMap === "object"
       ? (config.restAttributeMap as Record<string, unknown>)
@@ -89,5 +101,21 @@ export function compileHttpServiceTask(
     effect,
     idempotency: effect === "write" ? "workflow_node_key" : "none",
     retryClass: effect === "write" ? "idempotent_write" : "safe_read",
+    writeSafety,
+    ...(firstString(config.compensationNodeId)
+      ? { compensationNodeId: String(config.compensationNodeId).trim() }
+      : {}),
+    retry: {
+      maxAttempts: boundedInteger(config.retryMaxAttempts, effect === "read" ? 3 : 1, 1, 5),
+      baseDelayMs: boundedInteger(config.retryBaseDelayMs, 250, 50, 5000),
+    },
+    circuit: {
+      failureThreshold: boundedInteger(config.circuitFailureThreshold, 5, 1, 20),
+      resetAfterMs: boundedInteger(config.circuitResetMs, 30000, 1000, 300000),
+    },
+    concurrency: {
+      key: String(config.concurrencyKey ?? "").trim(),
+      limit: boundedInteger(config.concurrencyLimit, 5, 1, 50),
+    },
   };
 }
