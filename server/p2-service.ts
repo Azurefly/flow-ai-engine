@@ -1650,7 +1650,19 @@ async function runDataflowDefinition(
           quality: { passed: true, rowCount: rows.length, nullRate },
           operation: "quality_gate",
         };
-      } else if (["end", "sink", "output"].includes(String(node.type)))
+      } else if (String(node.type) === "sink") {
+        if (String(config.writeMode ?? "audit_only") !== "audit_only")
+          throw new Error("Sink 当前仅支持审计输出，拒绝未知写入模式。");
+        const idempotencyKey = String(config.idempotencyKey ?? "").trim();
+        if (!idempotencyKey) throw new Error("Sink 缺少幂等键模板。");
+        output = {
+          rows: rowsFromInput(inputs),
+          stage: "sink",
+          outputName: String(config.outputName ?? "result"),
+          writeMode: "audit_only",
+          idempotencyKey,
+        };
+      } else if (["end", "output"].includes(String(node.type)))
         output = { rows: rowsFromInput(inputs), stage: "output" };
       else throw new Error(`数据流节点类型 ${String(node.type)} 尚未启用。`);
       const outputRows = normalizeRows(output.rows);

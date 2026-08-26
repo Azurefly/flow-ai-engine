@@ -1767,13 +1767,31 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     label: "输出",
     description: "将数据流结果输出到运行审计",
     flowTypes: ["data"],
-    defaultConfig: { outputName: "result" },
+    defaultConfig: {
+      outputName: "result",
+      writeMode: "audit_only",
+      idempotencyKey: "{{run.id}}",
+    },
     fields: [
       {
         key: "outputName",
         label: "输出名称",
         help: "数据流运行审计中的输出引用名称。",
         kind: "text",
+        required: true,
+      },
+      {
+        key: "writeMode",
+        label: "写入模式",
+        help: "当前仅允许 audit_only；真实 Sink Connector 待启用。",
+        kind: "select",
+        options: [{ value: "audit_only", label: "仅审计" }],
+      },
+      {
+        key: "idempotencyKey",
+        label: "幂等键模板",
+        help: "真实写入启用前必须提供稳定幂等键。",
+        kind: "template",
         required: true,
       },
     ],
@@ -2528,6 +2546,11 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       assertString(config.udfId, "UDF 节点必须选择项目函数。");
       break;
     case "sink":
+      if (String(config.writeMode ?? "audit_only") !== "audit_only")
+        throw new Error("Sink 当前仅支持 audit_only 写入模式。");
+      assertString(config.idempotencyKey, "Sink 必须配置幂等键模板。");
+      assertString(config.outputName, "输出节点必须配置输出名称。");
+      break;
     case "output":
       assertString(config.outputName, "输出节点必须配置输出名称。");
       break;
