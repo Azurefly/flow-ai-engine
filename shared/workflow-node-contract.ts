@@ -268,6 +268,7 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
   ],
   source: [
     "table",
+    "transform",
     "filter",
     "map",
     "project",

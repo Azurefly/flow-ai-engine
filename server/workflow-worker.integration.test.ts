@@ -95,7 +95,7 @@ describe("durable workflow worker", () => {
       "SELECT status,attempt,leaseToken FROM workflow_run_job WHERE id=?",
       [first.jobId]
     );
-    expect(runRows[0].status).toBe("success");
+    expect(runRows[0].status, JSON.stringify(runRows[0])).toBe("success");
     expect(jobRows[0]).toMatchObject({ status: "completed", attempt: 2, leaseToken: null });
     expect(runRows[0].executionLockToken).toBeNull();
     const [milestones] = await pool.query<mysql.RowDataPacket[]>(
@@ -114,7 +114,7 @@ describe("durable workflow worker", () => {
     });
     process.env.WORKFLOW_WORKER_FAULT_POINT = "after_execute_before_complete";
     try {
-      await expect(drainWorkflowJobs(1)).rejects.toThrow(
+      await expect(drainWorkflowJobs(1), JSON.stringify(await pool!.query("SELECT status,lastErrorJson FROM workflow_run_job WHERE id=?", [submitted.jobId]))).rejects.toThrow(
         "Injected workflow worker crash"
       );
     } finally {
