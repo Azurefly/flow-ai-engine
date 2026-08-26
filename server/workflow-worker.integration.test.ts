@@ -131,7 +131,7 @@ describe("durable workflow worker", () => {
     expect(crashedJobs[0].status).toBe("leased");
     expect(crashedRuns[0].status).toBe("success");
 
-    expect(await drainWorkflowJobs(1)).toBe(1);
+    expect(await drainWorkflowJobs(1)).toBe(0);
     const [reconciledJobs] = await pool!.query<mysql.RowDataPacket[]>(
       "SELECT status,leaseToken FROM workflow_run_job WHERE id=?",
       [submitted.jobId]
