@@ -472,6 +472,7 @@ export async function drainWorkflowJobs(maxJobs = 100) {
 }
 
 export function wakeWorkflowWorker() {
+  if (process.env.WORKFLOW_WORKER_ENABLED === "false") return;
   queueMicrotask(
     () =>
       void runWorkflowWorkerOnce().catch(error => {

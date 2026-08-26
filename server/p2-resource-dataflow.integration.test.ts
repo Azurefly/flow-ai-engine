@@ -223,13 +223,14 @@ describe("P2 项目数据资源与数据流", () => {
       });
 
       const view = await readonly.data.resources({ projectId });
-      expect(view.sources).toHaveLength(1);
-      expect(view.sources[0]).toMatchObject({
+      expect(view.sources).toHaveLength(2);
+      const inlineView = view.sources.find((source: any) => source.id === sourceId);
+      expect(inlineView).toMatchObject({
         status: "draft",
         lastTestedAt: null,
       });
       expect(view.assets[0]).toMatchObject({ id: assetId, name: "订单样本" });
-      expect(view.sources[0]).not.toHaveProperty("credentialRef");
+      expect(view.sources.every((source: any) => !Object.prototype.hasOwnProperty.call(source, "credentialRef"))).toBe(true);
       await expect(
         readonly.data.createTag({ projectId, name: "越权标签" })
       ).rejects.toThrow("无权");
