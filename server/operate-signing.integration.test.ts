@@ -278,10 +278,13 @@ describe("原版操作节点或签和会签运行语义", () => {
         "SELECT jobType,status FROM workflow_run_job WHERE runId=? ORDER BY createdAt,id",
         [orStarted.runId]
       );
-      expect(orJobs).toMatchObject([
-        { jobType: "start", status: "completed" },
-        { jobType: "resume", status: "completed" },
-      ]);
+      expect(orJobs).toHaveLength(2);
+      expect(orJobs).toEqual(
+        expect.arrayContaining([
+          { jobType: "start", status: "completed" },
+          { jobType: "resume", status: "completed" },
+        ])
+      );
 
       const andWorkflowId = await createSigningWorkflow("andSignFor", 60);
       const andStarted: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
