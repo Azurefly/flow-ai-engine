@@ -45,6 +45,7 @@ const leaseSeconds = Math.max(
 let pool: mysql.Pool | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 let processing = false;
+let lastWorkflowJobClaimed = false;
 
 const state = {
   workerId,
@@ -439,6 +440,7 @@ export async function runWorkflowWorkerOnce() {
   processing = true;
   state.processing = true;
   state.lastPollAt = new Date().toISOString();
+  lastWorkflowJobClaimed = false;
   try {
     const outboxProcessed = await dispatchWorkflowOutboxOnce();
     const waitsTriggered = await reconcileDueWorkflowWaits();
@@ -457,6 +459,7 @@ export async function runWorkflowWorkerOnce() {
         dataSourceTestProcessed ||
         terminalJobsReconciled > 0
       );
+    lastWorkflowJobClaimed = true;
     await processJob(job);
     return true;
   } finally {
@@ -467,7 +470,11 @@ export async function runWorkflowWorkerOnce() {
 
 export async function drainWorkflowJobs(maxJobs = 100) {
   let processed = 0;
-  while (processed < maxJobs && (await runWorkflowWorkerOnce())) processed += 1;
+  while (processed < maxJobs) {
+    await runWorkflowWorkerOnce();
+    if (!lastWorkflowJobClaimed) break;
+    processed += 1;
+  }
   return processed;
 }
 
