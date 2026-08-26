@@ -1985,7 +1985,7 @@ pnpm test:integration:provider
 - [~] **3F-P1-044** 已接入 Inline 与已验证 MySQL 只读 Connector：Source 节点读取内联样本或白名单 MySQL 表，执行限制行数和安全标识符校验；API/文件 Connector 仍未启用。
 - [~] **3F-P1-045** SQL 节点已执行已验证 MySQL 数据源的单条只读 SELECT，支持命名参数绑定、行数上限及禁止 DML/DDL/文件写出；SQL Parser、真实 Schema 推断和列级依赖仍待完成。
 - [~] **3F-P1-046** 已将 Filter、Project、Derive 拆分为独立节点和运行语义：Filter 支持确定性比较，Project 支持选择/重命名，Derive 仅允许字段引用、数值/布尔/字符串常量；复杂安全表达式与 Cast 仍待补齐。
-- [ ] **3F-P1-047** Join、Union、Aggregate、Sort、Deduplicate。
+- [~] **3F-P1-047** 已增加 Join、Union、Aggregate、Sort、Deduplicate 运行节点：Join 明确左右输入和键，Union 支持 all/distinct，Aggregate 支持 count/sum/min/max，Sort 与 Deduplicate 为确定性操作；发布期输入基数/Schema 校验仍需加强。
 - [ ] **3F-P1-048** Quality Gate 和隔离输出。
 - [ ] **3F-P1-049** Sink 写入权限、Schema 策略和幂等提交。
 - [ ] **3F-P1-050** 失败不提交水位，重启从 Checkpoint 恢复。

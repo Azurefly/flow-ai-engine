@@ -1441,6 +1441,128 @@ async function runDataflowDefinition(
           }),
           operation: "derive",
         };
+      } else if (String(node.type) === "join") {
+        const left = normalizeRows(inputs[0]?.rows ?? []);
+        const right = normalizeRows(inputs[1]?.rows ?? []);
+        const leftKeys = Array.isArray(config.leftKeys)
+          ? config.leftKeys.map(String)
+          : [];
+        const rightKeys = Array.isArray(config.rightKeys)
+          ? config.rightKeys.map(String)
+          : [];
+        const index = new Map<string, JsonRecord[]>();
+        for (const row of right) {
+          const key = JSON.stringify(rightKeys.map(field => row[field]));
+          const bucket = index.get(key) ?? [];
+          bucket.push(row);
+          index.set(key, bucket);
+        }
+        const rows: JsonRecord[] = [];
+        for (const row of left) {
+          const matches =
+            index.get(JSON.stringify(leftKeys.map(field => row[field]))) ?? [];
+          if (!matches.length && config.kind === "left") rows.push({ ...row });
+          for (const match of matches)
+            rows.push({
+              ...row,
+              ...Object.fromEntries(
+                Object.entries(match).map(([key, value]) => [
+                  Object.prototype.hasOwnProperty.call(row, key)
+                    ? `${String(config.rightPrefix ?? "right_")}${key}`
+                    : key,
+                  value,
+                ])
+              ),
+            });
+        }
+        output = { rows, operation: "join" };
+      } else if (String(node.type) === "union") {
+        let rows = rowsFromInput(inputs);
+        if (String(config.mode) === "distinct") {
+          const seen = new Set<string>();
+          rows = rows.filter(row => {
+            const key = JSON.stringify(row);
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        }
+        output = { rows, operation: "union" };
+      } else if (String(node.type) === "aggregate") {
+        const groupBy = Array.isArray(config.groupBy)
+          ? config.groupBy.map(String)
+          : [];
+        const metrics = Array.isArray(config.metrics) ? config.metrics : [];
+        const groups = new Map<string, JsonRecord[]>();
+        for (const row of rowsFromInput(inputs)) {
+          const key = JSON.stringify(groupBy.map(field => row[field]));
+          const bucket = groups.get(key) ?? [];
+          bucket.push(row);
+          groups.set(key, bucket);
+        }
+        output = {
+          rows: Array.from(groups.values()).map((bucket: JsonRecord[]) => {
+            const out: JsonRecord = {};
+            for (const field of groupBy) out[field] = bucket[0]?.[field];
+            for (const metric of metrics) {
+              const item = metric as JsonRecord;
+              const field = String(item.field ?? "");
+              const values = bucket
+                .map((row: JsonRecord) => Number(row[field]))
+                .filter(Number.isFinite);
+              const op = String(item.operation ?? "count");
+              out[String(item.name ?? field ?? "metric")] =
+                op === "count"
+                  ? bucket.length
+                  : op === "sum"
+                    ? values.reduce((a: number, b: number) => a + b, 0)
+                    : op === "min"
+                      ? Math.min(...values)
+                      : Math.max(...values);
+            }
+            return out;
+          }),
+          operation: "aggregate",
+        };
+      } else if (String(node.type) === "deduplicate") {
+        const keys = Array.isArray(config.keys) ? config.keys.map(String) : [];
+        const seen = new Set<string>();
+        output = {
+          rows: rowsFromInput(inputs).filter(row => {
+            const key = JSON.stringify(keys.map(field => row[field]));
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }),
+          operation: "deduplicate",
+        };
+      } else if (String(node.type) === "sort") {
+        const fields = Array.isArray(config.fields) ? config.fields : [];
+        const rows = [...rowsFromInput(inputs)];
+        rows.sort((left, right) => {
+          for (const item of fields) {
+            const field = String((item as JsonRecord)?.field ?? item);
+            const direction =
+              String((item as JsonRecord)?.direction ?? "asc").toLowerCase() ===
+              "desc"
+                ? -1
+                : 1;
+            const a = left[field];
+            const b = right[field];
+            if (a === b) continue;
+            return (
+              (a === undefined || a === null
+                ? -1
+                : b === undefined || b === null
+                  ? 1
+                  : a < b
+                    ? -1
+                    : 1) * direction
+            );
+          }
+          return 0;
+        });
+        output = { rows, operation: "sort" };
       } else if (String(node.type) === "transform") {
         let rows = rowsFromInput(inputs);
         if (
