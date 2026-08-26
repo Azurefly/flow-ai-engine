@@ -631,7 +631,8 @@ Human Task 服务
 - [~] **T0450 [DATA-001]** 新数据源现在固定为 `draft` 且 `lastTestedAt=NULL`，通用创建/更新 API 不能伪造已验证；独立只读连接测试 Job 已实现，需真实依赖环境验收。
 - [~] **T0451 [DATA-001]** 连接配置或凭据引用变化会清空 `lastTestedAt` 并重置验证状态；测试 Job 已绑定配置哈希并保存分类、延迟、目标主机和脱敏证据，真实网络/认证错误矩阵仍待验收。
 - [~] **T0460 [DATA-002]** UI 已明确声明当前数据流为实验性元数据/样例执行器，保存成功不代表连接可用；已增加 dataflow profile 不可变 ExecutionPlan、稳定 plan hash、运行快照校验及耐久 Worker。生产入口仍配置级默认关闭，真实 Connector 尚未补齐。
-- [ ] **T0461 [DATA-002]** 若正式建设，实现至少一个真实数据库 Connector、Schema 发现和参数化只读查询。
+- [~] **T0461 [DATA-002]** 已实现 Inline 与白名单 MySQL 只读 Connector、已验证数据源门禁、参数化 SELECT 和行数上限；真实 MySQL Schema 发现、列级依赖和生产验收仍待完成。
+- [~] **T0462 [DATA-002]** Filter、Project、Derive 已拆分为独立数据流节点并保留旧 Transform 兼容执行；复杂表达式和 Cast 仍待安全实现。
 - [~] **T0462 [DATA-002]** 已实现根 Job 耐久队列、租约/续租/过期回收、有界重试、逐节点运行事实和稳定顺序，以及租约保护下原子提交的 Dataset Artifact、Checkpoint 与 Artifact 依赖血缘；重试会恢复并跳过已成功节点。分页、节点超时、资源隔离、外部 Artifact 存储、列级血缘和水位提交仍待补齐。
 - [ ] **T0463 [DATA-002]** UDF 在 CPU/内存/时长/网络受限沙箱运行，并完成逃逸测试。
 
