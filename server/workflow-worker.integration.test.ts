@@ -88,7 +88,7 @@ describe("durable workflow worker", () => {
 
     expect(await drainWorkflowJobs(5)).toBe(1);
     const [runRows] = await pool.query<mysql.RowDataPacket[]>(
-      "SELECT status,finalOutputJson,executionLockToken FROM workflow_run WHERE id=?",
+      "SELECT status,finalOutputJson,errorJson,executionLockToken FROM workflow_run WHERE id=?",
       [first.runId]
     );
     const [jobRows] = await pool.query<mysql.RowDataPacket[]>(
