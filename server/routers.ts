@@ -150,12 +150,14 @@ import {
   deleteDataflowSchedule,
   deleteProjectPlugin,
   getDataflowRunLineage,
+  listDataSourceTests,
   listDataflowRuns,
   listDataflowSchedules,
   listDataflows,
   listDataResources,
   pauseDataflowSchedule,
   runDataflow,
+  testDataSource,
   saveDataflowScheduleDraft,
   updateDataAsset,
   updateDataSource,
@@ -895,6 +897,23 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => getDataflowRunLineage(ctx.user, input)),
+    testSource: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          sourceId: z.string().min(8).max(64),
+        })
+      )
+      .mutation(({ ctx, input }) => testDataSource(ctx.user, input)),
+    sourceTests: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          sourceId: z.string().min(8).max(64).optional(),
+          limit: z.number().int().min(1).max(100).optional(),
+        })
+      )
+      .query(({ ctx, input }) => listDataSourceTests(ctx.user, input)),
     schedules: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) =>

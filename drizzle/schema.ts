@@ -997,6 +997,76 @@ export const dataSources = mysqlTable(
   ]
 );
 
+export const dataSourceTestRuns = mysqlTable(
+  "data_source_test_run",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 })
+      .notNull()
+      .references(() => flowProjects.id, { onDelete: "cascade" }),
+    sourceId: varchar("sourceId", { length: 36 })
+      .notNull()
+      .references(() => dataSources.id, { onDelete: "cascade" }),
+    sourceType: mysqlEnum("sourceType", [
+      "jdbc",
+      "api",
+      "file",
+      "inline",
+    ]).notNull(),
+    status: mysqlEnum("status", [
+      "queued",
+      "leased",
+      "success",
+      "failed",
+      "cancelled",
+    ])
+      .default("queued")
+      .notNull(),
+    configHash: varchar("configHash", { length: 64 }).notNull(),
+    attempt: int("attempt").default(0).notNull(),
+    maxAttempts: int("maxAttempts").default(2).notNull(),
+    availableAt: timestamp("availableAt").defaultNow().notNull(),
+    leaseToken: varchar("leaseToken", { length: 48 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    workerId: varchar("workerId", { length: 96 }),
+    endpointHost: varchar("endpointHost", { length: 255 }),
+    errorCategory: mysqlEnum("errorCategory", [
+      "policy",
+      "configuration",
+      "dns",
+      "network",
+      "timeout",
+      "authentication",
+      "authorization",
+      "database",
+      "unsupported",
+      "stale_configuration",
+      "internal",
+    ]),
+    evidenceJson: json("evidenceJson"),
+    errorJson: json("errorJson"),
+    latencyMs: int("latencyMs"),
+    requestId: varchar("requestId", { length: 100 }),
+    triggeredByUserId: int("triggeredByUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    startedAt: timestamp("startedAt"),
+    finishedAt: timestamp("finishedAt"),
+  },
+  table => [
+    index("data_source_test_run_claim_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+    index("data_source_test_run_source_created_idx").on(
+      table.sourceId,
+      table.createdAt
+    ),
+  ]
+);
+
 /** Discoverable project resources derived from a source, such as tables, files, endpoints and views. */
 export const dataAssets = mysqlTable(
   "data_asset",

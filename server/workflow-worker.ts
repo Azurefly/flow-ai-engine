@@ -10,7 +10,7 @@ import {
   type WorkflowCheckpoint,
 } from "./workflow-engine";
 import { notifyOwner } from "./_core/notification";
-import { runDataflowJobOnce } from "./p2-service";
+import { runDataflowJobOnce, runDataSourceTestJobOnce } from "./p2-service";
 
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type JsonRecord = Record<string, unknown>;
@@ -446,6 +446,7 @@ export async function runWorkflowWorkerOnce() {
     await reconcileWorkflowContinuations();
     const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
     const dataflowProcessed = await runDataflowJobOnce();
+    const dataSourceTestProcessed = await runDataSourceTestJobOnce();
     const job = await claimNextJob();
     if (!job)
       return (
@@ -453,6 +454,7 @@ export async function runWorkflowWorkerOnce() {
         waitsTriggered > 0 ||
         taskSchedulesFired > 0 ||
         dataflowProcessed ||
+        dataSourceTestProcessed ||
         terminalJobsReconciled > 0
       );
     await processJob(job);

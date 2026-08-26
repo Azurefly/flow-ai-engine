@@ -15,6 +15,8 @@ import {
   compileWorkflowDefinition,
   type WorkflowExecutionPlan,
 } from "./workflow-compiler";
+import { probeSafeHttpEndpoint } from "./workflow-engine";
+import { resolveExternalSecret } from "./service-endpoint-service";
 
 type JsonRecord = Record<string, unknown>;
 type ResourceKind = "source" | "asset" | "udf" | "tag" | "plugin";
@@ -258,6 +260,467 @@ export async function updateDataSource(
     ]
   );
   return true;
+}
+
+type DataSourceTestCategory =
+  | "policy"
+  | "configuration"
+  | "dns"
+  | "network"
+  | "timeout"
+  | "authentication"
+  | "authorization"
+  | "database"
+  | "unsupported"
+  | "stale_configuration"
+  | "internal";
+
+class DataSourceTestFailure extends Error {
+  constructor(
+    readonly category: DataSourceTestCategory,
+    message: string,
+    readonly evidence: JsonRecord = {}
+  ) {
+    super(message);
+    this.name = "DataSourceTestFailure";
+  }
+}
+
+function sourceConfigHash(
+  sourceType: string,
+  connection: unknown,
+  credentialRef: unknown
+) {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        sourceType,
+        connection: connection ?? {},
+        credentialRef: credentialRef ?? null,
+      })
+    )
+    .digest("hex");
+}
+
+function classifyDataSourceTestError(error: unknown): DataSourceTestFailure {
+  if (error instanceof DataSourceTestFailure) return error;
+  const message = error instanceof Error ? error.message : String(error);
+  if (/timed out|timeout|ETIMEDOUT|请求超时/i.test(message))
+    return new DataSourceTestFailure("timeout", "连接测试超时。");
+  if (/ENOTFOUND|EAI_AGAIN|getaddrinfo|DNS/i.test(message))
+    return new DataSourceTestFailure("dns", "连接地址无法解析。");
+  if (/ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETUNREACH/i.test(message))
+    return new DataSourceTestFailure("network", "目标网络连接失败。");
+  if (/access denied|authentication|invalid password|1045/i.test(message))
+    return new DataSourceTestFailure("authentication", "凭据认证失败。");
+  if (
+    /command denied|permission denied|not authorized|1142|42000/i.test(message)
+  )
+    return new DataSourceTestFailure(
+      "authorization",
+      "账号没有访问数据库的权限。"
+    );
+  if (/SecretRef|凭据引用|未配置|credential/i.test(message))
+    return new DataSourceTestFailure("configuration", "凭据引用无效或未配置。");
+  if (/unknown database|database .*does not exist|1049/i.test(message))
+    return new DataSourceTestFailure("database", "数据库不存在或不可用。");
+  return new DataSourceTestFailure("internal", "连接测试失败。");
+}
+
+function connectorAllowedHost(host: string) {
+  const allowed = String(process.env.DATA_CONNECTOR_ALLOWED_HOSTS ?? "")
+    .split(",")
+    .map(value => value.trim().toLowerCase())
+    .filter(Boolean);
+  return allowed.includes(host.toLowerCase());
+}
+
+async function executeDataSourceProbe(source: {
+  sourceType: string;
+  connection: JsonRecord;
+  credentialRef: string | null;
+}) {
+  const connection = source.connection;
+  if (source.sourceType === "inline")
+    return {
+      endpointHost: null,
+      evidence: { probe: "inline_metadata", readOnly: true, verified: true },
+      latencyMs: 0,
+    };
+  if (source.sourceType === "file")
+    throw new DataSourceTestFailure(
+      "unsupported",
+      "文件数据源尚未启用服务端受控读取器。"
+    );
+  const endpoint = String(connection.endpoint ?? "").trim();
+  if (!endpoint)
+    throw new DataSourceTestFailure("configuration", "连接地址不能为空。");
+  if (source.sourceType === "api") {
+    let url: URL;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      throw new DataSourceTestFailure(
+        "configuration",
+        "API 地址不是合法 URL。"
+      );
+    }
+    const headers: Record<string, string> = {};
+    if (source.credentialRef) {
+      const token = resolveExternalSecret(source.credentialRef);
+      headers[String(connection.authHeaderName ?? "Authorization")] =
+        `${String(connection.authScheme ?? "Bearer")} ${token}`;
+    }
+    let probe;
+    try {
+      probe = await probeSafeHttpEndpoint(url.toString(), headers);
+    } catch (error) {
+      throw classifyDataSourceTestError(error);
+    }
+    if (probe.status === 401)
+      throw new DataSourceTestFailure("authentication", "API 凭据认证失败.", {
+        httpStatus: probe.status,
+      });
+    if (probe.status === 403)
+      throw new DataSourceTestFailure(
+        "authorization",
+        "API 账号没有访问权限。",
+        { httpStatus: probe.status }
+      );
+    if (probe.status < 200 || probe.status >= 300)
+      throw new DataSourceTestFailure(
+        "network",
+        `API 探测返回 HTTP ${probe.status}。`,
+        { httpStatus: probe.status }
+      );
+    return {
+      endpointHost: probe.host,
+      latencyMs: probe.latencyMs,
+      evidence: {
+        probe: "http_get",
+        httpStatus: probe.status,
+        responseBytes: probe.bytes,
+        readOnly: true,
+        verified: true,
+      },
+    };
+  }
+  if (source.sourceType === "jdbc") {
+    let url: URL;
+    try {
+      url = new URL(endpoint);
+    } catch {
+      throw new DataSourceTestFailure(
+        "configuration",
+        "JDBC 地址不是合法 URL。"
+      );
+    }
+    if (url.protocol !== "mysql:")
+      throw new DataSourceTestFailure(
+        "configuration",
+        "JDBC 数据源测试目前仅支持 mysql:// 地址。"
+      );
+    const host = url.hostname.toLowerCase();
+    if (!connectorAllowedHost(host))
+      throw new DataSourceTestFailure(
+        "policy",
+        "JDBC 主机不在 DATA_CONNECTOR_ALLOWED_HOSTS 白名单中。",
+        { host }
+      );
+    let credentials: JsonRecord = {};
+    if (source.credentialRef) {
+      const secret = resolveExternalSecret(source.credentialRef);
+      try {
+        credentials = JSON.parse(secret) as JsonRecord;
+      } catch {
+        throw new DataSourceTestFailure(
+          "configuration",
+          "JDBC SecretRef 必须是 JSON 凭据对象。",
+          { host }
+        );
+      }
+    }
+    const startedAt = Date.now();
+    let connectionHandle: mysql.Connection | undefined;
+    try {
+      connectionHandle = await mysql.createConnection({
+        host,
+        port: Number(url.port || 3306),
+        database: url.pathname.replace(/^\//, "") || undefined,
+        user: String(credentials.username ?? connection.username ?? ""),
+        password: String(credentials.password ?? ""),
+        connectTimeout: 8_000,
+        ssl: connection.ssl === true ? {} : undefined,
+      });
+      await connectionHandle.query("SELECT 1 AS ok");
+    } catch (error) {
+      throw classifyDataSourceTestError(error);
+    } finally {
+      await connectionHandle?.end().catch(() => undefined);
+    }
+    return {
+      endpointHost: host,
+      latencyMs: Date.now() - startedAt,
+      evidence: {
+        probe: "mysql_select_1",
+        host,
+        port: Number(url.port || 3306),
+        readOnly: true,
+        verified: true,
+      },
+    };
+  }
+  throw new DataSourceTestFailure(
+    "unsupported",
+    `数据源类型 ${source.sourceType} 尚未启用测试器。`
+  );
+}
+
+type ClaimedDataSourceTest = {
+  id: string;
+  projectId: string;
+  sourceId: string;
+  sourceType: string;
+  connection: JsonRecord;
+  credentialRef: string | null;
+  configHash: string;
+  leaseToken: string;
+  attempt: number;
+  maxAttempts: number;
+  requestId: string | null;
+};
+
+async function claimDataSourceTest(
+  requestedJobId?: string
+): Promise<ClaimedDataSourceTest | null> {
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    // An expired lease at the attempt limit can never be reclaimed. Finalize it
+    // before selecting work so a crashed worker cannot leave a permanent lease.
+    await connection.query(
+      "UPDATE data_source_test_run SET status='failed',errorCategory='internal',errorJson=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE status='leased' AND leaseExpiresAt<NOW() AND attempt>=maxAttempts",
+      [
+        JSON.stringify({
+          message: "数据源测试 Worker 租约过期且已达到最大尝试次数。",
+        }),
+      ]
+    );
+    const where = [
+      "t.attempt<t.maxAttempts",
+      "((t.status='queued' AND t.availableAt<=NOW()) OR (t.status='leased' AND t.leaseExpiresAt<NOW()))",
+    ];
+    const params: unknown[] = [];
+    if (requestedJobId) {
+      where.push("t.id=?");
+      params.push(requestedJobId);
+    }
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT t.id,t.projectId,t.sourceId,t.sourceType,t.configHash,t.attempt,t.maxAttempts,t.requestId,
+              t.status,s.connectionJson,s.credentialRef
+         FROM data_source_test_run t JOIN data_source s ON s.id=t.sourceId AND s.projectId=t.projectId
+        WHERE ${where.join(" AND ")}
+        ORDER BY t.availableAt,t.createdAt LIMIT 1 FOR UPDATE SKIP LOCKED`,
+      params
+    );
+    const row = rows[0];
+    if (!row) {
+      await connection.commit();
+      return null;
+    }
+    const token = randomUUID().replaceAll("-", "").slice(0, 48);
+    const [claimed] = await connection.query<mysql.ResultSetHeader>(
+      `UPDATE data_source_test_run SET status='leased',attempt=attempt+1,leaseToken=?,leaseExpiresAt=DATE_ADD(NOW(),INTERVAL 60 SECOND),workerId=?,startedAt=COALESCE(startedAt,NOW())
+        WHERE id=? AND ((status='queued' AND availableAt<=NOW()) OR (status='leased' AND leaseExpiresAt<NOW()))`,
+      [token, dataflowWorkerId, row.id]
+    );
+    if (!claimed.affectedRows) {
+      await connection.rollback();
+      return null;
+    }
+    await connection.commit();
+    return {
+      id: String(row.id),
+      projectId: String(row.projectId),
+      sourceId: String(row.sourceId),
+      sourceType: String(row.sourceType),
+      connection: parseJson(row.connectionJson, {}) as JsonRecord,
+      credentialRef: row.credentialRef ? String(row.credentialRef) : null,
+      configHash: String(row.configHash),
+      leaseToken: token,
+      attempt: Number(row.attempt ?? 0) + 1,
+      maxAttempts: Number(row.maxAttempts ?? 2),
+      requestId: row.requestId ? String(row.requestId) : null,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function processDataSourceTest(job: ClaimedDataSourceTest) {
+  const startedAt = Date.now();
+  try {
+    const result = await executeDataSourceProbe(job);
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [sourceRows] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT connectionJson,credentialRef,sourceType FROM data_source WHERE id=? AND projectId=? LIMIT 1 FOR UPDATE",
+        [job.sourceId, job.projectId]
+      );
+      const source = sourceRows[0];
+      const currentHash = source
+        ? sourceConfigHash(
+            source.sourceType,
+            parseJson(source.connectionJson, {}),
+            source.credentialRef
+          )
+        : "";
+      if (!source || currentHash !== job.configHash)
+        throw new DataSourceTestFailure(
+          "stale_configuration",
+          "数据源配置在测试期间发生变化。",
+          { configChanged: true }
+        );
+      const [updated] = await connection.query<mysql.ResultSetHeader>(
+        "UPDATE data_source_test_run SET status='success',endpointHost=?,evidenceJson=?,errorCategory=NULL,errorJson=NULL,latencyMs=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND status='leased' AND leaseToken=?",
+        [
+          result.endpointHost,
+          JSON.stringify(result.evidence),
+          result.latencyMs ?? Date.now() - startedAt,
+          job.id,
+          job.leaseToken,
+        ]
+      );
+      if (!updated.affectedRows) throw new Error("数据源测试 Job 租约已失效。");
+      await connection.query(
+        "UPDATE data_source SET status='verified',lastTestedAt=NOW(),updatedAt=NOW() WHERE id=? AND projectId=?",
+        [job.sourceId, job.projectId]
+      );
+      await connection.commit();
+      return true;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    const failure = classifyDataSourceTestError(error);
+    const retryable =
+      ["dns", "network", "timeout"].includes(failure.category) &&
+      job.attempt < job.maxAttempts;
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [updated] = await connection.query<mysql.ResultSetHeader>(
+        `UPDATE data_source_test_run SET status=?,errorCategory=?,errorJson=?,availableAt=IF(?='queued',DATE_ADD(NOW(),INTERVAL 5 SECOND),availableAt),leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=IF(?='failed',NOW(),NULL),latencyMs=? WHERE id=? AND status='leased' AND leaseToken=?`,
+        [
+          retryable ? "queued" : "failed",
+          failure.category,
+          JSON.stringify({ message: failure.message, ...failure.evidence }),
+          retryable ? "queued" : "failed",
+          retryable ? "queued" : "failed",
+          Date.now() - startedAt,
+          job.id,
+          job.leaseToken,
+        ]
+      );
+      if (!updated.affectedRows)
+        throw new Error("数据源测试失败处理时租约已失效。");
+      await connection.commit();
+    } catch (releaseError) {
+      await connection.rollback();
+      throw releaseError;
+    } finally {
+      connection.release();
+    }
+    return false;
+  }
+}
+
+export async function runDataSourceTestJobOnce(requestedJobId?: string) {
+  const job = await claimDataSourceTest(requestedJobId);
+  if (!job) return false;
+  await processDataSourceTest(job);
+  return true;
+}
+
+export async function testDataSource(
+  user: DataflowUser,
+  input: { projectId: string; sourceId: string }
+) {
+  await requireProjectAccess(user, input.projectId, "edit");
+  const [sources] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,projectId,sourceType,connectionJson,credentialRef FROM data_source WHERE id=? AND projectId=? LIMIT 1",
+    [input.sourceId, input.projectId]
+  );
+  const source = sources[0];
+  if (!source) throw new Error("数据源不存在或不属于当前项目。");
+  const configHash = sourceConfigHash(
+    source.sourceType,
+    parseJson(source.connectionJson, {}),
+    source.credentialRef
+  );
+  const testId = id();
+  await db().query(
+    "INSERT INTO data_source_test_run (id,projectId,sourceId,sourceType,status,configHash,maxAttempts,requestId,triggeredByUserId) VALUES (?,?,?,?, 'queued',?,?,?,?)",
+    [
+      testId,
+      input.projectId,
+      input.sourceId,
+      source.sourceType,
+      configHash,
+      2,
+      currentRequestId() ?? null,
+      user.id,
+    ]
+  );
+  // Try this exact job once for fast feedback; the process worker remains the
+  // durable fallback if another worker already claimed it or the probe is slow.
+  await runDataSourceTestJobOnce(testId);
+  const [runs] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,status,errorCategory,evidenceJson,errorJson,endpointHost,latencyMs,createdAt,startedAt,finishedAt FROM data_source_test_run WHERE id=? LIMIT 1",
+    [testId]
+  );
+  const run = runs[0];
+  return {
+    ...run,
+    evidence: parseJson(run?.evidenceJson, null),
+    error: parseJson(run?.errorJson, null),
+    evidenceJson: undefined,
+    errorJson: undefined,
+  };
+}
+
+export async function listDataSourceTests(
+  user: DataflowUser,
+  input: { projectId: string; sourceId?: string; limit?: number }
+) {
+  await requireProjectAccess(user, input.projectId, "view");
+  const clauses = ["t.projectId=?"];
+  const params: unknown[] = [input.projectId];
+  if (input.sourceId) {
+    clauses.push("t.sourceId=?");
+    params.push(input.sourceId);
+  }
+  params.push(Math.min(Math.max(input.limit ?? 30, 1), 100));
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT t.id,t.sourceId,s.name AS sourceName,t.sourceType,t.status,t.errorCategory,t.endpointHost,t.evidenceJson,t.errorJson,t.latencyMs,t.requestId,t.createdAt,t.startedAt,t.finishedAt
+       FROM data_source_test_run t JOIN data_source s ON s.id=t.sourceId
+      WHERE ${clauses.join(" AND ")} ORDER BY t.createdAt DESC LIMIT ?`,
+    params
+  );
+  return rows.map(row => ({
+    ...row,
+    evidence: parseJson(row.evidenceJson, null),
+    error: parseJson(row.errorJson, null),
+    evidenceJson: undefined,
+    errorJson: undefined,
+  }));
 }
 
 export async function deleteDataSource(
@@ -578,6 +1041,165 @@ function rowsFromInput(values: unknown[]) {
   );
 }
 
+function assertReadOnlySql(statement: string) {
+  const normalized = statement.trim();
+  if (
+    !/^select\b/i.test(normalized) ||
+    /;|\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|call|load)\b/i.test(
+      normalized
+    )
+  )
+    throw new Error("SQL 节点仅支持单条只读 SELECT 语句。 ");
+  if (
+    /into\s+(outfile|dumpfile)|\bfor\s+update\b|lock\s+in\s+share\s+mode/i.test(
+      normalized
+    )
+  )
+    throw new Error("SQL 节点禁止文件写出。 ");
+  return normalized;
+}
+
+async function loadVerifiedConnector(projectId: string, sourceId: string) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,sourceType,status,connectionJson,credentialRef FROM data_source WHERE id=? AND projectId=? LIMIT 1",
+    [sourceId, projectId]
+  );
+  const source = rows[0];
+  if (!source) throw new Error("数据源不存在或不属于当前项目。 ");
+  if (source.sourceType !== "inline" && source.status !== "verified")
+    throw new Error("数据源尚未通过连接测试，禁止执行读取。 ");
+  const connection = parseJson(source.connectionJson, {}) as JsonRecord;
+  return {
+    sourceType: String(source.sourceType),
+    status: String(source.status),
+    connection,
+    credentialRef: source.credentialRef ? String(source.credentialRef) : null,
+  };
+}
+
+async function withMysqlConnector<T>(
+  source: { connection: JsonRecord; credentialRef: string | null },
+  run: (connection: mysql.Connection) => Promise<T>
+) {
+  const endpoint = String(source.connection.endpoint ?? "").trim();
+  let url: URL;
+  try {
+    url = new URL(endpoint);
+  } catch {
+    throw new Error("MySQL 数据源地址不是合法 URL。 ");
+  }
+  if (url.protocol !== "mysql:")
+    throw new Error("当前仅支持 mysql:// 数据源。 ");
+  const host = url.hostname.toLowerCase();
+  if (!connectorAllowedHost(host))
+    throw new Error("MySQL 主机不在 DATA_CONNECTOR_ALLOWED_HOSTS 白名单中。 ");
+  let credentials: JsonRecord = {};
+  if (source.credentialRef) {
+    const secret = resolveExternalSecret(source.credentialRef);
+    try {
+      credentials = JSON.parse(secret) as JsonRecord;
+    } catch {
+      throw new Error("MySQL SecretRef 必须是 JSON 凭据对象。 ");
+    }
+  }
+  const handle = await mysql.createConnection({
+    host,
+    port: Number(url.port || 3306),
+    database: url.pathname.replace(/^\//, "") || undefined,
+    user: String(credentials.username ?? source.connection.username ?? ""),
+    password: String(credentials.password ?? ""),
+    connectTimeout: 8_000,
+    ssl: source.connection.ssl === true ? {} : undefined,
+  });
+  try {
+    return await run(handle);
+  } finally {
+    await handle.end().catch(() => undefined);
+  }
+}
+
+async function readConnectorAsset(
+  projectId: string,
+  assetId: string,
+  options: { columns?: string[]; limit?: number } = {}
+) {
+  const [assets] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,name,assetType,schemaJson,sampleJson,sourceId,status FROM data_asset WHERE id=? AND projectId=? AND status='active' LIMIT 1",
+    [assetId, projectId]
+  );
+  const asset = assets[0];
+  if (!asset) throw new Error("数据资源不存在、已停用或不属于当前项目。 ");
+  if (!asset.sourceId)
+    return {
+      rows: normalizeRows(parseJson(asset.sampleJson, [])),
+      schema: parseJson(asset.schemaJson, []),
+    };
+  const source = await loadVerifiedConnector(projectId, String(asset.sourceId));
+  if (source.sourceType === "inline")
+    return {
+      rows: normalizeRows(parseJson(asset.sampleJson, [])),
+      schema: parseJson(asset.schemaJson, []),
+    };
+  if (source.sourceType !== "jdbc")
+    throw new Error(
+      `数据源类型 ${source.sourceType} 尚未启用数据读取 Connector。`
+    );
+  const identifier = String(asset.name ?? "");
+  if (!/^[A-Za-z_][A-Za-z0-9_$]*$/.test(identifier))
+    throw new Error("MySQL 表名必须是安全标识符。 ");
+  const columns = (options.columns ?? []).map(String).filter(Boolean);
+  if (columns.some(column => !/^[A-Za-z_][A-Za-z0-9_$]*$/.test(column)))
+    throw new Error("Source 节点列名必须是安全标识符。 ");
+  const projection = columns.length
+    ? columns.map(column => `\`${column}\``).join(",")
+    : "*";
+  const limit = Math.min(
+    Math.max(Math.trunc(Number(options.limit ?? 200)), 1),
+    1_000
+  );
+  const result = await withMysqlConnector(source, connection =>
+    connection.query<mysql.RowDataPacket[]>(
+      `SELECT ${projection} FROM \`${identifier}\` LIMIT ?`,
+      [limit]
+    )
+  );
+  return {
+    rows: normalizeRows(result[0]),
+    schema: parseJson(asset.schemaJson, []),
+  };
+}
+
+async function executeSqlConnector(
+  projectId: string,
+  sourceId: string,
+  statement: string,
+  parameters: JsonRecord = {},
+  maxRows = 1_000
+) {
+  const safeStatement = assertReadOnlySql(statement);
+  const source = await loadVerifiedConnector(projectId, sourceId);
+  if (source.sourceType !== "jdbc")
+    throw new Error("SQL Connector 目前仅支持已验证的 MySQL 数据源。 ");
+  const values: unknown[] = [];
+  const bound = safeStatement.replace(
+    /:([A-Za-z_][A-Za-z0-9_]*)/g,
+    (_, name: string) => {
+      if (!Object.prototype.hasOwnProperty.call(parameters, name))
+        throw new Error(`SQL 参数 ${name} 未提供。`);
+      values.push(parameters[name]);
+      return "?";
+    }
+  );
+  const limit = Math.min(Math.max(Math.trunc(Number(maxRows)), 1), 1_000);
+  const result = await withMysqlConnector(source, connection =>
+    connection.query<mysql.RowDataPacket[]>(
+      `SELECT * FROM (${bound}) AS _flow_query LIMIT ${limit}`,
+      values
+    )
+  );
+  return normalizeRows(result[0]);
+}
+
 export function compileDataflowExecutionPlan(definition: unknown) {
   const compiled = compileWorkflowDefinition(definition, { flowType: "data" });
   if (!compiled.plan.topologicalOrder)
@@ -727,19 +1349,17 @@ async function runDataflowDefinition(
         output = { rows: rowsFromInput(inputs), stage: "start" };
       else if (["source", "data_source", "table"].includes(String(node.type))) {
         const assetId = String(config.assetId ?? "");
-        const [assets] = await db().query<mysql.RowDataPacket[]>(
-          "SELECT * FROM data_asset WHERE id=? AND projectId=? AND status='active' LIMIT 1",
-          [assetId, projectId]
-        );
-        if (!assets[0])
-          throw new Error(
-            `节点 ${node.name ?? node.data?.label ?? nodeId} 引用的数据资源不存在、已停用或不属于当前项目。`
-          );
+        const asset = await readConnectorAsset(projectId, assetId, {
+          columns: Array.isArray(config.columns)
+            ? config.columns.map(String)
+            : undefined,
+          limit: Number(config.limit ?? 200),
+        });
         output = {
           assetId,
-          assetName: assets[0].name,
-          rows: normalizeRows(parseJson(assets[0].sampleJson, [])),
-          schema: parseJson(assets[0].schemaJson, []),
+          rows: asset.rows,
+          schema: asset.schema,
+          execution: "connector_read",
         };
       } else if (["transform", "filter", "map"].includes(String(node.type))) {
         let rows = rowsFromInput(inputs);
@@ -771,19 +1391,21 @@ async function runDataflowDefinition(
         const statement = String(
           config.statement ?? config.sql ?? config.query ?? ""
         ).trim();
-        if (
-          !/^select\s+/i.test(statement) ||
-          /;|\b(insert|update|delete|drop|alter|create|grant|revoke)\b/i.test(
-            statement
-          )
-        )
-          throw new Error(
-            "SQL 节点仅支持单条只读 SELECT 计划；禁止写入和 DDL。 "
-          );
-        output = {
-          rows: rowsFromInput(inputs),
+        const datasourceId = String(
+          config.datasourceId ?? config.sourceId ?? ""
+        );
+        if (!datasourceId) throw new Error("SQL 节点缺少 datasourceId。 ");
+        const rows = await executeSqlConnector(
+          projectId,
+          datasourceId,
           statement,
-          execution: "validated_read_plan",
+          (config.parameters ?? {}) as JsonRecord,
+          Number(config.maxRows ?? 1_000)
+        );
+        output = {
+          rows,
+          statement,
+          execution: "mysql_read_connector",
         };
       } else if (String(node.type) === "udf") {
         const udfId = String(config.udfId ?? "");

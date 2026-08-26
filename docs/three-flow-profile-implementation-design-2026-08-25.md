@@ -1981,9 +1981,9 @@ pnpm test:integration:provider
 - [~] **3F-P1-040** 数据 ExecutionPlan V2 和 plan hash。已在发布阶段编译 dataflow profile 不可变计划，运行时校验 SHA-256 哈希并仅按计划拓扑顺序执行；dataflow_run 固化定义、计划、哈希和 requestId。待真实 MySQL 迁移与运行快照验收后完成。
 - [~] **3F-P1-041** 已增加 `dataflow_run_job / dataflow_node_run` 耐久运行表：运行与根 Job 同事务创建，Worker 通过 `FOR UPDATE SKIP LOCKED`、租约、续租、过期回收和有界退避执行；每个节点固化稳定顺序、输入、输出、行数、耗时、Attempt 和失败事实，损坏计划会终止对应 Job 而不会永久毒化队列。待真实 MySQL 迁移、并发领取、进程重启和租约故障注入验收后完成。
 - [~] **3F-P1-042** 已实现逐节点 Dataset Artifact、Run Checkpoint 和 Artifact 级 Lineage：节点提交在有效 Job 租约下原子写入 NodeRun、Artifact、依赖边与 Checkpoint，租约交接后的旧 Worker 不能覆盖新 Attempt；重试从成功 Artifact 恢复并跳过已提交节点，运行审计提供项目权限保护的 Artifact/Lineage 查询。当前仅支持有界 `inline_json` Artifact 和节点依赖级血缘；外部对象存储、列级映射、水位提交及真实 MySQL 崩溃恢复验收仍待完成。
-- [ ] **3F-P1-043** 数据源真实连接测试 Job 和证据模型。
-- [ ] **3F-P1-044** Inline 与 MySQL 只读 Connector。
-- [ ] **3F-P1-045** 真实 SQL Source、参数绑定和 Schema 推断。
+- [~] **3F-P1-043** 已增加独立 `data_source_test_run` Job：配置哈希绑定、租约/过期回收、真实 API GET 与受白名单约束的 MySQL `SELECT 1` 探测、内联元数据探测，以及策略/DNS/网络/超时/认证/授权/数据库/配置漂移分类。仅成功测试可把数据源原子标记为 `verified`，证据脱敏且不保存凭据；文件读取器和真实 MySQL/Provider 验收仍待完成。
+- [~] **3F-P1-044** 已接入 Inline 与已验证 MySQL 只读 Connector：Source 节点读取内联样本或白名单 MySQL 表，执行限制行数和安全标识符校验；API/文件 Connector 仍未启用。
+- [~] **3F-P1-045** SQL 节点已执行已验证 MySQL 数据源的单条只读 SELECT，支持命名参数绑定、行数上限及禁止 DML/DDL/文件写出；SQL Parser、真实 Schema 推断和列级依赖仍待完成。
 - [ ] **3F-P1-046** Filter、Project、Derive 分离实现。
 - [ ] **3F-P1-047** Join、Union、Aggregate、Sort、Deduplicate。
 - [ ] **3F-P1-048** Quality Gate 和隔离输出。

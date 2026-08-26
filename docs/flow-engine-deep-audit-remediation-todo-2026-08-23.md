@@ -628,8 +628,8 @@ Human Task 服务
 - [~] **T0431 [HTTP-001]** 已覆盖 localhost、IPv4、IPv6 与 IPv4-mapped IPv6 私网拒绝，并固定解析地址消除 DNS 重绑定窗口；编码 IP 变体、真实 DNS 切换和私网重定向故障注入仍待完成。
 - [~] **T0440 [HTTP-002]** 已有节点 requestId、稳定幂等键、请求/响应摘要脱敏；独立 SecretRef 注入和租户域名白名单仍待完成。
 - [~] **T0441 [HTTP-002]** 实现分类重试、退避、熔断、并发限制和 POST 幂等键。Worker 已有有界退避，POST/PUT/PATCH/DELETE 会注入稳定节点幂等键；熔断和并发限制未实现。
-- [~] **T0450 [DATA-001]** 新数据源现在固定为 `draft` 且 `lastTestedAt=NULL`，通用创建/更新 API 不能伪造已验证；独立只读连接测试 Job 尚未实现。
-- [~] **T0451 [DATA-001]** 连接配置或凭据引用变化会清空 `lastTestedAt` 并重置验证状态；真实连接测试的脱敏证据模型尚未实现。
+- [~] **T0450 [DATA-001]** 新数据源现在固定为 `draft` 且 `lastTestedAt=NULL`，通用创建/更新 API 不能伪造已验证；独立只读连接测试 Job 已实现，需真实依赖环境验收。
+- [~] **T0451 [DATA-001]** 连接配置或凭据引用变化会清空 `lastTestedAt` 并重置验证状态；测试 Job 已绑定配置哈希并保存分类、延迟、目标主机和脱敏证据，真实网络/认证错误矩阵仍待验收。
 - [~] **T0460 [DATA-002]** UI 已明确声明当前数据流为实验性元数据/样例执行器，保存成功不代表连接可用；已增加 dataflow profile 不可变 ExecutionPlan、稳定 plan hash、运行快照校验及耐久 Worker。生产入口仍配置级默认关闭，真实 Connector 尚未补齐。
 - [ ] **T0461 [DATA-002]** 若正式建设，实现至少一个真实数据库 Connector、Schema 发现和参数化只读查询。
 - [~] **T0462 [DATA-002]** 已实现根 Job 耐久队列、租约/续租/过期回收、有界重试、逐节点运行事实和稳定顺序，以及租约保护下原子提交的 Dataset Artifact、Checkpoint 与 Artifact 依赖血缘；重试会恢复并跳过已成功节点。分页、节点超时、资源隔离、外部 Artifact 存储、列级血缘和水位提交仍待补齐。
