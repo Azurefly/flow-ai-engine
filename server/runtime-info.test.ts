@@ -10,6 +10,7 @@ const serverSource = readFileSync(
   new URL("./_core/index.ts", import.meta.url),
   "utf8"
 );
+const runtimeSource = readFileSync(new URL("./runtime-info.ts", import.meta.url), "utf8");
 
 describe("runtime identity and readiness contract", () => {
   it("publishes stable build, migration, worker and capability fields without secrets", () => {
@@ -34,5 +35,9 @@ describe("runtime identity and readiness contract", () => {
     expect(serverSource).toContain('app.get("/readyz"');
     expect(serverSource).toContain('app.get("/version"');
     expect(serverSource).toContain("checkReadiness()");
+  });
+
+  it("includes the data source test job table in the migration gate", () => {
+    expect(runtimeSource).toContain("data_source_test_run");
   });
 });

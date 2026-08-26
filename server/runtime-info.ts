@@ -81,7 +81,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
