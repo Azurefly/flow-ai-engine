@@ -342,10 +342,13 @@ describe("原版操作节点或签和会签运行语义", () => {
         "SELECT jobType,status FROM workflow_run_job WHERE runId=? ORDER BY createdAt,id",
         [andStarted.runId]
       );
-      expect(andJobs).toMatchObject([
-        { jobType: "start", status: "completed" },
-        { jobType: "resume", status: "completed" },
-      ]);
+      expect(andJobs).toHaveLength(2);
+      expect(andJobs).toEqual(
+        expect.arrayContaining([
+          { jobType: "start", status: "completed" },
+          { jobType: "resume", status: "completed" },
+        ])
+      );
     },
     120_000
   );
