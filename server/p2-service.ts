@@ -1361,7 +1361,87 @@ async function runDataflowDefinition(
           schema: asset.schema,
           execution: "connector_read",
         };
-      } else if (["transform", "filter", "map"].includes(String(node.type))) {
+      } else if (String(node.type) === "filter") {
+        const rows = rowsFromInput(inputs);
+        const field = String(config.filterField ?? "").trim();
+        const expected = config.filterValue;
+        const operator = String(config.operator ?? "equals");
+        output = {
+          rows: rows.filter(row => {
+            const actual = row[field];
+            if (operator === "exists")
+              return actual !== undefined && actual !== null;
+            if (operator === "notEquals")
+              return String(actual) !== String(expected);
+            if (operator === "contains")
+              return String(actual ?? "").includes(String(expected ?? ""));
+            if (operator === "greaterThan")
+              return Number(actual) > Number(expected);
+            if (operator === "lessThan")
+              return Number(actual) < Number(expected);
+            return String(actual) === String(expected);
+          }),
+          operation: "filter",
+        };
+      } else if (
+        String(node.type) === "map" ||
+        String(node.type) === "project"
+      ) {
+        let rows = rowsFromInput(inputs);
+        const columns = Array.isArray(config.columns)
+          ? config.columns.map(column => String(column))
+          : [];
+        const mappings = Array.isArray(config.fields) ? config.fields : [];
+        if (mappings.length)
+          rows = rows.map(row =>
+            Object.fromEntries(
+              mappings
+                .filter(item => item && typeof item === "object")
+                .map((item: any) => [
+                  String(item.target ?? item.source),
+                  row[String(item.source)],
+                ])
+            )
+          );
+        else if (columns.length)
+          rows = rows.map(row =>
+            Object.fromEntries(columns.map(column => [column, row[column]]))
+          );
+        const limit = Number(config.limit ?? 200);
+        output = {
+          rows: rows.slice(
+            0,
+            Number.isFinite(limit) ? Math.max(1, Math.min(limit, 200)) : 200
+          ),
+          operation: "safe_transform",
+        };
+      } else if (String(node.type) === "derive") {
+        const rows = rowsFromInput(inputs);
+        const fields = Array.isArray(config.fields) ? config.fields : [];
+        output = {
+          rows: rows.map(row => {
+            const next = { ...row };
+            for (const item of fields) {
+              if (!item || typeof item !== "object") continue;
+              const field = item as JsonRecord;
+              const name = String(field.name ?? "").trim();
+              const expression = String(field.expression ?? "").trim();
+              if (!name || !expression) continue;
+              const ref = expression.match(
+                /^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/
+              );
+              if (ref) next[name] = row[ref[1]!];
+              else if (/^-?\d+(?:\.\d+)?$/.test(expression))
+                next[name] = Number(expression);
+              else if (/^(true|false)$/i.test(expression))
+                next[name] = expression.toLowerCase() === "true";
+              else next[name] = expression;
+            }
+            return next;
+          }),
+          operation: "derive",
+        };
+      } else if (String(node.type) === "transform") {
         let rows = rowsFromInput(inputs);
         if (
           config.filterField &&

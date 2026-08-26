@@ -145,6 +145,8 @@ const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   table: { icon: Table2, color: "#0f766e" },
   filter: { icon: Filter, color: "#8b5cf6" },
   map: { icon: Braces, color: "#0891b2" },
+  project: { icon: Table2, color: "#0e7490" },
+  derive: { icon: Sigma, color: "#7c3aed" },
   edit_sql: { icon: Braces, color: "#475569" },
   udf: { icon: Sigma, color: "#b45309" },
   sink: { icon: FileText, color: "#be123c" },

@@ -25,6 +25,8 @@ export const FLOW_NODE_TYPES = [
   "table",
   "filter",
   "map",
+  "project",
+  "derive",
   "udf",
   "sink",
   "output",
@@ -85,6 +87,8 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "table",
     "filter",
     "map",
+    "project",
+    "derive",
     "edit_sql",
     "udf",
     "sink",
@@ -214,6 +218,8 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "subflow",
     "filter",
     "map",
+    "project",
+    "derive",
     "sink",
     "output",
     "end",
@@ -247,6 +253,8 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "condition",
     "filter",
     "map",
+    "project",
+    "derive",
     "udf",
     "sink",
     "output",
@@ -256,15 +264,57 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "table",
     "filter",
     "map",
+    "project",
+    "derive",
     "edit_sql",
     "udf",
     "sink",
     "output",
     "end",
   ],
-  table: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
-  filter: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  table: [
+    "filter",
+    "map",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
+  filter: [
+    "filter",
+    "map",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
   map: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  project: [
+    "filter",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
+  derive: [
+    "filter",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
   edit_sql: ["filter", "map", "udf", "sink", "output", "end"],
   udf: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
   sink: ["end"],
@@ -453,13 +503,48 @@ const referenceHttpFields: NodeField[] = [
       { value: "compensated", label: "失败时进入补偿节点" },
     ],
   },
-  { key: "compensationNodeId", label: "补偿节点 ID", help: "写操作选择补偿策略时必须指向当前流程中的后继补偿节点。", kind: "text" },
-  { key: "retryMaxAttempts", label: "最大尝试次数", help: "范围 1 至 5；包含首次执行。", kind: "number" },
-  { key: "retryBaseDelayMs", label: "重试基础延迟", help: "指数退避基础延迟，范围 50 至 5,000 毫秒。", kind: "number" },
-  { key: "circuitFailureThreshold", label: "熔断失败阈值", help: "同一并发键连续失败达到阈值后临时熔断。", kind: "number" },
-  { key: "circuitResetMs", label: "熔断恢复时间", help: "范围 1,000 至 300,000 毫秒。", kind: "number" },
-  { key: "concurrencyKey", label: "并发限制键", help: "相同键的任务共享并发配额；留空按 EndpointRef 或域名分组。", kind: "text" },
-  { key: "concurrencyLimit", label: "并发上限", help: "单 Worker 范围 1 至 50。", kind: "number" },
+  {
+    key: "compensationNodeId",
+    label: "补偿节点 ID",
+    help: "写操作选择补偿策略时必须指向当前流程中的后继补偿节点。",
+    kind: "text",
+  },
+  {
+    key: "retryMaxAttempts",
+    label: "最大尝试次数",
+    help: "范围 1 至 5；包含首次执行。",
+    kind: "number",
+  },
+  {
+    key: "retryBaseDelayMs",
+    label: "重试基础延迟",
+    help: "指数退避基础延迟，范围 50 至 5,000 毫秒。",
+    kind: "number",
+  },
+  {
+    key: "circuitFailureThreshold",
+    label: "熔断失败阈值",
+    help: "同一并发键连续失败达到阈值后临时熔断。",
+    kind: "number",
+  },
+  {
+    key: "circuitResetMs",
+    label: "熔断恢复时间",
+    help: "范围 1,000 至 300,000 毫秒。",
+    kind: "number",
+  },
+  {
+    key: "concurrencyKey",
+    label: "并发限制键",
+    help: "相同键的任务共享并发配额；留空按 EndpointRef 或域名分组。",
+    kind: "text",
+  },
+  {
+    key: "concurrencyLimit",
+    label: "并发上限",
+    help: "单 Worker 范围 1 至 50。",
+    kind: "number",
+  },
 ];
 
 export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
@@ -1338,14 +1423,59 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         help: "服务端限制为 1,000 至 15,000 毫秒。",
         kind: "number",
       },
-      { key: "writeSafety", label: "写操作安全策略", help: "写请求发布前必须声明远端幂等或配置补偿节点。", kind: "select", options: [{ value: "unconfigured", label: "尚未配置" }, { value: "idempotent", label: "远端支持幂等键" }, { value: "compensated", label: "失败时进入补偿节点" }] },
-      { key: "compensationNodeId", label: "补偿节点 ID", help: "补偿策略使用。", kind: "text" },
-      { key: "retryMaxAttempts", label: "最大尝试次数", help: "范围 1 至 5。", kind: "number" },
-      { key: "retryBaseDelayMs", label: "重试基础延迟", help: "范围 50 至 5,000 毫秒。", kind: "number" },
-      { key: "circuitFailureThreshold", label: "熔断失败阈值", help: "范围 1 至 20。", kind: "number" },
-      { key: "circuitResetMs", label: "熔断恢复时间", help: "范围 1,000 至 300,000 毫秒。", kind: "number" },
-      { key: "concurrencyKey", label: "并发限制键", help: "留空按 EndpointRef 或域名分组。", kind: "text" },
-      { key: "concurrencyLimit", label: "并发上限", help: "单 Worker 范围 1 至 50。", kind: "number" },
+      {
+        key: "writeSafety",
+        label: "写操作安全策略",
+        help: "写请求发布前必须声明远端幂等或配置补偿节点。",
+        kind: "select",
+        options: [
+          { value: "unconfigured", label: "尚未配置" },
+          { value: "idempotent", label: "远端支持幂等键" },
+          { value: "compensated", label: "失败时进入补偿节点" },
+        ],
+      },
+      {
+        key: "compensationNodeId",
+        label: "补偿节点 ID",
+        help: "补偿策略使用。",
+        kind: "text",
+      },
+      {
+        key: "retryMaxAttempts",
+        label: "最大尝试次数",
+        help: "范围 1 至 5。",
+        kind: "number",
+      },
+      {
+        key: "retryBaseDelayMs",
+        label: "重试基础延迟",
+        help: "范围 50 至 5,000 毫秒。",
+        kind: "number",
+      },
+      {
+        key: "circuitFailureThreshold",
+        label: "熔断失败阈值",
+        help: "范围 1 至 20。",
+        kind: "number",
+      },
+      {
+        key: "circuitResetMs",
+        label: "熔断恢复时间",
+        help: "范围 1,000 至 300,000 毫秒。",
+        kind: "number",
+      },
+      {
+        key: "concurrencyKey",
+        label: "并发限制键",
+        help: "留空按 EndpointRef 或域名分组。",
+        kind: "text",
+      },
+      {
+        key: "concurrencyLimit",
+        label: "并发上限",
+        help: "单 Worker 范围 1 至 50。",
+        kind: "number",
+      },
     ],
   },
   source: {
@@ -1423,13 +1553,57 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
     ],
   },
+  project: {
+    type: "project",
+    label: "投影",
+    description: "选择并重命名输出字段",
+    flowTypes: ["data"],
+    defaultConfig: { fields: [] },
+    fields: [
+      {
+        key: "fields",
+        label: "字段映射",
+        help: "[{source,target}]。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  derive: {
+    type: "derive",
+    label: "派生",
+    description: "基于安全常量或字段引用生成新字段",
+    flowTypes: ["data"],
+    defaultConfig: { fields: [] },
+    fields: [
+      {
+        key: "fields",
+        label: "派生字段",
+        help: "[{name,expression,type}]。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
   edit_sql: {
     type: "edit_sql",
     label: "SQL",
     description: "数据流 SQL 编辑节点",
     flowTypes: ["data"],
-    defaultConfig: { sql: "SELECT * FROM source" },
+    defaultConfig: {
+      datasourceId: "",
+      sql: "SELECT * FROM source",
+      parameters: {},
+      maxRows: 1000,
+    },
     fields: [
+      {
+        key: "datasourceId",
+        label: "数据源",
+        help: "项目内已验证的 MySQL 数据源标识。",
+        kind: "text",
+        required: true,
+      },
       {
         key: "sql",
         label: "SQL",
@@ -1887,10 +2061,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           ? config.url
           : firstNonBlank(config.restApi, config.endpoint, config.url)
       );
-      if (
-        config.endpointRef &&
-        /^[a-z][a-z0-9+.-]*:/i.test(configuredUrl)
-      )
+      if (config.endpointRef && /^[a-z][a-z0-9+.-]*:/i.test(configuredUrl))
         throw new Error(
           `${referenceType} 节点使用 EndpointRef 时只能配置相对路径。`
         );
@@ -1932,11 +2103,36 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           `${referenceType} 节点补偿策略必须配置补偿节点 ID。`
         );
       for (const [value, message, min, max] of [
-        [config.retryMaxAttempts, `${referenceType} 节点最大尝试次数必须是 1 至 5 的整数。`, 1, 5],
-        [config.retryBaseDelayMs, `${referenceType} 节点重试延迟必须是 50 至 5,000 毫秒的整数。`, 50, 5_000],
-        [config.circuitFailureThreshold, `${referenceType} 节点熔断阈值必须是 1 至 20 的整数。`, 1, 20],
-        [config.circuitResetMs, `${referenceType} 节点熔断恢复时间必须是 1,000 至 300,000 毫秒的整数。`, 1_000, 300_000],
-        [config.concurrencyLimit, `${referenceType} 节点并发上限必须是 1 至 50 的整数。`, 1, 50],
+        [
+          config.retryMaxAttempts,
+          `${referenceType} 节点最大尝试次数必须是 1 至 5 的整数。`,
+          1,
+          5,
+        ],
+        [
+          config.retryBaseDelayMs,
+          `${referenceType} 节点重试延迟必须是 50 至 5,000 毫秒的整数。`,
+          50,
+          5_000,
+        ],
+        [
+          config.circuitFailureThreshold,
+          `${referenceType} 节点熔断阈值必须是 1 至 20 的整数。`,
+          1,
+          20,
+        ],
+        [
+          config.circuitResetMs,
+          `${referenceType} 节点熔断恢复时间必须是 1,000 至 300,000 毫秒的整数。`,
+          1_000,
+          300_000,
+        ],
+        [
+          config.concurrencyLimit,
+          `${referenceType} 节点并发上限必须是 1 至 50 的整数。`,
+          1,
+          50,
+        ],
       ] as const)
         assertOptionalInteger(value, message, min, max);
       const attributes =
@@ -2080,7 +2276,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           governance.cachePolicy !== undefined &&
           governance.cachePolicy !== "none"
         )
-          throw new Error("LLM 节点 prompt_hash 缓存尚未启用，当前仅支持 none。");
+          throw new Error(
+            "LLM 节点 prompt_hash 缓存尚未启用，当前仅支持 none。"
+          );
         if (
           governance.humanReviewRequired !== undefined &&
           typeof governance.humanReviewRequired !== "boolean"
@@ -2142,7 +2340,16 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         100_000
       );
       break;
+    case "project":
+      if (!Array.isArray(config.fields))
+        throw new Error("投影节点 fields 必须是数组。");
+      break;
+    case "derive":
+      if (!Array.isArray(config.fields))
+        throw new Error("派生节点 fields 必须是数组。");
+      break;
     case "edit_sql":
+      assertString(config.datasourceId, "SQL 编辑节点必须选择数据源。");
       assertString(config.sql, "SQL 编辑节点必须配置 SQL 语句。");
       break;
     case "udf":
