@@ -1993,11 +1993,16 @@ export async function executePreparedWorkflowRun(input: {
   onCheckpoint?: (checkpoint: WorkflowCheckpoint) => Promise<void>;
 }): Promise<WorkflowExecutionResult> {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT r.*,w.name,w.projectId FROM workflow_run r
+    `SELECT r.*,w.id AS workflowDefinitionId,w.name,w.projectId FROM workflow_run r
        JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1`,
     [input.runId]
   );
-  const run = rows[0] as PersistedWorkflow | undefined;
+  const run = rows[0]
+    ? ({
+        ...rows[0],
+        id: String(rows[0].workflowDefinitionId ?? rows[0].workflowId),
+      } as PersistedWorkflow)
+    : undefined;
   if (!run) throw new Error("流程运行不存在。");
   if (
     ["success", "failed", "cancelled", "terminated"].includes(
