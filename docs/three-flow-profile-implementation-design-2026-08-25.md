@@ -1987,7 +1987,6 @@ pnpm test:integration:provider
 - [~] **3F-P1-046** 已将 Filter、Project、Derive 拆分为独立节点和运行语义：Filter 支持确定性比较，Project 支持选择/重命名，Derive 仅允许字段引用、数值/布尔/字符串常量；复杂安全表达式与 Cast 仍待补齐。
 - [~] **3F-P1-047** 已增加 Join、Union、Aggregate、Sort、Deduplicate 运行节点：Join 明确左右输入和键，Union 支持 all/distinct，Aggregate 支持 count/sum/min/max，Sort 与 Deduplicate 为确定性操作；发布期输入基数/Schema 校验仍需加强。
 - [~] **3F-P1-048** 已增加 Quality Gate 节点，按最少行数和空值率执行确定性校验；失败会终止当前 Job，且不会写入成功输出 Artifact。独立隔离区/失败样本存储仍待实现。
-- [ ] **3F-P1-049** Sink 写入权限、Schema 策略和幂等提交。
 - [~] **3F-P1-049** Sink 已要求显式 `audit_only` 写入模式和稳定幂等键模板，未知写入模式会被发布/运行双重拒绝；真实外部 Sink Connector、Schema 演进策略和写权限仍待实现。
 - [~] **3F-P1-050** 当前失败路径不会更新成功水位，节点提交要求有效 Job 租约，重启会从已提交 Artifact/Checkpoint 跳过成功节点；真实 MySQL 崩溃恢复和增量水位集成验收仍待完成。
 - [ ] **3F-P1-051** 数据流真实 MySQL 端到端和跨项目拒绝测试。
