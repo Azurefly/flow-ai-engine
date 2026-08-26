@@ -55,6 +55,7 @@ services:
       LLM_MODEL_PRICING_JSON: ${LLM_MODEL_PRICING_JSON:-}
       IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
       WORKFLOW_WORKER_ENABLED: ${WORKFLOW_WORKER_ENABLED:-true}
+      DATA_CONNECTOR_ALLOWED_HOSTS: ${DATA_CONNECTOR_ALLOWED_HOSTS:-mysql}
     depends_on:
       mysql:
         condition: service_healthy
