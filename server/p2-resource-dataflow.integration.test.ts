@@ -9,11 +9,14 @@ const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
 const adminName = `p2_admin_${suffix}`;
 const viewerName = `p2_viewer_${suffix}`;
+const mysqlSecretEnv = "FLOW_SECRET_TEST_DATAFLOW_MYSQL";
+const originalAllowedHosts = process.env.DATA_CONNECTOR_ALLOWED_HOSTS;
 let pool: mysql.Pool | undefined;
 let admin: any;
 let viewer: any;
 let projectId: string | undefined;
 let workflowId: string | undefined;
+let foreignProjectId: string | undefined;
 
 function callerFor(identity: any) {
   return appRouter.createCaller({
@@ -25,6 +28,10 @@ function callerFor(identity: any) {
 
 describe("P2 项目数据资源与数据流", () => {
   afterAll(async () => {
+    delete process.env[mysqlSecretEnv];
+    if (originalAllowedHosts === undefined)
+      delete process.env.DATA_CONNECTOR_ALLOWED_HOSTS;
+    else process.env.DATA_CONNECTOR_ALLOWED_HOSTS = originalAllowedHosts;
     if (!pool) return;
     if (projectId) {
       await pool.query("DELETE FROM dataflow_schedule WHERE projectId=?", [
@@ -55,6 +62,17 @@ describe("P2 项目数据资源与数据流", () => {
         projectId,
       ]);
       await pool.query("DELETE FROM flow_project WHERE id=?", [projectId]);
+    }
+    if (foreignProjectId) {
+      await pool.query("DELETE FROM data_source WHERE projectId=?", [
+        foreignProjectId,
+      ]);
+      await pool.query("DELETE FROM flow_project_member WHERE projectId=?", [
+        foreignProjectId,
+      ]);
+      await pool.query("DELETE FROM flow_project WHERE id=?", [
+        foreignProjectId,
+      ]);
     }
     await pool.query(
       "DELETE FROM authorization_audit_log WHERE actorUserId IN (?,?) OR targetUserId IN (?,?)",
@@ -127,6 +145,23 @@ describe("P2 项目数据资源与数据流", () => {
           connection: { description: "浏览器验收内联样本" },
         })
       ).id;
+      foreignProjectId = (
+        await owner.project.create({
+          code: `FOR${suffix.slice(0, 5).toUpperCase()}`,
+          name: "P2 跨项目边界",
+        })
+      ).id;
+      const foreignSourceId = (
+        await owner.data.createSource({
+          projectId: foreignProjectId,
+          name: "外部项目源",
+          sourceType: "inline",
+          connection: { description: "不可跨项目使用" },
+        })
+      ).id;
+      await expect(
+        owner.data.testSource({ projectId, sourceId: foreignSourceId })
+      ).rejects.toThrow("不属于当前项目");
       const assetId = (
         await owner.data.createAsset({
           projectId,
@@ -143,6 +178,30 @@ describe("P2 项目数据资源与数据流", () => {
           ],
         })
       ).id;
+      const databaseUrl = new URL(process.env.DATABASE_URL!);
+      const mysqlEndpoint = `mysql://${databaseUrl.hostname}:${databaseUrl.port || "3306"}${databaseUrl.pathname}`;
+      process.env.DATA_CONNECTOR_ALLOWED_HOSTS = [
+        originalAllowedHosts,
+        databaseUrl.hostname,
+      ]
+        .filter(Boolean)
+        .join(",");
+      process.env[mysqlSecretEnv] = JSON.stringify({
+        username: decodeURIComponent(databaseUrl.username),
+        password: decodeURIComponent(databaseUrl.password),
+      });
+      const mysqlSourceId = (
+        await owner.data.createSource({
+          projectId,
+          name: "验收 MySQL 只读源",
+          sourceType: "jdbc",
+          connection: { endpoint: mysqlEndpoint },
+          credentialRef: `env:${mysqlSecretEnv}`,
+        })
+      ).id;
+      await expect(
+        owner.data.testSource({ projectId, sourceId: mysqlSourceId })
+      ).resolves.toMatchObject({ status: "success" });
       await owner.data.createTag({
         projectId,
         name: "关键数据",
@@ -202,25 +261,17 @@ describe("P2 项目数据资源与数据流", () => {
             config: { columns: ["orderId", "amount"] },
           },
           {
-            id: "sql",
-            type: "edit_sql",
-            name: "只读 SQL",
-            position: { x: 540, y: 0 },
-            config: { sql: "SELECT orderId, amount FROM orders" },
-          },
-          {
             id: "end",
             type: "end",
             name: "结束",
-            position: { x: 720, y: 0 },
+            position: { x: 540, y: 0 },
             config: {},
           },
         ],
         edges: [
           { id: "e1", sourceNodeId: "start", targetNodeId: "source" },
           { id: "e2", sourceNodeId: "source", targetNodeId: "transform" },
-          { id: "e3", sourceNodeId: "transform", targetNodeId: "sql" },
-          { id: "e4", sourceNodeId: "sql", targetNodeId: "end" },
+          { id: "e3", sourceNodeId: "transform", targetNodeId: "end" },
         ],
       };
       workflowId = (
@@ -243,6 +294,65 @@ describe("P2 项目数据资源与数据流", () => {
         { orderId: "A-01", amount: 12 },
         { orderId: "A-02", amount: 34 },
       ]);
+      const sqlWorkflowId = (
+        await owner.project.createWorkflow({
+          projectId,
+          name: "真实 MySQL 参数查询",
+          flowType: "data",
+          definition: {
+            schemaVersion: 1,
+            viewport: { x: 0, y: 0, zoom: 1 },
+            settings: {},
+            nodes: [
+              {
+                id: "start",
+                type: "start",
+                name: "开始",
+                position: { x: 0, y: 0 },
+                config: {},
+              },
+              {
+                id: "sql",
+                type: "sql",
+                name: "参数化用户查询",
+                position: { x: 180, y: 0 },
+                config: {
+                  datasourceId: mysqlSourceId,
+                  statement:
+                    "SELECT username FROM users WHERE username=:username",
+                  parameters: { username: adminName },
+                  maxRows: 10,
+                },
+              },
+              {
+                id: "end",
+                type: "end",
+                name: "结束",
+                position: { x: 360, y: 0 },
+                config: {},
+              },
+            ],
+            edges: [
+              { id: "s1", sourceNodeId: "start", targetNodeId: "sql" },
+              { id: "s2", sourceNodeId: "sql", targetNodeId: "end" },
+            ],
+          },
+        })
+      ).id;
+      await owner.project.auditWorkflow({
+        projectId,
+        workflowId: sqlWorkflowId,
+        auditStatus: "approved",
+      });
+      await owner.workflow.publish({ id: sqlWorkflowId });
+      const sqlRun = await owner.data.run({
+        projectId,
+        workflowId: sqlWorkflowId,
+      });
+      expect(sqlRun.status).toBe("success");
+      expect((sqlRun.output.terminals[0] as any).rows).toEqual([
+        { username: adminName },
+      ]);
       const [jobRows] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status,attempt,leaseToken FROM dataflow_run_job WHERE runId=?",
         [run.runId]
@@ -256,10 +366,8 @@ describe("P2 项目数据资源与数据流", () => {
         "SELECT nodeId,sequenceNo,status,attempt FROM dataflow_node_run WHERE runId=? ORDER BY sequenceNo",
         [run.runId]
       );
-      expect(nodeRows).toHaveLength(5);
-      expect(nodeRows.map(row => Number(row.sequenceNo))).toEqual([
-        0, 1, 2, 3, 4,
-      ]);
+      expect(nodeRows).toHaveLength(4);
+      expect(nodeRows.map(row => Number(row.sequenceNo))).toEqual([0, 1, 2, 3]);
       expect(
         nodeRows.every(
           row => row.status === "success" && Number(row.attempt) === 1
@@ -269,17 +377,16 @@ describe("P2 项目数据资源与数据流", () => {
         projectId,
         runId: run.runId,
       });
-      expect(lineage.artifacts).toHaveLength(5);
-      expect(lineage.lineage).toHaveLength(4);
+      expect(lineage.artifacts).toHaveLength(4);
+      expect(lineage.lineage).toHaveLength(3);
       expect(lineage.run.checkpoint.completedNodeIds).toEqual([
         "start",
         "source",
         "transform",
-        "sql",
         "end",
       ]);
       expect(lineage.artifacts.map((artifact: any) => artifact.nodeId)).toEqual(
-        ["start", "source", "transform", "sql", "end"]
+        ["start", "source", "transform", "end"]
       );
       const runs = await owner.data.runs({ projectId, workflowId });
       expect(runs[0]).toMatchObject({
@@ -321,7 +428,7 @@ describe("P2 项目数据资源与数据流", () => {
         "SELECT status,attempt FROM dataflow_node_run WHERE runId=? ORDER BY sequenceNo",
         [faultRunId]
       );
-      expect(recoveredNodes).toHaveLength(5);
+      expect(recoveredNodes).toHaveLength(4);
       expect(
         recoveredNodes.every(
           row => row.status === "success" && Number(row.attempt) === 1

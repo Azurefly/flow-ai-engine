@@ -637,6 +637,7 @@ Human Task 服务
 - [~] **T0468 [DATA-002]** 已加入 Quality Gate 节点，按最少行数和空值率阻断不合格运行；隔离输出与失败样本保存仍待完成。
 - [~] **T0469 [DATA-002]** Sink 已增加 audit_only 写入模式与幂等键模板门禁；真实外部写入 Connector、Schema 演进和 data:sink:write 权限仍待完成。
 - [~] **T0470 [DATA-002]** 失败路径保持上一成功 Checkpoint 和水位不变，重启由 Worker 从已提交 Artifact 恢复；真实崩溃/水位集成验收仍待完成。
+- [~] **T0471 [DATA-002]** MySQL 集成测试已覆盖真实连接测试、SecretRef、参数化 SELECT、运行输出和跨项目拒绝；执行证据仍依赖配置 `DATABASE_URL` 的真实环境。
 - [~] **T0462 [DATA-002]** 已实现根 Job 耐久队列、租约/续租/过期回收、有界重试、逐节点运行事实和稳定顺序，以及租约保护下原子提交的 Dataset Artifact、Checkpoint 与 Artifact 依赖血缘；重试会恢复并跳过已成功节点。分页、节点超时、资源隔离、外部 Artifact 存储、列级血缘和水位提交仍待补齐。
 - [ ] **T0463 [DATA-002]** UDF 在 CPU/内存/时长/网络受限沙箱运行，并完成逃逸测试。
 
