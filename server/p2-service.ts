@@ -1621,6 +1621,35 @@ async function runDataflowDefinition(
           udf: { name: udfs[0].name, type: udfs[0].udfType },
           execution: "metadata_safe",
         };
+      } else if (String(node.type) === "quality_gate") {
+        const rows = rowsFromInput(inputs);
+        const minRows = Math.max(0, Math.trunc(Number(config.minRows ?? 1)));
+        const maxNullRate = Math.min(
+          1,
+          Math.max(0, Number(config.maxNullRate ?? 1))
+        );
+        const totalCells = rows.reduce(
+          (sum, row) => sum + Object.keys(row).length,
+          0
+        );
+        const nullCells = rows.reduce(
+          (sum, row) =>
+            sum +
+            Object.values(row).filter(
+              value => value === null || value === undefined || value === ""
+            ).length,
+          0
+        );
+        const nullRate = totalCells ? nullCells / totalCells : 0;
+        if (rows.length < minRows || nullRate > maxNullRate)
+          throw new Error(
+            `质量门失败：行数 ${rows.length}/${minRows}，空值率 ${nullRate.toFixed(4)}/${maxNullRate}。`
+          );
+        output = {
+          rows,
+          quality: { passed: true, rowCount: rows.length, nullRate },
+          operation: "quality_gate",
+        };
       } else if (["end", "sink", "output"].includes(String(node.type)))
         output = { rows: rowsFromInput(inputs), stage: "output" };
       else throw new Error(`数据流节点类型 ${String(node.type)} 尚未启用。`);

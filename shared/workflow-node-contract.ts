@@ -32,6 +32,7 @@ export const FLOW_NODE_TYPES = [
   "aggregate",
   "sort",
   "deduplicate",
+  "quality_gate",
   "udf",
   "sink",
   "output",
@@ -1696,6 +1697,27 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
     ],
   },
+  quality_gate: {
+    type: "quality_gate",
+    label: "质量门",
+    description: "在输出前校验行数和空值率",
+    flowTypes: ["data"],
+    defaultConfig: { minRows: 1, maxNullRate: 1 },
+    fields: [
+      {
+        key: "minRows",
+        label: "最少行数",
+        help: "不足则失败并隔离本次输出。",
+        kind: "number",
+      },
+      {
+        key: "maxNullRate",
+        label: "最大空值率",
+        help: "0 至 1。",
+        kind: "number",
+      },
+    ],
+  },
   edit_sql: {
     type: "edit_sql",
     label: "SQL",
@@ -2458,6 +2480,45 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
     case "derive":
       if (!Array.isArray(config.fields))
         throw new Error("派生节点 fields 必须是数组。");
+      break;
+    case "join":
+      if (
+        !Array.isArray(config.leftKeys) ||
+        !Array.isArray(config.rightKeys) ||
+        !config.leftKeys.length ||
+        config.leftKeys.length !== config.rightKeys.length
+      )
+        throw new Error("关联节点左右键必须是等长非空数组。");
+      break;
+    case "union":
+      if (!["all", "distinct"].includes(String(config.mode ?? "all")))
+        throw new Error("Union 模式无效。");
+      break;
+    case "aggregate":
+      if (!Array.isArray(config.groupBy) || !Array.isArray(config.metrics))
+        throw new Error("聚合节点配置必须是数组。");
+      break;
+    case "sort":
+      if (!Array.isArray(config.fields) || !config.fields.length)
+        throw new Error("排序节点必须配置字段。");
+      break;
+    case "deduplicate":
+      if (!Array.isArray(config.keys) || !config.keys.length)
+        throw new Error("去重节点必须配置业务键。");
+      break;
+    case "quality_gate":
+      assertOptionalNumber(
+        config.minRows,
+        "质量门最少行数必须为非负数。",
+        0,
+        1_000_000
+      );
+      assertOptionalNumber(
+        config.maxNullRate,
+        "质量门空值率必须在 0 至 1 之间。",
+        0,
+        1
+      );
       break;
     case "edit_sql":
       assertString(config.datasourceId, "SQL 编辑节点必须选择数据源。");

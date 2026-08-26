@@ -634,6 +634,7 @@ Human Task 服务
 - [~] **T0461 [DATA-002]** 已实现 Inline 与白名单 MySQL 只读 Connector、已验证数据源门禁、参数化 SELECT 和行数上限；真实 MySQL Schema 发现、列级依赖和生产验收仍待完成。
 - [~] **T0462 [DATA-002]** Filter、Project、Derive 已拆分为独立数据流节点并保留旧 Transform 兼容执行；复杂表达式和 Cast 仍待安全实现。
 - [~] **T0463 [DATA-002]** 已加入 Join、Union、Aggregate、Sort、Deduplicate 节点的确定性运行实现；多输入基数、Schema 对齐和聚合字段发布期校验仍待加强。
+- [~] **T0464 [DATA-002]** 已加入 Quality Gate 节点，按最少行数和空值率阻断不合格运行；隔离输出与失败样本保存仍待完成。
 - [~] **T0462 [DATA-002]** 已实现根 Job 耐久队列、租约/续租/过期回收、有界重试、逐节点运行事实和稳定顺序，以及租约保护下原子提交的 Dataset Artifact、Checkpoint 与 Artifact 依赖血缘；重试会恢复并跳过已成功节点。分页、节点超时、资源隔离、外部 Artifact 存储、列级血缘和水位提交仍待补齐。
 - [ ] **T0463 [DATA-002]** UDF 在 CPU/内存/时长/网络受限沙箱运行，并完成逃逸测试。
 
