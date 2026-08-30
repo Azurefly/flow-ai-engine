@@ -60,7 +60,7 @@ describe("工作流资源级运行权限", () => {
     owner = users.find(row => row.username === ownerUsername);
     viewer = users.find(row => row.username === viewerUsername);
     outsider = users.find(row => row.username === outsiderUsername);
-    await pool.query("INSERT INTO workflow (id,ownerUserId,name,status,definitionVersion,definitionJson) VALUES (?,?,?,'published',1,?)", [workflowId, owner.id, "资源权限集成测试", JSON.stringify(definition)]);
+    await pool.query("INSERT INTO workflow (id,ownerUserId,name,flowType,status,definitionVersion,definitionJson) VALUES (?,?,?,'control','published',1,?)", [workflowId, owner.id, "资源权限集成测试", JSON.stringify(definition)]);
     await pool.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?),(?,?,?,'viewer',NOW(),?)", [randomUUID(), workflowId, owner.id, owner.id, randomUUID(), workflowId, viewer.id, owner.id]);
 
     const ownerCaller = callerFor(owner);
@@ -71,7 +71,7 @@ describe("工作流资源级运行权限", () => {
     const detail = await viewerCaller.workflow.runDetail({ runId });
     legacyRunId = `legacy-run-${randomUUID().slice(0, 8)}`;
     await pool.query(
-      "INSERT INTO workflow_run (id,workflowId,ownerUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,finalOutputJson,startedAt,finishedAt,durationMs,triggeredByUserId) VALUES (?,?,?,'state','manual','success',?,?,?,?,NOW(),NOW(),0,?)",
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,finalOutputJson,startedAt,finishedAt,durationMs,triggeredByUserId) VALUES (?,?,?,'control','manual','success',?,?,?,?,NOW(),NOW(),0,?)",
       [legacyRunId, workflowId, owner.id, JSON.stringify(definition), JSON.stringify({ legacy: true }), JSON.stringify({}), JSON.stringify({ legacy: true }), owner.id],
     );
     await pool.query(

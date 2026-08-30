@@ -14,6 +14,7 @@ describe("原始节点配置统一契约", () => {
     expect(FLOW_NODE_ALLOWED_TARGETS.start).toContain("llm");
     expect(canConnectFlowNodeTypes("http", "llm")).toBe(true);
     expect(canConnectFlowNodeTypes("llm", "condition")).toBe(true);
+    expect(canConnectFlowNodeTypes("operate", "operate")).toBe(true);
     expect(canConnectFlowNodeTypes("end", "state")).toBe(false);
     expect(canConnectFlowNodeTypes("state", "start")).toBe(false);
   });
@@ -124,6 +125,36 @@ describe("原始节点配置统一契约", () => {
     });
     expect(getNodeConfigEvidence("rest")).toBe("reference-confirmed");
     expect(getNodeConfigEvidence("method")).toBe("reference-confirmed");
+  });
+
+  it("不会让别名或处理人默认值遮蔽导入配置和动态用户模板", () => {
+    const dynamicUser = withNodeConfigDefaults("operate", {
+      nodeDh: "REVIEW",
+      instruction: "请审核",
+      assigneeUserId: "{{input.assigneeUserId}}",
+    });
+    expect(dynamicUser).toMatchObject({
+      nodeDh: "REVIEW",
+      assigneeMode: "user",
+      assigneeUserId: "{{input.assigneeUserId}}",
+    });
+    expect(dynamicUser).not.toHaveProperty("commandCode");
+    expect(() => validateNodeConfig("operate", dynamicUser)).not.toThrow();
+
+    const explicitReceivers = withNodeConfigDefaults("operate", {
+      nodeDh: "BROADCAST_REVIEW",
+      instruction: "请相关人员审核",
+      assigneeMode: "receivers",
+      assigneeUserId: 42,
+    });
+    expect(explicitReceivers.assigneeMode).toBe("receivers");
+
+    const legacyState = withNodeConfigDefaults("state", {
+      nodeDh: "APPROVED",
+      jdmc: "已通过",
+    });
+    expect(legacyState).toMatchObject({ nodeDh: "APPROVED" });
+    expect(legacyState).not.toHaveProperty("stateCode");
   });
 
   it("严格验证路由分支、表单结构、REST 方法和条件句柄", () => {

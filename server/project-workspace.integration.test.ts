@@ -179,7 +179,7 @@ describe("原始项目工作区 P0", () => {
         description: "由项目设计者字段化更新",
       });
       const [infoAudits] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? AND JSON_UNQUOTE(JSON_EXTRACT(detailsJson,'$.operation'))='project_workflow_info_updated' ORDER BY createdAt DESC,id DESC",
         [designer.id, workflowId]
       );
       const infoDetails =
@@ -262,7 +262,7 @@ describe("原始项目工作区 P0", () => {
         changeSource: "unpublished",
       });
       const [unpublishAudits] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? AND JSON_UNQUOTE(JSON_EXTRACT(detailsJson,'$.operation'))='workflow_unpublished' ORDER BY createdAt DESC,id DESC",
         [designer.id, workflowId]
       );
       const unpublishDetails =
@@ -296,7 +296,7 @@ describe("原始项目工作区 P0", () => {
         afterReset.find((workflow: any) => workflow.id === workflowId)
       ).toMatchObject({ auditStatus: "init", status: "draft" });
       const [resetAudits] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? AND JSON_UNQUOTE(JSON_EXTRACT(detailsJson,'$.operation'))='workflow_audit_reset' ORDER BY createdAt DESC,id DESC",
         [owner.id, workflowId]
       );
       const resetDetails =

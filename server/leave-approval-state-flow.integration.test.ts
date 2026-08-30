@@ -103,7 +103,9 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
     expect((await callerFor(employee).task.dashboard()).counts.initiated).toBe(1);
     const supervisorWaiting = findRun(await callerFor(supervisor).task.instances({ view: "all" }), started.runId);
     expect(supervisorWaiting).toMatchObject({ displayStatus: "待审批" });
-    expect(supervisorWaiting.availableOperations).toEqual([{ taskId: started.taskId, name: "审核通过" }]);
+    expect(supervisorWaiting.availableOperations).toMatchObject([
+      { taskId: started.taskId, name: "审核通过" },
+    ]);
     const [initialStates] = await pool.query<mysql.RowDataPacket[]>("SELECT userId,stateName,sourceNodeId FROM workflow_participant_state WHERE runId=? ORDER BY userId", [started.runId]);
     expect(initialStates).toHaveLength(2);
     expect(initialStates.find(row => Number(row.userId) === employee.id)).toMatchObject({ stateName: "等待审核", sourceNodeId: "employee-waiting-supervisor" });

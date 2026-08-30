@@ -18,6 +18,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Integration files share one real database and process-level worker fault
+    // switches. Running them in parallel can make one suite drain another
+    // suite's durable job or temporarily override its fault point.
+    fileParallelism: false,
     include: ["server/**/*.integration.test.ts"],
     exclude: [
       "server/llm-runtime.integration.test.ts",

@@ -6,6 +6,7 @@ import type { Definition } from "./workflow-service";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const workflowId = randomUUID();
+const ownerUsername = `owner_guard_${randomUUID().slice(0, 8)}`;
 let pool: mysql.Pool | undefined;
 let ownerId: number | undefined;
 let ownerMemberId: string | undefined;
@@ -17,12 +18,20 @@ describe("流程最后所有者保护", () => {
     if (!pool) return;
     await pool.query("DELETE FROM workflow_member WHERE workflowId=?", [workflowId]);
     await pool.query("DELETE FROM workflow WHERE id=?", [workflowId]);
+    if (ownerId) await pool.query("DELETE FROM users WHERE id=?", [ownerId]);
     await pool.end();
   });
 
   runIntegration("拒绝撤销流程唯一有效所有者", async () => {
     pool = mysql.createPool(process.env.DATABASE_URL!);
-    const [users] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE status='active' ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END,id LIMIT 1");
+    await pool.query(
+      "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW())",
+      [`test:${ownerUsername}`, ownerUsername, "所有者保护测试用户", "admin", "active", "internal"]
+    );
+    const [users] = await pool.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM users WHERE username=? LIMIT 1",
+      [ownerUsername]
+    );
     ownerId = users[0]?.id;
     expect(ownerId).toBeTruthy();
     ownerMemberId = randomUUID();

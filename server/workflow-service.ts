@@ -953,10 +953,15 @@ export async function listSubflows(user: WorkflowUser) {
 
 export async function createSubflow(
   user: WorkflowUser,
-  input: { name: string; description?: string; definition: unknown }
+  input: {
+    name: string;
+    description?: string;
+    definition: unknown;
+    flowType?: "state" | "control";
+  }
 ) {
   const definition = validate(input.definition, {
-    flowType: "state",
+    flowType: input.flowType ?? "state",
     executable: true,
   });
   if (definition.nodes.some(node => node.type === "subflow"))
@@ -989,6 +994,7 @@ export async function updateSubflow(
     name?: string;
     description?: string | null;
     definition?: unknown;
+    flowType?: "state" | "control";
     isEnabled?: boolean;
   }
 ) {
@@ -1002,7 +1008,7 @@ export async function updateSubflow(
     input.definition === undefined
       ? (parseJson(subflow.definitionJson) as Definition)
       : validate(input.definition, {
-          flowType: "state",
+          flowType: input.flowType ?? "state",
           executable: true,
         });
   if (definition.nodes.some(node => node.type === "subflow"))

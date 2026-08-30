@@ -11,6 +11,21 @@ function parseJson(value: unknown) {
 }
 
 /**
+ * A durable run is moved to `waiting` when the worker creates a human task.
+ * During the tiny transition window it may still be `running`, so the test
+ * adapter must accept both states when it observes a pending task.
+ */
+export function waitingTaskIdForRun(run: unknown, task: unknown) {
+  if (!task || typeof task !== "object") return undefined;
+  if (!run || typeof run !== "object") return undefined;
+  const status = (run as { status?: unknown }).status;
+  if (status !== "running" && status !== "waiting") return undefined;
+  const taskId = (task as { id?: unknown }).id;
+  if (taskId === undefined || taskId === null) return undefined;
+  return String(taskId);
+}
+
+/**
  * Integration-test adapter for the production command API. Production callers
  * receive `queued`; tests explicitly drain the real durable Worker before
  * asserting the resulting run/task state.
@@ -43,8 +58,9 @@ export async function settleWorkflowCommand(
       "SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed') ORDER BY createdAt DESC,id DESC LIMIT 1",
       [command.runId]
     );
-    if (run.status === "running" && tasks[0]) {
-      return { ...command, status: "waiting", taskId: String(tasks[0].id) };
+    const taskId = waitingTaskIdForRun(run, tasks[0]);
+    if (taskId) {
+      return { ...command, status: "waiting", taskId };
     }
     await new Promise(resolve => setTimeout(resolve, 25));
   }

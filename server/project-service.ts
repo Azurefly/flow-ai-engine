@@ -275,6 +275,16 @@ export async function createProjectWorkflow(
     );
     if (!folders[0]) throw new Error("目标仓库目录不存在或不属于当前项目。");
   }
+  // Validate the supplied draft before creating the workflow row.  A failed
+  // profile/shape check must not leave an untracked workflow behind, because
+  // project cleanup and foreign-key checks would otherwise see an orphan.
+  const validatedDefinition =
+    input.definition === undefined
+      ? undefined
+      : validate(input.definition, {
+          flowType: input.flowType,
+          executable: false,
+        });
   const workflow = await createWorkflow(user, input.name, input.description, {
     projectId: input.projectId,
     folderId: input.folderId ?? null,
@@ -285,12 +295,9 @@ export async function createProjectWorkflow(
     auditStatus: "init",
     projectCreationAuthorized: true,
   });
-  if (input.definition && workflow)
+  if (validatedDefinition !== undefined && workflow)
     await updateWorkflow((workflow as any).id, user, {
-      definition: validate(input.definition, {
-        flowType: input.flowType,
-        executable: false,
-      }),
+      definition: validatedDefinition,
     });
   await recordAuthorizationAudit({
     actorUserId: user.id,

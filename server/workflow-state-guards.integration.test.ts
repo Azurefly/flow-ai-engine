@@ -150,7 +150,7 @@ describe("工作流运行状态与版本回滚守卫", () => {
         "运行状态守卫"
       );
 
-      const draftSubmission = await submitWhileWorkflowIsLocked(
+      const draftSubmission = submitWhileWorkflowIsLocked(
         workflowId,
         connection =>
           connection.query(
@@ -166,7 +166,7 @@ describe("工作流运行状态与版本回滚守卫", () => {
         "UPDATE workflow SET status='published',auditStatus='approved' WHERE id=?",
         [workflowId]
       );
-      const rejectedSubmission = await submitWhileWorkflowIsLocked(
+      const rejectedSubmission = submitWhileWorkflowIsLocked(
         workflowId,
         connection =>
           connection.query(
@@ -182,7 +182,7 @@ describe("工作流运行状态与版本回滚守卫", () => {
         "UPDATE workflow SET status='published',auditStatus='approved' WHERE id=?",
         [workflowId]
       );
-      const archivedProjectSubmission = await submitWhileWorkflowIsLocked(
+      const archivedProjectSubmission = submitWhileWorkflowIsLocked(
         workflowId,
         connection =>
           connection.query(
@@ -260,7 +260,12 @@ describe("工作流运行状态与版本回滚守卫", () => {
     "并发定义更新只允许一个 hydrated 版本成功写入",
     async () => {
       const owner = await ensureUser();
-      const workflow = (await createWorkflow(owner, "并发版本守卫")) as any;
+      const workflow = (await createWorkflow(
+        owner,
+        "并发版本守卫",
+        undefined,
+        { flowType: "control" }
+      )) as any;
       workflowIds.push(workflow.id);
       const hydrated = (await getWorkflow(workflow.id, owner)) as any;
       const expectedDefinitionVersion = Number(hydrated.definitionVersion);
@@ -298,7 +303,11 @@ describe("工作流运行状态与版本回滚守卫", () => {
       expect(Number(workflowRows[0].definitionVersion)).toBe(
         expectedDefinitionVersion + 1
       );
-      const savedDefinition = JSON.parse(String(workflowRows[0].definitionJson)) as Definition;
+      const savedDefinition = (
+        typeof workflowRows[0].definitionJson === "string"
+          ? JSON.parse(workflowRows[0].definitionJson)
+          : workflowRows[0].definitionJson
+      ) as Definition;
       expect(["并发提交 A", "并发提交 B"]).toContain(
         savedDefinition.nodes.find(node => node.id === "end")?.name
       );

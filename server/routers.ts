@@ -1591,6 +1591,7 @@ export const appRouter = router({
         z.object({
           name: z.string().trim().min(1).max(160),
           description: z.string().trim().max(500).optional(),
+          flowType: z.enum(["state", "control"]).optional(),
           definition: z.unknown(),
         })
       )
@@ -1603,6 +1604,7 @@ export const appRouter = router({
           id: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
           description: z.string().trim().max(500).nullable().optional(),
+          flowType: z.enum(["state", "control"]).optional(),
           definition: z.unknown().optional(),
           isEnabled: z.boolean().optional(),
         })

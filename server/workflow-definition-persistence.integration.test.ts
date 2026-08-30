@@ -3,7 +3,7 @@ import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { createWorkflow, deleteWorkflow, duplicateWorkflow, getWorkflow, type Definition } from "./workflow-service";
+import { createWorkflow, deleteWorkflow, duplicateWorkflow, getWorkflow, validate, type Definition } from "./workflow-service";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const username = `definition_test_${randomUUID().slice(0, 8)}`;
@@ -76,15 +76,20 @@ describe("流程定义 JSON 导入导出与持久化", () => {
     const routeCaller = callerFor(user);
     const subflow = await routeCaller.workflow.createSubflow({
       name: "定义持久化引用子流程",
+      flowType: "state",
       definition: {
         schemaVersion: 1,
         viewport: { x: 0, y: 0, zoom: 1 },
         settings: {},
         nodes: [
           { id: "subflow-start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: { initialVariables: {} } },
+          { id: "subflow-state", type: "state", name: "子流程状态", position: { x: 80, y: 0 }, config: { stateCode: "SUBFLOW_READY", displayName: "子流程就绪", stateType: "business" } },
           { id: "subflow-end", type: "end", name: "结束", position: { x: 160, y: 0 }, config: { resultTemplate: "{{vars}}" } },
         ],
-        edges: [{ id: "subflow-start-end", sourceNodeId: "subflow-start", sourceHandle: "default", targetNodeId: "subflow-end" }],
+        edges: [
+          { id: "subflow-start-state", sourceNodeId: "subflow-start", sourceHandle: "default", targetNodeId: "subflow-state" },
+          { id: "subflow-state-end", sourceNodeId: "subflow-state", sourceHandle: "default", targetNodeId: "subflow-end" },
+        ],
       },
     });
     subflowId = subflow.id;
@@ -113,7 +118,10 @@ describe("流程定义 JSON 导入导出与持久化", () => {
     const copy = await duplicateWorkflow(workflowId, user, "导入定义副本");
     copyId = (copy as any).id;
 
-    const expectedImported = JSON.parse(JSON.stringify(imported)) as Definition;
+    const expectedImported = validate(JSON.parse(JSON.stringify(imported)), {
+      flowType: "state",
+      executable: false,
+    });
     const expectedSubflowNode = expectedImported.nodes.find(node => node.id === "subflow");
     if (!expectedSubflowNode) throw new Error("期望定义缺少子流程节点。");
     expectedSubflowNode.config.subflowId = subflowId;

@@ -117,6 +117,7 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "end",
   ],
   operate: [
+    "operate",
     "state",
     "router",
     "rest",
@@ -1845,6 +1846,35 @@ export function withNodeConfigDefaults(
     },
     createDefaultNodeConfig(type)
   );
+  // `nodeDh`/`stateCode` and `nodeDh`/`commandCode` are aliases from two
+  // generations of the canvas contract. A placeholder alias must not mask a
+  // meaningful value supplied by an imported definition.
+  if (type === "state" || type === "operate") {
+    const primary = config.nodeDh;
+    const alias = type === "state" ? config.stateCode : config.commandCode;
+    if (hasNonBlankValue(primary) && !hasNonBlankValue(alias)) {
+      delete merged[type === "state" ? "stateCode" : "commandCode"];
+    } else if (!hasNonBlankValue(primary) && hasNonBlankValue(alias)) {
+      delete merged.nodeDh;
+    }
+  }
+  if (type === "operate" && config.assigneeMode === undefined) {
+    // Keep explicit assigneeMode (including receivers) authoritative. For
+    // legacy definitions that omitted it, infer the mode from a configured
+    // user/template before falling back to the documented receivers default.
+    if (hasNonBlankValue(config.assigneeUserId)) merged.assigneeMode = "user";
+    else if (
+      /direct_manager|直属上级|upperAuthUnitWord/.test(
+        JSON.stringify({
+          qxkz: config.qxkz,
+          bddx: config.bddx,
+          sxsz: config.sxsz,
+        })
+      )
+    ) {
+      merged.assigneeMode = "initiator_manager";
+    }
+  }
   if (type === "sql") {
     merged.statement = firstNonBlank(
       config.statement,
@@ -1873,6 +1903,20 @@ function firstNonBlank(...values: unknown[]) {
   return values.find(value => typeof value === "string" && value.trim()) as
     | string
     | undefined;
+}
+
+function hasNonBlankValue(value: unknown) {
+  return (
+    value !== undefined &&
+    value !== null &&
+    (typeof value !== "string" || value.trim().length > 0)
+  );
+}
+
+function isTemplateReference(value: unknown) {
+  return (
+    typeof value === "string" && /^\s*\{\{\s*[^}]+?\s*\}\}\s*$/.test(value)
+  );
 }
 
 function hasMeaningfulLegacyValue(value: unknown): boolean {
@@ -1984,7 +2028,10 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       )
         throw new Error("操作节点处理人方式无效。");
       assertString(config.instruction, "操作节点必须配置操作说明。");
-      if (config.assigneeMode === "user")
+      if (
+        config.assigneeMode === "user" &&
+        !isTemplateReference(config.assigneeUserId)
+      )
         assertOptionalInteger(
           config.assigneeUserId,
           "操作节点指定处理人必须是有效的内部账号 ID。",

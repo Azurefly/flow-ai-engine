@@ -80,7 +80,23 @@ describe("P1 人工任务与服务端续跑", () => {
         [projectId]
       );
       await pool.query(
+        "DELETE FROM workflow_wait_subscription WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
+        [projectId]
+      );
+      await pool.query(
+        "DELETE FROM workflow_participant_state WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
+        [projectId]
+      );
+      await pool.query(
         "DELETE FROM workflow_task WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
+        [projectId]
+      );
+      await pool.query(
+        "DELETE FROM workflow_task_group WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
+        [projectId]
+      );
+      await pool.query(
+        "DELETE FROM workflow_run_job WHERE runId IN (SELECT r.id FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE w.projectId=?)",
         [projectId]
       );
       await pool.query(

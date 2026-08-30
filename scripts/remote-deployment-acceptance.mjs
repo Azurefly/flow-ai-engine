@@ -88,23 +88,27 @@ function executableDefinition() {
         config: { initialVariables: { source: "{{input.source}}" } },
       },
       {
-        id: "state",
-        type: "state",
+        id: "milestone",
+        type: "milestone",
         name: "已接收",
         position: { x: 220, y: 0 },
-        config: { stateCode: "RECEIVED", displayName: "已接收" },
+        config: {
+          milestoneCode: "RECEIVED",
+          displayName: "已接收",
+          category: "business",
+        },
       },
       {
         id: "end",
         type: "end",
         name: "结束",
         position: { x: 440, y: 0 },
-        config: { resultTemplate: { state: "{{nodes.state.stateCode}}", source: "{{vars.source}}" } },
+        config: { resultTemplate: { state: "{{nodes.milestone.milestoneCode}}", source: "{{vars.source}}" } },
       },
     ],
     edges: [
-      { id: "start-state", sourceNodeId: "start", targetNodeId: "state" },
-      { id: "state-end", sourceNodeId: "state", targetNodeId: "end" },
+      { id: "start-milestone", sourceNodeId: "start", targetNodeId: "milestone" },
+      { id: "milestone-end", sourceNodeId: "milestone", targetNodeId: "end" },
     ],
   };
 }

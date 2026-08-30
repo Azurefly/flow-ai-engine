@@ -551,21 +551,29 @@ export async function bindOrganizationRole(
   const role = roles[0];
   if (!role || role.scope !== "system" || role.code === "system_admin")
     throw new Error("仅可绑定系统范围且非系统管理员的权限组。");
-  const effectiveFrom = input.effectiveFrom ?? new Date();
-  if (input.expiresAt && input.expiresAt <= effectiveFrom)
+  const requestedEffectiveFrom = input.effectiveFrom;
+  if (
+    input.expiresAt &&
+    input.expiresAt <= (requestedEffectiveFrom ?? new Date())
+  )
     throw new Error("部门权限绑定到期时间必须晚于生效时间。");
   await db().query(
-    "INSERT INTO organization_unit_role (id,unitId,roleId,includeDescendants,effectiveFrom,expiresAt,createdByUserId) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE includeDescendants=VALUES(includeDescendants),effectiveFrom=VALUES(effectiveFrom),expiresAt=VALUES(expiresAt),createdByUserId=VALUES(createdByUserId)",
+    "INSERT INTO organization_unit_role (id,unitId,roleId,includeDescendants,effectiveFrom,expiresAt,createdByUserId) VALUES (?,?,?,?,COALESCE(?,NOW()),?,?) ON DUPLICATE KEY UPDATE includeDescendants=VALUES(includeDescendants),effectiveFrom=VALUES(effectiveFrom),expiresAt=VALUES(expiresAt),createdByUserId=VALUES(createdByUserId)",
     [
       randomUUID(),
       input.unitId,
       input.roleId,
       input.includeDescendants ?? true,
-      effectiveFrom,
+      requestedEffectiveFrom ?? null,
       input.expiresAt ?? null,
       user.id,
     ]
   );
+  const [bindingRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT effectiveFrom FROM organization_unit_role WHERE unitId=? AND roleId=? LIMIT 1",
+    [input.unitId, input.roleId]
+  );
+  const effectiveFrom = bindingRows[0]?.effectiveFrom ?? requestedEffectiveFrom;
   await recordAuthorizationAudit({
     actorUserId: user.id,
     action: "role_assigned",

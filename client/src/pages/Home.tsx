@@ -1476,6 +1476,7 @@ function FlowConsole({
                 if (draftDefinition)
                   createSubflow.mutate({
                     name: `${draftName || "未命名流程"} · 子流程`,
+                    flowType: selectedWorkflow?.flowType ?? "state",
                     definition: draftDefinition,
                   });
               }}

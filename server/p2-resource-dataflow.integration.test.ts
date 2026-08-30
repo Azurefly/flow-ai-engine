@@ -18,6 +18,20 @@ let projectId: string | undefined;
 let workflowId: string | undefined;
 let foreignProjectId: string | undefined;
 
+function useTestWorkerEnvironment() {
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousWorkerEnabled = process.env.WORKFLOW_WORKER_ENABLED;
+  process.env.NODE_ENV = "test";
+  process.env.WORKFLOW_WORKER_ENABLED = "false";
+  return () => {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousWorkerEnabled === undefined)
+      delete process.env.WORKFLOW_WORKER_ENABLED;
+    else process.env.WORKFLOW_WORKER_ENABLED = previousWorkerEnabled;
+  };
+}
+
 function callerFor(identity: any) {
   return appRouter.createCaller({
     user: identity,
@@ -225,14 +239,21 @@ describe("P2 项目数据资源与数据流", () => {
 
       const view = await readonly.data.resources({ projectId });
       expect(view.sources).toHaveLength(2);
-      const inlineView = view.sources.find((source: any) => source.id === sourceId);
+      const inlineView = view.sources.find(
+        (source: any) => source.id === sourceId
+      );
       expect(inlineView).toMatchObject({
         status: "draft",
         lastTestedAt: null,
         hasCredentialRef: true,
       });
       expect(view.assets[0]).toMatchObject({ id: assetId, name: "订单样本" });
-      expect(view.sources.every((source: any) => !Object.prototype.hasOwnProperty.call(source, "credentialRef"))).toBe(true);
+      expect(
+        view.sources.every(
+          (source: any) =>
+            !Object.prototype.hasOwnProperty.call(source, "credentialRef")
+        )
+      ).toBe(true);
       await expect(
         readonly.data.createTag({ projectId, name: "越权标签" })
       ).rejects.toThrow("无权");
@@ -398,6 +419,7 @@ describe("P2 项目数据资源与数据流", () => {
         triggerType: "manual",
       });
       const faultBucket = `fault:${suffix}`;
+      const restoreWorkerEnvironment = useTestWorkerEnvironment();
       process.env.DATAFLOW_WORKER_FAULT_POINT = "after_nodes_before_complete";
       try {
         await expect(
@@ -410,6 +432,7 @@ describe("P2 项目数据资源与数据流", () => {
         ).rejects.toThrow("Injected dataflow worker crash");
       } finally {
         delete process.env.DATAFLOW_WORKER_FAULT_POINT;
+        restoreWorkerEnvironment();
       }
       const [faultRuns] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT id,status FROM dataflow_run WHERE workflowId=? AND scheduleBucket=?",

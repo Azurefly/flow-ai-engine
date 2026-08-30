@@ -8,11 +8,13 @@ import { appRouter } from "./routers";
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8).toLowerCase();
 const usernames = [`batch_${suffix}_one`, `batch_${suffix}_two`];
+const adminUsername = `batch_${suffix}_admin`;
 const roleCode = `custom_batch_${suffix}`;
 let pool: mysql.Pool | undefined;
 let unitId: string | undefined;
 let roleId: number | undefined;
 let userIds: number[] = [];
+let adminId: number | undefined;
 
 describe("AI 批量用户与内部账号权限中心真实数据库闭环", () => {
   afterAll(async () => {
@@ -38,10 +40,17 @@ describe("AI 批量用户与内部账号权限中心真实数据库闭环", () =
         userIds,
       ]);
       await pool.query(
-        "DELETE FROM authorization_audit_log WHERE targetUserId IN (?) OR (resourceType='iam_role' AND resourceId=?)",
-        [userIds, roleCode]
+        "DELETE FROM authorization_audit_log WHERE actorUserId=? OR targetUserId IN (?) OR (resourceType='iam_role' AND resourceId=?)",
+        [adminId ?? -1, userIds, roleCode]
       );
       await pool.query("DELETE FROM users WHERE id IN (?)", [userIds]);
+    }
+    if (adminId) {
+      await pool.query(
+        "DELETE FROM authorization_audit_log WHERE actorUserId=? OR targetUserId=?",
+        [adminId, adminId]
+      );
+      await pool.query("DELETE FROM users WHERE id=?", [adminId]);
     }
     await pool.end();
   });
@@ -51,11 +60,17 @@ describe("AI 批量用户与内部账号权限中心真实数据库闭环", () =
     async () => {
       pool = mysql.createPool(process.env.DATABASE_URL!);
       await ensureIamCatalog();
+      await pool.query(
+        "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW())",
+        [`test:${adminUsername}`, adminUsername, "批量账号测试管理员", "admin", "active", "internal"]
+      );
       const [adminRows] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT * FROM users WHERE role='admin' AND status='active' ORDER BY id LIMIT 1"
+        "SELECT * FROM users WHERE username=? LIMIT 1",
+        [adminUsername]
       );
       const admin = adminRows[0];
       expect(admin).toBeTruthy();
+      adminId = Number(admin.id);
       const caller = appRouter.createCaller({
         user: admin,
         req: { headers: {}, protocol: "https" },

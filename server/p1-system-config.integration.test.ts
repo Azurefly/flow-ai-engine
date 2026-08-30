@@ -66,7 +66,7 @@ describe("P1 系统配置与工作域", () => {
     projectId = (await callerFor(admin).project.create({ code: `P1${suffix.slice(0, 6).toUpperCase()}`, name: "P1 工作域项目", domainId })).id;
     const projects: any[] = await callerFor(admin).project.list();
     expect(projects.find(project => project.id === projectId)).toMatchObject({ domainId, domainCode: `DOM${suffix.slice(0, 5).toUpperCase()}`, domainName: "P1 验收工作域" });
-    workflowId = (await callerFor(admin).project.createWorkflow({ projectId, name: "审批配置流程", flowType: "state" })).id;
+    workflowId = (await callerFor(admin).project.createWorkflow({ projectId, name: "审批配置流程", flowType: "control" })).id;
     await expect(callerFor(admin).workflow.publish({ id: workflowId })).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
     await callerFor(admin).config.updateSetting({ key: "approval", value: { requireProjectApproval: false, reviewerMode: "project_owner_or_admin" } });
     await expect(callerFor(admin).workflow.publish({ id: workflowId })).resolves.toMatchObject({ status: "published" });

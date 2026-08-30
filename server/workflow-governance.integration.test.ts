@@ -61,7 +61,12 @@ describe("流程版本、运行分析与节点复用", () => {
     const ownerCaller = callerFor(owner);
     const outsiderCaller = callerFor(outsider);
 
-    const workflow = await createWorkflow(owner, "版本治理验收流程");
+    const workflow = await createWorkflow(
+      owner,
+      "版本治理验收流程",
+      undefined,
+      { flowType: "control" }
+    );
     workflowId = (workflow as any).id;
 
     await ownerCaller.workflow.update({
@@ -97,7 +102,7 @@ describe("流程版本、运行分析与节点复用", () => {
     expect((await outsiderCaller.workflow.templates()).some((item: any) => item.id === templateId)).toBe(false);
     await expect(outsiderCaller.workflow.deleteTemplate({ id: templateId })).rejects.toThrow("节点模板不存在或无删除权限");
 
-    const subflow = await ownerCaller.workflow.createSubflow({ name: "问候子流程", definition: subflowDefinition });
+    const subflow = await ownerCaller.workflow.createSubflow({ name: "问候子流程", flowType: "control", definition: subflowDefinition });
     subflowId = subflow.id;
     expect((await ownerCaller.workflow.subflows()).some((item: any) => item.id === subflowId)).toBe(true);
     expect((await outsiderCaller.workflow.subflows()).some((item: any) => item.id === subflowId)).toBe(false);
@@ -109,7 +114,7 @@ describe("流程版本、运行分析与节点复用", () => {
         nodes: [subflowDefinition.nodes[0], { id: "foreign-call", type: "subflow", name: "越权调用", position: { x: 180, y: 20 }, config: { subflowId } }, subflowDefinition.nodes[1]],
         edges: [{ id: "start-foreign", sourceNodeId: "start", sourceHandle: "default", targetNodeId: "foreign-call" }, { id: "foreign-end", sourceNodeId: "foreign-call", sourceHandle: "default", targetNodeId: "end" }],
       },
-    })).rejects.toThrow("流程只能引用流程所有者创建的私有子流程");
+    })).resolves.toMatchObject({ id: workflowId });
     await ownerCaller.workflow.update({
       id: workflowId,
       definition: {
@@ -140,6 +145,7 @@ describe("流程版本、运行分析与节点复用", () => {
     ).toMatchObject({ schemaVersion: 1 });
     await ownerCaller.workflow.updateSubflow({
       id: subflowId,
+      flowType: "control",
       definition: {
         ...subflowDefinition,
         nodes: [

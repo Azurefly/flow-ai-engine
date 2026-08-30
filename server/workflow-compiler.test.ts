@@ -95,6 +95,50 @@ describe("WorkflowCompiler", () => {
     });
   });
 
+  it("allows sequential operate nodes in control flows", () => {
+    const definition = base();
+    definition.nodes.splice(
+      1,
+      0,
+      {
+        id: "first-operate",
+        type: "operate",
+        name: "第一步操作",
+        position: { x: 120, y: 0 },
+        config: {
+          nodeDh: "FIRST_OPERATE",
+          assigneeMode: "initiator",
+          instruction: "完成第一步",
+        },
+      },
+      {
+        id: "second-operate",
+        type: "operate",
+        name: "第二步操作",
+        position: { x: 240, y: 0 },
+        config: {
+          nodeDh: "SECOND_OPERATE",
+          assigneeMode: "initiator",
+          instruction: "完成第二步",
+        },
+      }
+    );
+    definition.edges = [
+      { id: "start-first", sourceNodeId: "start", targetNodeId: "first-operate" },
+      { id: "first-second", sourceNodeId: "first-operate", targetNodeId: "second-operate" },
+      { id: "second-end", sourceNodeId: "second-operate", targetNodeId: "end" },
+    ];
+    const compiled = compileWorkflowDefinition(definition, {
+      flowType: "control",
+    });
+    expect(compiled.plan.topologicalOrder).toEqual([
+      "start",
+      "first-operate",
+      "second-operate",
+      "end",
+    ]);
+  });
+
   it.each([
     ["WF_DEF_INVALID", undefined],
     ["WF_VIEWPORT_INVALID", { viewport: { x: 0, y: 0, zoom: 0 } }],

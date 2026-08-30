@@ -51,6 +51,18 @@ describe("项目流程创建字段与数据源隔离", () => {
       dataSourceId: sourceId,
     });
     expect(dataflow).toMatchObject({ processCode: `DF_${suffix}`, creationSource: "manual", dataSourceId: sourceId, flowType: "data" });
+    await expect(createProjectWorkflow(user, {
+      projectId: primaryProjectId,
+      processCode: `BAD_${suffix}`,
+      name: "无效定义流程",
+      flowType: "control",
+      definition: null,
+    })).rejects.toThrow();
+    const [invalidRows] = await pool.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow WHERE projectId=? AND processCode=?",
+      [primaryProjectId, `BAD_${suffix}`]
+    );
+    expect(invalidRows).toHaveLength(0);
     await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `DF_${suffix}`, name: "重复代号", flowType: "state" })).rejects.toThrow("相同流程代号");
     await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `ST_${suffix}`, name: "状态流程错误关联", flowType: "state", dataSourceId: sourceId })).rejects.toThrow("仅数据流程");
     await expect(createProjectWorkflow(user, { projectId: primaryProjectId, processCode: `X_${suffix}`, name: "跨项目数据源", flowType: "data", dataSourceId: foreignSourceId })).rejects.toThrow("不属于当前业务");

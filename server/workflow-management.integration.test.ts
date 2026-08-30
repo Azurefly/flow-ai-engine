@@ -47,7 +47,12 @@ describe("流程仓库管理", () => {
     owner = users.find(row => row.username === ownerUsername);
     outsider = users.find(row => row.username === outsiderUsername);
     member = users.find(row => row.username === memberUsername);
-    const source = await createWorkflow(owner, "仓库管理集成测试");
+    const source = await createWorkflow(
+      owner,
+      "仓库管理集成测试",
+      undefined,
+      { flowType: "control" }
+    );
     sourceId = (source as any).id;
     const copy = await duplicateWorkflow(sourceId, owner, "仓库管理集成测试 · 副本");
     copyId = (copy as any).id;
