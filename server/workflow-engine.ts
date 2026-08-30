@@ -618,6 +618,30 @@ export async function assertSafeHttpUrl(rawUrl: string) {
   return (await resolveSafeHttpTarget(rawUrl)).url;
 }
 
+export function createPinnedHttpLookup(address: string, family: number) {
+  return ((
+    _hostname: string,
+    options:
+      | { all?: boolean }
+      | ((error: Error | null, address: string, family: number) => void),
+    callback?: (
+      error: Error | null,
+      address: string | { address: string; family: number }[],
+      family?: number
+    ) => void
+  ) => {
+    const done = (typeof options === "function" ? options : callback) as
+      | ((...args: any[]) => void)
+      | undefined;
+    if (!done) throw new Error("HTTP 节点 DNS 回调不可用。");
+    if (typeof options === "object" && options.all) {
+      done(null, [{ address, family }]);
+      return;
+    }
+    done(null, address, family);
+  }) as any;
+}
+
 function requestPinnedHttp(input: {
   url: URL;
   address: string;
@@ -643,15 +667,7 @@ function requestPinnedHttp(input: {
         method: input.method,
         headers: input.headers,
         servername: input.url.hostname,
-        lookup: ((
-          _hostname: string,
-          _options: unknown,
-          callback: (
-            error: Error | null,
-            address: string,
-            family: number
-          ) => void
-        ) => callback(null, input.address, input.family)) as any,
+        lookup: createPinnedHttpLookup(input.address, input.family),
       },
       response => {
         const status = Number(response.statusCode ?? 0);
