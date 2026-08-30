@@ -800,7 +800,9 @@ function FlowConsole({
         void utils.data.runs.invalidate({
           projectId: selectedWorkflow.projectId,
         });
-      toast.success(`数据流运行完成：${result.runId.slice(0, 8)}`);
+      toast.success(
+        `${result.status === "success" ? "数据流运行完成" : "数据流已进入持久化执行队列"}：${result.runId.slice(0, 8)}`
+      );
     },
     onError: error => toast.error(error.message),
   });

@@ -704,6 +704,34 @@ function requestPinnedHttp(input: {
   });
 }
 
+/** Performs a bounded, DNS-pinned probe for data-source verification. */
+export async function probeSafeHttpEndpoint(
+  rawUrl: string,
+  headers: Record<string, string> = {},
+  timeoutMs = 8_000
+) {
+  const target = await resolveSafeHttpTarget(rawUrl);
+  const startedAt = Date.now();
+  const response = await requestPinnedHttp({
+    url: target.url,
+    address: target.address,
+    family: target.family,
+    method: "GET",
+    headers: {
+      ...headers,
+      "user-agent": "AiFlowGraph-data-source-probe/1",
+    },
+    timeoutMs: Math.min(Math.max(timeoutMs, 1_000), HTTP_TIMEOUT_MS),
+  });
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    host: target.url.hostname.toLowerCase(),
+    latencyMs: Date.now() - startedAt,
+    bytes: response.bytes.byteLength,
+  };
+}
+
 /**
  * Adds a stable per-run/per-node key to mutating outbound calls. Remote services
  * can use this header to collapse retries after a Worker lease loss or crash.
@@ -825,7 +853,10 @@ export function isRetryableServiceTaskError(error: unknown) {
 }
 
 export function serviceTaskRetryDelay(baseDelayMs: number, attempt: number) {
-  return Math.min(10_000, Math.max(50, baseDelayMs) * 2 ** Math.max(0, attempt - 1));
+  return Math.min(
+    10_000,
+    Math.max(50, baseDelayMs) * 2 ** Math.max(0, attempt - 1)
+  );
 }
 
 async function acquireServiceConcurrency(key: string, limit: number) {
@@ -850,15 +881,19 @@ async function executeHttpServiceTask(
   context: JsonRecord
 ) {
   const url = new URL(String(runtimeConfig.url));
-  const policyKey = plan.concurrency.key || plan.endpointRef || url.hostname.toLowerCase();
+  const policyKey =
+    plan.concurrency.key || plan.endpointRef || url.hostname.toLowerCase();
   const retryAllowed =
     plan.retryClass === "safe_read" || plan.writeSafety === "idempotent";
   let lastError: unknown;
   for (let attempt = 1; attempt <= plan.retry.maxAttempts; attempt += 1) {
     const circuit = serviceCircuits.get(policyKey);
     if (circuit && circuit.openUntil > Date.now())
-      throw new Error(`服务任务熔断中，请在 ${new Date(circuit.openUntil).toISOString()} 后重试。`);
-    if (circuit && circuit.openUntil <= Date.now()) serviceCircuits.delete(policyKey);
+      throw new Error(
+        `服务任务熔断中，请在 ${new Date(circuit.openUntil).toISOString()} 后重试。`
+      );
+    if (circuit && circuit.openUntil <= Date.now())
+      serviceCircuits.delete(policyKey);
     const release = await acquireServiceConcurrency(
       policyKey,
       plan.concurrency.limit
@@ -891,7 +926,10 @@ async function executeHttpServiceTask(
       release();
     }
     await new Promise(resolve =>
-      setTimeout(resolve, serviceTaskRetryDelay(plan.retry.baseDelayMs, attempt))
+      setTimeout(
+        resolve,
+        serviceTaskRetryDelay(plan.retry.baseDelayMs, attempt)
+      )
     );
   }
   throw lastError;
@@ -979,11 +1017,17 @@ async function resolveServiceTaskRuntimeConfig(
   }
   if (!plan.endpointRef)
     throw new Error("项目流程服务任务缺少 EndpointRef，已拒绝直接网络调用。");
-  const endpoint = await resolveProjectServiceEndpoint(projectId, plan.endpointRef);
+  const endpoint = await resolveProjectServiceEndpoint(
+    projectId,
+    plan.endpointRef
+  );
   if (plan.secretRef && plan.secretRef !== endpoint.secretRef)
     throw new Error("节点 SecretRef 与项目 EndpointRef 登记的密钥引用不一致。");
   const relativePath = String(plan.urlTemplate || ".").trim();
-  if (/^[a-z][a-z0-9+.-]*:/i.test(relativePath) || relativePath.startsWith("//"))
+  if (
+    /^[a-z][a-z0-9+.-]*:/i.test(relativePath) ||
+    relativePath.startsWith("//")
+  )
     throw new Error("EndpointRef 服务任务只允许相对路径。");
   const resolvedUrl = new URL(relativePath || ".", endpoint.baseUrl);
   if (!endpoint.allowedHosts.includes(resolvedUrl.hostname.toLowerCase()))
@@ -992,7 +1036,11 @@ async function resolveServiceTaskRuntimeConfig(
   if (endpoint.secretRef) {
     const secret = resolveExternalSecret(endpoint.secretRef);
     const headerName = endpoint.authHeaderName || "Authorization";
-    if (Object.keys(headers).some(key => key.toLowerCase() === headerName.toLowerCase()))
+    if (
+      Object.keys(headers).some(
+        key => key.toLowerCase() === headerName.toLowerCase()
+      )
+    )
       throw new Error("节点请求头不能覆盖 EndpointRef 管理的认证请求头。");
     headers[headerName] = endpoint.authScheme
       ? `${endpoint.authScheme} ${secret}`
@@ -1019,9 +1067,7 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   if (dataClassification === "public" && allowSensitiveFields.length)
     throw new Error("public 数据分类不允许向 LLM 放行敏感字段。");
   const preparedContext = prepareLlmContext(context, allowSensitiveFields);
-  const resolved = asRecord(
-    resolveTemplates(config, preparedContext.context)
-  );
+  const resolved = asRecord(resolveTemplates(config, preparedContext.context));
   const governance = asRecord(resolved.governance);
   const catalog = await listLLMModels();
   const requestedModel =
@@ -1046,9 +1092,7 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
     !Array.isArray(resolved.outputSchema)
       ? asRecord(resolved.outputSchema)
       : undefined;
-  const deterministicValidation = asRecord(
-    governance.deterministicValidation
-  );
+  const deterministicValidation = asRecord(governance.deterministicValidation);
   const deterministicSchema =
     deterministicValidation.schema &&
     typeof deterministicValidation.schema === "object" &&
@@ -1511,17 +1555,16 @@ async function executeNode(
       };
     }
     case "rest":
-    case "method":
-      {
-        const plan = compileHttpServiceTask(node.type, config)!;
-        return {
-          output: await executeHttpServiceTask(
-            plan,
-            await resolveServiceTaskRuntimeConfig(node.type, config, projectId),
-            context
-          ),
-        };
-      }
+    case "method": {
+      const plan = compileHttpServiceTask(node.type, config)!;
+      return {
+        output: await executeHttpServiceTask(
+          plan,
+          await resolveServiceTaskRuntimeConfig(node.type, config, projectId),
+          context
+        ),
+      };
+    }
     case "operate":
       throw new Error(
         "操作节点需要 P1 人工任务工作台；当前运行已安全阻断，未执行任何外部操作。"
@@ -1551,17 +1594,16 @@ async function executeNode(
           : String(config.falseHandle ?? "false"),
       };
     }
-    case "http":
-      {
-        const plan = compileHttpServiceTask("http", config)!;
-        return {
-          output: await executeHttpServiceTask(
-            plan,
-            await resolveServiceTaskRuntimeConfig("http", config, projectId),
-            context
-          ),
-        };
-      }
+    case "http": {
+      const plan = compileHttpServiceTask("http", config)!;
+      return {
+        output: await executeHttpServiceTask(
+          plan,
+          await resolveServiceTaskRuntimeConfig("http", config, projectId),
+          context
+        ),
+      };
+    }
     case "llm":
       return { output: await executeLlmNode(config, context) };
     case "subflow": {
@@ -1951,11 +1993,16 @@ export async function executePreparedWorkflowRun(input: {
   onCheckpoint?: (checkpoint: WorkflowCheckpoint) => Promise<void>;
 }): Promise<WorkflowExecutionResult> {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT r.*,w.name,w.projectId FROM workflow_run r
+    `SELECT r.*,w.id AS workflowDefinitionId,w.name,w.projectId FROM workflow_run r
        JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1`,
     [input.runId]
   );
-  const run = rows[0] as PersistedWorkflow | undefined;
+  const run = rows[0]
+    ? ({
+        ...rows[0],
+        id: String(rows[0].workflowDefinitionId ?? rows[0].workflowId),
+      } as PersistedWorkflow)
+    : undefined;
   if (!run) throw new Error("流程运行不存在。");
   if (
     ["success", "failed", "cancelled", "terminated"].includes(
@@ -2423,9 +2470,14 @@ async function persistWorkflowWait(input: {
 }) {
   const config = asRecord(resolveTemplates(input.node.config, input.context));
   const waitType = input.node.type === "wait" ? "timer" : "message";
-  const durationSeconds = Math.max(1, Math.trunc(Number(config.durationSeconds ?? 60)));
-  const messageName = waitType === "message" ? String(config.messageName ?? "").trim() : null;
-  const correlationKey = waitType === "message" ? String(config.correlationKey ?? "").trim() : null;
+  const durationSeconds = Math.max(
+    1,
+    Math.trunc(Number(config.durationSeconds ?? 60))
+  );
+  const messageName =
+    waitType === "message" ? String(config.messageName ?? "").trim() : null;
+  const correlationKey =
+    waitType === "message" ? String(config.correlationKey ?? "").trim() : null;
   if (waitType === "message" && (!messageName || !correlationKey))
     throw new Error("消息等待节点未解析到有效消息名称和相关键。");
   const checkpoint: WorkflowCheckpoint = {
@@ -2452,7 +2504,9 @@ async function persistWorkflowWait(input: {
       messageName,
       correlationKey,
       JSON.stringify(checkpoint),
-      String(asRecord(input.context.runtime).requestId ?? currentRequestId() ?? "") || null,
+      String(
+        asRecord(input.context.runtime).requestId ?? currentRequestId() ?? ""
+      ) || null,
     ]
   );
   await db().query(
@@ -2907,7 +2961,11 @@ async function executeRunSegment(input: {
           .filter(edge => edge.sourceNodeId === node.id)
           .map(edge => edge.targetNodeId);
         for (const nextNodeId of nextNodeIds) {
-          setRuntimeNodeParticipants(input.context, nextNodeId, currentParticipants);
+          setRuntimeNodeParticipants(
+            input.context,
+            nextNodeId,
+            currentParticipants
+          );
           input.queue.push(nextNodeId);
         }
         const persisted = await persistWorkflowWait({
@@ -3304,7 +3362,9 @@ async function executeRunSegment(input: {
           input.context,
           true,
           Number(input.workflow.ownerUserId),
-          input.workflow.projectId ? String(input.workflow.projectId) : undefined
+          input.workflow.projectId
+            ? String(input.workflow.projectId)
+            : undefined
         );
       } catch (error) {
         const serviceTask = compileHttpServiceTask(node.type, node.config);
@@ -3551,7 +3611,9 @@ async function completeTaskAndEvaluateApprovalGroup(
       );
       const next = nextTasks[0];
       if (next) {
-        const nextConfig = asRecord(asRecord(readJson(next.payloadJson)).config);
+        const nextConfig = asRecord(
+          asRecord(readJson(next.payloadJson)).config
+        );
         const nextDueAfterSeconds = Math.max(
           0,
           Math.trunc(Number(nextConfig.dueAfterSeconds ?? 0) || 0)
@@ -3772,8 +3834,7 @@ export async function resumeWorkflowTask(input: {
       approvalGroupId: task.approvalGroupId ?? null,
       signMode: task.signMode ?? "single",
       completedByUserId: input.completedBy.id,
-      responsibleUserId:
-        Number(task.responsibleUserId) || input.completedBy.id,
+      responsibleUserId: Number(task.responsibleUserId) || input.completedBy.id,
       representedUserId: Number(task.representedUserId) || null,
       delegationId: task.delegationId ?? null,
       operationName: task.operationName ?? task.nodeName,
@@ -3905,7 +3966,10 @@ export async function resumeWorkflowTask(input: {
   }
 }
 
-async function triggerWorkflowWaitSubscription(waitId: string, payload: JsonRecord) {
+async function triggerWorkflowWaitSubscription(
+  waitId: string,
+  payload: JsonRecord
+) {
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
@@ -3963,7 +4027,14 @@ async function triggerWorkflowWaitSubscription(waitId: string, payload: JsonReco
     );
     await connection.query(
       "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
-      [randomUUID(), wait.runId, idempotencyKey, JSON.stringify(resumeCheckpoint), WORKFLOW_JOB_MAX_ATTEMPTS, wait.requestId ?? null]
+      [
+        randomUUID(),
+        wait.runId,
+        idempotencyKey,
+        JSON.stringify(resumeCheckpoint),
+        WORKFLOW_JOB_MAX_ATTEMPTS,
+        wait.requestId ?? null,
+      ]
     );
     await connection.commit();
     return true;
@@ -3986,7 +4057,11 @@ export async function reconcileDueWorkflowWaits(limit = 50) {
   );
   let triggered = 0;
   for (const row of rows)
-    if (await triggerWorkflowWaitSubscription(String(row.id), { reason: "timer_elapsed" }))
+    if (
+      await triggerWorkflowWaitSubscription(String(row.id), {
+        reason: "timer_elapsed",
+      })
+    )
       triggered += 1;
   return triggered;
 }
@@ -4003,13 +4078,18 @@ export async function signalWorkflowMessage(input: {
     [input.runId, input.messageName.trim(), input.correlationKey]
   );
   if (!rows.length) throw new Error("未找到匹配的活动消息等待订阅。");
-  if (rows.length > 1) throw new Error("消息相关键命中多个活动等待订阅，已拒绝不确定触发。");
+  if (rows.length > 1)
+    throw new Error("消息相关键命中多个活动等待订阅，已拒绝不确定触发。");
   const triggered = await triggerWorkflowWaitSubscription(
     String(rows[0]!.id),
     input.payload ?? {}
   );
   if (!triggered) throw new Error("消息等待订阅已由其他请求触发。");
-  return { waitId: String(rows[0]!.id), runId: input.runId, status: "queued" as const };
+  return {
+    waitId: String(rows[0]!.id),
+    runId: input.runId,
+    status: "queued" as const,
+  };
 }
 
 /**
@@ -4328,7 +4408,10 @@ export async function reconcileDueWorkflowTaskSchedules(limit = 100) {
           schedule.runId,
           schedule.recipientUserId,
           eventType === "escalation" ? "critical" : "warning",
-          `${label}：${schedule.operationName || schedule.nodeName}`.slice(0, 320),
+          `${label}：${schedule.operationName || schedule.nodeName}`.slice(
+            0,
+            320
+          ),
           JSON.stringify({
             eventType,
             taskId: schedule.taskId,

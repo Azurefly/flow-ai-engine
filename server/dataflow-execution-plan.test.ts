@@ -44,7 +44,8 @@ describe("数据流 ExecutionPlan V2 基线", () => {
   it("运行时只消费已校验计划并将计划与 requestId 固化到运行记录", () => {
     const source = readFileSync(new URL("./p2-service.ts", import.meta.url), "utf8");
     expect(source).toContain("assertWorkflowExecutionPlan(");
-    expect(source).toContain("runDataflowDefinition(input.projectId, executionPlan!)");
+    expect(source).toContain("job.executionPlan,");
+    expect(source).toContain("await runDataflowJobOnce(runId)");
     expect(source).toContain("executionPlanJson,executionPlanHash,requestId");
     expect(source).toContain("const queue = [...executionPlan.topologicalOrder]");
   });

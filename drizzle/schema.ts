@@ -326,7 +326,9 @@ export const workflows = mysqlTable(
     definitionVersion: int("definitionVersion").default(1).notNull(),
     definitionJson: json("definitionJson").notNull(),
     publishedExecutionPlanJson: json("publishedExecutionPlanJson"),
-    publishedExecutionPlanHash: varchar("publishedExecutionPlanHash", { length: 64 }),
+    publishedExecutionPlanHash: varchar("publishedExecutionPlanHash", {
+      length: 64,
+    }),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },
@@ -546,8 +548,16 @@ export const workflowOutboxEvents = mysqlTable(
   },
   table => [
     unique("workflow_outbox_dedupe_unique").on(table.dedupeKey),
-    index("workflow_outbox_claim_idx").on(table.status, table.availableAt, table.leaseExpiresAt),
-    index("workflow_outbox_aggregate_idx").on(table.aggregateType, table.aggregateId, table.createdAt),
+    index("workflow_outbox_claim_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+    index("workflow_outbox_aggregate_idx").on(
+      table.aggregateType,
+      table.aggregateId,
+      table.createdAt
+    ),
   ]
 );
 
@@ -601,7 +611,12 @@ export const workflowTaskGroups = mysqlTable(
       .notNull()
       .references(() => workflowRuns.id),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
-    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor", "sequentialSignFor"])
+    signMode: mysqlEnum("signMode", [
+      "single",
+      "orSignFor",
+      "andSignFor",
+      "sequentialSignFor",
+    ])
       .default("single")
       .notNull(),
     totalApprovers: int("totalApprovers").default(1).notNull(),
@@ -664,7 +679,12 @@ export const workflowTasks = mysqlTable(
     approvalGroupId: varchar("approvalGroupId", { length: 36 }).references(
       () => workflowTaskGroups.id
     ),
-    signMode: mysqlEnum("signMode", ["single", "orSignFor", "andSignFor", "sequentialSignFor"])
+    signMode: mysqlEnum("signMode", [
+      "single",
+      "orSignFor",
+      "andSignFor",
+      "sequentialSignFor",
+    ])
       .default("single")
       .notNull(),
     approvalOrder: int("approvalOrder").default(0).notNull(),
@@ -756,12 +776,26 @@ export const workflowTaskSchedules = mysqlTable(
   "workflow_task_schedule",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    taskId: varchar("taskId", { length: 36 }).notNull().references(() => workflowTasks.id, { onDelete: "cascade" }),
-    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id, { onDelete: "cascade" }),
-    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id, { onDelete: "cascade" }),
-    recipientUserId: int("recipientUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
-    eventType: mysqlEnum("eventType", ["reminder", "due", "escalation"]).notNull(),
-    status: mysqlEnum("status", ["scheduled", "fired", "cancelled"]).default("scheduled").notNull(),
+    taskId: varchar("taskId", { length: 36 })
+      .notNull()
+      .references(() => workflowTasks.id, { onDelete: "cascade" }),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => workflowRuns.id, { onDelete: "cascade" }),
+    workflowId: varchar("workflowId", { length: 36 })
+      .notNull()
+      .references(() => workflows.id, { onDelete: "cascade" }),
+    recipientUserId: int("recipientUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    eventType: mysqlEnum("eventType", [
+      "reminder",
+      "due",
+      "escalation",
+    ]).notNull(),
+    status: mysqlEnum("status", ["scheduled", "fired", "cancelled"])
+      .default("scheduled")
+      .notNull(),
     fireAt: timestamp("fireAt").notNull(),
     payloadJson: json("payloadJson"),
     requestId: varchar("requestId", { length: 100 }),
@@ -769,7 +803,11 @@ export const workflowTaskSchedules = mysqlTable(
     firedAt: timestamp("firedAt"),
   },
   table => [
-    unique("workflow_task_schedule_task_event_recipient_unique").on(table.taskId, table.eventType, table.recipientUserId),
+    unique("workflow_task_schedule_task_event_recipient_unique").on(
+      table.taskId,
+      table.eventType,
+      table.recipientUserId
+    ),
     index("workflow_task_schedule_due_idx").on(table.status, table.fireAt),
   ]
 );
@@ -788,7 +826,12 @@ export const workflowMilestones = mysqlTable(
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
     milestoneCode: varchar("milestoneCode", { length: 96 }).notNull(),
     displayName: varchar("displayName", { length: 160 }).notNull(),
-    category: mysqlEnum("category", ["business", "integration", "quality", "custom"])
+    category: mysqlEnum("category", [
+      "business",
+      "integration",
+      "quality",
+      "custom",
+    ])
       .default("business")
       .notNull(),
     detailsJson: json("detailsJson"),
@@ -798,7 +841,10 @@ export const workflowMilestones = mysqlTable(
   },
   table => [
     unique("workflow_milestone_run_node_unique").on(table.runId, table.nodeId),
-    index("workflow_milestone_workflow_time_idx").on(table.workflowId, table.occurredAt),
+    index("workflow_milestone_workflow_time_idx").on(
+      table.workflowId,
+      table.occurredAt
+    ),
   ]
 );
 
@@ -807,12 +853,20 @@ export const workflowWaitSubscriptions = mysqlTable(
   "workflow_wait_subscription",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    runId: varchar("runId", { length: 36 }).notNull().references(() => workflowRuns.id),
-    workflowId: varchar("workflowId", { length: 36 }).notNull().references(() => workflows.id),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => workflowRuns.id),
+    workflowId: varchar("workflowId", { length: 36 })
+      .notNull()
+      .references(() => workflows.id),
     nodeId: varchar("nodeId", { length: 128 }).notNull(),
-    nodeRunId: varchar("nodeRunId", { length: 36 }).notNull().references(() => workflowNodeRuns.id),
+    nodeRunId: varchar("nodeRunId", { length: 36 })
+      .notNull()
+      .references(() => workflowNodeRuns.id),
     waitType: mysqlEnum("waitType", ["timer", "message"]).notNull(),
-    status: mysqlEnum("status", ["active", "triggered", "cancelled"]).default("active").notNull(),
+    status: mysqlEnum("status", ["active", "triggered", "cancelled"])
+      .default("active")
+      .notNull(),
     resumeAt: timestamp("resumeAt"),
     messageName: varchar("messageName", { length: 128 }),
     correlationKey: varchar("correlationKey", { length: 255 }),
@@ -823,9 +877,21 @@ export const workflowWaitSubscriptions = mysqlTable(
     triggeredAt: timestamp("triggeredAt"),
   },
   table => [
-    unique("workflow_wait_subscription_run_node_unique").on(table.runId, table.nodeId),
-    index("workflow_wait_subscription_timer_idx").on(table.status, table.waitType, table.resumeAt),
-    index("workflow_wait_subscription_message_idx").on(table.runId, table.status, table.messageName, table.correlationKey),
+    unique("workflow_wait_subscription_run_node_unique").on(
+      table.runId,
+      table.nodeId
+    ),
+    index("workflow_wait_subscription_timer_idx").on(
+      table.status,
+      table.waitType,
+      table.resumeAt
+    ),
+    index("workflow_wait_subscription_message_idx").on(
+      table.runId,
+      table.status,
+      table.messageName,
+      table.correlationKey
+    ),
   ]
 );
 
@@ -927,6 +993,76 @@ export const dataSources = mysqlTable(
     index("data_source_project_updated_idx").on(
       table.projectId,
       table.updatedAt
+    ),
+  ]
+);
+
+export const dataSourceTestRuns = mysqlTable(
+  "data_source_test_run",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 })
+      .notNull()
+      .references(() => flowProjects.id, { onDelete: "cascade" }),
+    sourceId: varchar("sourceId", { length: 36 })
+      .notNull()
+      .references(() => dataSources.id, { onDelete: "cascade" }),
+    sourceType: mysqlEnum("sourceType", [
+      "jdbc",
+      "api",
+      "file",
+      "inline",
+    ]).notNull(),
+    status: mysqlEnum("status", [
+      "queued",
+      "leased",
+      "success",
+      "failed",
+      "cancelled",
+    ])
+      .default("queued")
+      .notNull(),
+    configHash: varchar("configHash", { length: 64 }).notNull(),
+    attempt: int("attempt").default(0).notNull(),
+    maxAttempts: int("maxAttempts").default(2).notNull(),
+    availableAt: timestamp("availableAt").defaultNow().notNull(),
+    leaseToken: varchar("leaseToken", { length: 48 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    workerId: varchar("workerId", { length: 96 }),
+    endpointHost: varchar("endpointHost", { length: 255 }),
+    errorCategory: mysqlEnum("errorCategory", [
+      "policy",
+      "configuration",
+      "dns",
+      "network",
+      "timeout",
+      "authentication",
+      "authorization",
+      "database",
+      "unsupported",
+      "stale_configuration",
+      "internal",
+    ]),
+    evidenceJson: json("evidenceJson"),
+    errorJson: json("errorJson"),
+    latencyMs: int("latencyMs"),
+    requestId: varchar("requestId", { length: 100 }),
+    triggeredByUserId: int("triggeredByUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    startedAt: timestamp("startedAt"),
+    finishedAt: timestamp("finishedAt"),
+  },
+  table => [
+    index("data_source_test_run_claim_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+    index("data_source_test_run_source_created_idx").on(
+      table.sourceId,
+      table.createdAt
     ),
   ]
 );
@@ -1090,6 +1226,9 @@ export const dataflowRuns = mysqlTable(
     executionPlanJson: json("executionPlanJson"),
     executionPlanHash: varchar("executionPlanHash", { length: 64 }),
     requestId: varchar("requestId", { length: 100 }),
+    checkpointJson: json("checkpointJson"),
+    watermarkInputJson: json("watermarkInputJson"),
+    watermarkOutputJson: json("watermarkOutputJson"),
     inputJson: json("inputJson").notNull(),
     outputJson: json("outputJson"),
     errorJson: json("errorJson"),
@@ -1112,6 +1251,146 @@ export const dataflowRuns = mysqlTable(
       table.workflowId,
       table.scheduleBucket
     ),
+  ]
+);
+
+export const dataflowRunJobs = mysqlTable(
+  "dataflow_run_job",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => dataflowRuns.id, { onDelete: "cascade" }),
+    status: mysqlEnum("status", [
+      "queued",
+      "leased",
+      "completed",
+      "failed",
+      "cancelled",
+    ])
+      .default("queued")
+      .notNull(),
+    attempt: int("attempt").default(0).notNull(),
+    maxAttempts: int("maxAttempts").default(3).notNull(),
+    availableAt: timestamp("availableAt").defaultNow().notNull(),
+    leaseToken: varchar("leaseToken", { length: 48 }),
+    leaseExpiresAt: timestamp("leaseExpiresAt"),
+    workerId: varchar("workerId", { length: 96 }),
+    resultJson: json("resultJson"),
+    lastErrorJson: json("lastErrorJson"),
+    requestId: varchar("requestId", { length: 100 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+    finishedAt: timestamp("finishedAt"),
+  },
+  table => [
+    unique("dataflow_run_job_run_unique").on(table.runId),
+    index("dataflow_run_job_claim_idx").on(
+      table.status,
+      table.availableAt,
+      table.leaseExpiresAt
+    ),
+  ]
+);
+
+export const dataflowNodeRuns = mysqlTable(
+  "dataflow_node_run",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => dataflowRuns.id, { onDelete: "cascade" }),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    sequenceNo: int("sequenceNo").notNull(),
+    nodeType: varchar("nodeType", { length: 64 }).notNull(),
+    status: mysqlEnum("status", ["running", "success", "failed", "skipped"])
+      .default("running")
+      .notNull(),
+    attempt: int("attempt").default(1).notNull(),
+    inputJson: json("inputJson"),
+    outputJson: json("outputJson"),
+    errorJson: json("errorJson"),
+    inputArtifactsJson: json("inputArtifactsJson"),
+    outputArtifactsJson: json("outputArtifactsJson"),
+    metricsJson: json("metricsJson"),
+    jobLeaseToken: varchar("jobLeaseToken", { length: 48 }),
+    rowCount: int("rowCount"),
+    requestId: varchar("requestId", { length: 100 }),
+    startedAt: timestamp("startedAt").defaultNow().notNull(),
+    finishedAt: timestamp("finishedAt"),
+    durationMs: int("durationMs"),
+  },
+  table => [
+    unique("dataflow_node_run_run_node_unique").on(table.runId, table.nodeId),
+    unique("dataflow_node_run_run_sequence_unique").on(
+      table.runId,
+      table.sequenceNo
+    ),
+    index("dataflow_node_run_status_idx").on(table.runId, table.status),
+  ]
+);
+
+export const dataflowDatasetArtifacts = mysqlTable(
+  "dataflow_dataset_artifact",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => dataflowRuns.id, { onDelete: "cascade" }),
+    nodeRunId: varchar("nodeRunId", { length: 36 })
+      .notNull()
+      .references(() => dataflowNodeRuns.id, { onDelete: "cascade" }),
+    nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    schemaJson: json("schemaJson").notNull(),
+    schemaHash: varchar("schemaHash", { length: 64 }).notNull(),
+    storageRef: varchar("storageRef", { length: 512 }).notNull(),
+    format: mysqlEnum("format", ["inline_json", "json", "parquet", "csv"])
+      .default("inline_json")
+      .notNull(),
+    dataJson: json("dataJson"),
+    partitionJson: json("partitionJson"),
+    rowCount: int("rowCount").default(0).notNull(),
+    byteCount: int("byteCount").default(0).notNull(),
+    watermarkJson: json("watermarkJson"),
+    sampleJson: json("sampleJson"),
+    expiresAt: timestamp("expiresAt"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("dataflow_dataset_artifact_node_run_unique").on(table.nodeRunId),
+    unique("dataflow_dataset_artifact_run_node_unique").on(
+      table.runId,
+      table.nodeId
+    ),
+    index("dataflow_dataset_artifact_run_idx").on(table.runId, table.createdAt),
+  ]
+);
+
+export const dataflowLineageEdges = mysqlTable(
+  "dataflow_lineage_edge",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    runId: varchar("runId", { length: 36 })
+      .notNull()
+      .references(() => dataflowRuns.id, { onDelete: "cascade" }),
+    sourceArtifactId: varchar("sourceArtifactId", { length: 36 })
+      .notNull()
+      .references(() => dataflowDatasetArtifacts.id, { onDelete: "cascade" }),
+    targetArtifactId: varchar("targetArtifactId", { length: 36 })
+      .notNull()
+      .references(() => dataflowDatasetArtifacts.id, { onDelete: "cascade" }),
+    nodeRunId: varchar("nodeRunId", { length: 36 })
+      .notNull()
+      .references(() => dataflowNodeRuns.id, { onDelete: "cascade" }),
+    columnMappingJson: json("columnMappingJson"),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("dataflow_lineage_edge_unique").on(
+      table.sourceArtifactId,
+      table.targetArtifactId,
+      table.nodeRunId
+    ),
+    index("dataflow_lineage_edge_run_idx").on(table.runId, table.createdAt),
   ]
 );
 

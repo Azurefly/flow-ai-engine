@@ -3,14 +3,18 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 
-export const DATABASE_MIGRATION_VERSION = "0027_dataflow_execution_plan";
-export const DATABASE_MIGRATION_EPOCH = 1787662800000;
+export const DATABASE_MIGRATION_VERSION = "0030_data_source_test_jobs";
+export const DATABASE_MIGRATION_EPOCH = 1787673600000;
 
 let pool: mysql.Pool | undefined;
 
 function db() {
-  if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not configured");
-  return (pool ??= mysql.createPool({ uri: process.env.DATABASE_URL, connectionLimit: 2 }));
+  if (!process.env.DATABASE_URL)
+    throw new Error("DATABASE_URL is not configured");
+  return (pool ??= mysql.createPool({
+    uri: process.env.DATABASE_URL,
+    connectionLimit: 2,
+  }));
 }
 
 export function getCapabilityStatus() {
@@ -20,7 +24,9 @@ export function getCapabilityStatus() {
       id: "state-control-workflow",
       label: "状态/控制流程",
       status: worker.started ? "beta" : "disabled",
-      reason: worker.started ? "持久化 Worker 已启动，仍需完成故障注入验收。" : "持久化 Worker 未启动。",
+      reason: worker.started
+        ? "持久化 Worker 已启动，仍需完成故障注入验收。"
+        : "持久化 Worker 未启动。",
     },
     {
       id: "human-approval",
@@ -32,13 +38,16 @@ export function getCapabilityStatus() {
       id: "llm-node",
       label: "LLM 节点",
       status: ENV.llmApiKey ? "beta" : "disabled",
-      reason: ENV.llmApiKey ? "Provider 已配置，仍需真实模型 E2E。" : "OPENAI_API_KEY 未配置。",
+      reason: ENV.llmApiKey
+        ? "Provider 已配置，仍需真实模型 E2E。"
+        : "OPENAI_API_KEY 未配置。",
     },
     {
       id: "dataflow",
       label: "数据流",
       status: "experimental",
-      reason: "当前仅适合样例和受控试验，尚无生产 Connector/Checkpoint 验收。",
+      reason:
+        "耐久 Job、内联 Artifact 和 Checkpoint 已接入；尚无生产 Connector、外部存储和真实重启验收。",
     },
   ] as const;
 }
@@ -72,7 +81,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -81,7 +90,9 @@ export async function checkReadiness() {
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
           (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
-          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId')) OR
+          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson')) OR
+          (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
+          (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -97,14 +108,20 @@ export async function checkReadiness() {
           OR (table_name='workflow_wait_subscription' AND index_name='workflow_wait_subscription_run_node_unique')
           OR (table_name='workflow_milestone' AND index_name='workflow_milestone_run_node_unique')
           OR (table_name='workflow_task_schedule' AND index_name='workflow_task_schedule_task_event_recipient_unique')
+          OR (table_name='dataflow_run_job' AND index_name='dataflow_run_job_run_unique')
+          OR (table_name='dataflow_node_run' AND index_name='dataflow_node_run_run_node_unique')
+          OR (table_name='dataflow_node_run' AND index_name='dataflow_node_run_run_sequence_unique')
+          OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_node_run_unique')
+          OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_run_node_unique')
+          OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
         )`
     );
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 8 &&
-      Number(columnRows[0]?.count ?? 0) === 24 &&
-      Number(indexRows[0]?.count ?? 0) === 7;
+      Number(tableRows[0]?.count ?? 0) === 13 &&
+      Number(columnRows[0]?.count ?? 0) === 36 &&
+      Number(indexRows[0]?.count ?? 0) === 13;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {
@@ -112,7 +129,10 @@ export async function checkReadiness() {
           message: `${DATABASE_MIGRATION_VERSION} migration is incomplete`,
         };
   } catch (error) {
-    checks.database = { ok: false, message: error instanceof Error ? error.message : String(error) };
+    checks.database = {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    };
     checks.migrations = { ok: false, message: "database check failed" };
   }
   const worker = getWorkflowWorkerStatus();
@@ -136,5 +156,9 @@ export async function checkReadiness() {
       }
     }
   }
-  return { ready: Object.values(checks).every(check => check.ok), checks, runtime: getRuntimeInfo() };
+  return {
+    ready: Object.values(checks).every(check => check.ok),
+    checks,
+    runtime: getRuntimeInfo(),
+  };
 }

@@ -1952,7 +1952,7 @@ pnpm test:integration:provider
 - [x] **3F-P0-024** 旧节点保持 `legacy_cancel`，设计器显示明确迁移提示。
 - [x] **3F-P0-025** 已新增状态迁移表、运行 currentState/stateVersion、状态变更 Outbox 和实例历史 UI。
 - [~] **3F-P0-026** 任务决定、任务组关闭、节点完成、运行排队和续跑 Job 已合并为单事务；进入目标状态时的状态事实与参与人更新在 Worker 内另一个原子事务完成，尚需进一步收敛为同一命令事务或证明两阶段恢复合同。
-- [ ] **3F-P0-027** 真实 MySQL 并发审批和重复推进测试。
+- [~] **3F-P0-027** 已有 MySQL 集成测试覆盖或签/会签并发审批仅一请求推进；当前环境未配置 `DATABASE_URL`，尚未形成真实数据库执行证据。
 
 ### P1：人员、表单和时间
 
@@ -1979,17 +1979,17 @@ pnpm test:integration:provider
 ### P1：数据流程 V2
 
 - [~] **3F-P1-040** 数据 ExecutionPlan V2 和 plan hash。已在发布阶段编译 dataflow profile 不可变计划，运行时校验 SHA-256 哈希并仅按计划拓扑顺序执行；dataflow_run 固化定义、计划、哈希和 requestId。待真实 MySQL 迁移与运行快照验收后完成。
-- [ ] **3F-P1-041** `dataflow_run_job / dataflow_node_run` 耐久运行表。
-- [ ] **3F-P1-042** Dataset Artifact、Checkpoint 和 Lineage。
-- [ ] **3F-P1-043** 数据源真实连接测试 Job 和证据模型。
-- [ ] **3F-P1-044** Inline 与 MySQL 只读 Connector。
-- [ ] **3F-P1-045** 真实 SQL Source、参数绑定和 Schema 推断。
-- [ ] **3F-P1-046** Filter、Project、Derive 分离实现。
-- [ ] **3F-P1-047** Join、Union、Aggregate、Sort、Deduplicate。
-- [ ] **3F-P1-048** Quality Gate 和隔离输出。
-- [ ] **3F-P1-049** Sink 写入权限、Schema 策略和幂等提交。
-- [ ] **3F-P1-050** 失败不提交水位，重启从 Checkpoint 恢复。
-- [ ] **3F-P1-051** 数据流真实 MySQL 端到端和跨项目拒绝测试。
+- [~] **3F-P1-041** 已增加 `dataflow_run_job / dataflow_node_run` 耐久运行表：运行与根 Job 同事务创建，Worker 通过 `FOR UPDATE SKIP LOCKED`、租约、续租、过期回收和有界退避执行；每个节点固化稳定顺序、输入、输出、行数、耗时、Attempt 和失败事实，损坏计划会终止对应 Job 而不会永久毒化队列。待真实 MySQL 迁移、并发领取、进程重启和租约故障注入验收后完成。
+- [~] **3F-P1-042** 已实现逐节点 Dataset Artifact、Run Checkpoint 和 Artifact 级 Lineage：节点提交在有效 Job 租约下原子写入 NodeRun、Artifact、依赖边与 Checkpoint，租约交接后的旧 Worker 不能覆盖新 Attempt；重试从成功 Artifact 恢复并跳过已提交节点，运行审计提供项目权限保护的 Artifact/Lineage 查询。当前仅支持有界 `inline_json` Artifact 和节点依赖级血缘；外部对象存储、列级映射、水位提交及真实 MySQL 崩溃恢复验收仍待完成。
+- [~] **3F-P1-043** 已增加独立 `data_source_test_run` Job：配置哈希绑定、租约/过期回收、真实 API GET 与受白名单约束的 MySQL `SELECT 1` 探测、内联元数据探测，以及策略/DNS/网络/超时/认证/授权/数据库/配置漂移分类。仅成功测试可把数据源原子标记为 `verified`，证据脱敏且不保存凭据；文件读取器和真实 MySQL/Provider 验收仍待完成。
+- [~] **3F-P1-044** 已接入 Inline 与已验证 MySQL 只读 Connector：Source 节点读取内联样本或白名单 MySQL 表，执行限制行数和安全标识符校验；API/文件 Connector 仍未启用。
+- [~] **3F-P1-045** SQL 节点已执行已验证 MySQL 数据源的单条只读 SELECT，支持命名参数绑定、行数上限及禁止 DML/DDL/文件写出；SQL Parser、真实 Schema 推断和列级依赖仍待完成。
+- [~] **3F-P1-046** 已将 Filter、Project、Derive 拆分为独立节点和运行语义：Filter 支持确定性比较，Project 支持选择/重命名，Derive 仅允许字段引用、数值/布尔/字符串常量；复杂安全表达式与 Cast 仍待补齐。
+- [~] **3F-P1-047** 已增加 Join、Union、Aggregate、Sort、Deduplicate 运行节点：Join 明确左右输入和键，Union 支持 all/distinct，Aggregate 支持 count/sum/min/max，Sort 与 Deduplicate 为确定性操作；发布期输入基数/Schema 校验仍需加强。
+- [~] **3F-P1-048** 已增加 Quality Gate 节点，按最少行数和空值率执行确定性校验；失败会终止当前 Job，且不会写入成功输出 Artifact。独立隔离区/失败样本存储仍待实现。
+- [~] **3F-P1-049** Sink 已要求显式 `audit_only` 写入模式和稳定幂等键模板，未知写入模式会被发布/运行双重拒绝；真实外部 Sink Connector、Schema 演进策略和写权限仍待实现。
+- [~] **3F-P1-050** 当前失败路径不会更新成功水位，节点提交要求有效 Job 租约，重启会从已提交 Artifact/Checkpoint 跳过成功节点；真实 MySQL 崩溃恢复和增量水位集成验收仍待完成。
+- [~] **3F-P1-051** MySQL 集成套件已增加真实凭据引用、连接测试、参数化 SELECT、运行结果断言和跨项目数据源拒绝；需配置 `DATABASE_URL` 执行后才能形成环境验收证据。
 
 ### P2：高级能力与体验
 

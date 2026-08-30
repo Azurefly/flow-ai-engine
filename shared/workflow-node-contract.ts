@@ -25,6 +25,14 @@ export const FLOW_NODE_TYPES = [
   "table",
   "filter",
   "map",
+  "project",
+  "derive",
+  "join",
+  "union",
+  "aggregate",
+  "sort",
+  "deduplicate",
+  "quality_gate",
   "udf",
   "sink",
   "output",
@@ -85,6 +93,8 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "table",
     "filter",
     "map",
+    "project",
+    "derive",
     "edit_sql",
     "udf",
     "sink",
@@ -214,6 +224,8 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "subflow",
     "filter",
     "map",
+    "project",
+    "derive",
     "sink",
     "output",
     "end",
@@ -247,6 +259,8 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "condition",
     "filter",
     "map",
+    "project",
+    "derive",
     "udf",
     "sink",
     "output",
@@ -254,17 +268,60 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
   ],
   source: [
     "table",
+    "transform",
     "filter",
     "map",
+    "project",
+    "derive",
     "edit_sql",
     "udf",
     "sink",
     "output",
     "end",
   ],
-  table: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
-  filter: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  table: [
+    "filter",
+    "map",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
+  filter: [
+    "filter",
+    "map",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
   map: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
+  project: [
+    "filter",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
+  derive: [
+    "filter",
+    "project",
+    "derive",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
   edit_sql: ["filter", "map", "udf", "sink", "output", "end"],
   udf: ["filter", "map", "edit_sql", "udf", "sink", "output", "end"],
   sink: ["end"],
@@ -453,13 +510,48 @@ const referenceHttpFields: NodeField[] = [
       { value: "compensated", label: "失败时进入补偿节点" },
     ],
   },
-  { key: "compensationNodeId", label: "补偿节点 ID", help: "写操作选择补偿策略时必须指向当前流程中的后继补偿节点。", kind: "text" },
-  { key: "retryMaxAttempts", label: "最大尝试次数", help: "范围 1 至 5；包含首次执行。", kind: "number" },
-  { key: "retryBaseDelayMs", label: "重试基础延迟", help: "指数退避基础延迟，范围 50 至 5,000 毫秒。", kind: "number" },
-  { key: "circuitFailureThreshold", label: "熔断失败阈值", help: "同一并发键连续失败达到阈值后临时熔断。", kind: "number" },
-  { key: "circuitResetMs", label: "熔断恢复时间", help: "范围 1,000 至 300,000 毫秒。", kind: "number" },
-  { key: "concurrencyKey", label: "并发限制键", help: "相同键的任务共享并发配额；留空按 EndpointRef 或域名分组。", kind: "text" },
-  { key: "concurrencyLimit", label: "并发上限", help: "单 Worker 范围 1 至 50。", kind: "number" },
+  {
+    key: "compensationNodeId",
+    label: "补偿节点 ID",
+    help: "写操作选择补偿策略时必须指向当前流程中的后继补偿节点。",
+    kind: "text",
+  },
+  {
+    key: "retryMaxAttempts",
+    label: "最大尝试次数",
+    help: "范围 1 至 5；包含首次执行。",
+    kind: "number",
+  },
+  {
+    key: "retryBaseDelayMs",
+    label: "重试基础延迟",
+    help: "指数退避基础延迟，范围 50 至 5,000 毫秒。",
+    kind: "number",
+  },
+  {
+    key: "circuitFailureThreshold",
+    label: "熔断失败阈值",
+    help: "同一并发键连续失败达到阈值后临时熔断。",
+    kind: "number",
+  },
+  {
+    key: "circuitResetMs",
+    label: "熔断恢复时间",
+    help: "范围 1,000 至 300,000 毫秒。",
+    kind: "number",
+  },
+  {
+    key: "concurrencyKey",
+    label: "并发限制键",
+    help: "相同键的任务共享并发配额；留空按 EndpointRef 或域名分组。",
+    kind: "text",
+  },
+  {
+    key: "concurrencyLimit",
+    label: "并发上限",
+    help: "单 Worker 范围 1 至 50。",
+    kind: "number",
+  },
 ];
 
 export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
@@ -1338,14 +1430,59 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         help: "服务端限制为 1,000 至 15,000 毫秒。",
         kind: "number",
       },
-      { key: "writeSafety", label: "写操作安全策略", help: "写请求发布前必须声明远端幂等或配置补偿节点。", kind: "select", options: [{ value: "unconfigured", label: "尚未配置" }, { value: "idempotent", label: "远端支持幂等键" }, { value: "compensated", label: "失败时进入补偿节点" }] },
-      { key: "compensationNodeId", label: "补偿节点 ID", help: "补偿策略使用。", kind: "text" },
-      { key: "retryMaxAttempts", label: "最大尝试次数", help: "范围 1 至 5。", kind: "number" },
-      { key: "retryBaseDelayMs", label: "重试基础延迟", help: "范围 50 至 5,000 毫秒。", kind: "number" },
-      { key: "circuitFailureThreshold", label: "熔断失败阈值", help: "范围 1 至 20。", kind: "number" },
-      { key: "circuitResetMs", label: "熔断恢复时间", help: "范围 1,000 至 300,000 毫秒。", kind: "number" },
-      { key: "concurrencyKey", label: "并发限制键", help: "留空按 EndpointRef 或域名分组。", kind: "text" },
-      { key: "concurrencyLimit", label: "并发上限", help: "单 Worker 范围 1 至 50。", kind: "number" },
+      {
+        key: "writeSafety",
+        label: "写操作安全策略",
+        help: "写请求发布前必须声明远端幂等或配置补偿节点。",
+        kind: "select",
+        options: [
+          { value: "unconfigured", label: "尚未配置" },
+          { value: "idempotent", label: "远端支持幂等键" },
+          { value: "compensated", label: "失败时进入补偿节点" },
+        ],
+      },
+      {
+        key: "compensationNodeId",
+        label: "补偿节点 ID",
+        help: "补偿策略使用。",
+        kind: "text",
+      },
+      {
+        key: "retryMaxAttempts",
+        label: "最大尝试次数",
+        help: "范围 1 至 5。",
+        kind: "number",
+      },
+      {
+        key: "retryBaseDelayMs",
+        label: "重试基础延迟",
+        help: "范围 50 至 5,000 毫秒。",
+        kind: "number",
+      },
+      {
+        key: "circuitFailureThreshold",
+        label: "熔断失败阈值",
+        help: "范围 1 至 20。",
+        kind: "number",
+      },
+      {
+        key: "circuitResetMs",
+        label: "熔断恢复时间",
+        help: "范围 1,000 至 300,000 毫秒。",
+        kind: "number",
+      },
+      {
+        key: "concurrencyKey",
+        label: "并发限制键",
+        help: "留空按 EndpointRef 或域名分组。",
+        kind: "text",
+      },
+      {
+        key: "concurrencyLimit",
+        label: "并发上限",
+        help: "单 Worker 范围 1 至 50。",
+        kind: "number",
+      },
     ],
   },
   source: {
@@ -1423,13 +1560,184 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
     ],
   },
+  project: {
+    type: "project",
+    label: "投影",
+    description: "选择并重命名输出字段",
+    flowTypes: ["data"],
+    defaultConfig: { fields: [] },
+    fields: [
+      {
+        key: "fields",
+        label: "字段映射",
+        help: "[{source,target}]。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  derive: {
+    type: "derive",
+    label: "派生",
+    description: "基于安全常量或字段引用生成新字段",
+    flowTypes: ["data"],
+    defaultConfig: { fields: [] },
+    fields: [
+      {
+        key: "fields",
+        label: "派生字段",
+        help: "[{name,expression,type}]。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  join: {
+    type: "join",
+    label: "关联",
+    description: "按左右键关联两个数据集",
+    flowTypes: ["data"],
+    defaultConfig: {
+      kind: "inner",
+      leftKeys: [],
+      rightKeys: [],
+      collisionPolicy: "prefix",
+    },
+    fields: [
+      {
+        key: "kind",
+        label: "关联类型",
+        help: "inner 或 left。",
+        kind: "select",
+        options: [
+          { value: "inner", label: "内连接" },
+          { value: "left", label: "左连接" },
+        ],
+      },
+      {
+        key: "leftKeys",
+        label: "左键",
+        help: "字段名数组。",
+        kind: "json",
+        required: true,
+      },
+      {
+        key: "rightKeys",
+        label: "右键",
+        help: "字段名数组。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  union: {
+    type: "union",
+    label: "合并",
+    description: "按字段名合并多个数据集",
+    flowTypes: ["data"],
+    defaultConfig: { mode: "all" },
+    fields: [
+      {
+        key: "mode",
+        label: "模式",
+        help: "all 或 distinct。",
+        kind: "select",
+        options: [
+          { value: "all", label: "保留重复" },
+          { value: "distinct", label: "去重" },
+        ],
+      },
+    ],
+  },
+  aggregate: {
+    type: "aggregate",
+    label: "聚合",
+    description: "分组并计算 count/sum/min/max",
+    flowTypes: ["data"],
+    defaultConfig: { groupBy: [], metrics: [] },
+    fields: [
+      { key: "groupBy", label: "分组字段", help: "字段名数组。", kind: "json" },
+      {
+        key: "metrics",
+        label: "指标",
+        help: "[{name,operation,field}]。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  sort: {
+    type: "sort",
+    label: "排序",
+    description: "按字段稳定排序",
+    flowTypes: ["data"],
+    defaultConfig: { fields: [] },
+    fields: [
+      {
+        key: "fields",
+        label: "排序字段",
+        help: "[{field,direction}]。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  deduplicate: {
+    type: "deduplicate",
+    label: "去重",
+    description: "按业务键保留首条记录",
+    flowTypes: ["data"],
+    defaultConfig: { keys: [] },
+    fields: [
+      {
+        key: "keys",
+        label: "去重键",
+        help: "字段名数组。",
+        kind: "json",
+        required: true,
+      },
+    ],
+  },
+  quality_gate: {
+    type: "quality_gate",
+    label: "质量门",
+    description: "在输出前校验行数和空值率",
+    flowTypes: ["data"],
+    defaultConfig: { minRows: 1, maxNullRate: 1 },
+    fields: [
+      {
+        key: "minRows",
+        label: "最少行数",
+        help: "不足则失败并隔离本次输出。",
+        kind: "number",
+      },
+      {
+        key: "maxNullRate",
+        label: "最大空值率",
+        help: "0 至 1。",
+        kind: "number",
+      },
+    ],
+  },
   edit_sql: {
     type: "edit_sql",
     label: "SQL",
     description: "数据流 SQL 编辑节点",
     flowTypes: ["data"],
-    defaultConfig: { sql: "SELECT * FROM source" },
+    defaultConfig: {
+      datasourceId: "",
+      sql: "SELECT * FROM source",
+      parameters: {},
+      maxRows: 1000,
+    },
     fields: [
+      {
+        key: "datasourceId",
+        label: "数据源",
+        help: "项目内已验证的 MySQL 数据源标识。",
+        kind: "text",
+        required: true,
+      },
       {
         key: "sql",
         label: "SQL",
@@ -1460,13 +1768,31 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     label: "输出",
     description: "将数据流结果输出到运行审计",
     flowTypes: ["data"],
-    defaultConfig: { outputName: "result" },
+    defaultConfig: {
+      outputName: "result",
+      writeMode: "audit_only",
+      idempotencyKey: "{{run.id}}",
+    },
     fields: [
       {
         key: "outputName",
         label: "输出名称",
         help: "数据流运行审计中的输出引用名称。",
         kind: "text",
+        required: true,
+      },
+      {
+        key: "writeMode",
+        label: "写入模式",
+        help: "当前仅允许 audit_only；真实 Sink Connector 待启用。",
+        kind: "select",
+        options: [{ value: "audit_only", label: "仅审计" }],
+      },
+      {
+        key: "idempotencyKey",
+        label: "幂等键模板",
+        help: "真实写入启用前必须提供稳定幂等键。",
+        kind: "template",
         required: true,
       },
     ],
@@ -1887,10 +2213,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           ? config.url
           : firstNonBlank(config.restApi, config.endpoint, config.url)
       );
-      if (
-        config.endpointRef &&
-        /^[a-z][a-z0-9+.-]*:/i.test(configuredUrl)
-      )
+      if (config.endpointRef && /^[a-z][a-z0-9+.-]*:/i.test(configuredUrl))
         throw new Error(
           `${referenceType} 节点使用 EndpointRef 时只能配置相对路径。`
         );
@@ -1932,11 +2255,36 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           `${referenceType} 节点补偿策略必须配置补偿节点 ID。`
         );
       for (const [value, message, min, max] of [
-        [config.retryMaxAttempts, `${referenceType} 节点最大尝试次数必须是 1 至 5 的整数。`, 1, 5],
-        [config.retryBaseDelayMs, `${referenceType} 节点重试延迟必须是 50 至 5,000 毫秒的整数。`, 50, 5_000],
-        [config.circuitFailureThreshold, `${referenceType} 节点熔断阈值必须是 1 至 20 的整数。`, 1, 20],
-        [config.circuitResetMs, `${referenceType} 节点熔断恢复时间必须是 1,000 至 300,000 毫秒的整数。`, 1_000, 300_000],
-        [config.concurrencyLimit, `${referenceType} 节点并发上限必须是 1 至 50 的整数。`, 1, 50],
+        [
+          config.retryMaxAttempts,
+          `${referenceType} 节点最大尝试次数必须是 1 至 5 的整数。`,
+          1,
+          5,
+        ],
+        [
+          config.retryBaseDelayMs,
+          `${referenceType} 节点重试延迟必须是 50 至 5,000 毫秒的整数。`,
+          50,
+          5_000,
+        ],
+        [
+          config.circuitFailureThreshold,
+          `${referenceType} 节点熔断阈值必须是 1 至 20 的整数。`,
+          1,
+          20,
+        ],
+        [
+          config.circuitResetMs,
+          `${referenceType} 节点熔断恢复时间必须是 1,000 至 300,000 毫秒的整数。`,
+          1_000,
+          300_000,
+        ],
+        [
+          config.concurrencyLimit,
+          `${referenceType} 节点并发上限必须是 1 至 50 的整数。`,
+          1,
+          50,
+        ],
       ] as const)
         assertOptionalInteger(value, message, min, max);
       const attributes =
@@ -2080,7 +2428,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           governance.cachePolicy !== undefined &&
           governance.cachePolicy !== "none"
         )
-          throw new Error("LLM 节点 prompt_hash 缓存尚未启用，当前仅支持 none。");
+          throw new Error(
+            "LLM 节点 prompt_hash 缓存尚未启用，当前仅支持 none。"
+          );
         if (
           governance.humanReviewRequired !== undefined &&
           typeof governance.humanReviewRequired !== "boolean"
@@ -2142,13 +2492,66 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         100_000
       );
       break;
+    case "project":
+      if (!Array.isArray(config.fields))
+        throw new Error("投影节点 fields 必须是数组。");
+      break;
+    case "derive":
+      if (!Array.isArray(config.fields))
+        throw new Error("派生节点 fields 必须是数组。");
+      break;
+    case "join":
+      if (
+        !Array.isArray(config.leftKeys) ||
+        !Array.isArray(config.rightKeys) ||
+        !config.leftKeys.length ||
+        config.leftKeys.length !== config.rightKeys.length
+      )
+        throw new Error("关联节点左右键必须是等长非空数组。");
+      break;
+    case "union":
+      if (!["all", "distinct"].includes(String(config.mode ?? "all")))
+        throw new Error("Union 模式无效。");
+      break;
+    case "aggregate":
+      if (!Array.isArray(config.groupBy) || !Array.isArray(config.metrics))
+        throw new Error("聚合节点配置必须是数组。");
+      break;
+    case "sort":
+      if (!Array.isArray(config.fields) || !config.fields.length)
+        throw new Error("排序节点必须配置字段。");
+      break;
+    case "deduplicate":
+      if (!Array.isArray(config.keys) || !config.keys.length)
+        throw new Error("去重节点必须配置业务键。");
+      break;
+    case "quality_gate":
+      assertOptionalNumber(
+        config.minRows,
+        "质量门最少行数必须为非负数。",
+        0,
+        1_000_000
+      );
+      assertOptionalNumber(
+        config.maxNullRate,
+        "质量门空值率必须在 0 至 1 之间。",
+        0,
+        1
+      );
+      break;
     case "edit_sql":
+      assertString(config.datasourceId, "SQL 编辑节点必须选择数据源。");
       assertString(config.sql, "SQL 编辑节点必须配置 SQL 语句。");
       break;
     case "udf":
       assertString(config.udfId, "UDF 节点必须选择项目函数。");
       break;
     case "sink":
+      if (String(config.writeMode ?? "audit_only") !== "audit_only")
+        throw new Error("Sink 当前仅支持 audit_only 写入模式。");
+      assertString(config.idempotencyKey, "Sink 必须配置幂等键模板。");
+      assertString(config.outputName, "输出节点必须配置输出名称。");
+      break;
     case "output":
       assertString(config.outputName, "输出节点必须配置输出名称。");
       break;
