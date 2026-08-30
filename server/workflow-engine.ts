@@ -841,7 +841,12 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
 }
 
 type ServiceCircuitState = { failures: number; openUntil: number };
-type ServiceConcurrencyState = { active: number; waiters: Array<() => void> };
+type ServiceConcurrencyWaiter = (release: () => void) => void;
+type ServiceConcurrencyState = {
+  /** Number of permits currently held by active requests. */
+  active: number;
+  waiters: ServiceConcurrencyWaiter[];
+};
 const serviceCircuits = new Map<string, ServiceCircuitState>();
 const serviceConcurrency = new Map<string, ServiceConcurrencyState>();
 
@@ -859,20 +864,44 @@ export function serviceTaskRetryDelay(baseDelayMs: number, attempt: number) {
   );
 }
 
-async function acquireServiceConcurrency(key: string, limit: number) {
+function createServiceConcurrencyRelease(
+  key: string,
+  state: ServiceConcurrencyState
+) {
+  let released = false;
+  return () => {
+    // A permit must be released at most once. This also protects the shared
+    // active count when a caller's cleanup path is invoked more than once.
+    if (released) return;
+    released = true;
+    const next = state.waiters.shift();
+    if (next) {
+      // Transfer the existing permit directly to the waiter. Keeping active
+      // unchanged avoids a window in which another caller can steal it.
+      next(createServiceConcurrencyRelease(key, state));
+    } else {
+      state.active = Math.max(0, state.active - 1);
+      if (
+        !state.active &&
+        !state.waiters.length &&
+        serviceConcurrency.get(key) === state
+      )
+        serviceConcurrency.delete(key);
+    }
+  };
+}
+
+export async function acquireServiceConcurrency(key: string, limit: number) {
+  const normalizedLimit = Number.isFinite(limit)
+    ? Math.max(1, Math.trunc(limit))
+    : 1;
   const state = serviceConcurrency.get(key) ?? { active: 0, waiters: [] };
   serviceConcurrency.set(key, state);
-  if (state.active >= limit) {
-    await new Promise<void>(resolve => state.waiters.push(resolve));
-  } else {
+  if (state.active < normalizedLimit) {
     state.active += 1;
+    return createServiceConcurrencyRelease(key, state);
   }
-  return () => {
-    const next = state.waiters.shift();
-    if (next) next();
-    else state.active = Math.max(0, state.active - 1);
-    if (!state.active && !state.waiters.length) serviceConcurrency.delete(key);
-  };
+  return new Promise<() => void>(resolve => state.waiters.push(resolve));
 }
 
 async function executeHttpServiceTask(
@@ -1840,35 +1869,6 @@ export async function submitWorkflowRun(input: {
   idempotencyKey?: string;
   requestId?: string;
 }) {
-  const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
-    [input.workflowId]
-  );
-  const workflow = workflowRows[0] as PersistedWorkflow | undefined;
-  if (!workflow) throw new Error("流程不存在。");
-  if (workflow.flowType === "data")
-    throw new Error("数据流程必须通过数据流运行入口启动。");
-  if (workflow.archivedAt)
-    throw new Error("已归档流程不能发起运行，请先恢复流程。");
-  if (
-    workflow.projectId &&
-    (workflow.status !== "published" || workflow.auditStatus !== "approved")
-  )
-    throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
-  const storedPlan = readJson(
-    workflow.publishedExecutionPlanJson
-  ) as WorkflowExecutionPlan | null;
-  const executablePlan =
-    storedPlan && workflow.publishedExecutionPlanHash
-      ? assertWorkflowExecutionPlan(
-          storedPlan,
-          String(workflow.publishedExecutionPlanHash),
-          workflow.flowType
-        )
-      : compileWorkflowDefinition(readJson(workflow.definitionJson), {
-          flowType: workflow.flowType,
-        }).plan;
-  const executableDefinition = executablePlan.definition;
   const requestedIdempotencyKey = input.idempotencyKey?.trim();
   const jobIdempotencyKey = requestedIdempotencyKey
     ? `workflow:start:${input.workflowId}:${input.triggeredBy.id}:${requestedIdempotencyKey}`
@@ -1888,52 +1888,103 @@ export async function submitWorkflowRun(input: {
 
   const runId = randomUUID();
   const jobId = randomUUID();
-  const startNode = executableDefinition.nodes.find(
-    node => node.type === "start"
-  );
-  if (!startNode) throw new Error("流程缺少开始节点。");
-  const context: JsonRecord = {
-    input: input.workflowInput ?? {},
-    vars: {},
-    nodes: {},
-    runtime: {
-      executionRunId: runId,
-      triggeredByUserId: input.triggeredBy.id,
-      lastActorUserId: input.triggeredBy.id,
-      participantUserIds: [input.triggeredBy.id],
-      requestId: input.requestId ?? currentRequestId() ?? null,
-      roleKeysByUser: {
-        [String(input.triggeredBy.id)]: ["default", "initiator", "sender"],
-      },
-      executionQueue: [startNode.id],
-      executionCurrentNodeId: null,
-    },
-  };
-  setRuntimeNodeParticipants(context, startNode.id, [input.triggeredBy.id]);
-  const authorizationSnapshot = {
-    userId: input.triggeredBy.id,
-    userRole: input.triggeredBy.role,
-    permission: "workflow:run",
-    authorizedAt: new Date().toISOString(),
-  };
-  const checkpoint: WorkflowCheckpoint = {
-    queue: [startNode.id],
-    context,
-    finalOutput: null,
-    currentNodeId: null,
-  };
+  let workflow: PersistedWorkflow;
+  let executablePlan: WorkflowExecutionPlan;
+  let executableDefinition: Definition;
+  let checkpoint: WorkflowCheckpoint;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
     const [lockedWorkflowRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT archivedAt,flowType FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+      "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
       [input.workflowId]
     );
     if (!lockedWorkflowRows[0]) throw new Error("流程不存在。");
-    if (lockedWorkflowRows[0].archivedAt)
+    workflow = lockedWorkflowRows[0] as PersistedWorkflow;
+    if (workflow.archivedAt)
       throw new Error("已归档流程不能发起运行，请先恢复流程。");
-    if (String(lockedWorkflowRows[0].flowType) === "data")
+    if (workflow.flowType === "data")
       throw new Error("数据流程必须通过数据流运行入口启动。");
+
+    if (workflow.projectId) {
+      const [projectRows] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT status FROM flow_project WHERE id=? LIMIT 1 FOR UPDATE",
+        [workflow.projectId]
+      );
+      if (!projectRows[0] || String(projectRows[0].status) !== "active")
+        throw new Error("所属业务已归档或不存在，无法发起流程运行。");
+      if (
+        workflow.status !== "published" ||
+        workflow.auditStatus !== "approved"
+      )
+        throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
+    }
+
+    // The preflight idempotency check above is only an optimization. Recheck
+    // while the workflow row is locked so two concurrent submissions cannot
+    // pass the state gate and enqueue a run after an earlier submission.
+    const [lockedExistingJobs] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,runId,status FROM workflow_run_job WHERE idempotencyKey=? LIMIT 1 FOR UPDATE",
+      [jobIdempotencyKey]
+    );
+    if (lockedExistingJobs[0]) {
+      await connection.commit();
+      return {
+        runId: String(lockedExistingJobs[0].runId),
+        jobId: String(lockedExistingJobs[0].id),
+        status: "queued" as const,
+        deduplicated: true,
+      };
+    }
+
+    const storedPlan = readJson(
+      workflow.publishedExecutionPlanJson
+    ) as WorkflowExecutionPlan | null;
+    executablePlan =
+      storedPlan && workflow.publishedExecutionPlanHash
+        ? assertWorkflowExecutionPlan(
+            storedPlan,
+            String(workflow.publishedExecutionPlanHash),
+            workflow.flowType
+          )
+        : compileWorkflowDefinition(readJson(workflow.definitionJson), {
+            flowType: workflow.flowType,
+          }).plan;
+    executableDefinition = executablePlan.definition;
+    const startNode = executableDefinition.nodes.find(
+      node => node.type === "start"
+    );
+    if (!startNode) throw new Error("流程缺少开始节点。");
+    const context: JsonRecord = {
+      input: input.workflowInput ?? {},
+      vars: {},
+      nodes: {},
+      runtime: {
+        executionRunId: runId,
+        triggeredByUserId: input.triggeredBy.id,
+        lastActorUserId: input.triggeredBy.id,
+        participantUserIds: [input.triggeredBy.id],
+        requestId: input.requestId ?? currentRequestId() ?? null,
+        roleKeysByUser: {
+          [String(input.triggeredBy.id)]: ["default", "initiator", "sender"],
+        },
+        executionQueue: [startNode.id],
+        executionCurrentNodeId: null,
+      },
+    };
+    setRuntimeNodeParticipants(context, startNode.id, [input.triggeredBy.id]);
+    const authorizationSnapshot = {
+      userId: input.triggeredBy.id,
+      userRole: input.triggeredBy.role,
+      permission: "workflow:run",
+      authorizedAt: new Date().toISOString(),
+    };
+    checkpoint = {
+      queue: [startNode.id],
+      context,
+      finalOutput: null,
+      currentNodeId: null,
+    };
     await connection.query(
       "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,requestId) VALUES (?,?,?,?,?,?,'queued',?,?,?,?,?,?,?)",
       [

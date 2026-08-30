@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Clock3, Flag, Loader2 } from "lucide-react";
+import { AlertTriangle, ChevronDown, Clock3, Flag, Loader2, RotateCcw } from "lucide-react";
 
 function parse(value: unknown) {
   if (typeof value !== "string") return value;
@@ -354,11 +354,21 @@ function Summary({ label, value }: { label: string; value: string }) {
 
 export function RunDetailDialog({
   run,
+  isLoading = false,
+  error = null,
+  retrying = false,
+  onRetry,
   onClose,
 }: {
   run: any;
+  isLoading?: boolean;
+  error?: unknown;
+  retrying?: boolean;
+  onRetry?: () => void;
   onClose: () => void;
 }) {
+  const errorMessage = error instanceof Error ? error.message : "暂时无法读取该流程实例，请稍后重试。";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 sm:items-center"
@@ -383,7 +393,33 @@ export function RunDetailDialog({
             关闭
           </Button>
         </header>
-        <RunDetailContent run={run} />
+        {isLoading ? (
+          <div className="grid min-h-48 place-items-center gap-2 p-5 text-center" role="status" aria-live="polite">
+            <Loader2 className="animate-spin text-slate-400" size={22} />
+            <p className="text-sm text-slate-500">正在读取流程实例详情…</p>
+          </div>
+        ) : error ? (
+          <div className="grid min-h-48 place-items-center gap-3 p-5 text-center" role="alert">
+            <AlertTriangle className="text-red-500" size={24} />
+            <div>
+              <p className="text-sm font-medium text-slate-700">流程实例详情读取失败</p>
+              <p className="mt-1 max-w-xl text-xs leading-5 text-slate-500">{errorMessage}</p>
+            </div>
+            {onRetry && (
+              <Button type="button" variant="outline" size="sm" disabled={retrying} onClick={onRetry}>
+                {retrying && <Loader2 className="animate-spin" size={14} />}
+                {!retrying && <RotateCcw size={14} />}
+                重试
+              </Button>
+            )}
+          </div>
+        ) : run ? (
+          <RunDetailContent run={run} />
+        ) : (
+          <div className="grid min-h-48 place-items-center p-5 text-sm text-slate-500" role="status">
+            未找到该流程实例详情。
+          </div>
+        )}
       </section>
     </div>
   );

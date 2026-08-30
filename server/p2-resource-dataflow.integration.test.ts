@@ -143,6 +143,7 @@ describe("P2 项目数据资源与数据流", () => {
           name: "订单内联源",
           sourceType: "inline",
           connection: { description: "浏览器验收内联样本" },
+          credentialRef: "vault/orders-read",
         })
       ).id;
       foreignProjectId = (
@@ -228,6 +229,7 @@ describe("P2 项目数据资源与数据流", () => {
       expect(inlineView).toMatchObject({
         status: "draft",
         lastTestedAt: null,
+        hasCredentialRef: true,
       });
       expect(view.assets[0]).toMatchObject({ id: assetId, name: "订单样本" });
       expect(view.sources.every((source: any) => !Object.prototype.hasOwnProperty.call(source, "credentialRef"))).toBe(true);

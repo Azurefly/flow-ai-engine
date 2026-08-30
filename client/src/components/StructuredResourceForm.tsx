@@ -9,6 +9,33 @@ type ResourceMutation = {
   isPending: boolean;
 };
 
+type SourceDraft = {
+  name: string;
+  sourceType: "jdbc" | "api" | "file" | "inline";
+  description: string;
+  endpoint: string;
+  credentialReference: string;
+};
+
+/** Keep the UI field name compatible with the server's top-level credentialRef contract. */
+export function buildDataSourceCreateInput(
+  projectId: string,
+  source: SourceDraft
+) {
+  const credentialRef = source.credentialReference.trim() || undefined;
+  return {
+    projectId,
+    name: source.name,
+    sourceType: source.sourceType,
+    connection: {
+      description: source.description,
+      endpoint: source.endpoint || undefined,
+      credentialReference: credentialRef,
+    },
+    credentialRef,
+  };
+}
+
 export function StructuredResourceForm({
   tab,
   projectId,
@@ -22,7 +49,7 @@ export function StructuredResourceForm({
   createSource: ResourceMutation;
   createAsset: ResourceMutation;
 }) {
-  const [source, setSource] = useState({
+  const [source, setSource] = useState<SourceDraft>({
     name: "",
     sourceType: "inline",
     description: "",
@@ -65,16 +92,9 @@ export function StructuredResourceForm({
   const submit = async () => {
     try {
       if (tab === "sources") {
-        await createSource.mutateAsync({
-          projectId,
-          name: source.name,
-          sourceType: source.sourceType,
-          connection: {
-            description: source.description,
-            endpoint: source.endpoint || undefined,
-          },
-          credentialRef: source.credentialReference || undefined,
-        });
+        await createSource.mutateAsync(
+          buildDataSourceCreateInput(projectId, source)
+        );
         setSource({
           name: "",
           sourceType: "inline",
@@ -119,7 +139,10 @@ export function StructuredResourceForm({
           className={fieldClass}
           value={source.sourceType}
           onChange={event =>
-            setSource({ ...source, sourceType: event.target.value })
+            setSource({
+              ...source,
+              sourceType: event.target.value as SourceDraft["sourceType"],
+            })
           }
         >
           <option value="inline">内联样本</option>

@@ -73,6 +73,7 @@ import {
   updateNodeTemplate,
   updateSubflow,
   updateWorkflow,
+  WorkflowVersionConflictError,
 } from "./workflow-service";
 import {
   createFolder,
@@ -197,6 +198,12 @@ function assertWorkflowRunController(
       message: `仅流程发起人或流程所有者可${action}。`,
     });
   }
+}
+
+function throwWorkflowMutationError(error: unknown): never {
+  if (error instanceof WorkflowVersionConflictError)
+    throw new TRPCError({ code: "CONFLICT", message: error.message });
+  throw error;
 }
 
 export const appRouter = router({
@@ -1341,12 +1348,17 @@ export const appRouter = router({
           id: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
           definition: z.unknown().optional(),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const workflow = await updateWorkflow(input.id, ctx.user, input);
-        if (!workflow) throw new Error("流程不存在或无编辑权限。");
-        return workflow;
+        try {
+          const workflow = await updateWorkflow(input.id, ctx.user, input);
+          if (!workflow) throw new Error("流程不存在或无编辑权限。");
+          return workflow;
+        } catch (error) {
+          return throwWorkflowMutationError(error);
+        }
       }),
     publish: protectedProcedure
       .input(
@@ -1354,25 +1366,41 @@ export const appRouter = router({
           id: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
           definition: z.unknown().optional(),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const workflow = await updateWorkflow(input.id, ctx.user, {
-          name: input.name,
-          definition: input.definition,
-          publish: true,
-        });
-        if (!workflow) throw new Error("流程不存在或无发布权限。");
-        return workflow;
+        try {
+          const workflow = await updateWorkflow(input.id, ctx.user, {
+            name: input.name,
+            definition: input.definition,
+            expectedDefinitionVersion: input.expectedDefinitionVersion,
+            publish: true,
+          });
+          if (!workflow) throw new Error("流程不存在或无发布权限。");
+          return workflow;
+        } catch (error) {
+          return throwWorkflowMutationError(error);
+        }
       }),
     unpublish: protectedProcedure
-      .input(z.object({ id: z.string().min(8).max(64) }))
+      .input(
+        z.object({
+          id: z.string().min(8).max(64),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
-        const workflow = await updateWorkflow(input.id, ctx.user, {
-          unpublish: true,
-        });
-        if (!workflow) throw new Error("流程不存在或无取消发布权限。");
-        return workflow;
+        try {
+          const workflow = await updateWorkflow(input.id, ctx.user, {
+            expectedDefinitionVersion: input.expectedDefinitionVersion,
+            unpublish: true,
+          });
+          if (!workflow) throw new Error("流程不存在或无取消发布权限。");
+          return workflow;
+        } catch (error) {
+          return throwWorkflowMutationError(error);
+        }
       }),
     duplicate: protectedProcedure
       .input(

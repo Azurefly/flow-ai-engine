@@ -1,6 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { compileHttpServiceTask } from "../shared/service-task-contract";
 import {
+  acquireServiceConcurrency,
   isRetryableServiceTaskError,
   serviceTaskPlanToRuntimeConfig,
   serviceTaskRetryDelay,
@@ -61,5 +63,32 @@ describe("统一 HTTP ServiceTask 执行计划", () => {
     expect(serviceTaskRetryDelay(250, 1)).toBe(250);
     expect(serviceTaskRetryDelay(250, 3)).toBe(1000);
     expect(serviceTaskRetryDelay(5000, 9)).toBe(10000);
+  });
+
+  it("在等待者接管 permit 时保持 active 计数，并使 release 幂等", async () => {
+    const key = `service-concurrency-test-${randomUUID()}`;
+    const firstRelease = await acquireServiceConcurrency(key, 1);
+    const secondPromise = acquireServiceConcurrency(key, 1);
+    const thirdPromise = acquireServiceConcurrency(key, 1);
+    let secondReady = false;
+    let thirdReady = false;
+    const second = secondPromise.then(release => {
+      secondReady = true;
+      return release;
+    });
+    const third = thirdPromise.then(release => {
+      thirdReady = true;
+      return release;
+    });
+
+    firstRelease();
+    firstRelease();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(secondReady).toBe(true);
+    expect(thirdReady).toBe(false);
+
+    (await second)();
+    const thirdRelease = await third;
+    thirdRelease();
   });
 });

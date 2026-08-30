@@ -1,6 +1,9 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { compileDataflowExecutionPlan } from "./p2-service";
+import {
+  buildDataflowStartSeed,
+  compileDataflowExecutionPlan,
+} from "./p2-service";
 
 const definition = {
   schemaVersion: 1 as const,
@@ -45,8 +48,35 @@ describe("数据流 ExecutionPlan V2 基线", () => {
     const source = readFileSync(new URL("./p2-service.ts", import.meta.url), "utf8");
     expect(source).toContain("assertWorkflowExecutionPlan(");
     expect(source).toContain("job.executionPlan,");
+    expect(source).toContain("job.input");
     expect(source).toContain("await runDataflowJobOnce(runId)");
+    expect(source).toContain("input.data ?? {}");
     expect(source).toContain("executionPlanJson,executionPlanHash,requestId");
     expect(source).toContain("const queue = [...executionPlan.topologicalOrder]");
+  });
+
+  it("将对象运行输入作为 start 的单行 seed，并保留完整 context", () => {
+    const input = { orderId: "A-01", status: "paid" };
+    const seed = buildDataflowStartSeed(input);
+
+    expect(seed).toEqual({ rows: [input], context: input });
+  });
+
+  it("兼容 data.rows 数组作为多行 seed，并保留完整 context", () => {
+    const input = {
+      rows: [
+        { orderId: "A-01", status: "paid" },
+        { orderId: "A-02", status: "pending" },
+      ],
+    };
+    const seed = buildDataflowStartSeed(input);
+
+    expect(seed).toEqual({
+      rows: [
+        { orderId: "A-01", status: "paid" },
+        { orderId: "A-02", status: "pending" },
+      ],
+      context: input,
+    });
   });
 });

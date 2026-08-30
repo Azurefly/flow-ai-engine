@@ -56,6 +56,32 @@ const packageSource = source("../package.json");
 const bundleBudgetSource = source("../scripts/check-bundle-budget.mts");
 
 describe("流程设计器界面回归约束", () => {
+  it("保存与发布携带 hydrated 版本，并在远端更新时保留本地草稿", () => {
+    expect(routerSource).toContain(
+      "expectedDefinitionVersion: z.number().int().positive().optional()"
+    );
+    expect(workflowServiceSource).toContain(
+      "WHERE id=? AND definitionVersion=?"
+    );
+    expect(workflowServiceSource).toContain("if (!updateResult.affectedRows)");
+    expect(workflowServiceSource).toContain("WorkflowVersionConflictError");
+    expect(routerSource).toContain('code: "CONFLICT"');
+    expect(homeSource).toContain("draftBaseDefinitionVersion");
+    expect(homeSource).toContain("expectedDefinitionVersion");
+    expect(homeSource).toContain("流程版本冲突");
+    expect(homeSource).toContain("检测到远端流程版本变化");
+    expect(homeSource).toContain(
+      "const handleDraftDefinitionChange = useCallback("
+    );
+    expect(homeSource).toContain(
+      "onDefinitionChange={handleDraftDefinitionChange}"
+    );
+    expect(homeSource).toContain("lastHydratedWorkflowIdRef");
+    expect(homeSource).toContain("lastHydratedWorkflowKeyRef");
+    expect(homeSource).toContain("workflowHydrationKey");
+    expect(homeSource).toContain("draftDirty &&");
+  });
+
   it("中文可访问性基线、工作区拆包和 bundle budget 保持生效", () => {
     expect(htmlSource).toContain('<html lang="zh-CN">');
     expect(htmlSource).not.toContain("maximum-scale=1");
@@ -821,7 +847,10 @@ describe("流程设计器界面回归约束", () => {
     expect(workflowServiceSource).toContain("canRestore");
     expect(workflowEngineSource).toContain("已归档流程不能发起运行");
     expect(workflowEngineSource).toContain(
-      "SELECT archivedAt,flowType FROM workflow WHERE id=? LIMIT 1 FOR UPDATE"
+      "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt"
+    );
+    expect(workflowEngineSource).toContain(
+      "SELECT status FROM flow_project WHERE id=? LIMIT 1 FOR UPDATE"
     );
     expect(projectServiceSource).toContain("archivedAt IS NULL");
     expect(dataflowServiceSource).toContain(
@@ -1087,8 +1116,12 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).not.toContain("NEBULA INSPIRED · V3");
     expect(canvasSource).toContain('data-aiflow-workflow-canvas=""');
     expect(projectWorkspaceSource).toContain('data-aiflow-business-center=""');
-    expect(projectWorkspaceSource).toContain('data-project-service-endpoints=""');
-    expect(projectWorkspaceSource).toContain("trpc.project.serviceEndpoints.useQuery");
+    expect(projectWorkspaceSource).toContain(
+      'data-project-service-endpoints=""'
+    );
+    expect(projectWorkspaceSource).toContain(
+      "trpc.project.serviceEndpoints.useQuery"
+    );
     expect(projectWorkspaceSource).toContain("SecretRef 只引用运行环境密钥");
     expect(warehouseSource).toContain('data-aiflow-warehouse=""');
     expect(styleSource).toContain('content: "AI FLOW GRAPH"');

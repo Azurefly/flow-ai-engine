@@ -9,7 +9,6 @@ import {
 import { isProjectApprovalRequired } from "./p1-service";
 import {
   analyzeWorkflowDefinition,
-  assertWorkflowExecutionPlan,
   compileWorkflowDefinition,
   validateWorkflowDefinition,
   type WorkflowCompileResult,
@@ -17,7 +16,6 @@ import {
   type WorkflowDefinition,
   type WorkflowAnalysisOptions,
   type WorkflowEdge,
-  type WorkflowExecutionPlan,
   type WorkflowNode,
 } from "./workflow-compiler";
 
@@ -108,6 +106,25 @@ type VersionSource =
   | "unpublished"
   | "rolled_back";
 type TemplateNodeType = Exclude<Node["type"], "start" | "end" | "subflow">;
+
+/**
+ * Raised when a mutation was based on an older hydrated workflow definition.
+ * Callers should refresh and merge their local draft before retrying.
+ */
+export class WorkflowVersionConflictError extends Error {
+  readonly code = "WORKFLOW_VERSION_CONFLICT";
+
+  constructor(
+    readonly workflowId: string,
+    readonly expectedDefinitionVersion: number,
+    readonly actualDefinitionVersion: number
+  ) {
+    super(
+      `流程版本冲突：服务器当前为 v${actualDefinitionVersion}，本地草稿基于 v${expectedDefinitionVersion}。请刷新后合并本地修改再保存。`
+    );
+    this.name = "WorkflowVersionConflictError";
+  }
+}
 
 const templateNodeTypes = new Set<TemplateNodeType>([
   "llm",
@@ -414,6 +431,12 @@ export async function updateWorkflow(
     definition?: unknown;
     publish?: boolean;
     unpublish?: boolean;
+    /**
+     * The definition version the caller hydrated. Internal callers may omit
+     * this field; the service then uses the authorized preflight snapshot as
+     * the conditional-write version.
+     */
+    expectedDefinitionVersion?: number;
   }
 ) {
   if (values.publish && values.unpublish)
@@ -435,6 +458,16 @@ export async function updateWorkflow(
     publishedExecutionPlanHash?: string | null;
   } | null;
   if (!current) return null;
+  const expectedDefinitionVersion =
+    values.expectedDefinitionVersion === undefined
+      ? undefined
+      : Number(values.expectedDefinitionVersion);
+  if (
+    expectedDefinitionVersion !== undefined &&
+    (!Number.isSafeInteger(expectedDefinitionVersion) ||
+      expectedDefinitionVersion < 1)
+  )
+    throw new Error("expectedDefinitionVersion 必须是正整数。 ");
   if (current.archivedAt)
     throw new Error("已归档流程必须先恢复后才能编辑或发布。");
   assertWorkflowUpdateTransition(current.status, values);
@@ -482,17 +515,60 @@ export async function updateWorkflow(
         : "当前审批规则要求项目流程通过审核后才能发布。"
     );
   const nextName = values.name ?? current.name;
-  const nextStatus = values.unpublish
-    ? "draft"
-    : values.publish
-      ? "published"
-      : current.status;
-  const nextVersion = Number(current.definitionVersion) + 1;
+  let nextStatus: "draft" | "published" = current.status;
+  const preflightDefinitionVersion = Number(current.definitionVersion);
+  const versionToMatch =
+    expectedDefinitionVersion ?? preflightDefinitionVersion;
+  let nextVersion = 0;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query(
-      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
+    const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT projectId,status,auditStatus,archivedAt,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+      [workflowId]
+    );
+    const locked = lockedRows[0] as
+      | {
+          projectId?: string | null;
+          status: "draft" | "published";
+          auditStatus?: "init" | "approved" | "rejected" | null;
+          archivedAt?: Date | string | null;
+          definitionVersion: number;
+        }
+      | undefined;
+    if (!locked) throw new Error("流程不存在。");
+    const lockedDefinitionVersion = Number(locked.definitionVersion);
+    if (lockedDefinitionVersion !== versionToMatch)
+      throw new WorkflowVersionConflictError(
+        workflowId,
+        versionToMatch,
+        lockedDefinitionVersion
+      );
+    if (locked.archivedAt)
+      throw new Error("已归档流程必须先恢复后才能编辑或发布。");
+    // State can be changed by governance operations that do not create a
+    // definition version. Re-run this guard against the locked row before
+    // writing so a stale preflight cannot cross a lifecycle boundary.
+    assertWorkflowUpdateTransition(locked.status, values);
+    if (
+      values.publish &&
+      locked.projectId &&
+      (await isProjectApprovalRequired()) &&
+      (locked.auditStatus !== "approved" || definitionChanged)
+    )
+      throw new Error(
+        definitionChanged
+          ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
+          : "当前审批规则要求项目流程通过审核后才能发布。"
+      );
+    nextVersion = lockedDefinitionVersion + 1;
+    nextStatus = values.unpublish
+      ? "draft"
+      : values.publish
+        ? "published"
+        : locked.status;
+    const [updateResult] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=? AND definitionVersion=?",
       [
         nextName,
         JSON.stringify(persistedDefinition),
@@ -509,8 +585,15 @@ export async function updateWorkflow(
         Boolean(values.unpublish),
         Boolean(values.unpublish),
         workflowId,
+        versionToMatch,
       ]
     );
+    if (!updateResult.affectedRows)
+      throw new WorkflowVersionConflictError(
+        workflowId,
+        versionToMatch,
+        lockedDefinitionVersion
+      );
     await insertVersion(connection, {
       workflowId,
       version: nextVersion,
@@ -692,8 +775,6 @@ export async function rollbackWorkflowVersion(
     name: string;
     status: "draft" | "published";
     definition: Definition;
-    executionPlanJson?: unknown;
-    executionPlanHash?: string | null;
   } | null;
   if (!target) return null;
   if (
@@ -701,55 +782,41 @@ export async function rollbackWorkflowVersion(
     !(await hasWorkflowPermission(user, workflowId, "workflow:publish"))
   )
     throw new Error("恢复已发布版本需要发布权限。");
-  const current = (await getWorkflow(workflowId, user)) as {
-    ownerUserId: number;
-    name: string;
-    definitionVersion: number;
-    flowType: "state" | "control" | "data";
-  } | null;
-  if (!current) return null;
-  let restoredDefinition = target.definition;
-  let restoredPlan: WorkflowExecutionPlan | undefined;
-  let restoredPlanHash: string | null = null;
-  if (target.status === "published") {
-    const storedPlan = parseJson(target.executionPlanJson);
-    if (storedPlan && target.executionPlanHash) {
-      restoredPlan = assertWorkflowExecutionPlan(
-        storedPlan,
-        String(target.executionPlanHash),
-        current.flowType
-      );
-      restoredPlanHash = String(target.executionPlanHash);
-    } else {
-      const resolvedDefinition = await resolveSubflowReferences(
-        target.definition,
-        current.ownerUserId,
-        true,
-        current.flowType
-      );
-      const compiled = compileWorkflowDefinition(resolvedDefinition, {
-        flowType: current.flowType,
-      });
-      restoredPlan = compiled.plan;
-      restoredPlanHash = compiled.planHash;
-    }
-    restoredDefinition = restoredPlan.definition;
-  }
-  const nextVersion = Number(current.definitionVersion) + 1;
+  const restoredDefinition = target.definition;
   const connection = await db().getConnection();
+  let nextVersion = 0;
   try {
     await connection.beginTransaction();
+    const [currentRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT ownerUserId,projectId,name,definitionVersion,flowType,status,auditStatus,archivedAt FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+      [workflowId]
+    );
+    const current = currentRows[0] as {
+      ownerUserId: number;
+      projectId?: string | null;
+      name: string;
+      definitionVersion: number;
+      flowType: "state" | "control" | "data";
+      auditStatus: "init" | "approved" | "rejected";
+      archivedAt?: Date | string | null;
+    } | undefined;
+    if (!current) throw new Error("流程不存在。");
+    if (current.archivedAt)
+      throw new Error("已归档流程必须先恢复后才能回滚版本。");
+    nextVersion = Number(current.definitionVersion) + 1;
+
+    // A rollback is a definition change, never an implicit publication. For
+    // project workflows it must re-enter the review queue even if the target
+    // snapshot used to be published; the next publish operation will compile
+    // a fresh execution plan after approval.
+    const nextAuditStatus = current.projectId ? "init" : current.auditStatus;
     await connection.query(
-      "UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,publishedExecutionPlanJson=?,publishedExecutionPlanHash=?,publishedAt=?,unpublishedAt=?,updatedAt=NOW() WHERE id=?",
+      "UPDATE workflow SET name=?,definitionJson=?,status='draft',definitionVersion=?,auditStatus=?,publishedExecutionPlanJson=NULL,publishedExecutionPlanHash=NULL,publishedAt=NULL,unpublishedAt=NOW(),updatedAt=NOW() WHERE id=?",
       [
         target.name,
         JSON.stringify(restoredDefinition),
-        target.status,
         nextVersion,
-        restoredPlan ? JSON.stringify(restoredPlan) : null,
-        restoredPlanHash,
-        target.status === "published" ? new Date() : null,
-        target.status === "draft" ? new Date() : null,
+        nextAuditStatus,
         workflowId,
       ]
     );
@@ -757,13 +824,13 @@ export async function rollbackWorkflowVersion(
       workflowId,
       version: nextVersion,
       name: target.name,
-      status: target.status,
+      status: "draft",
       definition: restoredDefinition,
       source: "rolled_back",
       actorUserId: user.id,
       restoredFromVersion: targetVersion,
-      executionPlan: restoredPlan,
-      executionPlanHash: restoredPlanHash,
+      executionPlan: undefined,
+      executionPlanHash: null,
     });
     await connection.commit();
   } catch (error) {

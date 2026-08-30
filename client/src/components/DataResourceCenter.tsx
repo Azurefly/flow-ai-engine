@@ -1,4 +1,14 @@
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { StructuredResourceForm } from "@/components/StructuredResourceForm";
 import { CreationDialog } from "@/components/CreationDialog";
@@ -64,6 +74,7 @@ export default function DataResourceCenter({
     workflowId: "",
     cronExpression: "0 0 9 * * *",
   });
+  const [pendingDeleteKey, setPendingDeleteKey] = useState<string | null>(null);
 
   const invalidate = () => {
     void utils.data.resources.invalidate({ projectId });
@@ -116,22 +127,27 @@ export default function DataResourceCenter({
   const removeSource = trpc.data.deleteSource.useMutation({
     onSuccess: invalidate,
     onError: error => toast.error(error.message),
+    onSettled: () => setPendingDeleteKey(null),
   });
   const removeAsset = trpc.data.deleteAsset.useMutation({
     onSuccess: invalidate,
     onError: error => toast.error(error.message),
+    onSettled: () => setPendingDeleteKey(null),
   });
   const removeUdf = trpc.data.deleteUdf.useMutation({
     onSuccess: invalidate,
     onError: error => toast.error(error.message),
+    onSettled: () => setPendingDeleteKey(null),
   });
   const removeTag = trpc.data.deleteTag.useMutation({
     onSuccess: invalidate,
     onError: error => toast.error(error.message),
+    onSettled: () => setPendingDeleteKey(null),
   });
   const removePlugin = trpc.data.deletePlugin.useMutation({
     onSuccess: invalidate,
     onError: error => toast.error(error.message),
+    onSettled: () => setPendingDeleteKey(null),
   });
   const testSource = trpc.data.testSource.useMutation({
     onSuccess: (result: any) => {
@@ -191,6 +207,11 @@ export default function DataResourceCenter({
       schedule,
     ])
   );
+  const confirmDelete = (key: string, action: () => void) => {
+    if (pendingDeleteKey) return;
+    setPendingDeleteKey(key);
+    action();
+  };
 
   const entries = useMemo(
     () => [
@@ -304,44 +325,54 @@ export default function DataResourceCenter({
           columns={["名称", "类型", "状态", "最近校验", "操作"]}
           empty="尚未配置数据源。"
         >
-          {(resources.data?.sources ?? []).map((source: any) => (
-            <tr key={source.id}>
-              <Cell
-                primary={source.name}
-                secondary={source.connection?.description || "连接元数据已隐藏"}
-              />
-              <td className="px-4 py-3 text-xs text-slate-600">
-                {source.sourceType}
-              </td>
-              <td className="px-4 py-3">
-                <State value={source.status} />
-              </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
-                {source.lastTestedAt
-                  ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
-                  : "—"}
-              </td>
-              <td className="px-4 py-3 text-right whitespace-nowrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mr-2 h-7 text-xs"
-                  disabled={testSource.isPending}
-                  onClick={() =>
-                    testSource.mutate({ projectId, sourceId: source.id })
-                  }
-                >
-                  测试连接
-                </Button>
-                <DeleteButton
-                  onClick={() =>
-                    removeSource.mutate({ projectId, sourceId: source.id })
+          {(resources.data?.sources ?? []).map((source: any) => {
+            const key = `source:${source.id}`;
+            return (
+              <tr key={source.id}>
+                <Cell
+                  primary={source.name}
+                  secondary={
+                    source.connection?.description || "连接元数据已隐藏"
                   }
                 />
-              </td>
-            </tr>
-          ))}
+                <td className="px-4 py-3 text-xs text-slate-600">
+                  {source.sourceType}
+                </td>
+                <td className="px-4 py-3">
+                  <State value={source.status} />
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {source.lastTestedAt
+                    ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
+                    : "—"}
+                </td>
+                <td className="px-4 py-3 text-right whitespace-nowrap">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mr-2 h-7 text-xs"
+                    disabled={testSource.isPending}
+                    onClick={() =>
+                      testSource.mutate({ projectId, sourceId: source.id })
+                    }
+                  >
+                    测试连接
+                  </Button>
+                  <DeleteButton
+                    resourceName={source.name}
+                    pending={pendingDeleteKey === key}
+                    disabled={Boolean(pendingDeleteKey)}
+                    onConfirm={() =>
+                      confirmDelete(key, () =>
+                        removeSource.mutate({ projectId, sourceId: source.id })
+                      )
+                    }
+                  />
+                </td>
+              </tr>
+            );
+          })}
         </ResourceTable>
       )}
       {tab === "assets" && (
@@ -349,31 +380,39 @@ export default function DataResourceCenter({
           columns={["资源名称", "类型 / 数据源", "结构 / 样本", "状态", "操作"]}
           empty="尚无已探查资源。"
         >
-          {(resources.data?.assets ?? []).map((asset: any) => (
-            <tr key={asset.id}>
-              <Cell
-                primary={asset.name}
-                secondary={asset.sourceName || "未关联数据源"}
-              />
-              <td className="px-4 py-3 text-xs text-slate-600">
-                {asset.assetType}
-              </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
-                {asset.schema?.length ?? 0} 字段 · {asset.sample?.length ?? 0}{" "}
-                行样本
-              </td>
-              <td className="px-4 py-3">
-                <State value={asset.status} />
-              </td>
-              <td className="px-4 py-3 text-right">
-                <DeleteButton
-                  onClick={() =>
-                    removeAsset.mutate({ projectId, assetId: asset.id })
-                  }
+          {(resources.data?.assets ?? []).map((asset: any) => {
+            const key = `asset:${asset.id}`;
+            return (
+              <tr key={asset.id}>
+                <Cell
+                  primary={asset.name}
+                  secondary={asset.sourceName || "未关联数据源"}
                 />
-              </td>
-            </tr>
-          ))}
+                <td className="px-4 py-3 text-xs text-slate-600">
+                  {asset.assetType}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {asset.schema?.length ?? 0} 字段 · {asset.sample?.length ?? 0}{" "}
+                  行样本
+                </td>
+                <td className="px-4 py-3">
+                  <State value={asset.status} />
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <DeleteButton
+                    resourceName={asset.name}
+                    pending={pendingDeleteKey === key}
+                    disabled={Boolean(pendingDeleteKey)}
+                    onConfirm={() =>
+                      confirmDelete(key, () =>
+                        removeAsset.mutate({ projectId, assetId: asset.id })
+                      )
+                    }
+                  />
+                </td>
+              </tr>
+            );
+          })}
         </ResourceTable>
       )}
       {tab === "udfs" && (
@@ -434,30 +473,38 @@ export default function DataResourceCenter({
             columns={["函数", "类型", "描述", "状态", "操作"]}
             empty="尚未注册 UDF。"
           >
-            {(resources.data?.udfs ?? []).map((udf: any) => (
-              <tr key={udf.id}>
-                <Cell
-                  primary={udf.name}
-                  secondary={udf.returnType || "未声明返回类型"}
-                />
-                <td className="px-4 py-3 text-xs text-slate-600">
-                  {udf.udfType}
-                </td>
-                <td className="max-w-[300px] truncate px-4 py-3 text-xs text-slate-500">
-                  {udf.description || "—"}
-                </td>
-                <td className="px-4 py-3">
-                  <State value={udf.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <DeleteButton
-                    onClick={() =>
-                      removeUdf.mutate({ projectId, udfId: udf.id })
-                    }
+            {(resources.data?.udfs ?? []).map((udf: any) => {
+              const key = `udf:${udf.id}`;
+              return (
+                <tr key={udf.id}>
+                  <Cell
+                    primary={udf.name}
+                    secondary={udf.returnType || "未声明返回类型"}
                   />
-                </td>
-              </tr>
-            ))}
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    {udf.udfType}
+                  </td>
+                  <td className="max-w-[300px] truncate px-4 py-3 text-xs text-slate-500">
+                    {udf.description || "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <State value={udf.status} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <DeleteButton
+                      resourceName={udf.name}
+                      pending={pendingDeleteKey === key}
+                      disabled={Boolean(pendingDeleteKey)}
+                      onConfirm={() =>
+                        confirmDelete(key, () =>
+                          removeUdf.mutate({ projectId, udfId: udf.id })
+                        )
+                      }
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </ResourceTable>
         </section>
       )}
@@ -478,30 +525,36 @@ export default function DataResourceCenter({
           </ResourceForm>
           <div className="rounded-lg border border-slate-200 bg-white p-5">
             <div className="flex flex-wrap gap-2">
-              {(resources.data?.tags ?? []).map((tag: any) => (
-                <span
-                  key={tag.id}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
-                  style={{
-                    backgroundColor: `${tag.color}18`,
-                    color: tag.color,
-                  }}
-                >
-                  <i
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: tag.color }}
-                  />
-                  {tag.name}
-                  <button
-                    className="ml-1 text-current/70 hover:text-red-600"
-                    onClick={() =>
-                      removeTag.mutate({ projectId, tagId: tag.id })
-                    }
+              {(resources.data?.tags ?? []).map((tag: any) => {
+                const key = `tag:${tag.id}`;
+                return (
+                  <span
+                    key={tag.id}
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
+                    style={{
+                      backgroundColor: `${tag.color}18`,
+                      color: tag.color,
+                    }}
                   >
-                    <Trash2 size={13} />
-                  </button>
-                </span>
-              ))}
+                    <i
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: tag.color }}
+                    />
+                    {tag.name}
+                    <DeleteButton
+                      resourceName={tag.name}
+                      className="ml-1 text-current/70 hover:text-red-600"
+                      pending={pendingDeleteKey === key}
+                      disabled={Boolean(pendingDeleteKey)}
+                      onConfirm={() =>
+                        confirmDelete(key, () =>
+                          removeTag.mutate({ projectId, tagId: tag.id })
+                        )
+                      }
+                    />
+                  </span>
+                );
+              })}
               {!(resources.data?.tags ?? []).length && (
                 <span className="text-sm text-slate-400">尚未创建标签。</span>
               )}
@@ -561,27 +614,38 @@ export default function DataResourceCenter({
             columns={["插件", "类型", "版本", "状态", "操作"]}
             empty="尚未登记项目插件。"
           >
-            {(resources.data?.plugins ?? []).map((plugin: any) => (
-              <tr key={plugin.id}>
-                <Cell primary={plugin.name} secondary="项目级插件" />
-                <td className="px-4 py-3 text-xs text-slate-600">
-                  {plugin.pluginType}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                  {plugin.version}
-                </td>
-                <td className="px-4 py-3">
-                  <State value={plugin.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <DeleteButton
-                    onClick={() =>
-                      removePlugin.mutate({ projectId, pluginId: plugin.id })
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
+            {(resources.data?.plugins ?? []).map((plugin: any) => {
+              const key = `plugin:${plugin.id}`;
+              return (
+                <tr key={plugin.id}>
+                  <Cell primary={plugin.name} secondary="项目级插件" />
+                  <td className="px-4 py-3 text-xs text-slate-600">
+                    {plugin.pluginType}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                    {plugin.version}
+                  </td>
+                  <td className="px-4 py-3">
+                    <State value={plugin.status} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <DeleteButton
+                      resourceName={plugin.name}
+                      pending={pendingDeleteKey === key}
+                      disabled={Boolean(pendingDeleteKey)}
+                      onConfirm={() =>
+                        confirmDelete(key, () =>
+                          removePlugin.mutate({
+                            projectId,
+                            pluginId: plugin.id,
+                          })
+                        )
+                      }
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </ResourceTable>
         </section>
       )}
@@ -1391,14 +1455,68 @@ function State({ value }: { value: string }) {
     </span>
   );
 }
-function DeleteButton({ onClick }: { onClick: () => void }) {
+function DeleteButton({
+  resourceName,
+  pending,
+  disabled = false,
+  className,
+  onConfirm,
+}: {
+  resourceName: string;
+  pending: boolean;
+  disabled?: boolean;
+  className?: string;
+  onConfirm: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label = `删除${resourceName}`;
+  const description = `将删除“${resourceName}”。此操作可能影响依赖它的数据流程，确认后才会提交删除请求。`;
   return (
-    <button
-      className="text-slate-400 hover:text-red-600"
-      onClick={onClick}
-      title="删除"
-    >
-      <Trash2 size={15} />
-    </button>
+    <>
+      <button
+        type="button"
+        className={className ?? "text-slate-400 hover:text-red-600"}
+        onClick={() => setOpen(true)}
+        disabled={disabled || pending}
+        title={label}
+        aria-label={label}
+        aria-busy={pending}
+      >
+        {pending ? (
+          <Loader2 className="animate-spin" size={15} />
+        ) : (
+          <Trash2 size={15} />
+        )}
+      </button>
+      <AlertDialog
+        open={open}
+        onOpenChange={nextOpen => {
+          if (!pending) setOpen(nextOpen);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除资源？</AlertDialogTitle>
+            <AlertDialogDescription>{description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={pending}
+              onClick={event => {
+                event.preventDefault();
+                if (disabled || pending) return;
+                onConfirm();
+                setOpen(false);
+              }}
+            >
+              {pending && <Loader2 className="animate-spin" size={14} />}
+              确认删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

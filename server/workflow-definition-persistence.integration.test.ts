@@ -96,6 +96,16 @@ describe("流程定义 JSON 导入导出与持久化", () => {
     (invalidImported.nodes[1] as any).config = [];
     await expect(routeCaller.workflow.update({ id: workflowId, definition: invalidImported })).rejects.toThrow("节点配置必须是 JSON 对象");
     const routedUpdate = await routeCaller.workflow.update({ id: workflowId, name: "导入定义已保存", definition: imported });
+    await expect(
+      routeCaller.workflow.update({
+        id: workflowId,
+        expectedDefinitionVersion: initialVersion,
+        definition: imported,
+      })
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      message: expect.stringContaining("流程版本冲突"),
+    });
     const reloaded = await getWorkflow(workflowId, user) as any;
     const routedExport = await routeCaller.workflow.get({ id: workflowId });
     const exportedJson = JSON.stringify({ workflow: { name: routedExport.name, definition: routedExport.definition } });

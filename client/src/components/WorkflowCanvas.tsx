@@ -63,6 +63,11 @@ import {
   validateNodeConfig,
 } from "@shared/workflow-node-contract";
 import { isFlowNodeAllowed } from "@shared/flow-profile-contract";
+import {
+  restoreRouterRouteConfig,
+  snapshotRouterRouteConfig,
+  type RouterRouteConfigSnapshot,
+} from "@/lib/workflow-route-history";
 
 type NodeKind = FlowNodeType;
 type FlowNodeData = { label: string; kind: NodeKind; config: NodeConfig };
@@ -83,6 +88,14 @@ type CanvasContextMenu = {
   nodeId?: string;
   edgeId?: string;
 } | null;
+type DeletedEdgeSnapshot = {
+  edge: Edge;
+  routerRoute?: {
+    routerId: string;
+    handle: string;
+    config: RouterRouteConfigSnapshot;
+  };
+};
 
 function canConnectCanvasNodes(
   source: CanvasNode,
@@ -1955,7 +1968,9 @@ export default function WorkflowCanvas({
   const [edges, setEdges, onEdgesChange] = useEdgesState(toFlowEdges(initial));
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
-  const [deletedEdge, setDeletedEdge] = useState<Edge | null>(null);
+  const [deletedEdge, setDeletedEdge] = useState<DeletedEdgeSnapshot | null>(
+    null
+  );
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("normal");
   const [inspectorLocked, setInspectorLocked] = useState(false);
@@ -2361,37 +2376,61 @@ export default function WorkflowCanvas({
 
   const deleteSelectedEdge = useCallback(() => {
     if (readOnly || !selectedEdgeId) return;
-    setEdges(current => {
-      const edge = current.find(item => item.id === selectedEdgeId);
-      if (edge) setDeletedEdge(edge);
-      const next = current.filter(item => item.id !== selectedEdgeId);
-      const router = edge
-        ? nodes.find(
-            node => node.id === edge.source && node.data.kind === "router"
-          )
-        : undefined;
-      if (router)
-        setNodes(existing => syncRouterRouteTargets(existing, next, router.id));
-      return next;
+    const edge = edges.find(item => item.id === selectedEdgeId);
+    if (!edge) return;
+    const router = nodes.find(
+      node => node.id === edge.source && node.data.kind === "router"
+    );
+    const handle = edge.sourceHandle || "default";
+    setDeletedEdge({
+      edge,
+      ...(router
+        ? {
+            routerRoute: {
+              routerId: router.id,
+              handle,
+              config: snapshotRouterRouteConfig(router.data.config, handle),
+            },
+          }
+        : {}),
     });
+    const next = edges.filter(item => item.id !== selectedEdgeId);
+    if (router)
+      setNodes(existing => syncRouterRouteTargets(existing, next, router.id));
+    setEdges(next);
     setSelectedEdgeId(null);
-  }, [nodes, readOnly, selectedEdgeId, setEdges, setNodes]);
+  }, [edges, nodes, readOnly, selectedEdgeId, setEdges, setNodes]);
 
   const undoDeletedEdge = useCallback(() => {
     if (readOnly || !deletedEdge) return;
     if (
-      !nodes.some(node => node.id === deletedEdge.source) ||
-      !nodes.some(node => node.id === deletedEdge.target)
+      !nodes.some(node => node.id === deletedEdge.edge.source) ||
+      !nodes.some(node => node.id === deletedEdge.edge.target)
     ) {
       setDeletedEdge(null);
       return;
     }
-    const nextEdges = edges.some(edge => edge.id === deletedEdge.id)
+    const nextEdges = edges.some(edge => edge.id === deletedEdge.edge.id)
       ? edges
-      : edges.concat(deletedEdge);
+      : edges.concat(deletedEdge.edge);
     setEdges(nextEdges);
-    setNodes(current => syncRouterRouteTargets(current, nextEdges));
-    setSelectedEdgeId(deletedEdge.id);
+    if (deletedEdge.routerRoute)
+      setNodes(current =>
+        current.map(node => {
+          if (
+            node.id !== deletedEdge.routerRoute?.routerId ||
+            node.data.kind !== "router"
+          )
+            return node;
+          const config = restoreRouterRouteConfig(
+            node.data.config,
+            deletedEdge.routerRoute.handle,
+            deletedEdge.routerRoute.config
+          );
+          return { ...node, data: { ...node.data, config } };
+        })
+      );
+    setSelectedEdgeId(deletedEdge.edge.id);
     setSelectedId(null);
     setDeletedEdge(null);
   }, [deletedEdge, edges, nodes, readOnly, setEdges, setNodes]);

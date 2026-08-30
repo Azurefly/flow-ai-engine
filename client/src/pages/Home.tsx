@@ -105,8 +105,18 @@ type RequestedConsoleRoute = {
 type CompileDiagnostic = {
   code: string;
   message: string;
-  location: { kind: "definition" | "node" | "edge"; nodeId?: string; edgeId?: string; field?: string };
+  location: {
+    kind: "definition" | "node" | "edge";
+    nodeId?: string;
+    edgeId?: string;
+    field?: string;
+  };
 };
+
+function readWorkflowDefinitionVersion(value: unknown): number | null {
+  const version = Number(value);
+  return Number.isSafeInteger(version) && version > 0 ? version : null;
+}
 
 function readConsoleRoute(): RequestedConsoleRoute {
   if (typeof window === "undefined")
@@ -207,8 +217,8 @@ function LoginScreen({
 }) {
   return (
     <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#f4f6f9] p-5 text-slate-800">
-    <div className="absolute inset-x-0 top-0 h-1 bg-[#2d6bea]" />
-    <section className="relative w-full max-w-md overflow-hidden border border-slate-200 bg-white shadow-sm">
+      <div className="absolute inset-x-0 top-0 h-1 bg-[#2d6bea]" />
+      <section className="relative w-full max-w-md overflow-hidden border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-7 py-5">
           <div className="flex items-center gap-3">
             <div className="grid h-10 w-10 place-items-center bg-[#2d6bea] text-white">
@@ -275,11 +285,11 @@ function LoginScreen({
           >
             {pending && <Loader2 className="animate-spin" />}登录流程引擎
           </Button>
-      </form>
+        </form>
         <div className="border-t border-slate-200 bg-slate-50 px-7 py-4 text-xs text-slate-500">
           账号由管理员创建；系统不提供公开注册。
         </div>
-    </section>
+      </section>
     </main>
   );
 }
@@ -332,6 +342,16 @@ function FlowConsole({
     null
   );
   const [draftName, setDraftName] = useState("");
+  const [draftBaseDefinitionVersion, setDraftBaseDefinitionVersion] = useState<
+    number | null
+  >(null);
+  const [draftDirty, setDraftDirty] = useState(false);
+  const lastHydratedWorkflowIdRef = useRef<string | null>(null);
+  const lastHydratedWorkflowKeyRef = useRef<string | null>(null);
+  const workflowSnapshotRef = useRef<{
+    id: string;
+    definitionSignature: string;
+  } | null>(null);
   const [runInput, setRunInput] = useState<Record<string, unknown>>({
     id: 2,
     prompt: "请总结输入内容",
@@ -390,8 +410,8 @@ function FlowConsole({
   );
   const navigateSection = useCallback(
     (next: ConsoleSection) => {
-    const permitted = next !== "system" || user.role === "admin";
-    const resolved = permitted ? next : "flows";
+      const permitted = next !== "system" || user.role === "admin";
+      const resolved = permitted ? next : "flows";
       navigateRoute(
         resolved === "flows"
           ? { section: "flows", view: "center" }
@@ -407,7 +427,7 @@ function FlowConsole({
 
   const openFlowEditor = useCallback(
     (workflowId: string, returnTo: FlowEditorReturn) => {
-    setSelectedWorkflowId(workflowId);
+      setSelectedWorkflowId(workflowId);
       navigateRoute(
         { section: "flows", view: "editor", workflowId },
         { editorReturn: returnTo }
@@ -442,12 +462,12 @@ function FlowConsole({
 
   const flowEditorReturnLabel =
     flowEditorReturn === "warehouse"
-    ? "返回流程仓库"
-    : flowEditorReturn === "detail"
-      ? "返回流程详情"
-      : flowEditorReturn === "workspace"
-        ? "返回项目流程中心"
-        : "返回业务中心";
+      ? "返回流程仓库"
+      : flowEditorReturn === "detail"
+        ? "返回流程详情"
+        : flowEditorReturn === "workspace"
+          ? "返回项目流程中心"
+          : "返回业务中心";
 
   useEffect(() => {
     const restoreConsoleRoute = () => setRequestedRoute(readConsoleRoute());
@@ -494,6 +514,26 @@ function FlowConsole({
     ? (decodeJson(selectedWorkflow.definition) as Definition)
     : null;
   const selectedId = selectedWorkflow?.id ?? null;
+  const hydratedDefinitionVersion = readWorkflowDefinitionVersion(
+    selectedWorkflow?.definitionVersion
+  );
+  const workflowHydrationKey = selectedWorkflow
+    ? `${selectedWorkflow.id}:${hydratedDefinitionVersion ?? "unknown"}`
+    : null;
+  workflowSnapshotRef.current = selectedWorkflow
+    ? {
+        id: selectedWorkflow.id,
+        definitionSignature: JSON.stringify(selectedWorkflowDefinition),
+      }
+    : null;
+  const expectedDefinitionVersion =
+    draftBaseDefinitionVersion ?? hydratedDefinitionVersion;
+  const remoteVersionConflict = Boolean(
+    draftDirty &&
+      draftBaseDefinitionVersion !== null &&
+      hydratedDefinitionVersion !== null &&
+      draftBaseDefinitionVersion !== hydratedDefinitionVersion
+  );
   const detailInput = useMemo(
     () => ({ runId: selectedRunId ?? "00000000-0000-0000-0000-000000000000" }),
     [selectedRunId]
@@ -681,11 +721,32 @@ function FlowConsole({
   }, [selectedWorkflowId, workflowItems]);
 
   useEffect(() => {
-    if (selectedWorkflow) {
-      setDraftName(selectedWorkflow.name);
-      setDraftDefinition(decodeJson(selectedWorkflow.definition) as Definition);
+    if (!selectedWorkflow) {
+      lastHydratedWorkflowIdRef.current = null;
+      lastHydratedWorkflowKeyRef.current = null;
+      setDraftBaseDefinitionVersion(null);
+      setDraftDirty(false);
+      return;
     }
-  }, [selectedWorkflow?.id]);
+    // A remote refresh for the same workflow must update a clean editor, but
+    // must never replace a dirty local draft. The key guard also prevents a
+    // mutation response followed by a stale query result from overwriting the
+    // just-saved local state.
+    if (
+      (draftDirty &&
+        lastHydratedWorkflowIdRef.current === selectedWorkflow.id) ||
+      lastHydratedWorkflowKeyRef.current === workflowHydrationKey
+    )
+      return;
+    lastHydratedWorkflowIdRef.current = selectedWorkflow.id;
+    lastHydratedWorkflowKeyRef.current = workflowHydrationKey;
+    setDraftName(selectedWorkflow.name);
+    setDraftDefinition(decodeJson(selectedWorkflow.definition) as Definition);
+    setDraftBaseDefinitionVersion(
+      readWorkflowDefinitionVersion(selectedWorkflow.definitionVersion)
+    );
+    setDraftDirty(false);
+  }, [draftDirty, selectedWorkflow, workflowHydrationKey]);
 
   useEffect(() => {
     const route = requestedRoute.route;
@@ -732,20 +793,54 @@ function FlowConsole({
       if (workflow) {
         setDraftDefinition(decodeJson(workflow.definition) as Definition);
         setDraftName(workflow.name);
+        setDraftBaseDefinitionVersion(
+          readWorkflowDefinitionVersion(workflow.definitionVersion)
+        );
       }
+      setDraftDirty(false);
       toast.success("流程定义已保存。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => {
+      if (error.message.includes("流程版本冲突")) {
+        void utils.workflow.list.invalidate();
+        if (selectedId) void utils.workflow.get.invalidate({ id: selectedId });
+        toast.error(
+          "保存失败：远端流程已更新。请刷新后检查并合并本地草稿，再重新保存。"
+        );
+        return;
+      }
+      toast.error(error.message);
+    },
   });
   const publishFlow = trpc.workflow.publish.useMutation({
-    onSuccess: () => {
+    onSuccess: (workflow: any) => {
       void utils.workflow.list.invalidate();
+      if (workflow) {
+        setDraftDefinition(decodeJson(workflow.definition) as Definition);
+        setDraftName(workflow.name);
+        setDraftBaseDefinitionVersion(
+          readWorkflowDefinitionVersion(workflow.definitionVersion)
+        );
+      }
+      setDraftDirty(false);
       toast.success("流程已发布。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => {
+      if (error.message.includes("流程版本冲突")) {
+        void utils.workflow.list.invalidate();
+        if (selectedId) void utils.workflow.get.invalidate({ id: selectedId });
+        toast.error(
+          "发布失败：远端流程已更新。请刷新后检查并合并本地草稿，再重新发布。"
+        );
+        return;
+      }
+      toast.error(error.message);
+    },
   });
   const compileFlow = trpc.workflow.compile.useMutation();
-  const [compileDiagnostics, setCompileDiagnostics] = useState<CompileDiagnostic[]>([]);
+  const [compileDiagnostics, setCompileDiagnostics] = useState<
+    CompileDiagnostic[]
+  >([]);
   const duplicateFlow = trpc.workflow.duplicate.useMutation({
     onSuccess: (workflow: any) => {
       void utils.workflow.list.invalidate();
@@ -760,6 +855,8 @@ function FlowConsole({
       void utils.project.list.invalidate();
       setSelectedWorkflowId(null);
       setDraftDefinition(null);
+      setDraftBaseDefinitionVersion(null);
+      setDraftDirty(false);
       returnFromFlowEditor();
       toast.success("流程已归档，可在流程仓库恢复。");
     },
@@ -888,18 +985,45 @@ function FlowConsole({
   const canManageMembers = Boolean(
     access.data?.permissions?.has("workflow:members:manage")
   );
+  const handleDraftNameChange = useCallback((value: string) => {
+    setDraftName(value);
+    setDraftDirty(true);
+  }, []);
+  const handleDraftDefinitionChange = useCallback((definition: Definition) => {
+    const remoteSnapshot = workflowSnapshotRef.current;
+    const matchesRemoteSnapshot =
+      remoteSnapshot !== null &&
+      remoteSnapshot.definitionSignature === JSON.stringify(definition);
+    setDraftDefinition(definition);
+    // WorkflowCanvas emits its current state once when it mounts. Treat that
+    // emission as hydration when it matches the remote snapshot, while
+    // preserving an already-dirty name/definition draft across remounts.
+    setDraftDirty(current => current || !matchesRemoteSnapshot);
+  }, []);
   const saveCurrent = useCallback(() => {
     if (!selectedId || !draftDefinition) return;
     if (selectedWorkflow?.status === "published") {
-      toast.error("已发布流程请使用“发布”提交新版本，或先取消发布后再保存草稿。");
+      toast.error(
+        "已发布流程请使用“发布”提交新版本，或先取消发布后再保存草稿。"
+      );
       return;
     }
     saveFlow.mutate({
       id: selectedId,
       name: draftName.trim() || "未命名流程",
       definition: draftDefinition,
+      ...(expectedDefinitionVersion === null
+        ? {}
+        : { expectedDefinitionVersion }),
     });
-  }, [draftDefinition, draftName, saveFlow, selectedId, selectedWorkflow?.status]);
+  }, [
+    draftDefinition,
+    draftName,
+    expectedDefinitionVersion,
+    saveFlow,
+    selectedId,
+    selectedWorkflow?.status,
+  ]);
 
   const exportCurrent = () => {
     if (!selectedWorkflow || !draftDefinition) return;
@@ -935,6 +1059,7 @@ function FlowConsole({
           throw new Error();
         setDraftDefinition(imported);
         if (parsed.workflow?.name) setDraftName(String(parsed.workflow.name));
+        setDraftDirty(true);
         toast.success("JSON 已载入；请检查后保存。");
       } catch {
         toast.error("导入文件不是有效的流程定义 JSON。");
@@ -987,7 +1112,7 @@ function FlowConsole({
       <a className="aiflow-skip-link" href="#aiflow-console-panel">
         跳到主要工作区
       </a>
-    <header className="sticky top-0 z-30 border-b border-[#d9e0e9] bg-white text-[#354052] shadow-sm">
+      <header className="sticky top-0 z-30 border-b border-[#d9e0e9] bg-white text-[#354052] shadow-sm">
         <div className="flex h-14 items-center">
           <button
             className="grid h-14 w-16 place-items-center border-r border-[#e0e6ee] text-slate-500 hover:bg-[#f2f6fc] hover:text-[#2469c7]"
@@ -999,7 +1124,7 @@ function FlowConsole({
           <div className="flex min-w-0 items-center gap-3 px-4">
             <div className="grid h-7 w-7 place-items-center rounded-sm bg-[#2d72cf] text-white">
               <Gauge size={16} />
-    </div>
+            </div>
             <div className="hidden sm:block">
               <p className="text-[10px] font-bold tracking-[.16em] text-[#2d72cf]">
                 AI FLOW GRAPH
@@ -1253,7 +1378,10 @@ function FlowConsole({
               workflow={selectedWorkflow}
               definition={draftDefinition}
               name={draftName}
-              setName={setDraftName}
+              setName={handleDraftNameChange}
+              remoteVersionConflict={remoteVersionConflict}
+              draftBaseDefinitionVersion={draftBaseDefinitionVersion}
+              hydratedDefinitionVersion={hydratedDefinitionVersion}
               canEdit={canEdit}
               canPublish={canPublish}
               canRun={canRun}
@@ -1270,15 +1398,32 @@ function FlowConsole({
               models={runtimeModels.data ?? []}
               templates={(templates.data ?? []) as any[]}
               subflows={(subflows.data ?? []) as any[]}
-              onDefinitionChange={setDraftDefinition}
+              onDefinitionChange={handleDraftDefinitionChange}
               backLabel={flowEditorReturnLabel}
               onBackToDesignCenter={returnFromFlowEditor}
               onSave={saveCurrent}
+              onWorkflowMutationSuccess={(workflow: any) => {
+                if (workflow) {
+                  setDraftDefinition(
+                    decodeJson(workflow.definition) as Definition
+                  );
+                  setDraftName(workflow.name);
+                  setDraftBaseDefinitionVersion(
+                    readWorkflowDefinitionVersion(workflow.definitionVersion)
+                  );
+                }
+                setDraftDirty(false);
+              }}
               onValidate={() => {
                 if (!selectedId || !draftDefinition) return;
                 compileFlow.mutate(
                   { id: selectedId, definition: draftDefinition },
-                  { onSuccess: result => setCompileDiagnostics(result.ok ? [] : result.diagnostics) }
+                  {
+                    onSuccess: result =>
+                      setCompileDiagnostics(
+                        result.ok ? [] : result.diagnostics
+                      ),
+                  }
                 );
               }}
               onPublish={() => {
@@ -1289,11 +1434,20 @@ function FlowConsole({
                     onSuccess: result => {
                       if (!result.ok) {
                         setCompileDiagnostics(result.diagnostics);
-                        toast.error(`编译未通过：${result.diagnostics.length} 项错误`);
+                        toast.error(
+                          `编译未通过：${result.diagnostics.length} 项错误`
+                        );
                         return;
                       }
                       setCompileDiagnostics([]);
-                      publishFlow.mutate({ id: selectedId, name: draftName.trim() || "未命名流程", definition: draftDefinition });
+                      publishFlow.mutate({
+                        id: selectedId,
+                        name: draftName.trim() || "未命名流程",
+                        definition: draftDefinition,
+                        ...(expectedDefinitionVersion === null
+                          ? {}
+                          : { expectedDefinitionVersion }),
+                      });
                     },
                     onError: error => toast.error(error.message),
                   }
@@ -1547,6 +1701,9 @@ function FlowDesigner({
   definition,
   name,
   setName,
+  remoteVersionConflict,
+  draftBaseDefinitionVersion,
+  hydratedDefinitionVersion,
   canEdit,
   canPublish,
   canRun,
@@ -1568,6 +1725,7 @@ function FlowDesigner({
   onBackToDesignCenter,
   onSave,
   onPublish,
+  onWorkflowMutationSuccess,
   onValidate,
   onRun,
   onExport,
@@ -1587,6 +1745,9 @@ function FlowDesigner({
   definition: Definition | null;
   name: string;
   setName: (value: string) => void;
+  remoteVersionConflict: boolean;
+  draftBaseDefinitionVersion: number | null;
+  hydratedDefinitionVersion: number | null;
   canEdit: boolean;
   canPublish: boolean;
   canRun: boolean;
@@ -1608,6 +1769,7 @@ function FlowDesigner({
   onBackToDesignCenter: () => void;
   onSave: () => void;
   onPublish: () => void;
+  onWorkflowMutationSuccess: (workflow: any) => void;
   onValidate: () => void;
   onRun: () => void;
   onExport: () => void;
@@ -1641,19 +1803,38 @@ function FlowDesigner({
   });
   const utils = trpc.useUtils();
   const unpublishFlow = trpc.workflow.unpublish.useMutation({
-    onSuccess: () => {
+    onSuccess: (nextWorkflow: any) => {
       void utils.workflow.list.invalidate();
+      onWorkflowMutationSuccess(nextWorkflow);
       toast.success("流程已取消发布；历史版本与运行审计已保留。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => {
+      if (error.message.includes("流程版本冲突")) {
+        void utils.workflow.list.invalidate();
+        toast.error(
+          "取消发布失败：远端流程已更新。请刷新后重试，避免覆盖他人的新版本。"
+        );
+        return;
+      }
+      toast.error(error.message);
+    },
   });
   const onUnpublish = () => {
     if (
-      window.confirm(
+      !window.confirm(
         "确定取消发布当前流程吗？流程将无法继续发起，但历史版本和运行记录会保留。"
       )
     )
-      unpublishFlow.mutate({ id: workflow.id });
+      return;
+    const expectedVersion = readWorkflowDefinitionVersion(
+      workflow.definitionVersion
+    );
+    if (expectedVersion === null) unpublishFlow.mutate({ id: workflow.id });
+    else
+      unpublishFlow.mutate({
+        id: workflow.id,
+        expectedDefinitionVersion: expectedVersion,
+      });
   };
   if (!workflow || !definition)
     return (
@@ -1726,7 +1907,9 @@ function FlowDesigner({
             size="sm"
             variant="outline"
             onClick={onSave}
-            disabled={!canEdit || savePending || workflow.status === "published"}
+            disabled={
+              !canEdit || savePending || workflow.status === "published"
+            }
             title={
               workflow.status === "published"
                 ? "已发布流程请使用发布操作提交新版本，或先取消发布"
@@ -1779,6 +1962,19 @@ function FlowDesigner({
           )}
         </div>
       </div>
+      {remoteVersionConflict && (
+        <div
+          role="alert"
+          className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          <p className="font-semibold">检测到远端流程版本变化</p>
+          <p className="mt-1 text-xs leading-5">
+            本地草稿基于 v{draftBaseDefinitionVersion}，服务器当前为 v
+            {hydratedDefinitionVersion}
+            。为避免覆盖他人的新版本，保存或发布会被拒绝；请刷新后检查并手动合并本地修改。
+          </p>
+        </div>
+      )}
       <div className="mb-4 min-w-0 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
         <div className="flex items-center gap-2 font-semibold">
           <LockKeyhole size={15} />
@@ -1897,20 +2093,58 @@ function FlowDesigner({
         )}
       </div>
       {compileDiagnostics.length > 0 && (
-        <section className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3" aria-label="流程编译诊断">
+        <section
+          className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3"
+          aria-label="流程编译诊断"
+        >
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-red-900">发布前检查未通过</p>
-              <p className="mt-1 text-xs text-red-700">共 {compileDiagnostics.length} 项问题；修复后重新执行编译检查。</p>
+              <p className="text-sm font-semibold text-red-900">
+                发布前检查未通过
+              </p>
+              <p className="mt-1 text-xs text-red-700">
+                共 {compileDiagnostics.length} 项问题；修复后重新执行编译检查。
+              </p>
             </div>
-            <button type="button" className="text-xs text-red-700 underline" onClick={() => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { nodeId: compileDiagnostics[0]?.location.nodeId } }))}>定位第一项</button>
+            <button
+              type="button"
+              className="text-xs text-red-700 underline"
+              onClick={() =>
+                window.dispatchEvent(
+                  new CustomEvent("flow:focus-node", {
+                    detail: { nodeId: compileDiagnostics[0]?.location.nodeId },
+                  })
+                )
+              }
+            >
+              定位第一项
+            </button>
           </div>
           <ul className="mt-2 grid gap-1.5 text-xs text-red-900">
             {compileDiagnostics.map((item, index) => (
-              <li key={`${item.code}-${item.location.nodeId ?? item.location.edgeId ?? index}`} className="flex min-w-0 flex-wrap items-baseline gap-2 rounded border border-red-100 bg-white/70 px-2 py-1.5">
+              <li
+                key={`${item.code}-${item.location.nodeId ?? item.location.edgeId ?? index}`}
+                className="flex min-w-0 flex-wrap items-baseline gap-2 rounded border border-red-100 bg-white/70 px-2 py-1.5"
+              >
                 <code className="font-semibold">{item.code}</code>
                 <span className="min-w-0 flex-1">{item.message}</span>
-                {(item.location.nodeId || item.location.edgeId) && <button type="button" className="text-red-700 underline" onClick={() => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { nodeId: item.location.nodeId } }))}>{item.location.nodeId ? `节点 ${item.location.nodeId}` : `连线 ${item.location.edgeId}`}</button>}
+                {(item.location.nodeId || item.location.edgeId) && (
+                  <button
+                    type="button"
+                    className="text-red-700 underline"
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent("flow:focus-node", {
+                          detail: { nodeId: item.location.nodeId },
+                        })
+                      )
+                    }
+                  >
+                    {item.location.nodeId
+                      ? `节点 ${item.location.nodeId}`
+                      : `连线 ${item.location.edgeId}`}
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -2644,8 +2878,8 @@ function IamCenter({
                 })
               }
             >
-            <option value="user">普通用户</option>
-            <option value="admin">管理员</option>
+              <option value="user">普通用户</option>
+              <option value="admin">管理员</option>
             </select>
           </label>
           <p className="self-end break-words text-[11px] leading-5 text-slate-400 md:col-span-2">

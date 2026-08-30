@@ -1200,6 +1200,22 @@ async function executeSqlConnector(
   return normalizeRows(result[0]);
 }
 
+/**
+ * Define the small, backwards-compatible input contract for a dataflow start:
+ * an explicit `rows` array is a bounded seed set; otherwise a non-empty input
+ * object becomes one seed row. The full input is retained as start context so
+ * callers can distinguish the run payload from derived rows.
+ */
+export function buildDataflowStartSeed(input: JsonRecord = {}) {
+  const context = JSON.parse(JSON.stringify(input)) as JsonRecord;
+  const rows = Array.isArray(input.rows)
+    ? normalizeRows(input.rows)
+    : Object.keys(input).length
+      ? [JSON.parse(JSON.stringify(input)) as JsonRecord]
+      : [];
+  return { rows, context };
+}
+
 export function compileDataflowExecutionPlan(definition: unknown) {
   const compiled = compileWorkflowDefinition(definition, { flowType: "data" });
   if (!compiled.plan.topologicalOrder)
@@ -1269,12 +1285,13 @@ async function loadDataflowCheckpoint(runId: string) {
   return { outputs, artifacts, executed };
 }
 
-async function runDataflowDefinition(
+export async function runDataflowDefinition(
   projectId: string,
   executionPlan: WorkflowExecutionPlan,
   runId: string,
   requestId: string | null,
-  ownership: DataflowJobOwnership
+  ownership: DataflowJobOwnership,
+  input: JsonRecord = {}
 ) {
   const definition = executionPlan.definition;
   const nodes: any[] = Array.isArray(definition?.nodes) ? definition.nodes : [];
@@ -1302,6 +1319,7 @@ async function runDataflowDefinition(
   const outputs = checkpoint.outputs;
   const artifactByNode = checkpoint.artifacts;
   const executed = checkpoint.executed;
+  const startSeed = buildDataflowStartSeed(input);
   while (queue.length) {
     const nodeId = queue.shift()!;
     if (outputs.has(nodeId)) continue;
@@ -1346,7 +1364,11 @@ async function runDataflowDefinition(
     let output: JsonRecord;
     try {
       if (["start", "begin"].includes(String(node.type)))
-        output = { rows: rowsFromInput(inputs), stage: "start" };
+        output = {
+          rows: startSeed.rows,
+          context: startSeed.context,
+          stage: "start",
+        };
       else if (["source", "data_source", "table"].includes(String(node.type))) {
         const assetId = String(config.assetId ?? "");
         const asset = await readConnectorAsset(projectId, assetId, {
@@ -1804,6 +1826,7 @@ type ClaimedDataflowJob = {
   executionPlan: WorkflowExecutionPlan;
   executionPlanHash: string;
   requestId: string | null;
+  input: JsonRecord;
 };
 
 async function claimDataflowJob(
@@ -1816,7 +1839,7 @@ async function claimDataflowJob(
     const runFilter = onlyRunId ? " AND j.runId=?" : "";
     if (onlyRunId) params.push(onlyRunId);
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT j.id,j.runId,j.attempt,j.maxAttempts,r.projectId,r.executionPlanJson,r.executionPlanHash,r.requestId
+      `SELECT j.id,j.runId,j.attempt,j.maxAttempts,r.projectId,r.executionPlanJson,r.executionPlanHash,r.requestId,r.inputJson
          FROM dataflow_run_job j JOIN dataflow_run r ON r.id=j.runId
         WHERE j.attempt<j.maxAttempts AND r.status IN ('queued','running')${runFilter}
           AND ((j.status='queued' AND j.availableAt<=NOW()) OR (j.status='leased' AND j.leaseExpiresAt<NOW()))
@@ -1879,6 +1902,7 @@ async function claimDataflowJob(
       executionPlan,
       executionPlanHash,
       requestId: row.requestId ? String(row.requestId) : null,
+      input: parseJson(row.inputJson, {}) as JsonRecord,
     };
   } catch (error) {
     await connection.rollback();
@@ -1908,7 +1932,8 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
       job.executionPlan,
       job.runId,
       job.requestId,
-      { id: job.id, leaseToken: job.leaseToken }
+      { id: job.id, leaseToken: job.leaseToken },
+      job.input
     );
     injectDataflowWorkerFault("after_nodes_before_complete");
     const connection = await db().getConnection();
