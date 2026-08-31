@@ -53,6 +53,40 @@
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
   --radius: 0.65rem;
+  --flow-background: #f8fafc;
+  --flow-foreground: #0f172a;
+  --flow-card: #ffffff;
+  --flow-card-foreground: #0f172a;
+  --flow-popover: #ffffff;
+  --flow-popover-foreground: #0f172a;
+  --flow-primary: #2d6bea;
+  --flow-primary-foreground: #ffffff;
+  --flow-muted: #f1f5f9;
+  --flow-muted-foreground: #64748b;
+  --flow-border: #e2e8f0;
+  --flow-input: #e2e8f0;
+  --flow-ring: #2d6bea;
+  --flow-surface: #ffffff;
+  --flow-surface-2: #f8fafc;
+  --flow-ink: #0f172a;
+  --flow-ink-2: #475569;
+  --flow-ink-3: #94a3b8;
+  --flow-line: #e2e8f0;
+  --flow-brand: #2d6bea;
+  --flow-brand-ink: #ffffff;
+  --flow-state-success: #10b981;
+  --flow-state-warning: #f59e0b;
+  --flow-state-error: #ef4444;
+  --flow-state-info: #0ea5e9;
+  --flow-radius-sm: 4px;
+  --flow-radius-md: 8px;
+  --flow-radius-lg: 12px;
+  --flow-radius-xl: 16px;
+  --flow-shadow-1: 0 1px 2px rgb(15 23 42 / 5%), 0 1px 1px rgb(15 23 42 / 3%);
+  --flow-shadow-popover: 0 8px 24px -8px rgb(15 23 42 / 14%);
+  --flow-shadow-modal: 0 24px 60px -20px rgb(15 23 42 / 22%);
+  --flow-font-sans: Inter, "Noto Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --flow-font-mono: "SF Mono", "Fira Code", "Noto Sans SC", monospace;
   --background: oklch(1 0 0);
   --foreground: oklch(0.235 0.015 65);
   --card: oklch(1 0 0);
@@ -111,17 +145,48 @@
   --sidebar-accent-foreground:  oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.488 0.243 264.376);
+  --flow-background: #0b0c10;
+  --flow-foreground: #f1f5f9;
+  --flow-card: #14161f;
+  --flow-card-foreground: #f1f5f9;
+  --flow-popover: #14161f;
+  --flow-popover-foreground: #f1f5f9;
+  --flow-primary: #4f8cff;
+  --flow-primary-foreground: #ffffff;
+  --flow-muted: #1e202d;
+  --flow-muted-foreground: #94a3b8;
+  --flow-border: #2a2d3d;
+  --flow-input: #2a2d3d;
+  --flow-ring: #4f8cff;
+  --flow-surface: #14161f;
+  --flow-surface-2: #1a1c28;
+  --flow-ink: #f1f5f9;
+  --flow-ink-2: #94a3b8;
+  --flow-ink-3: #64748b;
+  --flow-line: #2a2d3d;
+  --flow-brand: #4f8cff;
+  --flow-brand-ink: #ffffff;
 }
 
 @layer base {
   html {
     text-size-adjust: 100%;
   }
+  html,
+  body,
+  #root {
+    max-width: 100%;
+  }
+  #root {
+    min-width: 0;
+    overflow-x: clip;
+  }
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -227,8 +292,15 @@
 }
 
 /* 业务中心按原始页面保持平面筛选条与紧凑数据表，而非仪表盘卡片堆叠。 */
+[data-aiflow-business-center] {
+  background: var(--flow-background);
+  color: var(--flow-foreground);
+}
+
 [data-aiflow-business-center] > div {
-  max-width: none;
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 [data-aiflow-business-center] > div > div:first-child > p:first-child {
@@ -251,18 +323,19 @@
 }
 
 [data-aiflow-business-center] section {
-  border-color: #dfe5ec;
+  border-color: var(--flow-border);
+  border-radius: var(--flow-radius-lg);
   box-shadow: none;
 }
 
 [data-aiflow-business-center] section > div:first-child {
-  background: #fff;
+  background: var(--flow-surface-2);
   padding: 12px 16px;
 }
 
 [data-aiflow-business-center] table th {
-  background: #f6f8fb;
-  color: #697789;
+  background: var(--flow-surface-2);
+  color: var(--flow-ink-2);
   font-weight: 600;
 }
 
@@ -270,6 +343,11 @@
 [data-aiflow-business-center] table td {
   padding-top: 10px;
   padding-bottom: 10px;
+}
+
+[data-aiflow-business-center] button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 /* 项目概览：左侧是原始模块菜单，右侧为连续工作区，不采用宽卡片栅格。 */
@@ -756,6 +834,96 @@
   [data-aiflow-warehouse] > div > .grid {
     gap: 12px;
     grid-template-columns: 1fr;
+  }
+}
+
+/* 系统全景矩阵：保持参考稿的蓝色 Hero、轻量统计卡和可滚动模块矩阵。 */
+[data-aiflow-system-overview] {
+  color: var(--flow-foreground);
+  font-family: var(--flow-font-sans);
+}
+
+[data-aiflow-system-overview] a {
+  max-width: 100%;
+}
+
+[data-aiflow-system-overview] article {
+  min-width: 0;
+}
+
+[data-aiflow-system-overview] [data-overview-empty] {
+  border-radius: var(--flow-radius-md);
+}
+
+[data-aiflow-top-nav] [role="tablist"] {
+  scrollbar-width: none;
+}
+
+[data-aiflow-top-nav] [role="tablist"]::-webkit-scrollbar {
+  display: none;
+}
+
+/* 生产画布 profile 壳层：在 1024px 与移动宽度下保持面板可收敛且不撑开根容器。 */
+.workflow-canvas-shell {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.workflow-canvas-shell .workflow-canvas-profile-strip {
+  min-width: 0;
+}
+
+.workflow-canvas-shell .workflow-canvas-profile-strip > * {
+  min-width: 0;
+}
+
+.workflow-canvas-shell .workflow-canvas-palette,
+.workflow-canvas-shell .workflow-canvas-disabled-list,
+.workflow-canvas-shell .workflow-canvas-runtime-meta {
+  min-width: 0;
+  scrollbar-width: thin;
+}
+
+.workflow-canvas-shell .workflow-canvas-stage {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.workflow-canvas-shell .workflow-canvas-inspector {
+  min-width: 0;
+  overflow-x: hidden;
+}
+
+@media (max-width: 1023px) {
+  .workflow-canvas-shell [data-workflow-canvas-inspector] {
+    border-left-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .workflow-canvas-shell .workflow-canvas-profile-strip {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .workflow-canvas-shell .workflow-canvas-runtime-meta {
+    width: 100%;
+  }
+
+  .workflow-canvas-shell .workflow-canvas-disabled-list {
+    max-height: 116px;
+    overflow-y: auto;
+  }
+
+  .workflow-canvas-shell .workflow-canvas-stage {
+    height: 390px;
+  }
+
+  .workflow-canvas-shell .workflow-canvas-status {
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
   }
 }
 

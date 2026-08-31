@@ -2,7 +2,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CreationDialog } from "@/components/CreationDialog";
 import { trpc } from "@/lib/trpc";
-import { Activity, Building2, CheckCircle2, ClipboardCheck, Gauge, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, SlidersHorizontal, Stamp, Workflow } from "lucide-react";
+import {
+  Activity,
+  Building2,
+  CheckCircle2,
+  ClipboardCheck,
+  Gauge,
+  KeyRound,
+  Loader2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  ShieldCheck,
+  SlidersHorizontal,
+  Stamp,
+  Workflow,
+} from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { toast } from "sonner";
 
@@ -28,13 +43,13 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
               <p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">SYSTEM CONFIGURATION</p>
               <h1 className="mt-1 text-base font-semibold text-slate-800">系统配置</h1>
             </div>
-            <button type="button" title={collapsed ? "展开配置导航" : "收起配置导航"} className="rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-[#245fc8]" onClick={() => setCollapsed(value => !value)}>
+            <button type="button" aria-label={collapsed ? "展开配置导航" : "收起配置导航"} title={collapsed ? "展开配置导航" : "收起配置导航"} className="min-h-11 min-w-11 rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-[#245fc8]" onClick={() => setCollapsed(value => !value)}>
               {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
           </div>
           <nav className="mt-2 grid gap-1">
             {items.map(item => (
-              <button key={item.id} title={collapsed ? item.label : undefined} onClick={() => setTab(item.id)} className={`flex items-center gap-2 rounded px-3 py-2.5 text-left text-sm ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}>
+              <button type="button" key={item.id} aria-current={tab === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} onClick={() => setTab(item.id)} className={`flex min-h-11 items-center gap-2 rounded px-3 py-2.5 text-left text-sm ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}>
                 <item.icon size={16} />
                 <span className={collapsed ? "hidden" : "truncate"}>{item.label}</span>
               </button>
@@ -44,7 +59,7 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-100 bg-slate-50 px-5 pt-3">
             <div role="tablist" aria-label="系统配置卡片页签" className="flex w-fit gap-1">
-              <button id="system-config-active-tab" role="tab" aria-controls="system-config-card" aria-selected="true" className="flex items-center gap-2 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#245fc8]">
+              <button id="system-config-active-tab" type="button" role="tab" aria-controls="system-config-card" aria-selected="true" className="flex min-h-11 items-center gap-2 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#245fc8]">
                 <active.icon size={14} />
                 {active.label}
               </button>
@@ -349,7 +364,56 @@ function AccessSettings({ onOpenIdentity, onOpenOrganization }: { onOpenIdentity
           </Button>
         </section>
       </div>
+      <section
+        data-system-config-capability-boundaries
+        className="mt-5 rounded-lg border border-amber-200 bg-amber-50/70 p-5"
+      >
+        <div className="flex items-start gap-3">
+          <KeyRound className="mt-0.5 shrink-0 text-amber-700" size={19} />
+          <div className="min-w-0">
+            <h3 className="font-semibold text-slate-800">当前能力边界</h3>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              以下能力暂未接入真实服务端契约，保持禁用态，不展示样例密钥、不模拟授权结果。
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <DisabledCapability
+            title="ABAC 策略"
+            description="属性策略编辑器尚未开放，当前以系统角色、项目成员和组织继承权限为准。"
+          />
+          <DisabledCapability
+            title="API 访问凭证"
+            description="API Key 创建、轮换与撤销接口尚未开放；此处不会生成或显示密钥。"
+          />
+          <DisabledCapability
+            title="额度与限流"
+            description="组织级额度和限流策略尚未接入配置 API，暂不展示可编辑数值。"
+          />
+          <DisabledCapability
+            title="访问日志"
+            description="组织页面暂不提供 IP/设备访问日志；授权审计请使用身份中心已有记录。"
+          />
+        </div>
+      </section>
     </div>
+  );
+}
+
+function DisabledCapability({ title, description }: { title: string; description: string }) {
+  return (
+    <article
+      aria-disabled="true"
+      className="rounded-lg border border-amber-200 bg-white/70 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-sm font-medium text-slate-700">{title}</h4>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-500">
+          暂未开放
+        </span>
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+    </article>
   );
 }
 function Header({ eyebrow, title, description, action }: { eyebrow: string; title: string; description: string; action?: ReactNode }) {

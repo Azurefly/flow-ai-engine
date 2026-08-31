@@ -4,6 +4,9 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+const overviewSource = source(
+  "../client/src/components/SystemOverviewPage.tsx"
+);
 const canvasSource = source("../client/src/components/WorkflowCanvas.tsx");
 const nodeContractSource = source("../shared/workflow-node-contract.ts");
 const flowProfileSource = source("../shared/flow-profile-contract.ts");
@@ -56,6 +59,22 @@ const packageSource = source("../package.json");
 const bundleBudgetSource = source("../scripts/check-bundle-budget.mts");
 
 describe("流程设计器界面回归约束", () => {
+  it("系统全景矩阵使用可达 hash 路由、真实授权数据和可用生产入口", () => {
+    expect(consoleRouteSource).toContain('section: "overview"');
+    expect(consoleRouteSource).toContain('return "#/overview"');
+    expect(homeSource).toContain("const SystemOverviewPage = lazy");
+    expect(homeSource).toContain('section === "overview"');
+    expect(overviewSource).toContain('data-aiflow-system-overview=""');
+    expect(overviewSource).toContain("projectsLoading");
+    expect(overviewSource).toContain("workflowsError");
+    expect(overviewSource).toContain("formatConsoleRoute");
+    expect(overviewSource).toContain("状态流画布");
+    expect(overviewSource).toContain("控制流画布");
+    expect(overviewSource).toContain("数据流画布");
+    expect(overviewSource).toContain("href={href}");
+    expect(overviewSource).toContain('aria-disabled="true"');
+  });
+
   it("保存与发布携带 hydrated 版本，并在远端更新时保留本地草稿", () => {
     expect(routerSource).toContain(
       "expectedDefinitionVersion: z.number().int().positive().optional()"
@@ -365,9 +384,9 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).not.toContain("JSON.stringify");
   });
 
-  it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {
+  it("保留顶层导航与当前流程工作台内容区域关联", () => {
     expect(homeSource).toContain(
-      'role="tablist" aria-label="流程工作台主导航"'
+      'role="tablist" aria-label="系统功能主导航"'
     );
     expect(homeSource).toContain("id={`aiflow-console-tab-${item.id}`}");
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
@@ -390,6 +409,8 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("outline: 3px solid #2563eb;");
     expect(styleSource).toContain(".aiflow-skip-link:focus-visible");
     expect(appSource).toContain('role="status" aria-live="polite"');
+    expect(styleSource).toContain("overflow-x: hidden;");
+    expect(homeSource).toContain("overflow-x-clip");
   });
 
   it("组织选择和成员列表使用完整名称路径与编码路径", () => {
@@ -403,7 +424,7 @@ describe("流程设计器界面回归约束", () => {
       "export const consoleSections: ConsoleSection[]"
     );
     expect(consoleRouteSource).toContain(
-      '"flows", "runs", "warehouse", "system"'
+      '"overview", "flows", "runs", "warehouse", "system"'
     );
     expect(consoleRouteSource).toContain(
       "export function parseConsoleRoute(hash: string): ConsoleRoute"
@@ -462,7 +483,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留窄屏工作区选择器与顶层路由联动", () => {
     expect(homeSource).toContain("data-aiflow-mobile-workspace-nav");
-    expect(homeSource).toContain('aria-label="切换流程工作区"');
+    expect(homeSource).toContain('aria-label="切换控制台工作区"');
     expect(homeSource).toContain(
       "navigateSection(event.target.value as ConsoleSection)"
     );
@@ -728,8 +749,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("overflow-x-auto border-b border-slate-200");
   });
 
-  it("保留原始四页签、项目工作区和独立系统配置入口", () => {
-    expect(homeSource).toContain('label: "已启动流程"');
+  it("保留系统全景、项目工作区和独立系统配置入口", () => {
+    expect(homeSource).toContain('label: "系统全景"');
+    expect(homeSource).toContain('label: "业务中心"');
+    expect(homeSource).toContain('label: "运行中心"');
     expect(homeSource).toContain('label: "流程仓库"');
     expect(homeSource).toContain('label: "系统配置"');
     expect(systemConfigSource).toContain("工作域配置");

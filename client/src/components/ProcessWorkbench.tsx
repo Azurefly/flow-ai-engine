@@ -14,7 +14,9 @@ import {
   PanelLeftOpen,
   RefreshCw,
   RotateCcw,
+  Search,
   Send,
+  SlidersHorizontal,
   UserRoundPlus,
   UsersRound,
 } from "lucide-react";
@@ -22,6 +24,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type View = "board" | "calendar" | "todo" | "done" | "initiated" | "all";
+type TaskStatusFilter = "" | "pending" | "claimed" | "completed" | "cancelled";
 const labels: Record<View, string> = {
   board: "我的看板",
   calendar: "日历",
@@ -35,6 +38,63 @@ function date(value: unknown) {
   return value
     ? new Date(String(value)).toLocaleString("zh-CN", { hour12: false })
     : "—";
+}
+
+function parseJson(value: unknown) {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+const sensitiveTaskFieldPattern =
+  /(password|passwd|secret|token|credential|api[_-]?key|authorization|cookie|e-?mail|phone|mobile|id[_-]?card|ssn|bank[_-]?(account|card)|card[_-]?number)/i;
+
+export function redactTaskValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactTaskValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+      key,
+      sensitiveTaskFieldPattern.test(key) ? "[已隐藏]" : redactTaskValue(item),
+    ])
+  );
+}
+
+function shortValue(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (typeof value === "object") return JSON.stringify(redactTaskValue(value));
+  return String(value);
+}
+
+function taskSearchText(task: any) {
+  return [
+    task?.workflowName,
+    task?.nodeName,
+    task?.operationName,
+    task?.initiatedByName,
+    task?.assignedName,
+    task?.displayStatus,
+    task?.status,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function instanceSearchText(instance: any) {
+  return [
+    instance?.workflowName,
+    instance?.initiatedByName,
+    instance?.displayStatus,
+    instance?.status,
+    instance?.id,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function badge(status: string) {
@@ -91,6 +151,10 @@ export default function ProcessWorkbench() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [taskKeyword, setTaskKeyword] = useState("");
+  const [taskStatus, setTaskStatus] = useState<TaskStatusFilter>("");
+  const [instanceKeyword, setInstanceKeyword] = useState("");
+  const [instanceStatus, setInstanceStatus] = useState("");
   const [batchDecision, setBatchDecision] = useState<
     "approved" | "rejected" | "abstained"
   >("approved");
@@ -98,17 +162,20 @@ export default function ProcessWorkbench() {
   const [month, setMonth] = useState(() => new Date());
   const dashboard = trpc.task.dashboard.useQuery(undefined, {
     refetchInterval: 10_000,
+    retry: false,
   });
   const taskInput = useMemo(
     () => ({
       view: view === "board" || view === "calendar" ? ("todo" as const) : view,
       limit: 100,
+      ...(taskStatus ? { status: taskStatus } : {}),
     }),
-    [view]
+    [taskStatus, view]
   );
   const tasks = trpc.task.list.useQuery(taskInput, {
     enabled: ["todo", "done"].includes(view),
     refetchInterval: 10_000,
+    retry: false,
   });
   const instanceInput = useMemo(
     () => ({
@@ -120,10 +187,43 @@ export default function ProcessWorkbench() {
   const instances = trpc.task.instances.useQuery(instanceInput, {
     enabled: ["initiated", "all"].includes(view),
     refetchInterval: 10_000,
+    retry: false,
   });
+  const filteredTasks = useMemo(() => {
+    const keyword = taskKeyword.trim().toLowerCase();
+    return ((tasks.data ?? []) as any[]).filter(task => {
+      if (taskStatus && task.status !== taskStatus) return false;
+      return !keyword || taskSearchText(task).includes(keyword);
+    });
+  }, [taskKeyword, taskStatus, tasks.data]);
+  const filteredInstances = useMemo(() => {
+    const keyword = instanceKeyword.trim().toLowerCase();
+    return ((instances.data ?? []) as any[]).filter(instance => {
+      if (instanceStatus && String(instance.status) !== instanceStatus) {
+        return false;
+      }
+      return !keyword || instanceSearchText(instance).includes(keyword);
+    });
+  }, [instanceKeyword, instanceStatus, instances.data]);
+  const visibleTaskIds = useMemo(
+    () => new Set(filteredTasks.map(task => String(task.id))),
+    [filteredTasks]
+  );
+  const visibleSelectedTaskIds = useMemo(
+    () => selectedTaskIds.filter(id => visibleTaskIds.has(id)),
+    [selectedTaskIds, visibleTaskIds]
+  );
+  const actionableSelectedTaskIds =
+    tasks.isError || tasks.isLoading ? [] : visibleSelectedTaskIds;
+  useEffect(() => {
+    setSelectedTaskIds(current => {
+      const next = current.filter(id => visibleTaskIds.has(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [visibleTaskIds]);
   const calendar = trpc.task.calendar.useQuery(
     { month },
-    { enabled: view === "calendar" }
+    { enabled: view === "calendar", retry: false }
   );
   const taskDetail = trpc.task.get.useQuery(
     { taskId: selectedTaskId ?? "00000000-0000-0000-0000-000000000000" },
@@ -263,21 +363,25 @@ export default function ProcessWorkbench() {
   const nav = [
     { id: "board" as const, icon: LayoutDashboard, count: null },
     { id: "calendar" as const, icon: CalendarDays, count: null },
-    { id: "todo" as const, icon: ListTodo, count: dashboard.data?.counts.todo },
+    {
+      id: "todo" as const,
+      icon: ListTodo,
+      count: dashboard.isError ? null : dashboard.data?.counts.todo,
+    },
     {
       id: "done" as const,
       icon: CheckCheck,
-      count: dashboard.data?.counts.done,
+      count: dashboard.isError ? null : dashboard.data?.counts.done,
     },
     {
       id: "initiated" as const,
       icon: Send,
-      count: dashboard.data?.counts.initiated,
+      count: dashboard.isError ? null : dashboard.data?.counts.initiated,
     },
     {
       id: "all" as const,
       icon: ClipboardList,
-      count: dashboard.data?.counts.all,
+      count: dashboard.isError ? null : dashboard.data?.counts.all,
     },
   ];
   const closeRunTab = () => {
@@ -290,14 +394,37 @@ export default function ProcessWorkbench() {
     setSelectedTaskId(null);
     setSelectedTaskIds([]);
     invalidate();
+    setTaskKeyword("");
+    setTaskStatus("");
+    setInstanceKeyword("");
+    setInstanceStatus("");
   };
+  const toggleAllTasks = () => {
+    const visibleIds = filteredTasks.map(task => String(task.id));
+    if (!visibleIds.length) return;
+    setSelectedTaskIds(current => {
+      const visible = current.filter(id => visibleTaskIds.has(id));
+      return visibleIds.every(id => visible.includes(id))
+        ? visible.filter(id => !visibleIds.includes(id))
+        : Array.from(new Set([...visible, ...visibleIds]));
+    });
+  };
+  const allVisibleTasksSelected =
+    !tasks.isError &&
+    !tasks.isLoading &&
+    filteredTasks.length > 0 &&
+    filteredTasks.every(task => visibleSelectedTaskIds.includes(String(task.id)));
   const runBatchComplete = () => {
     if (batchDecision === "rejected" && !batchComment.trim()) {
       toast.error("批量拒绝必须填写处理意见。");
       return;
     }
+    if (!actionableSelectedTaskIds.length) {
+      toast.error("当前筛选范围内没有已选任务。");
+      return;
+    }
     batchComplete.mutate({
-      taskIds: selectedTaskIds,
+      taskIds: actionableSelectedTaskIds,
       result: {
         decision: batchDecision,
         ...(batchComment.trim() ? { comment: batchComment.trim() } : {}),
@@ -316,11 +443,12 @@ export default function ProcessWorkbench() {
           >
             <div className={sidebarCollapsed ? "hidden" : ""}>
               <p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">
-                INITIATED PROCESS
+                PERSONAL TASK CENTER
               </p>
               <h1 className="mt-1 text-base font-semibold text-slate-800">
-                已启动流程
+                个人任务中心
               </h1>
+              <p className="mt-1 text-xs text-slate-400">已启动流程与人工审批</p>
             </div>
             <button
               type="button"
@@ -366,7 +494,7 @@ export default function ProcessWorkbench() {
                 {!sidebarCollapsed && (
                   <>
                     <span className="flex-1">{labels[item.id]}</span>
-                    {item.count !== null && (
+                    {item.count != null && (
                       <span className="rounded bg-white px-1.5 text-[10px] text-slate-500">
                         {item.count ?? 0}
                       </span>
@@ -417,13 +545,25 @@ export default function ProcessWorkbench() {
               {view === "board" && (
                 <Board
                   dashboard={dashboard.data}
+                  loading={dashboard.isLoading}
+                  error={dashboard.isError}
+                  onRetry={() => void dashboard.refetch()}
                   onTask={id => {
                     setView("todo");
                     setSelectedTaskId(id);
                   }}
                 />
               )}
-              {view === "calendar" && (
+              {view === "calendar" && calendar.isError && (
+                <QueryErrorState
+                  title="日历数据读取失败"
+                  onRetry={() => void calendar.refetch()}
+                />
+              )}
+              {view === "calendar" && calendar.isLoading && (
+                <LoadingPanel label="正在读取任务日历…" />
+              )}
+              {view === "calendar" && !calendar.isError && !calendar.isLoading && (
                 <Calendar
                   month={month}
                   setMonth={setMonth}
@@ -436,10 +576,10 @@ export default function ProcessWorkbench() {
               )}
               {view === "todo" && (
                 <TaskBatchBar
-                  count={selectedTaskIds.length}
+                  count={actionableSelectedTaskIds.length}
                   busy={busy}
                   onClaim={() =>
-                    batchClaim.mutate({ taskIds: selectedTaskIds })
+                    batchClaim.mutate({ taskIds: actionableSelectedTaskIds })
                   }
                   onComplete={runBatchComplete}
                   decision={batchDecision}
@@ -448,30 +588,72 @@ export default function ProcessWorkbench() {
                   onComment={setBatchComment}
                 />
               )}
+              {(view === "todo" || view === "done") && (
+                <TaskFilterBar
+                  view={view}
+                  keyword={taskKeyword}
+                  status={taskStatus}
+                  onKeyword={value => {
+                    setTaskKeyword(value);
+                    setSelectedTaskIds([]);
+                  }}
+                  onStatus={value => {
+                    setTaskStatus(value);
+                    setSelectedTaskIds([]);
+                  }}
+                  selectedCount={actionableSelectedTaskIds.length}
+                  visibleCount={tasks.isError ? null : filteredTasks.length}
+                  allVisibleSelected={allVisibleTasksSelected}
+                  onToggleAll={toggleAllTasks}
+                  onClear={() => {
+                    setTaskKeyword("");
+                    setTaskStatus("");
+                    setSelectedTaskIds([]);
+                  }}
+                />
+              )}
               {["todo", "done"].includes(view) && (
                 <TaskList
-                  tasks={(tasks.data ?? []) as any[]}
+                  tasks={filteredTasks}
                   loading={tasks.isLoading}
+                  error={tasks.isError}
+                  onRetry={() => void tasks.refetch()}
                   onTask={setSelectedTaskId}
                   onExecute={setSelectedTaskId}
                   busy={busy}
-                  selectedTaskIds={selectedTaskIds}
+                  selectedTaskIds={visibleSelectedTaskIds}
                   onToggle={taskId =>
-                    setSelectedTaskIds(current =>
-                      current.includes(taskId)
-                        ? current.filter(id => id !== taskId)
-                        : [...current, taskId]
-                    )
+                    setSelectedTaskIds(current => {
+                      const visible = current.filter(id => visibleTaskIds.has(id));
+                      return visible.includes(taskId)
+                        ? visible.filter(id => id !== taskId)
+                        : [...visible, taskId];
+                    })
                   }
                   selectable={view === "todo"}
                 />
               )}
               {["initiated", "all"].includes(view) && (
-                <InstanceList
-                  instances={(instances.data ?? []) as any[]}
-                  loading={instances.isLoading}
-                  onOpenRun={setSelectedRunId}
-                />
+                <>
+                  <InstanceFilterBar
+                    keyword={instanceKeyword}
+                    status={instanceStatus}
+                    onKeyword={setInstanceKeyword}
+                    onStatus={setInstanceStatus}
+                    visibleCount={instances.isError ? null : filteredInstances.length}
+                    onClear={() => {
+                      setInstanceKeyword("");
+                      setInstanceStatus("");
+                    }}
+                  />
+                  <InstanceList
+                    instances={filteredInstances}
+                    loading={instances.isLoading}
+                    error={instances.isError}
+                    onRetry={() => void instances.refetch()}
+                    onOpenRun={setSelectedRunId}
+                  />
+                </>
               )}
             </section>
           )}
@@ -481,6 +663,9 @@ export default function ProcessWorkbench() {
         <TaskDrawer
           task={taskDetail.data as any}
           assignees={(assignees.data ?? []) as any[]}
+          taskLoading={taskDetail.isLoading}
+          taskError={taskDetail.isError}
+          onRetryTask={() => void taskDetail.refetch()}
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
           onClaim={() => claim.mutate({ taskId: selectedTaskId })}
@@ -517,6 +702,171 @@ export default function ProcessWorkbench() {
           onReturn={() => returnToPending.mutate({ taskId: selectedTaskId })}
         />
       )}
+    </div>
+  );
+}
+
+function TaskFilterBar({
+  view,
+  keyword,
+  status,
+  onKeyword,
+  onStatus,
+  selectedCount,
+  visibleCount,
+  allVisibleSelected,
+  onToggleAll,
+  onClear,
+}: {
+  view: "todo" | "done";
+  keyword: string;
+  status: TaskStatusFilter;
+  onKeyword: (value: string) => void;
+  onStatus: (value: TaskStatusFilter) => void;
+  selectedCount: number;
+  visibleCount: number | null;
+  allVisibleSelected: boolean;
+  onToggleAll: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      data-process-workbench-filters
+      className="flex flex-col gap-3 border-b border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center"
+    >
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <SlidersHorizontal size={15} className="shrink-0 text-slate-400" />
+        <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 text-slate-400 sm:max-w-xs">
+          <Search size={14} />
+          <input
+            aria-label="搜索人工任务"
+            className="h-9 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+            placeholder="搜索流程、节点或处理人"
+            value={keyword}
+            onChange={event => onKeyword(event.target.value)}
+          />
+        </label>
+        <label className="flex min-h-11 items-center gap-2 text-xs text-slate-500">
+          状态
+          <select
+            aria-label="按人工任务状态筛选"
+            className="h-11 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700"
+            value={status}
+            onChange={event => onStatus(event.target.value as TaskStatusFilter)}
+          >
+            <option value="">全部</option>
+            {view === "todo" ? (
+              <>
+                <option value="pending">待处理</option>
+                <option value="claimed">处理中</option>
+              </>
+            ) : (
+              <>
+                <option value="completed">已办结</option>
+                <option value="cancelled">已取消</option>
+              </>
+            )}
+          </select>
+        </label>
+        {view === "todo" && (
+          <label className="flex min-h-11 items-center gap-2 text-xs text-slate-600">
+            <input
+              type="checkbox"
+              className="h-4 w-4 accent-[#2d6bea]"
+              checked={allVisibleSelected}
+              onChange={onToggleAll}
+              disabled={visibleCount !== null && visibleCount === 0}
+              aria-label="选择当前筛选结果"
+            />
+            全选当前结果
+          </label>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        <span>
+          当前 {visibleCount === null ? "—" : visibleCount} 项
+          {view === "todo" ? ` · 已选 ${selectedCount} 项` : ""}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-11 text-xs text-slate-500"
+          onClick={onClear}
+          disabled={!keyword && !status && (!selectedCount || view !== "todo")}
+        >
+          清除筛选
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function InstanceFilterBar({
+  keyword,
+  status,
+  onKeyword,
+  onStatus,
+  visibleCount,
+  onClear,
+}: {
+  keyword: string;
+  status: string;
+  onKeyword: (value: string) => void;
+  onStatus: (value: string) => void;
+  visibleCount: number | null;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      data-process-workbench-instance-filters
+      className="flex flex-col gap-3 border-b border-slate-100 bg-white px-4 py-3 sm:flex-row sm:items-center"
+    >
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+        <SlidersHorizontal size={15} className="shrink-0 text-slate-400" />
+        <label className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-3 text-slate-400 sm:max-w-xs">
+          <Search size={14} />
+          <input
+            aria-label="搜索流程实例"
+            className="h-9 min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+            placeholder="搜索流程、发起人或实例编号"
+            value={keyword}
+            onChange={event => onKeyword(event.target.value)}
+          />
+        </label>
+        <label className="flex min-h-11 items-center gap-2 text-xs text-slate-500">
+          状态
+          <select
+            aria-label="按流程实例状态筛选"
+            className="h-11 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700"
+            value={status}
+            onChange={event => onStatus(event.target.value)}
+          >
+            <option value="">全部</option>
+            <option value="queued">排队中</option>
+            <option value="running">运行中</option>
+            <option value="waiting">等待处理</option>
+            <option value="blocked">已暂停</option>
+            <option value="success">成功</option>
+            <option value="failed">失败</option>
+            <option value="cancelled">已取消</option>
+            <option value="terminated">已终止</option>
+          </select>
+        </label>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+        <span>当前 {visibleCount === null ? "—" : visibleCount} 个实例</span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-11 text-xs text-slate-500"
+          onClick={onClear}
+          disabled={!keyword && !status}
+        >
+          清除筛选
+        </Button>
+      </div>
     </div>
   );
 }
@@ -611,12 +961,25 @@ function TaskBatchBar({
 
 function Board({
   dashboard,
+  loading,
+  error,
+  onRetry,
   onTask,
 }: {
   dashboard: any;
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
   onTask: (id: string) => void;
 }) {
-  if (!dashboard)
+  if (error)
+    return (
+      <QueryErrorState
+        title="看板数据读取失败"
+        onRetry={onRetry}
+      />
+    );
+  if (loading || !dashboard)
     return (
       <div
         data-process-workbench-loading
@@ -719,6 +1082,8 @@ function Stat({ icon: Icon, label, value, tone }: any) {
 function TaskList({
   tasks,
   loading,
+  error,
+  onRetry,
   onTask,
   onExecute,
   busy,
@@ -728,6 +1093,8 @@ function TaskList({
 }: {
   tasks: any[];
   loading: boolean;
+  error: boolean;
+  onRetry: () => void;
   onTask: (id: string) => void;
   onExecute: (id: string) => void;
   busy: boolean;
@@ -746,73 +1113,90 @@ function TaskList({
         "操作",
       ]}
     >
-      {loading ? (
+      {error ? (
+        <ErrorRow
+          colSpan={selectable ? 6 : 5}
+          title="人工任务读取失败"
+          onRetry={onRetry}
+        />
+      ) : loading ? (
         <Loading colSpan={selectable ? 6 : 5} />
       ) : (
-        tasks.map(task => (
-          <tr key={task.id} className="border-t border-slate-100">
-            {selectable && (
+        tasks.length ? (
+          tasks.map(task => (
+            <tr key={task.id} className="border-t border-slate-100">
+              {selectable && (
+                <td className="px-4 py-3">
+                  <label
+                    className="grid min-h-11 min-w-11 cursor-pointer place-items-center"
+                    aria-label={`选择任务 ${task.nodeName}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedTaskIds.includes(task.id)}
+                      onChange={() => onToggle(task.id)}
+                      className="h-5 w-5 accent-[#2d6bea]"
+                    />
+                  </label>
+                </td>
+              )}
               <td className="px-4 py-3">
-                <label
-                  className="grid min-h-11 min-w-11 cursor-pointer place-items-center"
-                  aria-label={`选择任务 ${task.nodeName}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedTaskIds.includes(task.id)}
-                    onChange={() => onToggle(task.id)}
-                    className="h-5 w-5 accent-[#2d6bea]"
-                  />
-                </label>
+                <p className="font-medium text-slate-800">{task.workflowName}</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {task.nodeName}
+                  {approvalLabel(task) && (
+                    <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">
+                      {approvalProgressText(task)}
+                    </span>
+                  )}
+                </p>
               </td>
-            )}
-            <td className="px-4 py-3">
-              <p className="font-medium text-slate-800">{task.workflowName}</p>
-              <p className="mt-1 text-xs text-slate-400">
-                {task.nodeName}
-                {approvalLabel(task) && (
-                  <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">
-                    {approvalProgressText(task)}
-                  </span>
-                )}
-              </p>
-            </td>
-            <td className="px-4 py-3 text-xs text-slate-500">
-              {task.initiatedByName || "—"}
-            </td>
-            <td className="px-4 py-3">
-              {badge(task.displayStatus || task.status)}
-            </td>
-            <td className="px-4 py-3 text-xs text-slate-400">
-              {date(task.createdAt)}
-            </td>
-            <td className="px-4 py-3">
-              <div className="flex flex-wrap items-center gap-1">
-                {task.status === "pending" && (
+              <td className="px-4 py-3 text-xs text-slate-500">
+                {task.initiatedByName || "—"}
+              </td>
+              <td className="px-4 py-3">
+                {badge(task.displayStatus || task.status)}
+              </td>
+              <td className="px-4 py-3 text-xs text-slate-400">
+                {date(task.createdAt)}
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex flex-wrap items-center gap-1">
+                  {task.status === "pending" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="min-h-11 bg-emerald-600 text-xs hover:bg-emerald-500"
+                      disabled={busy}
+                      onClick={() => onExecute(task.id)}
+                    >
+                      {busy && <Loader2 className="animate-spin" size={13} />}
+                      处理审批
+                    </Button>
+                  )}
                   <Button
                     type="button"
+                    variant="ghost"
                     size="sm"
-                    className="min-h-11 bg-emerald-600 text-xs hover:bg-emerald-500"
-                    disabled={busy}
-                    onClick={() => onExecute(task.id)}
+                    className="min-h-11 text-xs text-[#2d6bea]"
+                    onClick={() => onTask(task.id)}
                   >
-                    {busy && <Loader2 className="animate-spin" size={13} />}
-                    处理审批
+                    详情
                   </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-11 text-xs text-[#2d6bea]"
-                  onClick={() => onTask(task.id)}
-                >
-                  详情
-                </Button>
-              </div>
+                </div>
+              </td>
+            </tr>
+          ))
+        ) : (
+          <tr>
+            <td
+              colSpan={selectable ? 6 : 5}
+              className="p-10 text-center text-sm text-slate-400"
+            >
+              没有匹配的人工任务，请调整筛选条件。
             </td>
           </tr>
-        ))
+        )
       )}
     </Table>
   );
@@ -821,15 +1205,24 @@ function TaskList({
 function InstanceList({
   instances,
   loading,
+  error,
+  onRetry,
   onOpenRun,
 }: {
   instances: any[];
   loading: boolean;
+  error: boolean;
+  onRetry: () => void;
   onOpenRun: (id: string) => void;
 }) {
   return (
     <Table headers={["流程实例", "发起人", "状态", "创建时间", "操作"]}>
-      {loading ? (
+      {error ? (
+        <ErrorRow
+          title="流程实例读取失败"
+          onRetry={onRetry}
+        />
+      ) : loading ? (
         <Loading />
       ) : (
         instances.map(run => (
@@ -883,7 +1276,10 @@ function Table({
 }) {
   return (
     <div className="overflow-x-auto p-5">
-      <table className="w-full min-w-[680px] text-left text-sm">
+      <table
+        aria-label="流程任务与实例列表"
+        className="w-full min-w-[680px] text-left text-sm"
+      >
         <thead className="bg-slate-50 text-xs text-slate-500">
           <tr>
             {headers.map(header => (
@@ -904,6 +1300,81 @@ function Loading({ colSpan = 5 }: { colSpan?: number }) {
     <tr>
       <td colSpan={colSpan} className="p-8 text-center">
         <Loader2 className="mx-auto animate-spin text-slate-400" size={18} />
+      </td>
+    </tr>
+  );
+}
+
+function QueryErrorState({
+  title,
+  onRetry,
+}: {
+  title: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="grid min-h-[220px] place-items-center p-6 text-center"
+    >
+      <div>
+        <p className="text-sm font-medium text-rose-700">{title}</p>
+        <p className="mt-1 text-xs text-slate-500">服务端暂时未返回数据，请重试。</p>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-4 min-h-11"
+          onClick={onRetry}
+        >
+          <RefreshCw size={14} />
+          重试
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function LoadingPanel({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="grid min-h-[220px] place-items-center p-6 text-center"
+    >
+      <div>
+        <Loader2 className="mx-auto animate-spin text-slate-400" size={22} />
+        <p className="mt-3 text-sm text-slate-500">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorRow({
+  colSpan = 5,
+  title,
+  onRetry,
+}: {
+  colSpan?: number;
+  title: string;
+  onRetry: () => void;
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan}>
+        <div role="alert" className="p-8 text-center">
+          <p className="text-sm font-medium text-rose-700">{title}</p>
+          <p className="mt-1 text-xs text-slate-500">服务端暂时未返回数据，请重试。</p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3 min-h-11"
+            onClick={onRetry}
+          >
+            <RefreshCw size={14} />
+            重试
+          </Button>
+        </div>
       </td>
     </tr>
   );
@@ -1045,9 +1516,166 @@ function taskFormFields(task: any): Array<{
     .filter((item: any) => item.key && item.label);
 }
 
+export function taskInputRows(task: any): Array<{ label: string; value: string }> {
+  const payload = parseJson(task?.payload);
+  if (!payload || typeof payload !== "object") return [];
+  const context = parseJson((payload as any).context);
+  const contextInput =
+    context && typeof context === "object"
+      ? parseJson((context as any).input)
+      : undefined;
+  const input = contextInput ?? parseJson((payload as any).input);
+  if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+  return Object.entries(input as Record<string, unknown>)
+    .filter(([key]) => key.trim())
+    .slice(0, 40)
+    .map(([key, value]) => ({
+      label: key,
+      value: /password|secret|token|credential|authorization/i.test(key)
+        ? "[已隐藏]"
+        : shortValue(value),
+    }));
+}
+
+function approvalMemberStatus(status: unknown) {
+  const value = String(status || "pending");
+  if (value === "completed") return "已处理";
+  if (value === "claimed") return "处理中";
+  if (value === "cancelled") return "已取消";
+  return "待处理";
+}
+
+function approvalMemberTone(status: unknown) {
+  const value = String(status || "pending");
+  if (value === "completed") return "bg-emerald-100 text-emerald-700";
+  if (value === "claimed") return "bg-blue-100 text-blue-700";
+  if (value === "cancelled") return "bg-slate-100 text-slate-500";
+  return "bg-amber-100 text-amber-700";
+}
+
+function TaskApplicationSummary({ task }: { task: any }) {
+  const inputRows = taskInputRows(task);
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-slate-700">申请内容</p>
+          <p className="mt-1 text-xs text-slate-500">
+            申请人、节点和时间信息来自当前流程实例快照。
+          </p>
+        </div>
+        {task.runId && (
+          <code className="max-w-full break-all rounded bg-slate-50 px-2 py-1 text-[10px] text-slate-500">
+            实例 {String(task.runId).slice(0, 12)}
+          </code>
+        )}
+      </div>
+      <dl className="mt-3 grid gap-3 text-xs sm:grid-cols-2">
+        <div>
+          <dt className="text-slate-400">申请人</dt>
+          <dd className="mt-1 break-words font-medium text-slate-700">
+            {task.initiatedByName ||
+              (task.triggeredByUserId ? `用户 ${task.triggeredByUserId}` : "—")}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">申请时间</dt>
+          <dd className="mt-1 text-slate-700">{date(task.createdAt)}</dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">当前节点</dt>
+          <dd className="mt-1 break-words text-slate-700">
+            {task.nodeName || task.operationName || "—"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-slate-400">截止时间</dt>
+          <dd className="mt-1 text-slate-700">{date(task.dueAt)}</dd>
+        </div>
+      </dl>
+      {inputRows.length > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <p className="text-xs font-semibold text-slate-600">业务信息</p>
+          <dl className="mt-2 divide-y divide-slate-100 rounded border border-slate-100">
+            {inputRows.map(row => (
+              <div
+                key={row.label}
+                className="grid min-w-0 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(120px,0.35fr)_minmax(0,1fr)]"
+              >
+                <dt className="break-all font-mono text-slate-500">{row.label}</dt>
+                <dd className="min-w-0 break-words text-slate-700">{row.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ApprovalHistory({ task }: { task: any }) {
+  const members = Array.isArray(task?.approvalMembers)
+    ? [...task.approvalMembers].sort(
+        (left, right) =>
+          Number(left.approvalOrder ?? 0) - Number(right.approvalOrder ?? 0)
+      )
+    : [];
+  return (
+    <section className="rounded-lg border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-slate-700">审批历史与参与人</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">
+            成员状态与会签进度由服务端审批组返回；完整授权审计请在身份中心查看。
+          </p>
+        </div>
+        {task.approvalProgress && (
+          <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] text-indigo-700">
+            {approvalProgressText(task)}
+          </span>
+        )}
+      </div>
+      {members.length > 0 ? (
+        <ol className="mt-3 grid gap-2">
+          {members.map((member: any, index: number) => (
+            <li
+              key={member.id || `${member.assignedUserId}-${index}`}
+              className="flex min-w-0 flex-wrap items-center gap-2 rounded border border-slate-100 bg-slate-50 px-3 py-2 text-xs"
+            >
+              <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white font-mono text-[10px] text-slate-500">
+                {Number(member.approvalOrder ?? index) + 1}
+              </span>
+              <span className="min-w-0 flex-1 break-words font-medium text-slate-700">
+                {member.assignedName ||
+                  member.assignedUsername ||
+                  (member.assignedUserId
+                    ? `用户 ${member.assignedUserId}`
+                    : "未指定处理人")}
+                {String(member.id) === String(task.id) && (
+                  <span className="ml-2 text-[10px] text-blue-600">当前任务</span>
+                )}
+              </span>
+              <span className={`rounded-full px-2 py-1 text-[10px] ${approvalMemberTone(member.status)}`}>
+                {approvalMemberStatus(member.status)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-3 rounded border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+          当前为单人审批，参与人状态由任务详情展示。
+        </p>
+      )}
+    </section>
+  );
+}
+
 function TaskDrawer({
   task,
   assignees,
+  taskLoading,
+  taskError,
+  onRetryTask,
   busy,
   onClose,
   onClaim,
@@ -1195,7 +1823,14 @@ function TaskDrawer({
             关闭
           </Button>
         </div>
-        {task && (
+        {taskError ? (
+          <QueryErrorState
+            title="人工任务详情读取失败"
+            onRetry={onRetryTask}
+          />
+        ) : taskLoading ? (
+          <LoadingPanel label="正在读取人工任务详情…" />
+        ) : task && (
           <div className="mt-5 space-y-5">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold text-slate-500">操作说明</p>
@@ -1234,6 +1869,8 @@ function TaskDrawer({
                 )}
               </div>
             </div>
+            <TaskApplicationSummary task={task} />
+            <ApprovalHistory task={task} />
             {canManage && (
               <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
                 <p className="text-xs font-semibold text-slate-600">

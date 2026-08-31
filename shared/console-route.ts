@@ -1,6 +1,12 @@
-export type ConsoleSection = "flows" | "runs" | "warehouse" | "system";
+export type ConsoleSection =
+  | "overview"
+  | "flows"
+  | "runs"
+  | "warehouse"
+  | "system";
 
 export type ConsoleRoute =
+  | { section: "overview" }
   | { section: "flows"; view: "center" }
   | { section: "flows"; view: "workspace"; projectId: string }
   | { section: "flows"; view: "detail" | "editor"; workflowId: string }
@@ -10,6 +16,7 @@ export type ConsoleRoute =
   | { section: "system"; view: "config" | "identity" | "organization" };
 
 export const consoleSections: ConsoleSection[] = [
+  "overview",
   "flows",
   "runs",
   "warehouse",
@@ -32,6 +39,8 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
   const path = hash.replace(/^#\/?/, "").split("?", 1)[0].replace(/\/+$/, "");
   const parts = path ? path.split("/") : [];
 
+  if (parts.length === 1 && parts[0] === "overview")
+    return { section: "overview" };
   if (parts.length === 1 && parts[0] === "flows")
     return { section: "flows", view: "center" };
   if (parts.length === 3 && parts[0] === "flows" && parts[1] === "project") {
@@ -73,6 +82,7 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
 }
 
 export function formatConsoleRoute(route: ConsoleRoute): string {
+  if (route.section === "overview") return "#/overview";
   if (route.section === "flows") {
     if (route.view === "center") return "#/flows";
     if (route.view === "workspace")

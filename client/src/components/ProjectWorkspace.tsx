@@ -156,8 +156,15 @@ function ProcessCenter({ project, workflows, filters, setFilters, onApplyFilters
     setLaunchWorkflow(workflow);
   };
   const sourceNameById = new Map(dataSources.map(source => [source.id, source.name]));
+  const workflowStats = useMemo(() => ({
+    total: workflows.length,
+    published: workflows.filter(workflow => workflow.status === "published").length,
+    pendingAudit: workflows.filter(workflow => workflow.auditStatus === "init").length,
+    dataflows: workflows.filter(workflow => workflow.flowType === "data").length,
+  }), [workflows]);
 
   return <div>
+    <ProcessStats stats={workflowStats} />
     <div data-aiflow-context-header className="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
       <div><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">{project.code} · PROCESS DESIGN CENTER</p><h1 className="mt-1 text-xl font-semibold text-slate-800">流程设计中心</h1><p className="mt-1 text-sm text-slate-500">管理状态、控制和数据三类流程的审核、发布和执行生命周期。</p></div>
       <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={onOpenWarehouse}><Upload size={15} />上传仓库</Button>{workflows.length > 0 && <select aria-label="选择流程查看审批记录" className="h-9 max-w-48 rounded border border-slate-200 bg-white px-2 text-sm" value={auditWorkflowId ?? ""} onChange={event => setAuditWorkflowId(event.target.value || null)}><option value="">审批记录</option>{workflows.map(workflow => <option key={workflow.id} value={workflow.id}>{workflow.processCode || workflow.name}</option>)}</select>}{canCreate && <Button className="bg-[#2d6bea] hover:bg-[#255bc8]" onClick={() => setShowCreate(true)}><Plus size={16} />新增流程</Button>}</div>
@@ -168,6 +175,16 @@ function ProcessCenter({ project, workflows, filters, setFilters, onApplyFilters
   {launchWorkflow && <ProcessLaunchDialog workflow={launchWorkflow} form={launchForm} setForm={setLaunchForm} pending={launch.isPending} onClose={() => setLaunchWorkflow(null)} onSubmit={() => launch.mutate({ workflowId: launchWorkflow.id, input: { codeType: launchForm.codeType, flowEngine: true, flowModuleId: launchWorkflow.id, startNodeId: "", flowDeliveryTime: launchForm.expectedEnd ? new Date(launchForm.expectedEnd).toISOString() : "", businessId: project.id, roleKeys: launchForm.roleKeys.split(/[，,\s]+/).filter(Boolean), businessInformationOne: launchForm.businessInformationOne.trim(), businessInformationTwo: launchForm.businessInformationTwo.trim(), businessInformationThree: launchForm.businessInformationThree.trim(), businessInformationText: launchForm.businessInformationText.trim() } })} />}
   {auditWorkflowId && <Dialog open onOpenChange={open => { if (!open) setAuditWorkflowId(null); }}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>审批记录</DialogTitle><DialogDescription>仅展示当前业务内所选流程的审核与审核重置审计，不包含全局身份审计。</DialogDescription></DialogHeader><div className="max-h-96 space-y-3 overflow-y-auto pr-1">{approvalHistory.isLoading && <p className="py-8 text-center text-sm text-slate-400">正在读取审批记录…</p>}{!approvalHistory.isLoading && !(approvalHistory.data ?? []).length && <p className="py-8 text-center text-sm text-slate-400">暂无审批记录。</p>}{(approvalHistory.data ?? []).map((entry: any) => <div key={entry.id} className="border-l-2 border-[#2d6bea] bg-slate-50 px-3 py-2.5"><p className="text-sm font-medium text-slate-700">{entry.operation === "workflow_audit_reset" ? "重置审核状态" : entry.details?.auditStatus === "approved" ? "审核通过" : "审核驳回"}</p><p className="mt-1 text-xs text-slate-500">{entry.actorName || entry.actorUsername || "系统"} · {formatDate(entry.createdAt)}</p></div>)}</div><DialogFooter><Button type="button" onClick={() => setAuditWorkflowId(null)}>关闭</Button></DialogFooter></DialogContent></Dialog>}
   </div>;
+}
+
+function ProcessStats({ stats }: { stats: { total: number; published: number; pendingAudit: number; dataflows: number } }) {
+  const items = [
+    { label: "流程总数", value: stats.total, tone: "text-slate-800", hint: "当前授权与筛选范围" },
+    { label: "已发布", value: stats.published, tone: "text-blue-700", hint: "可进入运行入口" },
+    { label: "待审核", value: stats.pendingAudit, tone: "text-amber-700", hint: "需要审核动作" },
+    { label: "数据流程", value: stats.dataflows, tone: "text-emerald-700", hint: "使用数据运行契约" },
+  ];
+  return <div aria-label="当前筛选结果统计" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{items.map(item => <div key={item.label} className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm"><p className="text-xs text-slate-500">{item.label}</p><p className={`mt-1 text-2xl font-semibold tracking-tight ${item.tone}`}>{item.value}</p><p className="mt-1 text-[11px] text-slate-400">{item.hint}</p></div>)}</div>;
 }
 
 function ProcessLaunchDialog({ workflow, form, setForm, pending, onClose, onSubmit }: { workflow: any; form: { codeType: string; expectedEnd: string; roleKeys: string; businessInformationOne: string; businessInformationTwo: string; businessInformationThree: string; businessInformationText: string }; setForm: (value: { codeType: string; expectedEnd: string; roleKeys: string; businessInformationOne: string; businessInformationTwo: string; businessInformationThree: string; businessInformationText: string }) => void; pending: boolean; onClose: () => void; onSubmit: () => void }) {

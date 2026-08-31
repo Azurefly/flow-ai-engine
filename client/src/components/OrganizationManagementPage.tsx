@@ -1040,6 +1040,36 @@ export default function OrganizationManagementPage({
                         </div>
                       )}
                     </div>
+                    <section
+                      data-organization-capability-boundaries
+                      className="mt-5 rounded-lg border border-amber-200 bg-amber-50/70 p-4"
+                    >
+                      <div className="flex items-start gap-3">
+                        <KeyRound className="mt-0.5 shrink-0 text-amber-700" size={18} />
+                        <div className="min-w-0">
+                          <h3 className="text-sm font-semibold text-slate-800">
+                            IAM 能力边界
+                          </h3>
+                          <p className="mt-1 text-xs leading-5 text-slate-600">
+                            当前页面只管理真实组织关系与系统角色继承；未接入的安全能力保持禁用，不展示样例密钥。
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                        <DisabledSecurityCapability
+                          title="ABAC 策略"
+                          description="属性策略编辑器暂未接入。"
+                        />
+                        <DisabledSecurityCapability
+                          title="API Key / 凭证"
+                          description="创建、轮换和撤销接口暂未开放。"
+                        />
+                        <DisabledSecurityCapability
+                          title="额度与访问日志"
+                          description="组织额度、IP/设备访问日志暂未开放。"
+                        />
+                      </div>
+                    </section>
                   </div>
                 )}
               </>
@@ -1561,5 +1591,28 @@ function RoleSourceList({
         )}
       </div>
     </section>
+  );
+}
+
+function DisabledSecurityCapability({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <article
+      aria-disabled="true"
+      className="rounded-md border border-amber-200 bg-white/70 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-slate-700">{title}</p>
+        <span className="rounded-full bg-slate-100 px-2 py-1 text-[10px] text-slate-500">
+          暂未开放
+        </span>
+      </div>
+      <p className="mt-2 text-[11px] leading-5 text-slate-500">{description}</p>
+    </article>
   );
 }

@@ -7,6 +7,7 @@ import {
 
 describe("console hash routes", () => {
   const routes: ConsoleRoute[] = [
+    { section: "overview" },
     { section: "flows", view: "center" },
     { section: "flows", view: "workspace", projectId: "project_1234" },
     { section: "flows", view: "detail", workflowId: "workflow_1234" },
@@ -30,6 +31,10 @@ describe("console hash routes", () => {
   });
 
   it("accepts legacy top-level hashes and emits canonical child hashes", () => {
+    expect(parseConsoleRoute("#/overview?source=header")).toEqual({
+      section: "overview",
+    });
+    expect(formatConsoleRoute({ section: "overview" })).toBe("#/overview");
     expect(parseConsoleRoute("#/runs")).toEqual({
       section: "runs",
       view: "workbench",
@@ -46,6 +51,7 @@ describe("console hash routes", () => {
   it.each([
     "",
     "#/unknown",
+    "#/overview/extra",
     "#/flows/project/short",
     "#/flows/workflow/workflow_1234/delete",
     "#/flows/workflow/bad%2Fid/editor",

@@ -81,6 +81,9 @@ const ProjectWorkspace = lazy(() =>
   }))
 );
 const WorkflowWarehouse = lazy(() => import("@/components/WorkflowWarehouse"));
+const SystemOverviewPage = lazy(
+  () => import("@/components/SystemOverviewPage")
+);
 const SystemConfigShell = lazy(() => import("@/components/SystemConfigShell"));
 const OrganizationManagementPage = lazy(
   () => import("@/components/OrganizationManagementPage")
@@ -294,6 +297,54 @@ function LoginScreen({
   );
 }
 
+function RouteDataErrorPanel({
+  message,
+  onRetry,
+  onSafeEntry,
+}: {
+  message: string;
+  onRetry: () => void;
+  onSafeEntry: () => void;
+}) {
+  return (
+    <div
+      data-aiflow-route-data-error
+      role="alert"
+      aria-live="assertive"
+      className="flex min-h-[260px] items-center justify-center p-6 sm:p-10"
+    >
+      <div className="w-full max-w-xl rounded-xl border border-red-200 bg-red-50 p-5 text-red-900 shadow-sm sm:p-6">
+        <div className="flex items-start gap-3">
+          <Activity size={18} aria-hidden="true" className="mt-0.5 shrink-0" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold">页面数据暂时无法加载</h2>
+            <p className="mt-2 text-xs leading-5 text-red-800">{message}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="bg-red-700 text-white hover:bg-red-800"
+                onClick={onRetry}
+              >
+                重试加载
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="border-red-300 bg-white text-red-800 hover:bg-red-100"
+                onClick={onSafeEntry}
+              >
+                返回系统全景
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FlowConsole({
   user,
   general,
@@ -413,13 +464,15 @@ function FlowConsole({
       const permitted = next !== "system" || user.role === "admin";
       const resolved = permitted ? next : "flows";
       navigateRoute(
-        resolved === "flows"
-          ? { section: "flows", view: "center" }
-          : resolved === "runs"
-            ? { section: "runs", view: "workbench" }
-            : resolved === "warehouse"
-              ? { section: "warehouse" }
-              : { section: "system", view: "config" }
+        resolved === "overview"
+          ? { section: "overview" }
+          : resolved === "flows"
+            ? { section: "flows", view: "center" }
+            : resolved === "runs"
+              ? { section: "runs", view: "workbench" }
+              : resolved === "warehouse"
+                ? { section: "warehouse" }
+                : { section: "system", view: "config" }
       );
     },
     [navigateRoute, user.role]
@@ -589,6 +642,44 @@ function FlowConsole({
     { limit: 20 },
     { enabled: identityActive, retry: false }
   );
+  const routeNeedsProjectQuery =
+    requestedRoute.route.section === "warehouse" ||
+    (requestedRoute.route.section === "flows" &&
+      (requestedRoute.route.view === "center" ||
+        requestedRoute.route.view === "workspace" ||
+        requestedRoute.route.view === "detail" ||
+        requestedRoute.route.view === "editor"));
+  const routeNeedsWorkflowQuery =
+    (requestedRoute.route.section === "flows" &&
+      (requestedRoute.route.view === "detail" ||
+        requestedRoute.route.view === "editor")) ||
+    (requestedRoute.route.section === "runs" &&
+      requestedRoute.route.view === "monitor");
+  const routeNeedsSelectedWorkflowQuery = Boolean(
+    routeNeedsWorkflowQuery &&
+      routeWorkflowId &&
+      !selectedWorkflowFromList
+  );
+  const deepLinkDataError = Boolean(
+    routeNeedsSelectedWorkflowQuery && selectedWorkflowQuery.isError
+  );
+  const routeDataError =
+    (routeNeedsProjectQuery && projects.isError) ||
+    (routeNeedsWorkflowQuery && workflows.isError) ||
+    deepLinkDataError;
+  const routeDataErrorMessage = [
+    routeNeedsProjectQuery && projects.isError ? "授权业务项目" : null,
+    routeNeedsWorkflowQuery && workflows.isError ? "流程列表" : null,
+    deepLinkDataError ? "深链流程" : null,
+  ]
+    .filter((item): item is string => Boolean(item))
+    .join("、");
+  const retryRouteData = () => {
+    if (routeNeedsProjectQuery) void projects.refetch();
+    if (routeNeedsWorkflowQuery) void workflows.refetch();
+    if (routeNeedsSelectedWorkflowQuery)
+      void selectedWorkflowQuery.refetch();
+  };
 
   useEffect(() => {
     const route = requestedRoute.route;
@@ -609,6 +700,11 @@ function FlowConsole({
           canonical
         );
     };
+    if (route.section === "overview") {
+      setSection("overview");
+      canonicalize();
+      return;
+    }
     if (route.section === "system") {
       if (user.role !== "admin") {
         replaceWith({ section: "flows", view: "center" });
@@ -763,17 +859,24 @@ function FlowConsole({
       );
   }, [navigateRoute, requestedRoute.route, runDetail.data, runDetail.isError]);
 
+  const workflowsRestoring = workflows.isLoading || workflows.isFetching;
+  const projectsRestoring = projects.isLoading || projects.isFetching;
+  const selectedWorkflowRestoring = Boolean(
+    routeWorkflowId &&
+      !selectedWorkflowFromList &&
+      (selectedWorkflowQuery.isLoading || selectedWorkflowQuery.isFetching)
+  );
   const routeRestoring = Boolean(
-    (routeWorkflowId &&
-      (!workflows.isSuccess ||
-        (!selectedWorkflowFromList && selectedWorkflowQuery.isPending))) ||
-      (requestedRoute.route.section === "flows" &&
-        requestedRoute.route.view === "workspace" &&
-        !projects.isSuccess) ||
-      (requestedRoute.route.section === "flows" &&
-        (requestedRoute.route.view === "detail" ||
-          requestedRoute.route.view === "editor") &&
-        !projects.isSuccess)
+    !routeDataError &&
+      ((routeWorkflowId &&
+        (workflowsRestoring || selectedWorkflowRestoring)) ||
+        (requestedRoute.route.section === "flows" &&
+          requestedRoute.route.view === "workspace" &&
+          projectsRestoring) ||
+        (requestedRoute.route.section === "flows" &&
+          (requestedRoute.route.view === "detail" ||
+            requestedRoute.route.view === "editor") &&
+          (projectsRestoring || workflowsRestoring || selectedWorkflowRestoring)))
   );
 
   const createFlow = trpc.workflow.create.useMutation({
@@ -1090,9 +1193,10 @@ function FlowConsole({
   };
 
   const nav = [
-    { id: "flows" as const, label: "流程设计", icon: FolderKanban },
-    { id: "runs" as const, label: "已启动流程", icon: Activity },
-    { id: "warehouse" as const, label: "流程仓库", icon: FolderKanban },
+    { id: "overview" as const, label: "系统全景", icon: Gauge },
+    { id: "flows" as const, label: "业务中心", icon: FolderKanban },
+    { id: "runs" as const, label: "运行中心", icon: Activity },
+    { id: "warehouse" as const, label: "流程仓库", icon: ArchiveRestore },
     ...(user.role === "admin"
       ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }]
       : []),
@@ -1107,12 +1211,15 @@ function FlowConsole({
   return (
     <main
       data-aiflow-console=""
-      className="aiflow-console relative min-h-screen bg-[#f4f6f9] text-slate-700"
+      className="aiflow-console relative min-h-screen min-w-0 overflow-x-clip bg-[var(--flow-background)] text-[var(--flow-foreground)]"
     >
       <a className="aiflow-skip-link" href="#aiflow-console-panel">
         跳到主要工作区
       </a>
-      <header className="sticky top-0 z-30 border-b border-[#d9e0e9] bg-white text-[#354052] shadow-sm">
+      <header
+        data-aiflow-top-nav=""
+        className="sticky top-0 z-30 overflow-x-clip border-b border-[var(--flow-border)] bg-[var(--flow-card)] text-[var(--flow-foreground)] shadow-sm"
+      >
         <div className="flex h-14 items-center">
           <button
             className="grid h-14 w-16 place-items-center border-r border-[#e0e6ee] text-slate-500 hover:bg-[#f2f6fc] hover:text-[#2469c7]"
@@ -1136,11 +1243,12 @@ function FlowConsole({
           </div>
           <div
             role="tablist"
-            aria-label="流程工作台主导航"
-            className="ml-4 hidden h-full items-end gap-1 md:flex"
+            aria-label="系统功能主导航"
+            className="ml-4 hidden min-w-0 flex-1 items-end gap-1 overflow-x-auto md:flex"
           >
             {nav.map(item => (
               <button
+                type="button"
                 id={`aiflow-console-tab-${item.id}`}
                 role="tab"
                 aria-selected={section === item.id}
@@ -1175,14 +1283,14 @@ function FlowConsole({
       </header>
       <div
         data-aiflow-mobile-workspace-nav
-        className="border-b border-slate-200 bg-white px-3 py-2 md:hidden"
+        className="min-w-0 overflow-x-clip border-b border-[var(--flow-border)] bg-[var(--flow-card)] px-3 py-2 md:hidden"
       >
         <label className="flex items-center gap-2 text-xs font-medium text-slate-600">
           <span className="shrink-0">当前工作区</span>
           <select
             className="h-8 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs text-slate-700 outline-none focus:border-blue-400"
             value={section}
-            aria-label="切换流程工作区"
+            aria-label="切换控制台工作区"
             onChange={event =>
               navigateSection(event.target.value as ConsoleSection)
             }
@@ -1196,7 +1304,9 @@ function FlowConsole({
         </label>
       </div>
       <div className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
-        {section === "flows" && flowView === "editor" && (
+        {section === "flows" &&
+          flowView === "editor" &&
+          !routeDataError && (
           <aside
             className={`${sidebarOpen ? "w-full md:w-72" : "h-0 w-full overflow-hidden md:h-auto md:w-0"} shrink-0 border-b border-slate-200 bg-white transition-[width,height] duration-200 md:border-b-0 md:border-r`}
           >
@@ -1267,7 +1377,17 @@ function FlowConsole({
           aria-labelledby={`aiflow-console-tab-${section}`}
           className="min-w-0 w-full flex-1"
         >
-          {routeRestoring && (
+          {routeDataError ? (
+            <RouteDataErrorPanel
+              message={`${routeDataErrorMessage || "授权页面数据"}读取失败。请重试；如果问题持续，请返回系统全景后从可用入口重新进入。`}
+              onRetry={retryRouteData}
+              onSafeEntry={() =>
+                navigateRoute({ section: "overview" }, { replace: true })
+              }
+            />
+          ) : (
+            <>
+              {routeRestoring && (
             <div
               data-aiflow-route-restoring
               role="status"
@@ -1279,6 +1399,19 @@ function FlowConsole({
                 正在恢复受权页面…
               </div>
             </div>
+              )}
+          {section === "overview" && !routeRestoring && (
+            <SystemOverviewPage
+              platformName={general.platformName}
+              role={user.role}
+              projects={(projects.data ?? []) as ProjectRecord[]}
+              workflows={workflowItems}
+              projectsLoading={projects.isLoading}
+              workflowsLoading={workflows.isLoading}
+              projectsError={projects.isError}
+              workflowsError={workflows.isError}
+              onNavigate={navigateRoute}
+            />
           )}
           {section === "flows" && flowView === "center" && (
             <BusinessCenter
@@ -1657,6 +1790,8 @@ function FlowConsole({
                 </div>
               </div>
             )}
+            </>
+          )}
         </section>
       </div>
       <input

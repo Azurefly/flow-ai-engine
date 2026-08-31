@@ -1,5 +1,13 @@
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, ChevronDown, Clock3, Flag, Loader2, RotateCcw } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Clock3,
+  Flag,
+  Loader2,
+  RotateCcw,
+  ShieldCheck,
+} from "lucide-react";
 
 function parse(value: unknown) {
   if (typeof value !== "string") return value;
@@ -53,17 +61,36 @@ export function flattenInstanceFields(
 
 function statusLabel(status: unknown) {
   const value = String(status || "unknown");
-  return value === "success"
-    ? "成功"
-    : value === "failed"
-      ? "失败"
-      : value === "waiting"
-        ? "等待处理"
-        : value === "running"
-          ? "执行中"
-          : value === "skipped"
-            ? "已跳过"
-            : value;
+  const labels: Record<string, string> = {
+    success: "成功",
+    failed: "失败",
+    waiting: "等待处理",
+    running: "执行中",
+    queued: "排队中",
+    blocked: "已暂停",
+    cancelled: "已取消",
+    terminated: "已终止",
+    skipped: "已跳过",
+  };
+  return labels[value] ?? value;
+}
+
+function statusTone(status: unknown) {
+  const value = String(status || "unknown");
+  if (value === "success") return "bg-emerald-100 text-emerald-700";
+  if (value === "failed" || value === "terminated") return "bg-red-100 text-red-700";
+  if (value === "cancelled") return "bg-slate-100 text-slate-600";
+  if (value === "blocked") return "bg-orange-100 text-orange-700";
+  return "bg-amber-100 text-amber-700";
+}
+
+function durationLabel(value: unknown) {
+  const milliseconds = Number(value);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return "—";
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+  const seconds = milliseconds / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  return `${Math.floor(seconds / 60)} 分 ${Math.round(seconds % 60)} 秒`;
 }
 
 function DetailFields({ title, value }: { title: string; value: unknown }) {
@@ -99,6 +126,102 @@ function DetailFields({ title, value }: { title: string; value: unknown }) {
   );
 }
 
+function RunOverview({ run }: { run: any }) {
+  return (
+    <>
+      <section
+        data-run-detail-overview
+        className="rounded-lg border border-blue-100 bg-blue-50/60 p-4"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-slate-800">运行实例摘要</p>
+            <p className="mt-1 text-xs leading-5 text-slate-500">
+              关联流程、版本与触发信息均以本次实例保存的服务端事实为准。
+            </p>
+          </div>
+          <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${statusTone(run.status)}`}>
+            {statusLabel(run.status)}
+          </span>
+        </div>
+        <dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+          <div>
+            <dt className="text-slate-400">运行 ID</dt>
+            <dd className="mt-1 break-all font-mono text-slate-700">{run.id || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">流程 ID</dt>
+            <dd className="mt-1 break-all font-mono text-slate-700">{run.workflowId || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">触发方式</dt>
+            <dd className="mt-1 break-words text-slate-700">{run.triggerType || "会话触发"}</dd>
+          </div>
+          <div>
+            <dt className="text-slate-400">总耗时</dt>
+            <dd className="mt-1 text-slate-700">{durationLabel(run.durationMs)}</dd>
+          </div>
+        </dl>
+      </section>
+      <div className="flex items-start gap-2 rounded border border-amber-100 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-800">
+        <ShieldCheck size={14} className="mt-0.5 shrink-0" />
+        <span>
+          当前详情只读展示运行记录；拓扑图、重跑和审计导出尚未接入真实服务端契约。
+        </span>
+      </div>
+    </>
+  );
+}
+
+function RunTimeline({ actions }: { actions: any[] }) {
+  const chronological = [...actions].reverse();
+  return (
+    <section data-run-detail-timeline>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-800">节点执行时序</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            按服务端持久化时间和执行序号展示，不对未返回的拓扑关系做推断。
+          </p>
+        </div>
+        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] text-slate-500">
+          {chronological.length} 个节点
+        </span>
+      </div>
+      {chronological.length ? (
+        <ol className="grid gap-2">
+          {chronological.map((node: any, index: number) => (
+            <li
+              key={`${node.id}-${index}`}
+              className="grid min-w-0 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 sm:grid-cols-[34px_minmax(0,1fr)_100px_92px] sm:items-center"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-white font-mono text-[10px] text-slate-500">
+                {node.sequenceNo || index + 1}
+              </span>
+              <div className="min-w-0">
+                <p className="break-words text-sm font-medium text-slate-800">
+                  {node.nodeName || "未命名操作"}
+                </p>
+                <p className="mt-0.5 break-all font-mono text-[10px] text-slate-400">
+                  {node.nodeType || "unknown"} · {formatTime(operationTime(node))}
+                </p>
+              </div>
+              <span className={`w-fit rounded-full px-2 py-1 text-[10px] ${statusTone(node.status)}`}>
+                {statusLabel(node.status)}
+              </span>
+              <span className="text-xs text-slate-500">{durationLabel(node.durationMs)}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="rounded-lg border border-dashed border-slate-200 p-5 text-center text-xs text-slate-500">
+          该实例尚无节点执行时序。
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function RunDetailContent({ run }: { run: any }) {
   if (!run)
     return (
@@ -109,6 +232,7 @@ export function RunDetailContent({ run }: { run: any }) {
   const actions = sortInstanceActions(run.nodeRuns ?? [], run.definitionSnapshotJson);
   return (
     <div className="space-y-4 p-5">
+      <RunOverview run={run} />
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Summary label="实例状态" value={statusLabel(run.status)} />
         <Summary
@@ -214,6 +338,7 @@ export function RunDetailContent({ run }: { run: any }) {
           </div>
         </section>
       )}
+      <RunTimeline actions={actions} />
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -249,12 +374,12 @@ export function RunDetailContent({ run }: { run: any }) {
                   </p>
                 </div>
                 <span
-                  className={`w-fit rounded-full px-2 py-1 text-[10px] ${node.status === "success" ? "bg-emerald-100 text-emerald-700" : node.status === "failed" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}
+                  className={`w-fit rounded-full px-2 py-1 text-[10px] ${statusTone(node.status)}`}
                 >
                   {statusLabel(node.status)}
                 </span>
                 <span className="text-xs text-slate-500">
-                  {node.durationMs ?? "—"} ms
+                  {durationLabel(node.durationMs)}
                 </span>
               </div>
               <details className="group border-t border-slate-100">

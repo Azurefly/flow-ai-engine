@@ -4,13 +4,20 @@ import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
   BarChart3,
+  Check,
   CheckCircle2,
   Clock3,
   Filter,
   Loader2,
+  Pause,
+  Play,
+  RefreshCw,
+  Search,
+  Square,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 function formatTime(value: unknown) {
   return value
@@ -27,6 +34,40 @@ function decodeJson(value: unknown) {
   }
 }
 
+const runStatusLabels: Record<string, string> = {
+  queued: "排队中",
+  running: "运行中",
+  waiting: "等待人工",
+  blocked: "已暂停",
+  success: "成功",
+  failed: "失败",
+  cancelled: "已取消",
+  terminated: "已终止",
+};
+
+function runStatusLabel(status: unknown) {
+  const value = String(status || "unknown");
+  return runStatusLabels[value] ?? value;
+}
+
+function runStatusClass(status: unknown) {
+  const value = String(status || "unknown");
+  if (value === "success") return "bg-emerald-100 text-emerald-700";
+  if (value === "failed" || value === "terminated") return "bg-red-100 text-red-700";
+  if (value === "cancelled") return "bg-slate-100 text-slate-600";
+  if (value === "blocked") return "bg-orange-100 text-orange-700";
+  return "bg-amber-100 text-amber-700";
+}
+
+function runDuration(value: unknown) {
+  const milliseconds = Number(value);
+  if (!Number.isFinite(milliseconds) || milliseconds < 0) return "—";
+  if (milliseconds < 1000) return `${Math.round(milliseconds)} ms`;
+  const seconds = milliseconds / 1000;
+  if (seconds < 60) return `${seconds.toFixed(1)} s`;
+  return `${Math.floor(seconds / 60)} 分 ${Math.round(seconds % 60)} 秒`;
+}
+
 function LogBlock({ title, value }: { title: string; value: unknown }) {
   if (value === null || value === undefined) return null;
   return (
@@ -35,6 +76,41 @@ function LogBlock({ title, value }: { title: string; value: unknown }) {
       <pre className="max-h-48 overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-200">
         {JSON.stringify(value, null, 2)}
       </pre>
+    </div>
+  );
+}
+
+function QueryErrorNotice({
+  title,
+  onRetry,
+}: {
+  title: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center gap-2 p-6 text-center"
+    >
+      <p className="text-sm font-medium text-rose-700">{title}</p>
+      <p className="text-xs text-slate-500">服务端暂时未返回数据，请重试。</p>
+      <Button type="button" variant="outline" className="min-h-11" onClick={onRetry}>
+        <RefreshCw size={14} />
+        重试
+      </Button>
+    </div>
+  );
+}
+
+function QueryLoadingNotice({ title }: { title: string }) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex min-h-24 items-center justify-center gap-2 p-6 text-center text-sm text-slate-500"
+    >
+      <Loader2 className="animate-spin text-slate-400" size={18} />
+      {title}
     </div>
   );
 }
@@ -84,44 +160,56 @@ export default function RunCenter({
   const runs = trpc.workflow.runs.useQuery(filter, {
     enabled: Boolean(workflowId),
     refetchInterval: 5_000,
+    retry: false,
   });
   const metrics = trpc.workflow.runMetrics.useQuery(filter, {
     enabled: Boolean(workflowId),
     refetchInterval: 5_000,
+    retry: false,
   });
   const alerts = trpc.workflow.alerts.useQuery(undefined, {
+    enabled: Boolean(workflowId),
     refetchInterval: 10_000,
+    retry: false,
   });
   const markRead = trpc.workflow.markAlertRead.useMutation({
-    onSuccess: () => void utils.workflow.alerts.invalidate(),
+    onSuccess: () => {
+      void utils.workflow.alerts.invalidate();
+      toast.success("告警已标记为已读。");
+    },
+    onError: error => toast.error(error.message),
   });
   const cancelRun = trpc.workflow.cancelRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
       void utils.workflow.runDetail.invalidate();
+      toast.success("取消运行命令已提交。");
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const terminateRun = trpc.workflow.terminateRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
       void utils.workflow.runDetail.invalidate();
+      toast.success("终止运行命令已提交。");
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const pauseRun = trpc.workflow.pauseRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
       void utils.workflow.runDetail.invalidate();
+      toast.success("暂停运行命令已提交，将在安全检查点生效。");
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const resumeRun = trpc.workflow.resumeRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
       void utils.workflow.runDetail.invalidate();
+      toast.success("恢复运行命令已提交。");
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const workflowAlerts = (alerts.data ?? []).filter(
     (alert: any) => alert.workflowId === workflowId
@@ -131,6 +219,12 @@ export default function RunCenter({
     terminateRun.isPending ||
     pauseRun.isPending ||
     resumeRun.isPending;
+  const refreshAll = () => {
+    void runs.refetch();
+    void metrics.refetch();
+    void alerts.refetch();
+    void utils.workflow.runDetail.invalidate();
+  };
 
   if (!workflowId)
     return (
@@ -159,8 +253,26 @@ export default function RunCenter({
             当前流程：{workflowName || "未命名流程"} · {workflowId.slice(0, 8)}
           </p>
         </div>
-        <div className="w-fit rounded bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600">
-          自动刷新 · 5 秒
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600">
+            当前流程范围 · 自动刷新 5 秒
+          </span>
+    <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={refreshAll}
+            disabled={
+              runs.isFetching || metrics.isFetching || alerts.isFetching || controlPending
+            }
+          >
+            <RefreshCw
+              size={14}
+              className={runs.isFetching ? "animate-spin" : undefined}
+            />
+            刷新
+          </Button>
         </div>
       </div>
       <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -217,39 +329,57 @@ export default function RunCenter({
             清除筛选
           </Button>
         </div>
+        <p className="mt-3 flex items-center gap-1 text-[11px] leading-5 text-slate-400">
+          <Search size={12} />
+          运行中心严格限定在当前已选流程；触发者筛选使用用户 ID，不伪造跨流程聚合。
+        </p>
       </section>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <MetricCard
-          label="总运行"
-          value={metrics.data?.totalRuns ?? 0}
-          icon={BarChart3}
-          tone="blue"
-        />
-        <MetricCard
-          label="成功"
-          value={metrics.data?.successfulRuns ?? 0}
-          icon={CheckCircle2}
-          tone="emerald"
-        />
-        <MetricCard
-          label="失败"
-          value={metrics.data?.failedRuns ?? 0}
-          icon={XCircle}
-          tone="red"
-        />
-        <MetricCard
-          label="失败率"
-          value={`${metrics.data?.failureRate ?? 0}%`}
-          icon={AlertTriangle}
-          tone="amber"
-        />
-        <MetricCard
-          label="平均耗时"
-          value={`${metrics.data?.averageDurationMs ?? 0} ms`}
-          icon={Clock3}
-          tone="slate"
-        />
-      </div>
+      <section
+        aria-label="运行统计"
+        className="rounded-lg border border-slate-200 bg-white shadow-sm"
+      >
+        {metrics.isError ? (
+          <QueryErrorNotice
+            title="运行统计读取失败"
+            onRetry={() => void metrics.refetch()}
+          />
+        ) : metrics.isLoading || !metrics.data ? (
+          <QueryLoadingNotice title="正在读取运行统计…" />
+        ) : (
+          <div className="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-5">
+            <MetricCard
+              label="总运行"
+              value={metrics.data.totalRuns}
+              icon={BarChart3}
+              tone="blue"
+            />
+            <MetricCard
+              label="成功"
+              value={metrics.data.successfulRuns}
+              icon={CheckCircle2}
+              tone="emerald"
+            />
+            <MetricCard
+              label="失败"
+              value={metrics.data.failedRuns}
+              icon={XCircle}
+              tone="red"
+            />
+            <MetricCard
+              label="失败率"
+              value={`${metrics.data.failureRate}%`}
+              icon={AlertTriangle}
+              tone="amber"
+            />
+            <MetricCard
+              label="平均耗时"
+              value={`${metrics.data.averageDurationMs} ms`}
+              icon={Clock3}
+              tone="slate"
+            />
+          </div>
+        )}
+      </section>
       <section className="overflow-hidden rounded-lg border border-red-100 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-4 py-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-red-900">
@@ -257,40 +387,53 @@ export default function RunCenter({
             失败告警
           </div>
           <span className="rounded bg-white px-2 py-0.5 text-[10px] text-red-700">
-            {workflowAlerts.filter((alert: any) => !alert.readAt).length} 未读
+            {alerts.isError
+              ? "读取失败"
+              : alerts.isLoading || !alerts.data
+                ? "读取中"
+                : `${workflowAlerts.filter((alert: any) => !alert.readAt).length} 未读`}
           </span>
         </div>
         <div className="max-h-48 overflow-y-auto">
-          {workflowAlerts.map((alert: any) => (
-            <div
-              key={alert.id}
-              className={`flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center ${alert.readAt ? "text-slate-400" : "text-slate-700"}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">{alert.summary}</p>
-                <p className="mt-1 truncate">
-                  {decodeJson(alert.detailsJson)?.message ||
-                    "请查看运行节点日志。"}
-                </p>
-                <p className="mt-1 text-[10px] text-slate-400">
-                  {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"} ms
-                </p>
+          {alerts.isError ? (
+            <QueryErrorNotice
+              title="失败告警读取失败"
+              onRetry={() => void alerts.refetch()}
+            />
+          ) : alerts.isLoading || !alerts.data ? (
+            <QueryLoadingNotice title="正在读取失败告警…" />
+          ) : (
+            workflowAlerts.map((alert: any) => (
+              <div
+                key={alert.id}
+                className={`flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center ${alert.readAt ? "text-slate-400" : "text-slate-700"}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{alert.summary}</p>
+                  <p className="mt-1 truncate">
+                    {decodeJson(alert.detailsJson)?.message ||
+                      "请查看运行节点日志。"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"} ms
+                  </p>
+                </div>
+                {!alert.readAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={markRead.isPending}
+                    onClick={() => markRead.mutate({ alertId: alert.id })}
+                  >
+                    标记已读
+                  </Button>
+                )}
               </div>
-              {!alert.readAt && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  disabled={markRead.isPending}
-                  onClick={() => markRead.mutate({ alertId: alert.id })}
-                >
-                  标记已读
-                </Button>
-              )}
-            </div>
-          ))}
-          {!workflowAlerts.length && (
+            ))
+          )}
+          {!alerts.isError && !alerts.isLoading && alerts.data && !workflowAlerts.length && (
             <p className="p-4 text-center text-xs text-slate-400">
               当前筛选范围内没有失败告警。
             </p>
@@ -298,49 +441,122 @@ export default function RunCenter({
         </div>
       </section>
       <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 text-sm font-semibold">
-            <span>运行记录</span>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white xl:col-span-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 text-sm font-semibold">
+            <div className="flex items-center gap-2">
+              <span>运行实例</span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-normal text-slate-500">
+                {runs.isError
+                  ? "读取失败"
+                  : runs.isLoading || !runs.data
+                    ? "读取中"
+                    : `${runs.data.length} 条`}
+              </span>
+            </div>
             {runs.isFetching && (
               <Loader2 className="animate-spin text-slate-400" size={14} />
             )}
           </div>
-          <div className="max-h-[650px] overflow-y-auto">
-            {(runs.data ?? []).map((run: any) => (
-              <button
-                key={run.id}
-                onClick={() => onSelect(run.id)}
-                className={`w-full border-b border-slate-100 p-4 text-left hover:bg-slate-50 ${selectedRun?.id === run.id ? "bg-blue-50" : ""}`}
-              >
-                <div className="flex justify-between gap-2">
-                  <code className="text-xs text-slate-500">
-                    {run.id.slice(0, 8)}
-                  </code>
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${run.status === "success" ? "bg-emerald-100 text-emerald-700" : run.status === "failed" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+          {runs.isError ? (
+            <QueryErrorNotice
+              title="运行实例读取失败"
+              onRetry={() => void runs.refetch()}
+            />
+          ) : runs.isLoading || !runs.data ? (
+            <QueryLoadingNotice title="正在读取运行实例…" />
+          ) : (
+          <div className="overflow-x-auto">
+            <table
+              data-run-instance-table
+              aria-label="当前流程运行实例表"
+              className="w-full min-w-[860px] text-left text-sm"
+            >
+              <thead className="bg-slate-50 text-xs text-slate-500">
+                <tr>
+                  <th className="px-4 py-3 font-medium">运行 ID</th>
+                  <th className="px-4 py-3 font-medium">流程</th>
+                  <th className="px-4 py-3 font-medium">触发人</th>
+                  <th className="px-4 py-3 font-medium">开始时间</th>
+                  <th className="px-4 py-3 font-medium">结束时间</th>
+                  <th className="px-4 py-3 font-medium">耗时</th>
+                  <th className="px-4 py-3 font-medium">状态</th>
+                  <th className="px-4 py-3 font-medium">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(runs.data ?? []).map((run: any) => (
+                  <tr
+                    key={run.id}
+                    className={`border-t border-slate-100 ${selectedRun?.id === run.id ? "bg-blue-50" : "hover:bg-slate-50"}`}
                   >
-                    {run.status}
-                  </span>
-                </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                  <span>{formatTime(run.createdAt)}</span>
-                  <span>{run.durationMs ?? "—"} ms</span>
-                  <span>
-                    {run.triggeredByName ||
-                      run.username ||
-                      `用户 ${run.triggeredByUserId ?? "—"}`}
-                  </span>
-                </div>
-              </button>
-            ))}
-            {!runs.isFetching && !(runs.data ?? []).length && (
-              <p className="p-6 text-center text-sm text-slate-400">
-                当前筛选条件下尚无运行记录。
-              </p>
-            )}
+                    <td className="px-4 py-3">
+                      <code className="break-all text-xs text-slate-500">
+                        {run.id}
+                      </code>
+                    </td>
+                    <td className="max-w-[220px] px-4 py-3">
+                      <p className="truncate font-medium text-slate-800">
+                        {run.workflowName || workflowName || "未命名流程"}
+                      </p>
+                      {run.businessKey && (
+                        <p className="mt-1 truncate text-[10px] text-slate-400">
+                          业务标识：{run.businessKey}
+                        </p>
+                      )}
+                    </td>
+                    <td className="max-w-[150px] truncate px-4 py-3 text-xs text-slate-500">
+                      {run.triggeredByName ||
+                        run.username ||
+                        `用户 ${run.triggeredByUserId ?? "—"}`}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                      {formatTime(run.startedAt ?? run.createdAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                      {formatTime(run.finishedAt)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-xs text-slate-500">
+                      {runDuration(run.durationMs)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`rounded-full px-2 py-1 text-[10px] font-semibold ${runStatusClass(run.status)}`}>
+                        {runStatusLabel(run.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="min-h-11 px-2 text-xs text-blue-700"
+                        onClick={() => onSelect(run.id)}
+                        aria-label={`查看运行实例 ${String(run.id).slice(0, 12)}`}
+                      >
+                        查看详情
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {runs.isFetching && !(runs.data ?? []).length && (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center">
+                      <Loader2 className="mx-auto animate-spin text-slate-400" size={18} />
+                    </td>
+                  </tr>
+                )}
+                {!runs.isFetching && !(runs.data ?? []).length && (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-sm text-slate-400">
+                      当前筛选条件下尚无运行记录。
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
+          )}
         </section>
-        <section className="min-h-80 rounded-lg border border-slate-200 bg-white p-5">
+        <section className="min-h-80 rounded-lg border border-slate-200 bg-white p-5 xl:col-span-2">
           {selectedRun ? (
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -349,21 +565,28 @@ export default function RunCenter({
                     RUN {selectedRun.id.slice(0, 8)}
                   </p>
                   <h3 className="mt-1 font-semibold">
-                    {selectedRun.status === "success" ? "运行成功" : "运行详情"}
+                    {selectedRun.status === "success"
+                      ? "运行成功"
+                      : `${runStatusLabel(selectedRun.status)} · 运行详情`}
                   </h3>
                 </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="text-xs text-slate-400">
-                    {selectedRun.durationMs ?? "—"} ms
+                  <span
+                    aria-live="polite"
+                    className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${runStatusClass(selectedRun.status)}`}
+                  >
+                    {runStatusLabel(selectedRun.status)}
                   </span>
-                  {["queued", "waiting", "blocked"].includes(
+                  <span className="text-xs text-slate-400">
+                    {runDuration(selectedRun.durationMs)}
+                  </span>
+                  {["queued", "running", "waiting", "blocked"].includes(
                     String(selectedRun.status)
                   ) && (
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-8 text-xs text-blue-700"
+                      className="min-h-11 text-xs text-blue-700"
                       disabled={controlPending}
                       onClick={() => {
                         if (selectedRun.status === "blocked") {
@@ -377,6 +600,11 @@ export default function RunCenter({
                         }
                       }}
                     >
+                      {selectedRun.status === "blocked" ? (
+                        <Play size={14} />
+                      ) : (
+                        <Pause size={14} />
+                      )}
                       {selectedRun.status === "blocked" ? "恢复运行" : "暂停运行"}
                     </Button>
                   )}
@@ -386,8 +614,7 @@ export default function RunCenter({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-8 text-xs text-amber-700"
+                      className="min-h-11 text-xs text-amber-700"
                       disabled={controlPending}
                       onClick={() => {
                         if (
@@ -398,6 +625,7 @@ export default function RunCenter({
                           cancelRun.mutate({ runId: selectedRun.id });
                       }}
                     >
+                      <Square size={13} />
                       取消运行
                     </Button>
                   )}
@@ -407,8 +635,7 @@ export default function RunCenter({
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-8 text-xs text-red-700"
+                      className="min-h-11 text-xs text-red-700"
                       disabled={controlPending}
                       onClick={() => {
                         const reason = window.prompt(
@@ -422,13 +649,20 @@ export default function RunCenter({
                           });
                       }}
                     >
+                      <XCircle size={14} />
                       终止运行
                     </Button>
                   )}
                 </div>
               </div>
-              <div className="mt-5 grid gap-3">
-                {selectedRun.nodeRuns?.map((node: any) => (
+              <div className="mt-3 flex items-start gap-2 rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-500">
+                <Check size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                <span>
+                  暂停/恢复仅在已持久化 Checkpoint 边界生效；取消使用服务端标准命令，终止操作必须填写原因并写入运行控制记录。
+                </span>
+              </div>
+              <div className="mt-5 grid gap-3" aria-label="节点执行日志">
+                {(selectedRun.nodeRuns ?? []).map((node: any) => (
                   <details
                     key={node.id}
                     className="rounded border border-slate-200 bg-slate-50 p-3"
@@ -463,6 +697,11 @@ export default function RunCenter({
                     </div>
                   </details>
                 ))}
+                {!(selectedRun.nodeRuns ?? []).length && (
+                  <p className="rounded border border-dashed border-slate-200 p-6 text-center text-sm text-slate-400">
+                    当前实例尚无节点执行日志。
+                  </p>
+                )}
               </div>
             </>
           ) : (

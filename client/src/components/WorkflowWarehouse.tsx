@@ -357,12 +357,14 @@ export default function WorkflowWarehouse({
               type="button"
               variant="outline"
               size="sm"
+              aria-pressed={showArchived}
               onClick={() => setShowArchived(value => !value)}
             >
               <ArchiveRestore size={14} />
               {showArchived ? "返回流程仓库" : "查看归档流程"}
             </Button>
             <select
+              aria-label="选择流程仓库项目"
               className="h-9 min-w-48 rounded-md border border-slate-200 bg-white px-2 text-sm"
               value={currentProject.id}
               onChange={event => {
@@ -381,6 +383,41 @@ export default function WorkflowWarehouse({
             </select>
           </div>
         </div>
+        {warehouse.isLoading && (
+          <div
+            data-warehouse-loading
+            role="status"
+            aria-live="polite"
+            className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800"
+          >
+            正在加载当前项目的流程目录、列表和预览索引…
+          </div>
+        )}
+        {warehouse.error && (
+          <div
+            data-warehouse-error
+            role="alert"
+            className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+          >
+            <span>流程仓库加载失败：{warehouse.error.message}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void warehouse.refetch()}>
+              重试
+            </Button>
+          </div>
+        )}
+        {showArchived && archivedWorkflows.isLoading && (
+          <div data-warehouse-archive-loading role="status" aria-live="polite" className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+            正在读取可恢复归档流程…
+          </div>
+        )}
+        {showArchived && archivedWorkflows.error && (
+          <div data-warehouse-archive-error role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <span>归档流程加载失败：{archivedWorkflows.error.message}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void archivedWorkflows.refetch()}>
+              重试
+            </Button>
+          </div>
+        )}
         {showArchived ? (
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-4">
@@ -438,7 +475,7 @@ export default function WorkflowWarehouse({
         ) : (
           <>
             <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_430px]">
-              <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <aside aria-label="流程仓库目录树" className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-sm font-semibold text-slate-700">
@@ -479,6 +516,8 @@ export default function WorkflowWarehouse({
                         size="icon"
                         className="h-9 w-9"
                         title="批量操作"
+                        aria-haspopup="menu"
+                        aria-expanded={batchMenuOpen}
                         disabled={!canEdit}
                         onClick={() => setBatchMenuOpen(value => !value)}
                       >
@@ -510,6 +549,8 @@ export default function WorkflowWarehouse({
                 </div>
                 <div className="max-h-[620px] overflow-y-auto p-2">
                   <button
+                    type="button"
+                    aria-current={!selectedFolderId ? "page" : undefined}
                     className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-[#eaf1ff] text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
                     onClick={() => setSelectedFolderId(null)}
                   >
@@ -539,7 +580,7 @@ export default function WorkflowWarehouse({
                   ))}
                 </div>
               </aside>
-              <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <section aria-label="流程仓库列表" className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-3">
                   <div>
                     <p className="text-sm font-semibold text-slate-700">
@@ -604,7 +645,10 @@ export default function WorkflowWarehouse({
                         }
                       />
                       <button
+                        type="button"
                         className="min-w-0 flex-1 text-left"
+                        aria-label={`查看流程 ${workflow.name} 的只读预览`}
+                        aria-pressed={selectedWorkflowId === workflow.id}
                         onClick={() => setSelectedWorkflowId(workflow.id)}
                       >
                         <div className="flex items-center gap-2">
@@ -671,7 +715,7 @@ export default function WorkflowWarehouse({
                   )}
                 </div>
               </section>
-              <aside className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <aside aria-label="流程只读预览" className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between border-b border-slate-100 p-3">
                   <p className="text-sm font-semibold text-slate-700">
                     流程简介
@@ -721,6 +765,7 @@ export default function WorkflowWarehouse({
                     <div className="h-[470px]">
                       <WorkflowCanvas
                         workflowId={workflowDetail.data.id}
+                        flowType={workflowDetail.data.flowType ?? "state"}
                         definition={workflowDetail.data.definition}
                         readOnly
                       />
@@ -892,6 +937,9 @@ function FolderTree({
         className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-[#eaf1ff] text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
       >
         <button
+          type="button"
+          aria-current={selectedId === folder.id ? "page" : undefined}
+          aria-expanded={children.length ? expanded : undefined}
           className="flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 text-left"
           style={{ paddingLeft: `${8 + level * 16}px` }}
           onClick={() => onSelect(folder.id)}

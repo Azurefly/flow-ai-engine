@@ -207,6 +207,25 @@ export default function DataResourceCenter({
       schedule,
     ])
   );
+  const tabLoading =
+    tab === "flows"
+      ? flows.isLoading || runs.isLoading || schedules.isLoading
+      : resources.isLoading;
+  const tabError =
+    tab === "flows"
+      ? flows.error ?? runs.error ?? schedules.error
+      : resources.error;
+  const retryTab = () => {
+    if (tab === "flows") {
+      void Promise.all([
+        flows.refetch(),
+        runs.refetch(),
+        schedules.refetch(),
+      ]);
+      return;
+    }
+    void resources.refetch();
+  };
   const confirmDelete = (key: string, action: () => void) => {
     if (pendingDeleteKey) return;
     setPendingDeleteKey(key);
@@ -228,6 +247,12 @@ export default function DataResourceCenter({
         count: resources.data?.assets.length ?? 0,
       },
       {
+        id: "flows" as const,
+        label: "数据流",
+        icon: Braces,
+        count: flows.data?.length ?? 0,
+      },
+      {
         id: "udfs" as const,
         label: "UDF",
         icon: FileCode2,
@@ -244,12 +269,6 @@ export default function DataResourceCenter({
         label: "项目插件",
         icon: Puzzle,
         count: resources.data?.plugins.length ?? 0,
-      },
-      {
-        id: "flows" as const,
-        label: "数据流",
-        icon: Braces,
-        count: flows.data?.length ?? 0,
       },
     ],
     [flows.data, resources.data]
@@ -268,10 +287,23 @@ export default function DataResourceCenter({
           参考原始数据流模块集中管理项目内数据源、资源目录、函数、标签和插件。连接凭据仅能以引用形式保存，页面不会返回明文秘密。当前数据流为实验性元数据/样例执行器，数据源保存成功不代表网络、凭据或查询权限已验证。
         </p>
       </div>
-      <div className="mb-4 flex flex-wrap gap-2">
+      <div role="tablist" aria-label="项目资源中心" className="mb-4 flex flex-wrap gap-2">
         {entries.map(item => (
           <button
             key={item.id}
+            type="button"
+            role="tab"
+            aria-selected={tab === item.id}
+            tabIndex={tab === item.id ? 0 : -1}
+            onKeyDown={event => {
+              if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) return;
+              event.preventDefault();
+              const currentIndex = entries.findIndex(entry => entry.id === item.id);
+              const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? entries.length - 1 : (currentIndex + (["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1) + entries.length) % entries.length;
+              setTab(entries[nextIndex].id);
+              requestAnimationFrame(() => document.getElementById(`data-resource-tab-${entries[nextIndex].id}`)?.focus());
+            }}
+            id={`data-resource-tab-${item.id}`}
             onClick={() => setTab(item.id)}
             className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${tab === item.id ? "border-[#b9d2ff] bg-[#eaf1ff] font-semibold text-[#245fc8]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
           >
@@ -283,6 +315,17 @@ export default function DataResourceCenter({
           </button>
         ))}
       </div>
+      {tabLoading && (
+        <div data-resource-loading role="status" aria-live="polite" className="mb-4 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          正在加载“{entries.find(entry => entry.id === tab)?.label}”数据…
+        </div>
+      )}
+      {tabError && (
+        <div data-resource-error role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <span>“{entries.find(entry => entry.id === tab)?.label}”加载失败：{tabError.message}</span>
+          <Button type="button" variant="outline" size="sm" onClick={retryTab}>重试</Button>
+        </div>
+      )}
       {tab === "flows" && (
         <>
           <DataFlowCanvasReferenceShell
@@ -306,11 +349,6 @@ export default function DataResourceCenter({
           <DataflowOperationList runs={(runs.data ?? []) as any[]} />
         </>
       )}
-      {resources.isLoading && (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-sm text-slate-400">
-          正在读取项目资源目录…
-        </div>
-      )}
       {(tab === "sources" || tab === "assets") && (
         <StructuredResourceForm
           tab={tab}
@@ -332,7 +370,9 @@ export default function DataResourceCenter({
                 <Cell
                   primary={source.name}
                   secondary={
-                    source.connection?.description || "连接元数据已隐藏"
+                    source.hasCredentialRef
+                      ? "已配置凭据引用（不会显示明文）"
+                      : "未配置凭据引用"
                   }
                 />
                 <td className="px-4 py-3 text-xs text-slate-600">
@@ -419,7 +459,7 @@ export default function DataResourceCenter({
         <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
             title="注册 UDF"
-            description="登记函数元数据；数据流仅允许引用已审核 UDF，运行时不执行任意上传代码。"
+            description="登记函数元数据；数据流仅允许引用已审核 UDF，运行时不执行任意上传代码。Python/DSL 执行入口当前禁用，仅保留元数据登记。"
             onSubmit={() =>
               createUdf.mutateAsync({
                 projectId,
@@ -1185,6 +1225,9 @@ function DataFlowCanvasReferenceShell({
           <p className="mt-1 text-xs text-slate-500">
             保留原始资源树、函数树、任务详情和调度配置入口；真实编辑仍在受项目权限保护的设计器中完成。
           </p>
+          <p data-dataflow-execution-note className="mt-2 rounded border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-900">
+            当前执行模式为 <span className="font-mono font-semibold">audit_only</span>：Sink 仅记录审计，不写入真实目标；本页不展示字段级血缘，也不模拟真实 Sink。
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -1269,6 +1312,7 @@ function DataFlowCanvasReferenceShell({
         />
         <div className="rounded border border-slate-200 bg-white p-3">
           <p className="text-xs font-semibold text-slate-700">数据流工具栏</p>
+          <p className="mt-1 text-[11px] leading-5 text-slate-500">交集、差集、并集与 TSML 属于实验节点，当前执行器禁用；SQL 和中间表仅作为设计器入口。</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {[
               ["交集", "当前执行器未启用此原始节点"],
@@ -1448,6 +1492,8 @@ function State({ value }: { value: string }) {
     failed: "失败",
     running: "运行中",
     queued: "排队中",
+    audit_only: "仅审计",
+    paused: "已暂停",
   };
   return (
     <span className={`rounded px-2 py-1 text-xs ${tone}`}>

@@ -16,6 +16,9 @@ type WorkflowDetailPageProps = {
   canPublish: boolean;
   onClose: () => void;
   onOpen: () => void;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 };
 
 export function WorkflowDetailPage({
@@ -25,15 +28,100 @@ export function WorkflowDetailPage({
   canPublish,
   onClose,
   onOpen,
+  loading = false,
+  error = null,
+  onRetry,
 }: WorkflowDetailPageProps) {
-  if (!workflow || !definition) {
+  const retry = onRetry ?? (() => {
+    if (typeof window !== "undefined") window.location.reload();
+  });
+
+  if (loading) {
     return (
       <div
         data-aiflow-process-detail-page=""
+        data-aiflow-detail-state="loading"
+        role="status"
+        aria-live="polite"
         className="grid min-h-[calc(100vh-56px)] place-items-center bg-[#f5f7fb] p-6"
       >
         <div className="border border-slate-200 bg-white px-5 py-4 text-sm text-slate-500 shadow-sm">
           正在读取受权流程详情…
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div
+        data-aiflow-process-detail-page=""
+        data-aiflow-detail-state="error"
+        role="alert"
+        className="grid min-h-[calc(100vh-56px)] place-items-center bg-[#f5f7fb] p-6"
+      >
+        <div className="w-full max-w-lg border border-rose-200 bg-white px-5 py-5 text-sm shadow-sm">
+          <p className="font-semibold text-rose-800">流程详情加载失败</p>
+          <p className="mt-2 leading-6 text-slate-600">{error}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              返回流程设计中心
+            </Button>
+            <Button type="button" onClick={retry}>
+              重试
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!workflow) {
+    return (
+      <div
+        data-aiflow-process-detail-page=""
+        data-aiflow-detail-state="empty"
+        className="grid min-h-[calc(100vh-56px)] place-items-center bg-[#f5f7fb] p-6"
+      >
+        <div className="w-full max-w-lg border border-slate-200 bg-white px-5 py-5 text-sm shadow-sm">
+          <p className="font-semibold text-slate-800">暂无可访问的流程详情</p>
+          <p className="mt-2 leading-6 text-slate-500">
+            流程可能已被归档、删除，或当前账号没有查看权限。
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              返回流程设计中心
+            </Button>
+            <Button type="button" onClick={retry}>
+              重新读取
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!definition) {
+    return (
+      <div
+        data-aiflow-process-detail-page=""
+        data-aiflow-detail-state="definition-error"
+        role="alert"
+        className="grid min-h-[calc(100vh-56px)] place-items-center bg-[#f5f7fb] p-6"
+      >
+        <div className="w-full max-w-lg border border-rose-200 bg-white px-5 py-5 text-sm shadow-sm">
+          <p className="font-semibold text-rose-800">流程定义暂不可用</p>
+          <p className="mt-2 leading-6 text-slate-600">
+            已读取“{workflow.name}”，但服务端没有返回可预览的流程定义。
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              返回流程设计中心
+            </Button>
+            <Button type="button" onClick={retry}>
+              重试
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -73,6 +161,7 @@ export function WorkflowDetailPage({
         </div>
         <WorkflowGovernance
           workflowId={workflow.id}
+          definition={definition}
           canEdit={canEdit}
           canPublish={canPublish}
           canvas={
