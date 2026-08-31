@@ -209,15 +209,19 @@ export default function DataResourceCenter({
   );
   const tabLoading =
     tab === "flows"
-      ? flows.isLoading || runs.isLoading || schedules.isLoading
+      ? resources.isLoading ||
+        flows.isLoading ||
+        runs.isLoading ||
+        schedules.isLoading
       : resources.isLoading;
   const tabError =
     tab === "flows"
-      ? flows.error ?? runs.error ?? schedules.error
+      ? resources.error ?? flows.error ?? runs.error ?? schedules.error
       : resources.error;
   const retryTab = () => {
     if (tab === "flows") {
       void Promise.all([
+        resources.refetch(),
         flows.refetch(),
         runs.refetch(),
         schedules.refetch(),
@@ -294,6 +298,7 @@ export default function DataResourceCenter({
             type="button"
             role="tab"
             aria-selected={tab === item.id}
+            aria-controls="data-resource-panel"
             tabIndex={tab === item.id ? 0 : -1}
             onKeyDown={event => {
               if (!["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"].includes(event.key)) return;
@@ -326,8 +331,16 @@ export default function DataResourceCenter({
           <Button type="button" variant="outline" size="sm" onClick={retryTab}>重试</Button>
         </div>
       )}
-      {tab === "flows" && (
-        <>
+      <div
+        id="data-resource-panel"
+        role="tabpanel"
+        aria-labelledby={`data-resource-tab-${tab}`}
+        tabIndex={0}
+      >
+        {!tabLoading && !tabError && (
+          <>
+            {tab === "flows" && (
+              <>
           <DataFlowCanvasReferenceShell
             projectName={projectName}
             resources={resources.data as any}
@@ -347,22 +360,22 @@ export default function DataResourceCenter({
             onOpenWorkflow={onOpenWorkflow}
           />
           <DataflowOperationList runs={(runs.data ?? []) as any[]} />
-        </>
-      )}
-      {(tab === "sources" || tab === "assets") && (
-        <StructuredResourceForm
-          tab={tab}
-          projectId={projectId}
-          sources={(resources.data?.sources ?? []) as any[]}
-          createSource={createSource}
-          createAsset={createAsset}
-        />
-      )}
-      {tab === "sources" && (
-        <ResourceTable
-          columns={["名称", "类型", "状态", "最近校验", "操作"]}
-          empty="尚未配置数据源。"
-        >
+              </>
+            )}
+            {(tab === "sources" || tab === "assets") && (
+              <StructuredResourceForm
+                tab={tab}
+                projectId={projectId}
+                sources={(resources.data?.sources ?? []) as any[]}
+                createSource={createSource}
+                createAsset={createAsset}
+              />
+            )}
+            {tab === "sources" && (
+              <ResourceTable
+                columns={["名称", "类型", "状态", "最近校验", "操作"]}
+                empty="尚未配置数据源。"
+              >
           {(resources.data?.sources ?? []).map((source: any) => {
             const key = `source:${source.id}`;
             return (
@@ -413,13 +426,13 @@ export default function DataResourceCenter({
               </tr>
             );
           })}
-        </ResourceTable>
-      )}
-      {tab === "assets" && (
-        <ResourceTable
-          columns={["资源名称", "类型 / 数据源", "结构 / 样本", "状态", "操作"]}
-          empty="尚无已探查资源。"
-        >
+              </ResourceTable>
+            )}
+            {tab === "assets" && (
+              <ResourceTable
+                columns={["资源名称", "类型 / 数据源", "结构 / 样本", "状态", "操作"]}
+                empty="尚无已探查资源。"
+              >
           {(resources.data?.assets ?? []).map((asset: any) => {
             const key = `asset:${asset.id}`;
             return (
@@ -453,13 +466,13 @@ export default function DataResourceCenter({
               </tr>
             );
           })}
-        </ResourceTable>
-      )}
-      {tab === "udfs" && (
-        <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+              </ResourceTable>
+            )}
+            {tab === "udfs" && (
+              <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
             title="注册 UDF"
-            description="登记函数元数据；数据流仅允许引用已审核 UDF，运行时不执行任意上传代码。Python/DSL 执行入口当前禁用，仅保留元数据登记。"
+            description="登记函数元数据；SQL、JavaScript、Python、JAR 类型均可登记。数据流仅允许引用已审核 UDF；Python/JAR/DSL 执行入口当前禁用，仅保留元数据登记。"
             onSubmit={() =>
               createUdf.mutateAsync({
                 projectId,
@@ -546,10 +559,10 @@ export default function DataResourceCenter({
               );
             })}
           </ResourceTable>
-        </section>
-      )}
-      {tab === "tags" && (
-        <section className="grid gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
+              </section>
+            )}
+            {tab === "tags" && (
+              <section className="grid gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
           <ResourceForm
             title="新建标签"
             description="项目级数据标签用于资源分类，不会跨越项目可见范围。"
@@ -600,10 +613,10 @@ export default function DataResourceCenter({
               )}
             </div>
           </div>
-        </section>
-      )}
-      {tab === "plugins" && (
-        <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+              </section>
+            )}
+            {tab === "plugins" && (
+              <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
             title="登记项目插件"
             description="仅保存已批准插件的配置元数据；插件运行仍受服务端安全策略控制。"
@@ -687,10 +700,10 @@ export default function DataResourceCenter({
               );
             })}
           </ResourceTable>
-        </section>
-      )}
-      {tab === "flows" && (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+              </section>
+            )}
+            {tab === "flows" && (
+              <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="grid gap-4">
             <ResourceTable
               columns={["数据流", "发布状态", "运行次数", "调度", "操作"]}
@@ -883,8 +896,11 @@ export default function DataResourceCenter({
               )}
             </div>
           </div>
-        </section>
-      )}
+              </section>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

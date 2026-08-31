@@ -20,6 +20,7 @@ import {
   FolderOpen,
   FolderPlus,
   Image,
+  Loader2,
   MoreHorizontal,
   Search,
   Trash2,
@@ -722,7 +723,47 @@ export default function WorkflowWarehouse({
                   </p>
                   <span className="text-[11px] text-slate-400">流程图</span>
                 </div>
-                {workflowDetail.data ? (
+                {workflowDetail.isLoading ? (
+                  <div
+                    data-warehouse-preview-state="loading"
+                    role="status"
+                    aria-live="polite"
+                    className="grid h-[560px] place-items-center p-8 text-center text-sm text-slate-500"
+                  >
+                    <div>
+                      <Loader2
+                        className="mx-auto animate-spin text-[#2d6bea]"
+                        size={24}
+                      />
+                      <p className="mt-3">正在加载流程只读预览…</p>
+                    </div>
+                  </div>
+                ) : workflowDetail.isError ? (
+                  <div
+                    data-warehouse-preview-state="error"
+                    role="alert"
+                    className="grid h-[560px] place-items-center p-8 text-center text-sm text-slate-500"
+                  >
+                    <div>
+                      <p className="font-medium text-rose-700">
+                        流程只读预览加载失败
+                      </p>
+                      <p className="mt-2 max-w-xs text-xs leading-5 text-slate-500">
+                        {workflowDetail.error?.message ||
+                          "服务端暂时未返回流程详情。"}
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-4 min-h-11"
+                        onClick={() => void workflowDetail.refetch()}
+                      >
+                        重试
+                      </Button>
+                    </div>
+                  </div>
+                ) : workflowDetail.data ? (
                   <div>
                     <div className="border-b border-slate-100 p-3">
                       <div className="flex items-center gap-2">
@@ -772,7 +813,10 @@ export default function WorkflowWarehouse({
                     </div>
                   </div>
                 ) : (
-                  <div className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-slate-400">
+                  <div
+                    data-warehouse-preview-state="empty"
+                    className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-slate-400"
+                  >
                     <div>
                       <FolderClosed
                         className="mx-auto text-slate-300"
@@ -935,31 +979,27 @@ function FolderTree({
     <div>
       <div
         className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-[#eaf1ff] text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
+        style={{ paddingLeft: `${8 + level * 16}px` }}
       >
+        {children.length ? (
+          <button
+            type="button"
+            aria-label={`${folder.name}${expanded ? "收起" : "展开"}子目录`}
+            aria-expanded={expanded}
+            className="shrink-0 rounded p-1 hover:bg-white focus:outline-none focus:ring-2 focus:ring-blue-200"
+            onClick={() => setExpanded(value => !value)}
+          >
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </button>
+        ) : (
+          <span className="w-6 shrink-0" aria-hidden="true" />
+        )}
         <button
           type="button"
           aria-current={selectedId === folder.id ? "page" : undefined}
-          aria-expanded={children.length ? expanded : undefined}
           className="flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 text-left"
-          style={{ paddingLeft: `${8 + level * 16}px` }}
           onClick={() => onSelect(folder.id)}
         >
-          {children.length ? (
-            <span
-              onClick={event => {
-                event.stopPropagation();
-                setExpanded(value => !value);
-              }}
-            >
-              {expanded ? (
-                <ChevronDown size={14} />
-              ) : (
-                <ChevronRight size={14} />
-              )}
-            </span>
-          ) : (
-            <span className="w-3.5" />
-          )}
           {expanded ? <FolderOpen size={15} /> : <FolderClosed size={15} />}
           <span className="truncate">{folder.name}</span>
         </button>
