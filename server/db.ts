@@ -1,7 +1,36 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
+import mysql from "mysql2/promise";
 import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
+
+let _pool: mysql.Pool | null = null;
+
+export function getSharedPool(): mysql.Pool {
+  if (!process.env.DATABASE_URL) {
+    throw new Error("数据库连接未配置。");
+  }
+  if (!_pool) {
+    _pool = mysql.createPool({
+      uri: process.env.DATABASE_URL,
+      waitForConnections: true,
+      connectionLimit: 20,
+      maxIdle: 10,
+      idleTimeout: 60000,
+      queueLimit: 0,
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10000,
+    });
+  }
+  return _pool;
+}
+
+export async function closeSharedPool(): Promise<void> {
+  if (_pool) {
+    await _pool.end();
+    _pool = null;
+  }
+}
 
 let _db: ReturnType<typeof drizzle> | null = null;
 

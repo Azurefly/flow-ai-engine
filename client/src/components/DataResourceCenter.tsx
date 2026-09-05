@@ -931,13 +931,13 @@ function DataflowOperationList({ runs }: { runs: any[] }) {
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="bg-[#f8faff] text-xs font-medium text-slate-500">
             <tr>
-              <th className="px-4 py-3">操作 ID</th>
-              <th className="px-4 py-3">业务名称</th>
-              <th className="px-4 py-3">流程名称</th>
-              <th className="px-4 py-3">启动时间</th>
-              <th className="px-4 py-3">结束时间</th>
-              <th className="px-4 py-3">状态</th>
-              <th className="px-4 py-3 text-right">操作</th>
+              <th className="px-4 py-3 whitespace-nowrap">操作 ID</th>
+              <th className="px-4 py-3 whitespace-nowrap">业务名称</th>
+              <th className="px-4 py-3 whitespace-nowrap">流程名称</th>
+              <th className="px-4 py-3 whitespace-nowrap">启动时间</th>
+              <th className="px-4 py-3 whitespace-nowrap">结束时间</th>
+              <th className="px-4 py-3 whitespace-nowrap">状态</th>
+              <th className="px-4 py-3 text-right whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>

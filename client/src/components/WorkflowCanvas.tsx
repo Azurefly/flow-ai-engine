@@ -360,20 +360,32 @@ function FlowNodeCard({ data, selected }: NodeProps) {
           })}
         </div>
       )}
-      {handles.map((id, index) => (
-        <Handle
-          key={id}
-          type="source"
-          position={Position.Right}
-          id={id}
-          className="!h-2.5 !w-2.5 !border-2 !border-white"
-          style={{
-            top: `${((index + 1) / (handles.length + 1)) * 100}%`,
-            backgroundColor: appearance.color,
-          }}
-          title={id}
-        />
-      ))}
+      {handles.map((id, index) => {
+        const isApproved = id === "approved";
+        const isRejected = id === "rejected";
+        const isCompensation = id === "compensation";
+        const handleColor = isApproved
+          ? "#059669"
+          : isRejected
+            ? "#ef4444"
+            : isCompensation
+              ? "#f59e0b"
+              : appearance.color;
+        return (
+          <Handle
+            key={id}
+            type="source"
+            position={Position.Right}
+            id={id}
+            className="!h-2.5 !w-2.5 !border-2 !border-white"
+            style={{
+              top: `${((index + 1) / (handles.length + 1)) * 100}%`,
+              backgroundColor: handleColor,
+            }}
+            title={id}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1080,6 +1092,12 @@ const ORIGINAL_OBJECT_FIELD_SPECS: Record<string, OriginalFieldSpec[]> = {
     { key: "tjsz", label: "自动执行条件", kind: "structured" },
     { key: "code", label: "自动执行代码", kind: "structured" },
   ],
+  jdgycz: [
+    { key: "bj", label: "办结状态", kind: "yes-no", help: "当前状态是否作为办结状态。" },
+    { key: "zdbj", label: "自动办结", kind: "yes-no", help: "进入该状态后是否自动办结。" },
+    { key: "tsbjsyzlc", label: "同时办结所有子流程", kind: "yes-no", help: "办结时是否同步关闭所有子流程。" },
+    { key: "cs", label: "抄送通知", kind: "yes-no", help: "流转至该状态时是否发送抄送通知。" },
+  ],
 };
 
 const ORIGINAL_LIST_ITEM_SPECS: Record<string, OriginalFieldSpec[]> = {
@@ -1090,6 +1108,10 @@ const ORIGINAL_LIST_ITEM_SPECS: Record<string, OriginalFieldSpec[]> = {
     { key: "mbjd", label: "目标节点" },
     { key: "tjsz", label: "条件设置", kind: "structured" },
     { key: "code", label: "路由代码", kind: "structured" },
+  ],
+  ywcz: [
+    { key: "czid", label: "操作 ID", help: "业务操作唯一标识。" },
+    { key: "czmc", label: "操作名称", help: "业务操作不触发流程流转，仅作为功能触发入口。" },
   ],
   qxkz: [
     { key: "qxid", label: "权限 ID" },
@@ -1449,7 +1471,9 @@ function StructuredListRow({
                 ? "权限"
                 : fieldKey === "bddx"
                   ? "绑定对象"
-                  : "子流程出口"}
+                  : fieldKey === "ywcz"
+                    ? "业务操作"
+                    : "子流程出口"}
             配置
           </span>
           <button
@@ -1971,6 +1995,9 @@ export default function WorkflowCanvas({
   const appliedDefinitionRef = useRef("");
   const emittedDefinitionRef = useRef("");
   const appliedWorkflowRef = useRef<string | undefined>(undefined);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestNodesRef = useRef(nodes);
+  latestNodesRef.current = nodes;
   const definitionSignature = useMemo(
     () => JSON.stringify(definition ?? defaultDefinition()),
     [definition]
@@ -2005,8 +2032,22 @@ export default function WorkflowCanvas({
   useEffect(() => {
     if (!onDefinitionChange) return;
     const next = toDefinition(nodes, edges, baseRef.current);
-    emittedDefinitionRef.current = JSON.stringify(next);
-    onDefinitionChange(next);
+    const serialized = JSON.stringify(next);
+    if (emittedDefinitionRef.current === serialized) return;
+
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      emittedDefinitionRef.current = serialized;
+      onDefinitionChange(next);
+    }, 250);
+
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
   }, [edges, nodes, onDefinitionChange]);
 
   useEffect(() => {
@@ -2022,10 +2063,11 @@ export default function WorkflowCanvas({
       const requestedNodeId = (
         event as CustomEvent<{ nodeId?: string }> | undefined
       )?.detail?.nodeId;
+      const currentNodes = latestNodesRef.current;
       const next =
-        (requestedNodeId && nodes.find(node => node.id === requestedNodeId)) ||
-        nodes.find(node => !["start", "end"].includes(node.data.kind)) ||
-        nodes[0];
+        (requestedNodeId && currentNodes.find(node => node.id === requestedNodeId)) ||
+        currentNodes.find(node => !["start", "end"].includes(node.data.kind)) ||
+        currentNodes[0];
       if (!next) return;
       setSelectedId(next.id);
       setInspectorMode("normal");
@@ -2037,13 +2079,13 @@ export default function WorkflowCanvas({
     };
     window.addEventListener("flow:inspect-node", inspect);
     return () => window.removeEventListener("flow:inspect-node", inspect);
-  }, [nodes, reactFlow]);
+  }, [reactFlow]);
 
   useEffect(() => {
     const focus = (event: Event) => {
       const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
       if (!nodeId) return;
-      const node = nodes.find(item => item.id === nodeId);
+      const node = latestNodesRef.current.find(item => item.id === nodeId);
       if (!node) return;
       setSelectedId(node.id);
       setInspectorMode("normal");
@@ -2055,7 +2097,7 @@ export default function WorkflowCanvas({
     };
     window.addEventListener("flow:focus-node", focus);
     return () => window.removeEventListener("flow:focus-node", focus);
-  }, [nodes, reactFlow]);
+  }, [reactFlow]);
 
   const selected = useMemo(
     () => nodes.find(node => node.id === selectedId),
@@ -2091,10 +2133,14 @@ export default function WorkflowCanvas({
     selectedFieldGroups.find(group => group.label === inspectorTab) ??
     selectedFieldGroups[0];
   const inspectorDisabled = readOnly || inspectorLocked;
+  const nodeMap = useMemo(
+    () => new Map(nodes.map(node => [node.id, node])),
+    [nodes]
+  );
   const displayedEdges = useMemo(
     () =>
       edges.map(edge => {
-        const source = nodes.find(node => node.id === edge.source);
+        const source = nodeMap.get(edge.source);
         const routes =
           source?.data.kind === "router" &&
           Array.isArray(source.data.config.routes)
@@ -2120,30 +2166,55 @@ export default function WorkflowCanvas({
               : source?.data.kind === "llm" && edge.sourceHandle !== "default"
                 ? `失败：${edge.sourceHandle}`
                 : undefined;
+        const isOperateRejected =
+          source?.data.kind === "operate" &&
+          (edge.sourceHandle === "rejected" || operateOutcome?.code === "rejected");
+        const isOperateApproved =
+          source?.data.kind === "operate" &&
+          (edge.sourceHandle === "approved" || operateOutcome?.code === "approved");
+        const outcomeStroke = isOperateRejected
+          ? "#ef4444"
+          : isOperateApproved
+            ? "#10b981"
+            : undefined;
+
         return edge.id === selectedEdgeId
           ? {
               ...edge,
               label,
               selected: true,
               interactionWidth: 24,
-              labelStyle: { fill: "#5b21b6", fontSize: 11, fontWeight: 600 },
-              labelBgStyle: { fill: "#f5f3ff", fillOpacity: 0.96 },
+              labelStyle: {
+                fill: isOperateRejected ? "#dc2626" : isOperateApproved ? "#059669" : "#5b21b6",
+                fontSize: 11,
+                fontWeight: 600,
+              },
+              labelBgStyle: { fill: isOperateRejected ? "#fef2f2" : isOperateApproved ? "#ecfdf5" : "#f5f3ff", fillOpacity: 0.96 },
               labelBgPadding: [5, 3] as [number, number],
               labelBgBorderRadius: 6,
-              style: { ...edge.style, stroke: "#4f46e5", strokeWidth: 3 },
+              style: {
+                ...edge.style,
+                stroke: isOperateRejected ? "#dc2626" : isOperateApproved ? "#059669" : "#4f46e5",
+                strokeWidth: 3,
+              },
             }
           : {
               ...edge,
               label,
               selected: false,
               interactionWidth: 24,
-              labelStyle: { fill: "#6d28d9", fontSize: 11, fontWeight: 600 },
+              labelStyle: {
+                fill: isOperateRejected ? "#ef4444" : isOperateApproved ? "#059669" : "#6d28d9",
+                fontSize: 11,
+                fontWeight: 600,
+              },
               labelBgStyle: { fill: "#ffffff", fillOpacity: 0.94 },
               labelBgPadding: [5, 3] as [number, number],
               labelBgBorderRadius: 6,
+              style: outcomeStroke ? { ...edge.style, stroke: outcomeStroke } : edge.style,
             };
       }),
-    [edges, nodes, selectedEdgeId]
+    [edges, nodeMap, selectedEdgeId]
   );
 
   useEffect(() => {
@@ -2655,8 +2726,12 @@ export default function WorkflowCanvas({
 
   const toggleFullscreen = async () => {
     if (!canvasRegionRef.current) return;
-    if (document.fullscreenElement) await document.exitFullscreen();
-    else await canvasRegionRef.current.requestFullscreen();
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await canvasRegionRef.current.requestFullscreen();
+    } catch (err) {
+      console.warn("[WorkflowCanvas] Fullscreen toggle failed:", err);
+    }
   };
 
   useEffect(() => {

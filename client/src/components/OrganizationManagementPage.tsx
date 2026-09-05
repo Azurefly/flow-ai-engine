@@ -861,8 +861,8 @@ export default function OrganizationManagementPage({
                                   </span>
                                 )}
                               </td>
-                              <td className="px-4 py-3">
-                                <div className="flex flex-wrap gap-1.5">
+                              <td className="px-4 py-3 whitespace-nowrap">
+                                <div className="flex items-center gap-1.5">
                                   <Button
                                     type="button"
                                     size="sm"

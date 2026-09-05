@@ -4,6 +4,7 @@ import http from "node:http";
 import https from "node:https";
 import { isIP } from "node:net";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import {
   approvalRequirement,
   normalizeReferenceOperateConfig,
@@ -46,6 +47,26 @@ type WorkflowUser = { id: number; role: "user" | "admin" };
 export type ApprovalDecision = "approved" | "rejected" | "abstained";
 type WorkflowNode = Definition["nodes"][number];
 type WorkflowEdge = Definition["edges"][number];
+
+export type WorkflowExecutionFaultPoint =
+  "after_state_commit_before_checkpoint";
+
+export class WorkflowExecutionInjectedCrash extends Error {
+  constructor(point: WorkflowExecutionFaultPoint) {
+    super(`Injected workflow execution crash at ${point}`);
+    this.name = "WorkflowExecutionInjectedCrash";
+  }
+}
+
+export function injectWorkflowExecutionFault(
+  point: WorkflowExecutionFaultPoint
+) {
+  if (
+    process.env.NODE_ENV === "test" &&
+    process.env.WORKFLOW_WORKER_FAULT_POINT === point
+  )
+    throw new WorkflowExecutionInjectedCrash(point);
+}
 
 export function resolveRuntimeLlmModel(
   requestedModel: string | undefined,
@@ -477,10 +498,8 @@ export type WorkflowExecutionResult =
   | { runId: string; status: "success"; output: unknown }
   | { runId: string; status: "waiting"; taskId: string };
 
-let pool: mysql.Pool | undefined;
 function db() {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
+  return getSharedPool();
 }
 
 function asRecord(value: unknown): JsonRecord {
@@ -3396,13 +3415,19 @@ async function executeRunSegment(input: {
       input.context.vars = vars;
       input.context.nodes = nodeOutputs;
       if (node.type === "start") Object.assign(vars, asRecord(result.output));
-      if (node.type === "state")
+      if (node.type === "state") {
         await persistStateNode({
           runId: input.runId,
           workflowId: input.workflow.id,
           node,
           context: input.context,
         });
+        // The state fact, transition, participant snapshot and outbox event are
+        // committed atomically before the durable job checkpoint advances. A
+        // retry therefore re-enters this node idempotently if the worker dies
+        // in this narrow two-phase window.
+        injectWorkflowExecutionFault("after_state_commit_before_checkpoint");
+      }
       if (node.type === "milestone")
         await persistMilestoneNode({
           runId: input.runId,
@@ -4352,12 +4377,35 @@ export async function getWorkflowRunMetrics(
   };
 }
 
-export async function listRunAlerts(user: WorkflowUser) {
+export async function listRunAlerts(
+  user: WorkflowUser,
+  filters: Omit<RunFilters, "limit"> & { workflowId?: string } = {}
+) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT a.*,w.name AS workflowName,r.status AS runStatus,r.durationMs,r.finishedAt
-       FROM workflow_run_alert a JOIN workflow w ON w.id=a.workflowId JOIN workflow_run r ON r.id=a.runId
-      WHERE a.recipientUserId=? ORDER BY a.readAt IS NULL DESC,a.createdAt DESC LIMIT 100`,
-    [user.id]
+       FROM workflow_run_alert a
+       JOIN workflow w ON w.id=a.workflowId
+       JOIN workflow_run r ON r.id=a.runId
+      WHERE a.recipientUserId=?
+        AND (? IS NULL OR a.workflowId=?)
+        AND (? IS NULL OR r.status=?)
+        AND (? IS NULL OR a.createdAt>=?)
+        AND (? IS NULL OR a.createdAt<=?)
+        AND (? IS NULL OR r.triggeredByUserId=?)
+      ORDER BY a.readAt IS NULL DESC,a.createdAt DESC LIMIT 100`,
+    [
+      user.id,
+      filters.workflowId ?? null,
+      filters.workflowId ?? null,
+      filters.status ?? null,
+      filters.status ?? null,
+      filters.from ?? null,
+      filters.from ?? null,
+      filters.to ?? null,
+      filters.to ?? null,
+      filters.triggeredByUserId ?? null,
+      filters.triggeredByUserId ?? null,
+    ]
   );
   return rows;
 }

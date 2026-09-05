@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import { hasWorkflowPermission, recordAuthorizationAudit } from "./iam-service";
 import { resumeWorkflowTask } from "./workflow-engine";
 import { wakeWorkflowWorker } from "./workflow-worker";
@@ -7,11 +8,7 @@ import { wakeWorkflowWorker } from "./workflow-worker";
 type User = { id: number; role: "user" | "admin" };
 type TaskView = "todo" | "done" | "initiated" | "all";
 type JsonRecord = Record<string, unknown>;
-let pool: mysql.Pool | undefined;
-const db = () => {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
-};
+const db = () => getSharedPool();
 const parseJson = (value: unknown) => {
   if (typeof value !== "string") return value;
   try {

@@ -1,15 +1,12 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
 import { recordAuthorizationAudit } from "./iam-service";
 
 type User = { id: number; role: "user" | "admin" };
 type JsonRecord = Record<string, unknown>;
-let pool: mysql.Pool | undefined;
-const db = () => {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
-};
+const db = () => getSharedPool();
 
 const asRecord = (value: unknown): JsonRecord =>
   value && typeof value === "object" && !Array.isArray(value)

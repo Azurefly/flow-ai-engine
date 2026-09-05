@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import {
   executePreparedWorkflowRun,
   markWorkflowRunFailed,
@@ -7,6 +8,7 @@ import {
   reconcileDueWorkflowTaskSchedules,
   reconcileWorkflowContinuations,
   submitWorkflowRun as persistWorkflowRun,
+  WorkflowExecutionInjectedCrash,
   type WorkflowCheckpoint,
 } from "./workflow-engine";
 import { notifyOwner } from "./_core/notification";
@@ -75,8 +77,7 @@ export function injectWorkflowWorkerFault(point: WorkflowWorkerFaultPoint) {
 }
 
 function db() {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
+  return pool ?? getSharedPool();
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -252,14 +253,16 @@ async function dispatchWorkflowOutboxOnce() {
   const event = await claimNextOutboxEvent();
   if (!event) return false;
   try {
-    if (event.eventType !== "workflow.run.failed.notification") {
+    if (event.eventType === "workflow.run.failed.notification") {
+      const title = String(event.payload.title ?? "").trim();
+      const content = String(event.payload.content ?? "").trim();
+      if (!title || !content)
+        throw new Error("Outbox 通知事件缺少标题或内容。");
+      if (!(await notifyOwner({ title, content })))
+        throw new Error("通知服务未接受 Outbox 事件。");
+    } else if (event.eventType !== "workflow.state.changed") {
       throw new Error(`不支持的 Outbox 事件类型：${event.eventType}`);
     }
-    const title = String(event.payload.title ?? "").trim();
-    const content = String(event.payload.content ?? "").trim();
-    if (!title || !content) throw new Error("Outbox 通知事件缺少标题或内容。");
-    if (!(await notifyOwner({ title, content })))
-      throw new Error("通知服务未接受 Outbox 事件。");
     await completeOutboxEvent(event);
   } catch (error) {
     state.lastError = error instanceof Error ? error.message : String(error);
@@ -428,7 +431,11 @@ async function processJob(job: ClaimedJob) {
     state.processedJobs += 1;
   } catch (error) {
     state.lastError = error instanceof Error ? error.message : String(error);
-    if (error instanceof WorkflowWorkerInjectedCrash) throw error;
+    if (
+      error instanceof WorkflowWorkerInjectedCrash ||
+      error instanceof WorkflowExecutionInjectedCrash
+    )
+      throw error;
     await handleJobFailure(job, error);
   } finally {
     clearInterval(heartbeat);
@@ -502,12 +509,20 @@ export function startWorkflowWorker() {
   wakeWorkflowWorker();
 }
 
-export async function stopWorkflowWorker() {
+export async function stopWorkflowWorker(timeoutMs = 5000) {
   if (timer) clearInterval(timer);
   timer = undefined;
   state.started = false;
-  await pool?.end();
-  pool = undefined;
+
+  const start = Date.now();
+  while (processing && Date.now() - start < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+
+  if (pool) {
+    await pool.end();
+    pool = undefined;
+  }
 }
 
 export async function submitWorkflowRun(input: {

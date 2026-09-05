@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
 import { trpc } from "@/lib/trpc";
 import {
+  AlertTriangle,
   CalendarDays,
   CheckCheck,
   CirclePlay,
@@ -180,6 +181,7 @@ export default function ProcessWorkbench() {
               ? "审批已通过，后续节点已进入持久化续跑队列。"
               : "审批已通过，流程已完成。"
         );
+      if (result.runId) setSelectedRunId(result.runId);
       setSelectedTaskId(null);
     },
     onError: error => toast.error(error.message),
@@ -417,23 +419,35 @@ export default function ProcessWorkbench() {
               {view === "board" && (
                 <Board
                   dashboard={dashboard.data}
+                  loading={dashboard.isLoading}
+                  error={dashboard.error?.message}
+                  onRetry={() => void dashboard.refetch()}
                   onTask={id => {
                     setView("todo");
                     setSelectedTaskId(id);
                   }}
                 />
               )}
-              {view === "calendar" && (
-                <Calendar
-                  month={month}
-                  setMonth={setMonth}
-                  events={(calendar.data ?? []) as any[]}
-                  onTask={id => {
-                    setView("todo");
-                    setSelectedTaskId(id);
-                  }}
-                />
-              )}
+              {view === "calendar" &&
+                (calendar.isError ? (
+                  <QueryErrorState
+                    title="日历加载失败"
+                    message={calendar.error.message}
+                    onRetry={() => void calendar.refetch()}
+                  />
+                ) : calendar.isLoading ? (
+                  <LoadingState label="正在读取当前月份的流程任务…" />
+                ) : (
+                  <Calendar
+                    month={month}
+                    setMonth={setMonth}
+                    events={(calendar.data ?? []) as any[]}
+                    onTask={id => {
+                      setView("todo");
+                      setSelectedTaskId(id);
+                    }}
+                  />
+                ))}
               {view === "todo" && (
                 <TaskBatchBar
                   count={selectedTaskIds.length}
@@ -452,6 +466,8 @@ export default function ProcessWorkbench() {
                 <TaskList
                   tasks={(tasks.data ?? []) as any[]}
                   loading={tasks.isLoading}
+                  error={tasks.isError ? tasks.error.message : undefined}
+                  onRetry={() => void tasks.refetch()}
                   onTask={setSelectedTaskId}
                   onExecute={setSelectedTaskId}
                   busy={busy}
@@ -470,6 +486,8 @@ export default function ProcessWorkbench() {
                 <InstanceList
                   instances={(instances.data ?? []) as any[]}
                   loading={instances.isLoading}
+                  error={instances.isError ? instances.error.message : undefined}
+                  onRetry={() => void instances.refetch()}
                   onOpenRun={setSelectedRunId}
                 />
               )}
@@ -611,29 +629,30 @@ function TaskBatchBar({
 
 function Board({
   dashboard,
+  loading,
+  error,
+  onRetry,
   onTask,
 }: {
   dashboard: any;
+  loading: boolean;
+  error?: string;
+  onRetry: () => void;
   onTask: (id: string) => void;
 }) {
-  if (!dashboard)
+  if (error)
     return (
-      <div
-        data-process-workbench-loading
-        role="status"
-        aria-live="polite"
-        className="grid min-h-[360px] place-items-center p-6 text-center"
-      >
-        <div>
-          <Loader2 className="mx-auto animate-spin text-[#2d6bea]" size={24} />
-          <p className="mt-3 text-sm font-medium text-slate-700">
-            正在读取已启动流程
-          </p>
-          <p className="mt-1 text-xs text-slate-500">
-            正在加载当前授权范围内的看板统计与最近任务…
-          </p>
-        </div>
-      </div>
+      <QueryErrorState
+        title="看板加载失败"
+        message={error}
+        onRetry={onRetry}
+      />
+    );
+  if (loading || !dashboard)
+    return (
+      <LoadingState
+        label="正在加载当前授权范围内的看板统计与最近任务…"
+      />
     );
   const counts = dashboard?.counts ?? {};
   return (
@@ -719,6 +738,8 @@ function Stat({ icon: Icon, label, value, tone }: any) {
 function TaskList({
   tasks,
   loading,
+  error,
+  onRetry,
   onTask,
   onExecute,
   busy,
@@ -728,6 +749,8 @@ function TaskList({
 }: {
   tasks: any[];
   loading: boolean;
+  error?: string;
+  onRetry: () => void;
   onTask: (id: string) => void;
   onExecute: (id: string) => void;
   busy: boolean;
@@ -746,9 +769,11 @@ function TaskList({
         "操作",
       ]}
     >
-      {loading ? (
+      {error ? (
+        <QueryErrorRow colSpan={selectable ? 6 : 5} message={error} onRetry={onRetry} />
+      ) : loading ? (
         <Loading colSpan={selectable ? 6 : 5} />
-      ) : (
+      ) : tasks.length ? (
         tasks.map(task => (
           <tr key={task.id} className="border-t border-slate-100">
             {selectable && (
@@ -786,8 +811,8 @@ function TaskList({
             <td className="px-4 py-3 text-xs text-slate-400">
               {date(task.createdAt)}
             </td>
-            <td className="px-4 py-3">
-              <div className="flex flex-wrap items-center gap-1">
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="flex items-center gap-1.5">
                 {task.status === "pending" && (
                   <Button
                     type="button"
@@ -813,6 +838,8 @@ function TaskList({
             </td>
           </tr>
         ))
+      ) : (
+        <EmptyRow colSpan={selectable ? 6 : 5} message="当前筛选条件下暂无人工任务。" />
       )}
     </Table>
   );
@@ -821,17 +848,23 @@ function TaskList({
 function InstanceList({
   instances,
   loading,
+  error,
+  onRetry,
   onOpenRun,
 }: {
   instances: any[];
   loading: boolean;
+  error?: string;
+  onRetry: () => void;
   onOpenRun: (id: string) => void;
 }) {
   return (
     <Table headers={["流程实例", "发起人", "状态", "创建时间", "操作"]}>
-      {loading ? (
+      {error ? (
+        <QueryErrorRow colSpan={5} message={error} onRetry={onRetry} />
+      ) : loading ? (
         <Loading />
-      ) : (
+      ) : instances.length ? (
         instances.map(run => (
           <tr key={run.id} className="border-t border-slate-100">
             <td className="px-4 py-3">
@@ -849,8 +882,8 @@ function InstanceList({
             <td className="px-4 py-3 text-xs text-slate-400">
               {date(run.createdAt)}
             </td>
-            <td className="px-4 py-3">
-              <div className="flex flex-col items-start gap-1">
+            <td className="px-4 py-3 whitespace-nowrap">
+              <div className="flex items-center gap-2">
                 {!(run.availableOperations ?? []).length && (
                   <span className="text-[10px] text-slate-400">
                     无可执行操作
@@ -869,8 +902,71 @@ function InstanceList({
             </td>
           </tr>
         ))
+      ) : (
+        <EmptyRow colSpan={5} message="当前筛选条件下暂无流程实例。" />
       )}
     </Table>
+  );
+}
+
+function QueryErrorState({
+  title,
+  message,
+  onRetry,
+}: {
+  title: string;
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div role="alert" className="grid min-h-[260px] place-items-center p-8 text-center">
+      <div className="max-w-md">
+        <AlertTriangle className="mx-auto text-rose-500" size={25} />
+        <p className="mt-3 text-sm font-semibold text-slate-700">{title}</p>
+        <p className="mt-1 break-words text-xs leading-5 text-slate-500">{message || "暂时无法读取数据。"}</p>
+        <Button type="button" variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+          <RotateCcw size={14} /> 重试
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function LoadingState({ label }: { label: string }) {
+  return (
+    <div
+      data-process-workbench-loading
+      role="status"
+      aria-live="polite"
+      className="grid min-h-[260px] place-items-center p-8 text-center"
+    >
+      <div>
+        <Loader2 className="mx-auto animate-spin text-[#2d6bea]" size={24} />
+        <p className="mt-3 text-sm font-medium text-slate-700">正在读取已启动流程</p>
+        <p className="mt-1 text-xs text-slate-500">{label}</p>
+      </div>
+    </div>
+  );
+}
+
+function QueryErrorRow({ colSpan, message, onRetry }: { colSpan: number; message: string; onRetry: () => void }) {
+  return (
+    <tr role="alert">
+      <td colSpan={colSpan} className="p-8 text-center">
+        <AlertTriangle className="mx-auto text-rose-500" size={20} />
+        <p className="mt-2 text-sm font-medium text-slate-700">查询失败</p>
+        <p className="mt-1 break-words text-xs text-slate-500">{message || "暂时无法读取数据。"}</p>
+        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetry}><RotateCcw size={13} />重试</Button>
+      </td>
+    </tr>
+  );
+}
+
+function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="p-8 text-center text-sm text-slate-400">{message}</td>
+    </tr>
   );
 }
 
@@ -883,7 +979,7 @@ function Table({
 }) {
   return (
     <div className="overflow-x-auto p-5">
-      <table className="w-full min-w-[680px] text-left text-sm">
+      <table className="w-full min-w-[760px] text-left text-sm">
         <thead className="bg-slate-50 text-xs text-slate-500">
           <tr>
             {headers.map(header => (

@@ -437,6 +437,7 @@ export const workflowRuns = mysqlTable(
       table.currentStateCode,
       table.status
     ),
+    index("workflow_run_status_idx").on(table.status, table.createdAt),
   ]
 );
 
@@ -1548,28 +1549,40 @@ export const workflowSubflows = mysqlTable(
   ]
 );
 
-export const authorizationAuditLogs = mysqlTable("authorization_audit_log", {
-  id: varchar("id", { length: 36 }).primaryKey(),
-  actorUserId: int("actorUserId").references(() => users.id),
-  targetUserId: int("targetUserId").references(() => users.id),
-  action: mysqlEnum("action", [
-    "login_success",
-    "login_failed",
-    "logout",
-    "user_created",
-    "user_updated",
-    "user_disabled",
-    "role_assigned",
-    "role_revoked",
-    "temporary_role_assigned",
-    "temporary_role_revoked",
-  ]).notNull(),
-  resourceType: varchar("resourceType", { length: 64 }),
-  resourceId: varchar("resourceId", { length: 64 }),
-  detailsJson: json("detailsJson"),
-  requestId: varchar("requestId", { length: 100 }),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-});
+export const authorizationAuditLogs = mysqlTable(
+  "authorization_audit_log",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    actorUserId: int("actorUserId").references(() => users.id),
+    targetUserId: int("targetUserId").references(() => users.id),
+    action: mysqlEnum("action", [
+      "login_success",
+      "login_failed",
+      "logout",
+      "user_created",
+      "user_updated",
+      "user_disabled",
+      "role_assigned",
+      "role_revoked",
+      "temporary_role_assigned",
+      "temporary_role_revoked",
+    ]).notNull(),
+    resourceType: varchar("resourceType", { length: 64 }),
+    resourceId: varchar("resourceId", { length: 64 }),
+    detailsJson: json("detailsJson"),
+    requestId: varchar("requestId", { length: 100 }),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    index("auth_audit_actor_idx").on(table.actorUserId, table.createdAt),
+    index("auth_audit_resource_idx").on(
+      table.resourceType,
+      table.resourceId,
+      table.createdAt
+    ),
+    index("auth_audit_created_idx").on(table.createdAt),
+  ]
+);
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;

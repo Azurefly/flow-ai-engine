@@ -11,6 +11,8 @@ import { serveStatic, setupVite } from "./vite";
 import { handleDataflowScheduleCallback } from "../p2-service";
 import { startWorkflowWorker, stopWorkflowWorker } from "../workflow-worker";
 import { checkReadiness, getRuntimeInfo } from "../runtime-info";
+import { validateEnv } from "./env";
+import { closeSharedPool } from "../db";
 import {
   enforceTrustedOrigin,
   requestCorrelation,
@@ -37,6 +39,7 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 }
 
 async function startServer() {
+  validateEnv();
   const app = express();
   const server = createServer(app);
   app.use(requestCorrelation);
@@ -82,7 +85,14 @@ async function startServer() {
   });
 
   const shutdown = () => {
-    server.close(() => void stopWorkflowWorker());
+    server.close(async () => {
+      try {
+        await stopWorkflowWorker();
+        await closeSharedPool();
+      } catch (err) {
+        console.error("[Shutdown] Error during graceful shutdown:", err);
+      }
+    });
   };
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);

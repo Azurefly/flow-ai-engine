@@ -101,6 +101,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("StructuredRunInput");
     expect(homeSource).toContain("运行字段");
     expect(homeSource).toContain("添加运行字段");
+    expect(homeSource).toContain("当前未填写运行字段");
+    expect(homeSource).toContain("setRunInput({})");
+    expect(homeSource).not.toContain('prompt: "请总结输入内容"');
+    expect(homeSource).not.toContain("id: 2,");
     expect(homeSource).toContain("canRun={canRun}");
     expect(homeSource).not.toContain(
       'className="mt-2 h-20 w-full rounded border border-slate-200 bg-slate-50 p-2 font-mono'
@@ -598,6 +602,8 @@ describe("流程设计器界面回归约束", () => {
     expect(runCenterSource).toContain("workflow.runMetrics.useQuery");
     expect(runCenterSource).toContain("按运行状态筛选");
     expect(runCenterSource).toContain("失败告警");
+    expect(runCenterSource).toContain("trpc.workflow.alerts.useQuery(filter");
+    expect(runCenterSource).toContain("查看运行");
     expect(canvasSource).toContain("REUSE LIBRARY");
     expect(canvasSource).toContain("保存为节点模板");
     expect(canvasSource).toContain("在画布中编辑");
@@ -1021,7 +1027,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).not.toContain("运行输入必须是合法 JSON 对象");
     expect(homeSource).not.toContain("JSON.parse(runInput)");
     expect(homeSource).toContain("useState<Record<string, unknown>>");
-    expect(homeSource).toContain('prompt: "请总结输入内容"');
+    expect(homeSource).not.toContain('prompt: "请总结输入内容"');
     expect(homeSource).toContain("Object.fromEntries");
     expect(processWorkbenchSource).toContain(
       "const payload = createPayload(resultRows)"

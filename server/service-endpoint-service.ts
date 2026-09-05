@@ -1,13 +1,10 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
 import { getProjectAccess, type ProjectUser } from "./project-service";
 
-let pool: mysql.Pool | undefined;
-const db = () => {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
-};
+const db = () => getSharedPool();
 
 const REF_CODE = /^[A-Z][A-Z0-9_]{1,63}$/;
 const SECRET_REF = /^env:FLOW_SECRET_[A-Z0-9_]{2,128}$/;

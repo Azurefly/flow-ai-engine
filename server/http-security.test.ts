@@ -78,4 +78,30 @@ describe("HTTP security boundary", () => {
     enforceTrustedOrigin(context.req, context.res, context.next);
     expect(context.next).toHaveBeenCalledOnce();
   });
+
+  it("validates Referer header when Origin is absent", () => {
+    const untrustedReferer = exchange({
+      headers: { host: "flow.example.com", referer: "https://attacker.example/page" },
+    });
+    untrustedReferer.req.requestId = "trace-referer-1";
+    enforceTrustedOrigin(untrustedReferer.req, untrustedReferer.res, untrustedReferer.next);
+    expect(untrustedReferer.next).not.toHaveBeenCalled();
+    expect(untrustedReferer.res.status).toHaveBeenCalledWith(403);
+
+    const trustedReferer = exchange({
+      headers: { host: "flow.example.com", referer: "https://flow.example.com/editor" },
+    });
+    enforceTrustedOrigin(trustedReferer.req, trustedReferer.res, trustedReferer.next);
+    expect(trustedReferer.next).toHaveBeenCalledOnce();
+  });
+
+  it("rejects cross-site fetch without Origin header", () => {
+    const crossSite = exchange({
+      headers: { host: "flow.example.com", "sec-fetch-site": "cross-site" },
+    });
+    crossSite.req.requestId = "trace-sec-fetch";
+    enforceTrustedOrigin(crossSite.req, crossSite.res, crossSite.next);
+    expect(crossSite.next).not.toHaveBeenCalled();
+    expect(crossSite.res.status).toHaveBeenCalledWith(403);
+  });
 });

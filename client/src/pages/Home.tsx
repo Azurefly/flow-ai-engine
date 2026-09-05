@@ -7,6 +7,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -19,6 +20,8 @@ import {
 } from "../../../shared/console-route";
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
 import type { Definition } from "../../../server/workflow-service";
+import ErrorBoundary from "@/components/ErrorBoundary";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   Activity,
   ArchiveRestore,
@@ -37,11 +40,13 @@ import {
   LockKeyhole,
   LogOut,
   Menu,
+  Moon,
   Play,
   Plus,
   ShieldCheck,
   Search,
   SlidersHorizontal,
+  Sun,
   Upload,
   UsersRound,
   WandSparkles,
@@ -143,7 +148,8 @@ export default function Home() {
     password: "",
   });
   const login = trpc.auth.login.useMutation({
-    onSuccess: () => {
+    onSuccess: user => {
+      if (user) utils.auth.me.setData(undefined, user);
       void utils.auth.me.invalidate();
       toast.success("登录成功，正在进入流程中心。");
     },
@@ -151,6 +157,7 @@ export default function Home() {
   });
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => {
+      utils.auth.me.setData(undefined, null);
       void utils.auth.me.invalidate();
       toast.success("已安全退出。");
     },
@@ -293,6 +300,7 @@ function FlowConsole({
   general: PublicGeneral;
   onLogout: () => void;
 }) {
+  const { theme, toggleTheme } = useTheme();
   const utils = trpc.useUtils();
   const [initialRoute] = useState(readConsoleRoute);
   const [requestedRoute, setRequestedRoute] =
@@ -332,10 +340,9 @@ function FlowConsole({
     null
   );
   const [draftName, setDraftName] = useState("");
-  const [runInput, setRunInput] = useState<Record<string, unknown>>({
-    id: 2,
-    prompt: "请总结输入内容",
-  });
+  // Do not seed production runs with demo data. The designer input panel lets
+  // users add only the fields required by the selected workflow.
+  const [runInput, setRunInput] = useState<Record<string, unknown>>({});
   const [selectedRunId, setSelectedRunId] = useState<string | null>(
     initialRoute.route.section === "runs" &&
       initialRoute.route.view === "monitor"
@@ -684,6 +691,9 @@ function FlowConsole({
     if (selectedWorkflow) {
       setDraftName(selectedWorkflow.name);
       setDraftDefinition(decodeJson(selectedWorkflow.definition) as Definition);
+      // Runtime input belongs to a specific workflow. Never carry fields from a
+      // previously selected workflow into the next execution context.
+      setRunInput({});
     }
   }, [selectedWorkflow?.id]);
 
@@ -783,6 +793,8 @@ function FlowConsole({
     onSuccess: result => {
       void utils.workflow.runs.invalidate();
       void utils.workflow.runMetrics.invalidate();
+      void utils.task.list.invalidate();
+      void utils.task.dashboard.invalidate();
       if (selectedId)
         navigateRoute({
           section: "runs",
@@ -1036,6 +1048,18 @@ function FlowConsole({
             <span className="rounded-sm border border-[#e0e6ee] px-2 py-1 text-slate-600">
               {user.role === "admin" ? "系统管理员" : "成员"}
             </span>
+            {toggleTheme && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-slate-600 hover:bg-[#f2f6fc] hover:text-[#2469c7]"
+                onClick={toggleTheme}
+                title={theme === "dark" ? "切换至浅色模式" : "切换至暗黑模式"}
+              >
+                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
+                <span className="sr-only">切换主题</span>
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -1635,6 +1659,10 @@ function FlowDesigner({
     "owner" | "editor" | "operator" | "viewer"
   >("viewer");
   const [hours, setHours] = useState("");
+  const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
+  const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
   const runtimeModels = trpc.workflow.runtimeModels.useQuery(undefined, {
     staleTime: 60_000,
     retry: false,
@@ -1738,7 +1766,7 @@ function FlowDesigner({
             ) : (
               <FileJson size={14} />
             )}
-            {workflow.status === "published" ? "已发布" : "保存画布"}
+            保存画布
           </Button>
           <Button
             size="sm"
@@ -1777,124 +1805,49 @@ function FlowDesigner({
               </Button>
             </>
           )}
-        </div>
-      </div>
-      <div className="mb-4 min-w-0 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
-        <div className="flex items-center gap-2 font-semibold">
-          <LockKeyhole size={15} />
-          权限感知设计器
-        </div>
-        <p
-          className={`mt-1 text-xs leading-5 ${runtimeModels.isError ? "text-amber-700" : "text-blue-700"}`}
-        >
-          {canEdit
-            ? "你可编辑画布并保存版本。"
-            : "当前为只读授权；仍可查看定义与运行反馈。"}{" "}
-          {runtimeModels.isPending
-            ? "正在读取 LLM 模型目录…"
-            : runtimeModels.isError
-              ? "LLM 运行时当前不可用，请管理员配置 OpenAI 兼容模型提供方后重试。"
-              : `LLM 节点会使用服务端运行时模型目录，当前已发现 ${models.length} 个可用模型。`}
-        </p>
-        <details className="mt-3 min-w-0 rounded border border-blue-200 bg-white/80 p-2 text-[11px]">
-          <summary className="cursor-pointer font-semibold text-blue-900">
-            协作成员与有效期（{members.length}）
-          </summary>
-          <div className="mt-2 grid min-w-0 gap-1.5">
-            {members.map(member => (
-              <div
-                key={member.id}
-                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border border-blue-100 bg-white px-2 py-1.5"
-              >
-                <div className="min-w-0">
-                  <span className="break-words font-medium">
-                    {member.name || member.username || `用户 ${member.userId}`}
-                  </span>
-                  <span className="ml-2 text-blue-600">{member.role}</span>
-                  <p className="mt-0.5 text-[10px] text-slate-400">
-                    生效：{formatTime(member.effectiveFrom)} · 到期：
-                    {member.expiresAt ? formatTime(member.expiresAt) : "长期"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] ${member.revokedAt ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}
-                  >
-                    {member.revokedAt ? "已撤销" : "有效"}
-                  </span>
-                  {canManage && !member.revokedAt && (
-                    <button
-                      type="button"
-                      className="text-[10px] text-red-600 hover:underline"
-                      onClick={() => onRevoke(member.userId, member.role)}
-                    >
-                      撤销
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-            {!members.length && (
-              <span className="text-blue-500">暂无可见协作成员。</span>
-            )}
-          </div>
-        </details>
-        {canManage && (
-          <form
-            className="mt-3 grid min-w-0 gap-2 rounded border border-dashed border-blue-300 bg-white p-2 text-[11px]"
-            onSubmit={event => {
-              event.preventDefault();
-              const userId = Number(candidateId);
-              if (!userId) return;
-              onGrant(userId, memberRole, hours ? Number(hours) : undefined);
-              setCandidateId("");
-              setHours("");
-            }}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            onClick={() => setRunDialogOpen(true)}
+            title="填写运行字段并进行流程测试"
           >
-            <p className="font-semibold text-blue-900">授予流程成员</p>
-            <select
-              className="h-8 min-w-0 max-w-full rounded border border-slate-200 bg-white px-2"
-              value={candidateId}
-              onChange={event => setCandidateId(event.target.value)}
-              required
-            >
-              <option value="">选择内部账号</option>
-              {candidates.map(candidate => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.name || candidate.username}（{candidate.username}）
-                </option>
-              ))}
-            </select>
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-              <select
-                className="h-8 min-w-0 rounded border border-slate-200 bg-white px-2"
-                value={memberRole}
-                onChange={event =>
-                  setMemberRole(event.target.value as typeof memberRole)
-                }
-              >
-                <option value="viewer">查看者</option>
-                <option value="operator">运行者</option>
-                <option value="editor">编辑者</option>
-                <option value="owner">所有者</option>
-              </select>
-              <input
-                className="h-8 min-w-0 rounded border border-slate-200 px-2"
-                type="number"
-                min="1"
-                placeholder="有效期小时（可选）"
-                value={hours}
-                onChange={event => setHours(event.target.value)}
-              />
-            </div>
+            <Play size={14} />
+            运行测试
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setMembersDialogOpen(true)}
+            title="查看和管理流程协作成员与授权"
+          >
+            <UsersRound size={14} />
+            协作成员（{members.length}）
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setGovernanceDialogOpen(true)}
+            title="查看版本快照、差异对比与发布治理"
+          >
+            <ShieldCheck size={14} />
+            版本与发布治理
+          </Button>
+          {canEdit && (
             <Button
-              className="h-8 bg-blue-600 text-xs hover:bg-blue-500"
-              type="submit"
+              type="button"
+              variant="outline"
+              size="sm"
+              className="border-violet-200 text-violet-700 hover:bg-violet-50"
+              onClick={onSaveAsSubflow}
             >
-              授予成员
+              保存当前定义为子流程
             </Button>
-          </form>
-        )}
+          )}
+        </div>
       </div>
       {compileDiagnostics.length > 0 && (
         <section className="mb-3 rounded-xl border border-red-200 bg-red-50 p-3" aria-label="流程编译诊断">
@@ -1916,69 +1869,241 @@ function FlowDesigner({
           </ul>
         </section>
       )}
-      <StructuredRunInput
-        value={runInput}
-        onChange={setRunInput}
-        canRun={canRun}
-        runPending={runPending}
-        onRun={onRun}
-      />
-      <WorkflowCanvas
-        key={`${workflow.id}:${workflow.definitionVersion}`}
-        workflowId={workflow.id}
-        flowType={workflow.flowType ?? "state"}
-        definition={definition}
-        readOnly={!canEdit}
-        onDefinitionChange={onDefinitionChange}
-        templates={templates}
-        subflows={subflows}
-        onSaveTemplate={onCreateTemplate}
-        onUpdateTemplate={onUpdateTemplate}
-        onDeleteTemplate={onDeleteTemplate}
-        onToggleSubflow={onToggleSubflow}
-        onDeleteSubflow={onDeleteSubflow}
-      />
-      {workflow.status === "published" && (
-        <div className="mt-3 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-amber-950">发布治理</p>
-            <p className="mt-1 text-xs leading-5 text-amber-900">
-              取消发布会阻止后续发起，不会删除已有版本、运行实例或节点日志。
+      <ErrorBoundary>
+        <WorkflowCanvas
+          key={`${workflow.id}:${workflow.definitionVersion}`}
+          workflowId={workflow.id}
+          flowType={workflow.flowType ?? "state"}
+          definition={definition}
+          readOnly={!canEdit}
+          onDefinitionChange={onDefinitionChange}
+          templates={templates}
+          subflows={subflows}
+          onSaveTemplate={onCreateTemplate}
+          onUpdateTemplate={onUpdateTemplate}
+          onDeleteTemplate={onDeleteTemplate}
+          onToggleSubflow={onToggleSubflow}
+          onDeleteSubflow={onDeleteSubflow}
+        />
+      </ErrorBoundary>
+
+      <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
+        <DialogContent className="max-w-2xl sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>运行测试与字段配置</DialogTitle>
+            <DialogDescription>
+              按字段填写本次运行输入；数值与 true/false 会自动保留类型，无需编辑 JSON。
+            </DialogDescription>
+          </DialogHeader>
+          <StructuredRunInput
+            value={runInput}
+            onChange={setRunInput}
+            canRun={canRun}
+            runPending={runPending}
+            onRun={() => {
+              onRun();
+              setRunDialogOpen(false);
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
+        <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>流程权限与协作成员</DialogTitle>
+            <DialogDescription>
+              管理流程有效协作人员、到期时间与角色授权。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-w-0 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+            <div className="flex items-center gap-2 font-semibold">
+              <LockKeyhole size={15} />
+              权限感知设计器
+            </div>
+            <p
+              className={`mt-1 text-xs leading-5 ${runtimeModels.isError ? "text-amber-700" : "text-blue-700"}`}
+            >
+              {canEdit
+                ? "你可编辑画布并保存版本。"
+                : "当前为只读授权；仍可查看定义与运行反馈。"}{" "}
+              {runtimeModels.isPending
+                ? "正在读取 LLM 模型目录…"
+                : runtimeModels.isError
+                  ? "LLM 运行时当前不可用，请管理员配置 OpenAI 兼容模型提供方后重试。"
+                  : `LLM 节点会使用服务端运行时模型目录，当前已发现 ${models.length} 个可用模型。`}
             </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-amber-300 text-amber-900 hover:bg-amber-100"
-            disabled={!canPublish || unpublishFlow.isPending}
-            onClick={onUnpublish}
-          >
-            {unpublishFlow.isPending && (
-              <Loader2 className="animate-spin" size={14} />
+            <div className="mt-3 min-w-0 rounded border border-blue-200 bg-white/80 p-2 text-[11px]">
+              <p className="font-semibold text-blue-900 mb-1.5">
+                协作成员与有效期（{members.length}）
+              </p>
+              <div className="mt-2 grid min-w-0 gap-1.5">
+                {members.map(member => (
+                  <div
+                    key={member.id}
+                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border border-blue-100 bg-white px-2 py-1.5"
+                  >
+                    <div className="min-w-0">
+                      <span className="break-words font-medium">
+                        {member.name || member.username || `用户 ${member.userId}`}
+                      </span>
+                      <span className="ml-2 text-blue-600">{member.role}</span>
+                      <p className="mt-0.5 text-[10px] text-slate-400">
+                        生效：{formatTime(member.effectiveFrom)} · 到期：
+                        {member.expiresAt ? formatTime(member.expiresAt) : "长期"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] ${member.revokedAt ? "bg-slate-200 text-slate-600" : "bg-emerald-100 text-emerald-700"}`}
+                      >
+                        {member.revokedAt ? "已撤销" : "有效"}
+                      </span>
+                      {canManage && !member.revokedAt && (
+                        <button
+                          type="button"
+                          className="text-[10px] text-red-600 hover:underline"
+                          onClick={() => onRevoke(member.userId, member.role)}
+                        >
+                          撤销
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {!members.length && (
+                  <span className="text-blue-500">暂无可见协作成员。</span>
+                )}
+              </div>
+            </div>
+            {canManage && (
+              <form
+                className="mt-3 grid min-w-0 gap-2 rounded border border-dashed border-blue-300 bg-white p-2 text-[11px]"
+                onSubmit={event => {
+                  event.preventDefault();
+                  const userId = Number(candidateId);
+                  if (!userId) return;
+                  onGrant(userId, memberRole, hours ? Number(hours) : undefined);
+                  setCandidateId("");
+                  setHours("");
+                }}
+              >
+                <p className="font-semibold text-blue-900">授予流程成员</p>
+                <select
+                  className="h-8 min-w-0 max-w-full rounded border border-slate-200 bg-white px-2"
+                  value={candidateId}
+                  onChange={event => setCandidateId(event.target.value)}
+                  required
+                >
+                  <option value="">选择内部账号</option>
+                  {candidates.map(candidate => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.name || candidate.username}（{candidate.username}）
+                    </option>
+                  ))}
+                </select>
+                <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+                  <select
+                    className="h-8 min-w-0 rounded border border-slate-200 bg-white px-2"
+                    value={memberRole}
+                    onChange={event =>
+                      setMemberRole(event.target.value as typeof memberRole)
+                    }
+                  >
+                    <option value="viewer">查看者</option>
+                    <option value="operator">运行者</option>
+                    <option value="editor">编辑者</option>
+                    <option value="owner">所有者</option>
+                  </select>
+                  <input
+                    className="h-8 min-w-0 rounded border border-slate-200 px-2"
+                    type="number"
+                    min="1"
+                    placeholder="有效期小时（可选）"
+                    value={hours}
+                    onChange={event => setHours(event.target.value)}
+                  />
+                </div>
+                <Button
+                  className="h-8 bg-blue-600 text-xs hover:bg-blue-500"
+                  type="submit"
+                >
+                  授予成员
+                </Button>
+              </form>
             )}
-            取消发布
-          </Button>
-        </div>
-      )}
-      {canEdit && (
-        <div className="mt-3 flex justify-end">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-violet-200 text-violet-700 hover:bg-violet-50"
-            onClick={onSaveAsSubflow}
-          >
-            保存当前定义为子流程
-          </Button>
-        </div>
-      )}
-      <WorkflowGovernance
-        workflowId={workflow.id}
-        canEdit={canEdit}
-        canPublish={canPublish}
-      />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={governanceDialogOpen} onOpenChange={setGovernanceDialogOpen}>
+        <DialogContent className="max-w-5xl sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>流程版本治理与生命周期</DialogTitle>
+            <DialogDescription>
+              版本快照差异比对、安全回滚与发布治理；每项状态均来自当前流程真实数据。
+            </DialogDescription>
+          </DialogHeader>
+          {workflow.status === "published" && (
+            <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-amber-950">发布治理</p>
+                <p className="mt-1 text-xs leading-5 text-amber-900">
+                  取消发布会阻止后续发起，历史版本与运行审计已保留。
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-amber-300 text-amber-900 hover:bg-amber-100"
+                disabled={!canPublish || unpublishFlow.isPending}
+                onClick={onUnpublish}
+              >
+                {unpublishFlow.isPending && (
+                  <Loader2 className="animate-spin" size={14} />
+                )}
+                取消发布
+              </Button>
+            </div>
+          )}
+          <WorkflowGovernance
+            workflowId={workflow.id}
+            canEdit={canEdit}
+            canPublish={canPublish}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={subflowDialogOpen} onOpenChange={setSubflowDialogOpen}>
+        <DialogContent className="max-w-md sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>保存当前定义为子流程</DialogTitle>
+            <DialogDescription>
+              将当前画布定义保存为专属私有子流程，可在其他流程中复用。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-2 flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSubflowDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              className="bg-violet-600 hover:bg-violet-500 text-white"
+              onClick={() => {
+                onSaveAsSubflow();
+                setSubflowDialogOpen(false);
+              }}
+            >
+              确认保存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2009,11 +2134,18 @@ function StructuredRunInput({
       value: String(item ?? ""),
     }));
   const [rows, setRows] = useState(() => toRows(value));
+  const isInternalUpdate = useRef(false);
+
   useEffect(() => {
+    if (isInternalUpdate.current) {
+      isInternalUpdate.current = false;
+      return;
+    }
     setRows(toRows(value));
   }, [value]);
   const update = (next: Array<{ key: string; value: string }>) => {
     setRows(next);
+    isInternalUpdate.current = true;
     onChange(
       Object.fromEntries(
         next
@@ -2033,11 +2165,15 @@ function StructuredRunInput({
           运行字段
         </p>
         <p className="mt-1 text-[11px] leading-5 text-slate-500">
-          按字段填写本次运行输入；数值与 true/false 会自动保留类型，无需编辑
-          JSON。
+          当前流程未提供可读取的入口字段 schema；请按业务约定填写字段名和值。数值与 true/false 会自动保留类型，无需编辑 JSON。
         </p>
       </div>
       <div className="mt-3 grid min-w-0 gap-2">
+        {!rows.length && (
+          <div role="status" className="rounded border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-[11px] leading-5 text-slate-500">
+            当前未填写运行字段；如该流程不需要输入，可直接运行，否则请先按业务约定添加字段。
+          </div>
+        )}
         {rows.map((row, index) => (
           <div
             key={index}
@@ -2093,19 +2229,21 @@ function StructuredRunInput({
           + 添加运行字段
         </button>
       </div>
-      <Button
-        className="mt-3 w-full bg-blue-600 hover:bg-blue-500"
-        size="sm"
-        disabled={!canRun || runPending}
-        onClick={onRun}
-      >
-        {runPending ? (
-          <Loader2 className="animate-spin" size={14} />
-        ) : (
-          <Play size={14} />
-        )}
-        后端运行
-      </Button>
+      <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
+        <Button
+          className="bg-[#2d6bea] text-white hover:bg-[#255bc8]"
+          size="sm"
+          disabled={!canRun || runPending}
+          onClick={onRun}
+        >
+          {runPending ? (
+            <Loader2 className="animate-spin" size={14} />
+          ) : (
+            <Play size={14} />
+          )}
+          立即运行测试
+        </Button>
+      </div>
     </section>
   );
 }

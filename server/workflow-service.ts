@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import {
   getWorkflowAccess,
   hasSystemPermission,
@@ -45,11 +46,7 @@ export function assertProjectServiceTaskReferences(definition: Definition) {
   }
 }
 const id = () => randomBytes(12).toString("base64url");
-let pool: mysql.Pool | undefined;
-const db = () => {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
-};
+const db = () => getSharedPool();
 export const emptyDefinition = (): Definition => ({
   schemaVersion: 1,
   viewport: { x: 0, y: 0, zoom: 1 },
@@ -263,7 +260,7 @@ async function resolveSubflowReferences(
 export async function listWorkflows(user: WorkflowUser) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     user.role === "admin"
-      ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL ORDER BY w.updatedAt DESC"
+      ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL ORDER BY w.updatedAt DESC LIMIT 200"
       : `SELECT DISTINCT w.* FROM workflow w
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
           LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
@@ -271,7 +268,8 @@ export async function listWorkflows(user: WorkflowUser) {
           LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
           LEFT JOIN permission p ON p.id=rp.permissionId
          WHERE w.archivedAt IS NULL AND (w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.code='workflow:view')
-         ORDER BY w.updatedAt DESC`,
+         ORDER BY w.updatedAt DESC
+         LIMIT 200`,
     user.role === "admin" ? [] : [user.id, user.id, user.id, user.id]
   );
   return rows.map(hydrateWorkflow);

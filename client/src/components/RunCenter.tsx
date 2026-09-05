@@ -8,6 +8,7 @@ import {
   Clock3,
   Filter,
   Loader2,
+  RotateCcw,
   XCircle,
 } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -89,7 +90,8 @@ export default function RunCenter({
     enabled: Boolean(workflowId),
     refetchInterval: 5_000,
   });
-  const alerts = trpc.workflow.alerts.useQuery(undefined, {
+  const alerts = trpc.workflow.alerts.useQuery(filter, {
+    enabled: Boolean(workflowId),
     refetchInterval: 10_000,
   });
   const markRead = trpc.workflow.markAlertRead.useMutation({
@@ -123,9 +125,10 @@ export default function RunCenter({
     },
     onError: error => window.alert(error.message),
   });
-  const workflowAlerts = (alerts.data ?? []).filter(
-    (alert: any) => alert.workflowId === workflowId
-  );
+  const workflowAlerts = (alerts.data ?? []) as any[];
+  const queryError = runs.error?.message || metrics.error?.message || alerts.error?.message;
+  const queryLoading = runs.isLoading || metrics.isLoading || alerts.isLoading;
+  const metricsUnavailable = metrics.isLoading || metrics.isError || !metrics.data;
   const controlPending =
     cancelRun.isPending ||
     terminateRun.isPending ||
@@ -218,34 +221,43 @@ export default function RunCenter({
           </Button>
         </div>
       </section>
+      {queryLoading && !queryError && (
+        <div role="status" className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-500"><Loader2 size={14} className="animate-spin" />正在读取运行分析数据…</div>
+      )}
+      {queryError && (
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+          <div><p className="font-semibold">运行数据加载失败</p><p className="mt-1 break-words text-xs text-rose-700">{queryError}</p></div>
+          <Button type="button" variant="outline" size="sm" onClick={() => { void runs.refetch(); void metrics.refetch(); void alerts.refetch(); }}><RotateCcw size={14} />重试</Button>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="总运行"
-          value={metrics.data?.totalRuns ?? 0}
+          value={metricsUnavailable ? "—" : metrics.data.totalRuns}
           icon={BarChart3}
           tone="blue"
         />
         <MetricCard
           label="成功"
-          value={metrics.data?.successfulRuns ?? 0}
+          value={metricsUnavailable ? "—" : metrics.data.successfulRuns}
           icon={CheckCircle2}
           tone="emerald"
         />
         <MetricCard
           label="失败"
-          value={metrics.data?.failedRuns ?? 0}
+          value={metricsUnavailable ? "—" : metrics.data.failedRuns}
           icon={XCircle}
           tone="red"
         />
         <MetricCard
           label="失败率"
-          value={`${metrics.data?.failureRate ?? 0}%`}
+          value={metricsUnavailable ? "—" : `${metrics.data.failureRate}%`}
           icon={AlertTriangle}
           tone="amber"
         />
         <MetricCard
           label="平均耗时"
-          value={`${metrics.data?.averageDurationMs ?? 0} ms`}
+          value={metricsUnavailable ? "—" : `${metrics.data.averageDurationMs} ms`}
           icon={Clock3}
           tone="slate"
         />
@@ -261,7 +273,9 @@ export default function RunCenter({
           </span>
         </div>
         <div className="max-h-48 overflow-y-auto">
-          {workflowAlerts.map((alert: any) => (
+          {alerts.isLoading ? (
+            <p role="status" className="p-4 text-center text-xs text-slate-400">正在读取失败告警…</p>
+          ) : workflowAlerts.map((alert: any) => (
             <div
               key={alert.id}
               className={`flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center ${alert.readAt ? "text-slate-400" : "text-slate-700"}`}
@@ -276,21 +290,32 @@ export default function RunCenter({
                   {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"} ms
                 </p>
               </div>
-              {!alert.readAt && (
+              <div className="flex shrink-0 flex-wrap gap-2">
                 <Button
                   type="button"
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs"
-                  disabled={markRead.isPending}
-                  onClick={() => markRead.mutate({ alertId: alert.id })}
+                  onClick={() => onSelect(String(alert.runId))}
                 >
-                  标记已读
+                  查看运行
                 </Button>
-              )}
+                {!alert.readAt && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={markRead.isPending}
+                    onClick={() => markRead.mutate({ alertId: alert.id })}
+                  >
+                    标记已读
+                  </Button>
+                )}
+              </div>
             </div>
           ))}
-          {!workflowAlerts.length && (
+          {!alerts.isLoading && !alerts.isError && !workflowAlerts.length && (
             <p className="p-4 text-center text-xs text-slate-400">
               当前筛选范围内没有失败告警。
             </p>

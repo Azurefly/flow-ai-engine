@@ -83,18 +83,40 @@ export function enforceTrustedOrigin(
   }
 
   const origin = req.get("origin");
-  if (!origin) {
-    next();
-    return;
+  let normalizedOrigin: string | null = null;
+
+  if (origin) {
+    try {
+      normalizedOrigin = new URL(origin).origin;
+    } catch {
+      res
+        .status(403)
+        .json({ error: "请求来源格式无效。", requestId: req.requestId });
+      return;
+    }
+  } else {
+    const referer = req.get("referer");
+    if (referer) {
+      try {
+        normalizedOrigin = new URL(referer).origin;
+      } catch {
+        res
+          .status(403)
+          .json({ error: "请求来源格式无效。", requestId: req.requestId });
+        return;
+      }
+    }
   }
 
-  let normalizedOrigin: string;
-  try {
-    normalizedOrigin = new URL(origin).origin;
-  } catch {
-    res
-      .status(403)
-      .json({ error: "请求来源格式无效。", requestId: req.requestId });
+  if (!normalizedOrigin) {
+    const secFetchSite = req.get("sec-fetch-site");
+    if (secFetchSite === "cross-site") {
+      res
+        .status(403)
+        .json({ error: "跨站请求未携带来源头。", requestId: req.requestId });
+      return;
+    }
+    next();
     return;
   }
 

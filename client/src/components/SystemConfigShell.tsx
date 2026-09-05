@@ -268,17 +268,17 @@ function DomainSettings() {
         <table className="w-full min-w-[650px] text-left text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500">
             <tr>
-              <th className="px-4 py-3">代号</th>
-              <th className="px-4 py-3">名称 / 说明</th>
-              <th className="px-4 py-3">创建人</th>
-              <th className="px-4 py-3">状态</th>
-              <th className="px-4 py-3">操作</th>
+              <th className="px-4 py-3 whitespace-nowrap">代号</th>
+              <th className="px-4 py-3 whitespace-nowrap">名称 / 说明</th>
+              <th className="px-4 py-3 whitespace-nowrap">创建人</th>
+              <th className="px-4 py-3 whitespace-nowrap">状态</th>
+              <th className="px-4 py-3 whitespace-nowrap">操作</th>
             </tr>
           </thead>
           <tbody>
             {(domains.data ?? []).map((domain: any) => (
               <tr key={domain.id} className="border-t border-slate-100">
-                <td className="px-4 py-3 font-mono text-xs text-[#245fc8]">{domain.code}</td>
+                <td className="px-4 py-3 font-mono text-xs text-[#245fc8] whitespace-nowrap">{domain.code}</td>
                 <td className="px-4 py-3">
                   <p className="font-medium text-slate-800">{domain.name}</p>
                   <p className="mt-1 text-xs text-slate-400">{domain.description || "未填写说明"}</p>

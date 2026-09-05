@@ -166,7 +166,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-7).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-8).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -174,8 +174,9 @@ describe("database migration integrity", () => {
       "0028_durable_dataflow_worker",
       "0029_dataflow_artifact_lineage",
       "0030_data_source_test_jobs",
+      "0031_audit_and_run_indexes",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(30);
+    expect(journal.entries.at(-1)?.idx).toBe(31);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain(

@@ -20,7 +20,9 @@ import {
   FolderOpen,
   FolderPlus,
   Image,
+  Loader2,
   MoreHorizontal,
+  RotateCcw,
   Search,
   Trash2,
   Upload,
@@ -59,6 +61,13 @@ type DeleteTarget =
   | { kind: "folder"; folder: Folder }
   | { kind: "workflow"; workflow: WarehouseWorkflow }
   | null;
+
+type ImportResult = {
+  index: number;
+  name: string;
+  success: boolean;
+  message: string;
+};
 
 function FlowBadge({ type }: { type: string }) {
   const styles: Record<string, string> = {
@@ -349,7 +358,7 @@ export default function WorkflowWarehouse({
               流程仓库
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              在项目目录树中检索、归档、预览、批量导入和导出状态、控制与数据流程。
+              在项目目录树中检索、归档、预览、批量导入和导出状态、控制流程；数据流请前往数据资源中心管理。
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -381,6 +390,15 @@ export default function WorkflowWarehouse({
             </select>
           </div>
         </div>
+        {warehouse.isError && (
+          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+            <div><p className="font-semibold">流程仓库加载失败</p><p className="mt-1 break-words text-xs text-rose-700">{warehouse.error.message}</p></div>
+            <Button type="button" variant="outline" size="sm" onClick={() => void warehouse.refetch()}><RotateCcw size={14} />重试</Button>
+          </div>
+        )}
+        {warehouse.isLoading && (
+          <div role="status" className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" />正在读取流程仓库…</div>
+        )}
         {showArchived ? (
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-100 p-4">
@@ -390,7 +408,17 @@ export default function WorkflowWarehouse({
               </p>
             </div>
             <div className="divide-y divide-slate-100">
-              {restorableWorkflows.map(workflow => (
+              {archivedWorkflows.isError && (
+                <div role="alert" className="p-8 text-center">
+                  <p className="text-sm font-semibold text-slate-700">归档流程加载失败</p>
+                  <p className="mt-1 break-words text-xs text-slate-500">{archivedWorkflows.error.message}</p>
+                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void archivedWorkflows.refetch()}><RotateCcw size={14} />重试</Button>
+                </div>
+              )}
+              {archivedWorkflows.isLoading && (
+                <div role="status" className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" />正在读取归档流程…</div>
+              )}
+              {!archivedWorkflows.isLoading && !archivedWorkflows.isError && restorableWorkflows.map(workflow => (
                 <div
                   key={workflow.id}
                   className="flex flex-wrap items-center justify-between gap-3 p-4"
@@ -428,7 +456,7 @@ export default function WorkflowWarehouse({
                   )}
                 </div>
               ))}
-              {!archivedWorkflows.isLoading && !restorableWorkflows.length && (
+              {!archivedWorkflows.isLoading && !archivedWorkflows.isError && !restorableWorkflows.length && (
                 <div className="p-10 text-center text-sm text-slate-400">
                   当前项目暂无可恢复归档流程。
                 </div>
@@ -656,7 +684,7 @@ export default function WorkflowWarehouse({
                       )}
                     </div>
                   ))}
-                  {!visibleWorkflows.length && (
+                  {!warehouse.isLoading && !warehouse.isError && !visibleWorkflows.length && (
                     <div className="grid min-h-64 place-items-center p-8 text-center">
                       <div>
                         <FolderClosed

@@ -2,19 +2,13 @@ import mysql from "mysql2/promise";
 import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
+import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0030_data_source_test_jobs";
-export const DATABASE_MIGRATION_EPOCH = 1787673600000;
-
-let pool: mysql.Pool | undefined;
+export const DATABASE_MIGRATION_VERSION = "0031_audit_and_run_indexes";
+export const DATABASE_MIGRATION_EPOCH = 1787677200000;
 
 function db() {
-  if (!process.env.DATABASE_URL)
-    throw new Error("DATABASE_URL is not configured");
-  return (pool ??= mysql.createPool({
-    uri: process.env.DATABASE_URL,
-    connectionLimit: 2,
-  }));
+  return getSharedPool();
 }
 
 export function getCapabilityStatus() {

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
 import { getP1SystemSettings, type ReviewerMode } from "./p1-service";
 import {
@@ -20,11 +21,7 @@ export type ProjectPermission =
   | "project:workflow:run";
 
 const id = () => randomBytes(12).toString("base64url");
-let pool: mysql.Pool | undefined;
-const db = () => {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
-};
+const db = () => getSharedPool();
 
 const rolePermissions: Record<ProjectMemberRole, readonly ProjectPermission[]> =
   {

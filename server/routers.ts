@@ -1774,7 +1774,30 @@ export const appRouter = router({
           throw new Error("无权查看流程运行分析。");
         return getWorkflowRunMetrics(input.workflowId, input);
       }),
-    alerts: protectedProcedure.query(({ ctx }) => listRunAlerts(ctx.user)),
+    alerts: protectedProcedure
+      .input(
+        z
+          .object({
+            workflowId: z.string().min(8).max(64).optional(),
+            status: z
+              .enum([
+                "queued",
+                "running",
+                "waiting",
+                "blocked",
+                "success",
+                "failed",
+                "cancelled",
+                "terminated",
+              ])
+              .optional(),
+            from: z.coerce.date().optional(),
+            to: z.coerce.date().optional(),
+            triggeredByUserId: z.number().int().positive().optional(),
+          })
+          .optional()
+      )
+      .query(({ ctx, input }) => listRunAlerts(ctx.user, input ?? {})),
     markAlertRead: protectedProcedure
       .input(z.object({ alertId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => ({

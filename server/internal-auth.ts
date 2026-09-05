@@ -2,17 +2,15 @@ import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from "node:util";
 import mysql from "mysql2/promise";
 import type { User } from "../drizzle/schema";
+import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_MAX_SECONDS = 60 * 60 * 24 * 7;
 export const FLOW_SESSION_COOKIE = "flow_session";
 
-let pool: mysql.Pool | undefined;
 function db() {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  pool ??= mysql.createPool(process.env.DATABASE_URL);
-  return pool;
+  return getSharedPool();
 }
 
 const tokenHash = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -69,6 +67,9 @@ export async function logout(token?: string, actorUserId?: number) {
 export async function listUsers() { const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,username,name,email,role,status,lastSignedIn,createdAt FROM users ORDER BY createdAt DESC"); return rows; }
 export async function createUser(values: { username: string; password: string; name: string; email?: string | null; role?: "user" | "admin" }) {
   if (values.password.length < 12) throw new Error("密码至少需要 12 位。");
+  if (!/[a-zA-Z]/.test(values.password) || !/[0-9\W_]/.test(values.password)) {
+    throw new Error("密码需包含字母以及数字或特殊符号。");
+  }
   const username = values.username.trim().toLowerCase();
   if (!/^[a-z][a-z0-9._-]{2,63}$/.test(username)) throw new Error("用户名格式无效。");
   const passwordHash = await hashPassword(values.password);

@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
+import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
 import { getProjectAccess, type ProjectUser } from "./project-service";
 import {
@@ -45,11 +46,7 @@ export function injectDataflowWorkerFault(point: DataflowWorkerFaultPoint) {
   )
     throw new DataflowWorkerInjectedCrash(point);
 }
-let pool: mysql.Pool | undefined;
-const db = () => {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
-};
+const db = () => getSharedPool();
 
 async function recordScheduleAudit(input: {
   actorUserId: number;

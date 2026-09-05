@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { currentRequestId } from "./_core/http-security";
+import { getSharedPool } from "./db";
 
 export const WORKFLOW_PERMISSIONS = ["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage"] as const;
 
@@ -106,11 +107,9 @@ const projectMemberWorkflowPermissions: Record<ProjectMemberRole, readonly Workf
   viewer: ["workflow:view"],
 };
 
-let pool: mysql.Pool | undefined;
 let catalogInitialization: Promise<void> | undefined;
 function db() {
-  if (!process.env.DATABASE_URL) throw new Error("数据库连接未配置。");
-  return (pool ??= mysql.createPool(process.env.DATABASE_URL));
+  return getSharedPool();
 }
 
 export function isActiveWindow(effectiveFrom: Date, expiresAt: Date | null, revokedAt: Date | null, now = new Date()) {
