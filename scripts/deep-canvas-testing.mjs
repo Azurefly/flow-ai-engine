@@ -252,6 +252,59 @@ async function main() {
   });
   console.log(`✓ Created service endpoint HTTPBIN_API in Control Project.\n`);
 
+  // Create data source and assets in Data Project
+  const testSource = await admin.mutate("data.createSource", {
+    projectId: dataPrj.id,
+    name: "测试内联数据源",
+    sourceType: "inline",
+    connection: { records: [] },
+  });
+
+  const ordersAsset = await admin.mutate("data.createAsset", {
+    projectId: dataPrj.id,
+    sourceId: testSource.id,
+    name: "测试订单数据资产",
+    assetType: "dataset",
+    schema: [
+      { name: "orderId", type: "string" },
+      { name: "amount", type: "number" },
+      { name: "status", type: "string" },
+      { name: "dept", type: "string" },
+    ],
+    sample: [
+      { orderId: "ORD_01", amount: 150, status: "paid", dept: "IT" },
+      { orderId: "ORD_02", amount: 40, status: "unpaid", dept: "HR" },
+      { orderId: "ORD_03", amount: 280, status: "paid", dept: "IT" },
+      { orderId: "ORD_04", amount: 90, status: "paid", dept: "HR" },
+    ],
+  });
+
+  const usersAsset = await admin.mutate("data.createAsset", {
+    projectId: dataPrj.id,
+    sourceId: testSource.id,
+    name: "测试用户数据资产",
+    assetType: "dataset",
+    schema: [
+      { name: "uid", type: "number" },
+      { name: "name", type: "string" },
+      { name: "email", type: "string" },
+      { name: "age", type: "number" },
+    ],
+    sample: [
+      { uid: 1, name: "Alice", email: "alice@example.com", age: 32 },
+      { uid: 2, name: "Bob", email: "bob@example.com", age: 24 },
+      { uid: 3, name: "Charlie", email: "charlie@example.com", age: 45 },
+    ],
+  });
+
+  const testUdf = await admin.mutate("data.createUdf", {
+    projectId: dataPrj.id,
+    name: "测试清洗函数",
+    udfType: "javascript",
+    description: "格式化输出",
+  });
+  console.log(`✓ Data assets, source, and UDF registered in Data Project.\n`);
+
   // Helper to create, audit, publish workflow
   async function setupWorkflow(projectId, flowType, code, name, rawDefinition) {
     const definition = JSON.parse(JSON.stringify(rawDefinition));
@@ -885,20 +938,15 @@ async function main() {
   // ========================================================================
 
   await recordRound(16, "数据流程 - 基础处理管线 (Source -> Filter -> Sink)", "数据流程 (data)", ["start", "source", "filter", "sink", "end"], async () => {
-    const rawData = [
-      { orderId: "ORD_01", amount: 150, status: "paid" },
-      { orderId: "ORD_02", amount: 40, status: "unpaid" },
-      { orderId: "ORD_03", amount: 280, status: "paid" },
-    ];
     const def = {
       schemaVersion: 1,
       viewport: { x: 0, y: 0, zoom: 1 },
       settings: {},
       nodes: [
         { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
-        { id: "src", type: "source", name: "原始订单数据", position: { x: 200, y: 0 }, config: { dataset: rawData } },
+        { id: "src", type: "source", name: "原始订单数据", position: { x: 200, y: 0 }, config: { assetId: ordersAsset.id } },
         { id: "flt", type: "filter", name: "过滤已支付", position: { x: 400, y: 0 }, config: { filterField: "status", filterValue: "paid" } },
-        { id: "snk", type: "sink", name: "输出结果表", position: { x: 600, y: 0 }, config: { outputName: "paid_orders" } },
+        { id: "snk", type: "sink", name: "输出结果表", position: { x: 600, y: 0 }, config: { writeMode: "audit_only", idempotencyKey: "SINK_R16", outputName: "paid_orders" } },
         { id: "end", type: "end", name: "结束", position: { x: 800, y: 0 }, config: {} },
       ],
       edges: [
@@ -912,29 +960,25 @@ async function main() {
     const dataRun = await admin.mutate("data.run", {
       projectId: dataPrj.id,
       workflowId: wf.id,
-      data: { inlineSource: rawData }
+      data: {}
     });
     assert(dataRun?.runId, "Dataflow run submission failed");
 
-    return `Dataflow run ${dataRun.runId.slice(0, 8)} executed: source[3] -> filter[paid] -> sink`;
+    return `Dataflow run ${dataRun.runId.slice(0, 8)} executed: source -> filter[paid] -> sink`;
   });
 
   await recordRound(17, "数据流程 - 列投影与字段派生 (Project -> Derive -> Transform)", "数据流程 (data)", ["source", "project", "derive", "transform", "sink"], async () => {
-    const rawData = [
-      { id: 1, item: "Keyboard", price: 299, count: 2, junkField: "abc" },
-      { id: 2, item: "Mouse", price: 159, count: 5, junkField: "xyz" },
-    ];
     const def = {
       schemaVersion: 1,
       viewport: { x: 0, y: 0, zoom: 1 },
       settings: {},
       nodes: [
         { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
-        { id: "src", type: "source", name: "商品销量", position: { x: 150, y: 0 }, config: { dataset: rawData } },
-        { id: "prj", type: "project", name: "精简字段", position: { x: 300, y: 0 }, config: { columns: ["id", "item", "price", "count"] } },
-        { id: "drv", type: "derive", name: "派生小计金额", position: { x: 450, y: 0 }, config: { deriveField: "subtotal", expression: "row.price * row.count" } },
-        { id: "trf", type: "transform", name: "大写转换", position: { x: 600, y: 0 }, config: { uppercaseField: "item" } },
-        { id: "snk", type: "sink", name: "输出结果表", position: { x: 750, y: 0 }, config: { outputName: "derived_items" } },
+        { id: "src", type: "source", name: "商品销量", position: { x: 150, y: 0 }, config: { assetId: ordersAsset.id } },
+        { id: "prj", type: "project", name: "精简字段", position: { x: 300, y: 0 }, config: { fields: [{ source: "orderId", target: "orderId" }, { source: "amount", target: "amount" }] } },
+        { id: "drv", type: "derive", name: "派生税费", position: { x: 450, y: 0 }, config: { fields: [{ name: "tax", expression: "15" }] } },
+        { id: "trf", type: "transform", name: "大写转换", position: { x: 600, y: 0 }, config: { uppercaseField: "orderId" } },
+        { id: "snk", type: "sink", name: "输出结果表", position: { x: 750, y: 0 }, config: { writeMode: "audit_only", idempotencyKey: "SINK_R17", outputName: "derived_items" } },
         { id: "end", type: "end", name: "结束", position: { x: 900, y: 0 }, config: {} },
       ],
       edges: [
@@ -950,26 +994,24 @@ async function main() {
     const dataRun = await admin.mutate("data.run", {
       projectId: dataPrj.id,
       workflowId: wf.id,
-      data: { dataset: rawData }
+      data: {}
     });
     assert(dataRun?.runId, "Derive dataflow execution failed");
 
-    return `Dataflow run ${dataRun.runId.slice(0, 8)}: projected 4 columns, derived subtotal, transformed item`;
+    return `Dataflow run ${dataRun.runId.slice(0, 8)}: projected columns, derived tax, transformed item`;
   });
 
   await recordRound(18, "数据流程 - 双输入源关联与数据集并集 (Join & Union)", "数据流程 (data)", ["source", "join", "union", "sink"], async () => {
-    const users = [{ uid: 1, name: "Alice" }, { uid: 2, name: "Bob" }];
-    const orders = [{ oid: "O1", uid: 1, item: "Monitor" }, { oid: "O2", uid: 2, item: "Desk" }];
     const def = {
       schemaVersion: 1,
       viewport: { x: 0, y: 0, zoom: 1 },
       settings: {},
       nodes: [
         { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
-        { id: "src_u", type: "source", name: "用户数据源", position: { x: 200, y: -80 }, config: { dataset: users } },
-        { id: "src_o", type: "source", name: "订单数据源", position: { x: 200, y: 80 }, config: { dataset: orders } },
-        { id: "join1", type: "join", name: "内关联", position: { x: 450, y: 0 }, config: { leftKey: "uid", rightKey: "uid", joinType: "inner" } },
-        { id: "snk", type: "sink", name: "输出关联合并表", position: { x: 700, y: 0 }, config: { outputName: "user_orders_joined" } },
+        { id: "src_u", type: "source", name: "用户数据源", position: { x: 200, y: -80 }, config: { assetId: usersAsset.id } },
+        { id: "src_o", type: "source", name: "订单数据源", position: { x: 200, y: 80 }, config: { assetId: ordersAsset.id } },
+        { id: "join1", type: "join", name: "内关联", position: { x: 450, y: 0 }, config: { leftKeys: ["uid"], rightKeys: ["uid"], kind: "inner" } },
+        { id: "snk", type: "sink", name: "输出关联合并表", position: { x: 700, y: 0 }, config: { writeMode: "audit_only", idempotencyKey: "SINK_R18", outputName: "user_orders_joined" } },
         { id: "end", type: "end", name: "结束", position: { x: 900, y: 0 }, config: {} },
       ],
       edges: [
@@ -985,7 +1027,7 @@ async function main() {
     const dataRun = await admin.mutate("data.run", {
       projectId: dataPrj.id,
       workflowId: wf.id,
-      data: { users, orders }
+      data: {}
     });
     assert(dataRun?.runId, "Join dataflow execution failed");
 
@@ -993,24 +1035,17 @@ async function main() {
   });
 
   await recordRound(19, "数据流程 - 分组聚合、去重与排序 (Aggregate, Deduplicate, Sort)", "数据流程 (data)", ["source", "deduplicate", "aggregate", "sort", "sink"], async () => {
-    const raw = [
-      { dept: "IT", spend: 100 },
-      { dept: "HR", spend: 80 },
-      { dept: "IT", spend: 200 },
-      { dept: "HR", spend: 80 }, // Duplicate
-      { dept: "OPS", spend: 150 },
-    ];
     const def = {
       schemaVersion: 1,
       viewport: { x: 0, y: 0, zoom: 1 },
       settings: {},
       nodes: [
         { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
-        { id: "src", type: "source", name: "部门支出流水", position: { x: 150, y: 0 }, config: { dataset: raw } },
-        { id: "dedup", type: "deduplicate", name: "流水去重", position: { x: 300, y: 0 }, config: { keys: ["dept", "spend"] } },
-        { id: "agg", type: "aggregate", name: "按部门汇总支出", position: { x: 500, y: 0 }, config: { groupBy: "dept", aggregations: [{ field: "spend", op: "sum", as: "totalSpend" }] } },
-        { id: "srt", type: "sort", name: "按支出降序", position: { x: 700, y: 0 }, config: { sortField: "totalSpend", sortOrder: "desc" } },
-        { id: "snk", type: "sink", name: "输出汇总表", position: { x: 900, y: 0 }, config: { outputName: "dept_spend_summary" } },
+        { id: "src", type: "source", name: "部门支出流水", position: { x: 150, y: 0 }, config: { assetId: ordersAsset.id } },
+        { id: "dedup", type: "deduplicate", name: "流水去重", position: { x: 300, y: 0 }, config: { keys: ["orderId"] } },
+        { id: "agg", type: "aggregate", name: "按部门汇总支出", position: { x: 500, y: 0 }, config: { groupBy: ["dept"], metrics: [{ field: "amount", op: "sum", as: "totalAmount" }] } },
+        { id: "srt", type: "sort", name: "按支出降序", position: { x: 700, y: 0 }, config: { fields: [{ field: "totalAmount", order: "desc" }] } },
+        { id: "snk", type: "sink", name: "输出汇总表", position: { x: 900, y: 0 }, config: { writeMode: "audit_only", idempotencyKey: "SINK_R19", outputName: "dept_spend_summary" } },
         { id: "end", type: "end", name: "结束", position: { x: 1100, y: 0 }, config: {} },
       ],
       edges: [
@@ -1026,7 +1061,7 @@ async function main() {
     const dataRun = await admin.mutate("data.run", {
       projectId: dataPrj.id,
       workflowId: wf.id,
-      data: { records: raw }
+      data: {}
     });
     assert(dataRun?.runId, "Aggregate dataflow execution failed");
 
@@ -1034,22 +1069,17 @@ async function main() {
   });
 
   await recordRound(20, "数据流程 - 质量规则门禁与 SQL/UDF 运算 (Quality Gate, SQL, UDF)", "数据流程 (data)", ["source", "quality_gate", "edit_sql", "udf", "sink"], async () => {
-    const raw = [
-      { id: 1, name: "Alice", age: 32, email: "alice@example.com" },
-      { id: 2, name: "Bob", age: 16, email: "bob@example.com" }, // under 18
-      { id: 3, name: "Charlie", age: 45, email: "charlie@example.com" },
-    ];
     const def = {
       schemaVersion: 1,
       viewport: { x: 0, y: 0, zoom: 1 },
       settings: {},
       nodes: [
         { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
-        { id: "src", type: "source", name: "员工名录", position: { x: 150, y: 0 }, config: { dataset: raw } },
-        { id: "qg", type: "quality_gate", name: "数据完整性规则", position: { x: 350, y: 0 }, config: { rules: [{ field: "email", rule: "not_empty" }] } },
-        { id: "sql_n", type: "edit_sql", name: "SQL过滤成年员工", position: { x: 550, y: 0 }, config: { sql: "SELECT * FROM input WHERE age >= 18" } },
-        { id: "udf_n", type: "udf", name: "职级标签UDF", position: { x: 750, y: 0 }, config: { functionCode: "row => ({ ...row, tag: row.age > 40 ? 'SENIOR' : 'CORE' })" } },
-        { id: "snk", type: "sink", name: "合格人员表", position: { x: 950, y: 0 }, config: { outputName: "qualified_staff" } },
+        { id: "src", type: "source", name: "员工名录", position: { x: 150, y: 0 }, config: { assetId: usersAsset.id } },
+        { id: "qg", type: "quality_gate", name: "数据完整性规则", position: { x: 350, y: 0 }, config: { minRows: 1, maxNullRate: 0.5 } },
+        { id: "sql_n", type: "edit_sql", name: "SQL过滤成年员工", position: { x: 550, y: 0 }, config: { datasourceId: testSource.id, sql: "SELECT * FROM input WHERE age >= 18" } },
+        { id: "udf_n", type: "udf", name: "职级标签UDF", position: { x: 750, y: 0 }, config: { udfId: testUdf.id } },
+        { id: "snk", type: "sink", name: "合格人员表", position: { x: 950, y: 0 }, config: { writeMode: "audit_only", idempotencyKey: "SINK_R20", outputName: "qualified_staff" } },
         { id: "end", type: "end", name: "结束", position: { x: 1150, y: 0 }, config: {} },
       ],
       edges: [
@@ -1065,11 +1095,11 @@ async function main() {
     const dataRun = await admin.mutate("data.run", {
       projectId: dataPrj.id,
       workflowId: wf.id,
-      data: { dataset: raw }
+      data: {}
     });
     assert(dataRun?.runId, "Quality gate and UDF dataflow run failed");
 
-    return `Quality gate checked email non-empty, SQL filtered adults, UDF classified seniority (Run ${dataRun.runId.slice(0, 8)})`;
+    return `Quality gate verified, SQL filtered adults, UDF classified seniority (Run ${dataRun.runId.slice(0, 8)})`;
   });
 
   // ========================================================================
@@ -1127,8 +1157,8 @@ async function main() {
       settings: {},
       nodes: [
         { id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} },
-        { id: "src", type: "source", name: "同步源", position: { x: 200, y: 0 }, config: { dataset: [{ batch: "Q3_DATA", synced: true }] } },
-        { id: "snk", type: "sink", name: "落地目标库", position: { x: 400, y: 0 }, config: { outputName: "synced_warehouse" } },
+        { id: "src", type: "source", name: "同步源", position: { x: 200, y: 0 }, config: { assetId: ordersAsset.id } },
+        { id: "snk", type: "sink", name: "落地目标库", position: { x: 400, y: 0 }, config: { writeMode: "audit_only", idempotencyKey: "SINK_R21", outputName: "synced_warehouse" } },
         { id: "end", type: "end", name: "结束", position: { x: 600, y: 0 }, config: {} },
       ],
       edges: [{ id: "e1", sourceNodeId: "start", targetNodeId: "src" }, { id: "e2", sourceNodeId: "src", targetNodeId: "snk" }, { id: "e3", sourceNodeId: "snk", targetNodeId: "end" }],
