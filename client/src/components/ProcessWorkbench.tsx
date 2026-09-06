@@ -310,7 +310,7 @@ export default function ProcessWorkbench() {
   return (
     <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6">
       <div
-        className={`mx-auto grid max-w-[1500px] gap-4 ${sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[230px_minmax(0,1fr)]"}`}
+        className={`grid gap-4 ${sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[230px_minmax(0,1fr)]"}`}
       >
         <aside className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
           <div

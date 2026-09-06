@@ -474,7 +474,7 @@ export default function OrganizationManagementPage({
       data-aiflow-organization-page=""
       className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-3 sm:p-5"
     >
-      <div className="mx-auto max-w-[1440px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <header className="flex flex-col gap-4 border-b border-slate-200 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <button

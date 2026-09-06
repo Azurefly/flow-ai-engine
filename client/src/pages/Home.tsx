@@ -956,24 +956,29 @@ function FlowConsole({
     event.target.value = "";
   };
 
-  const startRun = () => {
-    if (!selectedId) return;
+  const startRun = async (): Promise<boolean> => {
+    if (!selectedId || runFlow.isPending || runDataflow.isPending) return false;
+    try {
     if (selectedWorkflow?.flowType === "data") {
       if (!selectedWorkflow.projectId) {
         toast.error("数据流缺少项目归属，无法运行。");
-        return;
+        return false;
       }
-      runDataflow.mutate({
+      await runDataflow.mutateAsync({
         projectId: selectedWorkflow.projectId,
         workflowId: selectedId,
         data: runInput,
       });
     } else
-      runFlow.mutate({
+      await runFlow.mutateAsync({
         workflowId: selectedId,
         input: runInput,
-        idempotencyKey: crypto.randomUUID(),
+        idempotencyKey: Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, "0")).join(""),
       });
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const nav = [
@@ -1342,12 +1347,17 @@ function FlowConsole({
                 )
                   deleteFlow.mutate({ id: selectedId });
               }}
-              onSaveAsSubflow={() => {
-                if (draftDefinition)
-                  createSubflow.mutate({
+              onSaveAsSubflow={async () => {
+                if (!draftDefinition || createSubflow.isPending) return false;
+                try {
+                  await createSubflow.mutateAsync({
                     name: `${draftName || "未命名流程"} · 子流程`,
                     definition: draftDefinition,
                   });
+                  return true;
+                } catch {
+                  return false;
+                }
               }}
               onCreateTemplate={input => createTemplate.mutate(input)}
               onUpdateTemplate={(template, updates) =>
@@ -1633,12 +1643,12 @@ function FlowDesigner({
   onSave: () => void;
   onPublish: () => void;
   onValidate: () => void;
-  onRun: () => void;
+  onRun: () => Promise<boolean>;
   onExport: () => void;
   onImport: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onSaveAsSubflow: () => void;
+  onSaveAsSubflow: () => Promise<boolean>;
   onCreateTemplate: (input: any) => void;
   onUpdateTemplate: (template: any, updates: any) => void;
   onDeleteTemplate: (id: string) => void;

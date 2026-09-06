@@ -21,7 +21,7 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
   const active = items.find(item => item.id === tab) ?? items[0];
   return (
     <div data-aiflow-system-config="" className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6">
-      <div className={`mx-auto grid max-w-6xl gap-4 ${collapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]"}`}>
+      <div className={`grid gap-4 ${collapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]"}`}>
         <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
           <div className={`flex items-start border-b border-slate-100 px-3 py-3 ${collapsed ? "justify-center" : "justify-between"}`}>
             <div className={collapsed ? "hidden" : "block"}>

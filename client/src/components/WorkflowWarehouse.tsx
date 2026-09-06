@@ -348,7 +348,7 @@ export default function WorkflowWarehouse({
       data-aiflow-warehouse=""
       className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"
     >
-      <div className="mx-auto max-w-[1500px]">
+      <div>
         <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">

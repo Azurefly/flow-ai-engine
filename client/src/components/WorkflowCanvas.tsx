@@ -63,6 +63,16 @@ import {
   validateNodeConfig,
 } from "@shared/workflow-node-contract";
 import { isFlowNodeAllowed } from "@shared/flow-profile-contract";
+import {
+  hasStateInnateOperation,
+  isConfigRecord,
+  renameConfigProperty,
+  showSigningPercent,
+  STATE_INNATE_OPERATIONS,
+  subflowSelectionConfig,
+  toggleConfigSelection,
+  toggleStateInnateOperation,
+} from "./workflow-config-editor";
 
 type NodeKind = FlowNodeType;
 type FlowNodeData = { label: string; kind: NodeKind; config: NodeConfig };
@@ -629,6 +639,13 @@ function ConfigFieldEditor({
   onChange: (value: unknown) => void;
 }) {
   const effectiveValue = value ?? fallback;
+  // Keep blur-committed drafts without remounting the input on every update.
+  // The parent key still resets drafts when switching nodes or fields.
+  const scalarValue = effectiveValue != null && typeof effectiveValue !== "object"
+    ? String(effectiveValue)
+    : "";
+  const [draft, setDraft] = useState(scalarValue);
+  useEffect(() => setDraft(scalarValue), [scalarValue]);
   const label = (
     <span className="flex items-center gap-1 text-xs font-semibold text-slate-700">
       {field.required && <i className="not-italic text-red-500">*</i>}
@@ -705,9 +722,9 @@ function ConfigFieldEditor({
       <label className="grid gap-1.5">
         {label}
         <textarea
-          key={String(effectiveValue ?? "")}
           className="min-h-20 w-full rounded-md border border-slate-200 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400"
-          defaultValue={String(effectiveValue ?? "")}
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
           disabled={disabled}
           onBlur={event => onChange(event.target.value)}
         />
@@ -717,7 +734,6 @@ function ConfigFieldEditor({
   if (field.kind === "json")
     return (
       <StructuredValueEditor
-        key={JSON.stringify(effectiveValue)}
         field={field}
         value={effectiveValue}
         disabled={disabled}
@@ -731,7 +747,6 @@ function ConfigFieldEditor({
   )
     return (
       <StructuredValueEditor
-        key={JSON.stringify(effectiveValue)}
         field={field}
         value={effectiveValue}
         disabled={disabled}
@@ -743,14 +758,10 @@ function ConfigFieldEditor({
       <label className="grid gap-1.5">
         {label}
         <input
-          key={String(effectiveValue ?? "")}
           type="number"
           className={inputClass}
-          defaultValue={
-            effectiveValue === undefined || effectiveValue === null
-              ? ""
-              : String(effectiveValue)
-          }
+          value={draft}
+          onChange={event => setDraft(event.target.value)}
           disabled={disabled}
           onBlur={event =>
             onChange(
@@ -765,9 +776,9 @@ function ConfigFieldEditor({
     <label className="grid gap-1.5">
       {label}
       <input
-        key={String(effectiveValue ?? "")}
         className={inputClass}
-        defaultValue={String(effectiveValue ?? "")}
+        value={draft}
+        onChange={event => setDraft(event.target.value)}
         disabled={disabled}
         onBlur={event => onChange(event.target.value)}
       />
@@ -804,6 +815,50 @@ function nextObjectKey(value: NodeConfig) {
     key = "字段名" + index;
   }
   return key;
+}
+
+function StructuredPropertyNameInput({
+  propertyKey,
+  record,
+  disabled,
+  className,
+  onChange,
+}: {
+  propertyKey: string;
+  record: NodeConfig;
+  disabled: boolean;
+  className: string;
+  onChange: (value: NodeConfig) => void;
+}) {
+  const [draft, setDraft] = useState(propertyKey);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    setDraft(propertyKey);
+    setError("");
+  }, [propertyKey]);
+  return (
+    <span className="grid min-w-0 gap-1">
+      <input
+        className={className}
+        value={draft}
+        disabled={disabled}
+        aria-label={"字段 " + propertyKey + " 名称"}
+        aria-invalid={Boolean(error)}
+        onChange={event => {
+          setDraft(event.target.value);
+          setError("");
+        }}
+        onBlur={() => {
+          const next = renameConfigProperty(record, propertyKey, draft);
+          if (next === record && draft !== propertyKey) {
+            setError("字段名不能为空或重复，已保留原字段。");
+            setDraft(propertyKey);
+          } else if (next !== record) onChange(next);
+        }}
+      />
+      {error && <span role="alert" className="text-[11px] text-red-600">{error}</span>}
+    </span>
+  );
 }
 
 function NestedStructuredValueEditor({
@@ -1126,7 +1181,11 @@ const ORIGINAL_LIST_ITEM_SPECS: Record<string, OriginalFieldSpec[]> = {
     { key: "bdid", label: "绑定 ID" },
     { key: "bdmc", label: "绑定名称" },
     { key: "bdzr", label: "绑定载入", kind: "structured" },
-    { key: "hqfw", label: "获取范围" },
+    { key: "hqfw", label: "获取范围", kind: "multi-select", options: [
+      { value: "1", label: "人" },
+      { value: "2", label: "部门" },
+      { value: "3", label: "权限部门" },
+    ] },
     { key: "fsfsz", label: "发送方设置", kind: "structured" },
     { key: "jsfsz", label: "接收方设置", kind: "structured" },
     { key: "code", label: "绑定代码", kind: "structured" },
@@ -1255,17 +1314,48 @@ function OriginalObjectEditor({
   onChange: (value: unknown) => void;
 }) {
   const specs = ORIGINAL_OBJECT_FIELD_SPECS[fieldKey];
-  const record =
-    value && typeof value === "object" && !Array.isArray(value)
+  const isArrayOfObjects =
+    fieldKey === "jdgycz" && Array.isArray(value);
+  const record = (() => {
+    if (isArrayOfObjects) {
+      const merged: NodeConfig = {};
+      for (const item of value as any[])
+        if (item && typeof item === "object")
+          Object.assign(merged, item);
+      return merged;
+    }
+    return value && typeof value === "object" && !Array.isArray(value)
       ? (value as NodeConfig)
       : {};
+  })();
+  const emitChange = (next: NodeConfig) => {
+    if (isArrayOfObjects) {
+      const entries = Object.entries(next).filter(
+        ([, v]) => v !== undefined && v !== "" && v !== "否" && v !== false
+      );
+      onChange(entries.map(([k, v]) => ({ [k]: v })));
+    } else {
+      onChange(next);
+    }
+  };
   const knownKeys = new Set(specs.map(spec => spec.key));
   const extras = Object.fromEntries(
     Object.entries(record).filter(([key]) => !knownKeys.has(key))
   );
+  const visibleSpecs = specs.filter(spec => {
+    if (spec.key === "hqtgbfb" && record["hqhqsz"] !== "andSignFor")
+      return false;
+    if (
+      (spec.key === "zdbj" || spec.key === "tsbjsyzlc") &&
+      record["bj"] !== "是" &&
+      record["bj"] !== true
+    )
+      return false;
+    return true;
+  });
   return (
     <div className="grid gap-2">
-      {specs.map(spec => (
+      {visibleSpecs.map(spec => (
         <label
           key={spec.key}
           className="grid min-w-0 gap-1 text-[11px] font-medium text-slate-600"
@@ -1275,7 +1365,7 @@ function OriginalObjectEditor({
             spec={spec}
             value={record[spec.key]}
             disabled={disabled}
-            onChange={next => onChange({ ...record, [spec.key]: next })}
+            onChange={next => emitChange({ ...record, [spec.key]: next })}
           />
           {spec.help && (
             <span className="font-normal leading-4 text-slate-400">
@@ -1298,7 +1388,7 @@ function OriginalObjectEditor({
                   .filter(spec => record[spec.key] !== undefined)
                   .map(spec => [spec.key, record[spec.key]])
               );
-              onChange({
+              emitChange({
                 ...known,
                 ...(next && typeof next === "object" && !Array.isArray(next)
                   ? (next as NodeConfig)
@@ -1367,11 +1457,13 @@ function StructuredValueEditor({
                     bdid: "",
                     bdmc: "",
                     bdzr: [],
-                    hqfw: "",
+                    hqfw: [],
                     fsfsz: [],
                     jsfsz: [],
                     code: "",
                   }
+                : field.key === "ywcz"
+                ? { czid: "", czmc: "" }
                 : field.key === "zlcck"
                   ? { connect: { id: "", text: "", yId: "" }, end: "" }
                   : "";
@@ -3446,7 +3538,7 @@ export default function WorkflowCanvas({
                           : undefined;
                       return (
                         <ConfigFieldEditor
-                          key={`${selected.id}-${field.key}-${JSON.stringify(fieldValue ?? selectedDefaults[field.key])}`}
+                          key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
                           field={field}
                           value={fieldValue}
                           fallback={selectedDefaults[field.key]}
@@ -3462,11 +3554,8 @@ export default function WorkflowCanvas({
                             updateConfigFields({
                               subflowId: value,
                               zlcxz: selectedSubflow
-                                ? {
-                                    id: selectedSubflow.id,
-                                    text: selectedSubflow.name,
-                                  }
-                                : { id: "", text: "" },
+                                ? subflowSelectionConfig(selectedConfig.zlcxz, selectedSubflow)
+                                : subflowSelectionConfig(selectedConfig.zlcxz),
                             });
                           }}
                         />
