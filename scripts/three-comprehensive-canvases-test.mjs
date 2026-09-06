@@ -46,6 +46,7 @@ class TrpcSession {
       method,
       headers,
       body: method === "POST" ? envelope : undefined,
+      signal: AbortSignal.timeout(15000),
     });
 
     const setCookies = typeof response.headers.getSetCookie === "function"
@@ -352,9 +353,9 @@ async function main() {
     viewport: { x: 0, y: 0, zoom: 1 },
     settings: {},
     nodes: [
-      { id: "start", type: "start", name: "申请开始", position: { x: 0, y: 0 }, config: { initialVariables: { docType: "EXPENSE_REIMBURSEMENT", amount: 8000 } } },
+      { id: "start", type: "start", name: "申请开始", position: { x: 60, y: 200 }, config: { initialVariables: { docType: "EXPENSE_REIMBURSEMENT", amount: 8000 } } },
       {
-        id: "s_draft", type: "state", name: "填报草稿", position: { x: 180, y: 0 },
+        id: "s_draft", type: "state", name: "填报草稿", position: { x: 410, y: 200 },
         config: {
           nodeDh: "ST_DRAFT_ENTERPRISE",
           jdmc: "申请填报中",
@@ -364,7 +365,7 @@ async function main() {
         }
       },
       {
-        id: "op_submit", type: "operate", name: "经办人提交", position: { x: 380, y: 0 },
+        id: "op_submit", type: "operate", name: "经办人提交", position: { x: 760, y: 200 },
         config: {
           czmc: "提交部门初审",
           assigneeMode: "user",
@@ -373,7 +374,7 @@ async function main() {
         }
       },
       {
-        id: "s_review", type: "state", name: "主管审核中", position: { x: 580, y: 0 },
+        id: "s_review", type: "state", name: "主管审核中", position: { x: 1110, y: 200 },
         config: {
           nodeDh: "ST_SUPERVISOR_REVIEW",
           jdmc: "主管复核中",
@@ -383,7 +384,7 @@ async function main() {
         }
       },
       {
-        id: "op_audit", type: "operate", name: "主管决策或签", position: { x: 780, y: 0 },
+        id: "op_audit", type: "operate", name: "主管决策或签", position: { x: 1460, y: 200 },
         config: {
           czmc: "主管决策或签",
           outcomeMode: "explicit",
@@ -401,7 +402,7 @@ async function main() {
         }
       },
       {
-        id: "s_rejected", type: "state", name: "已驳回状态", position: { x: 980, y: 150 },
+        id: "s_rejected", type: "state", name: "已驳回状态", position: { x: 1810, y: 340 },
         config: {
           nodeDh: "ST_REJECTED_FINAL",
           jdmc: "申请已被驳回",
@@ -411,7 +412,7 @@ async function main() {
         }
       },
       {
-        id: "r_tier", type: "router", name: "金额分级路由", position: { x: 980, y: -80 },
+        id: "r_tier", type: "router", name: "金额分级路由", position: { x: 1810, y: 60 },
         config: {
           routerRuleId: "ROUTER_AMT_TIER",
           defaultRoute: "default",
@@ -422,7 +423,7 @@ async function main() {
         }
       },
       {
-        id: "s_high", type: "state", name: "大额核算状态", position: { x: 1200, y: -160 },
+        id: "s_high", type: "state", name: "大额核算状态", position: { x: 2160, y: 60 },
         config: {
           nodeDh: "ST_HIGH_AUDIT",
           jdmc: "大额专项核算中",
@@ -432,14 +433,14 @@ async function main() {
         }
       },
       {
-        id: "sub_calc", type: "subflow", name: "调用核算子流程", position: { x: 1400, y: -160 },
+        id: "sub_calc", type: "subflow", name: "调用核算子流程", position: { x: 2510, y: 60 },
         config: {
           subflowId: subflowRes.id,
           input: { baseAmount: "{{vars.amount}}" },
         }
       },
       {
-        id: "s_archived", type: "state", name: "企业归档办结终态", position: { x: 1600, y: 0 },
+        id: "s_archived", type: "state", name: "企业归档办结终态", position: { x: 2860, y: 200 },
         config: {
           nodeDh: "ST_ENTERPRISE_ARCHIVED",
           jdmc: "企业级综合归档办结",
@@ -454,7 +455,7 @@ async function main() {
           bdjs: ["ROLE_AUDITOR"],
         }
       },
-      { id: "end", type: "end", name: "状态流结束", position: { x: 1800, y: 0 }, config: { resultTemplate: { finalState: "{{vars.s_archived.displayName}}", code: "{{vars.s_archived.stateCode}}" } } },
+      { id: "end", type: "end", name: "状态流结束", position: { x: 3210, y: 200 }, config: { resultTemplate: { finalState: "{{vars.s_archived.displayName}}", code: "{{vars.s_archived.stateCode}}" } } },
     ],
     edges: [
       { id: "e1", sourceNodeId: "start", targetNodeId: "s_draft" },
@@ -551,13 +552,13 @@ async function main() {
     viewport: { x: 0, y: 0, zoom: 1 },
     settings: {},
     nodes: [
-      { id: "start", type: "start", name: "控制启动", position: { x: 0, y: 0 }, config: {} },
+      { id: "start", type: "start", name: "控制启动", position: { x: 60, y: 180 }, config: {} },
       {
-        id: "ms1", type: "milestone", name: "立项打点", position: { x: 180, y: 0 },
+        id: "ms1", type: "milestone", name: "立项打点", position: { x: 410, y: 180 },
         config: { milestoneCode: "MS_INITIATED", displayName: "演练方案初始化", weight: 20 }
       },
       {
-        id: "t_prep", type: "transform", name: "参数计算", position: { x: 360, y: 0 },
+        id: "t_prep", type: "transform", name: "参数计算", position: { x: 760, y: 180 },
         config: {
           expression: {
             evalCode: "DRILL_2026",
@@ -566,7 +567,7 @@ async function main() {
         }
       },
       {
-        id: "http_check", type: "http", name: "外部状态监测", position: { x: 540, y: 0 },
+        id: "http_check", type: "http", name: "外部状态监测", position: { x: 1110, y: 180 },
         config: {
           endpointRef: "HTTPBIN_API",
           url: "get",
@@ -575,7 +576,7 @@ async function main() {
         }
       },
       {
-        id: "llm_eval", type: "llm", name: "AI安全初评", position: { x: 720, y: 0 },
+        id: "llm_eval", type: "llm", name: "AI安全初评", position: { x: 1460, y: 180 },
         config: {
           model: "gpt-4o-mini",
           prompt: "请评估此变更的安全风险等级：操作名称 {{input.taskName}}，风险分 {{input.riskScore}}",
@@ -583,7 +584,7 @@ async function main() {
         }
       },
       {
-        id: "cond1", type: "condition", name: "风险分流条件", position: { x: 900, y: 0 },
+        id: "cond1", type: "condition", name: "风险分流条件", position: { x: 1810, y: 180 },
         config: {
           left: "{{input.riskScore}}",
           operator: "greaterThan",
@@ -593,7 +594,7 @@ async function main() {
         }
       },
       {
-        id: "op_human", type: "operate", name: "高危人工审批网关", position: { x: 1100, y: -100 },
+        id: "op_human", type: "operate", name: "高危人工审批网关", position: { x: 2160, y: 80 },
         config: {
           czmc: "总架构师复核授权",
           instruction: "请核对高危容灾切换清单与数据镜像状态",
@@ -602,18 +603,18 @@ async function main() {
         }
       },
       {
-        id: "t_low", type: "transform", name: "低风险快速放行", position: { x: 1100, y: 100 },
+        id: "t_low", type: "transform", name: "低风险快速放行", position: { x: 2160, y: 280 },
         config: { expression: { fastTrack: true, message: "低风险自动放行" } }
       },
       {
-        id: "w_cooldown", type: "wait", name: "冷却缓冲延时", position: { x: 1320, y: 0 },
+        id: "w_cooldown", type: "wait", name: "冷却缓冲延时", position: { x: 2510, y: 180 },
         config: { durationSeconds: 1 }
       },
       {
-        id: "ms2", type: "milestone", name: "就绪里程碑", position: { x: 1500, y: 0 },
+        id: "ms2", type: "milestone", name: "就绪里程碑", position: { x: 2860, y: 180 },
         config: { milestoneCode: "MS_DEPLOY_READY", displayName: "方案已达生产就绪", weight: 100 }
       },
-      { id: "end", type: "end", name: "控制流程结束", position: { x: 1700, y: 0 }, config: { resultTemplate: "{{nodes.t_prep}}" } },
+      { id: "end", type: "end", name: "控制流程结束", position: { x: 3210, y: 180 }, config: { resultTemplate: "{{nodes.t_prep}}" } },
     ],
     edges: [
       { id: "e1", sourceNodeId: "start", targetNodeId: "ms1" },
@@ -680,46 +681,46 @@ async function main() {
     viewport: { x: 0, y: 0, zoom: 1 },
     settings: {},
     nodes: [
-      { id: "start", type: "start", name: "数据流启动", position: { x: 0, y: 0 }, config: {} },
-      { id: "src_orders", type: "source", name: "订单输入源", position: { x: 180, y: -60 }, config: { assetId: ordersAsset.id } },
-      { id: "src_users", type: "source", name: "用户输入源", position: { x: 180, y: 60 }, config: { assetId: usersAsset.id } },
+      { id: "start", type: "start", name: "数据流启动", position: { x: 60, y: 180 }, config: {} },
+      { id: "src_orders", type: "source", name: "订单输入源", position: { x: 410, y: 80 }, config: { assetId: ordersAsset.id } },
+      { id: "src_users", type: "source", name: "用户输入源", position: { x: 410, y: 280 }, config: { assetId: usersAsset.id } },
       {
-        id: "join_ou", type: "join", name: "用户订单关联", position: { x: 380, y: 0 },
+        id: "join_ou", type: "join", name: "用户订单关联", position: { x: 760, y: 180 },
         config: { leftKeys: ["uid"], rightKeys: ["uid"], kind: "inner" }
       },
       {
-        id: "qg_check", type: "quality_gate", name: "数据质量门禁", position: { x: 560, y: 0 },
+        id: "qg_check", type: "quality_gate", name: "数据质量门禁", position: { x: 1110, y: 180 },
         config: { minRows: 1, maxNullRate: 0.5 }
       },
       {
-        id: "flt_paid", type: "filter", name: "过滤已支付记录", position: { x: 740, y: 0 },
+        id: "flt_paid", type: "filter", name: "过滤已支付记录", position: { x: 1460, y: 180 },
         config: { filterField: "status", filterValue: "paid" }
       },
       {
-        id: "prj_cols", type: "project", name: "列剪裁投影", position: { x: 920, y: 0 },
+        id: "prj_cols", type: "project", name: "列剪裁投影", position: { x: 1810, y: 180 },
         config: { fields: [{ source: "orderId", target: "orderId" }, { source: "amount", target: "amount" }, { source: "dept", target: "dept" }, { source: "name", target: "userName" }] }
       },
       {
-        id: "drv_tax", type: "derive", name: "派生服务费", position: { x: 1100, y: 0 },
+        id: "drv_tax", type: "derive", name: "派生服务费", position: { x: 2160, y: 180 },
         config: { fields: [{ name: "serviceFee", expression: "8" }] }
       },
       {
-        id: "dedup_order", type: "deduplicate", name: "按订单号去重", position: { x: 1280, y: 0 },
+        id: "dedup_order", type: "deduplicate", name: "按订单号去重", position: { x: 2510, y: 180 },
         config: { keys: ["orderId"] }
       },
       {
-        id: "agg_dept", type: "aggregate", name: "部门财务汇总", position: { x: 1460, y: 0 },
+        id: "agg_dept", type: "aggregate", name: "部门财务汇总", position: { x: 2860, y: 180 },
         config: { groupBy: ["dept"], metrics: [{ field: "amount", op: "sum", as: "totalAmount" }] }
       },
       {
-        id: "sort_amt", type: "sort", name: "金额降序排列", position: { x: 1640, y: 0 },
+        id: "sort_amt", type: "sort", name: "金额降序排列", position: { x: 3210, y: 180 },
         config: { fields: [{ field: "totalAmount", order: "desc" }] }
       },
       {
-        id: "snk_final", type: "sink", name: "输出综合审计表", position: { x: 1820, y: 0 },
+        id: "snk_final", type: "sink", name: "输出综合审计表", position: { x: 3560, y: 180 },
         config: { writeMode: "audit_only", idempotencyKey: `SINK_${runTag}`, outputName: "enterprise_data_pipeline_output" }
       },
-      { id: "end", type: "end", name: "数据流结束", position: { x: 2000, y: 0 }, config: {} },
+      { id: "end", type: "end", name: "数据流结束", position: { x: 3910, y: 180 }, config: {} },
     ],
     edges: [
       { id: "e1", sourceNodeId: "start", targetNodeId: "src_orders" },

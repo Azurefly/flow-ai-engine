@@ -16,6 +16,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import {
   Braces,
   CircleDot,
@@ -481,6 +482,175 @@ function toDefinition(
       targetNodeId: edge.target,
     })),
   };
+}
+
+/**
+ * Automatically calculates a clean, non-overlapping hierarchical layout for canvas nodes.
+ * Guarantees zero overlapping cards and clear horizontal and vertical spacing.
+ */
+export function autoLayoutNodes<
+  T extends {
+    id: string;
+    position: { x: number; y: number };
+    data?: { kind?: string; label?: string };
+  },
+>(nodes: T[], edges: Edge[]): T[] {
+  if (nodes.length <= 1) return nodes;
+
+  const nodeMap = new Map(nodes.map(n => [n.id, n]));
+  const incoming = new Map<string, string[]>();
+  const outgoing = new Map<string, string[]>();
+
+  for (const n of nodes) {
+    incoming.set(n.id, []);
+    outgoing.set(n.id, []);
+  }
+
+  for (const e of edges) {
+    if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+      outgoing.get(e.source)?.push(e.target);
+      incoming.get(e.target)?.push(e.source);
+    }
+  }
+
+  // 1. Assign topological ranks (longest path propagation capped at 30 iterations)
+  const ranks = new Map<string, number>();
+  for (const n of nodes) ranks.set(n.id, 0);
+
+  // Propagate ranks along edges
+  for (let iter = 0; iter < Math.min(nodes.length, 30); iter++) {
+    let changed = false;
+    for (const e of edges) {
+      if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
+        const srcRank = ranks.get(e.source) ?? 0;
+        const tgtRank = ranks.get(e.target) ?? 0;
+        if (tgtRank < srcRank + 1) {
+          ranks.set(e.target, srcRank + 1);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+
+  // Ensure end nodes sit at maxRank
+  const endNodes = nodes.filter(n => n.data?.kind === "end");
+  let maxRank = 0;
+  for (const r of Array.from(ranks.values())) {
+    if (r > maxRank) maxRank = r;
+  }
+  for (const endNode of endNodes) {
+    if ((ranks.get(endNode.id) ?? 0) < maxRank) {
+      ranks.set(endNode.id, maxRank);
+    }
+  }
+
+  // Group nodes by rank
+  const rankBuckets = new Map<number, T[]>();
+  for (const n of nodes) {
+    const r = ranks.get(n.id) ?? 0;
+    const bucket = rankBuckets.get(r) ?? [];
+    bucket.push(n);
+    rankBuckets.set(r, bucket);
+  }
+
+  // Layout parameters:
+  // Node card width is 224px (w-56) with padding.
+  // Using 350px column step ensures a clean 126px horizontal gap between successive nodes!
+  const COL_SPACING = 350;
+  const ROW_HEIGHT = 160;
+  const START_X = 60;
+  const BASELINE_Y = 200;
+
+  const newPositions = new Map<string, { x: number; y: number }>();
+  const sortedRanks = Array.from(rankBuckets.keys()).sort((a, b) => a - b);
+
+  for (const r of sortedRanks) {
+    const nodesInRank = rankBuckets.get(r) ?? [];
+    const count = nodesInRank.length;
+
+    // Sort nodes in this rank:
+    // Try to sort by the average Y of their parents to reduce edge crossings
+    nodesInRank.sort((a, b) => {
+      const parentsA = incoming.get(a.id) ?? [];
+      const parentsB = incoming.get(b.id) ?? [];
+      const avgYA = parentsA.length
+        ? parentsA.reduce(
+            (sum, pid) => sum + (newPositions.get(pid)?.y ?? BASELINE_Y),
+            0
+          ) / parentsA.length
+        : BASELINE_Y;
+      const avgYB = parentsB.length
+        ? parentsB.reduce(
+            (sum, pid) => sum + (newPositions.get(pid)?.y ?? BASELINE_Y),
+            0
+          ) / parentsB.length
+        : BASELINE_Y;
+      return avgYA - avgYB;
+    });
+
+    if (count === 1) {
+      const node = nodesInRank[0]!;
+      const parents = incoming.get(node.id) ?? [];
+      let targetY = BASELINE_Y;
+      if (parents.length === 1) {
+        targetY = newPositions.get(parents[0]!)?.y ?? BASELINE_Y;
+      } else if (parents.length > 1) {
+        targetY = Math.round(
+          parents.reduce(
+            (sum, pid) => sum + (newPositions.get(pid)?.y ?? BASELINE_Y),
+            0
+          ) / parents.length
+        );
+      }
+      newPositions.set(node.id, {
+        x: START_X + r * COL_SPACING,
+        y: targetY,
+      });
+    } else {
+      // Multiple nodes in column (branches): spread vertically around baseline
+      const totalSpan = (count - 1) * ROW_HEIGHT;
+      const startY = BASELINE_Y - totalSpan / 2;
+      nodesInRank.forEach((node, index) => {
+        newPositions.set(node.id, {
+          x: START_X + r * COL_SPACING,
+          y: Math.round(startY + index * ROW_HEIGHT),
+        });
+      });
+    }
+  }
+
+  // Overlap Collision Prevention Pass:
+  // Ensure no two nodes ever overlap (dx < 260 && dy < 120)
+  for (let iter = 0; iter < 3; iter++) {
+    let hadCollision = false;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const idA = nodes[i]!.id;
+        const idB = nodes[j]!.id;
+        const posA = newPositions.get(idA)!;
+        const posB = newPositions.get(idB)!;
+
+        const dx = Math.abs(posA.x - posB.x);
+        const dy = Math.abs(posA.y - posB.y);
+
+        if (dx < 260 && dy < 120) {
+          hadCollision = true;
+          if (posA.y <= posB.y) {
+            posB.y = posA.y + 140;
+          } else {
+            posA.y = posB.y + 140;
+          }
+        }
+      }
+    }
+    if (!hadCollision) break;
+  }
+
+  return nodes.map(n => ({
+    ...n,
+    position: newPositions.get(n.id) ?? n.position,
+  }));
 }
 
 /** Keep modern router rules and legacy lysz entries aligned with actual outgoing edges. */
@@ -2090,6 +2260,8 @@ export default function WorkflowCanvas({
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestNodesRef = useRef(nodes);
   latestNodesRef.current = nodes;
+  const latestEdgesRef = useRef(edges);
+  latestEdgesRef.current = edges;
   const definitionSignature = useMemo(
     () => JSON.stringify(definition ?? defaultDefinition()),
     [definition]
@@ -2839,7 +3011,20 @@ export default function WorkflowCanvas({
       focusCanvas();
     };
     const neatenCanvas = () => {
-      reactFlow?.fitView({ padding: 0.24, duration: 180 });
+      const currentNodes = latestNodesRef.current;
+      const currentEdges = latestEdgesRef.current;
+      if (!currentNodes.length) return;
+
+      const neatNodes = autoLayoutNodes(currentNodes, currentEdges);
+      setNodes(neatNodes);
+      if (onDefinitionChange) {
+        const nextDef = toDefinition(neatNodes, currentEdges, baseRef.current);
+        onDefinitionChange(nextDef);
+      }
+      setTimeout(() => {
+        reactFlow?.fitView({ padding: 0.22, duration: 250 });
+      }, 50);
+      toast.success("画布已完成自动拓扑排版与间距整理。");
       focusCanvas();
     };
     const saveCanvasImage = () => {
