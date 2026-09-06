@@ -316,6 +316,20 @@ export const FLOW_NODE_ALLOWED_TARGETS: Partial<
     "filter",
     "project",
     "derive",
+    "transform",
+    "edit_sql",
+    "udf",
+    "sink",
+    "output",
+    "end",
+  ],
+  quality_gate: [
+    "filter",
+    "map",
+    "project",
+    "derive",
+    "transform",
+    "sql",
     "edit_sql",
     "udf",
     "sink",
@@ -1845,6 +1859,19 @@ export function withNodeConfigDefaults(
     },
     createDefaultNodeConfig(type)
   );
+  if (type === "state") {
+    if (config.nodeDh && (!config.stateCode || config.stateCode === "STATE_CODE")) {
+      merged.stateCode = String(config.nodeDh).trim();
+    }
+    if (config.jdmc && (!config.displayName || config.displayName === "业务状态")) {
+      merged.displayName = String(config.jdmc).trim();
+    }
+  }
+  if (type === "operate") {
+    if (config.czmc && (!config.operationName || config.operationName === "业务操作")) {
+      merged.operationName = String(config.czmc).trim();
+    }
+  }
   if (type === "sql") {
     merged.statement = firstNonBlank(
       config.statement,

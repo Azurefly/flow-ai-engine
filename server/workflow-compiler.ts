@@ -551,9 +551,11 @@ export function analyzeWorkflowDefinition(
 
       const stateCodes = new Map<string, string>();
       for (const stateNode of stateNodes) {
-        const stateCode = String(
-          stateNode.config.stateCode ?? stateNode.config.nodeDh ?? ""
-        ).trim();
+        const rawDh = typeof stateNode.config.nodeDh === "string" ? stateNode.config.nodeDh.trim() : "";
+        const rawCode = typeof stateNode.config.stateCode === "string" ? stateNode.config.stateCode.trim() : "";
+        const stateCode = (rawDh && (!rawCode || rawCode === "STATE_CODE"))
+          ? rawDh
+          : (rawCode || rawDh);
         const previousNodeId = stateCodes.get(stateCode);
         if (stateCode && previousNodeId)
           diagnostics.push(
