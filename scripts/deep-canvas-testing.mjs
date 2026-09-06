@@ -1192,8 +1192,11 @@ async function main() {
     assert(firstRun.runId === secondRun.runId, `Idempotency violation: expected same runId, got ${firstRun.runId} and ${secondRun.runId}`);
 
     // Verify audit logs exist
-    const auditLogs = await admin.query("iam.audit", { limit: 10 });
+    const auditLogs = await admin.query("iam.authorizationAudit", { limit: 10 });
     assert(Array.isArray(auditLogs) && auditLogs.length > 0, "Audit logs were not generated");
+
+    const wfAudit = await admin.query("project.workflowAudit", { projectId: statePrj.id, workflowId: wf.id });
+    assert(Array.isArray(wfAudit) && wfAudit.length > 0, "Workflow audit logs were not generated");
 
     return `Idempotent duplicate submission safely returned identical runId (${firstRun.runId.slice(0, 8)}), audit logs intact`;
   });
