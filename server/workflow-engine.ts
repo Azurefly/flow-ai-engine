@@ -664,13 +664,21 @@ function requestPinnedHttp(input: {
         servername: input.url.hostname,
         lookup: ((
           _hostname: string,
-          _options: unknown,
+          options: unknown,
           callback: (
             error: Error | null,
-            address: string,
-            family: number
+            address: unknown,
+            family?: number
           ) => void
-        ) => callback(null, input.address, input.family)) as any,
+        ) => {
+          if (typeof options === "function") {
+            return (options as any)(null, input.address, input.family);
+          }
+          if (options && typeof options === "object" && (options as any).all) {
+            return callback(null, [{ address: input.address, family: input.family }]);
+          }
+          return callback(null, input.address, input.family);
+        }) as any,
       },
       response => {
         const status = Number(response.statusCode ?? 0);
