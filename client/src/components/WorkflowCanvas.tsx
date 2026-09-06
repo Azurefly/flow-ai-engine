@@ -2872,7 +2872,10 @@ export default function WorkflowCanvas({
             : "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_420px]"
       }
     >
-      <section ref={canvasRegionRef} className="relative min-w-0 bg-slate-50">
+      <section
+        ref={canvasRegionRef}
+        className={`relative min-w-0 bg-slate-50 ${fullscreen ? "flex h-screen flex-col overflow-hidden" : "flex flex-col"}`}
+      >
         <div
           data-flow-canvas-toolbar=""
           className="border-b border-slate-200 bg-white"
@@ -3065,7 +3068,7 @@ export default function WorkflowCanvas({
           </div>
         )}
         <div
-          className="relative h-[420px] sm:h-[590px]"
+          className={`relative ${fullscreen ? "h-full flex-1" : "h-[450px] sm:h-[590px] lg:h-[calc(100vh-280px)] lg:min-h-[600px]"}`}
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
         >

@@ -1475,7 +1475,7 @@ function FlowConsole({
             user.role === "admin" &&
             systemView === "identity" && (
               <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6">
-                <div className="mx-auto max-w-6xl">
+                <div>
                   <button
                     className="mb-4 text-sm text-[#2d6bea] hover:underline"
                     onClick={() =>
