@@ -2732,15 +2732,28 @@ export default function WorkflowCanvas({
   }, [deletedEdge, edges, nodes, readOnly, setEdges, setNodes]);
 
   useEffect(() => {
-    if (readOnly) return;
-    const handleDeleteKey = (event: KeyboardEvent) => {
-      if (event.key !== "Delete" && event.key !== "Backspace") return;
+    const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (
         target?.isContentEditable ||
         ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")
       )
         return;
+
+      if (event.key === "Escape") {
+        if (!inspectorLocked) {
+          setSelectedId(null);
+          setSelectedEdgeId(null);
+          setNodes(current =>
+            current.map(node => ({ ...node, selected: false }))
+          );
+          setContextMenu(null);
+        }
+        return;
+      }
+
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (readOnly) return;
       if (
         !selectedEdgeId &&
         !nodes.some(
@@ -2752,11 +2765,12 @@ export default function WorkflowCanvas({
       if (selectedEdgeId) deleteSelectedEdge();
       else deleteSelectedNodes();
     };
-    window.addEventListener("keydown", handleDeleteKey);
-    return () => window.removeEventListener("keydown", handleDeleteKey);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     deleteSelectedEdge,
     deleteSelectedNodes,
+    inspectorLocked,
     nodes,
     readOnly,
     selectedEdgeId,
@@ -2781,6 +2795,7 @@ export default function WorkflowCanvas({
       setSelectedId(node.id);
       setSelectedEdgeId(null);
       setContextMenu(null);
+      setInspectorMode(current => (current === "compact" ? "normal" : current));
     },
     [setNodes]
   );
@@ -3518,6 +3533,7 @@ export default function WorkflowCanvas({
             }}
             onEdgeContextMenu={onEdgeContextMenu}
             onPaneClick={() => {
+              if (inspectorLocked) return;
               setSelectedId(null);
               setSelectedEdgeId(null);
               setNodes(current =>

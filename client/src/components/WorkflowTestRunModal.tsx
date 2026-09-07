@@ -650,7 +650,11 @@ export default function WorkflowTestRunModal({
                                   {outputColumns.map(col => {
                                     const val = typeof row === "object" && row !== null ? row[col] : row;
                                     return (
-                                      <td key={col} className="px-3 py-2 text-slate-800 whitespace-nowrap max-w-xs truncate">
+                                      <td
+                                        key={col}
+                                        className="px-3 py-2 text-slate-800 whitespace-nowrap max-w-xs truncate"
+                                        title={val === null || val === undefined ? "" : typeof val === "object" ? JSON.stringify(val) : String(val)}
+                                      >
                                         {val === null || val === undefined ? (
                                           <span className="text-slate-300 italic">null</span>
                                         ) : typeof val === "boolean" ? (

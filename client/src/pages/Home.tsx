@@ -25,6 +25,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   Activity,
   ArchiveRestore,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   CirclePlay,
@@ -1720,7 +1721,7 @@ function FlowDesigner({
     >
       <div
         data-aiflow-context-header
-        className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-center"
+        className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
       >
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -1741,127 +1742,183 @@ function FlowDesigner({
               <ChevronRight size={13} />
               设计器
             </span>
+            <span
+              className={`ml-1 rounded px-2 py-0.5 text-[11px] font-semibold border ${
+                workflow.status === "published"
+                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-amber-50 text-amber-700 border-amber-200"
+              }`}
+            >
+              {workflow.status === "published"
+                ? `● 已发布 v${workflow.definitionVersion || 1}`
+                : "● 草稿状态"}
+            </span>
           </div>
-          <div className="mt-2 flex max-w-md items-center gap-1">
+          <div className="mt-1.5 flex max-w-md items-center gap-1">
             <Input
               aria-label="流程名称"
-              className="h-9 min-w-0 flex-1 border-transparent bg-transparent px-0 text-xl font-semibold shadow-none focus-visible:border-blue-300 focus-visible:ring-0 disabled:opacity-100"
+              className="h-8 min-w-0 flex-1 rounded border border-transparent px-1.5 text-lg font-bold text-slate-900 shadow-none transition-colors hover:border-slate-200 hover:bg-slate-50/70 focus-visible:border-blue-400 focus-visible:bg-white focus-visible:ring-0 disabled:opacity-100"
               value={name}
               disabled={!canEdit}
               onChange={event => setName(event.target.value)}
+              title="双击或聚焦以编辑流程名称"
             />
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onImport}
-            disabled={!canEdit}
-          >
-            <Upload size={14} />
-            导入
-          </Button>
-          <Button variant="outline" size="sm" onClick={onExport}>
-            <Download size={14} />
-            导出
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onSave}
-            disabled={!canEdit || savePending || workflow.status === "published"}
-            title={
-              workflow.status === "published"
-                ? "已发布流程请使用发布操作提交新版本，或先取消发布"
-                : "保存草稿画布"
-            }
-          >
-            {savePending ? (
-              <Loader2 className="animate-spin" size={14} />
-            ) : (
-              <FileJson size={14} />
-            )}
-            保存画布
-          </Button>
-          <Button
-            size="sm"
-            className="bg-emerald-600 hover:bg-emerald-500"
-            onClick={onPublish}
-            disabled={!canPublish || publishPending || compilePending}
-          >
-            {publishPending && <Loader2 className="animate-spin" size={14} />}
-            发布
-          </Button>
+
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          {/* Group 1: 存盘与导入导出 */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50/80 p-0.5 shadow-2xs">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7.5 px-2 text-xs text-slate-700 hover:bg-white hover:text-slate-950"
+              onClick={onImport}
+              disabled={!canEdit}
+              title="从 JSON 导入图元定义"
+            >
+              <Upload size={13} className="mr-1 text-slate-500" />
+              导入
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7.5 px-2 text-xs text-slate-700 hover:bg-white hover:text-slate-950"
+              onClick={onExport}
+              title="将当前流程导出为 JSON 备份"
+            >
+              <Download size={13} className="mr-1 text-slate-500" />
+              导出
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7.5 px-2.5 text-xs font-semibold text-slate-800 hover:bg-white hover:text-blue-700 disabled:opacity-50"
+              onClick={onSave}
+              disabled={!canEdit || savePending || workflow.status === "published"}
+              title={
+                workflow.status === "published"
+                  ? "已发布流程请使用发布操作提交新版本，或先取消发布"
+                  : "保存当前画布草稿"
+              }
+            >
+              {savePending ? (
+                <Loader2 className="animate-spin mr-1 text-blue-600" size={13} />
+              ) : (
+                <FileJson size={13} className="mr-1 text-blue-600" />
+              )}
+              保存画布
+            </Button>
+          </div>
+
+          {/* Group 2: 质量门禁与发布 */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50/80 p-0.5 shadow-2xs">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7.5 px-2.5 text-xs font-medium text-violet-700 hover:bg-white hover:text-violet-900"
+              onClick={onValidate}
+              disabled={!canPublish || compilePending}
+              title="执行静态拓扑与语法编译检查"
+            >
+              {compilePending ? (
+                <Loader2 className="animate-spin mr-1" size={13} />
+              ) : (
+                <CheckCircle2 size={13} className="mr-1 text-violet-600" />
+              )}
+              编译检查
+            </Button>
+            <Button
+              size="sm"
+              className="h-7.5 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
+              onClick={onPublish}
+              disabled={!canPublish || publishPending || compilePending}
+              title="发布当前流程新版本"
+            >
+              {publishPending && <Loader2 className="animate-spin mr-1" size={13} />}
+              发布
+            </Button>
+          </div>
+
+          {/* Group 3: 试运行与调试核心入口 (突出显眼) */}
           <Button
             type="button"
             size="sm"
-            variant="outline"
-            className="border-violet-200 text-violet-700 hover:bg-violet-50"
-            onClick={onValidate}
-            disabled={!canPublish || compilePending}
-          >
-            {compilePending && <Loader2 className="animate-spin" size={14} />}
-            编译检查
-          </Button>
-          {canManage && (
-            <>
-              <Button variant="outline" size="sm" onClick={onDuplicate}>
-                <Copy size={14} />
-                复制
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
-                onClick={onDelete}
-              >
-                <ArchiveRestore size={14} />
-                归档
-              </Button>
-            </>
-          )}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            className="h-8.5 gap-1.5 px-3.5 text-xs font-semibold bg-[#2d6bea] text-white hover:bg-[#255bc8] shadow-sm transition-all"
             onClick={() => setRunDialogOpen(true)}
-            title="填写运行字段并进行流程测试"
+            title="填写运行字段并在画布内即时进行流程测试，实时查看运算结果表格"
           >
-            <Play size={14} />
+            <Play size={13} className="fill-white" />
             运行测试
           </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setMembersDialogOpen(true)}
-            title="查看和管理流程协作成员与授权"
-          >
-            <UsersRound size={14} />
-            协作成员（{members.length}）
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setGovernanceDialogOpen(true)}
-            title="查看版本快照、差异对比与发布治理"
-          >
-            <ShieldCheck size={14} />
-            版本与发布治理
-          </Button>
-          {canEdit && (
+
+          {/* Group 4: 治理与协作 */}
+          <div className="flex items-center gap-1">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="border-violet-200 text-violet-700 hover:bg-violet-50"
-              onClick={onSaveAsSubflow}
+              className="h-8 px-2.5 text-xs text-slate-700 hover:bg-slate-50"
+              onClick={() => setMembersDialogOpen(true)}
+              title="查看和管理流程协作成员与授权"
             >
-              保存当前定义为子流程
+              <UsersRound size={13} className="mr-1 text-slate-500" />
+              协作成员（{members.length}）
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 px-2.5 text-xs text-slate-700 hover:bg-slate-50"
+              onClick={() => setGovernanceDialogOpen(true)}
+              title="查看版本快照、差异对比与发布治理"
+            >
+              <ShieldCheck size={13} className="mr-1 text-slate-500" />
+              版本治理
+            </Button>
+          </div>
+
+          {/* Group 5: 更多操作 */}
+          {(canManage || canEdit) && (
+            <div className="flex items-center gap-1">
+              {canManage && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900"
+                    onClick={onDuplicate}
+                    title="创建此流程的完整副本"
+                  >
+                    <Copy size={13} className="mr-1 text-slate-400" />
+                    复制
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2.5 text-xs border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                    onClick={onDelete}
+                    title="将此流程归档至流程仓库"
+                  >
+                    <ArchiveRestore size={13} className="mr-1" />
+                    归档
+                  </Button>
+                </>
+              )}
+              {canEdit && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2.5 text-xs border-violet-200 text-violet-700 hover:bg-violet-50"
+                  onClick={onSaveAsSubflow}
+                  title="将当前拓扑定义注册为私有子流程组件"
+                >
+                  存为子流程
+                </Button>
+              )}
+            </div>
           )}
         </div>
       </div>
