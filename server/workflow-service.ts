@@ -971,12 +971,19 @@ export async function duplicateWorkflow(
     name: string;
     description?: string | null;
     definition: Definition;
+    projectId?: string | null;
+    flowType?: "state" | "control" | "data";
   } | null;
   if (!source) return null;
   const duplicated = await createWorkflow(
     user,
     name?.trim() || `${source.name} · 副本`,
-    source.description ?? undefined
+    source.description ?? undefined,
+    {
+      projectId: source.projectId,
+      flowType: source.flowType,
+      projectCreationAuthorized: Boolean(source.projectId),
+    }
   );
   if (!duplicated) return null;
   return updateWorkflow((duplicated as any).id, user, {
