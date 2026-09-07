@@ -2011,14 +2011,16 @@ export async function runDataflow(
   try {
     await connection.beginTransaction();
     const [workflows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND status='published' AND archivedAt IS NULL LIMIT 1 FOR UPDATE",
+      "SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND archivedAt IS NULL LIMIT 1 FOR UPDATE",
       [input.workflowId, input.projectId]
     );
     const workflow = workflows[0];
     if (!workflow)
-      throw new Error("数据流不存在、已归档、未发布或不属于当前项目。 ");
+      throw new Error("数据流不存在、已归档或不属于当前项目。 ");
+    if (input.triggerType === "schedule" && workflow.status !== "published")
+      throw new Error("定时调度的流程必须处于已发布状态。 ");
     const publishedPlan = parseJson(workflow.publishedExecutionPlanJson, null);
-    if (publishedPlan && workflow.publishedExecutionPlanHash) {
+    if (publishedPlan && workflow.publishedExecutionPlanHash && workflow.status === "published") {
       executionPlan = assertWorkflowExecutionPlan(
         publishedPlan,
         String(workflow.publishedExecutionPlanHash),
@@ -2114,6 +2116,60 @@ export async function listDataflowRuns(
     watermarkInputJson: undefined,
     watermarkOutputJson: undefined,
   }));
+}
+
+export async function getDataflowRun(
+  user: DataflowUser,
+  input: { projectId: string; runId: string }
+) {
+  await requireProjectAccess(user, input.projectId, "view");
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT r.*, w.name AS workflowName, u.name AS triggerName
+       FROM dataflow_run r
+       JOIN workflow w ON w.id = r.workflowId
+       LEFT JOIN users u ON u.id = r.triggeredByUserId
+      WHERE r.projectId = ? AND r.id = ? LIMIT 1`,
+    [input.projectId, input.runId]
+  );
+  const row = rows[0];
+  if (!row) return null;
+  const r = row as any;
+  const [nodeRuns] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT id, nodeId, nodeType, status, sequenceNo, attempt, rowCount, durationMs, inputJson, outputJson, errorJson, startedAt, finishedAt
+       FROM dataflow_node_run
+      WHERE runId = ? ORDER BY sequenceNo ASC, startedAt ASC`,
+    [input.runId]
+  );
+  return {
+    id: String(r.id),
+    projectId: String(r.projectId),
+    workflowId: String(r.workflowId),
+    status: String(r.status),
+    durationMs: r.durationMs as number | null,
+    startedAt: r.startedAt as Date | null,
+    finishedAt: r.finishedAt as Date | null,
+    workflowName: String(r.workflowName || ""),
+    triggerName: r.triggerName ? String(r.triggerName) : null,
+    input: parseJson(r.inputJson, {}),
+    output: parseJson(r.outputJson, null),
+    error: parseJson(r.errorJson, null),
+    checkpoint: parseJson(r.checkpointJson, null),
+    watermarkInput: parseJson(r.watermarkInputJson, null),
+    watermarkOutput: parseJson(r.watermarkOutputJson, null),
+    nodeRuns: nodeRuns.map((n: any) => ({
+      id: String(n.id),
+      nodeId: String(n.nodeId),
+      nodeType: String(n.nodeType),
+      status: String(n.status),
+      sequenceNo: Number(n.sequenceNo),
+      attempt: Number(n.attempt),
+      rowCount: n.rowCount as number | null,
+      durationMs: n.durationMs as number | null,
+      input: parseJson(n.inputJson, {}),
+      output: parseJson(n.outputJson, null),
+      error: parseJson(n.errorJson, null),
+    })),
+  };
 }
 
 export async function getDataflowRunLineage(

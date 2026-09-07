@@ -90,6 +90,9 @@ const SystemConfigShell = lazy(() => import("@/components/SystemConfigShell"));
 const OrganizationManagementPage = lazy(
   () => import("@/components/OrganizationManagementPage")
 );
+const WorkflowTestRunModal = lazy(
+  () => import("@/components/WorkflowTestRunModal")
+);
 
 type FlowEditorReturn = "center" | "workspace" | "detail" | "warehouse";
 type UserIdentity = {
@@ -795,7 +798,8 @@ function FlowConsole({
       void utils.workflow.runMetrics.invalidate();
       void utils.task.list.invalidate();
       void utils.task.dashboard.invalidate();
-      if (selectedId)
+      const inEditor = requestedRoute.route.section === "flows" && requestedRoute.route.view === "editor";
+      if (selectedId && !inEditor)
         navigateRoute({
           section: "runs",
           view: "monitor",
@@ -808,10 +812,12 @@ function FlowConsole({
   });
   const runDataflow = trpc.data.run.useMutation({
     onSuccess: result => {
-      if (selectedWorkflow?.projectId)
+      if (selectedWorkflow?.projectId) {
         void utils.data.runs.invalidate({
           projectId: selectedWorkflow.projectId,
         });
+        void utils.data.runDetail.invalidate();
+      }
       toast.success(
         `${result.status === "success" ? "数据流运行完成" : "数据流已进入持久化执行队列"}：${result.runId.slice(0, 8)}`
       );
@@ -1897,26 +1903,16 @@ function FlowDesigner({
         />
       </ErrorBoundary>
 
-      <Dialog open={runDialogOpen} onOpenChange={setRunDialogOpen}>
-        <DialogContent className="max-w-2xl sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>运行测试与字段配置</DialogTitle>
-            <DialogDescription>
-              按字段填写本次运行输入；数值与 true/false 会自动保留类型，无需编辑 JSON。
-            </DialogDescription>
-          </DialogHeader>
-          <StructuredRunInput
-            value={runInput}
-            onChange={setRunInput}
-            canRun={canRun}
-            runPending={runPending}
-            onRun={() => {
-              onRun();
-              setRunDialogOpen(false);
-            }}
-          />
-        </DialogContent>
-      </Dialog>
+      <WorkflowTestRunModal
+        open={runDialogOpen}
+        onOpenChange={setRunDialogOpen}
+        workflow={workflow}
+        definition={definition}
+        runInput={runInput}
+        onChangeRunInput={setRunInput}
+        canRun={canRun}
+        onSaveDraft={onSave}
+      />
 
       <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
         <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[85vh] overflow-y-auto">

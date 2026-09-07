@@ -149,6 +149,7 @@ import {
   deleteDataUdf,
   deleteDataflowSchedule,
   deleteProjectPlugin,
+  getDataflowRun,
   getDataflowRunLineage,
   listDataSourceTests,
   listDataflowRuns,
@@ -889,6 +890,14 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listDataflowRuns(ctx.user, input)),
+    runDetail: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          runId: z.string().min(8).max(64),
+        })
+      )
+      .query(({ ctx, input }) => getDataflowRun(ctx.user, input)),
     runLineage: protectedProcedure
       .input(
         z.object({
@@ -1597,6 +1606,7 @@ export const appRouter = router({
           workflowId: z.string().min(8).max(64),
           input: z.record(z.string(), z.unknown()).optional(),
           idempotencyKey: z.string().trim().min(8).max(128).optional(),
+          triggerType: z.enum(["manual", "test", "schedule"]).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -1618,6 +1628,7 @@ export const appRouter = router({
           workflowInput: input.input,
           idempotencyKey: input.idempotencyKey,
           requestId: ctx.requestId,
+          triggerType: input.triggerType,
         });
       }),
     cancelRun: protectedProcedure

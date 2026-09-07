@@ -1866,6 +1866,7 @@ export async function submitWorkflowRun(input: {
   workflowInput?: JsonRecord;
   idempotencyKey?: string;
   requestId?: string;
+  triggerType?: string;
 }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
@@ -1879,6 +1880,7 @@ export async function submitWorkflowRun(input: {
     throw new Error("已归档流程不能发起运行，请先恢复流程。");
   if (
     workflow.projectId &&
+    input.triggerType !== "test" &&
     (workflow.status !== "published" || workflow.auditStatus !== "approved")
   )
     throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");

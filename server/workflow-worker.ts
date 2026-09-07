@@ -531,6 +531,7 @@ export async function submitWorkflowRun(input: {
   workflowInput?: JsonRecord;
   idempotencyKey?: string;
   requestId?: string;
+  triggerType?: string;
 }) {
   const submitted = await persistWorkflowRun(input);
   wakeWorkflowWorker();
