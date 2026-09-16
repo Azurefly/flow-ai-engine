@@ -209,7 +209,85 @@ flowchart TD
 
 ---
 
-## 六、综合验收与投产评价
+## 六、多人、多层级、多角色端到端实测（4 级审批链与全流程审计回溯）
+
+针对真实企业采购与资本支出中最核心的**“多人参与、多级流转、多角色协同”**场景，本次专项设计并执行了跨 6 位真实人员、4 大审批层级的全流程 Web 界面实测：
+
+### 6.1 参与人员与多角色矩阵定义
+
+系统内已真实创建并分配如下 6 位测试人员，分别代表审批链条中的不同层级：
+
+| 人员标识 | 用户名 | 显示名称 | 所属层级与业务角色 | 职责范围与权限边界 |
+|---|---|---|---|---|
+| **User 1** | `applicant_alice` | 采购申请人爱丽丝 | **Tier 1：申请人 / 经办人** | 采购立项填报、初始材料提交、全生命周期审计回溯 |
+| **User 2** | `manager_bob` | 研发初审主管鲍勃 | **Tier 2：部门主管初审人** | 一级初审、部门预算合规审查、或签流转、任务独占认领 |
+| **User 3** | `finance_fiona` | 财务会签专员菲奥娜 | **Tier 3：财务并行会签官** | 二级双轨会签（财务侧）、资金计划复核、会签表决 |
+| **User 4** | `legal_leo` | 法务会签官利奥 | **Tier 3：法务并行会签官** | 二级双轨会签（法务侧）、供应商合同条款审查、会签表决 |
+| **User 5** | `cfo_clark` | 集团财务副总裁克拉克 | **Tier 4：集团 CFO 终审高管** | 三级终审批准、付款办结操作（触发 `bj: true`） |
+| **User 6** | `observer_oscar` | 无权限观察员奥斯卡 | **全局对照组：无关人员** | 项目只读查看，无运行操作权，用于全链路可见性严格隔离断言 |
+
+### 6.2 4 级审批流全链路界面实测轨迹与隔离断言
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Alice as 申请人 Alice (Tier 1)
+    actor Bob as 主管 Bob (Tier 2)
+    actor Fiona as 财务 Fiona (Tier 3)
+    actor Leo as 法务 Leo (Tier 3)
+    actor Clark as CFO Clark (Tier 4)
+    actor Oscar as 观察员 Oscar (无关)
+
+    Alice->>Bob: 1. 发起大额采购申请，提交至一级初审
+    Note over Alice: Alice 待办清空；无法再修改申请
+    Note over Oscar: Oscar 待办为 0，完全不可见、不可操作
+    Bob->>Bob: 2. Bob 专属待办呈现 -> 领取任务锁定 -> 审批同意
+    Bob->>Fiona: 3. 流转至二级会签阶段
+    Bob->>Leo: 3. 同时派发给法务会签
+    Note over Bob: Bob 待办清空，移入已办
+    Fiona->>Fiona: 4. Fiona 待办呈现 -> 办理同意 (会签进度 50%)
+    Note over Clark: Clark 待办为 0，未到终审不可见
+    Leo->>Leo: 5. Leo 待办呈现 -> 办理同意 (会签进度 100%)
+    Leo->>Clark: 6. 两人全员同意，晋级至三级终审
+    Clark->>Clark: 7. Clark 专属待办呈现 -> 终审批准并办结 (COMPLETED)
+    Alice->>Alice: 8. Alice 查看“我发起”，回溯 4 级审批全链路审计履历
+```
+
+#### 关键阶段实测细节与截图存证：
+
+1. **项目成员与多角色赋权（管理员操作）**：
+   - 管理员登录控制台，进入 `ST_CANVAS_QL4RJ9` 采购项目的“权限配置中心”；
+   - 界面依次为 Alice、Bob、Fiona、Leo、Clark 授予 `operator`（流程运行者）权限，为 Oscar 授予 `viewer`（查看者）权限；
+   - 截图存证：[05-multi-members-granted.png](screenshots/05-multi-members-granted.png)。
+2. **Tier 1 经办人申请填报（Alice 视角）**：
+   - 申请人 Alice 登录进入工作台，发起采购流程，提交流转至一级初审主管 Bob；
+   - 提交后刷新待办：任务即刻从 Alice 的待办中转移，Alice 无法再对该阶段进行编辑。
+   - 截图存证：[05-multi-alice-workbench.png](screenshots/05-multi-alice-workbench.png)。
+3. **严格权限隔离断言（Oscar 观察员视角）**：
+   - 无关观察员 Oscar 登录系统，进入 `已启动流程` -> `待办`（Todo）；
+   - **断言（100% 隔离）**：页面显示“待办 0 笔”（暂无待办任务），Oscar 对该流转中的采购任务**完全不可见、不可操作**。
+   - 截图存证：[05-multi-oscar-invisible-todo.png](screenshots/05-multi-oscar-invisible-todo.png)。
+4. **Tier 2 一级初审（主管 Bob 视角）**：
+   - 研发主管 Bob 登录系统进入待办，列表中准确呈现采购任务，操作列显示 `领取任务` 与 `办理`；
+   - Bob 点击 `领取任务` 锁定任务，点击 `办理` 录入初审意见并点击 `同意`，流转至 Tier 3。
+   - 截图存证：[05-multi-bob-visible-workbench.png](screenshots/05-multi-bob-visible-workbench.png)。
+5. **Tier 3 双轨并行会签（财务 Fiona & 法务 Leo 视角）**：
+   - **财务 Fiona 操作**：登录待办查看任务并办理同意，此时会签进度更新为 50%，流程因法务尚未表决而安全保持在会签状态（等待中）；
+     - 截图存证：[05-multi-fiona-sign-step1.png](screenshots/05-multi-fiona-sign-step1.png)；
+   - **法务 Leo 操作**：登录待办查看任务并办理同意，会签全员达成（100% 通过），流程自动跃迁晋级至 Tier 4；
+     - 截图存证：[05-multi-leo-sign-step2.png](screenshots/05-multi-leo-sign-step2.png)；
+   - 在此期间，上一环节主管 Bob 与下一环节高管 Clark 的待办中均不会出现越级任务。
+6. **Tier 4 终审批准与办结（CFO Clark 视角）**：
+   - 集团财务副总裁 Clark 登录系统进入待办，任务呈现于 CFO 专属待办中心；
+   - Clark 点击 `办理` 执行最终付款批准，系统触发办结状态机流转，流程成功结束（SUCCESS）。
+   - 截图存证：[05-multi-clark-cfo-final.png](screenshots/05-multi-clark-cfo-final.png)。
+7. **全流程审计留痕与回溯（Alice 视角）**：
+   - 发起人 Alice 再次登录，切换至 `我发起` 标签页，回溯全链路审计记录：清晰记录了 Tier 1 发起 -> Tier 2 主管 Bob 初审同意 -> Tier 3 财务 Fiona 会签同意 -> Tier 3 法务 Leo 会签同意 -> Tier 4 CFO Clark 终审办结的完整人员名单、决定与时间戳。
+   - 截图存证：[05-multi-audit-trace.png](screenshots/05-multi-audit-trace.png)。
+
+---
+
+## 七、综合验收与投产评价
 
 本次验证深入涵盖了 33 个节点与算子的完整生命周期，全流程通过自动化浏览器从实际页面界面完成交互操作与视觉留痕。
 
