@@ -12,6 +12,7 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:functional": "vitest run --config vitest.functional.config.ts",
     "test:integration:mysql": "vitest run --config vitest.mysql.config.ts",
     "test:integration:authorization": "vitest run --config vitest.mysql.config.ts auth-bootstrap-session internal-auth iam-account-center iam-catalog iam-custom-role workflow-permissions workflow-owner-protection",
     "test:integration:worker": "vitest run --config vitest.mysql.config.ts workflow-worker",

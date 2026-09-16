@@ -109,8 +109,12 @@ function canConnectCanvasNodes(
   if (!canConnectFlowNodeTypes(source.data.kind, target.data.kind))
     return false;
   const outgoing = edges.filter(edge => edge.source === source.id);
+  const isExplicitOperate =
+    source.data.kind === "operate" &&
+    readOperateOutcomeMode(source.data.config) === "explicit";
   if (
-    ["start", "operate", "rest"].includes(source.data.kind) &&
+    (["start", "rest"].includes(source.data.kind) ||
+      (source.data.kind === "operate" && !isExplicitOperate)) &&
     outgoing.length > 0
   )
     return false;

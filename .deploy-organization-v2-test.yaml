@@ -1,0 +1,19 @@
+services:
+  org_test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: build
+    environment:
+      NODE_ENV: test
+      DATABASE_URL: mysql://flow_ai:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@mysql:3306/flow_ai_engine
+    depends_on:
+      mysql:
+        condition: service_healthy
+    command:
+      - sh
+      - -c
+      - pnpm exec vitest run server/organization-management.integration.test.ts --maxWorkers=1 --minWorkers=1 && pnpm exec vitest run server/leave-approval-state-flow.integration.test.ts --maxWorkers=1 --minWorkers=1
+    networks:
+      - backend
