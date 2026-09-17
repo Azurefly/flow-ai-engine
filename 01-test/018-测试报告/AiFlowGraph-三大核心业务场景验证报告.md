@@ -287,7 +287,55 @@ sequenceDiagram
 
 ---
 
-## 七、综合验收与投产评价
+## 七、项目权限隔离与可见人/部门授权实测（创建人受控共享，超级管理员查看全部）
+
+针对业务实操中提出的**“项目需要进行权限隔离，创建人允许添加可见人或者部门；超级管理员可以看到全部”**的核心需求，系统在持久层、服务网关及前端工作区完成了完整闭环设计与功能验证：
+
+### 7.1 权限隔离架构与数据模型设计
+
+```mermaid
+flowchart TD
+    subgraph 超级管理员视角（Super Admin）
+        SA[超级管理员登录] -->|user.role === 'admin'| ALL[无限制查看全局全量业务项目及流程]
+    end
+
+    subgraph 普通用户与创建人隔离视角（Creator & Member）
+        U[普通用户登录] --> CHK{是否具备该项目可见权限?}
+        CHK -->|是创建人: p.ownerUserId == user.id| VIS[项目可见，拥有最高所有权 Owner]
+        CHK -->|被单独指定为可见人: pm.userId == user.id| VIS2[项目可见，获得指定查看/运行角色]
+        CHK -->|属于已授权可见部门: om.unitId == pu.unitId| VIS3[项目可见，自动继承部门查看/运行角色]
+        CHK -->|以上均不满足| HIDDEN[项目彻底不可见，列表 0 笔返回，拒绝越权访问]
+    end
+```
+
+### 7.2 核心改造与实现说明
+
+1. **可见部门数据持久化（`flow_project_unit` 表）**：
+   - 建立实体表 `flow_project_unit`（字段：`id`, `projectId`, `unitId`, `role`, `createdAt`），建立 `(projectId, unitId)` 唯一键与部门索引；
+   - 彻底打破“只能单人授权”的局限，无缝打通组织架构树（`organization_unit`），实现**按部门整体批量继承项目可见性**。
+2. **多维项目可见性检索算法（`listProjects`）**：
+   - **超级管理员**：`user.role === 'admin'` 时执行全表检索，**无任何条件过滤，全局所有项目与流程始终完全可见**；
+   - **非管理员用户**：严格校验 `(p.ownerUserId = ? OR pm.id IS NOT NULL OR EXISTS (SELECT 1 FROM flow_project_unit pu JOIN organization_membership om ON om.unitId=pu.unitId WHERE pu.projectId=p.id AND om.userId=?))`，确保未授权人员完全无法在界面上看到他人项目。
+3. **创建人灵活添加可见人与可见部门（前端交互落地）**：
+   - **创建业务时**：`新增业务`（`CreationDialog`）表单中，直接提供“添加可见部门（部门成员自动继承可见权）”与“添加可见人（直接授权人员可见权）”下拉选择器，创建即完成权限绑定与受控共享；
+   - **项目工作区内**：在“权限配置中心”提供**“可见人管理（直接授权成员）”**与**“可见部门管理（部门继承授权）”**两大并列管理模块，支持随时为新部门或新人员追加/撤销可见与运行角色；
+   - 界面上提供醒目的权限隔离指引说明，杜绝数据泄露风险。
+
+### 7.3 自动化功能与断言测试（`TC-MOD2-PERM-001`）
+
+固化测试套件 [tests/functional/02-business-workspace.functional.test.ts](flow-ai-engine/tests/functional/02-business-workspace.functional.test.ts) 中已固化该专项测试，实际执行结果：
+
+| 测试用例场景 | 模拟人员与权限配置 | 预期可见项目 | 实际测试输出 | 断言结论 |
+|---|---|---|---|---|
+| **Case 1：超级管理员** | `user.role: 'admin'` | 全部项目（p1, p2, p3） | `[p1, p2, p3]` (共 3 笔) | **PASS** |
+| **Case 2：项目创建人 Alice** | `userId: 101`，创建了 p1 | 仅自己创建的 p1 | `[p1]` (共 1 笔，看不到 p2 与 p3) | **PASS** |
+| **Case 3：单独可见人 David** | `userId: 104`，被 Alice 添加为 p1 可见人 | 获得授权的 p1 | `[p1]` (共 1 笔，看不到他人项目) | **PASS** |
+| **Case 4：部门继承人 Fiona** | `userId: 105`，属于财务部（p3 授权给财务部） | 财务部可见的 p3 | `[p3]` (共 1 笔，看不到研发项目) | **PASS** |
+| **Case 5：无关人员 Helen** | `userId: 106`，属于 HR 部门（无任何授权） | 0 笔（完全不可见） | `[]` (共 0 笔) | **PASS** |
+
+---
+
+## 八、综合验收与投产评价
 
 本次验证深入涵盖了 33 个节点与算子的完整生命周期，全流程通过自动化浏览器从实际页面界面完成交互操作与视觉留痕。
 
