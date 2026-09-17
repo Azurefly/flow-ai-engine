@@ -29,6 +29,10 @@ import {
   ArrowRight,
   Trash2,
   Plus,
+  Compass,
+  UserCheck,
+  Clock,
+  HelpCircle,
 } from "lucide-react";
 
 interface WorkflowTestRunModalProps {
@@ -53,6 +57,7 @@ export default function WorkflowTestRunModal({
   onSaveDraft,
 }: WorkflowTestRunModalProps) {
   const isDataflow = workflow?.flowType === "data";
+  const isStateflow = workflow?.flowType === "state";
   const [activeTab, setActiveTab] = useState<"result" | "steps" | "input">("result");
   const [viewMode, setViewMode] = useState<"config" | "result">("config");
   const [resultDisplayMode, setResultDisplayMode] = useState<"table" | "json">("table");
@@ -273,14 +278,26 @@ export default function WorkflowTestRunModal({
         <DialogHeader className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white shadow-sm">
-                <Play size={18} />
+              <div className={`flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-sm ${
+                isStateflow ? "bg-indigo-600" : isDataflow ? "bg-cyan-600" : "bg-blue-600"
+              }`}>
+                {isStateflow ? <Compass size={18} /> : <Play size={18} />}
               </div>
               <div>
                 <DialogTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                  <span>流程试运行与即时结果</span>
+                  <span>
+                    {isStateflow
+                      ? "状态流程交互仿真与路径走查"
+                      : isDataflow
+                      ? "数据流程管道抽样试跑"
+                      : "控制流程自动化单步调试"}
+                  </span>
                   <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200/60">
-                    {isDataflow ? "数据流算子管线" : "工作流引擎"}
+                    {isStateflow
+                      ? "状态机 Profile · 事务流转"
+                      : isDataflow
+                      ? "数据流 Profile · 算子管线"
+                      : "控制流 Profile · DAG 执行"}
                   </span>
                   {workflow?.status === "published" ? (
                     <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200/60">
@@ -288,12 +305,16 @@ export default function WorkflowTestRunModal({
                     </span>
                   ) : (
                     <span className="rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200/60">
-                      草稿试运行
+                      草稿仿真
                     </span>
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                  在设计器内即时调试执行并展示算子计算输出，无需跳出页面。
+                  {isStateflow
+                    ? "推演业务对象生命周期流转，模拟各节点参与人操作，排查孤岛状态与循环路径。"
+                    : isDataflow
+                    ? "在沙箱中抽样执行数据流算子，即时预览 Schema 兼容性与计算输出。"
+                    : "在设计器内即时调试执行自动化 DAG 并展示算子计算输出，无需跳出页面。"}
                 </DialogDescription>
               </div>
             </div>
@@ -309,7 +330,7 @@ export default function WorkflowTestRunModal({
                   onClick={() => setViewMode("config")}
                 >
                   <SlidersHorizontal size={13} className="mr-1.5" />
-                  配置运行参数
+                  配置初始上下文
                 </Button>
               )}
               {viewMode === "config" && currentRun && (
@@ -320,7 +341,7 @@ export default function WorkflowTestRunModal({
                   className="h-8 text-xs text-blue-600 border-blue-200 bg-blue-50/50"
                   onClick={() => setViewMode("result")}
                 >
-                  查看上次结果
+                  查看仿真轨迹
                 </Button>
               )}
             </div>
@@ -331,19 +352,26 @@ export default function WorkflowTestRunModal({
             <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-2.5 shadow-sm">
               <div className="flex items-center gap-3">
                 {isRunning || (!isCompleted && activeRunId && !runError) ? (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-blue-600">
-                    <Loader2 size={16} className="animate-spin text-blue-600" />
-                    <span>正在调度计算…</span>
-                  </div>
+                  currentRun?.status === "waiting" || currentRun?.status === "blocked" ? (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-amber-700">
+                      <Clock size={16} className="text-amber-600" />
+                      <span>{isStateflow ? "流转挂起：等待参与人审批操作" : "流程等待外部事件挂起"}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs font-semibold text-blue-600">
+                      <Loader2 size={16} className="animate-spin text-blue-600" />
+                      <span>正在调度推演…</span>
+                    </div>
+                  )
                 ) : currentRun?.status === "success" ? (
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
                     <CheckCircle2 size={16} className="text-emerald-600" />
-                    <span>试运行完成</span>
+                    <span>{isStateflow ? "状态流转抵达终态" : "执行顺利完成"}</span>
                   </div>
                 ) : currentRun?.status === "failed" || runError ? (
                   <div className="flex items-center gap-2 text-xs font-semibold text-red-700">
                     <XCircle size={16} className="text-red-600" />
-                    <span>试运行失败</span>
+                    <span>{isStateflow ? "状态流转异常阻断" : "试运行失败"}</span>
                   </div>
                 ) : (
                   <div className="text-xs text-slate-500 font-medium">准备就绪</div>
@@ -459,7 +487,11 @@ export default function WorkflowTestRunModal({
 
                 <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <div className="text-xs text-slate-400">
-                    试运行将优先保存当前画布草稿，并在后台沙箱中完成运算
+                    {isStateflow
+                      ? "仿真将保存画布草稿并在沙箱中推演业务生命周期"
+                      : isDataflow
+                      ? "抽样试跑将读取样例数据源并在沙箱中进行流式处理"
+                      : "调试将优先保存当前画布草稿，并在后台沙箱中完成自动化运算"}
                   </div>
                   <Button
                     className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
@@ -469,10 +501,12 @@ export default function WorkflowTestRunModal({
                   >
                     {isRunning ? (
                       <Loader2 size={14} className="animate-spin mr-1.5" />
+                    ) : isStateflow ? (
+                      <Compass size={14} className="mr-1.5" />
                     ) : (
                       <Play size={14} className="mr-1.5" />
                     )}
-                    立即开始试运行
+                    {isStateflow ? "开始仿真推演" : isDataflow ? "开始抽样试跑" : "立即开始单步调试"}
                   </Button>
                 </div>
               </div>
@@ -480,6 +514,23 @@ export default function WorkflowTestRunModal({
           ) : (
             /* Results View */
             <div className="space-y-4">
+              {/* State flow waiting prompt */}
+              {isStateflow && (currentRun?.status === "waiting" || currentRun?.status === "blocked") && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3.5 shadow-2xs">
+                  <div className="flex items-start gap-3">
+                    <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                    <div className="text-xs text-amber-800">
+                      <p className="font-semibold text-amber-900">
+                        状态流转已就绪：当前处于等待参与人操作（审批/签署/提交）阶段
+                      </p>
+                      <p className="mt-1 leading-relaxed text-amber-700">
+                        状态流程本质是长周期的业务对象生命周期，当前节点已成功流转至人工待办任务。在实际业务运行中，需由对应角色成员（如经办人、风控初审员、主管）在【已启动流程-工作台】中完成审批后方可继续流转。下方已为您呈现当前到达的状态节点与上下文数据。
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Tabs */}
               <div className="flex items-center gap-1 border-b border-slate-200 bg-white px-3 py-1 rounded-t-lg">
                 <button
@@ -492,7 +543,7 @@ export default function WorkflowTestRunModal({
                   onClick={() => setActiveTab("result")}
                 >
                   <FileSpreadsheet size={14} />
-                  <span>最终输出结果</span>
+                  <span>{isStateflow ? "当前状态与业务上下文" : "最终输出结果"}</span>
                   {outputRows && (
                     <span className="rounded bg-blue-100/70 px-1.5 py-0.2 text-[10px] text-blue-800 font-semibold">
                       {outputRows.length} 条
@@ -510,7 +561,7 @@ export default function WorkflowTestRunModal({
                   onClick={() => setActiveTab("steps")}
                 >
                   <Layers size={14} />
-                  <span>算子执行明细</span>
+                  <span>{isStateflow ? "状态跃迁与节点轨迹" : "算子执行明细"}</span>
                   {Boolean(currentRun?.nodeRuns?.length || dataflowLineageQuery.data?.artifacts?.length) && (
                     <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[10px] text-slate-600">
                       {currentRun?.nodeRuns?.length || dataflowLineageQuery.data?.artifacts?.length} 节点

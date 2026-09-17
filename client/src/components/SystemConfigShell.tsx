@@ -137,7 +137,7 @@ function GeneralSettings() {
           水印文字
           <Input value={form.watermarkText} onChange={event => setForm({ ...form, watermarkText: event.target.value })} maxLength={120} disabled={!form.watermarkEnabled} />
         </label>
-        <Button className="w-fit bg-[#2d6bea] hover:bg-[#255bc8]" disabled={update.isPending}>
+        <Button className="w-fit bg-blue-600 hover:bg-blue-700 text-white shadow-2xs" disabled={update.isPending}>
           {update.isPending && <Loader2 className="animate-spin" size={15} />}
           保存通用设置
         </Button>
@@ -202,7 +202,7 @@ function ApprovalSettings() {
             </label>
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <Button
-                className="bg-[#2d6bea] hover:bg-[#255bc8]"
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
                 size="sm"
                 disabled={update.isPending}
                 onClick={() =>
@@ -343,7 +343,7 @@ function AccessSettings({ onOpenIdentity, onOpenOrganization }: { onOpenIdentity
           <ShieldCheck className="text-[#2d6bea]" size={22} />
           <h3 className="mt-4 font-semibold text-slate-800">账号与角色</h3>
           <p className="mt-2 flex-1 text-sm leading-6 text-slate-600">维护内部账号、系统角色、直接与临时授权，查看用户权限和角色绑定用户。</p>
-          <Button type="button" className="mt-5 w-fit bg-[#2d6bea] hover:bg-[#255bc8]" onClick={onOpenIdentity}>
+          <Button type="button" className="mt-5 w-fit bg-blue-600 hover:bg-blue-700 text-white shadow-2xs" onClick={onOpenIdentity}>
             <ShieldCheck size={16} />
             打开身份与权限中心
           </Button>

@@ -229,7 +229,7 @@ export function StructuredResourceForm({
       </div>
       <Button
         type="button"
-        className="w-fit bg-[#2d6bea] hover:bg-[#255bc8]"
+        className="w-fit bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
         onClick={() => setOpen(true)}
       >
         <Plus size={14} />

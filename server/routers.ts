@@ -82,13 +82,19 @@ import {
   exportProjectWorkflows,
   getProjectAccess,
   grantProjectMember,
+  grantProjectUnit,
+  listActiveUnits,
+  listActiveUsers,
   listProjectMembers,
+  listProjectUnits,
   listProjects,
   listProjectWorkflowAudit,
   listProjectWorkflows,
   listWarehouse,
   moveProjectWorkflow,
   resetProjectWorkflowAudit,
+  revokeProjectMember,
+  revokeProjectUnit,
   setProjectWorkflowAudit,
   updateFolder,
   updateProjectWorkflowInfo,
@@ -535,6 +541,8 @@ export const appRouter = router({
           name: z.string().trim().min(1).max(160),
           description: z.string().trim().max(2000).optional(),
           domainId: z.string().uuid().nullable().optional(),
+          visibleUserIds: z.array(z.number().int()).optional(),
+          visibleUnitIds: z.array(z.string()).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => ({
@@ -621,6 +629,42 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await grantProjectMember(ctx.user, input),
       })),
+    revokeMember: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          userId: z.number().int().positive(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await revokeProjectMember(ctx.user, input),
+      })),
+    units: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => listProjectUnits(ctx.user, input.projectId)),
+    grantUnit: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          unitId: z.string().min(8).max(64),
+          role: z.enum(["owner", "designer", "operator", "viewer"]).default("viewer"),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await grantProjectUnit(ctx.user, input),
+      })),
+    revokeUnit: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          unitId: z.string().min(8).max(64),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await revokeProjectUnit(ctx.user, input),
+      })),
+    activeUnits: protectedProcedure.query(() => listActiveUnits()),
+    activeUsers: protectedProcedure.query(() => listActiveUsers()),
     warehouse: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => listWarehouse(ctx.user, input.projectId)),

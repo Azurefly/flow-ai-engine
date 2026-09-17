@@ -3,12 +3,13 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CreationDialog } from "@/components/CreationDialog";
 import { trpc } from "@/lib/trpc";
-import { ChevronLeft, ChevronRight, CircleDot, Database, FolderKanban, Globe2, LayoutList, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, Upload, UsersRound } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleDot, Database, FolderKanban, Globe2, LayoutList, Loader2, PanelLeftClose, PanelLeftOpen, Plus, ShieldCheck, Upload, UsersRound, Building2, Trash2 } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import DataResourceCenter from "./DataResourceCenter";
 
 export type ProjectRecord = { id: string; code: string; name: string; description?: string | null; ownerName?: string | null; ownerUsername?: string | null; workflowCount?: number; createdAt?: string | Date; domainId?: string | null; domainCode?: string | null; domainName?: string | null; rootDepartment?: string | null };
+export type ProjectMemberRole = "owner" | "designer" | "operator" | "viewer";
 
 const flowTypeLabel = { state: "状态流程", control: "控制流程", data: "数据流程" } as const;
 const flowTypeStyle = { state: "bg-blue-100 text-blue-700", control: "bg-violet-100 text-violet-700", data: "bg-emerald-100 text-emerald-700" } as const;
@@ -20,12 +21,19 @@ export function BusinessCenter({ projects, canCreate, onOpenProject }: { project
   const [filterForm, setFilterForm] = useState({ keyword: "", startDate: "", endDate: "" });
   const [appliedFilters, setAppliedFilters] = useState({ keyword: "", startDate: "", endDate: "" });
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ code: "", name: "", description: "", domainId: "" });
+  const [form, setForm] = useState({ code: "", name: "", description: "", domainId: "", visibleUserIds: [] as number[], visibleUnitIds: [] as string[] });
   const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
   const domains = trpc.project.activeDomains.useQuery(undefined, { enabled: canCreate });
+  const activeUnits = trpc.project.activeUnits.useQuery(undefined, { enabled: canCreate });
+  const activeUsers = trpc.project.activeUsers.useQuery(undefined, { enabled: canCreate });
   const createProject = trpc.project.create.useMutation({
-    onSuccess: () => { void utils.project.list.invalidate(); setShowCreate(false); setForm({ code: "", name: "", description: "", domainId: "" }); toast.success("业务项目已创建。"); },
+    onSuccess: () => {
+      void utils.project.list.invalidate();
+      setShowCreate(false);
+      setForm({ code: "", name: "", description: "", domainId: "", visibleUserIds: [], visibleUnitIds: [] });
+      toast.success("业务项目已创建，权限隔离已生效。");
+    },
     onError: error => toast.error(error.message),
   });
   const importBusinesses = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -64,11 +72,11 @@ export function BusinessCenter({ projects, canCreate, onOpenProject }: { project
     const end = appliedFilters.endDate ? new Date(`${appliedFilters.endDate}T23:59:59.999`).getTime() : Number.POSITIVE_INFINITY;
     return Number.isNaN(createdAt) ? !appliedFilters.startDate && !appliedFilters.endDate : createdAt >= start && createdAt <= end;
   }), [appliedFilters, projects]);
-  return <><BusinessCenterView projects={visible} canCreate={canCreate} filterForm={filterForm} setFilterForm={setFilterForm} onQuery={() => setAppliedFilters(filterForm)} onReset={() => { const empty = { keyword: "", startDate: "", endDate: "" }; setFilterForm(empty); setAppliedFilters(empty); }} showCreate={showCreate} setShowCreate={setShowCreate} form={form} setForm={setForm} domains={domains.data ?? []} creating={createProject.isPending} importing={importing} onRequestImport={() => importRef.current?.click()} onCreate={() => createProject.mutate({ ...form, domainId: form.domainId || null })} onOpenProject={onOpenProject} /><input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => void importBusinesses(event)} /></>;
+  return <><BusinessCenterView projects={visible} canCreate={canCreate} filterForm={filterForm} setFilterForm={setFilterForm} onQuery={() => setAppliedFilters(filterForm)} onReset={() => { const empty = { keyword: "", startDate: "", endDate: "" }; setFilterForm(empty); setAppliedFilters(empty); }} showCreate={showCreate} setShowCreate={setShowCreate} form={form} setForm={setForm} domains={domains.data ?? []} activeUnits={activeUnits.data ?? []} activeUsers={activeUsers.data ?? []} creating={createProject.isPending} importing={importing} onRequestImport={() => importRef.current?.click()} onCreate={() => createProject.mutate({ ...form, domainId: form.domainId || null, visibleUserIds: form.visibleUserIds, visibleUnitIds: form.visibleUnitIds })} onOpenProject={onOpenProject} /><input ref={importRef} type="file" accept=".csv,text/csv" className="hidden" onChange={event => void importBusinesses(event)} /></>;
 }
 
-function BusinessCenterView({ projects, canCreate, filterForm, setFilterForm, onQuery, onReset, showCreate, setShowCreate, form, setForm, domains, creating, importing, onRequestImport, onCreate, onOpenProject }: { projects: ProjectRecord[]; canCreate: boolean; filterForm: { keyword: string; startDate: string; endDate: string }; setFilterForm: (value: { keyword: string; startDate: string; endDate: string }) => void; onQuery: () => void; onReset: () => void; showCreate: boolean; setShowCreate: (value: boolean | ((previous: boolean) => boolean)) => void; form: { code: string; name: string; description: string; domainId: string }; setForm: (value: { code: string; name: string; description: string; domainId: string }) => void; domains: any[]; creating: boolean; importing: boolean; onRequestImport: () => void; onCreate: () => void; onOpenProject: (project: ProjectRecord) => void }) {
-  return <div data-aiflow-business-center="" className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div><div className="mb-5 border-b border-slate-200 pb-4"><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">FLOW DESIGN · BUSINESS CENTER</p><div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight text-slate-800">业务中心</h1><p className="mt-1 text-sm text-slate-500">选择业务项目，进入流程设计中心、项目权限与资源配置工作区。</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled title="当前未配置受管 BDP 连接，无法同步外部业务配置。">同步 BDP 配置</Button>{canCreate && <Button type="button" variant="outline" size="sm" disabled={importing} onClick={onRequestImport} title="导入列式 CSV：业务代号、业务名称、工作域代号（可选）、业务说明（可选）。"><Upload size={15} />{importing ? "正在导入" : "导入业务"}</Button>}{canCreate && <Button className="bg-[#2d6bea] hover:bg-[#255bc8]" onClick={() => setShowCreate(true)}><Plus size={16} />新增业务</Button>}</div></div></div><section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 bg-slate-50/80 p-4"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><FolderKanban size={16} className="text-[#2d6bea]" />业务列表 <span className="text-xs font-normal text-slate-400">（{projects.length}）</span></div><div className="grid gap-2 sm:grid-cols-[minmax(190px,1fr)_145px_145px_auto_auto]"><Input className="h-9 bg-white text-sm" placeholder="按业务代号、名称、工作域或说明搜索" value={filterForm.keyword} onChange={event => setFilterForm({ ...filterForm, keyword: event.target.value })} /><Input className="h-9 bg-white text-xs" type="date" aria-label="创建时间开始" value={filterForm.startDate} onChange={event => setFilterForm({ ...filterForm, startDate: event.target.value })} /><Input className="h-9 bg-white text-xs" type="date" aria-label="创建时间结束" value={filterForm.endDate} onChange={event => setFilterForm({ ...filterForm, endDate: event.target.value })} /><Button type="button" size="sm" onClick={onQuery}>查询</Button><Button type="button" variant="outline" size="sm" onClick={onReset}>重置</Button></div></div><p className="mt-2 text-[11px] text-slate-400">筛选仅作用于当前已授权可见的业务项目；同步入口在未配置受管外部连接时保持禁用。</p></div><div className="overflow-x-auto"><table className="w-full min-w-[1040px] text-left text-sm"><thead className="bg-[#f8faff] text-xs font-medium text-slate-500"><tr><th className="px-5 py-3 whitespace-nowrap">序号</th><th className="px-5 py-3 whitespace-nowrap">业务代号</th><th className="px-5 py-3 whitespace-nowrap">业务名称</th><th className="px-5 py-3 whitespace-nowrap">根部门</th><th className="px-5 py-3 whitespace-nowrap">工作域</th><th className="px-5 py-3 whitespace-nowrap">流程数量</th><th className="px-5 py-3 whitespace-nowrap">创建人</th><th className="px-5 py-3 whitespace-nowrap">创建时间</th><th className="px-5 py-3">说明</th><th className="px-5 py-3 text-right whitespace-nowrap">操作</th></tr></thead><tbody>{projects.map((project, index) => <tr key={project.id} className="border-t border-slate-100 transition-colors hover:bg-blue-50/40"><td className="px-5 py-4 font-mono text-xs text-slate-400 whitespace-nowrap">{index + 1}</td><td className="px-5 py-4 font-mono text-xs font-semibold text-[#2d6bea] whitespace-nowrap">{project.code}</td><td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">{project.name}</td><td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap" title={project.rootDepartment ? undefined : "当前内部项目模型未配置根部门，未以工作域字段替代。"}>{project.rootDepartment || "未配置"}</td><td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">{project.domainCode ? <span className="rounded bg-violet-50 px-2 py-1 text-violet-700">{project.domainCode} · {project.domainName}</span> : "未归属"}</td><td className="px-5 py-4 text-slate-500 whitespace-nowrap">{Number(project.workflowCount ?? 0)}</td><td className="px-5 py-4 text-slate-500 whitespace-nowrap">{project.ownerName || project.ownerUsername || "—"}</td><td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">{formatDate(project.createdAt)}</td><td className="max-w-[260px] truncate px-5 py-4 text-slate-500">{project.description || "—"}</td><td className="px-5 py-4 text-right whitespace-nowrap"><button className="font-medium text-[#2d6bea] hover:text-[#174fb5]" onClick={() => onOpenProject(project)}>进入业务 <ChevronRight className="inline" size={14} /></button></td></tr>)}{!projects.length && <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-slate-400">暂无匹配的已授权业务项目。{canCreate ? "请重置筛选或新建业务后开始设计流程。" : "请联系管理员授予项目角色。"}</td></tr>}</tbody></table></div></section><CreationDialog open={showCreate} onOpenChange={setShowCreate} title="新增业务" description="填写业务基本信息后调用项目创建接口；取消不会保存任何数据。" submitLabel="保存业务" pending={creating} onSubmit={onCreate}><Input placeholder="业务代号，如 OPS" value={form.code} onChange={event => setForm({ ...form, code: event.target.value.toUpperCase() })} required /><Input placeholder="业务名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /><select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={form.domainId} onChange={event => setForm({ ...form, domainId: event.target.value })}><option value="">未归属工作域</option>{domains.map(domain => <option key={domain.id} value={domain.id}>{domain.code} · {domain.name}</option>)}</select><Input placeholder="业务说明（可选）" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></CreationDialog></div></div>;
+function BusinessCenterView({ projects, canCreate, filterForm, setFilterForm, onQuery, onReset, showCreate, setShowCreate, form, setForm, domains, activeUnits, activeUsers, creating, importing, onRequestImport, onCreate, onOpenProject }: { projects: ProjectRecord[]; canCreate: boolean; filterForm: { keyword: string; startDate: string; endDate: string }; setFilterForm: (value: { keyword: string; startDate: string; endDate: string }) => void; onQuery: () => void; onReset: () => void; showCreate: boolean; setShowCreate: (value: boolean | ((previous: boolean) => boolean)) => void; form: any; setForm: (value: any) => void; domains: any[]; activeUnits: any[]; activeUsers: any[]; creating: boolean; importing: boolean; onRequestImport: () => void; onCreate: () => void; onOpenProject: (project: ProjectRecord) => void }) {
+  return <div data-aiflow-business-center="" className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"><div><div className="mb-5 border-b border-slate-200 pb-4"><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">FLOW DESIGN · BUSINESS CENTER</p><div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h1 className="text-2xl font-semibold tracking-tight text-slate-800">业务中心</h1><p className="mt-1 text-sm text-slate-500">选择业务项目，进入流程设计中心、项目权限与资源配置工作区。</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled title="当前未配置受管 BDP 连接，无法同步外部业务配置。">同步 BDP 配置</Button>{canCreate && <Button type="button" variant="outline" size="sm" disabled={importing} onClick={onRequestImport} title="导入列式 CSV：业务代号、业务名称、工作域代号（可选）、业务说明（可选）。"><Upload size={15} />{importing ? "正在导入" : "导入业务"}</Button>}{canCreate && <Button className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs" onClick={() => setShowCreate(true)}><Plus size={16} />新增业务</Button>}</div></div></div><section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="border-b border-slate-100 bg-slate-50/80 p-4"><div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"><div className="flex items-center gap-2 text-sm font-semibold text-slate-700"><FolderKanban size={16} className="text-[#2d6bea]" />业务列表 <span className="text-xs font-normal text-slate-400">（{projects.length}）</span></div><div className="grid gap-2 sm:grid-cols-[minmax(190px,1fr)_145px_145px_auto_auto]"><Input className="h-9 bg-white text-sm" placeholder="按业务代号、名称、工作域或说明搜索" value={filterForm.keyword} onChange={event => setFilterForm({ ...filterForm, keyword: event.target.value })} /><Input className="h-9 bg-white text-xs" type="date" aria-label="创建时间开始" value={filterForm.startDate} onChange={event => setFilterForm({ ...filterForm, startDate: event.target.value })} /><Input className="h-9 bg-white text-xs" type="date" aria-label="创建时间结束" value={filterForm.endDate} onChange={event => setFilterForm({ ...filterForm, endDate: event.target.value })} /><Button type="button" size="sm" onClick={onQuery}>查询</Button><Button type="button" variant="outline" size="sm" onClick={onReset}>重置</Button></div></div><p className="mt-2 text-[11px] text-slate-400">筛选仅作用于当前已授权可见的业务项目；同步入口在未配置受管外部连接时保持禁用。</p></div><div className="overflow-x-auto"><table className="w-full min-w-[1040px] text-left text-sm"><thead className="bg-[#f8faff] text-xs font-medium text-slate-500"><tr><th className="px-5 py-3 whitespace-nowrap">序号</th><th className="px-5 py-3 whitespace-nowrap">业务代号</th><th className="px-5 py-3 whitespace-nowrap">业务名称</th><th className="px-5 py-3 whitespace-nowrap">根部门</th><th className="px-5 py-3 whitespace-nowrap">工作域</th><th className="px-5 py-3 whitespace-nowrap">流程数量</th><th className="px-5 py-3 whitespace-nowrap">创建人</th><th className="px-5 py-3 whitespace-nowrap">创建时间</th><th className="px-5 py-3">说明</th><th className="px-5 py-3 text-right whitespace-nowrap">操作</th></tr></thead><tbody>{projects.map((project, index) => <tr key={project.id} className="border-t border-slate-100 transition-colors hover:bg-blue-50/40"><td className="px-5 py-4 font-mono text-xs text-slate-400 whitespace-nowrap">{index + 1}</td><td className="px-5 py-4 font-mono text-xs font-semibold text-[#2d6bea] whitespace-nowrap">{project.code}</td><td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">{project.name}</td><td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap" title={project.rootDepartment ? undefined : "当前内部项目模型未配置根部门，未以工作域字段替代。"}>{project.rootDepartment || "未配置"}</td><td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">{project.domainCode ? <span className="rounded bg-violet-50 px-2 py-1 text-violet-700">{project.domainCode} · {project.domainName}</span> : "未归属"}</td><td className="px-5 py-4 text-slate-500 whitespace-nowrap">{Number(project.workflowCount ?? 0)}</td><td className="px-5 py-4 text-slate-500 whitespace-nowrap">{project.ownerName || project.ownerUsername || "—"}</td><td className="px-5 py-4 text-xs text-slate-500 whitespace-nowrap">{formatDate(project.createdAt)}</td><td className="max-w-[260px] truncate px-5 py-4 text-slate-500">{project.description || "—"}</td><td className="px-5 py-4 text-right whitespace-nowrap"><button className="font-medium text-[#2d6bea] hover:text-[#174fb5]" onClick={() => onOpenProject(project)}>进入业务 <ChevronRight className="inline" size={14} /></button></td></tr>)}{!projects.length && <tr><td colSpan={10} className="px-5 py-12 text-center text-sm text-slate-400">暂无匹配的已授权业务项目。{canCreate ? "请重置筛选或新建业务后开始设计流程。" : "请联系管理员授予项目角色。"}</td></tr>}</tbody></table></div></section><CreationDialog open={showCreate} onOpenChange={setShowCreate} title="新增业务" description="填写业务基本信息后调用项目创建接口；创建人自动拥有所有权，可同时配置可见人与可见部门。" submitLabel="保存业务" pending={creating} onSubmit={onCreate}><Input placeholder="业务代号，如 OPS" value={form.code} onChange={event => setForm({ ...form, code: event.target.value.toUpperCase() })} required /><Input placeholder="业务名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /><select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={form.domainId} onChange={event => setForm({ ...form, domainId: event.target.value })}><option value="">未归属工作域</option>{domains.map(domain => <option key={domain.id} value={domain.id}>{domain.code} · {domain.name}</option>)}</select><Input placeholder="业务说明（可选）" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /><div className="grid gap-1"><label className="text-xs font-medium text-slate-600">添加可见部门（部门成员自动继承可见权）</label><select aria-label="添加可见部门" className="h-9 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700" value={form.visibleUnitIds[0] ?? ""} onChange={event => { const val = event.target.value; setForm({ ...form, visibleUnitIds: val ? [val] : [] }); }}><option value="">未指定（仅创建人与可见人可见）</option>{activeUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.displayPath || `${unit.name}（${unit.code}）`}</option>)}</select></div><div className="grid gap-1"><label className="text-xs font-medium text-slate-600">添加可见人（直接授权人员可见权）</label><select aria-label="添加可见人" className="h-9 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700" value={form.visibleUserIds[0] ? String(form.visibleUserIds[0]) : ""} onChange={event => { const val = Number(event.target.value); setForm({ ...form, visibleUserIds: val > 0 ? [val] : [] }); }}><option value="">未指定</option>{activeUsers.map(user => <option key={user.id} value={user.id}>{user.name ? `${user.name}（${user.username}）` : user.username}</option>)}</select></div><div className="rounded border border-blue-100 bg-blue-50/60 p-2.5 text-[11px] leading-5 text-slate-600"><strong>权限隔离保护：</strong>创建人默认拥有该业务所有权（Owner）；所选可见人与可见部门成员拥有查看与协作权；超级管理员（Super Admin）拥有全局全量业务查看权。</div></CreationDialog></div></div>;
 }
 
 type WorkspaceView = "process" | "members" | "resources" | "services";
@@ -160,24 +168,275 @@ function ProcessCenter({ project, workflows, filters, setFilters, onApplyFilters
   return <div>
     <div data-aiflow-context-header className="mb-5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
       <div><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">{project.code} · PROCESS DESIGN CENTER</p><h1 className="mt-1 text-xl font-semibold text-slate-800">流程设计中心</h1><p className="mt-1 text-sm text-slate-500">管理状态、控制和数据三类流程的审核、发布和执行生命周期。</p></div>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={onOpenWarehouse}><Upload size={15} />上传仓库</Button>{workflows.length > 0 && <select aria-label="选择流程查看审批记录" className="h-9 max-w-48 rounded border border-slate-200 bg-white px-2 text-sm" value={auditWorkflowId ?? ""} onChange={event => setAuditWorkflowId(event.target.value || null)}><option value="">审批记录</option>{workflows.map(workflow => <option key={workflow.id} value={workflow.id}>{workflow.processCode || workflow.name}</option>)}</select>}{canCreate && <Button className="bg-[#2d6bea] hover:bg-[#255bc8]" onClick={() => setShowCreate(true)}><Plus size={16} />新增流程</Button>}</div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={onOpenWarehouse} className="h-8 text-xs gap-1">
+          <Upload size={14} />上传仓库
+        </Button>
+        {workflows.length > 0 && (
+          <select
+            aria-label="选择流程查看审批记录"
+            className="h-8 max-w-48 rounded-lg border border-slate-200 bg-white px-2 text-xs text-slate-700 shadow-2xs"
+            value={auditWorkflowId ?? ""}
+            onChange={event => setAuditWorkflowId(event.target.value || null)}
+          >
+            <option value="">审批记录</option>
+            {workflows.map(workflow => (
+              <option key={workflow.id} value={workflow.id}>
+                {workflow.processCode || workflow.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {canCreate && (
+          <Button size="sm" className="h-8 text-xs gap-1 bg-blue-600 hover:bg-blue-700 text-white shadow-2xs" onClick={() => setShowCreate(true)}>
+            <Plus size={15} />新增流程
+          </Button>
+        )}
+      </div>
     </div>
     <CreationDialog open={showCreate} onOpenChange={setShowCreate} title="新增流程" description="填写流程信息后调用当前业务的流程创建接口；从仓库导入将转到仓库页面。" submitLabel={form.creationSource === "warehouse" ? "前往流程仓库" : "创建并设计"} pending={creating} onSubmit={onCreate}><Input placeholder="流程代号，如 ORDER_APPROVAL" value={form.processCode} onChange={event => setForm({ ...form, processCode: event.target.value.toUpperCase() })} required /><Input placeholder="流程名称" value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} required /><Input placeholder="流程说明（可选）" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /><select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={form.flowType} onChange={event => setForm({ ...form, flowType: event.target.value as typeof form.flowType, dataSourceId: event.target.value === "data" ? form.dataSourceId : "" })}><option value="state">状态流程</option><option value="control">控制流程</option><option value="data">数据流程</option></select><select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={form.creationSource} onChange={event => setForm({ ...form, creationSource: event.target.value as typeof form.creationSource })}><option value="manual">手工创建</option><option value="warehouse">从仓库导入</option></select>{form.creationSource === "manual" && form.flowType === "data" && <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm" value={form.dataSourceId} onChange={event => setForm({ ...form, dataSourceId: event.target.value })}><option value="">不关联数据源</option>{dataSources.filter(source => source.status !== "disabled").map(source => <option key={source.id} value={source.id}>{source.name} · {source.sourceType}</option>)}</select>}<div className="text-xs leading-5 text-slate-500">流程代号在当前业务内唯一。数据流程可选择当前业务未停用的数据源。</div></CreationDialog>
     <div className="mb-4 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-[minmax(0,1fr)_160px_160px_160px_auto_auto]"><Input className="h-8 text-xs" placeholder="搜索流程名称或说明" value={filters.keyword ?? ""} onChange={event => setFilters({ ...filters, keyword: event.target.value || undefined })} /><select className="h-8 rounded border border-slate-200 px-2 text-xs" value={filters.flowType ?? ""} onChange={event => setFilters({ ...filters, flowType: (event.target.value || undefined) as ProcessFilters["flowType"] })}><option value="">全部流程类型</option><option value="state">状态流程</option><option value="control">控制流程</option><option value="data">数据流程</option></select><select className="h-8 rounded border border-slate-200 px-2 text-xs" value={filters.auditStatus ?? ""} onChange={event => setFilters({ ...filters, auditStatus: (event.target.value || undefined) as ProcessFilters["auditStatus"] })}><option value="">全部审核状态</option><option value="init">待审核</option><option value="approved">审核通过</option><option value="rejected">审核驳回</option></select><select className="h-8 rounded border border-slate-200 px-2 text-xs" value={filters.status ?? ""} onChange={event => setFilters({ ...filters, status: (event.target.value || undefined) as ProcessFilters["status"] })}><option value="">全部发布状态</option><option value="draft">未发布</option><option value="published">已发布</option></select><Button type="button" size="sm" onClick={onApplyFilters}>查询</Button><Button type="button" variant="outline" size="sm" onClick={onResetFilters}>重置筛选</Button></div>
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[1500px] text-left text-sm"><thead className="bg-[#f8faff] text-xs font-medium text-slate-500"><tr><th className="px-4 py-3 whitespace-nowrap">流程代号</th><th className="px-4 py-3 whitespace-nowrap">流程名称 / 说明</th><th className="px-4 py-3 whitespace-nowrap">类型</th><th className="px-4 py-3 whitespace-nowrap">关联数据源</th><th className="px-4 py-3 whitespace-nowrap">审核状态</th><th className="px-4 py-3 whitespace-nowrap">发布状态</th><th className="px-4 py-3 whitespace-nowrap">创建人</th><th className="px-4 py-3 whitespace-nowrap">创建时间</th><th className="px-4 py-3 whitespace-nowrap">最近发布时间</th><th className="px-4 py-3 whitespace-nowrap">最近取消发布时间</th><th className="px-4 py-3 whitespace-nowrap">更新时间</th><th className="px-4 py-3 text-right whitespace-nowrap">操作</th></tr></thead><tbody>{workflows.map((workflow: any) => <tr key={workflow.id} className="border-t border-slate-100 hover:bg-blue-50/40"><td className="px-4 py-3 font-mono text-xs text-[#2d6bea] whitespace-nowrap">{workflow.processCode || String(workflow.id).slice(0, 8).toUpperCase()}</td><td className="px-4 py-3 min-w-[200px]"><p className="font-medium text-slate-800">{workflow.name}</p><p className="mt-0.5 max-w-[230px] truncate text-xs text-slate-400">{workflow.description || "未填写流程说明"} · {workflow.creationSource === "warehouse" ? "仓库导入" : "手工创建"}</p></td><td className="px-4 py-3 whitespace-nowrap"><span className={`inline-flex whitespace-nowrap rounded px-2.5 py-1 text-xs ${flowTypeStyle[workflow.flowType as keyof typeof flowTypeStyle] ?? "bg-slate-100 text-slate-600"}`}>{flowTypeLabel[workflow.flowType as keyof typeof flowTypeLabel] ?? workflow.flowType}</span></td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.flowType !== "data" ? "—" : workflow.dataSourceId ? sourceNameById.get(workflow.dataSourceId) || "已关联数据源" : "未关联"}</td><td className="px-4 py-3 whitespace-nowrap"><span className={`inline-flex items-center whitespace-nowrap text-xs ${workflow.auditStatus === "approved" ? "text-emerald-700" : workflow.auditStatus === "rejected" ? "text-red-600" : "text-amber-600"}`}><CircleDot className="mr-1 inline shrink-0" size={12} />{auditLabel[workflow.auditStatus as keyof typeof auditLabel] ?? "待审核"}</span></td><td className="px-4 py-3 whitespace-nowrap"><span className={`inline-flex whitespace-nowrap rounded border px-2.5 py-1 text-xs ${workflow.status === "published" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{workflow.status === "published" ? "已发布" : "未发布"}</span></td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.creatorName || workflow.creatorUsername || "—"}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{formatDate(workflow.createdAt)}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.publishedAt ? formatDate(workflow.publishedAt) : "尚未发布"}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.unpublishedAt ? formatDate(workflow.unpublishedAt) : "尚未取消发布"}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{formatDate(workflow.updatedAt)}</td><td className="px-4 py-3 text-right whitespace-nowrap"><button className="mr-3 text-xs text-slate-600 hover:underline" onClick={() => onDetail(workflow.id)}>详情</button><button className="mr-3 text-xs font-medium text-[#2d6bea] hover:underline" onClick={() => onOpenWorkflow(workflow.id)}>设计</button>{workflow.status === "published" && <button className="mr-3 text-xs text-[#245fc8] hover:underline" onClick={() => onLaunch(workflow)}>{workflow.flowType === "data" ? "启动" : "发起流程"}</button>}{canManage && workflow.status === "draft" && workflow.auditStatus === "approved" && <button className="mr-3 text-xs text-emerald-700 hover:underline" onClick={() => publish.mutate({ id: workflow.id })}>发布</button>}{canManage && workflow.status === "published" && <button className="mr-3 text-xs text-amber-700 hover:underline" onClick={() => unpublish.mutate({ id: workflow.id })}>取消发布</button>}{canManage && workflow.auditStatus === "init" && <><button className="mr-2 text-xs text-emerald-700 hover:underline" onClick={() => onAudit(workflow.id, "approved")}>通过</button><button className="text-xs text-red-600 hover:underline" onClick={() => onAudit(workflow.id, "rejected")}>驳回</button></>}</td></tr>)}{!workflows.length && <tr><td colSpan={12} className="px-4 py-14 text-center text-sm text-slate-400">项目内暂无匹配流程。{canCreate ? "可重置筛选或从右上角新建状态、控制或数据流程。" : ""}</td></tr>}</tbody></table></div></section>
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"><div className="overflow-x-auto"><table className="w-full min-w-[1500px] text-left text-sm"><thead className="bg-[#f8faff] text-xs font-medium text-slate-500"><tr><th className="px-4 py-3 whitespace-nowrap">流程代号</th><th className="px-4 py-3 whitespace-nowrap">流程名称 / 说明</th><th className="px-4 py-3 whitespace-nowrap">类型</th><th className="px-4 py-3 whitespace-nowrap">关联数据源</th><th className="px-4 py-3 whitespace-nowrap">审核状态</th><th className="px-4 py-3 whitespace-nowrap">发布状态</th><th className="px-4 py-3 whitespace-nowrap">创建人</th><th className="px-4 py-3 whitespace-nowrap">创建时间</th><th className="px-4 py-3 whitespace-nowrap">最近发布时间</th><th className="px-4 py-3 whitespace-nowrap">最近取消发布时间</th><th className="px-4 py-3 whitespace-nowrap">更新时间</th><th className="px-4 py-3 text-right whitespace-nowrap">操作</th></tr></thead><tbody>{workflows.map((workflow: any) => <tr key={workflow.id} className="border-t border-slate-100 hover:bg-blue-50/40"><td className="px-4 py-3 font-mono text-xs text-[#2d6bea] whitespace-nowrap">{workflow.processCode || String(workflow.id).slice(0, 8).toUpperCase()}</td><td className="px-4 py-3 min-w-[200px]"><p className="font-medium text-slate-800">{workflow.name}</p><p className="mt-0.5 max-w-[230px] truncate text-xs text-slate-400">{workflow.description || "未填写流程说明"} · {workflow.creationSource === "warehouse" ? "仓库导入" : "手工创建"}</p></td><td className="px-4 py-3 whitespace-nowrap"><span className={`inline-flex whitespace-nowrap rounded px-2.5 py-1 text-xs ${flowTypeStyle[workflow.flowType as keyof typeof flowTypeStyle] ?? "bg-slate-100 text-slate-600"}`}>{flowTypeLabel[workflow.flowType as keyof typeof flowTypeLabel] ?? workflow.flowType}</span></td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.flowType !== "data" ? "—" : workflow.dataSourceId ? sourceNameById.get(workflow.dataSourceId) || "已关联数据源" : "未关联"}</td><td className="px-4 py-3 whitespace-nowrap"><span className={`inline-flex items-center whitespace-nowrap text-xs ${workflow.auditStatus === "approved" ? "text-emerald-700" : workflow.auditStatus === "rejected" ? "text-red-600" : "text-amber-600"}`}><CircleDot className="mr-1 inline shrink-0" size={12} />{auditLabel[workflow.auditStatus as keyof typeof auditLabel] ?? "待审核"}</span></td><td className="px-4 py-3 whitespace-nowrap"><span className={`inline-flex whitespace-nowrap rounded border px-2.5 py-1 text-xs ${workflow.status === "published" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-slate-200 text-slate-500"}`}>{workflow.status === "published" ? "已发布" : "未发布"}</span></td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.creatorName || workflow.creatorUsername || "—"}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{formatDate(workflow.createdAt)}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.publishedAt ? formatDate(workflow.publishedAt) : "尚未发布"}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{workflow.unpublishedAt ? formatDate(workflow.unpublishedAt) : "尚未取消发布"}</td><td className="px-4 py-3 text-xs text-slate-500 whitespace-nowrap">{formatDate(workflow.updatedAt)}</td><td className="px-4 py-3 text-right whitespace-nowrap">
+  <div className="flex items-center justify-end gap-1.5">
+    <button className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors" onClick={() => onDetail(workflow.id)}>详情</button>
+    <button className="rounded-md border border-blue-200 bg-blue-50/60 px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors" onClick={() => onOpenWorkflow(workflow.id)}>设计</button>
+    {workflow.status === "published" && (
+      <button className="rounded-md border border-emerald-200 bg-emerald-50/60 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors" onClick={() => onLaunch(workflow)}>
+        {workflow.flowType === "data" ? "启动" : "发起流程"}
+      </button>
+    )}
+    {canManage && workflow.status === "draft" && workflow.auditStatus === "approved" && (
+      <button className="rounded px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 transition-colors" onClick={() => publish.mutate({ id: workflow.id })}>发布</button>
+    )}
+    {canManage && workflow.status === "published" && <button className="rounded px-2 py-1 text-xs text-amber-700 hover:bg-amber-50 transition-colors" onClick={() => unpublish.mutate({ id: workflow.id })}>取消发布</button>}
+    {canManage && workflow.auditStatus === "init" && (
+      <div className="flex items-center rounded border border-slate-200 bg-slate-50 p-0.5">
+        <button className="px-1.5 py-0.5 text-xs text-emerald-700 hover:bg-white rounded" onClick={() => onAudit(workflow.id, "approved")}>通过</button>
+        <button className="px-1.5 py-0.5 text-xs text-red-600 hover:bg-white rounded" onClick={() => onAudit(workflow.id, "rejected")}>驳回</button>
+      </div>
+    )}
+  </div>
+</td></tr>)}{!workflows.length && <tr><td colSpan={12} className="px-4 py-14 text-center text-sm text-slate-400">项目内暂无匹配流程。{canCreate ? "可重置筛选或从右上角新建状态、控制或数据流程。" : ""}</td></tr>}</tbody></table></div></section>
   {launchWorkflow && <ProcessLaunchDialog workflow={launchWorkflow} form={launchForm} setForm={setLaunchForm} pending={launch.isPending} onClose={() => setLaunchWorkflow(null)} onSubmit={() => launch.mutate({ workflowId: launchWorkflow.id, input: { codeType: launchForm.codeType, flowEngine: true, flowModuleId: launchWorkflow.id, startNodeId: "", flowDeliveryTime: launchForm.expectedEnd ? new Date(launchForm.expectedEnd).toISOString() : "", businessId: project.id, roleKeys: launchForm.roleKeys.split(/[，,\s]+/).filter(Boolean), businessInformationOne: launchForm.businessInformationOne.trim(), businessInformationTwo: launchForm.businessInformationTwo.trim(), businessInformationThree: launchForm.businessInformationThree.trim(), businessInformationText: launchForm.businessInformationText.trim() } })} />}
   {auditWorkflowId && <Dialog open onOpenChange={open => { if (!open) setAuditWorkflowId(null); }}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>审批记录</DialogTitle><DialogDescription>仅展示当前业务内所选流程的审核与审核重置审计，不包含全局身份审计。</DialogDescription></DialogHeader><div className="max-h-96 space-y-3 overflow-y-auto pr-1">{approvalHistory.isLoading && <p className="py-8 text-center text-sm text-slate-400">正在读取审批记录…</p>}{!approvalHistory.isLoading && !(approvalHistory.data ?? []).length && <p className="py-8 text-center text-sm text-slate-400">暂无审批记录。</p>}{(approvalHistory.data ?? []).map((entry: any) => <div key={entry.id} className="border-l-2 border-[#2d6bea] bg-slate-50 px-3 py-2.5"><p className="text-sm font-medium text-slate-700">{entry.operation === "workflow_audit_reset" ? "重置审核状态" : entry.details?.auditStatus === "approved" ? "审核通过" : "审核驳回"}</p><p className="mt-1 text-xs text-slate-500">{entry.actorName || entry.actorUsername || "系统"} · {formatDate(entry.createdAt)}</p></div>)}</div><DialogFooter><Button type="button" onClick={() => setAuditWorkflowId(null)}>关闭</Button></DialogFooter></DialogContent></Dialog>}
   </div>;
 }
 
 function ProcessLaunchDialog({ workflow, form, setForm, pending, onClose, onSubmit }: { workflow: any; form: { codeType: string; expectedEnd: string; roleKeys: string; businessInformationOne: string; businessInformationTwo: string; businessInformationThree: string; businessInformationText: string }; setForm: (value: { codeType: string; expectedEnd: string; roleKeys: string; businessInformationOne: string; businessInformationTwo: string; businessInformationThree: string; businessInformationText: string }) => void; pending: boolean; onClose: () => void; onSubmit: () => void }) {
-  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>发起流程</DialogTitle><DialogDescription>填写原始流程发起上下文。所有字段将以受权限保护的运行输入对象提交，不需要填写 JSON。</DialogDescription></DialogHeader><div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm text-slate-700">发起方类型<select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={form.codeType} onChange={event => setForm({ ...form, codeType: event.target.value })}><option value="UserWord">UserWord</option><option value="UnitWord">UnitWord</option><option value="AuthUnitWord">AuthUnitWord</option></select></label><label className="grid gap-1.5 text-sm text-slate-700">流程应结束时间（可选）<Input type="datetime-local" value={form.expectedEnd} onChange={event => setForm({ ...form, expectedEnd: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700 sm:col-span-2">发起方角色键（可选）<Input placeholder="多个角色键用逗号或空格分隔" value={form.roleKeys} onChange={event => setForm({ ...form, roleKeys: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息一<Input value={form.businessInformationOne} onChange={event => setForm({ ...form, businessInformationOne: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息二<Input value={form.businessInformationTwo} onChange={event => setForm({ ...form, businessInformationTwo: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息三<Input value={form.businessInformationThree} onChange={event => setForm({ ...form, businessInformationThree: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息说明<Input value={form.businessInformationText} onChange={event => setForm({ ...form, businessInformationText: event.target.value })} /></label></div><p className="text-xs text-slate-400">当前流程：{workflow.name}。实际发起人由服务端会话身份记录，不能由此表单伪造。</p><DialogFooter><Button type="button" variant="outline" onClick={onClose}>取消</Button><Button type="button" className="bg-[#2d6bea] hover:bg-[#255bc8]" disabled={pending} onClick={onSubmit}>{pending && <Loader2 className="animate-spin" size={15} />}确认发起</Button></DialogFooter></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={open => { if (!open) onClose(); }}><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>发起流程</DialogTitle><DialogDescription>填写原始流程发起上下文。所有字段将以受权限保护的运行输入对象提交，不需要填写 JSON。</DialogDescription></DialogHeader><div className="grid gap-3 sm:grid-cols-2"><label className="grid gap-1.5 text-sm text-slate-700">发起方类型<select className="h-9 rounded border border-slate-200 bg-white px-2 text-sm" value={form.codeType} onChange={event => setForm({ ...form, codeType: event.target.value })}><option value="UserWord">UserWord</option><option value="UnitWord">UnitWord</option><option value="AuthUnitWord">AuthUnitWord</option></select></label><label className="grid gap-1.5 text-sm text-slate-700">流程应结束时间（可选）<Input type="datetime-local" value={form.expectedEnd} onChange={event => setForm({ ...form, expectedEnd: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700 sm:col-span-2">发起方角色键（可选）<Input placeholder="多个角色键用逗号或空格分隔" value={form.roleKeys} onChange={event => setForm({ ...form, roleKeys: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息一<Input value={form.businessInformationOne} onChange={event => setForm({ ...form, businessInformationOne: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息二<Input value={form.businessInformationTwo} onChange={event => setForm({ ...form, businessInformationTwo: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息三<Input value={form.businessInformationThree} onChange={event => setForm({ ...form, businessInformationThree: event.target.value })} /></label><label className="grid gap-1.5 text-sm text-slate-700">业务信息说明<Input value={form.businessInformationText} onChange={event => setForm({ ...form, businessInformationText: event.target.value })} /></label></div><p className="text-xs text-slate-400">当前流程：{workflow.name}。实际发起人由服务端会话身份记录，不能由此表单伪造。</p><DialogFooter><Button type="button" variant="outline" onClick={onClose}>取消</Button><Button type="button" className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs" disabled={pending} onClick={onSubmit}>{pending && <Loader2 className="animate-spin" size={15} />}确认发起</Button></DialogFooter></DialogContent></Dialog>;
 }
 
 function ProjectMembers({ projectId, members, canManage }: { projectId: string; members: any[]; canManage: boolean }) {
   const utils = trpc.useUtils();
-  const users = trpc.iam.users.useQuery(undefined, { enabled: canManage });
-  const [form, setForm] = useState({ userId: "", role: "viewer" as "owner" | "designer" | "operator" | "viewer", hours: "" });
-  const grant = trpc.project.grantMember.useMutation({ onSuccess: () => { void utils.project.members.invalidate({ projectId }); toast.success("项目成员授权已保存。"); setForm({ userId: "", role: "viewer", hours: "" }); }, onError: error => toast.error(error.message) });
-  return <div><div className="mb-5 border-b border-slate-200 pb-4"><p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">PROJECT AUTHORIZATION</p><h1 className="mt-1 text-xl font-semibold text-slate-800">项目权限配置中心</h1></div>{canManage && <form className="mb-5 grid gap-3 rounded-lg border border-[#cbd9f5] bg-white p-4 md:grid-cols-[1fr_160px_180px_auto]" onSubmit={event => { event.preventDefault(); const userId = Number(form.userId); if (userId) grant.mutate({ projectId, userId, role: form.role, expiresAt: form.hours ? new Date(Date.now() + Number(form.hours) * 3600_000) : undefined }); }}><select className="h-9 rounded border border-slate-200 px-2 text-sm" value={form.userId} onChange={event => setForm({ ...form, userId: event.target.value })} required><option value="">选择内部账号</option>{(users.data ?? []).filter(user => user.status === "active").map(user => <option key={user.id} value={user.id}>{user.name || user.username}（{user.username}）</option>)}</select><select className="h-9 rounded border border-slate-200 px-2 text-sm" value={form.role} onChange={event => setForm({ ...form, role: event.target.value as typeof form.role })}><option value="viewer">查看者</option><option value="operator">运行者</option><option value="designer">设计者</option><option value="owner">项目所有者</option></select><Input className="h-9" type="number" min="1" placeholder="临时有效期小时（可选）" value={form.hours} onChange={event => setForm({ ...form, hours: event.target.value })} /><Button disabled={grant.isPending}><UsersRound size={15} />授予成员</Button></form>}<section className="overflow-hidden rounded-lg border border-slate-200 bg-white"><div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">项目角色列表</div><div className="divide-y divide-slate-100">{members.map(member => <div key={member.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-medium text-slate-800">{member.name || member.username}</p><p className="mt-0.5 text-xs text-slate-400">{member.username} · 生效：{formatDate(member.effectiveFrom)} · 到期：{member.expiresAt ? formatDate(member.expiresAt) : "长期"}</p></div><span className="w-fit rounded bg-[#edf3ff] px-2 py-1 text-xs font-medium text-[#245fc8]">{member.role}</span></div>)}{!members.length && <p className="p-8 text-center text-sm text-slate-400">项目尚无成员。</p>}</div></section></div>;
+  const activeUsers = trpc.project.activeUsers.useQuery(undefined, { enabled: canManage });
+  const activeUnits = trpc.project.activeUnits.useQuery(undefined, { enabled: canManage });
+  const projectUnits = trpc.project.units.useQuery({ projectId });
+
+  const [form, setForm] = useState({ userId: "", role: "viewer" as ProjectMemberRole, hours: "" });
+  const [unitForm, setUnitForm] = useState({ unitId: "", role: "viewer" as ProjectMemberRole });
+
+  const grant = trpc.project.grantMember.useMutation({
+    onSuccess: () => {
+      void utils.project.members.invalidate({ projectId });
+      toast.success("可见人授权已保存。");
+      setForm({ userId: "", role: "viewer", hours: "" });
+    },
+    onError: error => toast.error(error.message)
+  });
+
+  const revokeMember = trpc.project.revokeMember.useMutation({
+    onSuccess: () => {
+      void utils.project.members.invalidate({ projectId });
+      toast.success("可见人权限已移除。");
+    },
+    onError: error => toast.error(error.message)
+  });
+
+  const grantUnit = trpc.project.grantUnit.useMutation({
+    onSuccess: () => {
+      void utils.project.units.invalidate({ projectId });
+      toast.success("可见部门授权已保存。");
+      setUnitForm({ unitId: "", role: "viewer" });
+    },
+    onError: error => toast.error(error.message)
+  });
+
+  const revokeUnit = trpc.project.revokeUnit.useMutation({
+    onSuccess: () => {
+      void utils.project.units.invalidate({ projectId });
+      toast.success("可见部门已移除。");
+    },
+    onError: error => toast.error(error.message)
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="border-b border-slate-200 pb-4">
+        <p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">PROJECT AUTHORIZATION & ISOLATION</p>
+        <h1 className="mt-1 text-xl font-semibold text-slate-800">项目权限配置与可见性中心</h1>
+        <p className="mt-1 text-xs text-slate-500">
+          项目已启用严格权限隔离。创建人拥有所有权，可添加指定可见人或可见部门；属于可见部门的员工自动继承权限；超级管理员（Super Admin）拥有全局全部业务可见与管理权限。
+        </p>
+      </div>
+
+      {/* 可见部门授权管理 */}
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xs">
+        <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-sm font-semibold flex items-center justify-between">
+          <span className="flex items-center gap-1.5"><Building2 size={16} className="text-[#2d6bea]" />可见部门列表（部门继承授权）</span>
+          <span className="text-xs font-normal text-slate-400">所属部门人员均可查看此项目</span>
+        </div>
+        {canManage && (
+          <form
+            className="grid gap-3 border-b border-slate-100 bg-[#f8faff] p-4 sm:grid-cols-[1fr_160px_auto]"
+            onSubmit={event => {
+              event.preventDefault();
+              if (unitForm.unitId) {
+                grantUnit.mutate({ projectId, unitId: unitForm.unitId, role: unitForm.role });
+              }
+            }}
+          >
+            <select
+              aria-label="选择可见部门"
+              className="h-9 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700"
+              value={unitForm.unitId}
+              onChange={event => setUnitForm({ ...unitForm, unitId: event.target.value })}
+              required
+            >
+              <option value="">选择组织架构部门（部门下全员可见）</option>
+              {(activeUnits.data ?? []).map((unit: any) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.displayPath || `${unit.name}（${unit.code}）`}
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="部门权限角色"
+              className="h-9 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700"
+              value={unitForm.role}
+              onChange={event => setUnitForm({ ...unitForm, role: event.target.value as ProjectMemberRole })}
+            >
+              <option value="viewer">查看者（仅查看）</option>
+              <option value="operator">运行者（可发起/运行）</option>
+              <option value="designer">设计者（可编辑流）</option>
+            </select>
+            <Button disabled={grantUnit.isPending}>
+              <Building2 size={15} />添加可见部门
+            </Button>
+          </form>
+        )}
+        <div className="divide-y divide-slate-100">
+          {(projectUnits.data ?? []).map((item: any) => (
+            <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-slate-800">{item.unitName || item.unitCode}</p>
+                <p className="mt-0.5 text-xs text-slate-400 font-mono">部门代号：{item.unitCode} · 授权时间：{formatDate(item.createdAt)}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="rounded bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700">{item.role}</span>
+                {canManage && (
+                  <button
+                    type="button"
+                    className="text-xs text-rose-600 hover:underline inline-flex items-center gap-1"
+                    onClick={() => revokeUnit.mutate({ projectId, unitId: item.unitId })}
+                  >
+                    <Trash2 size={13} />移除部门
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {!(projectUnits.data ?? []).length && (
+            <p className="p-6 text-center text-xs text-slate-400">尚未绑定可见部门，外部部门员工无法继承访问。</p>
+          )}
+        </div>
+      </section>
+
+      {/* 可见人授权管理 */}
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xs">
+        <div className="border-b border-slate-100 bg-slate-50/70 px-4 py-3 text-sm font-semibold flex items-center justify-between">
+          <span className="flex items-center gap-1.5"><UsersRound size={16} className="text-[#2d6bea]" />可见人列表（成员直接授权）</span>
+          <span className="text-xs font-normal text-slate-400">单独授权人员清单</span>
+        </div>
+        {canManage && (
+          <form
+            className="grid gap-3 border-b border-slate-100 bg-[#f8faff] p-4 md:grid-cols-[1fr_160px_160px_auto]"
+            onSubmit={event => {
+              event.preventDefault();
+              const userId = Number(form.userId);
+              if (userId) {
+                grant.mutate({
+                  projectId,
+                  userId,
+                  role: form.role,
+                  expiresAt: form.hours ? new Date(Date.now() + Number(form.hours) * 3600_000) : undefined,
+                });
+              }
+            }}
+          >
+            <select
+              aria-label="选择可见人账号"
+              className="h-9 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700"
+              value={form.userId}
+              onChange={event => setForm({ ...form, userId: event.target.value })}
+              required
+            >
+              <option value="">选择内部账号</option>
+              {(activeUsers.data ?? []).map((user: any) => (
+                <option key={user.id} value={user.id}>
+                  {user.name || user.username}（{user.username}）
+                </option>
+              ))}
+            </select>
+            <select
+              aria-label="用户权限角色"
+              className="h-9 rounded border border-slate-200 bg-white px-2 text-sm text-slate-700"
+              value={form.role}
+              onChange={event => setForm({ ...form, role: event.target.value as ProjectMemberRole })}
+            >
+              <option value="viewer">查看者</option>
+              <option value="operator">运行者</option>
+              <option value="designer">设计者</option>
+              <option value="owner">项目所有者</option>
+            </select>
+            <Input
+              className="h-9 bg-white"
+              type="number"
+              min="1"
+              placeholder="有效期小时（可选）"
+              value={form.hours}
+              onChange={event => setForm({ ...form, hours: event.target.value })}
+            />
+            <Button disabled={grant.isPending}>
+              <UsersRound size={15} />添加可见人
+            </Button>
+          </form>
+        )}
+        <div className="divide-y divide-slate-100">
+          {members.map(member => (
+            <div key={member.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium text-slate-800">{member.name || member.username}</p>
+                <p className="mt-0.5 text-xs text-slate-400">
+                  {member.username} · 生效：{formatDate(member.effectiveFrom)} · 到期：{member.expiresAt ? formatDate(member.expiresAt) : "长期"}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="rounded bg-[#edf3ff] px-2 py-1 text-xs font-medium text-[#245fc8]">{member.role}</span>
+                {canManage && member.role !== "owner" && (
+                  <button
+                    type="button"
+                    className="text-xs text-rose-600 hover:underline inline-flex items-center gap-1"
+                    onClick={() => revokeMember.mutate({ projectId, userId: member.userId })}
+                  >
+                    <Trash2 size={13} />移除
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {!members.length && <p className="p-6 text-center text-xs text-slate-400">项目尚无单独可见人员。</p>}
+        </div>
+      </section>
+    </div>
+  );
 }

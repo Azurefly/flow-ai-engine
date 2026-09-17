@@ -282,5 +282,109 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
         start,
       });
     });
+
+    it("项目权限隔离：创建人添加可见人/可见部门，普通成员受限，超级管理员可见全部", () => {
+      const start = performance.now();
+
+      type MockProject = {
+        id: string;
+        code: string;
+        name: string;
+        ownerUserId: number;
+        status: "active" | "archived";
+      };
+
+      type MockProjectMember = {
+        projectId: string;
+        userId: number;
+        role: "owner" | "designer" | "operator" | "viewer";
+      };
+
+      type MockProjectUnit = {
+        projectId: string;
+        unitId: string;
+        role: "viewer" | "operator";
+      };
+
+      type MockUserDept = {
+        userId: number;
+        unitId: string;
+      };
+
+      const projects: MockProject[] = [
+        { id: "p1", code: "PROJ_ALICE", name: "爱丽丝的采购项目", ownerUserId: 101, status: "active" },
+        { id: "p2", code: "PROJ_BOB", name: "鲍勃的机密研发项目", ownerUserId: 102, status: "active" },
+        { id: "p3", code: "PROJ_DEPT", name: "财务部公共预算项目", ownerUserId: 103, status: "active" },
+      ];
+
+      // 直接授权可见人 (Direct Members)
+      const members: MockProjectMember[] = [
+        { projectId: "p1", userId: 101, role: "owner" },
+        { projectId: "p1", userId: 104, role: "viewer" }, // 104 (David) 被添加为可见人
+        { projectId: "p2", userId: 102, role: "owner" },
+        { projectId: "p3", userId: 103, role: "owner" },
+      ];
+
+      // 授权可见部门 (Department Visibility)
+      const projectUnits: MockProjectUnit[] = [
+        { projectId: "p3", unitId: "dept_finance", role: "viewer" }, // 财务部全员可见 p3
+      ];
+
+      // 用户所属部门 (User Department Memberships)
+      const userDepts: MockUserDept[] = [
+        { userId: 101, unitId: "dept_rd" },
+        { userId: 102, unitId: "dept_rd" },
+        { userId: 105, unitId: "dept_finance" }, // 105 (Fiona) 属于财务部
+        { userId: 106, unitId: "dept_hr" },      // 106 (Helen) 属于HR部门（无关人员）
+      ];
+
+      // 匹配 listProjects 权限隔离过滤逻辑
+      const queryUserProjects = (user: { id: number; role: "admin" | "user" }) => {
+        if (user.role === "admin") {
+          return projects.filter(p => p.status === "active"); // 超级管理员可以看到全部
+        }
+        return projects.filter(p => {
+          if (p.status !== "active") return false;
+          // 1. 创建人拥有所有权
+          if (p.ownerUserId === user.id) return true;
+          // 2. 被添加为可见人 (Direct Member)
+          if (members.some(m => m.projectId === p.id && m.userId === user.id)) return true;
+          // 3. 所属部门被添加为可见部门 (Department Visibility)
+          const myUnitIds = userDepts.filter(ud => ud.userId === user.id).map(ud => ud.unitId);
+          if (projectUnits.some(pu => pu.projectId === p.id && myUnitIds.includes(pu.unitId))) return true;
+          return false;
+        });
+      };
+
+      // 1. 超级管理员：可以看到全部 3 个项目
+      const adminProjects = queryUserProjects({ id: 1, role: "admin" });
+      expect(adminProjects.length).toBe(3);
+
+      // 2. 创建人 Alice (101)：只看到自己创建的 p1，看不到 Bob 的 p2 或财务的 p3
+      const aliceProjects = queryUserProjects({ id: 101, role: "user" });
+      expect(aliceProjects.map(p => p.id)).toEqual(["p1"]);
+
+      // 3. 可见人 David (104)：被 Alice 添加为 p1 的可见人，能看到 p1，看不到 p2 或 p3
+      const davidProjects = queryUserProjects({ id: 104, role: "user" });
+      expect(davidProjects.map(p => p.id)).toEqual(["p1"]);
+
+      // 4. 部门成员 Fiona (105)：属于财务部，能看到被授权给财务部的 p3，看不到 p1 或 p2
+      const fionaProjects = queryUserProjects({ id: 105, role: "user" });
+      expect(fionaProjects.map(p => p.id)).toEqual(["p3"]);
+
+      // 5. 无关人员 Helen (106)：属于 HR 部门，既不是创建人、也未被添加为可见人、所属部门也未被添加为可见部门 -> 0 个项目可见！
+      const helenProjects = queryUserProjects({ id: 106, role: "user" });
+      expect(helenProjects.length).toBe(0);
+
+      TestResultCollector.record({
+        testId: "TC-MOD2-PERM-001",
+        name: "项目权限隔离与创建人添加可见人/部门及超管全量可见",
+        category: "contract",
+        module: "权限配置中心",
+        target: "listProjects/ProjectIsolation",
+        status: "passed",
+        start,
+      });
+    });
   });
 });

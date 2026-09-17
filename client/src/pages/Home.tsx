@@ -11,6 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import {
   formatConsoleRoute,
@@ -30,10 +37,12 @@ import {
   ChevronRight,
   CirclePlay,
   Clock3,
+  Compass,
   Copy,
   Download,
   FileJson,
   FolderKanban,
+  FolderTree,
   Gauge,
   Eye,
   KeyRound,
@@ -42,12 +51,15 @@ import {
   LogOut,
   Menu,
   Moon,
+  MoreHorizontal,
   Play,
   Plus,
+  Save,
   ShieldCheck,
   Search,
   SlidersHorizontal,
   Sun,
+  Table2,
   Upload,
   UsersRound,
   WandSparkles,
@@ -218,11 +230,11 @@ function LoginScreen({
 }) {
   return (
     <main className="relative grid min-h-screen place-items-center overflow-hidden bg-[#f4f6f9] p-5 text-slate-800">
-    <div className="absolute inset-x-0 top-0 h-1 bg-[#2d6bea]" />
+    <div className="absolute inset-x-0 top-0 h-1 bg-blue-600" />
     <section className="relative w-full max-w-md overflow-hidden border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-7 py-5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center bg-[#2d6bea] text-white">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-blue-600 text-white shadow-sm">
               <Gauge size={21} />
             </div>
             <div>
@@ -281,7 +293,7 @@ function LoginScreen({
             />
           </label>
           <Button
-            className="mt-2 min-h-11 bg-[#2d6bea] hover:bg-[#245fc8]"
+            className="mt-2 min-h-11 bg-blue-600 hover:bg-blue-700 text-white shadow-2xs font-medium"
             disabled={pending}
           >
             {pending && <Loader2 className="animate-spin" />}登录流程引擎
@@ -1700,6 +1712,19 @@ function FlowDesigner({
     )
       unpublishFlow.mutate({ id: workflow.id });
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (canEdit && !savePending && workflow?.status !== "published") {
+          onSave();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [canEdit, savePending, workflow?.status, onSave]);
   if (!workflow || !definition)
     return (
       <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8">
@@ -1766,160 +1791,159 @@ function FlowDesigner({
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-          {/* Group 1: 存盘与导入导出 */}
-          <div className="flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50/80 p-0.5 shadow-2xs">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7.5 px-2 text-xs text-slate-700 hover:bg-white hover:text-slate-950"
-              onClick={onImport}
-              disabled={!canEdit}
-              title="从 JSON 导入图元定义"
-            >
-              <Upload size={13} className="mr-1 text-slate-500" />
-              导入
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7.5 px-2 text-xs text-slate-700 hover:bg-white hover:text-slate-950"
-              onClick={onExport}
-              title="将当前流程导出为 JSON 备份"
-            >
-              <Download size={13} className="mr-1 text-slate-500" />
-              导出
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7.5 px-2.5 text-xs font-semibold text-slate-800 hover:bg-white hover:text-blue-700 disabled:opacity-50"
-              onClick={onSave}
-              disabled={!canEdit || savePending || workflow.status === "published"}
-              title={
-                workflow.status === "published"
-                  ? "已发布流程请使用发布操作提交新版本，或先取消发布"
-                  : "保存当前画布草稿"
-              }
-            >
-              {savePending ? (
-                <Loader2 className="animate-spin mr-1 text-blue-600" size={13} />
-              ) : (
-                <FileJson size={13} className="mr-1 text-blue-600" />
-              )}
-              保存画布
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* 1. 存盘草稿 (支持 ⌘S) */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 px-2.5 text-xs text-slate-700 hover:bg-slate-50 border-slate-200 shadow-2xs"
+            onClick={onSave}
+            disabled={!canEdit || savePending || workflow.status === "published"}
+            title={
+              workflow.status === "published"
+                ? "已发布流程不可直接编辑草稿，请创建新版本或另存副本"
+                : "保存当前画布草稿 (Ctrl+S / ⌘S)"
+            }
+          >
+            {savePending ? (
+              <Loader2 className="animate-spin text-blue-600" size={13} />
+            ) : (
+              <Save size={13} className="text-slate-500" />
+            )}
+            <span>保存画布</span>
+            <kbd className="hidden sm:inline-block rounded bg-slate-100 px-1 text-[10px] text-slate-400 font-mono">⌘S</kbd>
+          </Button>
 
-          {/* Group 2: 质量门禁与发布 */}
-          <div className="flex items-center gap-0.5 rounded-lg border border-slate-200/80 bg-slate-50/80 p-0.5 shadow-2xs">
+          {/* 2. 差异化验证/仿真入口 (感知流程类型，摒弃一刀切) */}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 gap-1.5 px-3 text-xs font-medium border-blue-200 text-blue-700 bg-blue-50/60 hover:bg-blue-100/70 shadow-2xs transition-all"
+            onClick={() => setRunDialogOpen(true)}
+            title={
+              workflow.flowType === "state"
+                ? "开启状态机交互仿真与路径走查推演"
+                : workflow.flowType === "data"
+                ? "运行数据管道抽样并预览 Schema 与结果"
+                : "单步调试并执行自动化 DAG 流程"
+            }
+          >
+            {workflow.flowType === "state" ? (
+              <>
+                <Compass size={13} className="text-blue-600" />
+                <span>流程仿真</span>
+              </>
+            ) : workflow.flowType === "data" ? (
+              <>
+                <Table2 size={13} className="text-blue-600" />
+                <span>抽样试跑</span>
+              </>
+            ) : (
+              <>
+                <Play size={13} className="fill-blue-600 text-blue-600" />
+                <span>单步调试</span>
+              </>
+            )}
+          </Button>
+
+          {/* 3. 质量门禁与正式发布组合 */}
+          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50/80 p-0.5 shadow-2xs">
             <Button
               type="button"
               size="sm"
               variant="ghost"
-              className="h-7.5 px-2.5 text-xs font-medium text-violet-700 hover:bg-white hover:text-violet-900"
+              className="h-7 px-2 text-xs font-medium text-slate-600 hover:bg-white hover:text-slate-900"
               onClick={onValidate}
               disabled={!canPublish || compilePending}
-              title="执行静态拓扑与语法编译检查"
+              title="预检拓扑与语法（发布时也会自动检查）"
             >
               {compilePending ? (
-                <Loader2 className="animate-spin mr-1" size={13} />
+                <Loader2 className="animate-spin mr-1" size={12} />
               ) : (
-                <CheckCircle2 size={13} className="mr-1 text-violet-600" />
+                <CheckCircle2 size={12} className="mr-1 text-slate-500" />
               )}
-              编译检查
+              预检
             </Button>
             <Button
               size="sm"
-              className="h-7.5 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
+              className="h-7 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs"
               onClick={onPublish}
               disabled={!canPublish || publishPending || compilePending}
-              title="发布当前流程新版本"
+              title="通过预检并正式发布新版本"
             >
-              {publishPending && <Loader2 className="animate-spin mr-1" size={13} />}
+              {publishPending && <Loader2 className="animate-spin mr-1" size={12} />}
               发布
             </Button>
           </div>
 
-          {/* Group 3: 试运行与调试核心入口 (突出显眼) */}
-          <Button
-            type="button"
-            size="sm"
-            className="h-8.5 gap-1.5 px-3.5 text-xs font-semibold bg-[#2d6bea] text-white hover:bg-[#255bc8] shadow-sm transition-all"
-            onClick={() => setRunDialogOpen(true)}
-            title="填写运行字段并在画布内即时进行流程测试，实时查看运算结果表格"
-          >
-            <Play size={13} className="fill-white" />
-            运行测试
-          </Button>
-
-          {/* Group 4: 治理与协作 */}
-          <div className="flex items-center gap-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-              onClick={() => setMembersDialogOpen(true)}
-              title="查看和管理流程协作成员与授权"
-            >
-              <UsersRound size={13} className="mr-1 text-slate-500" />
-              协作成员（{members.length}）
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 px-2.5 text-xs text-slate-700 hover:bg-slate-50"
-              onClick={() => setGovernanceDialogOpen(true)}
-              title="查看版本快照、差异对比与发布治理"
-            >
-              <ShieldCheck size={13} className="mr-1 text-slate-500" />
-              版本治理
-            </Button>
-          </div>
-
-          {/* Group 5: 更多操作 */}
-          {(canManage || canEdit) && (
-            <div className="flex items-center gap-1">
+          {/* 4. 更多操作收纳菜单 (···) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 text-slate-700 hover:bg-slate-50 border-slate-200"
+                title="更多操作"
+              >
+                <MoreHorizontal size={15} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52 text-xs">
+              <DropdownMenuItem onClick={() => setMembersDialogOpen(true)}>
+                <UsersRound size={13} className="mr-2 text-slate-500" />
+                <span>协作成员</span>
+                <span className="ml-auto rounded-full bg-slate-100 px-1.5 py-0.2 text-[10px] text-slate-600">
+                  {members.length}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setGovernanceDialogOpen(true)}>
+                <ShieldCheck size={13} className="mr-2 text-slate-500" />
+                <span>版本治理与快照</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onImport} disabled={!canEdit}>
+                <Upload size={13} className="mr-2 text-slate-500" />
+                <span>导入定义 (JSON)</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onExport}>
+                <Download size={13} className="mr-2 text-slate-500" />
+                <span>导出备份 (JSON)</span>
+              </DropdownMenuItem>
+              {(canManage || canEdit) && <DropdownMenuSeparator />}
               {canManage && (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2.5 text-xs text-slate-600 hover:text-slate-900"
-                    onClick={onDuplicate}
-                    title="创建此流程的完整副本"
-                  >
-                    <Copy size={13} className="mr-1 text-slate-400" />
-                    复制
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 px-2.5 text-xs border-amber-200 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
-                    onClick={onDelete}
-                    title="将此流程归档至流程仓库"
-                  >
-                    <ArchiveRestore size={13} className="mr-1" />
-                    归档
-                  </Button>
-                </>
+                <DropdownMenuItem onClick={onDuplicate}>
+                  <Copy size={13} className="mr-2 text-slate-500" />
+                  <span>创建副本</span>
+                </DropdownMenuItem>
               )}
               {canEdit && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 px-2.5 text-xs border-violet-200 text-violet-700 hover:bg-violet-50"
-                  onClick={onSaveAsSubflow}
-                  title="将当前拓扑定义注册为私有子流程组件"
-                >
-                  存为子流程
-                </Button>
+                <DropdownMenuItem onClick={onSaveAsSubflow}>
+                  <FolderTree size={13} className="mr-2 text-slate-500" />
+                  <span>另存为私有子流程</span>
+                </DropdownMenuItem>
               )}
-            </div>
-          )}
+              {workflow.status === "published" && canPublish && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onUnpublish} className="text-amber-600 focus:text-amber-700">
+                    <Clock3 size={13} className="mr-2" />
+                    <span>取消发布</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+              {canManage && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={onDelete} className="text-red-600 focus:text-red-600">
+                    <ArchiveRestore size={13} className="mr-2" />
+                    <span>归档至流程仓库</span>
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
       {compileDiagnostics.length > 0 && (
@@ -2294,7 +2318,7 @@ function StructuredRunInput({
       </div>
       <div className="mt-4 flex justify-end gap-2 border-t border-slate-100 pt-3">
         <Button
-          className="bg-[#2d6bea] text-white hover:bg-[#255bc8]"
+          className="bg-blue-600 text-white hover:bg-blue-700 shadow-2xs"
           size="sm"
           disabled={!canRun || runPending}
           onClick={onRun}
@@ -2734,7 +2758,7 @@ function IamCenter({
           </Button>
           <Button
             type="button"
-            className="bg-[#2d6bea] hover:bg-[#255bc8]"
+            className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
             onClick={() => setNormalDialogOpen(true)}
           >
             <Plus size={15} />
@@ -3421,7 +3445,7 @@ function UserAuthorizationPanel({
         </div>
         <Button
           size="sm"
-          className="h-8 shrink-0 bg-[#2d6bea] text-xs hover:bg-[#255bc8]"
+          className="h-8 shrink-0 bg-blue-600 text-xs hover:bg-blue-700 text-white shadow-2xs"
           disabled={!details.data || details.isLoading}
           onClick={onAssign}
         >
@@ -3515,7 +3539,7 @@ function RoleAuthorizationPanel({
         </div>
         <Button
           size="sm"
-          className="h-8 shrink-0 bg-[#2d6bea] text-xs hover:bg-[#255bc8]"
+          className="h-8 shrink-0 bg-blue-600 text-xs hover:bg-blue-700 text-white shadow-2xs"
           disabled={!details.data || details.isLoading || !assignable}
           onClick={onAssign}
         >

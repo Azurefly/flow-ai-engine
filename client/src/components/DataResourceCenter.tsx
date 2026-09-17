@@ -736,7 +736,7 @@ export default function DataResourceCenter({
                 />
               </div>
               <Button
-                className="self-end bg-[#2d6bea] hover:bg-[#255bc8]"
+                className="self-end bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
                 disabled={saveSchedule.isPending}
               >
                 {saveSchedule.isPending && (
@@ -1066,7 +1066,7 @@ function ResourceForm({
       </div>
       <Button
         type="button"
-        className="w-fit bg-[#2d6bea] hover:bg-[#255bc8]"
+        className="w-fit bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
         onClick={() => setOpen(true)}
       >
         <Plus size={14} />

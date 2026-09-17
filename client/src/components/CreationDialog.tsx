@@ -20,7 +20,7 @@ export function CreationDialog({ open, onOpenChange, title, description, submitL
       <form data-aiflow-creation-dialog onSubmit={event => { event.preventDefault(); void onSubmit(); }}>
          <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 id="creation-dialog-title" className="text-lg font-semibold leading-6 text-slate-800">{title}</h2><p className="mt-1 text-sm leading-5 text-slate-500">{description}</p></div><button type="button" aria-label="关闭" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" disabled={pending} onClick={() => closeDialog()}>×</button></div>
         <div className="mt-4 grid max-h-[65vh] gap-3 overflow-y-auto pr-1">{children}</div>
-         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" disabled={pending} onClick={() => closeDialog()}>取消</Button><Button type="submit" className="bg-[#2d6bea] hover:bg-[#255bc8]" disabled={pending || submitDisabled}>{pending && <Loader2 className="animate-spin" size={14} />}{submitLabel}</Button></div>
+         <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" disabled={pending} onClick={() => closeDialog()}>取消</Button><Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-medium shadow-2xs" disabled={pending || submitDisabled}>{pending && <Loader2 className="animate-spin" size={14} />}{submitLabel}</Button></div>
       </form>
     </section>
   </div>;

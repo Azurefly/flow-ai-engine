@@ -64,7 +64,7 @@ export function WorkflowDetailPage({
             <Button
               type="button"
               size="sm"
-              className="bg-[#2d6bea] hover:bg-[#245fc8]"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
               onClick={onOpen}
             >
               进入设计器

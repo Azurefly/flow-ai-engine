@@ -47,6 +47,14 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import type { Definition } from "../../../server/workflow-service";
 import {
@@ -3136,53 +3144,57 @@ export default function WorkflowCanvas({
           {showCanvasActions && (
             <div
               data-flow-canvas-actions=""
-              className="flex min-h-10 items-center justify-start gap-1 overflow-x-auto border-t border-slate-100 bg-slate-50/80 px-3 py-1 sm:justify-end"
+              className="flex min-h-9 items-center justify-start gap-1 overflow-x-auto border-t border-slate-100 bg-white/80 backdrop-blur-sm px-3 py-1 sm:justify-start"
             >
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="gap-1 text-xs text-slate-600"
+                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 onClick={() =>
                   window.dispatchEvent(new Event("flow:neaten-canvas"))
                 }
-                title="整理画布"
+                title={
+                  flowType === "state"
+                    ? "整理画布：针对状态机生命周期执行拓扑层级对齐"
+                    : "整理画布：执行 DAG 依赖自动排版"
+                }
               >
-                <Waypoints size={14} />
-                整理画布
+                <Waypoints size={13} className="text-slate-500" />
+                <span>整理画布</span>
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="gap-1 text-xs text-slate-600"
+                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 onClick={() =>
                   window.dispatchEvent(new Event("flow:save-canvas-image"))
                 }
-                title="保存为图片"
+                title="导出当前画布拓扑为高清图片"
               >
-                <Download size={14} />
-                保存为图片
+                <Download size={13} className="text-slate-500" />
+                <span>保存为图片</span>
               </Button>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="gap-1 text-xs text-slate-600"
+                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 onClick={() =>
                   window.dispatchEvent(new Event("flow:fullscreen-canvas"))
                 }
-                title="全屏展示"
+                title="切换全屏沉浸设计模式"
               >
-                <Maximize2 size={14} />
-                {fullscreen ? "退出全屏" : "全屏展示"}
+                <Maximize2 size={13} className="text-slate-500" />
+                <span>{fullscreen ? "退出全屏" : "全屏展示"}</span>
               </Button>
               {!readOnly && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="gap-1 text-xs text-red-600 disabled:text-slate-300"
+                  className="h-7 gap-1 px-2 text-xs text-red-600 hover:bg-red-50 disabled:text-slate-300"
                   disabled={!selectedEdgeId}
                   onClick={deleteSelectedEdge}
                   title={
@@ -3191,8 +3203,8 @@ export default function WorkflowCanvas({
                       : "先单击画布中的连线"
                   }
                 >
-                  <Trash2 size={14} />
-                  删除连线
+                  <Trash2 size={13} />
+                  <span>删除连线</span>
                 </Button>
               )}
               {!readOnly && deletedEdge && (
@@ -3200,32 +3212,32 @@ export default function WorkflowCanvas({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="gap-1 text-xs text-indigo-600"
+                  className="h-7 gap-1 px-2 text-xs text-indigo-600 hover:bg-indigo-50"
                   onClick={undoDeletedEdge}
                   title="恢复刚删除的连线"
                 >
-                  <RotateCcw size={14} />
-                  撤销删线
+                  <RotateCcw size={13} />
+                  <span>撤销删线</span>
                 </Button>
               )}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="gap-1 text-xs text-slate-600"
+                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100"
                 onClick={() =>
                   window.dispatchEvent(new Event("flow:clear-highlight"))
                 }
                 title="取消高亮"
               >
-                <MousePointer2 size={14} />
-                取消高亮
+                <MousePointer2 size={13} className="text-slate-500" />
+                <span>取消高亮</span>
               </Button>
             </div>
           )}
         </div>
         {!readOnly && (templates.length > 0 || subflows.length > 0) && (
-          <div className="flex min-h-11 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+          <div className="flex min-h-9 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50/80 px-3 py-1 text-xs">
             <span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">
               REUSE LIBRARY
             </span>
@@ -3235,7 +3247,7 @@ export default function WorkflowCanvas({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-7 shrink-0 gap-1 text-xs"
+                className="h-6 shrink-0 gap-1 text-[11px] px-2 py-0 border-slate-200 hover:border-indigo-300 bg-white"
                 onClick={() =>
                   addReusableNode({
                     type: template.nodeType,
@@ -3244,7 +3256,7 @@ export default function WorkflowCanvas({
                   })
                 }
               >
-                <Save size={12} />
+                <Save size={11} className="text-slate-500" />
                 {template.name}
               </Button>
             ))}
@@ -3256,7 +3268,7 @@ export default function WorkflowCanvas({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-7 shrink-0 gap-1 border-violet-200 text-xs text-violet-700 hover:bg-violet-50"
+                  className="h-6 shrink-0 gap-1 border-violet-200 text-[11px] px-2 py-0 text-violet-700 hover:bg-violet-50 bg-white"
                   onClick={() =>
                     addReusableNode({
                       type: "subflow",
@@ -3265,12 +3277,13 @@ export default function WorkflowCanvas({
                     })
                   }
                 >
-                  <FolderTree size={12} />
+                  <FolderTree size={11} />
                   {subflow.name}
                 </Button>
               ))}
           </div>
         )}
+        </div>
         <div
           className={`relative ${fullscreen ? "h-full flex-1" : "h-[450px] sm:h-[590px] lg:h-[calc(100vh-280px)] lg:min-h-[600px]"}`}
           onDragOver={event => event.preventDefault()}

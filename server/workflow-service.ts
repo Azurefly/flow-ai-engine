@@ -267,10 +267,17 @@ export async function listWorkflows(user: WorkflowUser) {
           LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
           LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
           LEFT JOIN permission p ON p.id=rp.permissionId
-         WHERE w.archivedAt IS NULL AND (w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.code='workflow:view')
+         WHERE w.archivedAt IS NULL AND (
+           w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.code='workflow:view'
+           OR EXISTS (
+             SELECT 1 FROM flow_project_unit pu
+             JOIN organization_membership om ON om.unitId=pu.unitId
+             WHERE pu.projectId=w.projectId AND om.userId=?
+           )
+         )
          ORDER BY w.updatedAt DESC
          LIMIT 200`,
-    user.role === "admin" ? [] : [user.id, user.id, user.id, user.id]
+    user.role === "admin" ? [] : [user.id, user.id, user.id, user.id, user.id]
   );
   return rows.map(hydrateWorkflow);
 }

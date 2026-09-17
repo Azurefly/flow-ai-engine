@@ -263,6 +263,34 @@ export const flowProjectMembers = mysqlTable(
   ]
 );
 
+/** Department-level visibility and inherited role for a project. */
+export const flowProjectUnits = mysqlTable(
+  "flow_project_unit",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    projectId: varchar("projectId", { length: 36 })
+      .notNull()
+      .references(() => flowProjects.id),
+    unitId: varchar("unitId", { length: 36 })
+      .notNull()
+      .references(() => organizationUnits.id),
+    role: mysqlEnum("role", [
+      "owner",
+      "designer",
+      "operator",
+      "viewer",
+    ])
+      .default("viewer")
+      .notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("flow_project_unit_unique").on(table.projectId, table.unitId),
+    index("flow_project_unit_project_idx").on(table.projectId),
+    index("flow_project_unit_unit_idx").on(table.unitId),
+  ]
+);
+
 /** Hierarchical warehouse folders used for readonly discovery and workflow placement. */
 export const workflowFolders = mysqlTable(
   "workflow_folder",

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
+import { attachOrganizationPaths } from "./organization-service";
 import { getP1SystemSettings, type ReviewerMode } from "./p1-service";
 import {
   createWorkflow,
@@ -53,7 +54,26 @@ export function assertWorkflowReviewerSeparation(input: {
     throw new Error("独立复核模式下，流程设计所有人不能审核自己的流程。");
 }
 
+let projectUnitTableInitialized = false;
+export async function ensureProjectUnitTable() {
+  if (projectUnitTableInitialized) return;
+  await db().query(`
+    CREATE TABLE IF NOT EXISTS flow_project_unit (
+      id varchar(36) NOT NULL PRIMARY KEY,
+      projectId varchar(36) NOT NULL,
+      unitId varchar(36) NOT NULL,
+      role enum('owner','designer','operator','viewer') NOT NULL DEFAULT 'viewer',
+      createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY flow_project_unit_unique (projectId, unitId),
+      INDEX flow_project_unit_project_idx (projectId),
+      INDEX flow_project_unit_unit_idx (unitId)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+  projectUnitTableInitialized = true;
+}
+
 export async function getProjectAccess(user: ProjectUser, projectId: string) {
+  await ensureProjectUnitTable();
   const [projects] = await db().query<mysql.RowDataPacket[]>(
     "SELECT ownerUserId,status FROM flow_project WHERE id=? LIMIT 1",
     [projectId]
@@ -75,7 +95,18 @@ export async function getProjectAccess(user: ProjectUser, projectId: string) {
     "SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())",
     [projectId, user.id]
   );
-  const roles = members.map(member => member.role as ProjectMemberRole);
+  let roles = members.map(member => member.role as ProjectMemberRole);
+  if (roles.length === 0) {
+    const [unitRoles] = await db().query<mysql.RowDataPacket[]>(
+      `SELECT pu.role FROM flow_project_unit pu
+         JOIN organization_membership om ON om.unitId=pu.unitId
+        WHERE pu.projectId=? AND om.userId=? LIMIT 1`,
+      [projectId, user.id]
+    );
+    if (unitRoles[0]) {
+      roles.push((unitRoles[0].role as ProjectMemberRole) || "viewer");
+    }
+  }
   const permissions = new Set<ProjectPermission>();
   roles.forEach(role =>
     rolePermissions[role]?.forEach(permission => permissions.add(permission))
@@ -95,6 +126,7 @@ async function requireProjectPermission(
 }
 
 export async function listProjects(user: ProjectUser) {
+  await ensureProjectUnitTable();
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     user.role === "admin"
       ? `SELECT p.*,owner.username AS ownerUsername,owner.name AS ownerName,d.code AS domainCode,d.name AS domainName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount
@@ -103,8 +135,16 @@ export async function listProjects(user: ProjectUser) {
       : `SELECT DISTINCT p.*,owner.username AS ownerUsername,owner.name AS ownerName,d.code AS domainCode,d.name AS domainName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount
            FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId LEFT JOIN work_domain d ON d.id=p.domainId
            LEFT JOIN flow_project_member pm ON pm.projectId=p.id AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
-          WHERE p.status='active' AND (p.ownerUserId=? OR pm.id IS NOT NULL) ORDER BY p.updatedAt DESC`,
-    user.role === "admin" ? [] : [user.id, user.id]
+          WHERE p.status='active' AND (
+            p.ownerUserId=?
+            OR pm.id IS NOT NULL
+            OR EXISTS (
+              SELECT 1 FROM flow_project_unit pu
+              JOIN organization_membership om ON om.unitId=pu.unitId
+              WHERE pu.projectId=p.id AND om.userId=?
+            )
+          ) ORDER BY p.updatedAt DESC`,
+    user.role === "admin" ? [] : [user.id, user.id, user.id]
   );
   return rows;
 }
@@ -116,10 +156,13 @@ export async function createProject(
     name: string;
     description?: string;
     domainId?: string | null;
+    visibleUserIds?: number[];
+    visibleUnitIds?: string[];
   }
 ) {
   if (!(await hasSystemPermission(user, "workflow:create")))
     throw new Error("当前账号没有创建项目的权限。");
+  await ensureProjectUnitTable();
   const projectId = id();
   const code = input.code.trim().toUpperCase();
   const name = input.name.trim();
@@ -153,6 +196,32 @@ export async function createProject(
       "INSERT INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)",
       [id(), projectId, user.id, user.id]
     );
+
+    // 授权可见人（若创建人选定）
+    if (Array.isArray(input.visibleUserIds)) {
+      for (const visibleUid of input.visibleUserIds) {
+        const uid = Number(visibleUid);
+        if (Number.isInteger(uid) && uid > 0 && uid !== user.id) {
+          await connection.query(
+            "INSERT IGNORE INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'viewer',NOW(),?)",
+            [id(), projectId, uid, user.id]
+          );
+        }
+      }
+    }
+
+    // 授权可见部门（若创建人选定）
+    if (Array.isArray(input.visibleUnitIds)) {
+      for (const unitId of input.visibleUnitIds) {
+        if (typeof unitId === "string" && unitId.trim()) {
+          await connection.query(
+            "INSERT IGNORE INTO flow_project_unit (id,projectId,unitId,role,createdAt) VALUES (?,?,?, 'viewer', NOW())",
+            [id(), projectId, unitId.trim()]
+          );
+        }
+      }
+    }
+
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -169,6 +238,8 @@ export async function createProject(
       operation: "project_created",
       code,
       domainId: input.domainId ?? null,
+      visibleUsersCount: input.visibleUserIds?.length ?? 0,
+      visibleUnitsCount: input.visibleUnitIds?.length ?? 0,
     },
   });
   return projectId;
@@ -502,6 +573,116 @@ export async function grantProjectMember(
     },
   });
   return true;
+}
+
+export async function revokeProjectMember(
+  user: ProjectUser,
+  input: {
+    projectId: string;
+    userId: number;
+  }
+) {
+  await requireProjectPermission(user, input.projectId, "project:manage");
+  await db().query(
+    "UPDATE flow_project_member SET revokedAt=NOW() WHERE projectId=? AND userId=?",
+    [input.projectId, input.userId]
+  );
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    targetUserId: input.userId,
+    action: "role_revoked",
+    resourceType: "flow_project",
+    resourceId: input.projectId,
+    details: {},
+  });
+  return true;
+}
+
+export async function listProjectUnits(user: ProjectUser, projectId: string) {
+  await ensureProjectUnitTable();
+  await requireProjectPermission(user, projectId, "project:view");
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT pu.*, ou.code AS unitCode, ou.name AS unitName
+       FROM flow_project_unit pu
+       JOIN organization_unit ou ON ou.id=pu.unitId
+      WHERE pu.projectId=? ORDER BY pu.createdAt`,
+    [projectId]
+  );
+  return rows;
+}
+
+export async function grantProjectUnit(
+  user: ProjectUser,
+  input: {
+    projectId: string;
+    unitId: string;
+    role: ProjectMemberRole;
+  }
+) {
+  await ensureProjectUnitTable();
+  await requireProjectPermission(user, input.projectId, "project:manage");
+  const [units] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id, name FROM organization_unit WHERE id=? AND status='active' LIMIT 1",
+    [input.unitId]
+  );
+  if (!units[0]) throw new Error("目标部门不存在或已停用。");
+  await db().query(
+    `INSERT INTO flow_project_unit (id, projectId, unitId, role, createdAt)
+     VALUES (?, ?, ?, ?, NOW())
+     ON DUPLICATE KEY UPDATE role=VALUES(role)`,
+    [id(), input.projectId, input.unitId, input.role]
+  );
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "role_assigned",
+    resourceType: "flow_project",
+    resourceId: input.projectId,
+    details: {
+      targetUnitId: input.unitId,
+      unitName: units[0].name,
+      role: input.role,
+    },
+  });
+  return true;
+}
+
+export async function revokeProjectUnit(
+  user: ProjectUser,
+  input: {
+    projectId: string;
+    unitId: string;
+  }
+) {
+  await ensureProjectUnitTable();
+  await requireProjectPermission(user, input.projectId, "project:manage");
+  await db().query(
+    "DELETE FROM flow_project_unit WHERE projectId=? AND unitId=?",
+    [input.projectId, input.unitId]
+  );
+  await recordAuthorizationAudit({
+    actorUserId: user.id,
+    action: "role_revoked",
+    resourceType: "flow_project",
+    resourceId: input.projectId,
+    details: {
+      targetUnitId: input.unitId,
+    },
+  });
+  return true;
+}
+
+export async function listActiveUnits() {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id, code, name, parentUnitId, path FROM organization_unit WHERE status='active' ORDER BY sortOrder, code"
+  );
+  return attachOrganizationPaths(rows);
+}
+
+export async function listActiveUsers() {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id, username, name, email FROM users WHERE status='active' ORDER BY username"
+  );
+  return rows;
 }
 
 export async function createFolder(
