@@ -36,6 +36,7 @@ import {
   Play,
   Plus,
   RotateCcw,
+  RotateCw,
   Save,
   ShieldCheck,
   Sigma,
@@ -47,6 +48,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useMotionPreference } from "@/hooks/useMotionPreference";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -102,6 +104,7 @@ type CanvasContextMenu = {
   nodeId?: string;
   edgeId?: string;
 } | null;
+type HistorySnapshot = { nodes: CanvasNode[]; edges: Edge[] };
 
 function canConnectCanvasNodes(
   source: CanvasNode,
@@ -288,15 +291,16 @@ function FlowNodeCard({ data, selected }: NodeProps) {
       : {};
   return (
     <div
-      className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-white px-4 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.08)] transition-all ${selected ? "-translate-y-0.5 ring-4 ring-indigo-100 shadow-[0_12px_30px_rgba(79,70,229,0.16)]" : "hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(15,23,42,0.12)]"}`}
-      style={{ borderColor: `${appearance.color}66` }}
+      className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-white px-4 py-3.5 shadow-[0_4px_16px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] transition-all ${selected ? "-translate-y-0.5 ring-3 ring-blue-500/30 border-blue-500 shadow-[0_12px_28px_rgba(37,99,235,0.18)]" : "hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.10)]"}`}
+      style={{ borderColor: selected ? "#3b82f6" : `${appearance.color}4d` }}
     >
+      <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl opacity-90" style={{ backgroundColor: appearance.color }} />
       {hasTarget && (
         <Handle
           type="target"
           position={Position.Left}
           id="target"
-          className="!h-2.5 !w-2.5 !border-2 !border-white"
+          className="!h-3 !w-3 !border-2 !border-white shadow-2xs hover:scale-125 transition-transform"
           style={{ backgroundColor: appearance.color }}
         />
       )}
@@ -400,7 +404,7 @@ function FlowNodeCard({ data, selected }: NodeProps) {
             type="source"
             position={Position.Right}
             id={id}
-            className="!h-2.5 !w-2.5 !border-2 !border-white"
+            className="!h-3 !w-3 !border-2 !border-white shadow-2xs hover:scale-125 transition-transform"
             style={{
               top: `${((index + 1) / (handles.length + 1)) * 100}%`,
               backgroundColor: handleColor,
@@ -2279,6 +2283,90 @@ export default function WorkflowCanvas({
     [definition]
   );
 
+  const { prefersReducedMotion } = useMotionPreference();
+  const isLayoutAnimatingRef = useRef(false);
+  const layoutRafRef = useRef<number | null>(null);
+
+  const pastRef = useRef<HistorySnapshot[]>([]);
+  const futureRef = useRef<HistorySnapshot[]>([]);
+  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
+  const dragStartSnapshotRef = useRef<{ id: string; x: number; y: number } | null>(null);
+
+  const pushHistory = useCallback(
+    (currentNodes?: CanvasNode[], currentEdges?: Edge[]) => {
+      if (readOnly) return;
+      const n = currentNodes ?? latestNodesRef.current;
+      const e = currentEdges ?? latestEdgesRef.current;
+      const snapshot: HistorySnapshot = {
+        nodes: structuredClone(n),
+        edges: structuredClone(e),
+      };
+      pastRef.current = [...pastRef.current.slice(-29), snapshot];
+      futureRef.current = [];
+      setHistoryState({ canUndo: true, canRedo: false });
+    },
+    [readOnly]
+  );
+
+  const undo = useCallback(() => {
+    if (readOnly || !pastRef.current.length) return;
+    const previous = pastRef.current[pastRef.current.length - 1];
+    pastRef.current = pastRef.current.slice(0, -1);
+    const currentSnapshot: HistorySnapshot = {
+      nodes: structuredClone(latestNodesRef.current),
+      edges: structuredClone(latestEdgesRef.current),
+    };
+    futureRef.current = [currentSnapshot, ...futureRef.current.slice(0, 29)];
+    setNodes(previous.nodes);
+    setEdges(previous.edges);
+    setSelectedId(null);
+    setSelectedEdgeId(null);
+    setHistoryState({
+      canUndo: pastRef.current.length > 0,
+      canRedo: true,
+    });
+    toast.info("已撤销上一步操作 (⌘Z)");
+  }, [readOnly, setEdges, setNodes]);
+
+  const redo = useCallback(() => {
+    if (readOnly || !futureRef.current.length) return;
+    const next = futureRef.current[0];
+    futureRef.current = futureRef.current.slice(1);
+    const currentSnapshot: HistorySnapshot = {
+      nodes: structuredClone(latestNodesRef.current),
+      edges: structuredClone(latestEdgesRef.current),
+    };
+    pastRef.current = [...pastRef.current.slice(-29), currentSnapshot];
+    setNodes(next.nodes);
+    setEdges(next.edges);
+    setSelectedId(null);
+    setSelectedEdgeId(null);
+    setHistoryState({
+      canUndo: true,
+      canRedo: futureRef.current.length > 0,
+    });
+    toast.info("已重做操作 (⌘Y)");
+  }, [readOnly, setEdges, setNodes]);
+
+  const onNodeDragStart = useCallback((_event: any, node: CanvasNode) => {
+    dragStartSnapshotRef.current = { id: node.id, x: node.position.x, y: node.position.y };
+  }, []);
+
+  const onNodeDragStop = useCallback(
+    (_event: any, node: CanvasNode) => {
+      if (!dragStartSnapshotRef.current) return;
+      const { x, y } = dragStartSnapshotRef.current;
+      if (Math.abs(node.position.x - x) > 2 || Math.abs(node.position.y - y) > 2) {
+        const priorNodes = latestNodesRef.current.map(n =>
+          n.id === node.id ? { ...n, position: { x, y } } : n
+        );
+        pushHistory(priorNodes, latestEdgesRef.current);
+      }
+      dragStartSnapshotRef.current = null;
+    },
+    [pushHistory]
+  );
+
   useEffect(() => {
     if (emittedDefinitionRef.current === definitionSignature) {
       appliedDefinitionRef.current = definitionSignature;
@@ -2306,7 +2394,7 @@ export default function WorkflowCanvas({
   }, [definition, definitionSignature, workflowId, setEdges, setNodes]);
 
   useEffect(() => {
-    if (!onDefinitionChange) return;
+    if (!onDefinitionChange || isLayoutAnimatingRef.current) return;
     const next = toDefinition(nodes, edges, baseRef.current);
     const serialized = JSON.stringify(next);
     if (emittedDefinitionRef.current === serialized) return;
@@ -2499,6 +2587,7 @@ export default function WorkflowCanvas({
 
   const addNode = (item: (typeof palette)[number]) => {
     if (readOnly) return;
+    pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
     setNodes(current =>
       current.concat({
@@ -2523,6 +2612,7 @@ export default function WorkflowCanvas({
     config: NodeConfig;
   }) => {
     if (readOnly) return;
+    pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
     setNodes(current =>
       current.concat({
@@ -2545,6 +2635,7 @@ export default function WorkflowCanvas({
   const removeNode = useCallback(
     (nodeId: string) => {
       if (readOnly || nodeId === "start" || nodeId === "end") return;
+      pushHistory();
       const nextEdges = edges.filter(
         edge => edge.source !== nodeId && edge.target !== nodeId
       );
@@ -2559,7 +2650,7 @@ export default function WorkflowCanvas({
       setSelectedEdgeId(null);
       setContextMenu(null);
     },
-    [edges, readOnly, setEdges, setNodes]
+    [edges, pushHistory, readOnly, setEdges, setNodes]
   );
 
   const deleteSelectedNodes = useCallback(() => {
@@ -2574,6 +2665,7 @@ export default function WorkflowCanvas({
       !window.confirm("是否批量删除框选中的节点？删除后不可恢复，请谨慎操作！")
     )
       return;
+    pushHistory();
     const idSet = new Set(ids);
     const nextEdges = edges.filter(
       edge => !idSet.has(edge.source) && !idSet.has(edge.target)
@@ -2588,7 +2680,7 @@ export default function WorkflowCanvas({
     setSelectedId(null);
     setSelectedEdgeId(null);
     setContextMenu(null);
-  }, [edges, nodes, readOnly, setEdges, setNodes]);
+  }, [edges, nodes, pushHistory, readOnly, setEdges, setNodes]);
 
   const alignSelectedNodes = useCallback(
     (axis: "X" | "Y", anchorId: string) => {
@@ -2597,6 +2689,7 @@ export default function WorkflowCanvas({
       if (selectedNodes.length < 2) return;
       const anchor = nodes.find(node => node.id === anchorId);
       if (!anchor) return;
+      pushHistory();
       const value = axis === "X" ? anchor.position.x : anchor.position.y;
       setNodes(current =>
         current.map(node =>
@@ -2613,7 +2706,7 @@ export default function WorkflowCanvas({
       );
       setContextMenu(null);
     },
-    [nodes, readOnly, setNodes]
+    [nodes, pushHistory, readOnly, setNodes]
   );
 
   const addContextNode = useCallback(
@@ -2621,6 +2714,7 @@ export default function WorkflowCanvas({
       if (readOnly) return;
       const source = nodes.find(node => node.id === sourceId);
       if (!source) return;
+      pushHistory();
       const suffix = Math.random().toString(36).slice(2, 7);
       const nodeId = `${item.type}-${suffix}`;
       const nextNode: CanvasNode = {
@@ -2678,6 +2772,7 @@ export default function WorkflowCanvas({
       const target = nodes.find(node => node.id === connection.target);
       if (!source || !target || !canConnectCanvasNodes(source, target, edges))
         return;
+      pushHistory();
       const nextEdge = {
         ...connection,
         id: "edge-" + Date.now(),
@@ -2703,11 +2798,12 @@ export default function WorkflowCanvas({
           syncRouterRouteTargets(current, nextEdges, connection.source)
         );
     },
-    [edges, nodes, readOnly, setEdges, setNodes]
+    [edges, nodes, pushHistory, readOnly, setEdges, setNodes]
   );
 
   const deleteSelectedEdge = useCallback(() => {
     if (readOnly || !selectedEdgeId) return;
+    pushHistory();
     setEdges(current => {
       const edge = current.find(item => item.id === selectedEdgeId);
       if (edge) setDeletedEdge(edge);
@@ -2722,7 +2818,7 @@ export default function WorkflowCanvas({
       return next;
     });
     setSelectedEdgeId(null);
-  }, [nodes, readOnly, selectedEdgeId, setEdges, setNodes]);
+  }, [nodes, pushHistory, readOnly, selectedEdgeId, setEdges, setNodes]);
 
   const undoDeletedEdge = useCallback(() => {
     if (readOnly || !deletedEdge) return;
@@ -2733,6 +2829,7 @@ export default function WorkflowCanvas({
       setDeletedEdge(null);
       return;
     }
+    pushHistory();
     const nextEdges = edges.some(edge => edge.id === deletedEdge.id)
       ? edges
       : edges.concat(deletedEdge);
@@ -2741,7 +2838,7 @@ export default function WorkflowCanvas({
     setSelectedEdgeId(deletedEdge.id);
     setSelectedId(null);
     setDeletedEdge(null);
-  }, [deletedEdge, edges, nodes, readOnly, setEdges, setNodes]);
+  }, [deletedEdge, edges, nodes, pushHistory, readOnly, setEdges, setNodes]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -2751,6 +2848,22 @@ export default function WorkflowCanvas({
         ["INPUT", "TEXTAREA", "SELECT"].includes(target?.tagName ?? "")
       )
         return;
+
+      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        if (event.key.toLowerCase() === "z" && !event.shiftKey) {
+          event.preventDefault();
+          undo();
+          return;
+        }
+        if (
+          event.key.toLowerCase() === "y" ||
+          (event.key.toLowerCase() === "z" && event.shiftKey)
+        ) {
+          event.preventDefault();
+          redo();
+          return;
+        }
+      }
 
       if (event.key === "Escape") {
         if (!inspectorLocked) {
@@ -2785,7 +2898,9 @@ export default function WorkflowCanvas({
     inspectorLocked,
     nodes,
     readOnly,
+    redo,
     selectedEdgeId,
+    undo,
   ]);
 
   const selectedNodes = useMemo(
@@ -2835,11 +2950,12 @@ export default function WorkflowCanvas({
           config: createDefaultNodeConfig(type),
         },
       };
+      pushHistory();
       setNodes(current => current.concat(dropped));
       setSelectedId(dropped.id);
       setContextMenu(null);
     },
-    [reactFlow, readOnly, setNodes]
+    [pushHistory, reactFlow, readOnly, setNodes]
   );
 
   const handlePaletteDragStart = useCallback(
@@ -2951,6 +3067,7 @@ export default function WorkflowCanvas({
   }, [contextMenu]);
   const updateSelected = (updates: Partial<FlowNodeData>) => {
     if (!selectedId || inspectorDisabled) return;
+    pushHistory();
     setNodes(current =>
       current.map(node =>
         node.id === selectedId
@@ -3040,19 +3157,72 @@ export default function WorkflowCanvas({
     const neatenCanvas = () => {
       const currentNodes = latestNodesRef.current;
       const currentEdges = latestEdgesRef.current;
-      if (!currentNodes.length) return;
+      if (!currentNodes.length || readOnly) return;
 
+      pushHistory(currentNodes, currentEdges);
       const neatNodes = autoLayoutNodes(currentNodes, currentEdges);
-      setNodes(neatNodes);
-      if (onDefinitionChange) {
-        const nextDef = toDefinition(neatNodes, currentEdges, baseRef.current);
-        onDefinitionChange(nextDef);
+
+      if (prefersReducedMotion || currentNodes.length > 80 || currentEdges.length > 150) {
+        setNodes(neatNodes);
+        if (onDefinitionChange) {
+          const nextDef = toDefinition(neatNodes, currentEdges, baseRef.current);
+          onDefinitionChange(nextDef);
+        }
+        setTimeout(() => {
+          reactFlow?.fitView({ padding: 0.22, duration: 0 });
+        }, 30);
+        toast.success("画布已完成自动拓扑排版与间距整理。");
+        focusCanvas();
+        return;
       }
-      setTimeout(() => {
-        reactFlow?.fitView({ padding: 0.22, duration: 250 });
-      }, 50);
-      toast.success("画布已完成自动拓扑排版与间距整理。");
-      focusCanvas();
+
+      if (layoutRafRef.current) cancelAnimationFrame(layoutRafRef.current);
+      isLayoutAnimatingRef.current = true;
+      const startPositions = new Map(currentNodes.map(n => [n.id, { ...n.position }]));
+      const targetPositions = new Map(neatNodes.map(n => [n.id, { ...n.position }]));
+      const duration = 280;
+      const startTime = performance.now();
+      const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
+
+      const animate = (now: number) => {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        const eased = easeOutExpo(progress);
+
+        setNodes(current =>
+          current.map(node => {
+            const start = startPositions.get(node.id);
+            const target = targetPositions.get(node.id);
+            if (!start || !target) return node;
+            return {
+              ...node,
+              position: {
+                x: Math.round(start.x + (target.x - start.x) * eased),
+                y: Math.round(start.y + (target.y - start.y) * eased),
+              },
+            };
+          })
+        );
+
+        if (progress < 1) {
+          layoutRafRef.current = requestAnimationFrame(animate);
+        } else {
+          isLayoutAnimatingRef.current = false;
+          layoutRafRef.current = null;
+          setNodes(neatNodes);
+          if (onDefinitionChange) {
+            const nextDef = toDefinition(neatNodes, currentEdges, baseRef.current);
+            onDefinitionChange(nextDef);
+          }
+          setTimeout(() => {
+            reactFlow?.fitView({ padding: 0.22, duration: 250 });
+          }, 30);
+          toast.success("画布已完成自动拓扑排版与间距整理。");
+          focusCanvas();
+        }
+      };
+
+      layoutRafRef.current = requestAnimationFrame(animate);
     };
     const saveCanvasImage = () => {
       exportCanvasImage();
@@ -3066,6 +3236,10 @@ export default function WorkflowCanvas({
     window.addEventListener("flow:save-canvas-image", saveCanvasImage);
     window.addEventListener("flow:fullscreen-canvas", fullscreenCanvas);
     return () => {
+      if (layoutRafRef.current) {
+        cancelAnimationFrame(layoutRafRef.current);
+        isLayoutAnimatingRef.current = false;
+      }
       window.removeEventListener("flow:clear-highlight", clearHighlight);
       window.removeEventListener("flow:neaten-canvas", neatenCanvas);
       window.removeEventListener("flow:save-canvas-image", saveCanvasImage);
@@ -3077,11 +3251,11 @@ export default function WorkflowCanvas({
     <div
       data-aiflow-workflow-canvas=""
       className={
-        inspectorMode === "maximized"
-          ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_620px]"
-          : inspectorMode === "compact"
-            ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_72px]"
-            : "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[minmax(0,1fr)_420px]"
+        !selectedId || !selected || inspectorMode === "compact"
+          ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"
+          : inspectorMode === "maximized"
+            ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs lg:grid-cols-[minmax(0,1fr)_620px]"
+            : "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs lg:grid-cols-[minmax(0,1fr)_420px]"
       }
     >
       <section
@@ -3092,60 +3266,91 @@ export default function WorkflowCanvas({
           data-flow-canvas-toolbar=""
           className="border-b border-slate-200 bg-white"
         >
-          <div
-            data-flow-node-palette=""
-            className="flex min-h-14 items-center gap-1 overflow-x-auto px-3 py-1.5"
-          >
-            {palette
-              .filter(item => isFlowNodeAllowed(flowType, item.type))
-              .map(item => (
-                <Button
-                  key={item.type}
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-10 shrink-0 gap-2 rounded-xl px-2.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                  disabled={readOnly}
-                  draggable={!readOnly}
-                  onDragStart={event => handlePaletteDragStart(event, item)}
-                  onClick={() => addNode(item)}
-                  title={item.description}
-                >
-                  <NodeTypeGlyph
-                    icon={item.icon}
-                    color={item.color}
-                    size="palette"
-                  />
-                  {item.label}
-                </Button>
-              ))}
-            {(flowType === "state" || flowType === "control") && (
-              <>
-                <span className="mx-1 h-5 w-px bg-slate-200" />
-                <span
-                  aria-disabled="true"
-                  title="原始安装包中为禁用状态，项目资源接入后才可用"
-                  className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"
-                >
-                  <Database size={14} />
-                  业务资源
-                </span>
-                <span
-                  aria-disabled="true"
-                  title="原始安装包中为禁用状态，物理资源接入后才可用"
-                  className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"
-                >
-                  <Table2 size={14} />
-                  物理资源
-                </span>
-              </>
-            )}
-          </div>
+          {!readOnly && (
+            <div
+              data-flow-node-palette=""
+              className="flex min-h-14 items-center gap-1 overflow-x-auto px-3 py-1.5"
+            >
+              {palette
+                .filter(item => isFlowNodeAllowed(flowType, item.type))
+                .map(item => (
+                  <Button
+                    key={item.type}
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-10 shrink-0 gap-2 rounded-xl px-2.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950"
+                    disabled={readOnly}
+                    draggable={!readOnly}
+                    onDragStart={event => handlePaletteDragStart(event, item)}
+                    onClick={() => addNode(item)}
+                    title={item.description}
+                  >
+                    <NodeTypeGlyph
+                      icon={item.icon}
+                      color={item.color}
+                      size="palette"
+                    />
+                    {item.label}
+                  </Button>
+                ))}
+              {(flowType === "state" || flowType === "control") && (
+                <>
+                  <span className="mx-1 h-5 w-px bg-slate-200" />
+                  <span
+                    aria-disabled="true"
+                    title="原始安装包中为禁用状态，项目资源接入后才可用"
+                    className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"
+                  >
+                    <Database size={14} />
+                    业务资源
+                  </span>
+                  <span
+                    aria-disabled="true"
+                    title="原始安装包中为禁用状态，物理资源接入后才可用"
+                    className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"
+                  >
+                    <Table2 size={14} />
+                    物理资源
+                  </span>
+                </>
+              )}
+            </div>
+          )}
           {showCanvasActions && (
             <div
               data-flow-canvas-actions=""
               className="flex min-h-9 items-center justify-start gap-1 overflow-x-auto border-t border-slate-100 bg-white/80 backdrop-blur-sm px-3 py-1 sm:justify-start"
             >
+              {!readOnly && (
+                <>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
+                    disabled={!historyState.canUndo}
+                    onClick={undo}
+                    title="撤销操作 (Ctrl+Z / ⌘Z)"
+                  >
+                    <RotateCcw size={13} className="text-slate-600" />
+                    <span>撤销</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1 px-2 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
+                    disabled={!historyState.canRedo}
+                    onClick={redo}
+                    title="重做操作 (Ctrl+Y / ⌘Y)"
+                  >
+                    <RotateCw size={13} className="text-slate-600" />
+                    <span>重做</span>
+                  </Button>
+                  <span className="mx-1 h-4 w-px bg-slate-200" />
+                </>
+              )}
               <Button
                 type="button"
                 variant="ghost"
@@ -3235,7 +3440,6 @@ export default function WorkflowCanvas({
               </Button>
             </div>
           )}
-        </div>
         {!readOnly && (templates.length > 0 || subflows.length > 0) && (
           <div className="flex min-h-9 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50/80 px-3 py-1 text-xs">
             <span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">
@@ -3285,7 +3489,7 @@ export default function WorkflowCanvas({
         )}
         </div>
         <div
-          className={`relative ${fullscreen ? "h-full flex-1" : "h-[450px] sm:h-[590px] lg:h-[calc(100vh-280px)] lg:min-h-[600px]"}`}
+          className={`relative ${fullscreen ? "h-full flex-1" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
         >
@@ -3561,13 +3765,15 @@ export default function WorkflowCanvas({
             onPaneContextMenu={onPaneContextMenu}
             nodesDraggable={!readOnly}
             nodesConnectable={!readOnly}
+            onNodeDragStart={readOnly ? undefined : onNodeDragStart}
+            onNodeDragStop={readOnly ? undefined : onNodeDragStop}
             elementsSelectable
             selectionOnDrag={!readOnly}
             selectionKeyCode="Control"
             multiSelectionKeyCode={["Shift", "Control"]}
             fitView
           >
-            <Background color="#d9e2ec" gap={20} size={1} />
+            <Background color="#cbd5e1" gap={22} size={1.25} />
             <MiniMap
               nodeColor={node => colorFor((node.data as FlowNodeData).kind)}
               pannable
@@ -3577,10 +3783,11 @@ export default function WorkflowCanvas({
           </ReactFlow>
         </div>
       </section>
-      <aside
-        data-workflow-inspector
-        className="border-t border-slate-200 bg-white lg:border-l lg:border-t-0"
-      >
+      {selectedId && selected && (
+        <aside
+          data-workflow-inspector=""
+          className="border-t border-slate-200 bg-white lg:border-l lg:border-t-0"
+        >
         <div className="flex min-h-16 items-center justify-between border-b border-slate-100 px-4 py-3">
           <div className={inspectorMode === "compact" ? "hidden" : ""}>
             <p className="text-[10px] font-bold tracking-[.2em] text-indigo-600">
@@ -3714,7 +3921,7 @@ export default function WorkflowCanvas({
               <div
                 role="tablist"
                 aria-label={`${selectedDefinition.label}配置分类`}
-                className="flex gap-1 overflow-x-auto border-y border-slate-100 bg-slate-50 px-3 py-2"
+                className="flex gap-1.5 overflow-x-auto border-y border-slate-100 bg-slate-50/80 px-3 py-2"
               >
                 {selectedFieldGroups.map(group => (
                   <button
@@ -3722,7 +3929,11 @@ export default function WorkflowCanvas({
                     type="button"
                     role="tab"
                     aria-selected={activeInspectorGroup?.label === group.label}
-                    className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium ${activeInspectorGroup?.label === group.label ? "bg-[#3370ed] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100"}`}
+                    className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                      activeInspectorGroup?.label === group.label
+                        ? "bg-blue-600 text-white shadow-xs"
+                        : "border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
                     onClick={() => setInspectorTab(group.label)}
                   >
                     {group.label}
@@ -3914,6 +4125,7 @@ export default function WorkflowCanvas({
           </div>
         )}
       </aside>
+      )}
     </div>
   );
 }

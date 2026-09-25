@@ -41,16 +41,17 @@ export default function SystemConfigShell({ onOpenIdentity, onOpenOrganization }
             ))}
           </nav>
         </aside>
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50 px-5 pt-3">
-            <div role="tablist" aria-label="系统配置卡片页签" className="flex w-fit gap-1">
-              <button id="system-config-active-tab" role="tab" aria-controls="system-config-card" aria-selected="true" className="flex items-center gap-2 rounded-t border border-b-0 border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-[#245fc8]">
-                <active.icon size={14} />
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xs">
+          <div className="border-b border-slate-100 bg-slate-50/60 px-5 py-2.5">
+            <div role="tablist" aria-label="系统配置卡片页签" className="flex items-center gap-1.5 text-xs text-slate-500">
+              <span className="text-slate-400">系统配置 /</span>
+              <button id="system-config-active-tab" role="tab" aria-controls="system-config-card" aria-selected="true" className="inline-flex items-center gap-1.5 font-semibold text-slate-900">
+                <active.icon size={13} className="text-slate-700" />
                 {active.label}
               </button>
             </div>
           </div>
-          <div id="system-config-card" role="tabpanel" aria-labelledby="system-config-active-tab" className="p-5">
+          <div id="system-config-card" role="tabpanel" aria-labelledby="system-config-active-tab" className="p-5 max-w-4xl">
             {tab === "general" && <GeneralSettings />}
             {tab === "approval" && <ApprovalSettings />}
             {tab === "domain" && <DomainSettings />}

@@ -160,23 +160,20 @@ async function main() {
   await userB.mutate("auth.login", { username: usersToCreate[1].username, password: createdUsers[usersToCreate[1].username].password });
   console.log(`✓ Test user sessions authenticated.\n`);
 
-  // Create Custom Approval Role for multi-user assignment
-  const roleCode = `custom_appr_${runTag.toLowerCase()}`;
+  // Create Custom Approval Role for independent supervisor (strict SOD separation: applicant != approver)
+  const roleCode = `custom_mgr_${runTag.toLowerCase()}`;
   await admin.mutate("iam.createCustomRole", {
     code: roleCode,
-    name: `综合画布审批角色_${runTag}`,
+    name: `独立主管审批角色_${runTag}`,
     scope: "system",
     permissions: ["workflow:run", "workflow:view"],
   });
-  await admin.mutate("iam.assignSystemRole", {
-    userId: createdUsers[usersToCreate[0].username].id,
-    roleCode,
-  });
+  // Assign approval role strictly to UserB (UserA is applicant/operator, not approver)
   await admin.mutate("iam.assignSystemRole", {
     userId: createdUsers[usersToCreate[1].username].id,
     roleCode,
   });
-  console.log(`✓ Custom role ${roleCode} created and assigned to UserA & UserB.\n`);
+  console.log(`✓ Supervisor role ${roleCode} created and assigned exclusively to UserB (UserA applicant SOD separated).\n`);
 
   // Create 3 Projects (1 for each flow type)
   const statePrj = await admin.mutate("project.create", {
@@ -374,12 +371,12 @@ async function main() {
         }
       },
       {
-        id: "s_review", type: "state", name: "主管审核中", position: { x: 1110, y: 200 },
+        id: "s_review", type: "state", name: "待主管审核", position: { x: 1110, y: 200 },
         config: {
           nodeDh: "ST_SUPERVISOR_REVIEW",
-          jdmc: "主管复核中",
+          jdmc: "待主管复核",
           stateColor: "#f59e0b",
-          flowStatus: "审核中",
+          flowStatus: "待审核",
           stateType: "business",
         }
       },
@@ -397,7 +394,7 @@ async function main() {
           hqhqsz: "orSignFor",
           bdcz: {
             hqhqsz: "orSignFor",
-            xzdfhq: [uidA, uidB],
+            xzdfhq: [uidB],
           }
         }
       },
@@ -494,14 +491,14 @@ async function main() {
   });
   console.log(`✓ 经办人 UserA 提交操作执行成功`);
 
-  // Step 2: op_audit orSign task for UserA or UserB -> UserA approves
-  const taskAudit1A = await waitForTask(userA, stateWf.id);
+  // Step 2: op_audit task goes to supervisor UserB exclusively (UserA applicant cannot approve own request)
+  const taskAudit1A = await waitForTask(userB, stateWf.id);
   console.log(`→ 主管决策任务就绪: TaskId=${taskAudit1A.id} (${taskAudit1A.nodeName})`);
-  await userA.mutate("task.execute", {
+  await userB.mutate("task.execute", {
     taskId: taskAudit1A.id,
-    result: { decision: "approved", outcome: "approved", comment: "主管审核同意立项" },
+    result: { decision: "approved", outcome: "approved", comment: "主管 UserB 独立审核同意立项" },
   });
-  console.log(`✓ 主管决策 UserA 显式同意执行成功`);
+  console.log(`✓ 独立主管 UserB 审核同意执行成功 (发起人自审隔离与四眼原则生效)`);
 
   // Step 3: Wait for router and subflow to execute and reach end
   const run1ADetail = await waitForRunStatus(admin, run1A.runId, ["success", "completed"]);
@@ -519,19 +516,12 @@ async function main() {
   const taskSubmit1B = await waitForTask(userA, stateWf.id);
   await userA.mutate("task.execute", { taskId: taskSubmit1B.id, result: { decision: "approved" } });
 
-  const taskAudit1B_A = await waitForTask(userA, stateWf.id);
-  await userA.mutate("task.execute", {
-    taskId: taskAudit1B_A.id,
-    result: { decision: "rejected", outcome: "rejected", comment: "发票日期超期，驳回重新填报" },
-  });
-  console.log(`✓ 主管决策 UserA 显式驳回执行成功`);
-
   const taskAudit1B_B = await waitForTask(userB, stateWf.id);
   await userB.mutate("task.execute", {
     taskId: taskAudit1B_B.id,
-    result: { decision: "rejected", outcome: "rejected", comment: "联合主管复核确认不符要求，共同驳回" },
+    result: { decision: "rejected", outcome: "rejected", comment: "发票日期超期，主管 UserB 驳回重新填报" },
   });
-  console.log(`✓ 联合主管 UserB 显式驳回执行成功，满足或签全员否决条件`);
+  console.log(`✓ 独立主管 UserB 显式驳回执行成功`);
 
   const run1BDetail = await waitForRunStatus(admin, run1B.runId, ["success", "completed"]);
   console.log(`✓ 实例 1B 执行完成: Status=${run1BDetail.status}, CurrentState=${run1BDetail.currentStateCode}`);

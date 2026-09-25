@@ -42,29 +42,29 @@ export function WorkflowDetailPage({
   return (
     <div
       data-aiflow-process-detail-page=""
-      className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"
+      className="min-h-[calc(100vh-48px)] bg-[#fcfcfd] p-4 sm:p-5"
     >
       <div>
-        <div data-aiflow-context-header className="mb-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+        <div data-aiflow-context-header className="mb-3.5 flex flex-col gap-2 rounded-lg border border-slate-200 bg-white p-3.5 shadow-2xs sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
               PROCESS DETAIL
             </p>
-            <h1 className="mt-1 text-lg font-semibold text-slate-800">
+            <h1 className="mt-0.5 text-base font-semibold text-slate-900">
               {workflow.name}
             </h1>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-0.5 text-xs text-slate-500">
               当前详情仅承载已授权流程数据；关闭后返回当前业务的流程设计中心。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs border-slate-200 hover:bg-slate-50" onClick={onClose}>
               ← 返回流程设计中心
             </Button>
             <Button
               type="button"
               size="sm"
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+              className="h-8 text-xs bg-slate-900 hover:bg-slate-800 text-white shadow-2xs font-medium"
               onClick={onOpen}
             >
               进入设计器

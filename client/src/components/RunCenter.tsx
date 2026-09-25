@@ -40,6 +40,17 @@ function LogBlock({ title, value }: { title: string; value: unknown }) {
   );
 }
 
+const statusLabel: Record<string, string> = {
+  success: "成功",
+  failed: "失败",
+  running: "运行中",
+  waiting: "等待人工",
+  blocked: "已暂停",
+  queued: "排队中",
+  cancelled: "已取消",
+  terminated: "已终止",
+};
+
 export default function RunCenter({
   workflowId,
   workflowName,
@@ -262,67 +273,73 @@ export default function RunCenter({
           tone="slate"
         />
       </div>
-      <section className="overflow-hidden rounded-lg border border-red-100 bg-white shadow-sm">
-        <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-4 py-3">
-          <div className="flex items-center gap-2 text-sm font-semibold text-red-900">
-            <AlertTriangle size={15} />
-            失败告警
+      {workflowAlerts.length === 0 && !alerts.isLoading ? (
+        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600 shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 size={14} className="text-emerald-600" />
+            <span className="font-medium text-slate-800">失败告警</span>
+            <span className="text-slate-500">当前筛选范围内无告警记录</span>
           </div>
-          <span className="rounded bg-white px-2 py-0.5 text-[10px] text-red-700">
-            {workflowAlerts.filter((alert: any) => !alert.readAt).length} 未读
-          </span>
+          <span className="font-mono text-[11px] text-slate-400">0 未读</span>
         </div>
-        <div className="max-h-48 overflow-y-auto">
-          {alerts.isLoading ? (
-            <p role="status" className="p-4 text-center text-xs text-slate-400">正在读取失败告警…</p>
-          ) : workflowAlerts.map((alert: any) => (
-            <div
-              key={alert.id}
-              className={`flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center ${alert.readAt ? "text-slate-400" : "text-slate-700"}`}
-            >
-              <div className="min-w-0 flex-1">
-                <p className="font-medium">{alert.summary}</p>
-                <p className="mt-1 truncate">
-                  {decodeJson(alert.detailsJson)?.message ||
-                    "请查看运行节点日志。"}
-                </p>
-                <p className="mt-1 text-[10px] text-slate-400">
-                  {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"} ms
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                  onClick={() => onSelect(String(alert.runId))}
-                >
-                  查看运行
-                </Button>
-                {!alert.readAt && (
+      ) : (
+        <section className="overflow-hidden rounded-lg border border-red-100 bg-white shadow-sm">
+          <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-red-900">
+              <AlertTriangle size={15} />
+              失败告警
+            </div>
+            <span className="rounded bg-white px-2 py-0.5 text-[10px] text-red-700">
+              {workflowAlerts.filter((alert: any) => !alert.readAt).length} 未读
+            </span>
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {alerts.isLoading ? (
+              <p role="status" className="p-4 text-center text-xs text-slate-400">正在读取失败告警…</p>
+            ) : workflowAlerts.map((alert: any) => (
+              <div
+                key={alert.id}
+                className={`flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center ${alert.readAt ? "text-slate-400" : "text-slate-700"}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium">{alert.summary}</p>
+                  <p className="mt-1 truncate">
+                    {decodeJson(alert.detailsJson)?.message ||
+                      "请查看运行节点日志。"}
+                  </p>
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"} ms
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs"
-                    disabled={markRead.isPending}
-                    onClick={() => markRead.mutate({ alertId: alert.id })}
+                    onClick={() => onSelect(String(alert.runId))}
                   >
-                    标记已读
+                    查看运行
                   </Button>
-                )}
+                  {!alert.readAt && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      disabled={markRead.isPending}
+                      onClick={() => markRead.mutate({ alertId: alert.id })}
+                    >
+                      标记已读
+                    </Button>
+                  )}
+                </div>
               </div>
-            </div>
-          ))}
-          {!alerts.isLoading && !alerts.isError && !workflowAlerts.length && (
-            <p className="p-4 text-center text-xs text-slate-400">
-              当前筛选范围内没有失败告警。
-            </p>
-          )}
-        </div>
-      </section>
-      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
+            ))}
+          </div>
+        </section>
+      )}
+      <div className={`grid gap-4 ${selectedRun ? "xl:grid-cols-[420px_1fr]" : "grid-cols-1"}`}>
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 text-sm font-semibold">
             <span>运行记录</span>
@@ -338,18 +355,18 @@ export default function RunCenter({
                 className={`w-full border-b border-slate-100 p-4 text-left hover:bg-slate-50 ${selectedRun?.id === run.id ? "bg-blue-50" : ""}`}
               >
                 <div className="flex justify-between gap-2">
-                  <code className="text-xs text-slate-500">
+                  <code className="text-xs text-slate-500 font-mono">
                     {run.id.slice(0, 8)}
                   </code>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${run.status === "success" ? "bg-emerald-100 text-emerald-700" : run.status === "failed" ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"}`}
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium border ${run.status === "success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}
                   >
-                    {run.status}
+                    {statusLabel[run.status] ?? run.status}
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                  <span>{formatTime(run.createdAt)}</span>
-                  <span>{run.durationMs ?? "—"} ms</span>
+                  <span className="font-mono tabular-nums">{formatTime(run.createdAt)}</span>
+                  <span className="font-mono tabular-nums">{run.durationMs ?? "—"} ms</span>
                   <span>
                     {run.triggeredByName ||
                       run.username ||
@@ -365,18 +382,17 @@ export default function RunCenter({
             )}
           </div>
         </section>
-        <section className="min-h-80 rounded-lg border border-slate-200 bg-white p-5">
-          {selectedRun ? (
-            <>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-bold tracking-[.18em] text-slate-400">
-                    RUN {selectedRun.id.slice(0, 8)}
-                  </p>
-                  <h3 className="mt-1 font-semibold">
-                    {selectedRun.status === "success" ? "运行成功" : "运行详情"}
-                  </h3>
-                </div>
+        {selectedRun && (
+          <section className="min-h-80 rounded-lg border border-slate-200 bg-white p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-bold tracking-[.18em] text-slate-400">
+                  RUN {selectedRun.id.slice(0, 8)}
+                </p>
+                <h3 className="mt-1 font-semibold">
+                  {selectedRun.status === "success" ? "运行成功" : "运行详情"}
+                </h3>
+              </div>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <span className="text-xs text-slate-400">
                     {selectedRun.durationMs ?? "—"} ms
@@ -489,16 +505,8 @@ export default function RunCenter({
                   </details>
                 ))}
               </div>
-            </>
-          ) : (
-            <div className="grid h-full place-items-center text-center text-sm text-slate-400">
-              <div>
-                <Clock3 className="mx-auto" size={28} />
-                <p className="mt-3">从左侧选择一次运行以查看节点级日志。</p>
-              </div>
-            </div>
-          )}
-        </section>
+          </section>
+        )}
       </div>
     </div>
   );

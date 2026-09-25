@@ -448,7 +448,7 @@ export default function ProcessWorkbench() {
                     }}
                   />
                 ))}
-              {view === "todo" && (
+              {view === "todo" && selectedTaskIds.length > 0 && (
                 <TaskBatchBar
                   count={selectedTaskIds.length}
                   busy={busy}

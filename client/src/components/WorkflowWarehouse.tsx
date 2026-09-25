@@ -465,7 +465,7 @@ export default function WorkflowWarehouse({
           </section>
         ) : (
           <>
-            <div className="grid gap-4 xl:grid-cols-[300px_minmax(0,1fr)_430px]">
+            <div className={`grid gap-4 ${selectedWorkflowId ? "xl:grid-cols-[280px_minmax(0,1fr)_420px]" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}>
               <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="border-b border-slate-100 p-3">
                   <div className="flex items-center justify-between gap-2">
@@ -699,13 +699,24 @@ export default function WorkflowWarehouse({
                   )}
                 </div>
               </section>
-              <aside className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 p-3">
-                  <p className="text-sm font-semibold text-slate-700">
-                    流程简介
-                  </p>
-                  <span className="text-[11px] text-slate-400">流程图</span>
-                </div>
+              {selectedWorkflowId && (
+                <aside className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col">
+                  <div className="flex items-center justify-between border-b border-slate-100 p-3">
+                    <p className="text-sm font-semibold text-slate-700">
+                      流程简介
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-slate-400">只读流程图</span>
+                      <button
+                        type="button"
+                        className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        onClick={() => setSelectedWorkflowId(null)}
+                        title="收起预览"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
                 {workflowDetail.data ? (
                   <div>
                     <div className="border-b border-slate-100 p-3">
@@ -782,6 +793,7 @@ export default function WorkflowWarehouse({
                   </div>
                 )}
               </aside>
+              )}
             </div>
             <input
               ref={importRef}

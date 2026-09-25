@@ -66,6 +66,8 @@ export default function WorkflowTestRunModal({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [outputPage, setOutputPage] = useState(1);
+  const OUTPUT_PAGE_SIZE = 25;
 
   // Field rows for input editor
   const [inputRows, setInputRows] = useState<Array<{ key: string; value: string }>>([]);
@@ -211,6 +213,18 @@ export default function WorkflowTestRunModal({
     return Object.keys(first);
   }, [outputRows]);
 
+  useEffect(() => {
+    setOutputPage(1);
+  }, [activeRunId, open]);
+
+  const totalOutputRows = outputRows?.length ?? 0;
+  const totalOutputPages = Math.max(1, Math.ceil(totalOutputRows / OUTPUT_PAGE_SIZE));
+  const paginatedOutputRows = useMemo(() => {
+    if (!outputRows) return [];
+    const start = (outputPage - 1) * OUTPUT_PAGE_SIZE;
+    return outputRows.slice(start, start + OUTPUT_PAGE_SIZE);
+  }, [outputRows, outputPage]);
+
   const handleStartRun = async () => {
     if (!workflow?.id || isRunning) return;
     setIsRunning(true);
@@ -273,26 +287,26 @@ export default function WorkflowTestRunModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl sm:max-w-4xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-slate-200 shadow-2xl">
+      <DialogContent className="max-w-5xl sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-slate-200 shadow-2xl">
         {/* Modal Header */}
-        <DialogHeader className="px-6 py-4 border-b border-slate-100 bg-slate-50/70 flex-shrink-0">
+        <DialogHeader className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={`flex h-9 w-9 items-center justify-center rounded-lg text-white shadow-sm ${
-                isStateflow ? "bg-indigo-600" : isDataflow ? "bg-cyan-600" : "bg-blue-600"
+              <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-2xs ${
+                isStateflow ? "bg-emerald-600" : isDataflow ? "bg-violet-600" : "bg-blue-600"
               }`}>
-                {isStateflow ? <Compass size={18} /> : <Play size={18} />}
+                {isStateflow ? <Compass size={17} /> : <Play size={17} />}
               </div>
               <div>
-                <DialogTitle className="text-base font-semibold text-slate-900 flex items-center gap-2">
+                <DialogTitle className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                   <span>
                     {isStateflow
-                      ? "状态流程交互仿真与路径走查"
+                      ? "状态流程仿真推演"
                       : isDataflow
-                      ? "数据流程管道抽样试跑"
-                      : "控制流程自动化单步调试"}
+                      ? "数据流程抽样试跑"
+                      : "控制流程单步调试"}
                   </span>
-                  <span className="rounded bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200/60">
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200/60">
                     {isStateflow
                       ? "状态机 Profile · 事务流转"
                       : isDataflow
@@ -310,11 +324,7 @@ export default function WorkflowTestRunModal({
                   )}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                  {isStateflow
-                    ? "推演业务对象生命周期流转，模拟各节点参与人操作，排查孤岛状态与循环路径。"
-                    : isDataflow
-                    ? "在沙箱中抽样执行数据流算子，即时预览 Schema 兼容性与计算输出。"
-                    : "在设计器内即时调试执行自动化 DAG 并展示算子计算输出，无需跳出页面。"}
+                  将保存当前草稿并发起测试执行，实际影响由节点与外部服务配置决定。
                 </DialogDescription>
               </div>
             </div>
@@ -677,55 +687,92 @@ export default function WorkflowTestRunModal({
 
                       {/* Tabular Data View */}
                       {outputRows && resultDisplayMode === "table" ? (
-                        <div className="overflow-x-auto rounded border border-slate-200 max-h-[380px]">
-                          <table className="w-full text-left text-xs">
-                            <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
-                              <tr>
-                                <th className="px-3 py-2 w-12 text-slate-400 font-mono">#</th>
-                                {outputColumns.map(col => (
-                                  <th key={col} className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
-                                    {col}
-                                  </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {outputRows.map((row: any, rowIndex: number) => (
-                                <tr
-                                  key={rowIndex}
-                                  className="hover:bg-blue-50/40 transition-colors"
-                                >
-                                  <td className="px-3 py-2 text-slate-400 font-mono text-[11px]">
-                                    {rowIndex + 1}
-                                  </td>
-                                  {outputColumns.map(col => {
-                                    const val = typeof row === "object" && row !== null ? row[col] : row;
-                                    return (
-                                      <td
-                                        key={col}
-                                        className="px-3 py-2 text-slate-800 whitespace-nowrap max-w-xs truncate"
-                                        title={val === null || val === undefined ? "" : typeof val === "object" ? JSON.stringify(val) : String(val)}
-                                      >
-                                        {val === null || val === undefined ? (
-                                          <span className="text-slate-300 italic">null</span>
-                                        ) : typeof val === "boolean" ? (
-                                          <span className={val ? "text-emerald-600 font-semibold" : "text-slate-400"}>
-                                            {String(val)}
-                                          </span>
-                                        ) : typeof val === "object" ? (
-                                          <code className="text-[10px] text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">
-                                            {JSON.stringify(val)}
-                                          </code>
-                                        ) : (
-                                          String(val)
-                                        )}
-                                      </td>
-                                    );
-                                  })}
+                        <div className="space-y-2">
+                          <div className="overflow-x-auto rounded border border-slate-200 max-h-[360px]">
+                            <table className="w-full text-left text-xs">
+                              <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
+                                <tr>
+                                  <th className="px-3 py-2 w-12 text-slate-400 font-mono">#</th>
+                                  {outputColumns.map(col => (
+                                    <th key={col} className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
+                                      {col}
+                                    </th>
+                                  ))}
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {paginatedOutputRows.map((row: any, idx: number) => {
+                                  const rowIndex = (outputPage - 1) * OUTPUT_PAGE_SIZE + idx;
+                                  return (
+                                    <tr
+                                      key={rowIndex}
+                                      className="hover:bg-blue-50/40 transition-colors"
+                                    >
+                                      <td className="px-3 py-2 text-slate-400 font-mono text-[11px]">
+                                        {rowIndex + 1}
+                                      </td>
+                                      {outputColumns.map(col => {
+                                        const val = typeof row === "object" && row !== null ? row[col] : row;
+                                        return (
+                                          <td
+                                            key={col}
+                                            className="px-3 py-2 text-slate-800 whitespace-nowrap max-w-xs truncate"
+                                            title={val === null || val === undefined ? "" : typeof val === "object" ? JSON.stringify(val) : String(val)}
+                                          >
+                                            {val === null || val === undefined ? (
+                                              <span className="text-slate-300 italic">null</span>
+                                            ) : typeof val === "boolean" ? (
+                                              <span className={val ? "text-emerald-600 font-semibold" : "text-slate-400"}>
+                                                {String(val)}
+                                              </span>
+                                            ) : typeof val === "object" ? (
+                                              <code className="text-[10px] text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">
+                                                {JSON.stringify(val)}
+                                              </code>
+                                            ) : (
+                                              String(val)
+                                            )}
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          {totalOutputPages > 1 && (
+                            <div className="flex items-center justify-between px-1 py-1 text-xs text-slate-500 border-t border-slate-100 pt-2">
+                              <span>
+                                显示第 {(outputPage - 1) * OUTPUT_PAGE_SIZE + 1} ~ {Math.min(outputPage * OUTPUT_PAGE_SIZE, totalOutputRows)} 条，共 {totalOutputRows} 条
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  disabled={outputPage <= 1}
+                                  onClick={() => setOutputPage(p => Math.max(1, p - 1))}
+                                >
+                                  上一页
+                                </Button>
+                                <span className="font-mono text-xs px-1 text-slate-600">
+                                  {outputPage} / {totalOutputPages}
+                                </span>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                  disabled={outputPage >= totalOutputPages}
+                                  onClick={() => setOutputPage(p => Math.min(totalOutputPages, p + 1))}
+                                >
+                                  下一页
+                                </Button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
                         /* JSON / Code View */

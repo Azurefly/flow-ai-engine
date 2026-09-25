@@ -1023,32 +1023,30 @@ function FlowConsole({
       <a className="aiflow-skip-link" href="#aiflow-console-panel">
         跳到主要工作区
       </a>
-    <header className="sticky top-0 z-30 border-b border-[#d9e0e9] bg-white text-[#354052] shadow-sm">
-        <div className="flex h-14 items-center">
+    <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/95 backdrop-blur-sm text-slate-800 shadow-2xs">
+        <div className="flex h-12 items-center">
           <button
-            className="grid h-14 w-16 place-items-center border-r border-[#e0e6ee] text-slate-500 hover:bg-[#f2f6fc] hover:text-[#2469c7]"
+            className="grid h-12 w-12 place-items-center border-r border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors"
             onClick={() => setSidebarOpen(value => !value)}
             aria-label="展开导航"
           >
-            {sidebarOpen ? <X size={19} /> : <Menu size={19} />}
+            {sidebarOpen ? <X size={17} /> : <Menu size={17} />}
           </button>
-          <div className="flex min-w-0 items-center gap-3 px-4">
-            <div className="grid h-7 w-7 place-items-center rounded-sm bg-[#2d72cf] text-white">
-              <Gauge size={16} />
-    </div>
-            <div className="hidden sm:block">
-              <p className="text-[10px] font-bold tracking-[.16em] text-[#2d72cf]">
-                AI FLOW GRAPH
-              </p>
-              <p className="text-sm font-semibold text-slate-700">
+          <div className="flex min-w-0 items-center gap-2.5 px-3.5">
+            <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-white shadow-2xs">
+              <Gauge size={15} />
+            </div>
+            <div className="hidden sm:flex items-baseline gap-1.5">
+              <span className="text-sm font-semibold tracking-tight text-slate-900">
                 {general.platformName}
-              </p>
+              </span>
+              <span className="text-[10px] font-mono text-slate-400">Studio</span>
             </div>
           </div>
           <div
             role="tablist"
             aria-label="流程工作台主导航"
-            className="ml-4 hidden h-full items-end gap-1 md:flex"
+            className="ml-3 hidden h-full items-end gap-0.5 md:flex"
           >
             {nav.map(item => (
               <button
@@ -1058,18 +1056,18 @@ function FlowConsole({
                 aria-controls="aiflow-console-panel"
                 key={item.id}
                 onClick={() => navigateSection(item.id)}
-                className={`flex h-full items-center gap-2 border-b-2 px-4 text-sm transition-colors ${section === item.id ? "border-[#3a82e4] bg-[#edf4ff] text-[#2469c7]" : "border-transparent text-slate-500 hover:bg-[#f2f6fc] hover:text-[#2469c7]"}`}
+                className={`flex h-full items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-all ${section === item.id ? "border-slate-900 text-slate-900 font-semibold bg-slate-50/80" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-800"}`}
               >
-                <item.icon size={15} />
+                <item.icon size={14} className={section === item.id ? "text-slate-900" : "text-slate-400"} />
                 {item.label}
               </button>
             ))}
           </div>
-          <div className="ml-auto flex h-full items-center gap-3 px-4 text-xs">
+          <div className="ml-auto flex h-full items-center gap-2.5 px-3.5 text-xs">
             <span className="hidden text-slate-500 lg:inline">
               {user.name || user.username || "内部用户"}
             </span>
-            <span className="rounded-sm border border-[#e0e6ee] px-2 py-1 text-slate-600">
+            <span className="rounded-full border border-slate-200/80 bg-slate-50 px-2.5 py-0.5 text-xs font-medium text-slate-600">
               {user.role === "admin" ? "系统管理员" : "成员"}
             </span>
             {toggleTheme && (
@@ -1126,7 +1124,7 @@ function FlowConsole({
             <div className="border-b border-slate-100 p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] font-bold tracking-[.18em] text-slate-400">
+                  <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
                     PROJECT WORKBENCH
                   </p>
                   <h2 className="mt-1 text-sm font-semibold">流程仓库</h2>
@@ -1173,7 +1171,7 @@ function FlowConsole({
                         {workflow.status === "published" ? "已发布" : "草稿"}
                       </span>
                     </div>
-                    <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-400">
+                    <div className="mt-2 flex items-center gap-3 text-[11px] text-slate-500">
                       <span>{definition?.nodes?.length ?? 0} 节点</span>
                       <span>v{workflow.definitionVersion}</span>
                     </div>
@@ -1251,7 +1249,7 @@ function FlowConsole({
                       )}
                     </select>
                   </label>
-                  <span className="text-[11px] text-slate-400">
+                  <span className="text-[11px] text-slate-500">
                     仅显示当前账号具备查看权限的业务项目
                   </span>
                 </div>
