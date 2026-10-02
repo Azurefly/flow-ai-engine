@@ -20,3 +20,7 @@ coverage/
 playwright-report/
 test-results/
 scripts/dev/
+.audit-*.sh
+.cleanup-failed-tests.sh
+.compare-backup-residue.sh
+.deploy-*-test.yaml
