@@ -29,14 +29,14 @@ export function getCapabilityStatus() {
       label: "状态/控制流程",
       status: worker.started ? "beta" : "disabled",
       reason: worker.started
-        ? "持久化 Worker 已启动，仍需完成故障注入验收。"
+        ? "已在独立 MySQL 8.4 验收库通过故障注入恢复测试；生产环境故障恢复演练仍需完成。"
         : "持久化 Worker 未启动。",
     },
     {
       id: "human-approval",
       label: "人工审批与或签/会签",
       status: "beta",
-      reason: "决定和票数语义已接入，真实 MySQL 并发验收尚未完成。",
+      reason: "已在独立 MySQL 8.4 验收库通过或签/会签并发测试；生产组织和审批路由验收仍需完成。",
     },
     {
       id: "llm-node",

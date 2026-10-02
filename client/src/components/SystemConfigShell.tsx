@@ -192,7 +192,7 @@ function RuntimeStatus() {
   const maturityGroups = [
     {
       key: "beta",
-      title: "待完成验收",
+      title: "生产验证待完成",
       items: capabilities.filter(capability => capability.status === "beta"),
     },
     {
@@ -314,7 +314,7 @@ function RuntimeStatus() {
           </p>
           <div className="aiflow-type-meta mt-2 flex flex-wrap gap-1.5">
             <span className="rounded-full bg-aiflow-info-surface px-2 py-1 text-aiflow-info">
-              待验收 {betaCount}
+              待生产验证 {betaCount}
             </span>
             <span className="rounded-full bg-aiflow-warning-surface px-2 py-1 text-aiflow-warning">
               实验阶段 {experimentalCount}
@@ -369,7 +369,7 @@ function RuntimeStatus() {
                         className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${capability.status === "beta" ? "bg-aiflow-info-surface text-aiflow-info" : capability.status === "experimental" ? "bg-aiflow-warning-surface text-aiflow-warning" : "bg-muted text-muted-foreground"}`}
                       >
                         {capability.status === "beta"
-                          ? "待验收"
+                          ? "待生产验证"
                           : capability.status === "experimental"
                             ? "实验中"
                             : capability.status === "disabled"

@@ -75,6 +75,29 @@ describe("runtime identity and readiness contract", () => {
     );
   });
 
+  it("distinguishes isolated MySQL acceptance from production verification", () => {
+    const info = getRuntimeInfo();
+    const stateControl = info.capabilities.find(
+      capability => capability.id === "state-control-workflow"
+    );
+    const humanApproval = info.capabilities.find(
+      capability => capability.id === "human-approval"
+    );
+
+    expect(humanApproval).toMatchObject({
+      status: "beta",
+      reason:
+        "已在独立 MySQL 8.4 验收库通过或签/会签并发测试；生产组织和审批路由验收仍需完成。",
+    });
+    if (info.worker.started) {
+      expect(stateControl).toMatchObject({
+        status: "beta",
+        reason:
+          "已在独立 MySQL 8.4 验收库通过故障注入恢复测试；生产环境故障恢复演练仍需完成。",
+      });
+    }
+  });
+
   it("reports injected source identity, UTC build time and Docker image ID", () => {
     vi.stubEnv("BUILD_ID", "source-0123456789abcdef");
     vi.stubEnv("BUILD_TIME", "2026-09-28T10:30:00Z");
