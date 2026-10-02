@@ -807,7 +807,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         key: "nodeDh",
         aliases: ["stateCode"],
         label: "状态代号",
-        help: "原版代号仅允许数字和字母；用于状态流识别和审计。",
+        help: "代号仅允许数字和字母，用于流转识别和审计。",
         kind: "text",
         required: true,
       },
@@ -815,7 +815,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         key: "jdmc",
         aliases: ["displayName"],
         label: "状态名称",
-        help: "原版状态节点名称。",
+        help: "业务状态名称，与画布节点名称分别设置。",
         kind: "text",
         required: true,
       },
@@ -840,7 +840,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "stateColor",
         label: "状态颜色",
-        help: "原版状态节点颜色。",
+        help: "状态显示颜色。",
         kind: "text",
       },
       {
@@ -858,7 +858,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "stateType",
         label: "状态类型",
-        help: "区分业务状态和系统状态。",
+        help: "区分业务状态、系统状态和业务终态。",
         kind: "select",
         options: [
           { value: "business", label: "业务状态" },
@@ -2029,6 +2029,15 @@ export function createDefaultNodeConfig(type: FlowNodeType): NodeConfig {
   return structuredClone(FLOW_NODE_DEFINITIONS[type].defaultConfig);
 }
 
+/** Legacy defaults must not mask an explicitly configured display name. */
+export function resolveStateDisplayName(config: NodeConfig, fallback: string) {
+  const legacy = typeof config.jdmc === "string" ? config.jdmc.trim() : "";
+  const modern =
+    typeof config.displayName === "string" ? config.displayName.trim() : "";
+  if (legacy && legacy !== "业务状态") return legacy;
+  return modern || legacy || fallback;
+}
+
 /** Preserves forward-compatible keys while filling only missing documented defaults. */
 export function withNodeConfigDefaults(
   type: FlowNodeType,
@@ -2042,15 +2051,27 @@ export function withNodeConfigDefaults(
     createDefaultNodeConfig(type)
   );
   if (type === "state") {
-    if (config.nodeDh && (!config.stateCode || config.stateCode === "STATE_CODE")) {
+    if ((!config.jdmc || config.jdmc === "业务状态") && config.displayName) {
+      merged.jdmc = String(config.displayName).trim();
+    }
+    if (
+      config.nodeDh &&
+      (!config.stateCode || config.stateCode === "STATE_CODE")
+    ) {
       merged.stateCode = String(config.nodeDh).trim();
     }
-    if (config.jdmc && (!config.displayName || config.displayName === "业务状态")) {
+    if (
+      config.jdmc &&
+      (!config.displayName || config.displayName === "业务状态")
+    ) {
       merged.displayName = String(config.jdmc).trim();
     }
   }
   if (type === "operate") {
-    if (config.czmc && (!config.operationName || config.operationName === "业务操作")) {
+    if (
+      config.czmc &&
+      (!config.operationName || config.operationName === "业务操作")
+    ) {
       merged.operationName = String(config.czmc).trim();
     }
   }

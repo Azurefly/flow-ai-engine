@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   parseBusinessCsvContent,
   TestResultCollector,
@@ -104,6 +105,35 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
   });
 
   describe("流程中心（ProcessCenter）配置项与执行效果", () => {
+    it("项目流程数量不一致或读取失败时显示可恢复反馈", () => {
+      const start = performance.now();
+      const source = readFileSync(
+        new URL(
+          "../../client/src/components/ProjectWorkspace.tsx",
+          import.meta.url
+        ),
+        "utf8"
+      );
+
+      expect(source).toContain("data-project-workflow-count-mismatch");
+      expect(source).toContain("project.workflowCount");
+      expect(source).toContain("workflows.length");
+      expect(source).toContain("workflows.isError");
+      expect(source).toContain("流程列表读取失败");
+      expect(source).toContain('"重新读取"');
+      expect(source).toContain("onRefreshWorkflows");
+
+      TestResultCollector.record({
+        testId: "TC-MOD2-PROJECT-WORKFLOW-COUNT-001",
+        name: "项目概览与流程列表数量不一致时提供可恢复反馈",
+        category: "contract",
+        module: "流程设计中心",
+        target: "ProjectWorkspace.WorkflowCountConsistency",
+        status: "passed",
+        start,
+      });
+    });
+
     it("流程类型、来源与数据源必选门禁配置", () => {
       const start = performance.now();
 
@@ -154,9 +184,9 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
       expect(
         canPublishWorkflow({ status: "draft", auditStatus: "approved" })
       ).toBe(true);
-      expect(
-        canPublishWorkflow({ status: "draft", auditStatus: "init" })
-      ).toBe(false);
+      expect(canPublishWorkflow({ status: "draft", auditStatus: "init" })).toBe(
+        false
+      );
       expect(
         canPublishWorkflow({ status: "draft", auditStatus: "rejected" })
       ).toBe(false);
@@ -229,7 +259,10 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
     it("项目成员授权与过期时间换算执行效果", () => {
       const start = performance.now();
 
-      const calculateExpiresAt = (hoursStr: string, baseTime = 1773000000000) => {
+      const calculateExpiresAt = (
+        hoursStr: string,
+        baseTime = 1773000000000
+      ) => {
         const hours = Number(hoursStr);
         return hours > 0 ? new Date(baseTime + hours * 3600_000) : undefined;
       };
@@ -269,7 +302,8 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
       expect(endpoint.baseUrl.startsWith("http")).toBe(true);
 
       // Toggle status
-      const toggledStatus = endpoint.status === "active" ? "disabled" : "active";
+      const toggledStatus =
+        endpoint.status === "active" ? "disabled" : "active";
       expect(toggledStatus).toBe("disabled");
 
       TestResultCollector.record({
@@ -312,9 +346,27 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
       };
 
       const projects: MockProject[] = [
-        { id: "p1", code: "PROJ_ALICE", name: "爱丽丝的采购项目", ownerUserId: 101, status: "active" },
-        { id: "p2", code: "PROJ_BOB", name: "鲍勃的机密研发项目", ownerUserId: 102, status: "active" },
-        { id: "p3", code: "PROJ_DEPT", name: "财务部公共预算项目", ownerUserId: 103, status: "active" },
+        {
+          id: "p1",
+          code: "PROJ_ALICE",
+          name: "爱丽丝的采购项目",
+          ownerUserId: 101,
+          status: "active",
+        },
+        {
+          id: "p2",
+          code: "PROJ_BOB",
+          name: "鲍勃的机密研发项目",
+          ownerUserId: 102,
+          status: "active",
+        },
+        {
+          id: "p3",
+          code: "PROJ_DEPT",
+          name: "财务部公共预算项目",
+          ownerUserId: 103,
+          status: "active",
+        },
       ];
 
       // 直接授权可见人 (Direct Members)
@@ -335,11 +387,14 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
         { userId: 101, unitId: "dept_rd" },
         { userId: 102, unitId: "dept_rd" },
         { userId: 105, unitId: "dept_finance" }, // 105 (Fiona) 属于财务部
-        { userId: 106, unitId: "dept_hr" },      // 106 (Helen) 属于HR部门（无关人员）
+        { userId: 106, unitId: "dept_hr" }, // 106 (Helen) 属于HR部门（无关人员）
       ];
 
       // 匹配 listProjects 权限隔离过滤逻辑
-      const queryUserProjects = (user: { id: number; role: "admin" | "user" }) => {
+      const queryUserProjects = (user: {
+        id: number;
+        role: "admin" | "user";
+      }) => {
         if (user.role === "admin") {
           return projects.filter(p => p.status === "active"); // 超级管理员可以看到全部
         }
@@ -348,10 +403,18 @@ describe("功能测试 - 模块 2：业务中心与项目工作区 (Project Work
           // 1. 创建人拥有所有权
           if (p.ownerUserId === user.id) return true;
           // 2. 被添加为可见人 (Direct Member)
-          if (members.some(m => m.projectId === p.id && m.userId === user.id)) return true;
+          if (members.some(m => m.projectId === p.id && m.userId === user.id))
+            return true;
           // 3. 所属部门被添加为可见部门 (Department Visibility)
-          const myUnitIds = userDepts.filter(ud => ud.userId === user.id).map(ud => ud.unitId);
-          if (projectUnits.some(pu => pu.projectId === p.id && myUnitIds.includes(pu.unitId))) return true;
+          const myUnitIds = userDepts
+            .filter(ud => ud.userId === user.id)
+            .map(ud => ud.unitId);
+          if (
+            projectUnits.some(
+              pu => pu.projectId === p.id && myUnitIds.includes(pu.unitId)
+            )
+          )
+            return true;
           return false;
         });
       };

@@ -15,6 +15,7 @@ import {
   ensureBootstrapAdmin,
   FLOW_SESSION_COOKIE,
   listUsers,
+  listUsersPage,
   login,
   logout,
   setUserStatus,
@@ -24,8 +25,10 @@ import {
   createCustomRole,
   deleteCustomRole,
   getRoleAuthorizationDetails,
+  listAssignableRoleUsersPage,
   getUserAuthorizationDetails,
   getWorkflowAccess,
+  hasSystemPermission,
   grantWorkflowMember,
   listActiveUsersForWorkflowAssignment,
   listAuthorizationAudit,
@@ -41,6 +44,7 @@ import {
   getWorkflowRun,
   getWorkflowRunMetrics,
   listRunAlerts,
+  listWorkflowRunHistoryPage,
   listWorkflowRuns,
   markRunAlertRead,
   controlWorkflowRun,
@@ -49,7 +53,7 @@ import {
   signalWorkflowMessage,
 } from "./workflow-engine";
 import { submitWorkflowRun, wakeWorkflowWorker } from "./workflow-worker";
-import { getRuntimeInfo } from "./runtime-info";
+import { checkReadiness, getRuntimeInfo } from "./runtime-info";
 import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
 import {
   archiveWorkflow,
@@ -85,6 +89,8 @@ import {
   grantProjectUnit,
   listActiveUnits,
   listActiveUsers,
+  searchActiveUnits,
+  searchActiveUsers,
   listProjectMembers,
   listProjectUnits,
   listProjects,
@@ -102,6 +108,7 @@ import {
 import {
   createProjectServiceEndpoint,
   listProjectServiceEndpoints,
+  setProjectServiceEndpointEnvironment,
   setProjectServiceEndpointStatus,
 } from "./service-endpoint-service";
 import {
@@ -122,6 +129,8 @@ import {
   listActiveWorkDomains,
   listProcessInstances,
   listWorkDomains,
+  pageProcessInstances,
+  pageWorkflowTasks,
   listWorkflowTaskAssignees,
   listWorkflowTasks,
   removeWorkflowTaskSigner,
@@ -135,6 +144,8 @@ import {
   createOrganizationUnit,
   deleteOrganizationUnit,
   listOrganization,
+  listOrganizationDirectory,
+  listOrganizationMembersPage,
   moveOrganizationMember,
   removeOrganizationMember,
   resolveOperateAssignees,
@@ -281,6 +292,26 @@ export const appRouter = router({
   }),
   iam: router({
     users: iamManageProcedure.query(() => listUsers()),
+    userDirectory: iamManageProcedure
+      .input(
+        z.object({
+          search: z.string().trim().max(160).default(""),
+          offset: z.number().int().min(0).max(1_000_000).default(0),
+          limit: z.number().int().min(1).max(100).default(20),
+          status: z.enum(["active", "disabled"]).optional(),
+        })
+      )
+      .query(({ input }) => listUsersPage(input)),
+    roleAssignableUsers: iamManageProcedure
+      .input(
+        z.object({
+          roleId: z.number().int().positive(),
+          search: z.string().trim().max(160).default(""),
+          offset: z.number().int().min(0).max(1_000_000).default(0),
+          limit: z.number().int().min(1).max(100).default(20),
+        })
+      )
+      .query(({ input }) => listAssignableRoleUsersPage(input)),
     previewUserCreation: iamManageProcedure
       .input(
         z.object({
@@ -515,6 +546,12 @@ export const appRouter = router({
           refCode: z.string().trim().min(2).max(64),
           name: z.string().trim().min(1).max(160),
           baseUrl: z.string().trim().url().max(2048),
+          targetEnvironment: z.enum([
+            "development",
+            "test",
+            "staging",
+            "production",
+          ]),
           secretRef: z.string().trim().max(255).nullable().optional(),
           authHeaderName: z.string().trim().max(128).nullable().optional(),
           authScheme: z.string().trim().max(32).nullable().optional(),
@@ -522,6 +559,22 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => ({
         id: await createProjectServiceEndpoint(ctx.user, input),
+      })),
+    setServiceEndpointEnvironment: protectedProcedure
+      .input(
+        z.object({
+          projectId: z.string().min(8).max(64),
+          id: z.string().uuid(),
+          targetEnvironment: z.enum([
+            "development",
+            "test",
+            "staging",
+            "production",
+          ]),
+        })
+      )
+      .mutation(async ({ ctx, input }) => ({
+        success: await setProjectServiceEndpointEnvironment(ctx.user, input),
       })),
     setServiceEndpointStatus: protectedProcedure
       .input(
@@ -548,7 +601,11 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         id: await createProject(ctx.user, input),
       })),
-    activeDomains: protectedProcedure.query(() => listActiveWorkDomains()),
+    activeDomains: protectedProcedure.query(async ({ ctx }) => {
+      if (!(await hasSystemPermission(ctx.user, "workflow:create")))
+        throw new Error("当前账号无权读取可授权工作域。");
+      return listActiveWorkDomains();
+    }),
     workflows: protectedProcedure
       .input(
         z.object({
@@ -647,7 +704,9 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           unitId: z.string().min(8).max(64),
-          role: z.enum(["owner", "designer", "operator", "viewer"]).default("viewer"),
+          role: z
+            .enum(["owner", "designer", "operator", "viewer"])
+            .default("viewer"),
         })
       )
       .mutation(async ({ ctx, input }) => ({
@@ -663,8 +722,28 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => ({
         success: await revokeProjectUnit(ctx.user, input),
       })),
-    activeUnits: protectedProcedure.query(() => listActiveUnits()),
-    activeUsers: protectedProcedure.query(() => listActiveUsers()),
+    activeUnits: protectedProcedure.query(({ ctx }) =>
+      listActiveUnits(ctx.user)
+    ),
+    searchActiveUnits: protectedProcedure
+      .input(
+        z.object({
+          query: z.string().trim().min(1).max(80),
+          projectId: z.string().min(8).max(64).optional(),
+        })
+      )
+      .query(({ ctx, input }) => searchActiveUnits(ctx.user, input)),
+    activeUsers: protectedProcedure.query(({ ctx }) =>
+      listActiveUsers(ctx.user)
+    ),
+    searchActiveUsers: protectedProcedure
+      .input(
+        z.object({
+          query: z.string().trim().min(1).max(80),
+          projectId: z.string().min(8).max(64).optional(),
+        })
+      )
+      .query(({ ctx, input }) => searchActiveUsers(ctx.user, input)),
     warehouse: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => listWarehouse(ctx.user, input.projectId)),
@@ -1022,6 +1101,20 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listWorkflowTasks(ctx.user, input)),
+    page: protectedProcedure
+      .input(
+        z.object({
+          view: z.enum(["todo", "done", "initiated", "all"]),
+          projectId: z.string().min(8).max(64).optional(),
+          status: z.string().trim().min(1).max(120).optional(),
+          search: z.string().trim().max(200).optional(),
+          createdAtFrom: z.coerce.date().optional(),
+          createdAtBefore: z.coerce.date().optional(),
+          limit: z.number().int().min(1).max(100).default(50),
+          cursor: z.string().max(512).optional(),
+        })
+      )
+      .query(({ ctx, input }) => pageWorkflowTasks(ctx.user, input)),
     instances: protectedProcedure
       .input(
         z.object({
@@ -1030,9 +1123,33 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listProcessInstances(ctx.user, input)),
+    instancePage: protectedProcedure
+      .input(
+        z.object({
+          view: z.enum(["initiated", "all"]),
+          status: z.string().trim().min(1).max(120).optional(),
+          search: z.string().trim().max(200).optional(),
+          createdAtFrom: z.coerce.date().optional(),
+          createdAtBefore: z.coerce.date().optional(),
+          limit: z.number().int().min(1).max(100).default(50),
+          cursor: z.string().max(512).optional(),
+        })
+      )
+      .query(({ ctx, input }) => pageProcessInstances(ctx.user, input)),
     calendar: protectedProcedure
-      .input(z.object({ month: z.coerce.date() }))
-      .query(({ ctx, input }) => getTaskCalendar(ctx.user, input.month)),
+      .input(
+        z
+          .object({
+            start: z.coerce.date(),
+            end: z.coerce.date(),
+            limit: z.number().int().min(1).max(200).default(200),
+            cursor: z.string().max(512).optional(),
+          })
+          .refine(range => range.start < range.end, {
+            message: "日历查询的起止时间无效。",
+          })
+      )
+      .query(({ ctx, input }) => getTaskCalendar(ctx.user, input)),
     get: protectedProcedure
       .input(z.object({ taskId: z.string().uuid() }))
       .query(async ({ ctx, input }) => {
@@ -1158,6 +1275,7 @@ export const appRouter = router({
   config: router({
     publicGeneral: publicProcedure.query(() => getPublicGeneralSettings()),
     runtimeInfo: adminProcedure.query(() => getRuntimeInfo()),
+    readiness: adminProcedure.query(() => checkReadiness()),
     settings: adminProcedure.query(() => getP1SystemSettings()),
     updateSetting: adminProcedure
       .input(
@@ -1194,6 +1312,22 @@ export const appRouter = router({
         success: await updateWorkDomain(ctx.user, input),
       })),
     organization: iamManageProcedure.query(() => listOrganization()),
+    organizationDirectory: iamManageProcedure.query(() =>
+      listOrganizationDirectory()
+    ),
+    organizationMembersPage: iamManageProcedure
+      .input(
+        z.object({
+          unitId: z.string().uuid(),
+          includeDescendants: z.boolean().default(false),
+          search: z.string().trim().max(128).default(""),
+          page: z.number().int().min(1).max(100_000).default(1),
+          pageSize: z
+            .union([z.literal(10), z.literal(20), z.literal(50)])
+            .default(20),
+        })
+      )
+      .query(({ input }) => listOrganizationMembersPage(input)),
     createOrganizationUnit: iamManageProcedure
       .input(
         z.object({
@@ -1783,6 +1917,7 @@ export const appRouter = router({
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
           triggeredByUserId: z.number().int().positive().optional(),
+          triggeredByQuery: z.string().trim().min(1).max(80).optional(),
           limit: z.number().int().min(1).max(200).optional(),
         })
       )
@@ -1794,8 +1929,50 @@ export const appRouter = router({
             "workflow:view"
           ))
         )
-          throw new Error("无权查看流程运行历史。");
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权查看流程运行历史。",
+          });
         return listWorkflowRuns(input.workflowId, input);
+      }),
+    runHistoryPage: protectedProcedure
+      .input(
+        z.object({
+          workflowId: z.string().min(8).max(64),
+          status: z
+            .enum([
+              "queued",
+              "running",
+              "waiting",
+              "blocked",
+              "success",
+              "failed",
+              "cancelled",
+              "terminated",
+            ])
+            .optional(),
+          from: z.coerce.date().optional(),
+          to: z.coerce.date().optional(),
+          triggeredByUserId: z.number().int().positive().optional(),
+          triggeredByQuery: z.string().trim().min(1).max(80).optional(),
+          searchQuery: z.string().trim().min(1).max(100).optional(),
+          cursor: z.string().min(1).max(512).optional(),
+          pageSize: z.number().int().min(1).max(50).default(25),
+        })
+      )
+      .query(async ({ ctx, input }) => {
+        if (
+          !(await hasWorkflowPermission(
+            ctx.user,
+            input.workflowId,
+            "workflow:view"
+          ))
+        )
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权查看流程运行历史。",
+          });
+        return listWorkflowRunHistoryPage(input.workflowId, input);
       }),
     runMetrics: protectedProcedure
       .input(
@@ -1816,6 +1993,7 @@ export const appRouter = router({
           from: z.coerce.date().optional(),
           to: z.coerce.date().optional(),
           triggeredByUserId: z.number().int().positive().optional(),
+          triggeredByQuery: z.string().trim().min(1).max(80).optional(),
         })
       )
       .query(async ({ ctx, input }) => {
@@ -1826,7 +2004,10 @@ export const appRouter = router({
             "workflow:view"
           ))
         )
-          throw new Error("无权查看流程运行分析。");
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "无权查看流程运行分析。",
+          });
         return getWorkflowRunMetrics(input.workflowId, input);
       }),
     alerts: protectedProcedure
@@ -1849,6 +2030,7 @@ export const appRouter = router({
             from: z.coerce.date().optional(),
             to: z.coerce.date().optional(),
             triggeredByUserId: z.number().int().positive().optional(),
+            triggeredByQuery: z.string().trim().min(1).max(80).optional(),
           })
           .optional()
       )

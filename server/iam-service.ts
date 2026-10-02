@@ -335,6 +335,11 @@ export async function assignRole(input: { userId: number; roleCode: string; scop
   const [roleRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,scope FROM iam_role WHERE code=? LIMIT 1", [input.roleCode]);
   const role = roleRows[0];
   if (!role || role.scope !== input.scopeType) throw new Error("角色不存在或授权范围不匹配。");
+  const [userRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT status FROM users WHERE id=? LIMIT 1",
+    [input.userId]
+  );
+  if (userRows[0]?.status !== "active") throw new Error("只能为启用中的用户绑定角色。");
   const [existingRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT id FROM role_assignment
       WHERE userId=? AND roleId=? AND scopeType=? AND scopeId <=> ?
@@ -614,6 +619,41 @@ export async function getRoleAuthorizationDetails(roleId: number) {
   );
   const [organizationUnits] = await db().query<mysql.RowDataPacket[]>("SELECT ou.id,ou.code,ou.name,ou.status,our.includeDescendants,our.effectiveFrom,our.expiresAt FROM organization_unit_role our JOIN organization_unit ou ON ou.id=our.unitId WHERE our.roleId=? ORDER BY ou.name,ou.code", [roleId]);
   return { role, permissions, directUsers, inheritedUsers, organizationUnits };
+}
+
+export async function listAssignableRoleUsersPage(input: {
+  roleId: number;
+  search: string;
+  offset: number;
+  limit: number;
+}) {
+  const [roleRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT scope FROM iam_role WHERE id=? LIMIT 1",
+    [input.roleId]
+  );
+  if (roleRows[0]?.scope !== "system") throw new Error("仅系统角色支持在此绑定用户。");
+  const search = input.search.trim().toLowerCase();
+  const searchClause = search
+    ? " AND (INSTR(LOWER(COALESCE(u.name, '')), ?) > 0 OR INSTR(LOWER(u.username), ?) > 0 OR INSTR(LOWER(COALESCE(u.email, '')), ?) > 0)"
+    : "";
+  const where = `WHERE u.status='active'
+    AND NOT EXISTS (
+      SELECT 1 FROM role_assignment ra
+       WHERE ra.userId=u.id AND ra.roleId=? AND ra.scopeType='system' AND ra.scopeId IS NULL
+         AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW()
+         AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
+    )${searchClause}`;
+  const args = search ? [input.roleId, search, search, search] : [input.roleId];
+  const [countRows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM users u ${where}`,
+    args
+  );
+  const [items] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT u.id,u.username,u.name,u.email FROM users u ${where}
+      ORDER BY u.createdAt DESC,u.id DESC LIMIT ? OFFSET ?`,
+    [...args, input.limit, input.offset]
+  );
+  return { items, total: Number(countRows[0]?.total ?? 0), offset: input.offset, limit: input.limit };
 }
 
 export async function listAuthorizationAudit(limit = 100) {

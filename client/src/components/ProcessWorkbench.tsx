@@ -1,10 +1,24 @@
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
 import { trpc } from "@/lib/trpc";
+import {
+  CALENDAR_AGENDA_PAGE_SIZE,
+  CALENDAR_DAY_PREVIEW_LIMIT,
+  getCalendarAgendaVisibleLimit,
+} from "@shared/calendar-agenda";
+import {
+  getWorkbenchListStatusMessage,
+  getWorkbenchStatusOptions,
+  WORKBENCH_STATUS_LABELS,
+} from "@shared/workbench-list-status";
 import {
   AlertTriangle,
   CalendarDays,
   CheckCheck,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CirclePlay,
   ClipboardList,
   LayoutDashboard,
@@ -32,6 +46,10 @@ const labels: Record<View, string> = {
   all: "全部流程",
 };
 
+function formatStatusLabel(status: string) {
+  return WORKBENCH_STATUS_LABELS[status] ?? status;
+}
+
 function date(value: unknown) {
   return value
     ? new Date(String(value)).toLocaleString("zh-CN", { hour12: false })
@@ -40,33 +58,23 @@ function date(value: unknown) {
 
 function badge(status: string) {
   const styles: Record<string, string> = {
-    pending: "bg-amber-100 text-amber-700",
-    claimed: "bg-blue-100 text-blue-700",
-    completed: "bg-emerald-100 text-emerald-700",
-    success: "bg-emerald-100 text-emerald-700",
+    pending: "bg-aiflow-warning-surface text-aiflow-warning",
+    claimed: "bg-aiflow-info-surface text-aiflow-info",
+    completed: "bg-aiflow-success-surface text-aiflow-success",
+    success: "bg-aiflow-success-surface text-aiflow-success",
     failed: "bg-red-100 text-red-700",
-    running: "bg-blue-100 text-blue-700",
-    等待审核: "bg-amber-100 text-amber-700",
-    待审批: "bg-amber-100 text-amber-700",
-    已审核: "bg-blue-100 text-blue-700",
+    running: "bg-aiflow-info-surface text-aiflow-info",
+    等待审核: "bg-aiflow-warning-surface text-aiflow-warning",
+    待审批: "bg-aiflow-warning-surface text-aiflow-warning",
+    已审核: "bg-aiflow-info-surface text-aiflow-info",
     "直接上级审核通过，待经理通过": "bg-indigo-100 text-indigo-700",
-    申请通过: "bg-emerald-100 text-emerald-700",
-  };
-  const names: Record<string, string> = {
-    pending: "待处理",
-    claimed: "处理中",
-    completed: "已办",
-    cancelled: "已取消",
-    success: "成功",
-    failed: "失败",
-    running: "等待任务",
-    queued: "排队中",
+    申请通过: "bg-aiflow-success-surface text-aiflow-success",
   };
   return (
     <span
-      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${styles[status] ?? "bg-slate-100 text-slate-600"}`}
+      className={`aiflow-type-meta rounded px-1.5 py-0.5 font-semibold ${styles[status] ?? "bg-muted text-muted-foreground"}`}
     >
-      {names[status] ?? status}
+      {formatStatusLabel(status)}
     </span>
   );
 }
@@ -92,40 +100,149 @@ export default function ProcessWorkbench() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
+  const [pageSize, setPageSize] = useState(20);
+  const [pageCursorStack, setPageCursorStack] = useState<
+    Array<string | undefined>
+  >([undefined]);
   const [batchDecision, setBatchDecision] = useState<
     "approved" | "rejected" | "abstained"
   >("approved");
   const [batchComment, setBatchComment] = useState("");
+  const [listSearch, setListSearch] = useState("");
+  const [debouncedListSearch, setDebouncedListSearch] = useState("");
+  const [listStatus, setListStatus] = useState("all");
+  const [listFrom, setListFrom] = useState("");
+  const [listThrough, setListThrough] = useState("");
   const [month, setMonth] = useState(() => new Date());
+  const [calendarCursorStack, setCalendarCursorStack] = useState<
+    Array<string | undefined>
+  >([undefined]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
+  const [calendarNextCursor, setCalendarNextCursor] = useState<string | null>(
+    null
+  );
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setDebouncedListSearch(listSearch);
+      setPageCursorStack([undefined]);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [listSearch]);
   const dashboard = trpc.task.dashboard.useQuery(undefined, {
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
+  const currentPageCursor = pageCursorStack[pageCursorStack.length - 1];
+  const dateFilterInput = useMemo(
+    () => ({
+      ...(listFrom ? { createdAtFrom: new Date(`${listFrom}T00:00:00`) } : {}),
+      ...(listThrough
+        ? {
+            createdAtBefore: new Date(
+              new Date(`${listThrough}T00:00:00`).getTime() + 86_400_000
+            ),
+          }
+        : {}),
+    }),
+    [listFrom, listThrough]
+  );
   const taskInput = useMemo(
     () => ({
       view: view === "board" || view === "calendar" ? ("todo" as const) : view,
-      limit: 100,
+      limit: pageSize,
+      cursor: currentPageCursor,
+      ...(debouncedListSearch.trim()
+        ? { search: debouncedListSearch.trim() }
+        : {}),
+      ...(listStatus !== "all" ? { status: listStatus } : {}),
+      ...dateFilterInput,
     }),
-    [view]
+    [
+      view,
+      currentPageCursor,
+      pageSize,
+      debouncedListSearch,
+      listStatus,
+      dateFilterInput,
+    ]
   );
-  const tasks = trpc.task.list.useQuery(taskInput, {
+  const tasks = trpc.task.page.useQuery(taskInput, {
     enabled: ["todo", "done"].includes(view),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
   const instanceInput = useMemo(
     () => ({
       view: view === "initiated" ? ("initiated" as const) : ("all" as const),
-      limit: 100,
+      limit: pageSize,
+      cursor: currentPageCursor,
+      ...(debouncedListSearch.trim()
+        ? { search: debouncedListSearch.trim() }
+        : {}),
+      ...(listStatus !== "all" ? { status: listStatus } : {}),
+      ...dateFilterInput,
     }),
-    [view]
+    [
+      view,
+      currentPageCursor,
+      pageSize,
+      debouncedListSearch,
+      listStatus,
+      dateFilterInput,
+    ]
   );
-  const instances = trpc.task.instances.useQuery(instanceInput, {
+  const calendarInput = useMemo(
+    () => ({
+      start: new Date(month.getFullYear(), month.getMonth(), 1),
+      end: new Date(month.getFullYear(), month.getMonth() + 1, 1),
+      limit: 200,
+      cursor: calendarCursorStack[calendarCursorStack.length - 1],
+    }),
+    [month.getFullYear(), month.getMonth(), calendarCursorStack]
+  );
+  const instances = trpc.task.instancePage.useQuery(instanceInput, {
     enabled: ["initiated", "all"].includes(view),
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
-  const calendar = trpc.task.calendar.useQuery(
-    { month },
-    { enabled: view === "calendar" }
+  const taskPage = tasks.data;
+  const instancePage = instances.data;
+  const taskRows = (taskPage?.items ?? []) as any[];
+  const instanceRows = (instancePage?.items ?? []) as any[];
+  const listRows = ["todo", "done"].includes(view) ? taskRows : instanceRows;
+  const filteredListRows = listRows;
+  const listStatusOptions = useMemo(
+    () =>
+      getWorkbenchStatusOptions(
+        listRows,
+        listStatus,
+        !["todo", "done"].includes(view)
+      ),
+    [listRows, listStatus, view]
   );
+  const hasListFilters =
+    Boolean(listSearch.trim()) ||
+    listStatus !== "all" ||
+    Boolean(listFrom) ||
+    Boolean(listThrough);
+  const activeHasNextPage = ["todo", "done"].includes(view)
+    ? Boolean(taskPage?.hasMore)
+    : Boolean(instancePage?.hasMore);
+  const searchPending = listSearch !== debouncedListSearch;
+  const pagingLoading =
+    tasks.isFetching || instances.isFetching || searchPending;
+  const calendar = trpc.task.calendar.useQuery(calendarInput, {
+    enabled: view === "calendar",
+    refetchInterval: 30_000,
+  });
+  useEffect(() => {
+    if (calendar.isFetching || !calendar.data) return;
+    setCalendarEvents(current => {
+      const seen = new Set(current.map(event => event.id));
+      return [
+        ...current,
+        ...calendar.data.items.filter(event => !seen.has(event.id)),
+      ];
+    });
+    setCalendarNextCursor(calendar.data.nextCursor);
+  }, [calendar.data, calendar.isFetching]);
   const taskDetail = trpc.task.get.useQuery(
     { taskId: selectedTaskId ?? "00000000-0000-0000-0000-000000000000" },
     { enabled: Boolean(selectedTaskId), retry: false }
@@ -137,7 +254,9 @@ export default function ProcessWorkbench() {
   const invalidate = () => {
     void utils.task.dashboard.invalidate();
     void utils.task.list.invalidate();
+    void utils.task.page.invalidate();
     void utils.task.instances.invalidate();
+    void utils.task.instancePage.invalidate();
     void utils.task.calendar.invalidate();
     if (selectedTaskId) {
       void utils.task.get.invalidate({ taskId: selectedTaskId });
@@ -291,7 +410,35 @@ export default function ProcessWorkbench() {
     setSelectedRunId(null);
     setSelectedTaskId(null);
     setSelectedTaskIds([]);
+    setPageCursorStack([undefined]);
+    setListSearch("");
+    setDebouncedListSearch("");
+    setListStatus("all");
+    setListFrom("");
+    setListThrough("");
     invalidate();
+  };
+  const openTask = (taskId: string) => setSelectedTaskId(taskId);
+  const changeCalendarMonth = (nextMonth: Date) => {
+    if (
+      nextMonth.getFullYear() === month.getFullYear() &&
+      nextMonth.getMonth() === month.getMonth()
+    ) {
+      setMonth(nextMonth);
+      return;
+    }
+    setCalendarCursorStack([undefined]);
+    setCalendarEvents([]);
+    setCalendarNextCursor(null);
+    setMonth(nextMonth);
+  };
+  const loadMoreCalendarEvents = () => {
+    if (calendar.isError) {
+      void calendar.refetch();
+      return;
+    }
+    if (calendarNextCursor && !calendar.isFetching)
+      setCalendarCursorStack(current => [...current, calendarNextCursor]);
   };
   const runBatchComplete = () => {
     if (batchDecision === "rejected" && !batchComment.trim()) {
@@ -308,21 +455,26 @@ export default function ProcessWorkbench() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6">
+    <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
       <div
+        data-workbench-layout=""
         className={`grid gap-4 ${sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[230px_minmax(0,1fr)]"}`}
       >
-        <aside className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm">
+        <aside
+          data-workbench-navigation=""
+          className="min-w-0 overflow-hidden rounded-lg border border-border bg-card p-2 shadow-sm"
+        >
           <div
-            className={`border-b border-slate-100 px-3 py-3 ${sidebarCollapsed ? "flex justify-center" : ""}`}
+            data-workbench-nav-header=""
+            className={`hidden border-b border-border px-3 py-3 lg:flex ${sidebarCollapsed ? "justify-center" : ""}`}
           >
             <div className={sidebarCollapsed ? "hidden" : ""}>
-              <p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">
+              <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
                 INITIATED PROCESS
               </p>
-              <h1 className="mt-1 text-base font-semibold text-slate-800">
+              <h2 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
                 已启动流程
-              </h1>
+              </h2>
             </div>
             <button
               type="button"
@@ -330,20 +482,7 @@ export default function ProcessWorkbench() {
                 sidebarCollapsed ? "展开已启动流程导航" : "收起已启动流程导航"
               }
               title={sidebarCollapsed ? "展开导航" : "收起导航"}
-              className={`min-h-11 min-w-11 rounded p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-800 ${sidebarCollapsed ? "" : "absolute hidden lg:block"}`}
-              onClick={() => setSidebarCollapsed(value => !value)}
-            >
-              {sidebarCollapsed ? (
-                <PanelLeftOpen size={16} />
-              ) : (
-                <PanelLeftClose size={16} />
-              )}
-            </button>
-            <button
-              type="button"
-              aria-label="移动端切换已启动流程导航"
-              title="切换导航"
-              className="mt-2 min-h-11 min-w-11 rounded p-1.5 text-slate-500 hover:bg-slate-100 lg:hidden"
+              className={`min-h-11 min-w-11 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground ${sidebarCollapsed ? "" : "ml-auto"}`}
               onClick={() => setSidebarCollapsed(value => !value)}
             >
               {sidebarCollapsed ? (
@@ -353,7 +492,32 @@ export default function ProcessWorkbench() {
               )}
             </button>
           </div>
-          <nav className="mt-2 grid gap-1">
+          <label className="mt-2 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 lg:hidden">
+            <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
+              视图
+            </span>
+            <select
+              data-workbench-view-select=""
+              aria-label="已启动流程视图"
+              value={view}
+              onChange={event => changeView(event.target.value as View)}
+              className="aiflow-type-control h-11 min-w-0 rounded-md border border-border bg-card px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              {nav.map(item => (
+                <option key={item.id} value={item.id}>
+                  {labels[item.id]}
+                  {item.count === null
+                    ? ""
+                    : `（${item.count === undefined ? "读取中" : item.count}）`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <nav
+            data-workbench-view-navigation=""
+            aria-label="已启动流程视图"
+            className="hidden min-w-0 lg:mt-2 lg:grid lg:grid-cols-1 lg:gap-2"
+          >
             {nav.map(item => (
               <button
                 key={item.id}
@@ -362,29 +526,55 @@ export default function ProcessWorkbench() {
                 aria-current={view === item.id ? "page" : undefined}
                 title={sidebarCollapsed ? labels[item.id] : undefined}
                 onClick={() => changeView(item.id)}
-                className={`flex min-h-11 rounded px-3 py-2.5 text-left text-sm transition-colors ${sidebarCollapsed ? "justify-center" : "items-center gap-2"} ${view === item.id ? "bg-[#eaf1ff] font-semibold text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
+                className={`flex min-h-11 min-w-0 items-center gap-1.5 rounded px-2 py-2.5 text-left text-sm transition-colors lg:px-3 ${sidebarCollapsed ? "lg:justify-center" : ""} ${view === item.id ? "bg-accent font-semibold text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
               >
                 <item.icon size={16} />
-                {!sidebarCollapsed && (
-                  <>
-                    <span className="flex-1">{labels[item.id]}</span>
-                    {item.count !== null && (
-                      <span className="rounded bg-white px-1.5 text-[10px] text-slate-500">
-                        {item.count ?? 0}
-                      </span>
-                    )}
-                  </>
-                )}
+                <span
+                  className={`min-w-0 flex-1 whitespace-nowrap ${sidebarCollapsed ? "lg:hidden" : ""}`}
+                >
+                  {labels[item.id]}
+                </span>
+                {/* The dashboard cards already show these three totals; keep the unique done count here. */}
+                {item.count !== null &&
+                  (view !== "board" || item.id === "done") && (
+                    <span
+                      aria-label={
+                        item.count === undefined
+                          ? `${labels[item.id]}数量正在读取`
+                          : `${item.count} 项`
+                      }
+                      className={`shrink-0 whitespace-nowrap rounded bg-card px-1.5 text-[10px] text-muted-foreground ${sidebarCollapsed ? "lg:hidden" : ""}`}
+                    >
+                      {item.count ?? "—"}
+                    </span>
+                  )}
               </button>
             ))}
           </nav>
           {!sidebarCollapsed && (
-            <div className="mt-4 border-t border-slate-100 p-3 text-xs leading-5 text-slate-500">
-              人工操作由服务端暂停和续跑；移交、退回与批量处理逐项执行，任务仅在当前流程授权范围内可见。
-            </div>
+            <details
+              data-workbench-navigation-help=""
+              className="group mt-3 hidden border-t border-border px-2 lg:block"
+            >
+              <summary className="aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
+                <span>操作说明</span>
+                <ChevronDown
+                  aria-hidden="true"
+                  size={14}
+                  className="shrink-0 transition-transform group-open:rotate-180"
+                />
+              </summary>
+              <p className="aiflow-type-body pb-3 text-muted-foreground">
+                人工操作由服务端暂停和续跑；移交、退回与批量处理逐项执行，任务仅在当前流程授权范围内可见。
+              </p>
+            </details>
           )}
         </aside>
-        <main className="min-w-0">
+        <section
+          aria-label="流程工作台内容"
+          data-workbench-content=""
+          className="min-w-0"
+        >
           {selectedRunId ? (
             <ProcessWorkbenchRunTab
               runId={selectedRunId}
@@ -393,16 +583,22 @@ export default function ProcessWorkbench() {
               onReturn={closeRunTab}
             />
           ) : (
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-              <header className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">
+            <section
+              data-workbench-panel=""
+              className="rounded-lg border border-border bg-card shadow-sm"
+            >
+              <header className="flex items-start justify-between gap-3 border-b border-border p-4 sm:items-center sm:p-5">
+                <div className="min-w-0">
+                  <p className="aiflow-type-meta hidden font-bold tracking-[.16em] text-muted-foreground sm:block">
                     PROCESS WORKBENCH
                   </p>
-                  <h2 className="mt-1 text-xl font-semibold text-slate-800">
+                  <h1
+                    data-aiflow-page-title=""
+                    className="aiflow-type-page-title font-semibold text-foreground sm:mt-1"
+                  >
                     {labels[view]}
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-400">
+                  </h1>
+                  <p className="aiflow-type-body mt-1 text-muted-foreground">
                     当前视图仅展示具备运行权限的流程实例与人工任务。
                   </p>
                 </div>
@@ -410,10 +606,20 @@ export default function ProcessWorkbench() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={invalidate}
+                  aria-label="刷新当前视图"
+                  title="刷新当前视图"
+                  className="aiflow-type-control min-h-11 min-w-11 shrink-0 px-2 sm:min-w-0 sm:px-3 lg:min-h-9"
+                  onClick={() => {
+                    if (view === "calendar") {
+                      setCalendarCursorStack([undefined]);
+                      setCalendarEvents([]);
+                      setCalendarNextCursor(null);
+                    }
+                    invalidate();
+                  }}
                 >
                   <RefreshCw size={14} />
-                  刷新
+                  <span className="sr-only sm:not-sr-only">刷新</span>
                 </Button>
               </header>
               {view === "board" && (
@@ -421,31 +627,32 @@ export default function ProcessWorkbench() {
                   dashboard={dashboard.data}
                   loading={dashboard.isLoading}
                   error={dashboard.error?.message}
+                  onView={changeView}
                   onRetry={() => void dashboard.refetch()}
-                  onTask={id => {
-                    setView("todo");
-                    setSelectedTaskId(id);
-                  }}
+                  onTask={openTask}
                 />
               )}
               {view === "calendar" &&
-                (calendar.isError ? (
+                (calendar.isError && !calendarEvents.length ? (
                   <QueryErrorState
                     title="日历加载失败"
                     message={calendar.error.message}
                     onRetry={() => void calendar.refetch()}
                   />
-                ) : calendar.isLoading ? (
+                ) : calendar.isLoading && !calendarEvents.length ? (
                   <LoadingState label="正在读取当前月份的流程任务…" />
                 ) : (
                   <Calendar
                     month={month}
-                    setMonth={setMonth}
-                    events={(calendar.data ?? []) as any[]}
-                    onTask={id => {
-                      setView("todo");
-                      setSelectedTaskId(id);
-                    }}
+                    setMonth={changeCalendarMonth}
+                    events={calendarEvents}
+                    hasMore={Boolean(calendarNextCursor)}
+                    loadingMore={calendar.isFetching}
+                    loadMoreError={
+                      calendar.isError ? calendar.error.message : undefined
+                    }
+                    onLoadMore={loadMoreCalendarEvents}
+                    onTask={openTask}
                   />
                 ))}
               {view === "todo" && selectedTaskIds.length > 0 && (
@@ -462,10 +669,81 @@ export default function ProcessWorkbench() {
                   onComment={setBatchComment}
                 />
               )}
+              {["todo", "done", "initiated", "all"].includes(view) && (
+                <WorkbenchListFilters
+                  matchingCount={filteredListRows.length}
+                  pageNumber={pageCursorStack.length}
+                  pageSize={pageSize}
+                  hasPreviousPage={pageCursorStack.length > 1}
+                  hasNextPage={activeHasNextPage}
+                  searchPending={searchPending}
+                  pagingLoading={pagingLoading}
+                  search={listSearch}
+                  status={listStatus}
+                  from={listFrom}
+                  through={listThrough}
+                  statusLabel={
+                    ["todo", "done"].includes(view)
+                      ? "任务状态"
+                      : "流程状态 / 业务阶段"
+                  }
+                  statusOptions={listStatusOptions}
+                  onSearch={value => {
+                    setListSearch(value);
+                    setSelectedTaskIds([]);
+                  }}
+                  onStatus={value => {
+                    setListStatus(value);
+                    setPageCursorStack([undefined]);
+                    setSelectedTaskIds([]);
+                  }}
+                  onFrom={value => {
+                    setListFrom(value);
+                    setPageCursorStack([undefined]);
+                    setSelectedTaskIds([]);
+                  }}
+                  onThrough={value => {
+                    setListThrough(value);
+                    setPageCursorStack([undefined]);
+                    setSelectedTaskIds([]);
+                  }}
+                  onReset={() => {
+                    setListSearch("");
+                    setDebouncedListSearch("");
+                    setListStatus("all");
+                    setListFrom("");
+                    setListThrough("");
+                    setPageCursorStack([undefined]);
+                    setSelectedTaskIds([]);
+                  }}
+                  onPageSize={value => {
+                    setPageSize(value);
+                    setPageCursorStack([undefined]);
+                    setSelectedTaskIds([]);
+                  }}
+                  onPreviousPage={() => {
+                    setSelectedTaskIds([]);
+                    setPageCursorStack(current => current.slice(0, -1));
+                  }}
+                  onNextPage={() => {
+                    const nextCursor = ["todo", "done"].includes(view)
+                      ? taskPage?.nextCursor
+                      : instancePage?.nextCursor;
+                    if (nextCursor) {
+                      setSelectedTaskIds([]);
+                      setPageCursorStack(current => [...current, nextCursor]);
+                    }
+                  }}
+                />
+              )}
               {["todo", "done"].includes(view) && (
                 <TaskList
-                  tasks={(tasks.data ?? []) as any[]}
-                  loading={tasks.isLoading}
+                  key={`${view}:${listSearch}:${listStatus}:${listFrom}:${listThrough}:${pageSize}:${pageCursorStack.at(-1) ?? "first"}`}
+                  tasks={filteredListRows}
+                  loading={
+                    tasks.isLoading ||
+                    (pagingLoading && filteredListRows.length === 0)
+                  }
                   error={tasks.isError ? tasks.error.message : undefined}
                   onRetry={() => void tasks.refetch()}
                   onTask={setSelectedTaskId}
@@ -480,20 +758,40 @@ export default function ProcessWorkbench() {
                     )
                   }
                   selectable={view === "todo"}
+                  emptyMessage={
+                    activeHasNextPage
+                      ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
+                      : hasListFilters
+                        ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
+                        : "当前范围内暂无可见人工任务。"
+                  }
                 />
               )}
               {["initiated", "all"].includes(view) && (
                 <InstanceList
-                  instances={(instances.data ?? []) as any[]}
-                  loading={instances.isLoading}
-                  error={instances.isError ? instances.error.message : undefined}
+                  key={`${view}:${listSearch}:${listStatus}:${listFrom}:${listThrough}:${pageSize}:${pageCursorStack.at(-1) ?? "first"}`}
+                  instances={filteredListRows}
+                  loading={
+                    instances.isLoading ||
+                    (pagingLoading && filteredListRows.length === 0)
+                  }
+                  error={
+                    instances.isError ? instances.error.message : undefined
+                  }
                   onRetry={() => void instances.refetch()}
                   onOpenRun={setSelectedRunId}
+                  emptyMessage={
+                    activeHasNextPage
+                      ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
+                      : hasListFilters
+                        ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
+                        : "当前范围内暂无可见流程实例。"
+                  }
                 />
               )}
             </section>
           )}
-        </main>
+        </section>
       </div>
       {selectedTaskId && (
         <TaskDrawer
@@ -501,6 +799,10 @@ export default function ProcessWorkbench() {
           assignees={(assignees.data ?? []) as any[]}
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
+          onOpenRun={(runId: string) => {
+            setSelectedTaskId(null);
+            setSelectedRunId(runId);
+          }}
           onClaim={() => claim.mutate({ taskId: selectedTaskId })}
           onExecute={(result: {
             decision: "approved" | "rejected" | "abstained";
@@ -565,16 +867,16 @@ function TaskBatchBar({
         ? "批量弃权"
         : "批量同意";
   return (
-    <div className="grid gap-3 border-b border-slate-100 bg-slate-50 px-3 py-3 sm:px-5 lg:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_auto] lg:items-end">
-      <div className="text-xs leading-5 text-slate-500">
-        已选择 <strong className="text-slate-800">{count}</strong>{" "}
+    <div className="grid gap-3 border-b border-border bg-muted px-3 py-3 sm:px-5 lg:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_auto] lg:items-end">
+      <div className="aiflow-type-body text-muted-foreground">
+        已选择 <strong className="text-foreground">{count}</strong>{" "}
         项。批量处理对每项分别进行权限与状态校验，不会跨流程或跨项目执行。
       </div>
       <div className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]">
-        <label className="grid gap-1 text-xs font-medium text-slate-600">
+        <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
           批量决定
           <select
-            className="h-11 rounded border border-slate-200 bg-white px-2 text-sm"
+            className="h-11 rounded border border-border bg-card px-2 text-sm"
             value={decision}
             onChange={event =>
               onDecision(
@@ -587,10 +889,10 @@ function TaskBatchBar({
             <option value="abstained">弃权</option>
           </select>
         </label>
-        <label className="grid min-w-0 gap-1 text-xs font-medium text-slate-600">
+        <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
           处理意见{decision === "rejected" ? "（必填）" : "（可选）"}
           <input
-            className="h-11 min-w-0 rounded border border-slate-200 bg-white px-3 text-sm font-normal"
+            className="h-11 min-w-0 rounded border border-border bg-card px-3 text-sm font-normal"
             maxLength={2000}
             value={comment}
             onChange={event => onComment(event.target.value)}
@@ -631,83 +933,115 @@ function Board({
   dashboard,
   loading,
   error,
+  onView,
   onRetry,
   onTask,
 }: {
   dashboard: any;
   loading: boolean;
   error?: string;
+  onView: (view: View) => void;
   onRetry: () => void;
   onTask: (id: string) => void;
 }) {
   if (error)
     return (
-      <QueryErrorState
-        title="看板加载失败"
-        message={error}
-        onRetry={onRetry}
-      />
+      <QueryErrorState title="看板加载失败" message={error} onRetry={onRetry} />
     );
   if (loading || !dashboard)
-    return (
-      <LoadingState
-        label="正在加载当前授权范围内的看板统计与最近任务…"
-      />
-    );
+    return <LoadingState label="正在加载当前授权范围内的看板统计与最近任务…" />;
   const counts = dashboard?.counts ?? {};
   return (
     <div className="p-5">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Stat
-          icon={ListTodo}
-          label="待办"
-          value={counts.todo ?? 0}
-          tone="amber"
-        />
-        <Stat
-          icon={CheckCheck}
-          label="已办"
-          value={counts.done ?? 0}
-          tone="emerald"
-        />
-        <Stat
-          icon={Send}
-          label="我发起"
-          value={counts.initiated ?? 0}
-          tone="blue"
-        />
-        <Stat
-          icon={UsersRound}
-          label="全部可见"
-          value={counts.all ?? 0}
-          tone="slate"
-        />
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        {[
+          {
+            view: "todo" as const,
+            icon: ListTodo,
+            label: "待办",
+            value: counts.todo ?? 0,
+            tone: "amber",
+          },
+          {
+            view: "initiated" as const,
+            icon: Send,
+            label: "我发起",
+            value: counts.initiated ?? 0,
+            tone: "blue",
+          },
+          {
+            view: "all" as const,
+            icon: UsersRound,
+            label: "全部可见",
+            value: counts.all ?? 0,
+            tone: "slate",
+          },
+        ].map(item => (
+          <button
+            key={item.view}
+            type="button"
+            aria-label={`查看${item.label}流程`}
+            className="min-w-0 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            onClick={() => onView(item.view)}
+          >
+            <Stat
+              icon={item.icon}
+              label={item.label}
+              value={item.value}
+              tone={item.tone}
+            />
+          </button>
+        ))}
       </div>
-      <section className="mt-5 overflow-hidden rounded-lg border border-slate-200">
-        <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-700">
-          最近任务
+      <p className="aiflow-type-body mt-2 text-muted-foreground">
+        “≥”表示已确认数量的下界，“待确认”表示快速扫描暂未确认总量；打开列表可继续核验授权范围。
+      </p>
+      <section className="mt-5 overflow-hidden rounded-lg border border-border">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="aiflow-type-section-title font-semibold text-foreground">
+            最近任务
+          </h2>
+          <p className="aiflow-type-body mt-1 text-muted-foreground">
+            包含本人待办、已办和发起的近期任务；待办数只统计当前分配/候选给本人或由本人领取的任务。
+          </p>
         </div>
-        <div className="divide-y divide-slate-100">
-          {(dashboard?.recent ?? []).map((task: any) => (
-            <button
-              key={task.id}
-              onClick={() => onTask(task.id)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50"
-            >
-              <CirclePlay size={15} className="text-[#2d6bea]" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-slate-800">
-                  {task.workflowName} · {task.nodeName}
-                </p>
-                <p className="mt-1 text-[11px] text-slate-400">
-                  {date(task.createdAt)} · {task.initiatedByName || "内部用户"}
-                </p>
-              </div>
-              {badge(task.status)}
-            </button>
-          ))}
+        <div className="divide-y divide-border">
+          {(dashboard?.recent ?? []).map((task: any) => {
+            const readOnlyTask =
+              ["pending", "claimed"].includes(task.status) &&
+              task.canAct !== true;
+            const currentHandler = task.claimedByName || task.assignedName;
+            return (
+              <button
+                key={task.id}
+                onClick={() => onTask(task.id)}
+                className="flex min-w-0 w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted"
+              >
+                <CirclePlay size={15} className="text-aiflow-info" />
+                <div className="min-w-0 flex-1">
+                  <p className="aiflow-type-body truncate font-medium text-foreground">
+                    {task.workflowName} · {task.nodeName}
+                  </p>
+                  <p className="aiflow-type-meta mt-1 tabular-nums text-muted-foreground">
+                    {date(task.createdAt)}
+                  </p>
+                  <div className="aiflow-type-body mt-0.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
+                    <span className="min-w-0 break-words">
+                      发起人 {task.initiatedByName || "内部用户"}
+                    </span>
+                    {currentHandler && (
+                      <span className="min-w-0 max-w-full break-words">
+                        经办人 {currentHandler}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {badge(readOnlyTask ? "仅可查看" : task.status)}
+              </button>
+            );
+          })}
           {!(dashboard?.recent ?? []).length && (
-            <p className="p-8 text-center text-sm text-slate-400">
+            <p className="aiflow-type-body p-8 text-center text-muted-foreground">
               暂无可见流程任务。
             </p>
           )}
@@ -719,18 +1053,221 @@ function Board({
 
 function Stat({ icon: Icon, label, value, tone }: any) {
   const colors: any = {
-    amber: "bg-amber-50 text-amber-700",
-    emerald: "bg-emerald-50 text-emerald-700",
-    blue: "bg-blue-50 text-blue-700",
-    slate: "bg-slate-50 text-slate-700",
+    amber: "bg-aiflow-warning-surface text-aiflow-warning",
+    emerald: "bg-aiflow-success-surface text-aiflow-success",
+    blue: "bg-aiflow-info-surface text-aiflow-info",
+    slate: "bg-muted text-foreground",
   };
   return (
-    <div className={`rounded-lg border border-slate-100 p-4 ${colors[tone]}`}>
-      <div className="flex items-center justify-between text-xs font-medium">
-        <span>{label}</span>
-        <Icon size={15} />
+    <div
+      className={`rounded-lg border border-border p-2 sm:p-4 ${colors[tone]}`}
+    >
+      <div className="aiflow-type-body flex min-w-0 items-center justify-between gap-1 font-medium">
+        <span className="truncate whitespace-nowrap" title={label}>
+          {label}
+        </span>
+        <Icon size={15} className="hidden shrink-0 sm:block" />
       </div>
-      <p className="mt-2 text-2xl font-bold">{value}</p>
+      <p className="aiflow-type-display mt-1 font-bold sm:mt-2">{value}</p>
+    </div>
+  );
+}
+
+function WorkbenchListFilters({
+  matchingCount,
+  pageNumber,
+  pageSize,
+  hasPreviousPage,
+  hasNextPage,
+  searchPending,
+  pagingLoading,
+  search,
+  status,
+  from,
+  through,
+  statusLabel,
+  statusOptions,
+  onSearch,
+  onStatus,
+  onFrom,
+  onThrough,
+  onReset,
+  onPageSize,
+  onPreviousPage,
+  onNextPage,
+}: {
+  matchingCount: number;
+  pageNumber: number;
+  pageSize: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+  searchPending: boolean;
+  pagingLoading: boolean;
+  search: string;
+  status: string;
+  from: string;
+  through: string;
+  statusLabel: string;
+  statusOptions: string[];
+  onSearch: (value: string) => void;
+  onStatus: (value: string) => void;
+  onFrom: (value: string) => void;
+  onThrough: (value: string) => void;
+  onReset: () => void;
+  onPageSize: (value: number) => void;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
+}) {
+  const dateRangeInvalid = Boolean(from && through && from > through);
+  const hasFilters = Boolean(
+    search.trim() || status !== "all" || from || through
+  );
+  const advancedFilterCount =
+    Number(status !== "all") + Number(Boolean(from)) + Number(Boolean(through));
+  return (
+    <div
+      data-aiflow-workbench-list-filters=""
+      aria-busy={pagingLoading}
+      className="border-b border-border px-4 py-3"
+    >
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <label className="aiflow-type-control col-span-2 grid min-w-0 gap-1 font-medium text-muted-foreground sm:col-span-1">
+          <span>关键词</span>
+          <Input
+            value={search}
+            onChange={event => onSearch(event.target.value)}
+            placeholder="流程、任务节点或发起人"
+            aria-label="搜索流程、任务节点或发起人"
+            className="h-11 lg:h-9"
+          />
+        </label>
+        <details className="min-w-0">
+          <summary
+            aria-label={
+              advancedFilterCount
+                ? `更多筛选，已设置 ${advancedFilterCount} 项`
+                : "更多筛选"
+            }
+            className="aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-border bg-card px-3 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+          >
+            <span>筛选条件</span>
+            <span className="flex items-center gap-2">
+              {advancedFilterCount > 0 && (
+                <span className="aiflow-type-meta rounded bg-aiflow-info-surface px-2 py-0.5 text-aiflow-info">
+                  已应用 {advancedFilterCount}
+                </span>
+              )}
+              <ChevronDown size={16} aria-hidden="true" />
+            </span>
+          </summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(140px,180px)_minmax(0,1fr)_minmax(0,1fr)]">
+            <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+              <span>{statusLabel}</span>
+              <select
+                value={status}
+                onChange={event => onStatus(event.target.value)}
+                aria-label={`按${statusLabel}筛选`}
+                className="h-11 min-w-0 rounded-md border border-border bg-card px-3 text-sm font-normal text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:h-9"
+              >
+                <option value="all">全部状态</option>
+                {statusOptions.map(value => (
+                  <option key={value} value={value}>
+                    {formatStatusLabel(value)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+              <span>创建时间从</span>
+              <Input
+                type="date"
+                value={from}
+                onChange={event => onFrom(event.target.value)}
+                aria-label="创建时间开始"
+                className="h-11 lg:h-9"
+              />
+            </label>
+            <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+              <span>创建时间至</span>
+              <Input
+                type="date"
+                value={through}
+                onChange={event => onThrough(event.target.value)}
+                aria-label="创建时间结束"
+                className="h-11 lg:h-9"
+              />
+            </label>
+          </div>
+        </details>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!hasFilters}
+          onClick={onReset}
+          className="h-11 whitespace-nowrap px-3 lg:h-9"
+        >
+          重置筛选
+        </Button>
+      </div>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          role="status"
+          aria-live="polite"
+          className="aiflow-type-body text-muted-foreground"
+        >
+          {getWorkbenchListStatusMessage({
+            searchPending,
+            isFetching: pagingLoading && !searchPending,
+            rowCount: matchingCount,
+            pageNumber,
+            hasNextPage,
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="flex h-11 items-center gap-2 whitespace-nowrap text-sm text-muted-foreground lg:h-9">
+            每页
+            <select
+              aria-label="每页条数"
+              value={pageSize}
+              onChange={event => onPageSize(Number(event.target.value))}
+              className="h-11 rounded-md border border-border bg-card px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:h-9"
+            >
+              <option value={20}>20 条</option>
+              <option value={50}>50 条</option>
+              <option value={100}>100 条</option>
+            </select>
+          </label>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={!hasPreviousPage || pagingLoading}
+            onClick={onPreviousPage}
+          >
+            上一页
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={!hasNextPage || pagingLoading}
+            onClick={onNextPage}
+          >
+            下一页
+          </Button>
+        </div>
+      </div>
+      {!pagingLoading && !matchingCount && hasNextPage && (
+        <p className="aiflow-type-body mt-2 text-aiflow-warning">
+          本页暂未找到符合授权条件的记录，仍有候选数据待扫描；继续翻页可完成核验。
+        </p>
+      )}
+      {dateRangeInvalid && (
+        <p role="alert" className="aiflow-type-body mt-1 text-aiflow-danger">
+          开始日期不能晚于结束日期。
+        </p>
+      )}
     </div>
   );
 }
@@ -746,6 +1283,7 @@ function TaskList({
   selectedTaskIds,
   onToggle,
   selectable,
+  emptyMessage,
 }: {
   tasks: any[];
   loading: boolean;
@@ -757,91 +1295,241 @@ function TaskList({
   selectedTaskIds: string[];
   onToggle: (id: string) => void;
   selectable: boolean;
+  emptyMessage: string;
 }) {
+  const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
+
   return (
-    <Table
-      headers={[
-        ...(selectable ? ["选择"] : []),
-        "流程 / 任务",
-        "发起人",
-        "状态",
-        "创建时间",
-        "操作",
-      ]}
-    >
-      {error ? (
-        <QueryErrorRow colSpan={selectable ? 6 : 5} message={error} onRetry={onRetry} />
-      ) : loading ? (
-        <Loading colSpan={selectable ? 6 : 5} />
-      ) : tasks.length ? (
-        tasks.map(task => (
-          <tr key={task.id} className="border-t border-slate-100">
-            {selectable && (
-              <td className="px-4 py-3">
-                <label
-                  className="grid min-h-11 min-w-11 cursor-pointer place-items-center"
-                  aria-label={`选择任务 ${task.nodeName}`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedTaskIds.includes(task.id)}
-                    onChange={() => onToggle(task.id)}
-                    className="h-5 w-5 accent-[#2d6bea]"
-                  />
-                </label>
-              </td>
-            )}
-            <td className="px-4 py-3">
-              <p className="font-medium text-slate-800">{task.workflowName}</p>
-              <p className="mt-1 text-xs text-slate-400">
-                {task.nodeName}
-                {approvalLabel(task) && (
-                  <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">
-                    {approvalProgressText(task)}
+    <>
+      <div className="grid gap-2 p-3 md:grid-cols-2 lg:hidden">
+        {error ? (
+          <div className="md:col-span-2">
+            <QueryErrorState
+              title="任务加载失败"
+              message={error}
+              onRetry={onRetry}
+            />
+          </div>
+        ) : loading ? (
+          <div className="md:col-span-2">
+            <LoadingState label="正在读取当前视图的人工任务…" />
+          </div>
+        ) : tasks.length ? (
+          <>
+            {tasks.slice(0, mobileVisibleCount).map(task => (
+              <article
+                key={task.id}
+                data-workbench-task-card=""
+                className="min-w-0 rounded-lg border border-border bg-card p-3"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="aiflow-type-body break-words font-semibold text-foreground">
+                      {task.workflowName || "未命名流程"}
+                    </h3>
+                    <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+                      {task.nodeName || "未命名任务节点"}
+                    </p>
+                    {approvalLabel(task) && (
+                      <span className="aiflow-type-meta mt-1 inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600">
+                        {approvalProgressText(task)}
+                      </span>
+                    )}
+                  </div>
+                  <span className="shrink-0">
+                    {badge(task.displayStatus || task.status)}
                   </span>
-                )}
-              </p>
-            </td>
-            <td className="px-4 py-3 text-xs text-slate-500">
-              {task.initiatedByName || "—"}
-            </td>
-            <td className="px-4 py-3">
-              {badge(task.displayStatus || task.status)}
-            </td>
-            <td className="px-4 py-3 text-xs text-slate-400">
-              {date(task.createdAt)}
-            </td>
-            <td className="px-4 py-3 whitespace-nowrap">
-              <div className="flex items-center gap-1.5">
-                {task.status === "pending" && (
+                </div>
+                <dl className="aiflow-type-body mt-3 grid gap-1 border-t border-border pt-2">
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <dt className="aiflow-type-body shrink-0 text-muted-foreground">
+                      发起人
+                    </dt>
+                    <dd className="min-w-0 truncate text-right text-muted-foreground">
+                      {task.initiatedByName || "—"}
+                    </dd>
+                  </div>
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <dt className="aiflow-type-body shrink-0 text-muted-foreground">
+                      创建时间
+                    </dt>
+                    <dd className="min-w-0 break-words text-right tabular-nums text-muted-foreground">
+                      {date(task.createdAt)}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectable && (
+                    <label
+                      className="grid min-h-11 min-w-11 cursor-pointer place-items-center rounded border border-border"
+                      aria-label={`选择任务 ${task.nodeName}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTaskIds.includes(task.id)}
+                        onChange={() => onToggle(task.id)}
+                        className="h-5 w-5 accent-[#2d6bea]"
+                      />
+                    </label>
+                  )}
+                  {task.status === "pending" && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="min-h-11 flex-1 bg-emerald-600 text-xs hover:bg-emerald-500"
+                      disabled={busy}
+                      onClick={() => onExecute(task.id)}
+                    >
+                      {busy && <Loader2 className="animate-spin" size={13} />}
+                      处理审批
+                    </Button>
+                  )}
                   <Button
                     type="button"
+                    variant="outline"
                     size="sm"
-                    className="min-h-11 bg-emerald-600 text-xs hover:bg-emerald-500"
-                    disabled={busy}
-                    onClick={() => onExecute(task.id)}
+                    className={`min-h-11 ${selectable ? "flex-1" : "w-full"} text-xs text-aiflow-info`}
+                    onClick={() => onTask(task.id)}
                   >
-                    {busy && <Loader2 className="animate-spin" size={13} />}
-                    处理审批
+                    详情
                   </Button>
+                </div>
+              </article>
+            ))}
+            {tasks.length > mobileVisibleCount && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 w-full md:col-span-2"
+                onClick={() =>
+                  setMobileVisibleCount(current =>
+                    Math.min(tasks.length, current + 10)
+                  )
+                }
+              >
+                展开本页后续 {Math.min(10, tasks.length - mobileVisibleCount)}{" "}
+                项 · 已显示 {mobileVisibleCount}/{tasks.length}
+              </Button>
+            )}
+          </>
+        ) : (
+          <div className="aiflow-type-body rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground md:col-span-2">
+            {emptyMessage}
+          </div>
+        )}
+      </div>
+      <div className="hidden lg:block">
+        <Table
+          headers={[
+            ...(selectable ? ["选择"] : []),
+            "流程 / 任务",
+            "发起人",
+            "状态",
+            "创建时间",
+            "操作",
+          ]}
+        >
+          {error ? (
+            <QueryErrorRow
+              colSpan={selectable ? 6 : 5}
+              message={error}
+              onRetry={onRetry}
+            />
+          ) : loading ? (
+            <Loading colSpan={selectable ? 6 : 5} />
+          ) : tasks.length ? (
+            tasks.map(task => (
+              <tr key={task.id} className="border-t border-border">
+                {selectable && (
+                  <td className="px-4 py-3">
+                    <label
+                      className="grid min-h-11 min-w-11 cursor-pointer place-items-center"
+                      aria-label={`选择任务 ${task.nodeName}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedTaskIds.includes(task.id)}
+                        onChange={() => onToggle(task.id)}
+                        className="h-5 w-5 accent-[#2d6bea]"
+                      />
+                    </label>
+                  </td>
                 )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-11 text-xs text-[#2d6bea]"
-                  onClick={() => onTask(task.id)}
-                >
-                  详情
-                </Button>
-              </div>
-            </td>
-          </tr>
-        ))
-      ) : (
-        <EmptyRow colSpan={selectable ? 6 : 5} message="当前筛选条件下暂无人工任务。" />
+                <td className="px-4 py-3">
+                  <p className="font-medium text-foreground">
+                    {task.workflowName}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {task.nodeName}
+                    {approvalLabel(task) && (
+                      <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
+                        {approvalProgressText(task)}
+                      </span>
+                    )}
+                  </p>
+                </td>
+                <td className="aiflow-type-body px-4 py-3 text-muted-foreground">
+                  {task.initiatedByName || "—"}
+                </td>
+                <td className="px-4 py-3">
+                  {badge(task.displayStatus || task.status)}
+                </td>
+                <td className="px-4 py-3 text-sm text-muted-foreground">
+                  {date(task.createdAt)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <div className="flex items-center gap-1.5">
+                    {task.status === "pending" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="min-h-11 bg-emerald-600 text-xs hover:bg-emerald-500"
+                        disabled={busy}
+                        onClick={() => onExecute(task.id)}
+                      >
+                        {busy && <Loader2 className="animate-spin" size={13} />}
+                        处理审批
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11 text-xs text-aiflow-info"
+                      onClick={() => onTask(task.id)}
+                    >
+                      详情
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ))
+          ) : (
+            <EmptyRow colSpan={selectable ? 6 : 5} message={emptyMessage} />
+          )}
+        </Table>
+      </div>
+    </>
+  );
+}
+
+function InstanceStatus({ run }: { run: any }) {
+  const executionStatus = String(run.status || "unknown");
+  const businessStatus =
+    typeof run.stateName === "string" ? run.stateName.trim() : "";
+  return (
+    <div
+      role="group"
+      aria-label={businessStatus ? "运行状态和业务状态" : "运行状态"}
+      className="flex min-w-0 flex-wrap items-center gap-1"
+    >
+      {badge(executionStatus)}
+      {businessStatus && (
+        <span className="aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+          业务：{businessStatus}
+        </span>
       )}
-    </Table>
+    </div>
   );
 }
 
@@ -851,61 +1539,180 @@ function InstanceList({
   error,
   onRetry,
   onOpenRun,
+  emptyMessage,
 }: {
   instances: any[];
   loading: boolean;
   error?: string;
   onRetry: () => void;
   onOpenRun: (id: string) => void;
+  emptyMessage: string;
 }) {
+  const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
+
   return (
-    <Table headers={["流程实例", "发起人", "状态", "创建时间", "操作"]}>
-      {error ? (
-        <QueryErrorRow colSpan={5} message={error} onRetry={onRetry} />
-      ) : loading ? (
-        <Loading />
-      ) : instances.length ? (
-        instances.map(run => (
-          <tr key={run.id} className="border-t border-slate-100">
-            <td className="px-4 py-3">
-              <p className="font-medium text-slate-800">{run.workflowName}</p>
-              <code className="mt-1 block text-[10px] text-slate-400">
-                {run.id.slice(0, 8)}
-              </code>
-            </td>
-            <td className="px-4 py-3 text-xs text-slate-500">
-              {run.initiatedByName || "—"}
-            </td>
-            <td className="px-4 py-3">
-              {badge(run.displayStatus || run.status)}
-            </td>
-            <td className="px-4 py-3 text-xs text-slate-400">
-              {date(run.createdAt)}
-            </td>
-            <td className="px-4 py-3 whitespace-nowrap">
-              <div className="flex items-center gap-2">
-                {!(run.availableOperations ?? []).length && (
-                  <span className="text-[10px] text-slate-400">
-                    无可执行操作
-                  </span>
-                )}
+    <>
+      <div className="grid gap-2 p-3 md:grid-cols-2 lg:hidden">
+        {error ? (
+          <div className="md:col-span-2">
+            <QueryErrorState
+              title="流程实例加载失败"
+              message={error}
+              onRetry={onRetry}
+            />
+          </div>
+        ) : loading ? (
+          <div className="md:col-span-2">
+            <LoadingState label="正在读取当前授权范围的流程实例…" />
+          </div>
+        ) : instances.length ? (
+          <>
+            {instances.slice(0, mobileVisibleCount).map(run => (
+              <article
+                key={run.id}
+                data-workbench-instance-card=""
+                className="min-w-0 rounded-lg border border-border bg-card p-3"
+              >
+                <div className="flex min-w-0 items-start justify-between gap-2">
+                  <h3
+                    data-workbench-instance-name=""
+                    className="aiflow-type-body min-w-0 flex-1 break-words font-semibold text-foreground"
+                  >
+                    {(run.workflowName || "未命名流程").replaceAll(
+                      "_",
+                      "_\u200b"
+                    )}
+                  </h3>
+                </div>
+                <div className="mt-2">
+                  <InstanceStatus run={run} />
+                </div>
+                <dl className="aiflow-type-body mt-3 grid gap-1 border-t border-border pt-2">
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <dt className="aiflow-type-meta shrink-0 text-muted-foreground">
+                      实例编号
+                    </dt>
+                    <dd className="aiflow-type-meta min-w-0 truncate text-right font-mono text-muted-foreground">
+                      {run.id.slice(0, 8)}
+                    </dd>
+                  </div>
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <dt className="aiflow-type-body shrink-0 text-muted-foreground">
+                      发起人
+                    </dt>
+                    <dd className="aiflow-type-body min-w-0 break-words text-right text-muted-foreground">
+                      {run.initiatedByName || "—"}
+                    </dd>
+                  </div>
+                  <div className="flex min-w-0 justify-between gap-2">
+                    <dt className="aiflow-type-meta shrink-0 text-muted-foreground">
+                      创建时间
+                    </dt>
+                    <dd className="aiflow-type-meta min-w-0 break-words text-right tabular-nums text-muted-foreground">
+                      {date(run.createdAt)}
+                    </dd>
+                  </div>
+                </dl>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   size="sm"
-                  className="min-h-11 px-2 text-xs text-[#2d6bea]"
+                  className="aiflow-type-control mt-3 min-h-11 w-full text-aiflow-info"
                   onClick={() => onOpenRun(run.id)}
                 >
                   实例详情
                 </Button>
-              </div>
-            </td>
-          </tr>
-        ))
-      ) : (
-        <EmptyRow colSpan={5} message="当前筛选条件下暂无流程实例。" />
-      )}
-    </Table>
+              </article>
+            ))}
+            {instances.length > mobileVisibleCount && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 w-full md:col-span-2"
+                onClick={() =>
+                  setMobileVisibleCount(current =>
+                    Math.min(instances.length, current + 10)
+                  )
+                }
+              >
+                展开本页后续{" "}
+                {Math.min(10, instances.length - mobileVisibleCount)} 项 ·{" "}
+                已显示 {mobileVisibleCount}/{instances.length}
+              </Button>
+            )}
+          </>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground md:col-span-2">
+            {emptyMessage}
+          </div>
+        )}
+      </div>
+      <div className="hidden lg:block">
+        <Table
+          headers={[
+            "流程实例",
+            "发起人",
+            "运行状态 / 业务状态",
+            "创建时间",
+            "操作",
+          ]}
+          columnWidths={["32%", "15%", "24%", "18%", "11%"]}
+        >
+          {error ? (
+            <QueryErrorRow colSpan={5} message={error} onRetry={onRetry} />
+          ) : loading ? (
+            <Loading />
+          ) : instances.length ? (
+            instances.map(run => (
+              <tr key={run.id} className="border-t border-border">
+                <td className="min-w-0 px-3 py-3">
+                  <p
+                    data-workbench-instance-name=""
+                    className="aiflow-type-body max-w-full break-words whitespace-normal font-medium text-foreground"
+                    title={run.workflowName}
+                  >
+                    {run.workflowName.replaceAll("_", "_\u200b")}
+                  </p>
+                  <code className="aiflow-type-code mt-1 block truncate whitespace-nowrap text-muted-foreground">
+                    {run.id.slice(0, 8)}
+                  </code>
+                </td>
+                <td
+                  className="aiflow-type-body min-w-0 break-words whitespace-normal px-3 py-3 align-top text-muted-foreground"
+                  title={run.initiatedByName || "—"}
+                >
+                  {run.initiatedByName || "—"}
+                </td>
+                <td className="min-w-0 px-3 py-3 align-top">
+                  <InstanceStatus run={run} />
+                </td>
+                <td className="aiflow-type-meta whitespace-nowrap px-3 py-3 text-muted-foreground">
+                  {date(run.createdAt)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    title={
+                      !(run.availableOperations ?? []).length
+                        ? "无可执行操作；仅可查看实例详情"
+                        : "打开实例详情"
+                    }
+                    className="min-h-11 px-1 text-xs text-aiflow-info"
+                    onClick={() => onOpenRun(run.id)}
+                  >
+                    实例详情
+                  </Button>
+                </td>
+              </tr>
+            ))
+          ) : (
+            <EmptyRow colSpan={5} message={emptyMessage} />
+          )}
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -919,12 +1726,25 @@ function QueryErrorState({
   onRetry: () => void;
 }) {
   return (
-    <div role="alert" className="grid min-h-[260px] place-items-center p-8 text-center">
+    <div
+      role="alert"
+      className="grid min-h-[260px] place-items-center p-8 text-center"
+    >
       <div className="max-w-md">
         <AlertTriangle className="mx-auto text-rose-500" size={25} />
-        <p className="mt-3 text-sm font-semibold text-slate-700">{title}</p>
-        <p className="mt-1 break-words text-xs leading-5 text-slate-500">{message || "暂时无法读取数据。"}</p>
-        <Button type="button" variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+        <p className="aiflow-type-section-title mt-3 font-semibold text-foreground">
+          {title}
+        </p>
+        <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+          {message || "暂时无法读取数据。"}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-4"
+          onClick={onRetry}
+        >
           <RotateCcw size={14} /> 重试
         </Button>
       </div>
@@ -941,22 +1761,45 @@ function LoadingState({ label }: { label: string }) {
       className="grid min-h-[260px] place-items-center p-8 text-center"
     >
       <div>
-        <Loader2 className="mx-auto animate-spin text-[#2d6bea]" size={24} />
-        <p className="mt-3 text-sm font-medium text-slate-700">正在读取已启动流程</p>
-        <p className="mt-1 text-xs text-slate-500">{label}</p>
+        <Loader2 className="mx-auto animate-spin text-aiflow-info" size={24} />
+        <p className="aiflow-type-body mt-3 font-medium text-foreground">
+          正在读取已启动流程
+        </p>
+        <p className="aiflow-type-body mt-1 text-muted-foreground">{label}</p>
       </div>
     </div>
   );
 }
 
-function QueryErrorRow({ colSpan, message, onRetry }: { colSpan: number; message: string; onRetry: () => void }) {
+function QueryErrorRow({
+  colSpan,
+  message,
+  onRetry,
+}: {
+  colSpan: number;
+  message: string;
+  onRetry: () => void;
+}) {
   return (
     <tr role="alert">
       <td colSpan={colSpan} className="p-8 text-center">
         <AlertTriangle className="mx-auto text-rose-500" size={20} />
-        <p className="mt-2 text-sm font-medium text-slate-700">查询失败</p>
-        <p className="mt-1 break-words text-xs text-slate-500">{message || "暂时无法读取数据。"}</p>
-        <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetry}><RotateCcw size={13} />重试</Button>
+        <p className="aiflow-type-section-title mt-2 font-medium text-foreground">
+          查询失败
+        </p>
+        <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+          {message || "暂时无法读取数据。"}
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-3"
+          onClick={onRetry}
+        >
+          <RotateCcw size={13} />
+          重试
+        </Button>
       </td>
     </tr>
   );
@@ -965,7 +1808,12 @@ function QueryErrorRow({ colSpan, message, onRetry }: { colSpan: number; message
 function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
   return (
     <tr>
-      <td colSpan={colSpan} className="p-8 text-center text-sm text-slate-400">{message}</td>
+      <td
+        colSpan={colSpan}
+        className="aiflow-type-body p-8 text-center text-muted-foreground"
+      >
+        {message}
+      </td>
     </tr>
   );
 }
@@ -973,14 +1821,25 @@ function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
 function Table({
   children,
   headers = ["流程 / 任务", "发起人", "状态", "创建时间", "操作"],
+  columnWidths,
 }: {
   children: React.ReactNode;
   headers?: string[];
+  columnWidths?: string[];
 }) {
   return (
     <div className="overflow-x-auto p-5">
-      <table className="w-full min-w-[760px] text-left text-sm">
-        <thead className="bg-slate-50 text-xs text-slate-500">
+      <table
+        className={`w-full min-w-[760px] text-left text-sm ${columnWidths ? "table-fixed" : ""}`}
+      >
+        {columnWidths && (
+          <colgroup>
+            {columnWidths.map((width, index) => (
+              <col key={index} style={{ width }} />
+            ))}
+          </colgroup>
+        )}
+        <thead className="bg-muted text-sm font-medium text-muted-foreground">
           <tr>
             {headers.map(header => (
               <th key={header} className="px-4 py-3 font-medium">
@@ -999,23 +1858,54 @@ function Loading({ colSpan = 5 }: { colSpan?: number }) {
   return (
     <tr>
       <td colSpan={colSpan} className="p-8 text-center">
-        <Loader2 className="mx-auto animate-spin text-slate-400" size={18} />
+        <Loader2
+          className="mx-auto animate-spin text-muted-foreground"
+          size={18}
+        />
       </td>
     </tr>
   );
 }
 
+function calendarDayKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+type CalendarEvent = {
+  id: string;
+  title: string;
+  start: string | Date;
+  status?: string;
+};
 function Calendar({
   month,
   setMonth,
   events,
+  hasMore,
+  loadingMore,
+  loadMoreError,
+  onLoadMore,
   onTask,
 }: {
   month: Date;
   setMonth: (date: Date) => void;
-  events: any[];
+  events: CalendarEvent[];
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMoreError?: string;
+  onLoadMore: () => void;
   onTask: (id: string) => void;
 }) {
+  const [selectedDayKey, setSelectedDayKey] = useState(() =>
+    calendarDayKey(new Date())
+  );
+  const [agendaVisibleLimits, setAgendaVisibleLimits] = useState<
+    Record<string, number>
+  >({});
+
   const first = new Date(month.getFullYear(), month.getMonth(), 1);
   const start = new Date(first);
   start.setDate(1 - first.getDay());
@@ -1024,66 +1914,452 @@ function Calendar({
     value.setDate(start.getDate() + index);
     return value;
   });
-  const eventDay = (day: Date) =>
-    events.filter(
-      event =>
-        new Date(String(event.start)).toDateString() === day.toDateString()
+  const eventsByDay = useMemo(() => {
+    const grouped = new Map<string, CalendarEvent[]>();
+    for (const event of events) {
+      const startAt = new Date(String(event.start));
+      if (Number.isNaN(startAt.getTime())) continue;
+      const key = calendarDayKey(startAt);
+      const sameDay = grouped.get(key) ?? [];
+      sameDay.push(event);
+      grouped.set(key, sameDay);
+    }
+    grouped.forEach(sameDay => {
+      sameDay.sort(
+        (left, right) =>
+          new Date(String(left.start)).getTime() -
+          new Date(String(right.start)).getTime()
+      );
+    });
+    return grouped;
+  }, [events]);
+  const agendaDays = days.filter(
+    day =>
+      day.getMonth() === month.getMonth() &&
+      day.getFullYear() === month.getFullYear() &&
+      (eventsByDay.get(calendarDayKey(day))?.length ?? 0) > 0
+  );
+  const selectedDay = new Date(`${selectedDayKey}T12:00:00`);
+  const selectedEvents = eventsByDay.get(selectedDayKey) ?? [];
+  const selectedVisibleLimit = Math.min(
+    agendaVisibleLimits[selectedDayKey] ?? CALENDAR_AGENDA_PAGE_SIZE,
+    selectedEvents.length
+  );
+  const visibleSelectedEvents = selectedEvents.slice(0, selectedVisibleLimit);
+
+  const selectDay = (day: Date) => {
+    setSelectedDayKey(calendarDayKey(day));
+    if (
+      day.getMonth() !== month.getMonth() ||
+      day.getFullYear() !== month.getFullYear()
+    ) {
+      setAgendaVisibleLimits({});
+      setMonth(new Date(day.getFullYear(), day.getMonth(), 1));
+    }
+  };
+  const changeMonth = (offset: number) => {
+    const nextMonth = new Date(
+      month.getFullYear(),
+      month.getMonth() + offset,
+      1
     );
+    setAgendaVisibleLimits({});
+    setMonth(nextMonth);
+    setSelectedDayKey(calendarDayKey(nextMonth));
+  };
+  const showCurrentMonth = () => {
+    const today = new Date();
+    setAgendaVisibleLimits({});
+    setMonth(today);
+    setSelectedDayKey(calendarDayKey(today));
+  };
+
   return (
     <div className="p-5">
-      <div className="mb-4 flex items-center justify-between">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
-          }
-        >
-          上月
-        </Button>
-        <p className="font-semibold text-slate-700">
-          {month.getFullYear()} 年 {month.getMonth() + 1} 月
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() =>
-            setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
-          }
-        >
-          下月
-        </Button>
+      <div className="mb-4 grid gap-2 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+        <div className="grid grid-cols-[44px_minmax(0,1fr)_auto_auto] items-center gap-1 sm:flex sm:gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="上月"
+            title="上月"
+            className="min-h-11 min-w-11 px-2 lg:min-h-9"
+            onClick={() => changeMonth(-1)}
+          >
+            <ChevronLeft size={16} aria-hidden="true" />
+            <span className="sr-only sm:not-sr-only">上月</span>
+          </Button>
+          <p className="min-w-0 whitespace-nowrap text-center text-sm font-semibold text-foreground sm:text-base">
+            {month.getFullYear()} 年 {month.getMonth() + 1} 月
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            aria-label="回到本月"
+            title="回到本月"
+            className="min-h-11 min-w-11 px-2 lg:min-h-9"
+            onClick={showCurrentMonth}
+          >
+            本月
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="下月"
+            title="下月"
+            className="min-h-11 min-w-11 px-2 lg:min-h-9"
+            onClick={() => changeMonth(1)}
+          >
+            <span className="sr-only sm:not-sr-only">下月</span>
+            <ChevronRight size={16} aria-hidden="true" />
+          </Button>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
+          <span
+            className="aiflow-type-body min-w-0 text-muted-foreground"
+            role="status"
+            aria-live="polite"
+          >
+            本月已载入 {events.length} 条授权任务
+            {hasMore ? " · 可继续扫描" : " · 已扫描至末尾"}
+          </span>
+          {hasMore && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              disabled={loadingMore}
+              onClick={onLoadMore}
+            >
+              {loadingMore
+                ? "读取中…"
+                : loadMoreError
+                  ? "重试载入"
+                  : "载入更多任务"}
+            </Button>
+          )}
+        </div>
       </div>
-      <div className="grid grid-cols-7 border-l border-t border-slate-200 text-xs">
-        {"日一二三四五六".split("").map(day => (
-          <div
-            key={day}
-            className="border-b border-r border-slate-200 bg-slate-50 p-2 text-center font-medium text-slate-500"
-          >
-            {day}
-          </div>
-        ))}
-        {days.map(day => (
-          <div
-            key={day.toISOString()}
-            className={`min-h-24 border-b border-r border-slate-200 p-2 ${day.getMonth() !== month.getMonth() ? "bg-slate-50 text-slate-300" : "bg-white"}`}
-          >
-            <p>{day.getDate()}</p>
-            <div className="mt-1 grid gap-1">
-              {eventDay(day).map(event => (
+      <p className="aiflow-type-body text-muted-foreground">
+        此日历按任务创建时间归档，不表示计划办理日或截止日。
+      </p>
+      {loadMoreError && events.length > 0 && (
+        <p role="alert" className="aiflow-type-body mb-3 text-aiflow-danger">
+          后续任务载入失败，已显示的日历记录仍保留；可重试载入。
+        </p>
+      )}
+      <p className="aiflow-type-body mb-2 text-muted-foreground">
+        每天先显示 2 项，更多任务可按需展开；其余月份数据按需载入。
+      </p>
+      <section
+        className="mb-5 grid gap-2 sm:hidden"
+        aria-label={`${month.getFullYear()}年${month.getMonth() + 1}月流程日程`}
+      >
+        {agendaDays.length === 0 ? (
+          <p className="aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-8 text-center text-muted-foreground">
+            本月暂无流程任务。
+          </p>
+        ) : (
+          agendaDays.map(day => {
+            const dayKey = calendarDayKey(day);
+            const dayEvents = eventsByDay.get(dayKey) ?? [];
+            const visibleEventLimit = Math.min(
+              agendaVisibleLimits[dayKey] ?? CALENDAR_DAY_PREVIEW_LIMIT,
+              dayEvents.length
+            );
+            const visibleDayEvents = dayEvents.slice(0, visibleEventLimit);
+            const hasHiddenEvents = visibleDayEvents.length < dayEvents.length;
+            const hasExpandedEvents =
+              visibleEventLimit > CALENDAR_DAY_PREVIEW_LIMIT;
+            return (
+              <section
+                key={dayKey}
+                className={`overflow-hidden rounded-lg border bg-card ${dayKey === selectedDayKey ? "border-blue-300 ring-1 ring-blue-200" : "border-border"}`}
+              >
                 <button
-                  key={event.id}
-                  onClick={() => onTask(event.id)}
-                  className="truncate rounded bg-blue-50 px-1 py-0.5 text-left text-[10px] text-blue-700"
+                  type="button"
+                  onClick={() => selectDay(day)}
+                  aria-pressed={dayKey === selectedDayKey}
+                  className="flex min-h-11 w-full items-center justify-between gap-3 border-b border-border bg-muted px-3 text-left text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
                 >
-                  {event.title}
+                  <span>
+                    {day.toLocaleDateString("zh-CN", {
+                      month: "numeric",
+                      day: "numeric",
+                      weekday: "long",
+                    })}
+                  </span>
+                  <span className="aiflow-type-meta rounded-full bg-aiflow-info-surface px-2 py-0.5 font-medium tabular-nums text-aiflow-info">
+                    {dayEvents.length} 项
+                  </span>
                 </button>
-              ))}
+                <ul
+                  id={`calendar-agenda-${dayKey}`}
+                  className="divide-y divide-border"
+                >
+                  {visibleDayEvents.map(event => {
+                    const startAt = new Date(String(event.start));
+                    return (
+                      <li
+                        key={event.id}
+                        className="flex items-center gap-3 px-3 py-3"
+                      >
+                        <span className="aiflow-type-meta w-12 shrink-0 tabular-nums text-muted-foreground">
+                          {Number.isNaN(startAt.getTime())
+                            ? "—"
+                            : startAt.toLocaleTimeString("zh-CN", {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: false,
+                              })}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 break-words text-sm text-foreground">
+                            {event.title || "未命名任务"}
+                          </p>
+                          {event.status && (
+                            <span className="mt-1 inline-flex">
+                              {badge(String(event.status))}
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="aiflow-type-control min-h-11 min-w-11 shrink-0 px-2.5"
+                          onClick={() => onTask(String(event.id))}
+                        >
+                          查看
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {dayEvents.length > CALENDAR_DAY_PREVIEW_LIMIT && (
+                  <div className="grid gap-1 border-t border-border p-1 sm:flex sm:justify-end">
+                    {hasHiddenEvents && (
+                      <button
+                        type="button"
+                        aria-controls={`calendar-agenda-${dayKey}`}
+                        aria-expanded={hasExpandedEvents}
+                        aria-label={`显示后续任务，当前已显示 ${visibleDayEvents.length} 项，共 ${dayEvents.length} 项`}
+                        className="min-h-11 w-full px-3 text-sm font-medium text-aiflow-info hover:bg-aiflow-info-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:w-auto"
+                        onClick={() =>
+                          setAgendaVisibleLimits(current => ({
+                            ...current,
+                            [dayKey]: getCalendarAgendaVisibleLimit(
+                              dayEvents.length,
+                              visibleEventLimit,
+                              "show-more"
+                            ),
+                          }))
+                        }
+                      >
+                        {`显示后续 ${Math.min(CALENDAR_AGENDA_PAGE_SIZE, dayEvents.length - visibleDayEvents.length)} 项 · ${visibleDayEvents.length}/${dayEvents.length}`}
+                      </button>
+                    )}
+                    {hasExpandedEvents && (
+                      <button
+                        type="button"
+                        aria-controls={`calendar-agenda-${dayKey}`}
+                        aria-label={`收起已显示任务到前 ${CALENDAR_DAY_PREVIEW_LIMIT} 项`}
+                        className="min-h-11 w-full px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:w-auto"
+                        onClick={() =>
+                          setAgendaVisibleLimits(current => ({
+                            ...current,
+                            [dayKey]: getCalendarAgendaVisibleLimit(
+                              dayEvents.length,
+                              visibleEventLimit,
+                              "collapse"
+                            ),
+                          }))
+                        }
+                      >
+                        {`收起到前 ${CALENDAR_DAY_PREVIEW_LIMIT} 项`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </section>
+            );
+          })
+        )}
+      </section>
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(22rem,1fr)]">
+        <div className="aiflow-type-meta hidden min-w-0 grid-cols-7 border-l border-t border-border sm:grid">
+          {"日一二三四五六".split("").map(day => (
+            <div
+              key={day}
+              className="border-b border-r border-border bg-muted p-2 text-center font-medium text-muted-foreground"
+            >
+              {day}
             </div>
+          ))}
+          {days.map(day => (
+            <section
+              key={calendarDayKey(day)}
+              className={`min-h-[88px] border-b border-r border-border p-1 sm:min-h-[104px] sm:p-2 ${day.getMonth() !== month.getMonth() ? "bg-muted text-muted-foreground" : "bg-card"} ${calendarDayKey(day) === selectedDayKey ? "ring-2 ring-inset ring-blue-500" : ""}`}
+            >
+              <button
+                type="button"
+                onClick={() => selectDay(day)}
+                aria-label={`查看 ${day.getFullYear()}年${day.getMonth() + 1}月${day.getDate()}日，${(eventsByDay.get(calendarDayKey(day)) ?? []).length} 项任务`}
+                aria-pressed={calendarDayKey(day) === selectedDayKey}
+                className="flex w-full items-center justify-between rounded px-1 py-0.5 text-left font-medium hover:bg-aiflow-info-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              >
+                <span>{day.getDate()}</span>
+                {(eventsByDay.get(calendarDayKey(day)) ?? []).length > 0 && (
+                  <span className="aiflow-type-meta rounded-full bg-aiflow-info-surface px-1.5 text-aiflow-info">
+                    {(eventsByDay.get(calendarDayKey(day)) ?? []).length}
+                  </span>
+                )}
+              </button>
+              <div className="mt-1 grid gap-1">
+                {(eventsByDay.get(calendarDayKey(day)) ?? [])
+                  .slice(0, CALENDAR_DAY_PREVIEW_LIMIT)
+                  .map(event => (
+                    <button
+                      key={event.id}
+                      type="button"
+                      onClick={() => onTask(event.id)}
+                      title={event.title}
+                      className="aiflow-type-control truncate rounded bg-aiflow-info-surface px-1 py-0.5 text-left text-aiflow-info hover:bg-aiflow-info-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    >
+                      {event.title}
+                    </button>
+                  ))}
+                {(eventsByDay.get(calendarDayKey(day)) ?? []).length >
+                  CALENDAR_DAY_PREVIEW_LIMIT && (
+                  <button
+                    type="button"
+                    onClick={() => selectDay(day)}
+                    className="aiflow-type-control rounded px-1 text-left font-medium text-aiflow-info hover:bg-aiflow-info-surface"
+                  >
+                    +
+                    {(eventsByDay.get(calendarDayKey(day)) ?? []).length -
+                      CALENDAR_DAY_PREVIEW_LIMIT}{" "}
+                    项
+                  </button>
+                )}
+              </div>
+            </section>
+          ))}
+        </div>
+        <section
+          aria-labelledby="calendar-selected-day-title"
+          className="hidden min-w-0 overflow-hidden rounded-lg border border-border sm:block lg:sticky lg:top-24"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-muted px-4 py-3">
+            <div>
+              <h3
+                id="calendar-selected-day-title"
+                className="font-semibold text-foreground"
+              >
+                {selectedDay.getFullYear()} 年 {selectedDay.getMonth() + 1} 月{" "}
+                {selectedDay.getDate()} 日
+              </h3>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                当天已载入 {selectedEvents.length} 项任务
+              </p>
+            </div>
+            <CalendarDays
+              size={18}
+              className="text-muted-foreground"
+              aria-hidden="true"
+            />
           </div>
-        ))}
+          {selectedEvents.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+              当天没有流程任务
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {visibleSelectedEvents.map(event => {
+                const startAt = new Date(String(event.start));
+                return (
+                  <li
+                    key={event.id}
+                    className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center"
+                  >
+                    <span className="aiflow-type-meta shrink-0 tabular-nums text-muted-foreground">
+                      {Number.isNaN(startAt.getTime())
+                        ? "时间未提供"
+                        : startAt.toLocaleTimeString("zh-CN", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: false,
+                          })}
+                    </span>
+                    <span className="min-w-0 flex-1 break-words text-sm text-foreground">
+                      {event.title || "未命名任务"}
+                    </span>
+                    {event.status && badge(String(event.status))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="self-start sm:ml-2 sm:self-auto"
+                      onClick={() => onTask(String(event.id))}
+                    >
+                      查看任务
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {selectedEvents.length > CALENDAR_AGENDA_PAGE_SIZE && (
+            <div className="border-t border-border px-4 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="aiflow-type-meta text-muted-foreground">
+                  已显示 {selectedVisibleLimit} / {selectedEvents.length} 项
+                </span>
+                <div className="flex flex-wrap gap-1">
+                  {selectedVisibleLimit < selectedEvents.length && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11"
+                      onClick={() =>
+                        setAgendaVisibleLimits(current => ({
+                          ...current,
+                          [selectedDayKey]: Math.min(
+                            selectedEvents.length,
+                            selectedVisibleLimit + CALENDAR_AGENDA_PAGE_SIZE
+                          ),
+                        }))
+                      }
+                    >
+                      {`显示后续 ${Math.min(CALENDAR_AGENDA_PAGE_SIZE, selectedEvents.length - selectedVisibleLimit)} 项`}
+                    </Button>
+                  )}
+                  {selectedVisibleLimit > CALENDAR_AGENDA_PAGE_SIZE && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="min-h-11"
+                      onClick={() =>
+                        setAgendaVisibleLimits(current => ({
+                          ...current,
+                          [selectedDayKey]: CALENDAR_AGENDA_PAGE_SIZE,
+                        }))
+                      }
+                    >
+                      收起到前 {CALENDAR_AGENDA_PAGE_SIZE} 项
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );
@@ -1146,6 +2422,7 @@ function TaskDrawer({
   assignees,
   busy,
   onClose,
+  onOpenRun,
   onClaim,
   onExecute,
   onComplete,
@@ -1225,7 +2502,29 @@ function TaskDrawer({
     outcome: selectedOutcome?.code ?? decision,
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   });
-  const canManage = task?.status === "pending" || task?.status === "claimed";
+  const canManage =
+    (task?.status === "pending" || task?.status === "claimed") &&
+    task?.canAct === true;
+  const isHistoricalTask =
+    task?.status === "completed" || task?.status === "cancelled";
+  const taskHistoryNotice =
+    task?.status === "completed"
+      ? "此任务已完成，以下为历史处理记录。"
+      : task?.status === "cancelled"
+        ? "此任务已取消，当前为只读记录。"
+        : null;
+  const taskInstruction =
+    task?.instruction?.trim() ||
+    (isHistoricalTask
+      ? "未配置操作说明。"
+      : canManage
+        ? "请完成当前人工操作。"
+        : "请由指定处理人完成当前人工操作。");
+  const taskInstructionLabel = isHistoricalTask
+    ? "原操作说明"
+    : canManage
+      ? "操作说明"
+      : "指定处理人办理说明";
   const missingRequiredFormField = formFields.some(field => {
     if (!field.required) return false;
     return !resultRows.find(row => row.key === field.key)?.value.trim();
@@ -1260,22 +2559,22 @@ function TaskDrawer({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <section className="h-full w-full max-w-lg overflow-y-auto bg-white p-5 shadow-2xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+      <section className="h-full w-full max-w-lg overflow-y-auto bg-card p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
           <div>
-            <p className="text-[10px] font-bold tracking-[.16em] text-[#5b72a8]">
+            <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
               MANUAL TASK
             </p>
             <h3
               id="workflow-task-drawer-title"
-              className="mt-1 text-lg font-semibold text-slate-800"
+              className="mt-1 text-lg font-semibold text-foreground"
             >
               {task?.workflowName || "正在读取任务…"}
             </h3>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               {task?.nodeName}
               {approvalLabel(task) && (
-                <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-xs text-indigo-600">
+                <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
                   {approvalProgressText(task)}
                 </span>
               )}
@@ -1293,49 +2592,84 @@ function TaskDrawer({
         </div>
         {task && (
           <div className="mt-5 space-y-5">
-            <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold text-slate-500">操作说明</p>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                {task.instruction || "请完成当前人工操作。"}
+            {(task.status === "pending" || task.status === "claimed") &&
+              task.canAct !== true && (
+                <div className="flex flex-col gap-3 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p role="status" className="text-sm leading-6 text-amber-900">
+                    此任务仅供查看；处理操作由指定处理人完成。
+                  </p>
+                  {task.canViewRun === true && task.runId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="min-h-11 shrink-0"
+                      onClick={() => onOpenRun(String(task.runId))}
+                    >
+                      查看运行详情
+                    </Button>
+                  )}
+                </div>
+              )}
+            {taskHistoryNotice && (
+              <p
+                role="status"
+                className="rounded-lg border border-border bg-muted px-4 py-3 text-sm leading-6 text-foreground"
+              >
+                {taskHistoryNotice}
+              </p>
+            )}
+            <div className="rounded-lg border border-border bg-muted p-4">
+              <p className="aiflow-type-body font-semibold text-muted-foreground">
+                {taskInstructionLabel}
+              </p>
+              <p className="mt-2 text-sm leading-6 text-foreground">
+                {taskInstruction}
               </p>
               <div className="mt-3 flex flex-wrap gap-2">
                 {badge(task.displayStatus || task.status)}
-                <span className="text-xs text-slate-400">
+                <span className="aiflow-type-meta text-muted-foreground">
                   创建于 {date(task.createdAt)}
                 </span>
                 {task.formSchemaVersion && (
-                  <span className="text-xs text-slate-400">
+                  <span className="aiflow-type-meta text-muted-foreground">
                     表单版本 v{task.formSchemaVersion}
                   </span>
                 )}
                 {task.dueAt && (
-                  <span className="text-xs text-slate-400">
+                  <span className="aiflow-type-meta text-muted-foreground">
                     截止于 {date(task.dueAt)}
                   </span>
                 )}
                 {task.assignedName && (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-sm text-muted-foreground">
                     指定处理人：{task.assignedName}
                   </span>
                 )}
+                {task.claimedByName &&
+                  Number(task.claimedByUserId) !==
+                    Number(task.assignedUserId) && (
+                    <span className="text-sm text-muted-foreground">
+                      当前经办人：{task.claimedByName}
+                    </span>
+                  )}
                 {task.responsibleName && (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-sm text-muted-foreground">
                     责任主体：{task.responsibleName}
                   </span>
                 )}
                 {task.representedName && (
-                  <span className="text-xs text-indigo-500">
+                  <span className="text-sm text-indigo-700">
                     代理关系：代表 {task.representedName} 办理
                   </span>
                 )}
               </div>
             </div>
             {canManage && (
-              <div className="rounded-lg border border-blue-100 bg-blue-50/50 p-4">
-                <p className="text-xs font-semibold text-slate-600">
+              <div className="rounded-lg border border-aiflow-info-border bg-aiflow-info-surface/50 p-4">
+                <p className="aiflow-type-body font-semibold text-foreground">
                   任务移交与回退
                 </p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
+                <p className="aiflow-type-body mt-1 text-muted-foreground">
                   仅显示拥有该流程运行权限的内部用户。移交变更责任人；代理同时保留被代理主体。两者都不会直接推进流程。
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -1343,7 +2677,7 @@ function TaskDrawer({
                     aria-label="选择移交处理人"
                     value={targetUserId}
                     onChange={event => setTargetUserId(event.target.value)}
-                    className="h-9 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-sm"
+                    className="h-9 min-w-0 flex-1 rounded border border-border bg-card px-2 text-sm"
                   >
                     <option value="">选择可分配处理人</option>
                     {assignees.map((item: any) => (
@@ -1374,11 +2708,11 @@ function TaskDrawer({
                   </Button>
                 </div>
                 {task.approvalGroupId && (
-                  <div className="mt-3 border-t border-blue-100 pt-3">
-                    <p className="text-xs font-semibold text-slate-600">
+                  <div className="mt-3 border-t border-aiflow-info-border pt-3">
+                    <p className="aiflow-type-body font-semibold text-foreground">
                       加签与减签
                     </p>
-                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                    <p className="aiflow-type-body mt-1 text-muted-foreground">
                       成员变更使用任务组版本校验；已领取或已决定的成员不能减签。
                     </p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row">
@@ -1403,7 +2737,7 @@ function TaskDrawer({
                         onChange={event =>
                           setRemoveMemberTaskId(event.target.value)
                         }
-                        className="h-9 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-sm"
+                        className="h-9 min-w-0 flex-1 rounded border border-border bg-card px-2 text-sm"
                       >
                         <option value="">选择未处理成员</option>
                         {(task.approvalMembers ?? [])
@@ -1452,24 +2786,24 @@ function TaskDrawer({
                 )}
               </div>
             )}
-            {(task.status === "pending" || task.status === "claimed") && (
-              <div className="rounded-lg border border-emerald-100 bg-emerald-50/40 p-4">
+            {canManage && (
+              <div className="rounded-lg border border-aiflow-success-border bg-aiflow-success-surface/40 p-4">
                 {formFields.length > 0 && (
-                  <div className="mb-4 rounded-lg border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold text-slate-600">
+                  <div className="mb-4 rounded-lg border border-border bg-card p-3">
+                    <p className="aiflow-type-section-title font-semibold text-muted-foreground">
                       任务表单 · v{task.formSchemaVersion ?? 1}
                     </p>
                     <div className="mt-3 grid gap-3">
                       {formFields.map(field => (
                         <label
                           key={field.key}
-                          className="grid gap-1 text-xs font-medium text-slate-600"
+                          className="grid gap-1 text-sm font-medium text-foreground"
                         >
                           {field.label}
                           {field.required ? "（必填）" : "（可选）"}
                           {field.type === "textarea" ? (
                             <textarea
-                              className="min-h-20 resize-y rounded border border-slate-200 px-3 py-2 text-sm font-normal"
+                              className="min-h-20 resize-y rounded border border-border px-3 py-2 text-sm font-normal"
                               value={
                                 resultRows.find(row => row.key === field.key)
                                   ?.value ?? ""
@@ -1481,7 +2815,7 @@ function TaskDrawer({
                           ) : (
                             <input
                               type={field.type === "number" ? "number" : "text"}
-                              className="h-9 rounded border border-slate-200 px-3 text-sm font-normal"
+                              className="h-9 rounded border border-border px-3 text-sm font-normal"
                               value={
                                 resultRows.find(row => row.key === field.key)
                                   ?.value ?? ""
@@ -1496,8 +2830,10 @@ function TaskDrawer({
                     </div>
                   </div>
                 )}
-                <p className="text-xs font-semibold text-slate-600">审批决定</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
+                <p className="aiflow-type-body font-semibold text-foreground">
+                  审批决定
+                </p>
+                <p className="aiflow-type-body mt-1 text-muted-foreground">
                   仅展示当前操作合同允许的结果，提交后由服务端选择唯一后继分支。
                 </p>
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1513,10 +2849,10 @@ function TaskDrawer({
                     </Button>
                   ))}
                 </div>
-                <label className="mt-3 grid gap-1 text-xs font-medium text-slate-600">
+                <label className="mt-3 grid gap-1 text-sm font-medium text-foreground">
                   处理意见{commentRequired ? "（必填）" : "（可选）"}
                   <textarea
-                    className="min-h-20 resize-y rounded border border-slate-200 bg-white px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
+                    className="min-h-20 resize-y rounded border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
                     maxLength={2000}
                     value={comment}
                     onChange={event => setComment(event.target.value)}
@@ -1529,8 +2865,8 @@ function TaskDrawer({
                     }
                   />
                 </label>
-                <details className="mt-3 rounded border border-slate-200 bg-white/70 p-3">
-                  <summary className="cursor-pointer text-xs font-medium text-slate-600">
+                <details className="mt-3 rounded border border-border bg-card/70 p-3">
+                  <summary className="cursor-pointer text-sm font-medium text-foreground">
                     附加结果字段（可选）
                   </summary>
                   <div className="mt-3 grid gap-2">
@@ -1540,7 +2876,7 @@ function TaskDrawer({
                         className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
                       >
                         <input
-                          className="col-span-2 h-9 min-w-0 rounded border border-slate-200 bg-white px-2 text-sm sm:col-span-1"
+                          className="col-span-2 h-9 min-w-0 rounded border border-border bg-card px-2 text-sm sm:col-span-1"
                           aria-label="处理结果字段名称"
                           placeholder="字段名"
                           value={row.key}
@@ -1549,7 +2885,7 @@ function TaskDrawer({
                           }
                         />
                         <input
-                          className="h-9 min-w-0 rounded border border-slate-200 bg-white px-2 text-sm"
+                          className="h-9 min-w-0 rounded border border-border bg-card px-2 text-sm"
                           aria-label="处理结果字段值"
                           placeholder="字段值"
                           value={row.value}
@@ -1559,7 +2895,7 @@ function TaskDrawer({
                         />
                         <button
                           type="button"
-                          className="min-h-11 min-w-11 rounded px-2 text-slate-400 hover:text-red-600"
+                          className="min-h-11 min-w-11 rounded px-2 text-muted-foreground hover:text-red-600"
                           onClick={() =>
                             setResultRows(rows =>
                               rows.filter((_, rowIndex) => rowIndex !== index)
@@ -1573,7 +2909,7 @@ function TaskDrawer({
                     ))}
                     <button
                       type="button"
-                      className="w-fit text-xs font-medium text-[#245fc8] hover:underline"
+                      className="w-fit text-xs font-medium text-aiflow-info hover:underline"
                       onClick={() =>
                         setResultRows(rows => [...rows, { key: "", value: "" }])
                       }
@@ -1610,8 +2946,10 @@ function TaskDrawer({
             )}
             {task.status === "completed" && (
               <div>
-                <p className="text-xs font-semibold text-slate-500">处理结果</p>
-                <pre className="mt-2 rounded bg-slate-950 p-3 text-xs text-emerald-200">
+                <p className="aiflow-type-body font-semibold text-muted-foreground">
+                  处理结果
+                </p>
+                <pre className="aiflow-type-code mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-3 font-mono text-emerald-200">
                   {JSON.stringify(task.result, null, 2)}
                 </pre>
               </div>

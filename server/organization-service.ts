@@ -3,6 +3,10 @@ import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
 import { recordAuthorizationAudit } from "./iam-service";
+import {
+  organizationMemberPageWindow,
+  organizationMemberSearchPattern,
+} from "./organization-member-pagination";
 
 type User = { id: number; role: "user" | "admin" };
 type JsonRecord = Record<string, unknown>;
@@ -154,6 +158,177 @@ export async function listOrganization() {
       unitCode: unitPaths.get(String(binding.unitId))?.code,
       unitDisplayPath: unitPaths.get(String(binding.unitId))?.displayPath,
     })),
+  };
+}
+
+export async function listOrganizationDirectory() {
+  const [units] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT ou.*,manager.name AS managerName,manager.username AS managerUsername,parent.name AS parentName FROM organization_unit ou LEFT JOIN users manager ON manager.id=ou.managerUserId LEFT JOIN organization_unit parent ON parent.id=ou.parentUnitId ORDER BY ou.status,ou.sortOrder,ou.code"
+  );
+  const [memberCounts] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT unitId,COUNT(*) AS memberCount FROM organization_membership GROUP BY unitId"
+  );
+  const [unassignedActiveUsers] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT COUNT(*) AS unassignedCount FROM users u WHERE u.status='active' AND NOT EXISTS (SELECT 1 FROM organization_membership om WHERE om.userId=u.id)"
+  );
+  const [roleBindings] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT our.id,our.unitId,our.roleId,our.includeDescendants,our.effectiveFrom,our.expiresAt,our.createdByUserId,our.createdAt,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope FROM organization_unit_role our JOIN iam_role r ON r.id=our.roleId ORDER BY r.name,r.code"
+  );
+  const unitsWithPaths = attachOrganizationPaths(units) as Array<
+    mysql.RowDataPacket & {
+      pathName?: string;
+      pathCode?: string;
+      displayPath?: string;
+    }
+  >;
+  const memberCountByUnit = new Map<string, number>();
+  for (const row of memberCounts)
+    memberCountByUnit.set(String(row.unitId), Number(row.memberCount));
+  const unitPaths = new Map(
+    unitsWithPaths.map(unit => [String(unit.id), unit])
+  );
+  return {
+    units: unitsWithPaths.map(unit => ({
+      ...unit,
+      memberCount: memberCountByUnit.get(String(unit.id)) ?? 0,
+    })),
+    unassignedActiveUserCount: Number(
+      unassignedActiveUsers[0]?.unassignedCount ?? 0
+    ),
+    roleBindings: roleBindings.map(binding => ({
+      ...binding,
+      unitCode: unitPaths.get(String(binding.unitId))?.code,
+      unitDisplayPath: unitPaths.get(String(binding.unitId))?.displayPath,
+    })),
+  };
+}
+
+export async function listOrganizationMembersPage(input: {
+  unitId: string;
+  includeDescendants: boolean;
+  search: string;
+  page: number;
+  pageSize: number;
+}) {
+  const searchPattern = organizationMemberSearchPattern(input.search);
+  const unitScopeCte = input.includeDescendants
+    ? `WITH RECURSIVE unit_scope(id,parentUnitId,depth) AS (
+         SELECT id,parentUnitId,0 FROM organization_unit WHERE id=?
+         UNION ALL
+         SELECT child.id,child.parentUnitId,parent.depth+1
+           FROM organization_unit child JOIN unit_scope parent ON child.parentUnitId=parent.id
+          WHERE parent.depth<99
+       )`
+    : "";
+  const unitScopeFilter = input.includeDescendants
+    ? "om.unitId IN (SELECT id FROM unit_scope)"
+    : "om.unitId=?";
+  const where = searchPattern
+    ? `${unitScopeFilter} AND CONCAT_WS(' ',COALESCE(u.name,''),u.username,COALESCE(om.title,'')) LIKE ? ESCAPE '='`
+    : unitScopeFilter;
+  const baseValues: Array<string | number> = [input.unitId];
+  if (searchPattern) baseValues.push(searchPattern);
+  const [countRows] = await db().query<mysql.RowDataPacket[]>(
+    `${unitScopeCte} SELECT COUNT(*) AS total FROM organization_membership om JOIN users u ON u.id=om.userId WHERE ${where}`,
+    baseValues
+  );
+  const total = Number(countRows[0]?.total ?? 0);
+  const page = organizationMemberPageWindow(input.page, input.pageSize, total);
+  const [memberRows] = await db().query<mysql.RowDataPacket[]>(
+    `${unitScopeCte} SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId WHERE ${where} ORDER BY ou.code,om.isPrimary DESC,u.name,u.username,u.id,om.id LIMIT ? OFFSET ?`,
+    [...baseValues, page.pageSize, page.offset]
+  );
+  const userIds = Array.from(
+    new Set(memberRows.map(row => Number(row.userId)).filter(Number.isFinite))
+  );
+  if (!userIds.length)
+    return {
+      items: [],
+      total,
+      ...page,
+      unitId: input.unitId,
+      includeDescendants: input.includeDescendants,
+      search: input.search.trim(),
+    };
+
+  const placeholders = userIds.map(() => "?").join(",");
+  const [directRoleRows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT ra.id AS assignmentId,ra.userId,ra.roleId,ra.scopeType,ra.scopeId,ra.expiresAt,r.code AS roleCode,r.name AS roleName FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId WHERE ra.userId IN (${placeholders}) AND ra.scopeType='system' AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) ORDER BY r.name,r.code`,
+    userIds
+  );
+  const [inheritedRoleRows] = await db().query<mysql.RowDataPacket[]>(
+    `WITH RECURSIVE membership_units(userId,memberUnitId,unitId,parentUnitId,depth) AS (
+       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
+         FROM organization_membership om
+         JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
+        WHERE om.userId IN (${placeholders})
+       UNION ALL
+       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
+         FROM membership_units mu
+         JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
+        WHERE mu.depth<32
+     )
+     SELECT DISTINCT mu.userId,our.unitId,ou.name AS unitName,our.roleId,
+            r.code AS roleCode,r.name AS roleName
+       FROM membership_units mu
+       JOIN organization_unit_role our ON our.unitId=mu.unitId
+         AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
+       JOIN organization_unit ou ON ou.id=our.unitId
+       JOIN iam_role r ON r.id=our.roleId
+      WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
+      ORDER BY ou.name,r.name,r.code`,
+    userIds
+  );
+  const [unitRows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT id,code,name,parentUnitId FROM organization_unit"
+  );
+  const unitsWithPaths = attachOrganizationPaths(unitRows) as Array<
+    mysql.RowDataPacket & {
+      pathName?: string;
+      pathCode?: string;
+      displayPath?: string;
+    }
+  >;
+  const unitPaths = new Map(
+    unitsWithPaths.map(unit => [String(unit.id), unit])
+  );
+  const directRolesByUser = new Map<number, mysql.RowDataPacket[]>();
+  const inheritedRolesByUser = new Map<number, mysql.RowDataPacket[]>();
+  for (const role of directRoleRows) {
+    const userId = Number(role.userId);
+    directRolesByUser.set(userId, [
+      ...(directRolesByUser.get(userId) ?? []),
+      role,
+    ]);
+  }
+  for (const role of inheritedRoleRows) {
+    const userId = Number(role.userId);
+    inheritedRolesByUser.set(userId, [
+      ...(inheritedRolesByUser.get(userId) ?? []),
+      role,
+    ]);
+  }
+  return {
+    items: memberRows.map(member => ({
+      ...member,
+      unitCode: unitPaths.get(String(member.unitId))?.code,
+      unitPathName: unitPaths.get(String(member.unitId))?.pathName,
+      unitPathCode: unitPaths.get(String(member.unitId))?.pathCode,
+      unitDisplayPath: unitPaths.get(String(member.unitId))?.displayPath,
+      directRoles: directRolesByUser.get(Number(member.userId)) ?? [],
+      inheritedRoles: (
+        inheritedRolesByUser.get(Number(member.userId)) ?? []
+      ).map(role => ({
+        ...role,
+        unitCode: unitPaths.get(String(role.unitId))?.code,
+        unitDisplayPath: unitPaths.get(String(role.unitId))?.displayPath,
+      })),
+    })),
+    total,
+    ...page,
+    unitId: input.unitId,
+    includeDescendants: input.includeDescendants,
+    search: input.search.trim(),
   };
 }
 
@@ -551,14 +726,16 @@ export async function bindOrganizationRole(
   const effectiveFrom = input.effectiveFrom ?? new Date();
   if (input.expiresAt && input.expiresAt <= effectiveFrom)
     throw new Error("部门权限绑定到期时间必须晚于生效时间。");
+  // TIMESTAMP without fractional precision rounds a JS Date up into the next
+  // second. Use the database clock for immediate grants; preserve explicit dates.
   await db().query(
-    "INSERT INTO organization_unit_role (id,unitId,roleId,includeDescendants,effectiveFrom,expiresAt,createdByUserId) VALUES (?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE includeDescendants=VALUES(includeDescendants),effectiveFrom=VALUES(effectiveFrom),expiresAt=VALUES(expiresAt),createdByUserId=VALUES(createdByUserId)",
+    "INSERT INTO organization_unit_role (id,unitId,roleId,includeDescendants,effectiveFrom,expiresAt,createdByUserId) VALUES (?,?,?,?,COALESCE(?,CURRENT_TIMESTAMP),?,?) ON DUPLICATE KEY UPDATE includeDescendants=VALUES(includeDescendants),effectiveFrom=VALUES(effectiveFrom),expiresAt=VALUES(expiresAt),createdByUserId=VALUES(createdByUserId)",
     [
       randomUUID(),
       input.unitId,
       input.roleId,
       input.includeDescendants ?? true,
-      effectiveFrom,
+      input.effectiveFrom ?? null,
       input.expiresAt ?? null,
       user.id,
     ]

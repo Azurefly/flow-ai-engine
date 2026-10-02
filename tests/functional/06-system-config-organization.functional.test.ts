@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import { TestResultCollector } from "./helpers/test-harness";
 
 describe("功能测试 - 模块 6：系统配置与组织架构 (System Config & Organization)", () => {
@@ -8,7 +9,8 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
 
       // Non-admin call rejection
       const assertAdmin = (user: { role: string }) => {
-        if (user.role !== "admin") throw new Error("只有平台管理员有权修改系统级配置。");
+        if (user.role !== "admin")
+          throw new Error("只有平台管理员有权修改系统级配置。");
         return true;
       };
 
@@ -21,7 +23,8 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
         watermarkEnabled: boolean;
         watermarkText: string;
       }) => {
-        if (!settings.platformName.trim()) throw new Error("平台名称不可为空。");
+        if (!settings.platformName.trim())
+          throw new Error("平台名称不可为空。");
         if (settings.watermarkEnabled && !settings.watermarkText.trim()) {
           throw new Error("开启水印时必须配置水印文本。");
         }
@@ -58,9 +61,14 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
     it("工作域生命周期：创建、代号大写规范与启停切换", () => {
       const start = performance.now();
 
-      const createWorkDomain = (input: { code: string; name: string; description?: string }) => {
+      const createWorkDomain = (input: {
+        code: string;
+        name: string;
+        description?: string;
+      }) => {
         const code = input.code.trim().toUpperCase();
-        if (code.length < 2 || code.length > 64) throw new Error("工作域代号长度应在 2-64 字符。");
+        if (code.length < 2 || code.length > 64)
+          throw new Error("工作域代号长度应在 2-64 字符。");
         if (!input.name.trim()) throw new Error("工作域名称不可为空。");
         return {
           id: "dom-uuid-1",
@@ -70,7 +78,10 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
         };
       };
 
-      const domain = createWorkDomain({ code: "fin_settle", name: "金融结算域" });
+      const domain = createWorkDomain({
+        code: "fin_settle",
+        name: "金融结算域",
+      });
       expect(domain.code).toBe("FIN_SETTLE");
       expect(domain.status).toBe("active");
 
@@ -91,6 +102,79 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
   });
 
   describe("组织架构管理（OrganizationManagementPage）交互与层级树维护", () => {
+    it("窄屏聚焦部门详情，并以卡片呈现成员和按需显示长路径", () => {
+      const start = performance.now();
+      const source = readFileSync(
+        new URL(
+          "../../client/src/components/OrganizationManagementPage.tsx",
+          import.meta.url
+        ),
+        "utf8"
+      );
+
+      expect(source).toContain(
+        'selected && !mobileDirectoryOpen ? "hidden lg:block" : ""'
+      );
+      expect(source).toContain("setMobileDirectoryOpen(true)");
+      expect(source).toContain(
+        'className="mt-4 grid gap-3 min-[1024px]:grid-cols-2 min-[1360px]:hidden"'
+      );
+      expect(source).toContain(
+        'className="mt-4 hidden overflow-x-auto min-[1360px]:block"'
+      );
+      expect(source).toContain("text-xs text-aiflow-info");
+      expect(source).toContain("部门路径");
+      expect(source).toContain(
+        'className="mt-4 grid grid-cols-1 gap-2 min-[448px]:grid-cols-2 xl:grid-cols-3"'
+      );
+      expect(source).toContain("renderMemberActions(member)");
+      expect(source).toContain("新增部门");
+      expect(source).toContain("children.length > 0 &&");
+      expect(source).not.toContain(
+        "{children.length && isExpanded && renderTree(unit.id, depth + 1)}"
+      );
+      expect(source).toContain("duplicateUnitNames.has(unit.name.trim())");
+      expect(source).toContain("font-mono text-xs text-muted-foreground");
+
+      TestResultCollector.record({
+        testId: "TC-MOD6-ORG-009",
+        name: "窄屏组织目录与成员卡片信息层级",
+        category: "contract",
+        module: "组织架构管理",
+        target: "OrganizationManagementPage.ResponsiveLayout",
+        status: "passed",
+        start,
+      });
+    });
+
+    it("成员移出与权限解绑通过页内确认说明影响", () => {
+      const start = performance.now();
+      const source = readFileSync(
+        new URL(
+          "../../client/src/components/OrganizationManagementPage.tsx",
+          import.meta.url
+        ),
+        "utf8"
+      );
+
+      expect(source).not.toContain("window.confirm");
+      expect(source).toContain('kind: "remove-member"');
+      expect(source).toContain('kind: "unbind-role"');
+      expect(source).toContain("不会删除账号");
+      expect(source).toContain("继承权限将立即失效");
+      expect(source).toContain("confirmOrganizationAction");
+
+      TestResultCollector.record({
+        testId: "TC-MOD6-ORG-010",
+        name: "成员移出和权限解绑使用页内确认并明确操作影响",
+        category: "contract",
+        module: "组织架构管理",
+        target: "OrganizationManagementPage.DestructiveActionConfirmation",
+        status: "passed",
+        start,
+      });
+    });
+
     it("组织机构树（根部门、同级、子级）挂载与完整路径生成", () => {
       const start = performance.now();
 
@@ -103,9 +187,24 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
       };
 
       const units: OrgUnit[] = [
-        { id: "u-root", code: "CORP", name: "未来科技集团", parentUnitId: null },
-        { id: "u-rd", code: "RD_DEPT", name: "研发中心", parentUnitId: "u-root" },
-        { id: "u-fe", code: "FE_GROUP", name: "前端架构组", parentUnitId: "u-rd" },
+        {
+          id: "u-root",
+          code: "CORP",
+          name: "未来科技集团",
+          parentUnitId: null,
+        },
+        {
+          id: "u-rd",
+          code: "RD_DEPT",
+          name: "研发中心",
+          parentUnitId: "u-root",
+        },
+        {
+          id: "u-fe",
+          code: "FE_GROUP",
+          name: "前端架构组",
+          parentUnitId: "u-rd",
+        },
       ];
 
       // Build hierarchical display path
@@ -114,14 +213,18 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
         let curr: OrgUnit | undefined = units.find(u => u.id === unitId);
         while (curr) {
           path.unshift(curr.name);
-          curr = curr.parentUnitId ? units.find(u => u.id === curr?.parentUnitId) : undefined;
+          curr = curr.parentUnitId
+            ? units.find(u => u.id === curr?.parentUnitId)
+            : undefined;
         }
         return path.join(" / ");
       };
 
       expect(buildDisplayPath("u-root")).toBe("未来科技集团");
       expect(buildDisplayPath("u-rd")).toBe("未来科技集团 / 研发中心");
-      expect(buildDisplayPath("u-fe")).toBe("未来科技集团 / 研发中心 / 前端架构组");
+      expect(buildDisplayPath("u-fe")).toBe(
+        "未来科技集团 / 研发中心 / 前端架构组"
+      );
 
       TestResultCollector.record({
         testId: "TC-MOD6-ORG-001",
@@ -164,9 +267,13 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
 
       // Move member
       const moveMember = (userId: number, fromUnit: string, toUnit: string) => {
-        const target = memberships.find(m => m.userId === userId && m.unitId === fromUnit);
+        const target = memberships.find(
+          m => m.userId === userId && m.unitId === fromUnit
+        );
         if (!target) throw new Error("成员不在该原机构中。");
-        memberships = memberships.filter(m => !(m.userId === userId && m.unitId === fromUnit));
+        memberships = memberships.filter(
+          m => !(m.userId === userId && m.unitId === fromUnit)
+        );
         memberships.push({ ...target, unitId: toUnit });
       };
 
@@ -195,13 +302,23 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
       };
 
       const bindings: RoleBinding[] = [
-        { unitId: "u-rd", roleCode: "developer_role", includeDescendants: true },
-        { unitId: "u-rd", roleCode: "rd_special_role", includeDescendants: false },
+        {
+          unitId: "u-rd",
+          roleCode: "developer_role",
+          includeDescendants: true,
+        },
+        {
+          unitId: "u-rd",
+          roleCode: "rd_special_role",
+          includeDescendants: false,
+        },
       ];
 
       // Sub-department u-fe is child of u-rd
       const resolveUnitRoles = (unitId: string, parentUnitIds: string[]) => {
-        const direct = bindings.filter(b => b.unitId === unitId).map(b => b.roleCode);
+        const direct = bindings
+          .filter(b => b.unitId === unitId)
+          .map(b => b.roleCode);
         const inherited = bindings
           .filter(b => parentUnitIds.includes(b.unitId) && b.includeDescendants)
           .map(b => b.roleCode);

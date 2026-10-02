@@ -274,12 +274,7 @@ export const flowProjectUnits = mysqlTable(
     unitId: varchar("unitId", { length: 36 })
       .notNull()
       .references(() => organizationUnits.id),
-    role: mysqlEnum("role", [
-      "owner",
-      "designer",
-      "operator",
-      "viewer",
-    ])
+    role: mysqlEnum("role", ["owner", "designer", "operator", "viewer"])
       .default("viewer")
       .notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -457,6 +452,8 @@ export const workflowRuns = mysqlTable(
     requestId: varchar("requestId", { length: 100 }),
     executionPlanJson: json("executionPlanJson"),
     executionPlanHash: varchar("executionPlanHash", { length: 64 }),
+    executionSource: varchar("executionSource", { length: 24 }),
+    definitionVersion: int("definitionVersion"),
   },
   table => [
     index("workflow_run_workflow_idx").on(table.workflowId, table.createdAt),
@@ -526,6 +523,15 @@ export const projectServiceEndpoints = mysqlTable(
     refCode: varchar("refCode", { length: 64 }).notNull(),
     name: varchar("name", { length: 160 }).notNull(),
     baseUrl: varchar("baseUrl", { length: 2048 }).notNull(),
+    targetEnvironment: mysqlEnum("targetEnvironment", [
+      "unclassified",
+      "development",
+      "test",
+      "staging",
+      "production",
+    ])
+      .default("unclassified")
+      .notNull(),
     allowedHostsJson: json("allowedHostsJson").notNull(),
     secretRef: varchar("secretRef", { length: 255 }),
     authHeaderName: varchar("authHeaderName", { length: 128 }),
@@ -1254,6 +1260,8 @@ export const dataflowRuns = mysqlTable(
     definitionSnapshotJson: json("definitionSnapshotJson").notNull(),
     executionPlanJson: json("executionPlanJson"),
     executionPlanHash: varchar("executionPlanHash", { length: 64 }),
+    executionSource: varchar("executionSource", { length: 24 }),
+    definitionVersion: int("definitionVersion"),
     requestId: varchar("requestId", { length: 100 }),
     checkpointJson: json("checkpointJson"),
     watermarkInputJson: json("watermarkInputJson"),

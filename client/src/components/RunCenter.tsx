@@ -2,16 +2,20 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import {
+  ArrowLeft,
   AlertTriangle,
   BarChart3,
   CheckCircle2,
   Clock3,
   Filter,
   Loader2,
+  Pause,
+  Play,
   RotateCcw,
   XCircle,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { RunPayloadDetails } from "./RunPayloadDetails";
 
 function formatTime(value: unknown) {
   return value
@@ -28,39 +32,42 @@ function decodeJson(value: unknown) {
   }
 }
 
-function LogBlock({ title, value }: { title: string; value: unknown }) {
-  if (value === null || value === undefined) return null;
-  return (
-    <div>
-      <p className="mb-1 font-semibold text-slate-500">{title}</p>
-      <pre className="max-h-48 overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-200">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
 const statusLabel: Record<string, string> = {
   success: "成功",
   failed: "失败",
   running: "运行中",
-  waiting: "等待人工",
-  blocked: "已暂停",
+  waiting: "等待中",
+  blocked: "已阻塞",
   queued: "排队中",
   cancelled: "已取消",
   terminated: "已终止",
 };
 
+function formatRunStatus(status: unknown) {
+  const value = String(status ?? "");
+  return statusLabel[value] ?? `未知状态（原值：${value || "空"}）`;
+}
+
 export default function RunCenter({
   workflowId,
   workflowName,
+  selectedRunId,
   selectedRun,
+  selectedRunLoading,
+  selectedRunError,
   onSelect,
+  onClearSelection,
+  onRetrySelection,
 }: {
   workflowId: string | null;
   workflowName?: string | null;
+  selectedRunId: string | null;
   selectedRun: any;
+  selectedRunLoading: boolean;
+  selectedRunError: boolean;
   onSelect: (id: string) => void;
+  onClearSelection: () => void;
+  onRetrySelection: () => void;
 }) {
   const utils = trpc.useUtils();
   const [status, setStatus] = useState<
@@ -75,7 +82,57 @@ export default function RunCenter({
     | "terminated"
   >("");
   const [range, setRange] = useState<"all" | "24h" | "7d" | "30d">("all");
-  const [triggeredBy, setTriggeredBy] = useState("");
+  const [triggeredByInput, setTriggeredByInput] = useState("");
+  const [triggeredByQuery, setTriggeredByQuery] = useState("");
+  const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
+  const [historyNavigation, setHistoryNavigation] = useState<{
+    filterKey: string;
+    cursors: Array<string | undefined>;
+  }>({ filterKey: "", cursors: [undefined] });
+  const runListRef = useRef<HTMLElement | null>(null);
+  const runDetailRef = useRef<HTMLElement | null>(null);
+  const previousSelectedRunId = useRef<string | null>(selectedRunId);
+  const runDetail =
+    selectedRunId && selectedRun?.id !== selectedRunId ? null : selectedRun;
+  const hasSelectedRun = Boolean(selectedRunId || runDetail);
+  useEffect(() => {
+    const activeRunId = selectedRunId ?? selectedRun?.id ?? null;
+    let frame: number | undefined;
+    if (activeRunId && window.matchMedia("(max-width: 1279px)").matches) {
+      frame = window.requestAnimationFrame(() =>
+        runDetailRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
+      );
+    } else if (!activeRunId && previousSelectedRunId.current) {
+      frame = window.requestAnimationFrame(() =>
+        runListRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        })
+      );
+    }
+    previousSelectedRunId.current = activeRunId;
+    return () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+    };
+  }, [selectedRunId, selectedRun?.id]);
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setTriggeredByQuery(triggeredByInput.trim()),
+      300
+    );
+    return () => window.clearTimeout(timeout);
+  }, [triggeredByInput]);
+  useEffect(() => {
+    const media = window.matchMedia("(min-width: 1024px)");
+    const syncWithViewport = () => setAdvancedFiltersOpen(media.matches);
+    syncWithViewport();
+    media.addEventListener("change", syncWithViewport);
+    return () => media.removeEventListener("change", syncWithViewport);
+  }, []);
   const filter = useMemo(() => {
     const now = Date.now();
     const rangeMs =
@@ -90,20 +147,37 @@ export default function RunCenter({
       workflowId: workflowId ?? "00000000",
       status: status || undefined,
       from: rangeMs ? new Date(now - rangeMs) : undefined,
-      triggeredByUserId: triggeredBy ? Number(triggeredBy) : undefined,
+      triggeredByQuery: triggeredByQuery || undefined,
     };
-  }, [range, status, triggeredBy, workflowId]);
-  const runs = trpc.workflow.runs.useQuery(filter, {
-    enabled: Boolean(workflowId),
-    refetchInterval: 5_000,
-  });
+  }, [range, status, triggeredByQuery, workflowId]);
+  const historyFilterKey = JSON.stringify([
+    workflowId,
+    status,
+    range,
+    triggeredByQuery,
+  ]);
+  const historyCursorStack =
+    historyNavigation.filterKey === historyFilterKey
+      ? historyNavigation.cursors
+      : [undefined];
+  const historyCursor = historyCursorStack.at(-1);
+  const runs = trpc.workflow.runHistoryPage.useQuery(
+    { ...filter, cursor: historyCursor, pageSize: 25 },
+    {
+      enabled: Boolean(workflowId),
+      refetchInterval: autoRefreshEnabled ? 15_000 : false,
+      refetchIntervalInBackground: false,
+    }
+  );
   const metrics = trpc.workflow.runMetrics.useQuery(filter, {
     enabled: Boolean(workflowId),
-    refetchInterval: 5_000,
+    refetchInterval: autoRefreshEnabled ? 15_000 : false,
+    refetchIntervalInBackground: false,
   });
   const alerts = trpc.workflow.alerts.useQuery(filter, {
     enabled: Boolean(workflowId),
-    refetchInterval: 10_000,
+    refetchInterval: autoRefreshEnabled ? 15_000 : false,
+    refetchIntervalInBackground: false,
   });
   const markRead = trpc.workflow.markAlertRead.useMutation({
     onSuccess: () => void utils.workflow.alerts.invalidate(),
@@ -111,6 +185,7 @@ export default function RunCenter({
   const cancelRun = trpc.workflow.cancelRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
+      void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
     },
     onError: error => window.alert(error.message),
@@ -118,6 +193,7 @@ export default function RunCenter({
   const terminateRun = trpc.workflow.terminateRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
+      void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
     },
     onError: error => window.alert(error.message),
@@ -125,6 +201,7 @@ export default function RunCenter({
   const pauseRun = trpc.workflow.pauseRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
+      void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
     },
     onError: error => window.alert(error.message),
@@ -132,23 +209,52 @@ export default function RunCenter({
   const resumeRun = trpc.workflow.resumeRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
+      void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
     },
     onError: error => window.alert(error.message),
   });
   const workflowAlerts = (alerts.data ?? []) as any[];
-  const queryError = runs.error?.message || metrics.error?.message || alerts.error?.message;
+  const workflowRuns = runs.data?.items ?? [];
+  const queryError =
+    runs.error?.message || metrics.error?.message || alerts.error?.message;
   const queryLoading = runs.isLoading || metrics.isLoading || alerts.isLoading;
-  const metricsUnavailable = metrics.isLoading || metrics.isError || !metrics.data;
+  const metricsUnavailable =
+    metrics.isLoading || metrics.isError || !metrics.data;
+  const failedMetricTone: "slate" | "red" | "emerald" = metricsUnavailable
+    ? "slate"
+    : metrics.data.failedRuns > 0
+      ? "red"
+      : metrics.data.totalRuns > 0
+        ? "emerald"
+        : "slate";
+  const dataFetching =
+    runs.isFetching || metrics.isFetching || alerts.isFetching;
+  const latestUpdatedAt = Math.max(
+    runs.dataUpdatedAt,
+    metrics.dataUpdatedAt,
+    alerts.dataUpdatedAt
+  );
+  const lastUpdatedLabel = latestUpdatedAt
+    ? new Date(latestUpdatedAt).toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      })
+    : "尚无数据";
   const controlPending =
     cancelRun.isPending ||
     terminateRun.isPending ||
     pauseRun.isPending ||
     resumeRun.isPending;
+  const hasRunFilters = Boolean(
+    status || range !== "all" || triggeredByInput.trim() || triggeredByQuery
+  );
 
   if (!workflowId)
     return (
-      <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8 text-center text-sm text-slate-400">
+      <div className="aiflow-type-body grid min-h-[calc(100vh-56px)] place-items-center p-8 text-center text-muted-foreground">
         <div>
           <Clock3 className="mx-auto" size={30} />
           <p className="mt-3">请先在流程仓库选择一个可查看的流程。</p>
@@ -157,32 +263,95 @@ export default function RunCenter({
     );
 
   return (
-    <div className="space-y-5 p-4 lg:p-6">
+    <div className="min-w-0 space-y-5 p-4 lg:p-6">
       <div
         data-aiflow-context-header
-        className="flex flex-col justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-end"
+        className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm lg:flex-row lg:items-end lg:justify-between"
       >
-        <div className="min-w-0">
-          <p className="text-xs font-bold tracking-[.18em] text-blue-600">
+        <div className="min-w-0 lg:flex-1">
+          <p className="aiflow-type-meta font-bold tracking-[.18em] text-aiflow-info">
             RUNTIME OBSERVABILITY
           </p>
-          <h2 className="mt-1 text-xl font-semibold">
+          <h1
+            data-aiflow-page-title=""
+            className="aiflow-type-page-title mt-1 font-semibold"
+          >
             运行分析、失败告警与节点日志
-          </h2>
-          <p className="mt-1 truncate text-xs text-slate-500">
-            当前流程：{workflowName || "未命名流程"} · {workflowId.slice(0, 8)}
+          </h1>
+          <p className="aiflow-type-body mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 text-muted-foreground">
+            <span className="shrink-0">当前流程：</span>
+            <span
+              className="min-w-0 max-w-full break-words font-medium text-foreground"
+              aria-label={workflowName || "未命名流程"}
+              title={workflowName || "未命名流程"}
+            >
+              {(workflowName || "未命名流程").replaceAll("_", "_\u200b")}
+            </span>
+            <code
+              className="aiflow-type-meta shrink-0 font-mono text-muted-foreground"
+              title={`流程编号：${workflowId}`}
+            >
+              · {workflowId.slice(0, 8)}
+            </code>
           </p>
         </div>
-        <div className="w-fit rounded bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600">
-          自动刷新 · 5 秒
+        <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
+          <div className="aiflow-type-meta text-muted-foreground">
+            <p className="font-medium text-foreground">
+              {autoRefreshEnabled ? "自动刷新 · 每 15 秒" : "自动刷新已暂停"}
+            </p>
+            <p aria-live="polite" className="mt-0.5">
+              上次更新：{lastUpdatedLabel}
+            </p>
+          </div>
+          <div className="flex min-w-0 flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"
+              aria-pressed={autoRefreshEnabled}
+              onClick={() => setAutoRefreshEnabled(enabled => !enabled)}
+            >
+              {autoRefreshEnabled ? (
+                <Pause size={14} aria-hidden="true" />
+              ) : (
+                <Play size={14} aria-hidden="true" />
+              )}
+              {autoRefreshEnabled ? "暂停自动刷新" : "恢复自动刷新"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"
+              disabled={dataFetching}
+              onClick={() => {
+                void Promise.all([
+                  runs.refetch(),
+                  metrics.refetch(),
+                  alerts.refetch(),
+                ]);
+              }}
+            >
+              <RotateCcw
+                size={14}
+                className={dataFetching ? "animate-spin" : undefined}
+                aria-hidden="true"
+              />
+              立即刷新
+            </Button>
+          </div>
         </div>
       </div>
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <Filter size={15} className="shrink-0 text-slate-500" />
+      <section
+        data-run-filter-panel=""
+        className="rounded-lg border border-border bg-card p-3 shadow-sm sm:p-4"
+      >
+        <div className="grid min-w-0 grid-cols-2 items-center gap-2 lg:grid-cols-[minmax(180px,1fr)_minmax(160px,0.9fr)_minmax(220px,1.2fr)_auto]">
           <select
             aria-label="按运行状态筛选"
-            className="h-9 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs sm:flex-none"
+            className="aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9"
             value={status}
             onChange={event => setStatus(event.target.value as typeof status)}
           >
@@ -190,15 +359,15 @@ export default function RunCenter({
             <option value="success">成功</option>
             <option value="failed">失败</option>
             <option value="running">运行中</option>
-            <option value="waiting">等待人工</option>
-            <option value="blocked">已暂停</option>
+            <option value="waiting">等待中</option>
+            <option value="blocked">已阻塞</option>
             <option value="queued">排队中</option>
             <option value="cancelled">已取消</option>
             <option value="terminated">已终止</option>
           </select>
           <select
             aria-label="按时间筛选"
-            className="h-9 min-w-0 flex-1 rounded border border-slate-200 bg-white px-2 text-xs sm:flex-none"
+            className="aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9"
             value={range}
             onChange={event => setRange(event.target.value as typeof range)}
           >
@@ -207,25 +376,45 @@ export default function RunCenter({
             <option value="7d">最近 7 天</option>
             <option value="30d">最近 30 天</option>
           </select>
-          <Input
-            aria-label="按触发者筛选"
-            className="h-9 w-full text-xs sm:w-36"
-            inputMode="numeric"
-            placeholder="触发者用户 ID"
-            value={triggeredBy}
-            onChange={event =>
-              setTriggeredBy(event.target.value.replace(/\D/g, ""))
-            }
-          />
+          <details
+            open={advancedFiltersOpen}
+            onToggle={event => setAdvancedFiltersOpen(event.currentTarget.open)}
+            className="col-span-1 min-w-0 lg:contents"
+          >
+            <summary className="aiflow-type-control flex h-11 min-w-0 cursor-pointer list-none items-center justify-center gap-2 rounded border border-border px-2 text-center text-foreground lg:hidden">
+              <Filter size={15} aria-hidden="true" />
+              <span>更多筛选</span>
+              {triggeredByQuery && (
+                <span className="aiflow-type-meta rounded bg-aiflow-info-surface px-1.5 text-aiflow-info">
+                  已启用
+                </span>
+              )}
+            </summary>
+            <div className="mt-2 min-w-0 lg:col-span-1 lg:mt-0">
+              <label className="sr-only" htmlFor="run-triggered-by-filter">
+                按触发者姓名或用户名筛选
+              </label>
+              <Input
+                id="run-triggered-by-filter"
+                aria-label="按触发者姓名或用户名筛选"
+                className="aiflow-type-control h-11 min-w-0 w-full lg:h-9"
+                placeholder="姓名或用户名"
+                value={triggeredByInput}
+                onChange={event => setTriggeredByInput(event.target.value)}
+              />
+            </div>
+          </details>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="w-full sm:w-auto"
+            className="aiflow-type-control h-11 justify-self-end px-3 lg:col-span-1 lg:h-9"
+            disabled={!hasRunFilters}
             onClick={() => {
               setStatus("");
               setRange("all");
-              setTriggeredBy("");
+              setTriggeredByInput("");
+              setTriggeredByQuery("");
             }}
           >
             清除筛选
@@ -233,141 +422,193 @@ export default function RunCenter({
         </div>
       </section>
       {queryLoading && !queryError && (
-        <div role="status" className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-500"><Loader2 size={14} className="animate-spin" />正在读取运行分析数据…</div>
-      )}
-      {queryError && (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-          <div><p className="font-semibold">运行数据加载失败</p><p className="mt-1 break-words text-xs text-rose-700">{queryError}</p></div>
-          <Button type="button" variant="outline" size="sm" onClick={() => { void runs.refetch(); void metrics.refetch(); void alerts.refetch(); }}><RotateCcw size={14} />重试</Button>
+        <div role="status" className="sr-only">
+          正在读取运行分析数据…
         </div>
       )}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {queryError && (
+        <div
+          role="alert"
+          className="aiflow-type-body flex flex-wrap items-center justify-between gap-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-aiflow-danger"
+        >
+          <div>
+            <p className="font-semibold">运行数据加载失败</p>
+            <p className="aiflow-type-body mt-1 break-words text-aiflow-danger">
+              {queryError}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 lg:h-9"
+            onClick={() => {
+              void runs.refetch();
+              void metrics.refetch();
+              void alerts.refetch();
+            }}
+          >
+            <RotateCcw size={14} />
+            重试
+          </Button>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         <MetricCard
-          label="总运行"
+          label="运行数"
           value={metricsUnavailable ? "—" : metrics.data.totalRuns}
           icon={BarChart3}
           tone="blue"
         />
         <MetricCard
-          label="成功"
-          value={metricsUnavailable ? "—" : metrics.data.successfulRuns}
-          icon={CheckCircle2}
-          tone="emerald"
-        />
-        <MetricCard
           label="失败"
           value={metricsUnavailable ? "—" : metrics.data.failedRuns}
           icon={XCircle}
-          tone="red"
-        />
-        <MetricCard
-          label="失败率"
-          value={metricsUnavailable ? "—" : `${metrics.data.failureRate}%`}
-          icon={AlertTriangle}
-          tone="amber"
+          tone={failedMetricTone}
         />
         <MetricCard
           label="平均耗时"
-          value={metricsUnavailable ? "—" : `${metrics.data.averageDurationMs} ms`}
+          value={
+            metricsUnavailable ? "—" : `${metrics.data.averageDurationMs} ms`
+          }
           icon={Clock3}
           tone="slate"
+          fullWidthOnMobile
         />
       </div>
+      <details className="aiflow-type-body rounded-lg border border-border bg-card px-3 py-2 text-muted-foreground">
+        <summary className="aiflow-type-control min-h-7 cursor-pointer font-medium text-foreground">
+          更多指标
+        </summary>
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 border-t border-border pt-2">
+          <span>
+            成功：{metricsUnavailable ? "—" : metrics.data.successfulRuns}
+          </span>
+          <span>
+            失败率：{metricsUnavailable ? "—" : `${metrics.data.failureRate}%`}
+          </span>
+        </div>
+      </details>
       {workflowAlerts.length === 0 && !alerts.isLoading ? (
-        <div className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs text-slate-600 shadow-2xs">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={14} className="text-emerald-600" />
-            <span className="font-medium text-slate-800">失败告警</span>
-            <span className="text-slate-500">当前筛选范围内无告警记录</span>
+        <div className="aiflow-type-body flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5 text-muted-foreground shadow-2xs">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+            <CheckCircle2 size={14} className="text-aiflow-success" />
+            <span className="font-medium text-foreground">失败告警</span>
+            <span className="text-muted-foreground">
+              当前筛选范围内无告警记录
+            </span>
           </div>
-          <span className="font-mono text-[11px] text-slate-400">0 未读</span>
+          <span className="aiflow-type-meta font-mono text-muted-foreground">
+            0 未读
+          </span>
         </div>
       ) : (
-        <section className="overflow-hidden rounded-lg border border-red-100 bg-white shadow-sm">
+        <section className="overflow-hidden rounded-lg border border-red-100 bg-card shadow-sm">
           <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-4 py-3">
-            <div className="flex items-center gap-2 text-sm font-semibold text-red-900">
+            <div className="aiflow-type-section-title flex items-center gap-2 font-semibold text-red-900">
               <AlertTriangle size={15} />
               失败告警
             </div>
-            <span className="rounded bg-white px-2 py-0.5 text-[10px] text-red-700">
+            <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-red-700">
               {workflowAlerts.filter((alert: any) => !alert.readAt).length} 未读
             </span>
           </div>
-          <div className="max-h-48 overflow-y-auto">
+          <div>
             {alerts.isLoading ? (
-              <p role="status" className="p-4 text-center text-xs text-slate-400">正在读取失败告警…</p>
-            ) : workflowAlerts.map((alert: any) => (
-              <div
-                key={alert.id}
-                className={`flex flex-col gap-2 border-b border-slate-100 px-4 py-3 text-xs sm:flex-row sm:items-center ${alert.readAt ? "text-slate-400" : "text-slate-700"}`}
+              <p
+                role="status"
+                className="aiflow-type-body p-4 text-center text-muted-foreground"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{alert.summary}</p>
-                  <p className="mt-1 truncate">
-                    {decodeJson(alert.detailsJson)?.message ||
-                      "请查看运行节点日志。"}
-                  </p>
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"} ms
-                  </p>
-                </div>
-                <div className="flex shrink-0 flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => onSelect(String(alert.runId))}
-                  >
-                    查看运行
-                  </Button>
-                  {!alert.readAt && (
+                正在读取失败告警…
+              </p>
+            ) : (
+              workflowAlerts.map((alert: any) => (
+                <div
+                  key={alert.id}
+                  className={`aiflow-type-body flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center ${alert.readAt ? "text-muted-foreground" : "text-foreground"}`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="break-words font-medium">{alert.summary}</p>
+                    <p className="mt-1 break-words">
+                      {decodeJson(alert.detailsJson)?.message ||
+                        "请查看运行节点日志。"}
+                    </p>
+                    <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                      {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"}{" "}
+                      ms
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
                     <Button
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs"
-                      disabled={markRead.isPending}
-                      onClick={() => markRead.mutate({ alertId: alert.id })}
+                      className="aiflow-type-control h-11 lg:h-9"
+                      onClick={() => onSelect(String(alert.runId))}
                     >
-                      标记已读
+                      查看运行
                     </Button>
-                  )}
+                    {!alert.readAt && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="aiflow-type-control h-11 lg:h-9"
+                        disabled={markRead.isPending}
+                        onClick={() => markRead.mutate({ alertId: alert.id })}
+                      >
+                        标记已读
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
       )}
-      <div className={`grid gap-4 ${selectedRun ? "xl:grid-cols-[420px_1fr]" : "grid-cols-1"}`}>
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 text-sm font-semibold">
+      <div
+        className={`grid min-w-0 gap-4 ${hasSelectedRun ? "grid-cols-1 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]" : "grid-cols-1"}`}
+      >
+        <section
+          ref={runListRef}
+          data-run-history-panel
+          className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card ${hasSelectedRun ? "hidden xl:block" : ""}`}
+        >
+          <div className="aiflow-type-section-title flex items-center justify-between border-b border-border px-4 py-3 font-semibold">
             <span>运行记录</span>
             {runs.isFetching && (
-              <Loader2 className="animate-spin text-slate-400" size={14} />
+              <Loader2
+                className="animate-spin text-muted-foreground"
+                size={14}
+              />
             )}
           </div>
-          <div className="max-h-[650px] overflow-y-auto">
-            {(runs.data ?? []).map((run: any) => (
+          <div>
+            {workflowRuns.map((run: any) => (
               <button
                 key={run.id}
                 onClick={() => onSelect(run.id)}
-                className={`w-full border-b border-slate-100 p-4 text-left hover:bg-slate-50 ${selectedRun?.id === run.id ? "bg-blue-50" : ""}`}
+                className={`w-full border-b border-border p-4 text-left hover:bg-muted ${selectedRun?.id === run.id || selectedRunId === run.id ? "bg-aiflow-info-surface" : ""}`}
               >
                 <div className="flex justify-between gap-2">
-                  <code className="text-xs text-slate-500 font-mono">
+                  <code className="aiflow-type-code font-mono text-muted-foreground">
                     {run.id.slice(0, 8)}
                   </code>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-medium border ${run.status === "success" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"}`}
+                    className={`aiflow-type-meta rounded px-1.5 py-0.5 font-medium border ${run.status === "success" ? "bg-aiflow-success-surface text-aiflow-success border-aiflow-success-border" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-aiflow-warning-surface text-aiflow-warning border-aiflow-warning-border"}`}
                   >
-                    {statusLabel[run.status] ?? run.status}
+                    {formatRunStatus(run.status)}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-slate-400">
-                  <span className="font-mono tabular-nums">{formatTime(run.createdAt)}</span>
-                  <span className="font-mono tabular-nums">{run.durationMs ?? "—"} ms</span>
-                  <span>
+                <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-muted-foreground">
+                  <span className="aiflow-type-meta font-mono tabular-nums">
+                    {formatTime(run.createdAt)}
+                  </span>
+                  <span className="aiflow-type-meta font-mono tabular-nums">
+                    {run.durationMs ?? "—"} ms
+                  </span>
+                  <span className="aiflow-type-body min-w-0 break-words">
                     {run.triggeredByName ||
                       run.username ||
                       `用户 ${run.triggeredByUserId ?? "—"}`}
@@ -375,60 +616,115 @@ export default function RunCenter({
                 </div>
               </button>
             ))}
-            {!runs.isFetching && !(runs.data ?? []).length && (
-              <p className="p-6 text-center text-sm text-slate-400">
+            {!runs.isFetching && !workflowRuns.length && (
+              <p className="aiflow-type-body p-6 text-center text-muted-foreground">
                 当前筛选条件下尚无运行记录。
               </p>
             )}
           </div>
+          <div className="aiflow-type-control flex flex-col gap-2 border-t border-border px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <span aria-live="polite">
+              第 {historyCursorStack.length} 页 · 本页 {workflowRuns.length} 条
+            </span>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-11 flex-1 lg:h-9 lg:flex-none"
+                disabled={historyCursorStack.length <= 1 || runs.isFetching}
+                onClick={() =>
+                  setHistoryNavigation({
+                    filterKey: historyFilterKey,
+                    cursors: historyCursorStack.slice(0, -1),
+                  })
+                }
+              >
+                较新记录
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-11 flex-1 lg:h-9 lg:flex-none"
+                disabled={!runs.data?.nextCursor || runs.isFetching}
+                onClick={() => {
+                  const nextCursor = runs.data?.nextCursor;
+                  if (nextCursor)
+                    setHistoryNavigation({
+                      filterKey: historyFilterKey,
+                      cursors: [...historyCursorStack, nextCursor],
+                    });
+                }}
+              >
+                更早记录
+              </Button>
+            </div>
+          </div>
         </section>
-        {selectedRun && (
-          <section className="min-h-80 rounded-lg border border-slate-200 bg-white p-5">
+        {hasSelectedRun && (
+          <section
+            ref={runDetailRef}
+            data-run-detail-panel
+            className="min-w-0 scroll-mt-4 rounded-lg border border-border bg-card p-4 sm:p-5"
+          >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs font-bold tracking-[.18em] text-slate-400">
-                  RUN {selectedRun.id.slice(0, 8)}
+                <p className="aiflow-type-meta font-bold tracking-[.18em] text-muted-foreground">
+                  RUN {(selectedRunId ?? runDetail?.id ?? "").slice(0, 8)}
                 </p>
-                <h3 className="mt-1 font-semibold">
-                  {selectedRun.status === "success" ? "运行成功" : "运行详情"}
+                <h3 className="aiflow-type-section-title mt-1 font-semibold">
+                  {runDetail?.status === "success" ? "运行成功" : "运行详情"}
                 </h3>
               </div>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <span className="text-xs text-slate-400">
-                    {selectedRun.durationMs ?? "—"} ms
-                  </span>
-                  {["queued", "waiting", "blocked"].includes(
-                    String(selectedRun.status)
+              <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
+                <span className="aiflow-type-meta text-muted-foreground">
+                  {runDetail?.durationMs ?? "—"} ms
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="aiflow-type-control min-h-11 lg:min-h-9"
+                  onClick={onClearSelection}
+                >
+                  <ArrowLeft size={14} aria-hidden="true" />
+                  返回运行记录
+                </Button>
+                {runDetail &&
+                  ["queued", "waiting", "blocked"].includes(
+                    String(runDetail.status)
                   ) && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 text-xs text-blue-700"
+                      className="aiflow-type-control h-11 text-aiflow-info lg:h-9"
                       disabled={controlPending}
                       onClick={() => {
-                        if (selectedRun.status === "blocked") {
-                          resumeRun.mutate({ runId: selectedRun.id });
+                        if (runDetail.status === "blocked") {
+                          resumeRun.mutate({ runId: runDetail.id });
                         } else if (
                           window.confirm(
                             "确定暂停这次流程运行吗？系统只会在已持久化 Checkpoint 边界暂停。"
                           )
                         ) {
-                          pauseRun.mutate({ runId: selectedRun.id });
+                          pauseRun.mutate({ runId: runDetail.id });
                         }
                       }}
                     >
-                      {selectedRun.status === "blocked" ? "恢复运行" : "暂停运行"}
+                      {runDetail.status === "blocked" ? "恢复运行" : "暂停运行"}
                     </Button>
                   )}
-                  {["queued", "running", "waiting", "blocked"].includes(
-                    String(selectedRun.status)
+                {runDetail &&
+                  ["queued", "running", "waiting", "blocked"].includes(
+                    String(runDetail.status)
                   ) && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 text-xs text-amber-700"
+                      className="aiflow-type-control h-11 text-aiflow-warning lg:h-9"
                       disabled={controlPending}
                       onClick={() => {
                         if (
@@ -436,20 +732,21 @@ export default function RunCenter({
                             "确定取消这次流程运行吗？取消后将终止排队、节点租约和未完成人工任务。"
                           )
                         )
-                          cancelRun.mutate({ runId: selectedRun.id });
+                          cancelRun.mutate({ runId: runDetail.id });
                       }}
                     >
                       取消运行
                     </Button>
                   )}
-                  {["queued", "running", "waiting", "blocked"].includes(
-                    String(selectedRun.status)
+                {runDetail &&
+                  ["queued", "running", "waiting", "blocked"].includes(
+                    String(runDetail.status)
                   ) && (
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 text-xs text-red-700"
+                      className="aiflow-type-control h-11 text-red-700 lg:h-9"
                       disabled={controlPending}
                       onClick={() => {
                         const reason = window.prompt(
@@ -458,7 +755,7 @@ export default function RunCenter({
                         );
                         if (reason?.trim())
                           terminateRun.mutate({
-                            runId: selectedRun.id,
+                            runId: runDetail.id,
                             reason: reason.trim(),
                           });
                       }}
@@ -466,45 +763,74 @@ export default function RunCenter({
                       终止运行
                     </Button>
                   )}
+              </div>
+            </div>
+            {selectedRunLoading && !selectedRun ? (
+              <div
+                role="status"
+                className="aiflow-type-body mt-5 grid min-h-32 place-items-center text-muted-foreground"
+              >
+                正在读取运行节点详情…
+              </div>
+            ) : selectedRunError && !selectedRun ? (
+              <div
+                role="alert"
+                className="aiflow-type-body mt-5 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-aiflow-danger"
+              >
+                <p>运行详情暂时无法读取。请重试，或返回运行记录列表。</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11 lg:min-h-9"
+                    onClick={onRetrySelection}
+                  >
+                    <RotateCcw size={14} aria-hidden="true" /> 重试
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="min-h-11 lg:min-h-9"
+                    onClick={onClearSelection}
+                  >
+                    返回运行记录
+                  </Button>
                 </div>
               </div>
+            ) : (
               <div className="mt-5 grid gap-3">
-                {selectedRun.nodeRuns?.map((node: any) => (
+                {runDetail?.nodeRuns?.map((node: any) => (
                   <details
                     key={node.id}
-                    className="rounded border border-slate-200 bg-slate-50 p-3"
+                    className="min-w-0 rounded border border-border bg-muted p-3"
                   >
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm">
-                      <span className="flex items-center gap-2">
+                    <summary className="aiflow-type-body flex min-w-0 cursor-pointer list-none items-center justify-between gap-3">
+                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                         <span
                           className={`h-2 w-2 rounded-full ${node.status === "success" ? "bg-emerald-500" : node.status === "failed" ? "bg-red-500" : "bg-slate-400"}`}
                         />
-                        {node.nodeName}
-                        <code className="text-[10px] text-slate-400">
+                        <span className="min-w-0 break-words">
+                          {node.nodeName}
+                        </span>
+                        <code className="aiflow-type-code min-w-0 max-w-full break-words text-muted-foreground [overflow-wrap:anywhere]">
                           {node.nodeType}
                         </code>
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="aiflow-type-meta shrink-0 text-muted-foreground">
                         {node.durationMs ?? "—"} ms
                       </span>
                     </summary>
-                    <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 text-xs">
-                      <LogBlock
-                        title="输入"
-                        value={decodeJson(node.inputJson)}
-                      />
-                      <LogBlock
-                        title="输出"
-                        value={decodeJson(node.outputJson)}
-                      />
-                      <LogBlock
-                        title="错误"
-                        value={decodeJson(node.errorJson)}
-                      />
+                    <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
+                      <RunPayloadDetails title="输入" value={node.inputJson} />
+                      <RunPayloadDetails title="输出" value={node.outputJson} />
+                      <RunPayloadDetails title="错误" value={node.errorJson} />
                     </div>
                   </details>
                 ))}
               </div>
+            )}
           </section>
         )}
       </div>
@@ -517,26 +843,34 @@ function MetricCard({
   value,
   icon: Icon,
   tone,
+  fullWidthOnMobile = false,
 }: {
   label: string;
   value: string | number;
   icon: typeof BarChart3;
   tone: "blue" | "emerald" | "red" | "amber" | "slate";
+  fullWidthOnMobile?: boolean;
 }) {
   const tones = {
-    blue: "border-blue-100 bg-blue-50 text-blue-700",
-    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    blue: "border-aiflow-info-border bg-aiflow-info-surface text-aiflow-info",
+    emerald:
+      "border-aiflow-success-border bg-aiflow-success-surface text-aiflow-success",
     red: "border-red-100 bg-red-50 text-red-700",
-    amber: "border-amber-100 bg-amber-50 text-amber-700",
-    slate: "border-slate-200 bg-slate-50 text-slate-700",
+    amber:
+      "border-aiflow-warning-border bg-aiflow-warning-surface text-aiflow-warning",
+    slate: "border-border bg-muted text-foreground",
   };
   return (
-    <div className={`rounded-lg border p-4 ${tones[tone]}`}>
-      <div className="flex items-center justify-between text-xs font-medium">
-        <span>{label}</span>
-        <Icon size={15} />
+    <div
+      className={`min-w-0 rounded-lg border p-2.5 sm:p-4 ${fullWidthOnMobile ? "col-span-2 sm:col-span-1" : ""} ${tones[tone]}`}
+    >
+      <div className="aiflow-type-body flex items-center justify-between gap-1 font-medium">
+        <span className="min-w-0 break-words">{label}</span>
+        <Icon className="shrink-0" size={14} />
       </div>
-      <p className="mt-2 text-xl font-bold">{value}</p>
+      <p className="aiflow-type-display min-w-0 break-words font-bold tabular-nums mt-1 sm:mt-2">
+        {value}
+      </p>
     </div>
   );
 }

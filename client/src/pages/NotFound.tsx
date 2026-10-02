@@ -12,7 +12,7 @@ export default function NotFound() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-      <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+      <Card className="w-full max-w-lg mx-4 shadow-lg border-0 bg-card/80 backdrop-blur-sm">
         <CardContent className="pt-8 pb-8 text-center">
           <div className="flex justify-center mb-6">
             <div className="relative">
@@ -21,13 +21,15 @@ export default function NotFound() {
             </div>
           </div>
 
-          <h1 className="text-4xl font-bold text-slate-900 mb-2">404</h1>
+          <h1 className="aiflow-type-display mb-2 font-bold text-foreground">
+            404
+          </h1>
 
-          <h2 className="text-xl font-semibold text-slate-700 mb-4">
+          <h2 className="aiflow-type-page-title mb-4 font-semibold text-foreground">
             Page Not Found
           </h2>
 
-          <p className="text-slate-600 mb-8 leading-relaxed">
+          <p className="aiflow-type-body mb-8 text-muted-foreground">
             Sorry, the page you are looking for doesn't exist.
             <br />
             It may have been moved or deleted.

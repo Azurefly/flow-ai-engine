@@ -41,7 +41,8 @@ const manualDefinition: Definition = {
       position: { x: 200, y: 0 },
       config: {
         instruction: "核验申请资料",
-        assigneeUserId: "{{input.assigneeUserId}}",
+        assigneeMode: "form_user",
+        assigneeFormField: "input.assigneeUserId",
       },
     },
     {
@@ -81,6 +82,14 @@ describe("P1 人工任务与服务端续跑", () => {
       );
       await pool.query(
         "DELETE FROM workflow_task WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
+        [projectId]
+      );
+      await pool.query(
+        "DELETE FROM workflow_participant_state WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
+        [projectId]
+      );
+      await pool.query(
+        "DELETE FROM workflow_task_group WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
         [projectId]
       );
       await pool.query(
@@ -217,10 +226,13 @@ describe("P1 人工任务与服务端续跑", () => {
       });
       await updateWorkflow(workflowId, owner, { publish: true });
 
-      const waiting: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
-        workflowId,
-        input: { applicant: "张三", assigneeUserId: operator.id },
-      }));
+      const waiting: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(owner).workflow.run({
+          workflowId,
+          input: { applicant: "张三", assigneeUserId: operator.id },
+        })
+      );
       expect(waiting).toMatchObject({ status: "waiting" });
       const todo = await callerFor(operator).task.list({ view: "todo" });
       expect(todo).toHaveLength(1);
@@ -229,6 +241,24 @@ describe("P1 人工任务与服务端续跑", () => {
         nodeName: "人工审批",
         status: "pending",
         assignedUserId: operator.id,
+      });
+      const ownerTask: any = await callerFor(owner).task.get({
+        taskId: waiting.taskId,
+      });
+      expect(ownerTask).toMatchObject({
+        status: "pending",
+        assignedUserId: operator.id,
+        canAct: false,
+        canViewRun: true,
+      });
+      const operatorTask: any = await callerFor(operator).task.get({
+        taskId: waiting.taskId,
+      });
+      expect(operatorTask).toMatchObject({
+        status: "pending",
+        assignedUserId: operator.id,
+        canAct: true,
+        canViewRun: true,
       });
       await expect(
         callerFor(outsider).task.get({ taskId: waiting.taskId })
@@ -269,9 +299,9 @@ describe("P1 人工任务与服务端续跑", () => {
       const targetState = participantStates.find(
         state => Number(state.userId) === Number(handoverUser.id)
       );
-      expect(operationIds(previousState?.availableOperationsJson)).not.toContain(
-        waiting.taskId
-      );
+      expect(
+        operationIds(previousState?.availableOperationsJson)
+      ).not.toContain(waiting.taskId);
       expect(targetState).toMatchObject({ sourceNodeId: "operate" });
       expect(operationIds(targetState?.availableOperationsJson)).toContain(
         waiting.taskId
@@ -309,7 +339,9 @@ describe("P1 人工任务与服务端续跑", () => {
         taskIds: [waiting.taskId],
         result: { decision: "approved", comment: "资料完整" },
       });
-      const batchCompleted: any[] = [await settleWorkflowCommand(pool, batchCompletedRaw[0])];
+      const batchCompleted: any[] = [
+        await settleWorkflowCommand(pool, batchCompletedRaw[0]),
+      ];
       expect(batchCompleted).toMatchObject([
         {
           taskId: waiting.taskId,
@@ -361,14 +393,20 @@ describe("P1 人工任务与服务端续跑", () => {
         ])
       );
 
-      const rejectedWaiting: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
-        workflowId,
-        input: { applicant: "李四", assigneeUserId: operator.id },
-      }));
-      const rejected: any = await settleWorkflowCommand(pool, await callerFor(operator).task.execute({
-        taskId: rejectedWaiting.taskId,
-        result: { decision: "rejected", comment: "资料不完整" },
-      }));
+      const rejectedWaiting: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(owner).workflow.run({
+          workflowId,
+          input: { applicant: "李四", assigneeUserId: operator.id },
+        })
+      );
+      const rejected: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(operator).task.execute({
+          taskId: rejectedWaiting.taskId,
+          result: { decision: "rejected", comment: "资料不完整" },
+        })
+      );
       expect(rejected).toMatchObject({
         status: "cancelled",
         output: { decision: "rejected" },

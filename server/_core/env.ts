@@ -14,13 +14,39 @@ export const ENV = {
   llmModelPricingJson: process.env.LLM_MODEL_PRICING_JSON ?? "",
 };
 
+export function getJwtSecretConfigurationError(
+  jwtSecret: string | undefined,
+  bootstrapAdminPassword: string | undefined
+) {
+  if (!jwtSecret) return "JWT_SECRET is required";
+  if (Buffer.byteLength(jwtSecret, "utf8") < 32) {
+    return "JWT_SECRET must contain at least 32 bytes";
+  }
+  if (jwtSecret === bootstrapAdminPassword) {
+    return "JWT_SECRET must differ from FLOW_BOOTSTRAP_ADMIN_PASSWORD";
+  }
+  return null;
+}
+
 export function validateEnv() {
   const missing: string[] = [];
+  const invalid: string[] = [];
   if (ENV.isProduction) {
-    if (!process.env.JWT_SECRET) missing.push("JWT_SECRET");
+    const jwtSecretError = getJwtSecretConfigurationError(
+      process.env.JWT_SECRET,
+      process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD
+    );
+    if (jwtSecretError === "JWT_SECRET is required") {
+      missing.push("JWT_SECRET");
+    } else if (jwtSecretError) {
+      invalid.push(jwtSecretError);
+    }
     if (!process.env.DATABASE_URL) missing.push("DATABASE_URL");
   }
   if (missing.length > 0) {
     throw new Error(`[ENV] 生产环境缺少必要环境变量: ${missing.join(", ")}`);
+  }
+  if (invalid.length > 0) {
+    throw new Error(`[ENV] 生产环境密钥配置无效: ${invalid.join(", ")}`);
   }
 }

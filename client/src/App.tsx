@@ -28,16 +28,17 @@ function Router() {
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        switchable={true}
-      >
+      <ThemeProvider defaultTheme="light" switchable={true}>
         <TooltipProvider>
           <Toaster />
           <Suspense
             fallback={
-              <main className="grid min-h-screen place-items-center bg-white text-slate-600">
-                <div role="status" aria-live="polite" className="border border-slate-200 bg-white px-4 py-3 text-sm shadow-sm">
+              <main className="grid min-h-screen place-items-center bg-card text-muted-foreground">
+                <div
+                  role="status"
+                  aria-live="polite"
+                  className="border border-border bg-card px-4 py-3 text-sm shadow-sm"
+                >
                   正在加载流程工作台…
                 </div>
               </main>

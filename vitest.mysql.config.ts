@@ -2,7 +2,9 @@ import { defineConfig } from "vitest/config";
 import path from "node:path";
 
 if (!process.env.DATABASE_URL) {
-  throw new Error("MySQL integration tests require DATABASE_URL; this gate must not be reported as skipped or passed without a real database.");
+  throw new Error(
+    "MySQL integration tests require DATABASE_URL; this gate must not be reported as skipped or passed without a real database."
+  );
 }
 
 const root = path.resolve(import.meta.dirname);
@@ -18,6 +20,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Tests change shared system settings and explicitly drain the same durable queue.
+    // Separate files must not mutate those global contracts concurrently.
+    fileParallelism: false,
     include: ["server/**/*.integration.test.ts"],
     exclude: [
       "server/llm-runtime.integration.test.ts",

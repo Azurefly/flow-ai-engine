@@ -53,8 +53,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
@@ -74,6 +72,7 @@ import {
   validateNodeConfig,
 } from "@shared/workflow-node-contract";
 import { isFlowNodeAllowed } from "@shared/flow-profile-contract";
+import { matchesWorkflowDefinitionSnapshot } from "@shared/workflow-publish";
 import {
   hasStateInnateOperation,
   isConfigRecord,
@@ -291,10 +290,13 @@ function FlowNodeCard({ data, selected }: NodeProps) {
       : {};
   return (
     <div
-      className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-white px-4 py-3.5 shadow-[0_4px_16px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] transition-all ${selected ? "-translate-y-0.5 ring-3 ring-blue-500/30 border-blue-500 shadow-[0_12px_28px_rgba(37,99,235,0.18)]" : "hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.10)]"}`}
+      className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-card px-4 py-3.5 shadow-[0_4px_16px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] transition-all ${selected ? "-translate-y-0.5 ring-3 ring-blue-500/30 border-blue-500 shadow-[0_12px_28px_rgba(37,99,235,0.18)]" : "hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.10)]"}`}
       style={{ borderColor: selected ? "#3b82f6" : `${appearance.color}4d` }}
     >
-      <div className="absolute inset-x-0 top-0 h-1 rounded-t-2xl opacity-90" style={{ backgroundColor: appearance.color }} />
+      <div
+        className="absolute inset-x-0 top-0 h-1 rounded-t-2xl opacity-90"
+        style={{ backgroundColor: appearance.color }}
+      />
       {hasTarget && (
         <Handle
           type="target"
@@ -307,10 +309,10 @@ function FlowNodeCard({ data, selected }: NodeProps) {
       <div className="flex items-center gap-3">
         <NodeTypeGlyph icon={appearance.icon} color={appearance.color} />
         <div className="min-w-0 flex-1">
-          <span className="block break-words text-sm font-semibold leading-5 text-slate-800">
+          <span className="block break-words text-sm font-semibold leading-5 text-foreground">
             {nodeData.label}
           </span>
-          <span className="mt-0.5 block truncate text-[10px] font-semibold uppercase tracking-[.14em] text-slate-400">
+          <span className="aiflow-type-meta mt-0.5 block truncate font-semibold uppercase tracking-[.14em] text-muted-foreground">
             {nodeData.kind}
           </span>
         </div>
@@ -326,32 +328,32 @@ function FlowNodeCard({ data, selected }: NodeProps) {
         />
       </div>
       {nodeData.kind === "llm" && (
-        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2.5 text-[10px] font-semibold">
+        <div className="aiflow-type-meta mt-3 flex flex-wrap gap-1.5 border-t border-border pt-2.5 font-semibold">
           <span className="rounded-md bg-indigo-50 px-1.5 py-1 text-indigo-700">
             {String(nodeData.config.model || "自动模型")}
           </span>
-          <span className="rounded-md bg-slate-100 px-1.5 py-1 text-slate-600">
+          <span className="rounded-md bg-muted px-1.5 py-1 text-muted-foreground">
             {String(llmGovernance.dataClassification || "internal")}
           </span>
           {nodeData.config.outputSchema ? (
-            <span className="rounded-md bg-emerald-50 px-1.5 py-1 text-emerald-700">
+            <span className="rounded-md bg-aiflow-success-surface px-1.5 py-1 text-aiflow-success">
               结构化输出
             </span>
           ) : null}
           {llmGovernance.humanReviewRequired === true ? (
-            <span className="rounded-md bg-amber-50 px-1.5 py-1 text-amber-700">
+            <span className="rounded-md bg-aiflow-warning-surface px-1.5 py-1 text-aiflow-warning">
               人工复核
             </span>
           ) : null}
           {Number(llmGovernance.maxCostMicros) > 0 ? (
-            <span className="rounded-md bg-rose-50 px-1.5 py-1 text-rose-700">
+            <span className="rounded-md bg-aiflow-danger-surface px-1.5 py-1 text-aiflow-danger">
               ≤ {Number(llmGovernance.maxCostMicros)} μ
             </span>
           ) : null}
         </div>
       )}
       {routeItems.length > 0 && (
-        <div className="mt-3 grid gap-1.5 border-t border-slate-100 pt-2.5">
+        <div className="mt-3 grid gap-1.5 border-t border-border pt-2.5">
           {routeItems.map((route, index) => {
             const routeName = String(
               route.label ||
@@ -368,16 +370,16 @@ function FlowNodeCard({ data, selected }: NodeProps) {
             return (
               <div
                 key={String(route.handle || route.routerRuleId || index)}
-                className="flex items-center justify-between gap-3 text-[10px]"
+                className="aiflow-type-control flex items-center justify-between gap-3"
               >
                 <span
-                  className="min-w-0 flex-1 truncate rounded-md bg-violet-50 px-1.5 py-1 font-semibold text-violet-700"
+                  className="min-w-0 flex-1 truncate rounded-md bg-aiflow-special-surface px-1.5 py-1 font-semibold text-aiflow-special"
                   title={routeName}
                 >
                   {routeName}
                 </span>
                 <span
-                  className="max-w-24 truncate text-slate-400"
+                  className="max-w-24 truncate text-muted-foreground"
                   title={routeTarget}
                 >
                   → {routeTarget}
@@ -482,9 +484,12 @@ function toDefinition(
   edges: Edge[],
   base: Definition
 ): Definition {
+  const baseNodes = new Map(base.nodes.map(node => [node.id, node]));
+  const baseEdges = new Map(base.edges.map(edge => [edge.id, edge]));
   return {
     ...base,
     nodes: nodes.map(node => ({
+      ...baseNodes.get(node.id),
       id: node.id,
       type: (node.data as FlowNodeData).kind,
       name: String((node.data as FlowNodeData).label ?? "未命名节点"),
@@ -492,6 +497,7 @@ function toDefinition(
       config: (node.data as FlowNodeData).config ?? {},
     })),
     edges: edges.map(edge => ({
+      ...baseEdges.get(edge.id),
       id: edge.id,
       sourceNodeId: edge.source,
       sourceHandle: edge.sourceHandle ?? undefined,
@@ -825,21 +831,22 @@ function ConfigFieldEditor({
   onChange: (value: unknown) => void;
 }) {
   const effectiveValue = value ?? fallback;
-  // Keep blur-committed drafts without remounting the input on every update.
+  // Keep a local editing draft while committing accepted text on every input.
   // The parent key still resets drafts when switching nodes or fields.
-  const scalarValue = effectiveValue != null && typeof effectiveValue !== "object"
-    ? String(effectiveValue)
-    : "";
+  const scalarValue =
+    effectiveValue != null && typeof effectiveValue !== "object"
+      ? String(effectiveValue)
+      : "";
   const [draft, setDraft] = useState(scalarValue);
   useEffect(() => setDraft(scalarValue), [scalarValue]);
   const label = (
-    <span className="flex items-center gap-1 text-xs font-semibold text-slate-700">
+    <span className="aiflow-type-control flex items-center gap-1 font-semibold text-foreground">
       {field.required && <i className="not-italic text-red-500">*</i>}
       {field.label}
     </span>
   );
   const inputClass =
-    "h-9 w-full rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400";
+    "aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground min-[1024px]:h-9 min-[1024px]:min-h-0";
   if (runtimeOptions) {
     const current = String(effectiveValue ?? "");
     const currentAvailable = runtimeOptions.some(
@@ -872,7 +879,7 @@ function ConfigFieldEditor({
     return (
       <label className="grid gap-1.5">
         {label}
-        <span className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700">
+        <span className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm text-foreground">
           <input
             type="checkbox"
             checked={Boolean(effectiveValue)}
@@ -908,11 +915,13 @@ function ConfigFieldEditor({
       <label className="grid gap-1.5">
         {label}
         <textarea
-          className="min-h-20 w-full rounded-md border border-slate-200 bg-white p-2.5 text-sm text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50 disabled:text-slate-400"
+          className="min-h-20 w-full rounded-md border border-border bg-card p-2.5 text-sm text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground"
           value={draft}
-          onChange={event => setDraft(event.target.value)}
+          onChange={event => {
+            setDraft(event.target.value);
+            onChange(event.target.value);
+          }}
           disabled={disabled}
-          onBlur={event => onChange(event.target.value)}
         />
         <FieldHelp help={field.help} />
       </label>
@@ -947,7 +956,13 @@ function ConfigFieldEditor({
           type="number"
           className={inputClass}
           value={draft}
-          onChange={event => setDraft(event.target.value)}
+          onChange={event => {
+            setDraft(event.target.value);
+            if (event.target.validity.valid)
+              onChange(
+                event.target.value === "" ? "" : Number(event.target.value)
+              );
+          }}
           disabled={disabled}
           onBlur={event =>
             onChange(
@@ -964,9 +979,11 @@ function ConfigFieldEditor({
       <input
         className={inputClass}
         value={draft}
-        onChange={event => setDraft(event.target.value)}
+        onChange={event => {
+          setDraft(event.target.value);
+          onChange(event.target.value);
+        }}
         disabled={disabled}
-        onBlur={event => onChange(event.target.value)}
       />
       <FieldHelp help={field.help} />
     </label>
@@ -1042,7 +1059,11 @@ function StructuredPropertyNameInput({
           } else if (next !== record) onChange(next);
         }}
       />
-      {error && <span role="alert" className="text-[11px] text-red-600">{error}</span>}
+      {error && (
+        <span role="alert" className="aiflow-type-body text-red-600">
+          {error}
+        </span>
+      )}
     </span>
   );
 }
@@ -1057,10 +1078,10 @@ function NestedStructuredValueEditor({
   onChange: (value: unknown) => void;
 }) {
   const inputClass =
-    "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50";
+    "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
   if (Array.isArray(value)) {
     return (
-      <div className="grid min-w-0 gap-2 rounded border border-slate-200 bg-white p-2">
+      <div className="grid min-w-0 gap-2 rounded border border-border bg-card p-2">
         {value.map((item, index) => (
           <div
             key={index}
@@ -1079,7 +1100,7 @@ function NestedStructuredValueEditor({
             />
             <button
               type="button"
-              className="rounded px-1 text-slate-400 hover:text-red-600"
+              className="rounded px-1 text-muted-foreground hover:text-red-600"
               disabled={disabled}
               onClick={() =>
                 onChange(value.filter((_, itemIndex) => itemIndex !== index))
@@ -1095,7 +1116,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px]"
+            className="aiflow-type-control h-7"
             disabled={disabled}
             onClick={() => onChange([...value, ""])}
           >
@@ -1106,7 +1127,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px]"
+            className="aiflow-type-control h-7"
             disabled={disabled}
             onClick={() => onChange([...value, {}])}
           >
@@ -1117,7 +1138,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px]"
+            className="aiflow-type-control h-7"
             disabled={disabled}
             onClick={() => onChange([...value, []])}
           >
@@ -1134,7 +1155,7 @@ function NestedStructuredValueEditor({
     const updateEntries = (next: Array<[string, unknown]>) =>
       onChange(Object.fromEntries(next.filter(([key]) => key.trim())));
     return (
-      <div className="grid min-w-0 gap-2 rounded border border-slate-200 bg-white p-2">
+      <div className="grid min-w-0 gap-2 rounded border border-border bg-card p-2">
         {entries.map(([key, entryValue], index) => (
           <div
             key={key + "-" + index}
@@ -1170,7 +1191,7 @@ function NestedStructuredValueEditor({
             />
             <button
               type="button"
-              className="rounded px-1 text-slate-400 hover:text-red-600"
+              className="rounded px-1 text-muted-foreground hover:text-red-600"
               disabled={disabled}
               onClick={() =>
                 updateEntries(
@@ -1188,7 +1209,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px]"
+            className="aiflow-type-control h-7"
             disabled={disabled}
             onClick={() => onChange({ ...record, [nextObjectKey(record)]: "" })}
           >
@@ -1199,7 +1220,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px]"
+            className="aiflow-type-control h-7"
             disabled={disabled}
             onClick={() => onChange({ ...record, [nextObjectKey(record)]: {} })}
           >
@@ -1210,7 +1231,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="h-7 text-[11px]"
+            className="aiflow-type-control h-7"
             disabled={disabled}
             onClick={() => onChange({ ...record, [nextObjectKey(record)]: [] })}
           >
@@ -1334,10 +1355,30 @@ const ORIGINAL_OBJECT_FIELD_SPECS: Record<string, OriginalFieldSpec[]> = {
     { key: "code", label: "自动执行代码", kind: "structured" },
   ],
   jdgycz: [
-    { key: "bj", label: "办结状态", kind: "yes-no", help: "当前状态是否作为办结状态。" },
-    { key: "zdbj", label: "自动办结", kind: "yes-no", help: "进入该状态后是否自动办结。" },
-    { key: "tsbjsyzlc", label: "同时办结所有子流程", kind: "yes-no", help: "办结时是否同步关闭所有子流程。" },
-    { key: "cs", label: "抄送通知", kind: "yes-no", help: "流转至该状态时是否发送抄送通知。" },
+    {
+      key: "bj",
+      label: "办结状态",
+      kind: "yes-no",
+      help: "当前状态是否作为办结状态。",
+    },
+    {
+      key: "zdbj",
+      label: "自动办结",
+      kind: "yes-no",
+      help: "进入该状态后是否自动办结。",
+    },
+    {
+      key: "tsbjsyzlc",
+      label: "同时办结所有子流程",
+      kind: "yes-no",
+      help: "办结时是否同步关闭所有子流程。",
+    },
+    {
+      key: "cs",
+      label: "抄送通知",
+      kind: "yes-no",
+      help: "流转至该状态时是否发送抄送通知。",
+    },
   ],
 };
 
@@ -1352,7 +1393,11 @@ const ORIGINAL_LIST_ITEM_SPECS: Record<string, OriginalFieldSpec[]> = {
   ],
   ywcz: [
     { key: "czid", label: "操作 ID", help: "业务操作唯一标识。" },
-    { key: "czmc", label: "操作名称", help: "业务操作不触发流程流转，仅作为功能触发入口。" },
+    {
+      key: "czmc",
+      label: "操作名称",
+      help: "业务操作不触发流程流转，仅作为功能触发入口。",
+    },
   ],
   qxkz: [
     { key: "qxid", label: "权限 ID" },
@@ -1367,11 +1412,16 @@ const ORIGINAL_LIST_ITEM_SPECS: Record<string, OriginalFieldSpec[]> = {
     { key: "bdid", label: "绑定 ID" },
     { key: "bdmc", label: "绑定名称" },
     { key: "bdzr", label: "绑定载入", kind: "structured" },
-    { key: "hqfw", label: "获取范围", kind: "multi-select", options: [
-      { value: "1", label: "人" },
-      { value: "2", label: "部门" },
-      { value: "3", label: "权限部门" },
-    ] },
+    {
+      key: "hqfw",
+      label: "获取范围",
+      kind: "multi-select",
+      options: [
+        { value: "1", label: "人" },
+        { value: "2", label: "部门" },
+        { value: "3", label: "权限部门" },
+      ],
+    },
     { key: "fsfsz", label: "发送方设置", kind: "structured" },
     { key: "jsfsz", label: "接收方设置", kind: "structured" },
     { key: "code", label: "绑定代码", kind: "structured" },
@@ -1394,7 +1444,7 @@ function OriginalFieldControl({
   onChange: (value: unknown) => void;
 }) {
   const inputClass =
-    "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50";
+    "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
   if (spec.kind === "structured")
     return (
       <NestedStructuredValueEditor
@@ -1405,7 +1455,7 @@ function OriginalFieldControl({
     );
   if (spec.kind === "boolean")
     return (
-      <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+      <label className="inline-flex items-center gap-2 text-xs text-foreground">
         <input
           type="checkbox"
           checked={Boolean(value)}
@@ -1445,11 +1495,11 @@ function OriginalFieldControl({
   if (spec.kind === "multi-select") {
     const selected = new Set(Array.isArray(value) ? value.map(String) : []);
     return (
-      <div className="grid gap-1 rounded border border-slate-200 bg-white p-2">
+      <div className="grid gap-1 rounded border border-border bg-card p-2">
         {(spec.options ?? []).map(option => (
           <label
             key={option.value}
-            className="inline-flex items-center gap-2 text-xs font-normal text-slate-700"
+            className="inline-flex items-center gap-2 text-xs font-normal text-foreground"
           >
             <input
               type="checkbox"
@@ -1500,14 +1550,12 @@ function OriginalObjectEditor({
   onChange: (value: unknown) => void;
 }) {
   const specs = ORIGINAL_OBJECT_FIELD_SPECS[fieldKey];
-  const isArrayOfObjects =
-    fieldKey === "jdgycz" && Array.isArray(value);
+  const isArrayOfObjects = fieldKey === "jdgycz" && Array.isArray(value);
   const record = (() => {
     if (isArrayOfObjects) {
       const merged: NodeConfig = {};
       for (const item of value as any[])
-        if (item && typeof item === "object")
-          Object.assign(merged, item);
+        if (item && typeof item === "object") Object.assign(merged, item);
       return merged;
     }
     return value && typeof value === "object" && !Array.isArray(value)
@@ -1544,7 +1592,7 @@ function OriginalObjectEditor({
       {visibleSpecs.map(spec => (
         <label
           key={spec.key}
-          className="grid min-w-0 gap-1 text-[11px] font-medium text-slate-600"
+          className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground"
         >
           <span>{spec.label}</span>
           <OriginalFieldControl
@@ -1554,7 +1602,7 @@ function OriginalObjectEditor({
             onChange={next => emitChange({ ...record, [spec.key]: next })}
           />
           {spec.help && (
-            <span className="font-normal leading-4 text-slate-400">
+            <span className="aiflow-type-body font-normal text-muted-foreground">
               {spec.help}
             </span>
           )}
@@ -1562,7 +1610,7 @@ function OriginalObjectEditor({
       ))}
       {Object.keys(extras).length > 0 && (
         <div className="grid gap-1">
-          <span className="text-[11px] font-medium text-slate-600">
+          <span className="aiflow-type-control font-medium text-muted-foreground">
             原版扩展字段
           </span>
           <NestedStructuredValueEditor
@@ -1649,14 +1697,14 @@ function StructuredValueEditor({
                     code: "",
                   }
                 : field.key === "ywcz"
-                ? { czid: "", czmc: "" }
-                : field.key === "zlcck"
-                  ? { connect: { id: "", text: "", yId: "" }, end: "" }
-                  : "";
+                  ? { czid: "", czmc: "" }
+                  : field.key === "zlcck"
+                    ? { connect: { id: "", text: "", yId: "" }, end: "" }
+                    : "";
   const originalObject = ORIGINAL_OBJECT_FIELD_SPECS[field.key];
   return (
-    <fieldset className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-2.5">
-      <legend className="px-1 text-xs font-semibold text-slate-700">
+    <fieldset className="grid gap-2 rounded-md border border-border bg-muted p-2.5">
+      <legend className="px-1 text-xs font-semibold text-foreground">
         {field.required && <i className="mr-1 not-italic text-red-500">*</i>}
         {field.label}
       </legend>
@@ -1727,7 +1775,7 @@ function StructuredListRow({
   onRemove: () => void;
 }) {
   const inputClass =
-    "h-8 min-w-0 rounded border border-slate-200 bg-white px-2 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50";
+    "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
   const originalSpecs = ORIGINAL_LIST_ITEM_SPECS[fieldKey];
   if (originalSpecs) {
     const record =
@@ -1739,9 +1787,9 @@ function StructuredListRow({
       Object.entries(record).filter(([key]) => !knownKeys.has(key))
     );
     return (
-      <div className="grid gap-2 rounded border border-slate-200 bg-white p-2">
+      <div className="grid gap-2 rounded border border-border bg-card p-2">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-semibold text-slate-600">
+          <span className="aiflow-type-control font-semibold text-muted-foreground">
             原版
             {fieldKey === "lysz"
               ? "路由"
@@ -1756,7 +1804,7 @@ function StructuredListRow({
           </span>
           <button
             type="button"
-            className="text-slate-400 hover:text-red-600"
+            className="text-muted-foreground hover:text-red-600"
             disabled={disabled}
             onClick={onRemove}
             aria-label="删除原版配置项"
@@ -1767,7 +1815,7 @@ function StructuredListRow({
         {originalSpecs.map(spec => (
           <label
             key={spec.key}
-            className="grid min-w-0 gap-1 text-[11px] font-medium text-slate-600"
+            className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground"
           >
             <span>{spec.label}</span>
             <OriginalFieldControl
@@ -1780,7 +1828,7 @@ function StructuredListRow({
         ))}
         {Object.keys(extras).length > 0 && (
           <div className="grid gap-1">
-            <span className="text-[11px] font-medium text-slate-600">
+            <span className="aiflow-type-control font-medium text-muted-foreground">
               原版扩展字段
             </span>
             <NestedStructuredValueEditor
@@ -1815,14 +1863,14 @@ function StructuredListRow({
       ? route.roleKeys.map(String)
       : [];
     return (
-      <div className="grid min-w-0 gap-3 rounded-lg border border-violet-100 bg-white p-3 shadow-sm">
+      <div className="grid min-w-0 gap-3 rounded-lg border border-aiflow-special-border bg-card p-3 shadow-sm">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-violet-700">
+          <span className="text-xs font-semibold text-aiflow-special">
             {String(route.label ?? "新路径")}
           </span>
           <button
             type="button"
-            className="grid min-h-11 min-w-11 place-items-center text-slate-400 hover:text-red-600"
+            className="grid min-h-11 min-w-11 place-items-center text-muted-foreground hover:text-red-600"
             disabled={disabled}
             onClick={onRemove}
             aria-label="删除路由规则"
@@ -1831,7 +1879,7 @@ function StructuredListRow({
           </button>
         </div>
         <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-          <label className="grid min-w-0 gap-1 text-[11px] text-slate-500">
+          <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
             路径句柄
             <input
               className={inputClass}
@@ -1843,7 +1891,7 @@ function StructuredListRow({
               }
             />
           </label>
-          <label className="grid min-w-0 gap-1 text-[11px] text-slate-500">
+          <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
             路径名称
             <input
               className={inputClass}
@@ -1856,9 +1904,11 @@ function StructuredListRow({
             />
           </label>
         </div>
-        <label className="grid min-w-0 gap-1 text-[11px] text-slate-500">
+        <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
           目标节点
-          <span className="flex min-h-11 items-center rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-700">
+          <span
+            className={`flex min-h-11 items-center rounded border border-border bg-muted px-2 ${(route.targetNodeId ?? route.target) ? "aiflow-type-control" : "aiflow-type-body"} text-foreground`}
+          >
             {String(
               route.targetNodeId ??
                 route.target ??
@@ -1866,7 +1916,7 @@ function StructuredListRow({
             )}
           </span>
         </label>
-        <label className="grid min-w-0 gap-1 text-[11px] text-slate-500">
+        <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
           流程身份（逗号分隔）
           <input
             className={inputClass}
@@ -1884,11 +1934,11 @@ function StructuredListRow({
             }
           />
         </label>
-        <details className="rounded border border-slate-100 bg-slate-50">
-          <summary className="cursor-pointer px-2 py-3 text-[11px] font-medium text-slate-600">
+        <details className="rounded border border-border bg-muted">
+          <summary className="aiflow-type-control cursor-pointer px-2 py-3 font-medium text-muted-foreground">
             附加数据条件
           </summary>
-          <div className="grid min-w-0 gap-2 border-t border-slate-100 p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
+          <div className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
             <input
               className={inputClass}
               placeholder="左值"
@@ -1943,7 +1993,7 @@ function StructuredListRow({
     const itemField =
       item && typeof item === "object" ? (item as NodeConfig) : {};
     return (
-      <div className="grid grid-cols-[1fr_1fr_100px_auto_auto] items-center gap-2 rounded border border-slate-200 bg-white p-2">
+      <div className="grid grid-cols-[1fr_1fr_100px_auto_auto] items-center gap-2 rounded border border-border bg-card p-2">
         <input
           className={inputClass}
           placeholder="字段标识"
@@ -1975,7 +2025,7 @@ function StructuredListRow({
           <option value="date">日期</option>
           <option value="select">选项</option>
         </select>
-        <label className="flex items-center gap-1 text-[11px] text-slate-600">
+        <label className="aiflow-type-control flex items-center gap-1 text-muted-foreground">
           <input
             type="checkbox"
             checked={Boolean(itemField.required)}
@@ -1988,7 +2038,7 @@ function StructuredListRow({
         </label>
         <button
           type="button"
-          className="text-slate-400 hover:text-red-600"
+          className="text-muted-foreground hover:text-red-600"
           disabled={disabled}
           onClick={onRemove}
           aria-label="删除表单字段"
@@ -2023,7 +2073,7 @@ function StructuredListRow({
         />
         <button
           type="button"
-          className="text-slate-400 hover:text-red-600"
+          className="text-muted-foreground hover:text-red-600"
           disabled={disabled}
           onClick={onRemove}
           aria-label={`删除${label}`}
@@ -2043,7 +2093,7 @@ function StructuredListRow({
       />
       <button
         type="button"
-        className="text-slate-400 hover:text-red-600"
+        className="text-muted-foreground hover:text-red-600"
         disabled={disabled}
         onClick={onRemove}
         aria-label="删除列表项"
@@ -2055,7 +2105,7 @@ function StructuredListRow({
 }
 
 function FieldHelp({ help }: { help: string }) {
-  return <p className="text-[11px] leading-4 text-slate-500">{help}</p>;
+  return <p className="aiflow-type-body text-muted-foreground">{help}</p>;
 }
 
 type ConfigField = FlowNodeDefinition["fields"][number];
@@ -2065,7 +2115,7 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   state: [
     {
       label: "基础状态",
-      description: "状态代号用于审计与流转；状态名称是当前办理人的人员级状态。",
+      description: "配置状态代号、业务显示名称和类型。",
       keys: ["nodeDh", "jdmc", "stateType", "stateColor"],
     },
     {
@@ -2223,6 +2273,7 @@ export default function WorkflowCanvas({
   flowType = "state",
   definition,
   readOnly = false,
+  compactReadOnlyPreview = false,
   onDefinitionChange,
   templates = [],
   subflows = [],
@@ -2237,6 +2288,7 @@ export default function WorkflowCanvas({
   flowType?: FlowType;
   definition?: Definition | null;
   readOnly?: boolean;
+  compactReadOnlyPreview?: boolean;
   onDefinitionChange?: (definition: Definition) => void;
   templates?: ReuseTemplate[];
   subflows?: ReuseSubflow[];
@@ -2260,6 +2312,7 @@ export default function WorkflowCanvas({
   const [deletedEdge, setDeletedEdge] = useState<Edge | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null);
   const [inspectorMode, setInspectorMode] = useState<InspectorMode>("normal");
+  const previousInspectorExpandedRef = useRef(false);
   const [inspectorLocked, setInspectorLocked] = useState(false);
   const [inspectorTab, setInspectorTab] = useState("");
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance<
@@ -2267,13 +2320,16 @@ export default function WorkflowCanvas({
     Edge
   > | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [nodePaletteSearch, setNodePaletteSearch] = useState("");
+  const [reuseSearch, setReuseSearch] = useState("");
+  const lastInitialFitKeyRef = useRef<string | null>(null);
   const participantPreview = trpc.workflow.previewParticipants.useMutation();
   const canvasRegionRef = useRef<HTMLDivElement>(null);
+  const flowViewportRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<Definition>(initial);
   const appliedDefinitionRef = useRef("");
   const emittedDefinitionRef = useRef("");
   const appliedWorkflowRef = useRef<string | undefined>(undefined);
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestNodesRef = useRef(nodes);
   latestNodesRef.current = nodes;
   const latestEdgesRef = useRef(edges);
@@ -2289,8 +2345,15 @@ export default function WorkflowCanvas({
 
   const pastRef = useRef<HistorySnapshot[]>([]);
   const futureRef = useRef<HistorySnapshot[]>([]);
-  const [historyState, setHistoryState] = useState({ canUndo: false, canRedo: false });
-  const dragStartSnapshotRef = useRef<{ id: string; x: number; y: number } | null>(null);
+  const [historyState, setHistoryState] = useState({
+    canUndo: false,
+    canRedo: false,
+  });
+  const dragStartSnapshotRef = useRef<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const pushHistory = useCallback(
     (currentNodes?: CanvasNode[], currentEdges?: Edge[]) => {
@@ -2349,14 +2412,21 @@ export default function WorkflowCanvas({
   }, [readOnly, setEdges, setNodes]);
 
   const onNodeDragStart = useCallback((_event: any, node: CanvasNode) => {
-    dragStartSnapshotRef.current = { id: node.id, x: node.position.x, y: node.position.y };
+    dragStartSnapshotRef.current = {
+      id: node.id,
+      x: node.position.x,
+      y: node.position.y,
+    };
   }, []);
 
   const onNodeDragStop = useCallback(
     (_event: any, node: CanvasNode) => {
       if (!dragStartSnapshotRef.current) return;
       const { x, y } = dragStartSnapshotRef.current;
-      if (Math.abs(node.position.x - x) > 2 || Math.abs(node.position.y - y) > 2) {
+      if (
+        Math.abs(node.position.x - x) > 2 ||
+        Math.abs(node.position.y - y) > 2
+      ) {
         const priorNodes = latestNodesRef.current.map(n =>
           n.id === node.id ? { ...n, position: { x, y } } : n
         );
@@ -2394,25 +2464,128 @@ export default function WorkflowCanvas({
   }, [definition, definitionSignature, workflowId, setEdges, setNodes]);
 
   useEffect(() => {
+    if (!reactFlow || (workflowId && !definition)) return;
+    const fitKey = workflowId ?? "__new_workflow__";
+    if (lastInitialFitKeyRef.current === fitKey) return;
+
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        void reactFlow
+          .fitView({
+            padding: compactReadOnlyPreview ? 0.12 : 0.22,
+            minZoom: 0.1,
+            maxZoom: 1.25,
+            duration: 0,
+          })
+          .then(applied => {
+            if (applied) lastInitialFitKeyRef.current = fitKey;
+          });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [
+    compactReadOnlyPreview,
+    definition,
+    definitionSignature,
+    reactFlow,
+    workflowId,
+  ]);
+
+  const inspectorExpanded = Boolean(selectedId && inspectorMode !== "compact");
+  useEffect(() => {
+    if (!reactFlow) return;
+    const wasExpanded = previousInspectorExpandedRef.current;
+    previousInspectorExpandedRef.current = inspectorExpanded;
+    if (!inspectorExpanded || wasExpanded) return;
+
+    let firstFrame = 0;
+    let secondFrame = 0;
+    firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        void reactFlow.fitView({
+          padding: compactReadOnlyPreview ? 0.12 : 0.22,
+          minZoom: 0.1,
+          maxZoom: 1.25,
+          duration: 180,
+        });
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [compactReadOnlyPreview, inspectorExpanded, reactFlow]);
+
+  useEffect(() => {
+    const viewport = flowViewportRef.current;
+    if (!reactFlow || !viewport || typeof ResizeObserver === "undefined")
+      return;
+
+    const initialRect = viewport.getBoundingClientRect();
+    let previousWidth = initialRect.width;
+    let previousHeight = initialRect.height;
+    let resizeTimer: number | null = null;
+    let firstFrame = 0;
+    let secondFrame = 0;
+    const observer = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect;
+      if (!rect) return;
+      const changed =
+        Math.abs(rect.width - previousWidth) > 2 ||
+        Math.abs(rect.height - previousHeight) > 2;
+      previousWidth = rect.width;
+      previousHeight = rect.height;
+      if (!changed) return;
+
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        firstFrame = window.requestAnimationFrame(() => {
+          secondFrame = window.requestAnimationFrame(() => {
+            void reactFlow.fitView({
+              padding: compactReadOnlyPreview ? 0.12 : 0.22,
+              minZoom: 0.1,
+              maxZoom: 1.25,
+              duration: 180,
+            });
+          });
+        });
+      }, 120);
+    });
+
+    observer.observe(viewport);
+    return () => {
+      observer.disconnect();
+      if (resizeTimer !== null) window.clearTimeout(resizeTimer);
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [compactReadOnlyPreview, reactFlow]);
+
+  useEffect(() => {
     if (!onDefinitionChange || isLayoutAnimatingRef.current) return;
     const next = toDefinition(nodes, edges, baseRef.current);
     const serialized = JSON.stringify(next);
+    if (
+      matchesWorkflowDefinitionSnapshot(
+        JSON.stringify(definition ?? defaultDefinition()),
+        next
+      )
+    ) {
+      emittedDefinitionRef.current = serialized;
+      return;
+    }
     if (emittedDefinitionRef.current === serialized) return;
 
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      emittedDefinitionRef.current = serialized;
-      onDefinitionChange(next);
-    }, 250);
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [edges, nodes, onDefinitionChange]);
+    emittedDefinitionRef.current = serialized;
+    onDefinitionChange(next);
+  }, [definition, edges, nodes, onDefinitionChange]);
 
   useEffect(() => {
     const syncFullscreen = () =>
@@ -2429,7 +2602,8 @@ export default function WorkflowCanvas({
       )?.detail?.nodeId;
       const currentNodes = latestNodesRef.current;
       const next =
-        (requestedNodeId && currentNodes.find(node => node.id === requestedNodeId)) ||
+        (requestedNodeId &&
+          currentNodes.find(node => node.id === requestedNodeId)) ||
         currentNodes.find(node => !["start", "end"].includes(node.data.kind)) ||
         currentNodes[0];
       if (!next) return;
@@ -2532,10 +2706,12 @@ export default function WorkflowCanvas({
                 : undefined;
         const isOperateRejected =
           source?.data.kind === "operate" &&
-          (edge.sourceHandle === "rejected" || operateOutcome?.code === "rejected");
+          (edge.sourceHandle === "rejected" ||
+            operateOutcome?.code === "rejected");
         const isOperateApproved =
           source?.data.kind === "operate" &&
-          (edge.sourceHandle === "approved" || operateOutcome?.code === "approved");
+          (edge.sourceHandle === "approved" ||
+            operateOutcome?.code === "approved");
         const outcomeStroke = isOperateRejected
           ? "#ef4444"
           : isOperateApproved
@@ -2549,16 +2725,31 @@ export default function WorkflowCanvas({
               selected: true,
               interactionWidth: 24,
               labelStyle: {
-                fill: isOperateRejected ? "#dc2626" : isOperateApproved ? "#059669" : "#5b21b6",
-                fontSize: 11,
+                fill: isOperateRejected
+                  ? "#dc2626"
+                  : isOperateApproved
+                    ? "#059669"
+                    : "#5b21b6",
+                fontSize: 14,
                 fontWeight: 600,
               },
-              labelBgStyle: { fill: isOperateRejected ? "#fef2f2" : isOperateApproved ? "#ecfdf5" : "#f5f3ff", fillOpacity: 0.96 },
+              labelBgStyle: {
+                fill: isOperateRejected
+                  ? "#fef2f2"
+                  : isOperateApproved
+                    ? "#ecfdf5"
+                    : "#f5f3ff",
+                fillOpacity: 0.96,
+              },
               labelBgPadding: [5, 3] as [number, number],
               labelBgBorderRadius: 6,
               style: {
                 ...edge.style,
-                stroke: isOperateRejected ? "#dc2626" : isOperateApproved ? "#059669" : "#4f46e5",
+                stroke: isOperateRejected
+                  ? "#dc2626"
+                  : isOperateApproved
+                    ? "#059669"
+                    : "#4f46e5",
                 strokeWidth: 3,
               },
             }
@@ -2568,14 +2759,20 @@ export default function WorkflowCanvas({
               selected: false,
               interactionWidth: 24,
               labelStyle: {
-                fill: isOperateRejected ? "#ef4444" : isOperateApproved ? "#059669" : "#6d28d9",
-                fontSize: 11,
+                fill: isOperateRejected
+                  ? "#ef4444"
+                  : isOperateApproved
+                    ? "#059669"
+                    : "#6d28d9",
+                fontSize: 14,
                 fontWeight: 600,
               },
               labelBgStyle: { fill: "#ffffff", fillOpacity: 0.94 },
               labelBgPadding: [5, 3] as [number, number],
               labelBgBorderRadius: 6,
-              style: outcomeStroke ? { ...edge.style, stroke: outcomeStroke } : edge.style,
+              style: outcomeStroke
+                ? { ...edge.style, stroke: outcomeStroke }
+                : edge.style,
             };
       }),
     [edges, nodeMap, selectedEdgeId]
@@ -3120,7 +3317,7 @@ export default function WorkflowCanvas({
     const cards = nodes
       .map(
         node =>
-          `<g><rect x="${node.position.x}" y="${node.position.y}" width="164" height="72" rx="10" fill="#ffffff" stroke="${colorFor(node.data.kind)}" stroke-width="2"/><text x="${node.position.x + 14}" y="${node.position.y + 30}" fill="#0f172a" font-size="14" font-family="Arial, sans-serif" font-weight="700">${escapeXml(node.data.label)}</text><text x="${node.position.x + 14}" y="${node.position.y + 52}" fill="#64748b" font-size="10" font-family="Arial, sans-serif">${escapeXml(node.data.kind.toUpperCase())}</text></g>`
+          `<g><rect x="${node.position.x}" y="${node.position.y}" width="164" height="72" rx="10" fill="#ffffff" stroke="${colorFor(node.data.kind)}" stroke-width="2"/><text x="${node.position.x + 14}" y="${node.position.y + 30}" fill="#0f172a" font-size="14" font-family="Arial, sans-serif" font-weight="700">${escapeXml(node.data.label)}</text><text x="${node.position.x + 14}" y="${node.position.y + 52}" fill="#64748b" font-size="14" font-family="Arial, sans-serif">${escapeXml(node.data.kind.toUpperCase())}</text></g>`
       )
       .join("");
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs><rect width="100%" height="100%" fill="#f8fafc"/>${lines}${cards}</svg>`;
@@ -3162,10 +3359,18 @@ export default function WorkflowCanvas({
       pushHistory(currentNodes, currentEdges);
       const neatNodes = autoLayoutNodes(currentNodes, currentEdges);
 
-      if (prefersReducedMotion || currentNodes.length > 80 || currentEdges.length > 150) {
+      if (
+        prefersReducedMotion ||
+        currentNodes.length > 80 ||
+        currentEdges.length > 150
+      ) {
         setNodes(neatNodes);
         if (onDefinitionChange) {
-          const nextDef = toDefinition(neatNodes, currentEdges, baseRef.current);
+          const nextDef = toDefinition(
+            neatNodes,
+            currentEdges,
+            baseRef.current
+          );
           onDefinitionChange(nextDef);
         }
         setTimeout(() => {
@@ -3178,11 +3383,16 @@ export default function WorkflowCanvas({
 
       if (layoutRafRef.current) cancelAnimationFrame(layoutRafRef.current);
       isLayoutAnimatingRef.current = true;
-      const startPositions = new Map(currentNodes.map(n => [n.id, { ...n.position }]));
-      const targetPositions = new Map(neatNodes.map(n => [n.id, { ...n.position }]));
+      const startPositions = new Map(
+        currentNodes.map(n => [n.id, { ...n.position }])
+      );
+      const targetPositions = new Map(
+        neatNodes.map(n => [n.id, { ...n.position }])
+      );
       const duration = 280;
       const startTime = performance.now();
-      const easeOutExpo = (t: number) => (t === 1 ? 1 : 1 - Math.pow(2, -10 * t));
+      const easeOutExpo = (t: number) =>
+        t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
 
       const animate = (now: number) => {
         const elapsed = now - startTime;
@@ -3211,7 +3421,11 @@ export default function WorkflowCanvas({
           layoutRafRef.current = null;
           setNodes(neatNodes);
           if (onDefinitionChange) {
-            const nextDef = toDefinition(neatNodes, currentEdges, baseRef.current);
+            const nextDef = toDefinition(
+              neatNodes,
+              currentEdges,
+              baseRef.current
+            );
             onDefinitionChange(nextDef);
           }
           setTimeout(() => {
@@ -3247,80 +3461,241 @@ export default function WorkflowCanvas({
     };
   }, [reactFlow, fullscreen]);
 
+  const availablePalette = palette.filter(item =>
+    isFlowNodeAllowed(flowType, item.type)
+  );
+  const normalizedNodeSearch = nodePaletteSearch.trim().toLowerCase();
+  const visiblePalette = availablePalette.filter(
+    item =>
+      !normalizedNodeSearch ||
+      item.label.toLowerCase().includes(normalizedNodeSearch) ||
+      item.description.toLowerCase().includes(normalizedNodeSearch)
+  );
+  const enabledSubflows = subflows.filter(subflow => subflow.isEnabled);
+  const normalizedReuseSearch = reuseSearch.trim().toLowerCase();
+  const visibleTemplates = templates.filter(
+    template =>
+      !normalizedReuseSearch ||
+      template.name.toLowerCase().includes(normalizedReuseSearch)
+  );
+  const visibleSubflows = enabledSubflows.filter(
+    subflow =>
+      !normalizedReuseSearch ||
+      subflow.name.toLowerCase().includes(normalizedReuseSearch)
+  );
+  const reuseCount = templates.length + enabledSubflows.length;
+  const canvasMinHeight = compactReadOnlyPreview ? "min-h-0" : "min-h-[650px]";
+
   return (
     <div
       data-aiflow-workflow-canvas=""
       className={
         !selectedId || !selected || inspectorMode === "compact"
-          ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs"
+          ? `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs`
           : inspectorMode === "maximized"
-            ? "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs lg:grid-cols-[minmax(0,1fr)_620px]"
-            : "grid min-h-[650px] min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xs lg:grid-cols-[minmax(0,1fr)_420px]"
+            ? `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs lg:grid-cols-[minmax(0,1fr)_620px]`
+            : `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs lg:grid-cols-[minmax(0,1fr)_420px]`
       }
     >
       <section
         ref={canvasRegionRef}
-        className={`relative min-w-0 bg-slate-50 ${fullscreen ? "flex h-screen flex-col overflow-hidden" : "flex flex-col"}`}
+        className={
+          fullscreen
+            ? "relative min-w-0 bg-muted flex h-screen flex-col overflow-hidden"
+            : "relative min-w-0 bg-muted flex flex-col"
+        }
       >
         <div
           data-flow-canvas-toolbar=""
-          className="border-b border-slate-200 bg-white"
+          className="border-b border-border bg-card"
         >
           {!readOnly && (
             <div
               data-flow-node-palette=""
-              className="flex min-h-14 items-center gap-1 overflow-x-auto px-3 py-1.5"
+              className="flex min-h-12 items-center gap-2 px-3 py-1.5"
             >
-              {palette
-                .filter(item => isFlowNodeAllowed(flowType, item.type))
-                .map(item => (
-                  <Button
-                    key={item.type}
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-10 shrink-0 gap-2 rounded-xl px-2.5 text-slate-600 hover:bg-slate-100 hover:text-slate-950"
-                    disabled={readOnly}
-                    draggable={!readOnly}
-                    onDragStart={event => handlePaletteDragStart(event, item)}
-                    onClick={() => addNode(item)}
-                    title={item.description}
-                  >
-                    <NodeTypeGlyph
-                      icon={item.icon}
-                      color={item.color}
-                      size="palette"
+              <details className="relative">
+                <summary className="aiflow-type-control inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-border bg-card px-3 font-semibold text-foreground shadow-2xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-[1024px]:h-9">
+                  <Plus size={14} />
+                  添加节点
+                  <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
+                    {availablePalette.length}
+                  </span>
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    ▾
+                  </span>
+                </summary>
+                <div className="absolute left-0 top-full z-30 mt-2 max-h-[65vh] w-[min(92vw,720px)] overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-xl">
+                  <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
+                    搜索节点
+                    <input
+                      type="search"
+                      className="aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                      placeholder="输入节点名称或用途"
+                      value={nodePaletteSearch}
+                      onChange={event =>
+                        setNodePaletteSearch(event.target.value)
+                      }
                     />
-                    {item.label}
-                  </Button>
-                ))}
-              {(flowType === "state" || flowType === "control") && (
-                <>
-                  <span className="mx-1 h-5 w-px bg-slate-200" />
-                  <span
-                    aria-disabled="true"
-                    title="原始安装包中为禁用状态，项目资源接入后才可用"
-                    className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"
-                  >
-                    <Database size={14} />
-                    业务资源
-                  </span>
-                  <span
-                    aria-disabled="true"
-                    title="原始安装包中为禁用状态，物理资源接入后才可用"
-                    className="flex cursor-not-allowed items-center gap-1 rounded px-2 py-1.5 text-xs text-slate-300"
-                  >
-                    <Table2 size={14} />
-                    物理资源
-                  </span>
-                </>
+                  </label>
+                  <p className="aiflow-type-body mt-2 text-muted-foreground">
+                    可拖拽到画布，也可单击添加；当前流程类型已筛除不适用节点。
+                  </p>
+                  {visiblePalette.length ? (
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {visiblePalette.map(item => (
+                        <Button
+                          key={item.type}
+                          type="button"
+                          variant="ghost"
+                          className="h-auto min-h-12 justify-start gap-2 rounded-lg border border-border px-2.5 py-2 text-left hover:border-aiflow-info-border hover:bg-aiflow-info-surface/50"
+                          disabled={readOnly}
+                          draggable={!readOnly}
+                          aria-label={
+                            "添加" + item.label + "：" + item.description
+                          }
+                          onDragStart={event =>
+                            handlePaletteDragStart(event, item)
+                          }
+                          onClick={() => addNode(item)}
+                          title={item.description}
+                        >
+                          <NodeTypeGlyph
+                            icon={item.icon}
+                            color={item.color}
+                            size="palette"
+                          />
+                          <span className="min-w-0">
+                            <span className="aiflow-type-body block truncate font-semibold text-foreground">
+                              {item.label}
+                            </span>
+                            <span className="aiflow-type-body mt-0.5 block line-clamp-2 text-muted-foreground">
+                              {item.description}
+                            </span>
+                          </span>
+                        </Button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="aiflow-type-body mt-3 rounded-md bg-muted p-4 text-center text-muted-foreground">
+                      没有匹配的节点。
+                    </p>
+                  )}
+                  {(flowType === "state" || flowType === "control") && (
+                    <p className="aiflow-type-body mt-3 border-t border-border pt-2 text-muted-foreground">
+                      业务资源与物理资源节点尚未接入当前项目。
+                    </p>
+                  )}
+                </div>
+              </details>
+              {reuseCount > 0 && (
+                <details className="relative">
+                  <summary className="aiflow-type-control inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-border bg-card px-3 font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-[1024px]:h-9">
+                    <FolderTree size={14} />
+                    复用资源
+                    <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-1.5 py-0.5 font-mono text-aiflow-special">
+                      {reuseCount}
+                    </span>
+                    <span aria-hidden="true" className="text-muted-foreground">
+                      ▾
+                    </span>
+                  </summary>
+                  <div className="absolute left-0 top-full z-30 mt-2 max-h-[65vh] w-[min(92vw,720px)] overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-xl">
+                    <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
+                      搜索可复用资源
+                      <input
+                        type="search"
+                        className="aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                        placeholder="输入模板或子流程名称"
+                        value={reuseSearch}
+                        onChange={event => setReuseSearch(event.target.value)}
+                      />
+                    </label>
+                    <div className="mt-3 grid gap-3">
+                      {visibleTemplates.length > 0 && (
+                        <section>
+                          <h3 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+                            节点模板
+                          </h3>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {visibleTemplates.map(template => (
+                              <Button
+                                key={template.id}
+                                type="button"
+                                variant="outline"
+                                className="aiflow-type-control h-11 min-h-11 justify-start gap-2 truncate min-[1024px]:h-9 min-[1024px]:min-h-0"
+                                aria-label={`添加节点模板：${template.name}`}
+                                title={template.name}
+                                onClick={() =>
+                                  addReusableNode({
+                                    type: template.nodeType,
+                                    label: template.name,
+                                    config: template.config,
+                                  })
+                                }
+                              >
+                                <Save
+                                  size={13}
+                                  className="shrink-0 text-muted-foreground"
+                                />
+                                <span className="truncate">
+                                  {template.name}
+                                </span>
+                              </Button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                      {visibleSubflows.length > 0 && (
+                        <section>
+                          <h3 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+                            可用子流程
+                          </h3>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {visibleSubflows.map(subflow => (
+                              <Button
+                                key={subflow.id}
+                                type="button"
+                                variant="outline"
+                                className="aiflow-type-control h-11 min-h-11 justify-start gap-2 truncate border-aiflow-special-border text-aiflow-special hover:bg-aiflow-special-surface min-[1024px]:h-9 min-[1024px]:min-h-0"
+                                aria-label={`添加子流程：${subflow.name}`}
+                                title={subflow.name}
+                                onClick={() =>
+                                  addReusableNode({
+                                    type: "subflow",
+                                    label: subflow.name,
+                                    config: {
+                                      subflowId: subflow.id,
+                                      input: "{{input}}",
+                                    },
+                                  })
+                                }
+                              >
+                                <FolderTree size={13} className="shrink-0" />
+                                <span className="truncate">{subflow.name}</span>
+                              </Button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                      {!visibleTemplates.length && !visibleSubflows.length && (
+                        <p className="aiflow-type-body rounded-md bg-muted p-4 text-center text-muted-foreground">
+                          没有匹配的模板或子流程。
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </details>
               )}
+              <span className="aiflow-type-body ml-auto hidden text-muted-foreground md:inline">
+                单击或拖拽节点到画布
+              </span>
             </div>
           )}
           {showCanvasActions && (
             <div
               data-flow-canvas-actions=""
-              className="flex min-h-9 items-center justify-start gap-1 overflow-x-auto border-t border-slate-100 bg-white/80 backdrop-blur-sm px-3 py-1 sm:justify-start"
+              className="flex min-h-10 flex-wrap items-center gap-1 border-t border-border bg-card/80 px-2 py-1 backdrop-blur-sm sm:px-3"
             >
               {!readOnly && (
                 <>
@@ -3328,176 +3703,143 @@ export default function WorkflowCanvas({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
+                    className="h-11 w-11 gap-0 p-0 text-xs text-foreground hover:bg-muted disabled:opacity-40 sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                    aria-label="撤销"
                     disabled={!historyState.canUndo}
                     onClick={undo}
                     title="撤销操作 (Ctrl+Z / ⌘Z)"
                   >
-                    <RotateCcw size={13} className="text-slate-600" />
-                    <span>撤销</span>
+                    <RotateCcw size={13} className="text-muted-foreground" />
+                    <span className="hidden sm:inline">撤销</span>
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-slate-700 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-40"
+                    className="h-11 w-11 gap-0 p-0 text-xs text-foreground hover:bg-muted disabled:opacity-40 sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                    aria-label="重做"
                     disabled={!historyState.canRedo}
                     onClick={redo}
                     title="重做操作 (Ctrl+Y / ⌘Y)"
                   >
-                    <RotateCw size={13} className="text-slate-600" />
-                    <span>重做</span>
+                    <RotateCw size={13} className="text-muted-foreground" />
+                    <span className="hidden sm:inline">重做</span>
                   </Button>
-                  <span className="mx-1 h-4 w-px bg-slate-200" />
+                  <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
                 </>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                onClick={() =>
-                  window.dispatchEvent(new Event("flow:neaten-canvas"))
-                }
-                title={
-                  flowType === "state"
-                    ? "整理画布：针对状态机生命周期执行拓扑层级对齐"
-                    : "整理画布：执行 DAG 依赖自动排版"
-                }
-              >
-                <Waypoints size={13} className="text-slate-500" />
-                <span>整理画布</span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                onClick={() =>
-                  window.dispatchEvent(new Event("flow:save-canvas-image"))
-                }
-                title="导出当前画布拓扑为高清图片"
-              >
-                <Download size={13} className="text-slate-500" />
-                <span>保存为图片</span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                onClick={() =>
-                  window.dispatchEvent(new Event("flow:fullscreen-canvas"))
-                }
-                title="切换全屏沉浸设计模式"
-              >
-                <Maximize2 size={13} className="text-slate-500" />
-                <span>{fullscreen ? "退出全屏" : "全屏展示"}</span>
-              </Button>
               {!readOnly && (
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-red-600 hover:bg-red-50 disabled:text-slate-300"
-                  disabled={!selectedEdgeId}
-                  onClick={deleteSelectedEdge}
+                  className="h-11 w-11 gap-0 p-0 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                  aria-label="整理画布"
+                  onClick={() =>
+                    window.dispatchEvent(new Event("flow:neaten-canvas"))
+                  }
                   title={
-                    selectedEdgeId
-                      ? "删除选中的连线（Delete 或 Backspace）"
-                      : "先单击画布中的连线"
+                    flowType === "state"
+                      ? "整理画布：针对状态机生命周期执行拓扑层级对齐"
+                      : "整理画布：执行 DAG 依赖自动排版"
                   }
                 >
-                  <Trash2 size={13} />
-                  <span>删除连线</span>
-                </Button>
-              )}
-              {!readOnly && deletedEdge && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-xs text-indigo-600 hover:bg-indigo-50"
-                  onClick={undoDeletedEdge}
-                  title="恢复刚删除的连线"
-                >
-                  <RotateCcw size={13} />
-                  <span>撤销删线</span>
+                  <Waypoints size={13} className="text-muted-foreground" />
+                  <span className="hidden sm:inline">整理画布</span>
                 </Button>
               )}
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-7 gap-1 px-2 text-xs text-slate-600 hover:bg-slate-100"
+                className="h-11 w-11 gap-0 p-0 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                aria-label={fullscreen ? "退出全屏" : "全屏展示"}
                 onClick={() =>
-                  window.dispatchEvent(new Event("flow:clear-highlight"))
+                  window.dispatchEvent(new Event("flow:fullscreen-canvas"))
                 }
-                title="取消高亮"
+                title="切换全屏沉浸设计模式"
               >
-                <MousePointer2 size={13} className="text-slate-500" />
-                <span>取消高亮</span>
+                <Maximize2 size={13} className="text-muted-foreground" />
+                <span className="hidden sm:inline">
+                  {fullscreen ? "退出全屏" : "全屏展示"}
+                </span>
               </Button>
+              {!readOnly && selectedEdgeId && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-11 w-11 gap-0 p-0 text-xs text-red-600 hover:bg-red-50 sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                  aria-label="删除连线"
+                  onClick={deleteSelectedEdge}
+                  title="删除选中的连线（Delete 或 Backspace）"
+                >
+                  <Trash2 size={13} />
+                  <span className="hidden sm:inline">删除连线</span>
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="更多画布操作"
+                    title="更多画布操作"
+                    className="ml-auto inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted sm:min-w-0 sm:justify-start min-[1024px]:h-9"
+                  >
+                    <span className="sm:hidden">更多</span>
+                    <span className="hidden sm:inline">更多画布操作</span>
+                    <span aria-hidden="true">▾</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-44">
+                  <DropdownMenuItem
+                    aria-label="保存为图片"
+                    className="min-h-11 text-sm min-[1024px]:min-h-9"
+                    onSelect={() =>
+                      window.dispatchEvent(new Event("flow:save-canvas-image"))
+                    }
+                  >
+                    <Download size={16} />
+                    <span>保存为图片</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    aria-label="取消高亮"
+                    className="min-h-11 text-sm min-[1024px]:min-h-9"
+                    onSelect={() =>
+                      window.dispatchEvent(new Event("flow:clear-highlight"))
+                    }
+                  >
+                    <MousePointer2 size={16} />
+                    <span>取消高亮</span>
+                  </DropdownMenuItem>
+                  {!readOnly && deletedEdge && (
+                    <DropdownMenuItem
+                      aria-label="撤销删线"
+                      className="min-h-11 text-sm text-indigo-600 min-[1024px]:min-h-9"
+                      onSelect={undoDeletedEdge}
+                    >
+                      <RotateCcw size={16} />
+                      <span>撤销删线</span>
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           )}
-        {!readOnly && (templates.length > 0 || subflows.length > 0) && (
-          <div className="flex min-h-9 items-center gap-2 overflow-x-auto border-b border-slate-100 bg-slate-50/80 px-3 py-1 text-xs">
-            <span className="shrink-0 text-[10px] font-bold tracking-[.14em] text-slate-400">
-              REUSE LIBRARY
-            </span>
-            {templates.map(template => (
-              <Button
-                key={template.id}
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-6 shrink-0 gap-1 text-[11px] px-2 py-0 border-slate-200 hover:border-indigo-300 bg-white"
-                onClick={() =>
-                  addReusableNode({
-                    type: template.nodeType,
-                    label: template.name,
-                    config: template.config,
-                  })
-                }
-              >
-                <Save size={11} className="text-slate-500" />
-                {template.name}
-              </Button>
-            ))}
-            {subflows
-              .filter(subflow => subflow.isEnabled)
-              .map(subflow => (
-                <Button
-                  key={subflow.id}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-6 shrink-0 gap-1 border-violet-200 text-[11px] px-2 py-0 text-violet-700 hover:bg-violet-50 bg-white"
-                  onClick={() =>
-                    addReusableNode({
-                      type: "subflow",
-                      label: subflow.name,
-                      config: { subflowId: subflow.id, input: "{{input}}" },
-                    })
-                  }
-                >
-                  <FolderTree size={11} />
-                  {subflow.name}
-                </Button>
-              ))}
-          </div>
-        )}
         </div>
         <div
-          className={`relative ${fullscreen ? "h-full flex-1" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
+          ref={flowViewportRef}
+          className={`relative ${fullscreen ? "h-full flex-1" : compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
         >
-          <details className="absolute left-3 top-3 z-10 rounded-lg border border-slate-200 bg-white/95 text-[11px] text-slate-600 shadow-sm">
-            <summary className="cursor-pointer px-3 py-2 font-semibold text-slate-700">
+          <details className="aiflow-type-control absolute left-3 top-3 z-10 rounded-lg border border-border bg-card/95 text-muted-foreground shadow-sm">
+            <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 py-2 font-semibold text-foreground">
               画布说明
             </summary>
-            <div className="grid gap-2 border-t border-slate-100 px-3 py-2">
+            <div className="grid gap-2 border-t border-border px-3 py-2">
               <div className="flex flex-wrap gap-3">
                 <span className="flex items-center gap-1">
                   <i className="h-2 w-2 rounded-full bg-red-500" />
@@ -3512,7 +3854,7 @@ export default function WorkflowCanvas({
                   已配置
                 </span>
               </div>
-              <div className="flex flex-wrap gap-3 text-slate-500">
+              <div className="flex flex-wrap gap-3 text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Move size={13} />
                   画布移动
@@ -3535,7 +3877,7 @@ export default function WorkflowCanvas({
           {contextMenu && (
             <div
               data-flow-context-menu=""
-              className="absolute z-50 min-w-44 rounded-md border border-slate-200 bg-white py-1 text-xs shadow-xl"
+              className="absolute z-50 min-w-44 rounded-md border border-border bg-card py-1 text-xs shadow-xl"
               style={{ left: contextMenu.x, top: contextMenu.y }}
               onMouseDown={event => event.stopPropagation()}
             >
@@ -3563,7 +3905,7 @@ export default function WorkflowCanvas({
                       {!["start", "end"].includes(targetNode.data.kind) && (
                         <button
                           type="button"
-                          className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                          className="block w-full px-3 py-2 text-left hover:bg-muted"
                           onClick={() => {
                             setInspectorMode("normal");
                             setSelectedId(targetNode.id);
@@ -3579,7 +3921,7 @@ export default function WorkflowCanvas({
                         !readOnly && (
                           <button
                             type="button"
-                            className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                            className="block w-full px-3 py-2 text-left hover:bg-muted"
                             onClick={() => {
                               const name = window.prompt(
                                 "修改节点名称",
@@ -3607,7 +3949,7 @@ export default function WorkflowCanvas({
                         )}
                       <button
                         type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                        className="block w-full px-3 py-2 text-left hover:bg-muted"
                         onClick={() => {
                           navigator.clipboard
                             ?.writeText(targetNode.id)
@@ -3619,14 +3961,14 @@ export default function WorkflowCanvas({
                       </button>
                       <button
                         type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                        className="block w-full px-3 py-2 text-left hover:bg-muted"
                         onClick={() => showNodePath(targetNode.id)}
                       >
                         查看路径
                       </button>
-                      <div className="my-1 border-t border-slate-100" />
+                      <div className="my-1 border-t border-border" />
                       {!readOnly && targetNode.data.kind !== "end" && (
-                        <div className="px-3 py-1 text-[10px] font-semibold text-slate-400">
+                        <div className="aiflow-type-control px-3 py-1 font-semibold text-muted-foreground">
                           在此节点后添加
                         </div>
                       )}
@@ -3636,7 +3978,7 @@ export default function WorkflowCanvas({
                           <button
                             key={item.type}
                             type="button"
-                            className="block w-full px-3 py-1.5 text-left hover:bg-slate-100"
+                            className="block w-full px-3 py-1.5 text-left hover:bg-muted"
                             onClick={() => addContextNode(item, targetNode.id)}
                           >
                             添加{item.label}
@@ -3644,7 +3986,7 @@ export default function WorkflowCanvas({
                         ))}
                       {canDelete && (
                         <>
-                          <div className="my-1 border-t border-slate-100" />
+                          <div className="my-1 border-t border-border" />
                           <button
                             type="button"
                             className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
@@ -3661,7 +4003,7 @@ export default function WorkflowCanvas({
                 <>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                    className="block w-full px-3 py-2 text-left hover:bg-muted"
                     onClick={() =>
                       alignSelectedNodes(
                         "X",
@@ -3673,7 +4015,7 @@ export default function WorkflowCanvas({
                   </button>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                    className="block w-full px-3 py-2 text-left hover:bg-muted"
                     onClick={() =>
                       alignSelectedNodes(
                         "Y",
@@ -3694,7 +4036,7 @@ export default function WorkflowCanvas({
                   )}
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                    className="block w-full px-3 py-2 text-left hover:bg-muted"
                     onClick={() => {
                       setNodes(current =>
                         current.map(node => ({ ...node, selected: false }))
@@ -3723,7 +4065,7 @@ export default function WorkflowCanvas({
               {contextMenu.kind === "pane" && !readOnly && (
                 <button
                   type="button"
-                  className="block w-full px-3 py-2 text-left hover:bg-slate-100"
+                  className="block w-full px-3 py-2 text-left hover:bg-muted"
                   onClick={() => {
                     setSelectedId(null);
                     setSelectedEdgeId(null);
@@ -3771,360 +4113,374 @@ export default function WorkflowCanvas({
             selectionOnDrag={!readOnly}
             selectionKeyCode="Control"
             multiSelectionKeyCode={["Shift", "Control"]}
-            fitView
+            minZoom={0.1}
+            maxZoom={1.25}
           >
             <Background color="#cbd5e1" gap={22} size={1.25} />
             <MiniMap
+              className={compactReadOnlyPreview ? "hidden" : "hidden md:block"}
               nodeColor={node => colorFor((node.data as FlowNodeData).kind)}
               pannable
               zoomable
             />
-            <Controls showInteractive={!readOnly} />
+            <Controls
+              className="flow-canvas-controls"
+              showInteractive={!readOnly}
+            />
           </ReactFlow>
         </div>
       </section>
       {selectedId && selected && (
         <aside
           data-workflow-inspector=""
-          className="border-t border-slate-200 bg-white lg:border-l lg:border-t-0"
+          className="border-t border-border bg-card lg:border-l lg:border-t-0"
         >
-        <div className="flex min-h-16 items-center justify-between border-b border-slate-100 px-4 py-3">
-          <div className={inspectorMode === "compact" ? "hidden" : ""}>
-            <p className="text-[10px] font-bold tracking-[.2em] text-indigo-600">
-              CONFIGURATION
-            </p>
-            <h2 className="mt-1 text-sm font-semibold text-slate-900">
-              配置信息
-            </h2>
+          <div className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3">
+            <div className={inspectorMode === "compact" ? "hidden" : ""}>
+              <p className="aiflow-type-meta font-bold tracking-[.2em] text-indigo-600">
+                CONFIGURATION
+              </p>
+              <h2 className="mt-1 text-sm font-semibold text-foreground">
+                配置信息
+              </h2>
+            </div>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                className={`rounded p-1.5 text-muted-foreground hover:bg-muted ${inspectorLocked ? "text-indigo-600" : ""}`}
+                title={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
+                aria-label={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
+                onClick={() => setInspectorLocked(value => !value)}
+              >
+                <LockKeyhole size={15} />
+              </button>
+              <button
+                type="button"
+                className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                title="最大化面板"
+                aria-label="最大化面板"
+                onClick={() => setInspectorMode("maximized")}
+              >
+                <Maximize2 size={15} />
+              </button>
+              <button
+                type="button"
+                className={`rounded p-1.5 text-muted-foreground hover:bg-muted ${inspectorMode === "normal" ? "text-slate-300" : ""}`}
+                title="恢复配置面板"
+                aria-label="恢复配置面板"
+                onClick={() => setInspectorMode("normal")}
+              >
+                <RotateCcw size={15} />
+              </button>
+              <button
+                type="button"
+                className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                title="最小化面板"
+                aria-label="最小化面板"
+                onClick={() => setInspectorMode("compact")}
+              >
+                <Minimize2 size={15} />
+              </button>
+            </div>
           </div>
-          <div className="ml-auto flex items-center gap-1">
-            <button
-              type="button"
-              className={`rounded p-1.5 text-slate-500 hover:bg-slate-100 ${inspectorLocked ? "text-indigo-600" : ""}`}
-              title={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
-              aria-label={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
-              onClick={() => setInspectorLocked(value => !value)}
-            >
-              <LockKeyhole size={15} />
-            </button>
-            <button
-              type="button"
-              className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
-              title="最大化面板"
-              aria-label="最大化面板"
-              onClick={() => setInspectorMode("maximized")}
-            >
-              <Maximize2 size={15} />
-            </button>
-            <button
-              type="button"
-              className={`rounded p-1.5 text-slate-500 hover:bg-slate-100 ${inspectorMode === "normal" ? "text-slate-300" : ""}`}
-              title="恢复配置面板"
-              aria-label="恢复配置面板"
-              onClick={() => setInspectorMode("normal")}
-            >
-              <RotateCcw size={15} />
-            </button>
-            <button
-              type="button"
-              className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
-              title="最小化面板"
-              aria-label="最小化面板"
-              onClick={() => setInspectorMode("compact")}
-            >
-              <Minimize2 size={15} />
-            </button>
-          </div>
-        </div>
-        {inspectorMode !== "compact" &&
-          (selected && selectedDefinition ? (
-            <div className="max-h-[650px] overflow-y-auto">
-              <div className="space-y-3 p-4">
-                <label className="grid gap-1.5 text-xs font-medium text-slate-600">
-                  节点名称
-                  <input
-                    className="h-9 rounded-lg border border-slate-200 px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-slate-50"
-                    value={String(selected.data.label ?? "")}
-                    disabled={inspectorDisabled}
-                    onChange={event =>
-                      updateSelected({ label: event.target.value })
-                    }
-                  />
-                </label>
-                <div
-                  className={`rounded-lg border px-3 py-2 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-blue-200 bg-blue-50" : "border-emerald-200 bg-emerald-50"}`}
-                >
-                  <p className="text-xs font-semibold text-slate-700">
-                    {selectedDefinition.label} ·{" "}
-                    {selectedConfigState === "partial"
-                      ? "未完全配置"
-                      : selectedConfigState === "editing"
-                        ? "配置中"
-                        : "已配置"}
-                  </p>
-                </div>
-                {selected.data.kind === "operate" &&
-                  readOperateOutcomeMode(selectedConfig) ===
-                    "legacy_cancel" && (
-                    <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
-                      该历史操作仍使用“拒绝即取消实例”的兼容语义。请将结果路由模式改为显式出口，并分别连接同意、拒绝分支。
+          {inspectorMode !== "compact" &&
+            (selected && selectedDefinition ? (
+              <div className="max-h-[650px] overflow-y-auto">
+                <div className="space-y-3 p-4">
+                  <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                    节点名称
+                    <input
+                      className="h-9 rounded-lg border border-border px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted"
+                      value={String(selected.data.label ?? "")}
+                      disabled={inspectorDisabled}
+                      onChange={event =>
+                        updateSelected({ label: event.target.value })
+                      }
+                    />
+                  </label>
+                  <div
+                    className={`rounded-lg border px-3 py-2 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-aiflow-info-border bg-aiflow-info-surface" : "border-aiflow-success-border bg-aiflow-success-surface"}`}
+                  >
+                    <p className="text-xs font-semibold text-foreground">
+                      {selectedDefinition.label} ·{" "}
+                      {selectedConfigState === "partial"
+                        ? "未完全配置"
+                        : selectedConfigState === "editing"
+                          ? "配置中"
+                          : "已配置"}
+                    </p>
+                  </div>
+                  {selected.data.kind === "operate" &&
+                    readOperateOutcomeMode(selectedConfig) ===
+                      "legacy_cancel" && (
+                      <div className="aiflow-type-body rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-aiflow-warning">
+                        该历史操作仍使用“拒绝即取消实例”的兼容语义。请将结果路由模式改为显式出口，并分别连接同意、拒绝分支。
+                      </div>
+                    )}
+                  {selected.data.kind === "operate" && workflowId && (
+                    <div className="aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-semibold">参与人解析预览</p>
+                          <p className="text-aiflow-info">
+                            以当前登录用户模拟发起人与当前操作人；运行时会再次解析并固化快照。
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={participantPreview.isPending}
+                          onClick={() =>
+                            participantPreview.mutate({
+                              workflowId,
+                              config: selectedConfig,
+                            })
+                          }
+                        >
+                          {participantPreview.isPending
+                            ? "解析中…"
+                            : "预览候选人"}
+                        </Button>
+                      </div>
+                      {participantPreview.data && (
+                        <div className="mt-2 rounded border border-aiflow-info-border bg-card/80 px-2 py-1.5">
+                          <p>
+                            方式：{participantPreview.data.mode}；候选用户 ID：
+                            {participantPreview.data.candidateUserIds.join(
+                              ", "
+                            )}
+                          </p>
+                          {participantPreview.data.fallbackApplied && (
+                            <p className="text-aiflow-warning">
+                              已使用兜底：
+                              {participantPreview.data.fallbackApplied}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {participantPreview.error && (
+                        <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+                          {participantPreview.error.message}
+                        </p>
+                      )}
                     </div>
                   )}
-                {selected.data.kind === "operate" && workflowId && (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-3 text-xs leading-5 text-blue-900">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <p className="font-semibold">参与人解析预览</p>
-                        <p className="text-blue-700">
-                          以当前登录用户模拟发起人与当前操作人；运行时会再次解析并固化快照。
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        disabled={participantPreview.isPending}
-                        onClick={() =>
-                          participantPreview.mutate({
-                            workflowId,
+                </div>
+                <div
+                  role="tablist"
+                  aria-label={`${selectedDefinition.label}配置分类`}
+                  className="grid min-w-0 grid-cols-2 gap-1.5 border-y border-border bg-muted/80 px-3 py-2 sm:flex sm:flex-wrap"
+                >
+                  {selectedFieldGroups.map(group => (
+                    <button
+                      key={group.label}
+                      type="button"
+                      role="tab"
+                      aria-selected={
+                        activeInspectorGroup?.label === group.label
+                      }
+                      className={`min-w-0 whitespace-normal rounded-lg px-2 py-1.5 text-xs font-medium transition-all sm:px-3 ${
+                        activeInspectorGroup?.label === group.label
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                      onClick={() => setInspectorTab(group.label)}
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
+                {activeInspectorGroup && (
+                  <section
+                    role="tabpanel"
+                    className="m-4 rounded-xl border border-border bg-card p-4 shadow-sm"
+                  >
+                    <div className="mb-4">
+                      <h3 className="aiflow-type-section-title font-semibold text-foreground">
+                        {activeInspectorGroup.label}
+                      </h3>
+                      <p className="aiflow-type-body mt-1 text-muted-foreground">
+                        {activeInspectorGroup.description}
+                      </p>
+                    </div>
+                    <div className="space-y-4">
+                      {activeInspectorGroup.fields.map(field => {
+                        const fieldValue = configFieldValue(
+                          field,
+                          selectedConfig
+                        );
+                        const runtimeOptions =
+                          field.key === "subflowId"
+                            ? subflows
+                                .filter(subflow => subflow.isEnabled)
+                                .map(subflow => ({
+                                  value: subflow.id,
+                                  label: subflow.name,
+                                }))
+                            : undefined;
+                        return (
+                          <ConfigFieldEditor
+                            key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
+                            field={field}
+                            value={fieldValue}
+                            fallback={selectedDefaults[field.key]}
+                            disabled={inspectorDisabled}
+                            runtimeOptions={runtimeOptions}
+                            onChange={value => {
+                              if (field.key !== "subflowId")
+                                return updateConfigField(field.key, value);
+                              const selectedSubflow = subflows.find(
+                                subflow =>
+                                  subflow.id === value && subflow.isEnabled
+                              );
+                              updateConfigFields({
+                                subflowId: value,
+                                zlcxz: selectedSubflow
+                                  ? subflowSelectionConfig(
+                                      selectedConfig.zlcxz,
+                                      selectedSubflow
+                                    )
+                                  : subflowSelectionConfig(
+                                      selectedConfig.zlcxz
+                                    ),
+                              });
+                            }}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
+                {!readOnly && (
+                  <div className="p-4 pt-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="w-full rounded-lg"
+                      disabled={inspectorDisabled}
+                      onClick={() => {
+                        const name = window.prompt(
+                          "节点模板名称",
+                          String(selected.data.label ?? "未命名模板")
+                        );
+                        if (name?.trim())
+                          onSaveTemplate?.({
+                            name: name.trim(),
+                            nodeType: selected.data
+                              .kind as ReuseTemplate["nodeType"],
                             config: selectedConfig,
+                          });
+                      }}
+                    >
+                      <Save size={13} />
+                      保存为节点模板
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ) : selectedEdgeId ? (
+              <div className="m-4 mt-8 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800">
+                <p className="font-semibold">已选中连线</p>
+                <p className="aiflow-type-body mt-1">
+                  可点击顶部“删除连线”，或按 Delete /
+                  Backspace。删除后可立即撤销。
+                </p>
+              </div>
+            ) : (
+              <div className="m-4 mt-8 rounded-lg border border-dashed border-border bg-muted p-4 text-sm leading-6 text-muted-foreground">
+                <p className="font-medium text-foreground">暂无配置信息</p>
+                <p className="mt-1">
+                  请选择画布中的元件查看配置信息；若无元件，请添加元件。
+                </p>
+              </div>
+            ))}
+          {inspectorMode !== "compact" && !readOnly && (
+            <div className="border-t border-border p-4">
+              <details>
+                <summary className="aiflow-type-control cursor-pointer font-semibold text-foreground">
+                  管理我的模板与子流程
+                </summary>
+                <div className="aiflow-type-control mt-3 grid gap-2">
+                  {templates.map(template => (
+                    <div
+                      key={template.id}
+                      className="flex items-center gap-1 rounded border border-border bg-muted p-2"
+                    >
+                      <span className="min-w-0 flex-1 truncate">
+                        {template.name}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-indigo-700 hover:underline"
+                        onClick={() => {
+                          const name = window.prompt("模板名称", template.name);
+                          if (name?.trim() && name !== template.name)
+                            onUpdateTemplate?.(template, { name: name.trim() });
+                        }}
+                      >
+                        改名
+                      </button>
+                      <button
+                        type="button"
+                        className="text-indigo-700 hover:underline"
+                        onClick={() =>
+                          addReusableNode({
+                            type: template.nodeType,
+                            label: template.name,
+                            config: template.config,
                           })
                         }
                       >
-                        {participantPreview.isPending
-                          ? "解析中…"
-                          : "预览候选人"}
-                      </Button>
+                        在画布中编辑
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-600 hover:underline"
+                        onClick={() => onDeleteTemplate?.(template.id)}
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
-                    {participantPreview.data && (
-                      <div className="mt-2 rounded border border-blue-100 bg-white/80 px-2 py-1.5">
-                        <p>
-                          方式：{participantPreview.data.mode}；候选用户 ID：
-                          {participantPreview.data.candidateUserIds.join(", ")}
-                        </p>
-                        {participantPreview.data.fallbackApplied && (
-                          <p className="text-amber-700">
-                            已使用兜底：
-                            {participantPreview.data.fallbackApplied}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {participantPreview.error && (
-                      <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
-                        {participantPreview.error.message}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-              <div
-                role="tablist"
-                aria-label={`${selectedDefinition.label}配置分类`}
-                className="flex gap-1.5 overflow-x-auto border-y border-slate-100 bg-slate-50/80 px-3 py-2"
-              >
-                {selectedFieldGroups.map(group => (
-                  <button
-                    key={group.label}
-                    type="button"
-                    role="tab"
-                    aria-selected={activeInspectorGroup?.label === group.label}
-                    className={`shrink-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                      activeInspectorGroup?.label === group.label
-                        ? "bg-blue-600 text-white shadow-xs"
-                        : "border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                    }`}
-                    onClick={() => setInspectorTab(group.label)}
-                  >
-                    {group.label}
-                  </button>
-                ))}
-              </div>
-              {activeInspectorGroup && (
-                <section
-                  role="tabpanel"
-                  className="m-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-                >
-                  <div className="mb-4">
-                    <h3 className="text-sm font-semibold text-slate-800">
-                      {activeInspectorGroup.label}
-                    </h3>
-                    <p className="mt-1 text-[11px] leading-5 text-slate-500">
-                      {activeInspectorGroup.description}
+                  ))}
+                  {subflows.map(subflow => (
+                    <div
+                      key={subflow.id}
+                      className="flex items-center gap-1 rounded border border-aiflow-special-border bg-aiflow-special-surface p-2"
+                    >
+                      <FolderTree size={12} className="text-aiflow-special" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {subflow.name}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-aiflow-special hover:underline"
+                        onClick={() =>
+                          onToggleSubflow?.(subflow, !subflow.isEnabled)
+                        }
+                      >
+                        {subflow.isEnabled ? "停用" : "启用"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-red-600 hover:underline"
+                        onClick={() => onDeleteSubflow?.(subflow.id)}
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                  {!templates.length && !subflows.length && (
+                    <p className="aiflow-type-body text-muted-foreground">
+                      从选中节点保存模板，或在设计器顶部将当前流程保存为子流程。
                     </p>
-                  </div>
-                  <div className="space-y-4">
-                    {activeInspectorGroup.fields.map(field => {
-                      const fieldValue = configFieldValue(
-                        field,
-                        selectedConfig
-                      );
-                      const runtimeOptions =
-                        field.key === "subflowId"
-                          ? subflows
-                              .filter(subflow => subflow.isEnabled)
-                              .map(subflow => ({
-                                value: subflow.id,
-                                label: subflow.name,
-                              }))
-                          : undefined;
-                      return (
-                        <ConfigFieldEditor
-                          key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
-                          field={field}
-                          value={fieldValue}
-                          fallback={selectedDefaults[field.key]}
-                          disabled={inspectorDisabled}
-                          runtimeOptions={runtimeOptions}
-                          onChange={value => {
-                            if (field.key !== "subflowId")
-                              return updateConfigField(field.key, value);
-                            const selectedSubflow = subflows.find(
-                              subflow =>
-                                subflow.id === value && subflow.isEnabled
-                            );
-                            updateConfigFields({
-                              subflowId: value,
-                              zlcxz: selectedSubflow
-                                ? subflowSelectionConfig(selectedConfig.zlcxz, selectedSubflow)
-                                : subflowSelectionConfig(selectedConfig.zlcxz),
-                            });
-                          }}
-                        />
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-              {!readOnly && (
-                <div className="p-4 pt-0">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="w-full rounded-lg"
-                    disabled={inspectorDisabled}
-                    onClick={() => {
-                      const name = window.prompt(
-                        "节点模板名称",
-                        String(selected.data.label ?? "未命名模板")
-                      );
-                      if (name?.trim())
-                        onSaveTemplate?.({
-                          name: name.trim(),
-                          nodeType: selected.data
-                            .kind as ReuseTemplate["nodeType"],
-                          config: selectedConfig,
-                        });
-                    }}
-                  >
-                    <Save size={13} />
-                    保存为节点模板
-                  </Button>
+                  )}
                 </div>
-              )}
+              </details>
             </div>
-          ) : selectedEdgeId ? (
-            <div className="m-4 mt-8 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800">
-              <p className="font-semibold">已选中连线</p>
-              <p className="mt-1 text-xs">
-                可点击顶部“删除连线”，或按 Delete /
-                Backspace。删除后可立即撤销。
-              </p>
-            </div>
-          ) : (
-            <div className="m-4 mt-8 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-500">
-              <p className="font-medium text-slate-700">暂无配置信息</p>
-              <p className="mt-1">
-                请选择画布中的元件查看配置信息；若无元件，请添加元件。
-              </p>
-            </div>
-          ))}
-        {inspectorMode !== "compact" && !readOnly && (
-          <div className="border-t border-slate-100 p-4">
-            <details>
-              <summary className="cursor-pointer text-xs font-semibold text-slate-700">
-                管理我的模板与子流程
-              </summary>
-              <div className="mt-3 grid gap-2 text-xs">
-                {templates.map(template => (
-                  <div
-                    key={template.id}
-                    className="flex items-center gap-1 rounded border border-slate-100 bg-slate-50 p-2"
-                  >
-                    <span className="min-w-0 flex-1 truncate">
-                      {template.name}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-indigo-700 hover:underline"
-                      onClick={() => {
-                        const name = window.prompt("模板名称", template.name);
-                        if (name?.trim() && name !== template.name)
-                          onUpdateTemplate?.(template, { name: name.trim() });
-                      }}
-                    >
-                      改名
-                    </button>
-                    <button
-                      type="button"
-                      className="text-indigo-700 hover:underline"
-                      onClick={() =>
-                        addReusableNode({
-                          type: template.nodeType,
-                          label: template.name,
-                          config: template.config,
-                        })
-                      }
-                    >
-                      在画布中编辑
-                    </button>
-                    <button
-                      type="button"
-                      className="text-red-600 hover:underline"
-                      onClick={() => onDeleteTemplate?.(template.id)}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-                {subflows.map(subflow => (
-                  <div
-                    key={subflow.id}
-                    className="flex items-center gap-1 rounded border border-violet-100 bg-violet-50 p-2"
-                  >
-                    <FolderTree size={12} className="text-violet-600" />
-                    <span className="min-w-0 flex-1 truncate">
-                      {subflow.name}
-                    </span>
-                    <button
-                      type="button"
-                      className="text-violet-700 hover:underline"
-                      onClick={() =>
-                        onToggleSubflow?.(subflow, !subflow.isEnabled)
-                      }
-                    >
-                      {subflow.isEnabled ? "停用" : "启用"}
-                    </button>
-                    <button
-                      type="button"
-                      className="text-red-600 hover:underline"
-                      onClick={() => onDeleteSubflow?.(subflow.id)}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                ))}
-                {!templates.length && !subflows.length && (
-                  <p className="text-slate-400">
-                    从选中节点保存模板，或在设计器顶部将当前流程保存为子流程。
-                  </p>
-                )}
-              </div>
-            </details>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
       )}
     </div>
   );

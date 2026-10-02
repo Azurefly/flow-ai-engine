@@ -69,6 +69,22 @@ const dataSourceTestMigration = readFileSync(
   new URL("../drizzle/0030_data_source_test_jobs.sql", import.meta.url),
   "utf8"
 );
+const runExecutionSourceMigration = readFileSync(
+  new URL("../drizzle/0032_run_execution_source.sql", import.meta.url),
+  "utf8"
+);
+const serviceEndpointEnvironmentMigration = readFileSync(
+  new URL("../drizzle/0033_service_endpoint_environment.sql", import.meta.url),
+  "utf8"
+);
+const projectUnitCollationMigration = readFileSync(
+  new URL("../drizzle/0034_project_unit_collation.sql", import.meta.url),
+  "utf8"
+);
+const projectServiceSource = readFileSync(
+  new URL("./project-service.ts", import.meta.url),
+  "utf8"
+);
 const migrationJournal = readFileSync(
   new URL("../drizzle/meta/_journal.json", import.meta.url),
   "utf8"
@@ -104,6 +120,20 @@ describe("database migration integrity", () => {
     expect(dataSourceTestMigration).toContain("`evidenceJson` json");
     expect(dataSourceTestMigration).toContain("data_source_test_run_claim_idx");
     expect(dataSourceTestMigration).toContain("ON DELETE cascade");
+  });
+  it("persists the selected workflow plan source and definition version with each run", () => {
+    expect(runExecutionSourceMigration).toContain(
+      "ALTER TABLE `workflow_run` ADD `executionSource` varchar(24)"
+    );
+    expect(runExecutionSourceMigration).toContain(
+      "ALTER TABLE `workflow_run` ADD `definitionVersion` int"
+    );
+    expect(runExecutionSourceMigration).toContain(
+      "ALTER TABLE `dataflow_run` ADD `executionSource` varchar(24)"
+    );
+    expect(runExecutionSourceMigration).toContain(
+      "ALTER TABLE `dataflow_run` ADD `definitionVersion` int"
+    );
   });
   it("persists leased dataflow jobs and ordered node execution facts", () => {
     expect(durableDataflowWorkerMigration).toContain(
@@ -166,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-8).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-11).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -175,8 +205,11 @@ describe("database migration integrity", () => {
       "0029_dataflow_artifact_lineage",
       "0030_data_source_test_jobs",
       "0031_audit_and_run_indexes",
+      "0032_run_execution_source",
+      "0033_service_endpoint_environment",
+      "0034_project_unit_collation",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(31);
+    expect(journal.entries.at(-1)?.idx).toBe(34);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain(
@@ -201,6 +234,35 @@ describe("database migration integrity", () => {
     );
     expect(serviceEndpointMigration).not.toMatch(
       /`(secretValue|password|apiKey)`/i
+    );
+  });
+  it("adds an endpoint target label and leaves historic endpoints explicitly unclassified", () => {
+    expect(serviceEndpointEnvironmentMigration).toContain(
+      "ALTER TABLE `project_service_endpoint`"
+    );
+    expect(serviceEndpointEnvironmentMigration).toContain(
+      "`targetEnvironment` enum('unclassified','development','test','staging','production') NOT NULL DEFAULT 'unclassified'"
+    );
+    expect(serviceEndpointEnvironmentMigration).not.toMatch(
+      /UPDATE `?project_service_endpoint`? SET `?status`?/i
+    );
+    expect(serviceEndpointEnvironmentMigration).not.toContain("DROP TABLE");
+  });
+  it("aligns department-project grant collations without replacing grant data", () => {
+    expect(projectUnitCollationMigration).toContain(
+      "CREATE TABLE IF NOT EXISTS `flow_project_unit`"
+    );
+    expect(projectUnitCollationMigration).toContain(
+      "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+    );
+    expect(projectUnitCollationMigration).toContain(
+      "CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci"
+    );
+    expect(projectUnitCollationMigration).not.toMatch(
+      /DROP TABLE|TRUNCATE|DELETE FROM/i
+    );
+    expect(projectServiceSource).toContain(
+      "DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
     );
   });
   it("adds the dataflow schedule bucket once before creating its unique constraint", () => {

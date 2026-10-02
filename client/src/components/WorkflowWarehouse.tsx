@@ -8,18 +8,33 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import WorkflowCanvas from "@/components/WorkflowCanvas";
 import { trpc } from "@/lib/trpc";
 import {
   ArchiveRestore,
+  Check,
+  ChevronLeft,
   ChevronDown,
   ChevronRight,
+  ChevronsUpDown,
   Download,
   FileJson,
   FolderClosed,
   FolderOpen,
   FolderPlus,
-  Image,
   Loader2,
   MoreHorizontal,
   RotateCcw,
@@ -27,8 +42,9 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { type ChangeEvent, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { searchSelectOptions } from "../../../shared/search-select";
 import type { ProjectRecord } from "./ProjectWorkspace";
 
 type Folder = {
@@ -69,11 +85,13 @@ type ImportResult = {
   message: string;
 };
 
+const displayWorkflowName = (name: string) => name.replaceAll("_", "_\u200b");
+
 function FlowBadge({ type }: { type: string }) {
   const styles: Record<string, string> = {
-    state: "bg-blue-100 text-blue-700",
-    control: "bg-violet-100 text-violet-700",
-    data: "bg-emerald-100 text-emerald-700",
+    state: "bg-aiflow-info-surface text-aiflow-info",
+    control: "bg-aiflow-special-surface text-aiflow-special",
+    data: "bg-aiflow-success-surface text-aiflow-success",
   };
   const labels: Record<string, string> = {
     state: "状态",
@@ -82,7 +100,7 @@ function FlowBadge({ type }: { type: string }) {
   };
   return (
     <span
-      className={`rounded px-1.5 py-0.5 text-[10px] ${styles[type] ?? "bg-slate-100 text-slate-600"}`}
+      className={`aiflow-type-meta rounded px-1.5 py-0.5 ${styles[type] ?? "bg-muted text-muted-foreground"}`}
     >
       {labels[type] ?? type}
     </span>
@@ -91,9 +109,15 @@ function FlowBadge({ type }: { type: string }) {
 
 export default function WorkflowWarehouse({
   projects,
+  projectsLoading,
+  projectsError,
+  onRetryProjects,
   onOpenWorkflow,
 }: {
   projects: ProjectRecord[];
+  projectsLoading: boolean;
+  projectsError: boolean;
+  onRetryProjects: () => void;
   onOpenWorkflow: (project: ProjectRecord, workflowId: string) => void;
 }) {
   const utils = trpc.useUtils();
@@ -107,11 +131,30 @@ export default function WorkflowWarehouse({
   const [folderDialogName, setFolderDialogName] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [keyword, setKeyword] = useState("");
+  const [projectSelectorOpen, setProjectSelectorOpen] = useState(false);
+  const [projectQuery, setProjectQuery] = useState("");
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
+  const workflowRowRefs = useRef(new Map<string, HTMLButtonElement>());
+  const workflowPreviewRef = useRef<HTMLElement | null>(null);
+  const returnToWorkflowListRef = useRef<HTMLButtonElement | null>(null);
+  const previousSelectedWorkflowId = useRef<string | null>(selectedWorkflowId);
   const currentProject =
     projects.find(project => project.id === projectId) ?? projects[0] ?? null;
+  const projectOptions = useMemo(
+    () =>
+      projects.map(project => ({
+        value: project.id,
+        label: `${project.code} · ${project.name}`,
+        keywords: `${project.code} ${project.name}`,
+      })),
+    [projects]
+  );
+  const projectSearch = useMemo(
+    () => searchSelectOptions(projectOptions, projectQuery, 50),
+    [projectOptions, projectQuery]
+  );
   const activeProjectId = currentProject?.id ?? "00000000";
   const warehouse = trpc.project.warehouse.useQuery(
     { projectId: activeProjectId },
@@ -133,6 +176,26 @@ export default function WorkflowWarehouse({
     { id: selectedWorkflowId ?? "00000000" },
     { enabled: Boolean(selectedWorkflowId), retry: false }
   );
+  useEffect(() => {
+    const previousId = previousSelectedWorkflowId.current;
+    let frame: number | undefined;
+    if (window.matchMedia("(max-width: 1279px)").matches) {
+      frame = window.requestAnimationFrame(() => {
+        if (selectedWorkflowId) {
+          workflowPreviewRef.current?.scrollIntoView({ block: "start" });
+          returnToWorkflowListRef.current?.focus({ preventScroll: true });
+        } else if (previousId) {
+          const previousRow = workflowRowRefs.current.get(previousId);
+          previousRow?.scrollIntoView({ block: "center" });
+          previousRow?.focus({ preventScroll: true });
+        }
+      });
+    }
+    previousSelectedWorkflowId.current = selectedWorkflowId;
+    return () => {
+      if (frame !== undefined) window.cancelAnimationFrame(frame);
+    };
+  }, [selectedWorkflowId]);
   const exportInput = useMemo(
     () => ({ projectId: activeProjectId, workflowIds: checkedIds }),
     [activeProjectId, checkedIds]
@@ -334,10 +397,47 @@ export default function WorkflowWarehouse({
     else deleteWorkflow.mutate({ id: deleteTarget.workflow.id });
   };
 
+  if (projectsLoading && !projects.length)
+    return (
+      <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex min-h-80 items-center justify-center gap-2 rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground"
+        >
+          <Loader2 size={16} className="animate-spin" />
+          正在读取当前账号可见的业务项目…
+        </div>
+      </div>
+    );
+
+  if (projectsError && !projects.length)
+    return (
+      <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+        <div
+          role="alert"
+          className="grid min-h-80 place-items-center rounded-lg border border-aiflow-danger-border bg-card p-8 text-center"
+        >
+          <div>
+            <p className="text-sm font-semibold text-foreground">
+              业务列表暂时无法加载
+            </p>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+              这不代表当前没有可访问的业务项目。请检查连接后重试。
+            </p>
+            <Button type="button" className="mt-4" onClick={onRetryProjects}>
+              <RotateCcw size={14} />
+              重试
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+
   if (!currentProject)
     return (
-      <div className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6">
-        <div className="grid min-h-80 place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center text-sm text-slate-400">
+      <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+        <div className="grid min-h-80 place-items-center rounded-lg border border-dashed border-input bg-card p-10 text-center text-sm text-muted-foreground">
           暂无可访问项目；请先在流程设计中创建或加入一个业务项目。
         </div>
       </div>
@@ -346,138 +446,283 @@ export default function WorkflowWarehouse({
   return (
     <div
       data-aiflow-warehouse=""
-      className="min-h-[calc(100vh-56px)] bg-[#f5f7fb] p-4 sm:p-6"
+      className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6"
     >
       <div>
-        <div className="mb-4 flex flex-col gap-3 border-b border-slate-200 pb-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="mb-4 flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">
+            <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
               PROCESS WAREHOUSE
             </p>
-            <h1 className="mt-1 text-xl font-semibold text-slate-800">
+            <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               流程仓库
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
+            <p className="aiflow-type-body mt-1 text-muted-foreground">
               在项目目录树中检索、归档、预览、批量导入和导出状态、控制流程；数据流请前往数据资源中心管理。
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
             <Button
               type="button"
               variant="outline"
               size="sm"
+              className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
               onClick={() => setShowArchived(value => !value)}
             >
               <ArchiveRestore size={14} />
               {showArchived ? "返回流程仓库" : "查看归档流程"}
             </Button>
-            <select
-              className="h-9 min-w-48 rounded-md border border-slate-200 bg-white px-2 text-sm"
-              value={currentProject.id}
-              onChange={event => {
-                setProjectId(event.target.value);
-                setSelectedFolderId(null);
-                setSelectedWorkflowId(null);
-                setCheckedIds([]);
-                setKeyword("");
+            <Popover
+              open={projectSelectorOpen}
+              onOpenChange={open => {
+                setProjectSelectorOpen(open);
+                if (!open) setProjectQuery("");
               }}
             >
-              {projects.map(project => (
-                <option key={project.id} value={project.id}>
-                  {project.code} · {project.name}
-                </option>
-              ))}
-            </select>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-label={`切换流程仓库项目，当前：${currentProject.code} · ${currentProject.name}`}
+                  aria-expanded={projectSelectorOpen}
+                  className="h-11 w-full justify-between gap-2 px-3 text-left font-normal sm:w-80"
+                  title={`${currentProject.code} · ${currentProject.name}`}
+                >
+                  <span className="min-w-0 truncate">
+                    {currentProject.code} · {currentProject.name}
+                  </span>
+                  <ChevronsUpDown
+                    size={16}
+                    className="shrink-0 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                align="end"
+                className="max-w-[calc(100vw-2rem)] p-0"
+                style={{ width: "var(--radix-popover-trigger-width)" }}
+              >
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    aria-label="搜索仓库项目"
+                    placeholder="输入项目名称或代号搜索"
+                    value={projectQuery}
+                    onValueChange={setProjectQuery}
+                  />
+                  <CommandList>
+                    {projectSearch.totalMatches === 0 ? (
+                      <CommandEmpty>
+                        没有匹配的项目，请更换搜索词。
+                      </CommandEmpty>
+                    ) : (
+                      <CommandGroup
+                        heading={`匹配 ${projectSearch.totalMatches} 个项目`}
+                      >
+                        {projectSearch.options.map(option => (
+                          <CommandItem
+                            key={option.value}
+                            value={option.value}
+                            onSelect={() => {
+                              setProjectId(option.value);
+                              setSelectedFolderId(null);
+                              setSelectedWorkflowId(null);
+                              setCheckedIds([]);
+                              setKeyword("");
+                              setProjectSelectorOpen(false);
+                              setProjectQuery("");
+                            }}
+                            className="min-h-11"
+                          >
+                            <Check
+                              size={16}
+                              className={
+                                option.value === currentProject.id
+                                  ? "opacity-100"
+                                  : "opacity-0"
+                              }
+                              aria-hidden="true"
+                            />
+                            <span
+                              className="min-w-0 truncate"
+                              title={option.label}
+                            >
+                              {option.label}
+                            </span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    )}
+                  </CommandList>
+                  {projectSearch.hasMore && (
+                    <p className="aiflow-type-body border-t px-3 py-2 text-muted-foreground">
+                      显示前 50 个匹配项目；继续输入名称或代号以缩小范围。
+                    </p>
+                  )}
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
+        {projectsError && projects.length > 0 && (
+          <div
+            role="status"
+            className="aiflow-type-body mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-4 py-2 text-amber-900"
+          >
+            <span>刷新失败，当前显示上次成功读取的业务项目列表。</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 border-amber-300 bg-card text-xs text-amber-900"
+              onClick={onRetryProjects}
+            >
+              重试
+            </Button>
+          </div>
+        )}
         {warehouse.isError && (
-          <div role="alert" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
-            <div><p className="font-semibold">流程仓库加载失败</p><p className="mt-1 break-words text-xs text-rose-700">{warehouse.error.message}</p></div>
-            <Button type="button" variant="outline" size="sm" onClick={() => void warehouse.refetch()}><RotateCcw size={14} />重试</Button>
+          <div
+            role="alert"
+            className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-sm text-aiflow-danger"
+          >
+            <div>
+              <p className="font-semibold">流程仓库加载失败</p>
+              <p className="aiflow-type-body mt-1 break-words text-aiflow-danger">
+                {warehouse.error.message}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void warehouse.refetch()}
+            >
+              <RotateCcw size={14} />
+              重试
+            </Button>
           </div>
         )}
         {warehouse.isLoading && (
-          <div role="status" className="mb-4 flex items-center gap-2 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" />正在读取流程仓库…</div>
+          <div
+            role="status"
+            className="mb-4 flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground"
+          >
+            <Loader2 size={16} className="animate-spin" />
+            正在读取流程仓库…
+          </div>
         )}
         {showArchived ? (
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-100 p-4">
-              <h2 className="font-semibold text-slate-700">可恢复归档流程</h2>
-              <p className="mt-1 text-xs text-slate-400">
+          <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+            <div className="border-b border-border p-4">
+              <h2 className="font-semibold text-foreground">可恢复归档流程</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
                 归档不会删除版本、运行和审计记录；存在活动运行的流程不能归档。
               </p>
             </div>
-            <div className="divide-y divide-slate-100">
+            <div className="divide-y divide-border">
               {archivedWorkflows.isError && (
                 <div role="alert" className="p-8 text-center">
-                  <p className="text-sm font-semibold text-slate-700">归档流程加载失败</p>
-                  <p className="mt-1 break-words text-xs text-slate-500">{archivedWorkflows.error.message}</p>
-                  <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void archivedWorkflows.refetch()}><RotateCcw size={14} />重试</Button>
+                  <p className="text-sm font-semibold text-foreground">
+                    归档流程加载失败
+                  </p>
+                  <p className="mt-1 break-words text-sm text-muted-foreground">
+                    {archivedWorkflows.error.message}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => void archivedWorkflows.refetch()}
+                  >
+                    <RotateCcw size={14} />
+                    重试
+                  </Button>
                 </div>
               )}
               {archivedWorkflows.isLoading && (
-                <div role="status" className="flex items-center justify-center gap-2 p-8 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" />正在读取归档流程…</div>
-              )}
-              {!archivedWorkflows.isLoading && !archivedWorkflows.isError && restorableWorkflows.map(workflow => (
                 <div
-                  key={workflow.id}
-                  className="flex flex-wrap items-center justify-between gap-3 p-4"
+                  role="status"
+                  className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground"
                 >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-800">
-                      {workflow.name}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      {workflow.description || "未填写流程简介"} · 归档于{" "}
-                      {workflow.archivedAt
-                        ? new Date(workflow.archivedAt).toLocaleString(
-                            "zh-CN",
-                            { hour12: false }
-                          )
-                        : "—"}
-                    </p>
-                  </div>
-                  {workflow.canRestore ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled={restoreWorkflow.isPending}
-                      onClick={() =>
-                        restoreWorkflow.mutate({ id: workflow.id })
-                      }
-                    >
-                      <ArchiveRestore size={14} />
-                      恢复流程
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-slate-400">
-                      仅流程所有者或管理员可恢复
-                    </span>
-                  )}
-                </div>
-              ))}
-              {!archivedWorkflows.isLoading && !archivedWorkflows.isError && !restorableWorkflows.length && (
-                <div className="p-10 text-center text-sm text-slate-400">
-                  当前项目暂无可恢复归档流程。
+                  <Loader2 size={16} className="animate-spin" />
+                  正在读取归档流程…
                 </div>
               )}
+              {!archivedWorkflows.isLoading &&
+                !archivedWorkflows.isError &&
+                restorableWorkflows.map(workflow => (
+                  <div
+                    key={workflow.id}
+                    className="flex flex-wrap items-center justify-between gap-3 p-4"
+                  >
+                    <div className="min-w-0">
+                      <p
+                        aria-label={workflow.name}
+                        className="aiflow-type-body break-words font-medium text-foreground"
+                        title={workflow.name}
+                      >
+                        {displayWorkflowName(workflow.name)}
+                      </p>
+                      <p className="aiflow-type-body mt-1 text-muted-foreground">
+                        {workflow.description || "未填写流程简介"} · 归档于{" "}
+                        {workflow.archivedAt
+                          ? new Date(workflow.archivedAt).toLocaleString(
+                              "zh-CN",
+                              { hour12: false }
+                            )
+                          : "—"}
+                      </p>
+                    </div>
+                    {workflow.canRestore ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={restoreWorkflow.isPending}
+                        onClick={() =>
+                          restoreWorkflow.mutate({ id: workflow.id })
+                        }
+                      >
+                        <ArchiveRestore size={14} />
+                        恢复流程
+                      </Button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        仅流程所有者或管理员可恢复
+                      </span>
+                    )}
+                  </div>
+                ))}
+              {!archivedWorkflows.isLoading &&
+                !archivedWorkflows.isError &&
+                !restorableWorkflows.length && (
+                  <div className="p-10 text-center text-sm text-muted-foreground">
+                    当前项目暂无可恢复归档流程。
+                  </div>
+                )}
             </div>
           </section>
         ) : (
           <>
-            <div className={`grid gap-4 ${selectedWorkflowId ? "xl:grid-cols-[280px_minmax(0,1fr)_420px]" : "xl:grid-cols-[280px_minmax(0,1fr)]"}`}>
-              <aside className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 p-3">
+            <div
+              className={`grid gap-4 ${selectedWorkflowId ? "xl:grid-cols-[240px_minmax(280px,1fr)_minmax(500px,1.35fr)]" : "xl:grid-cols-[240px_minmax(0,1fr)]"}`}
+            >
+              <aside
+                className={`overflow-hidden rounded-lg border border-border bg-card shadow-sm ${selectedWorkflowId ? "hidden xl:block" : ""}`}
+              >
+                <div className="border-b border-border p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-700">
+                    <h2 className="aiflow-type-section-title font-semibold text-foreground">
                       流程列表
-                    </p>
+                    </h2>
                     {canEdit && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="h-8 text-xs"
+                        className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
                         onClick={() => {
                           setFolderDialog({ mode: "selected" });
                           setFolderDialogName("");
@@ -492,11 +737,12 @@ export default function WorkflowWarehouse({
                     <div className="relative min-w-0 flex-1">
                       <Search
                         size={14}
-                        className="absolute left-2.5 top-2.5 text-slate-400"
+                        className="absolute left-2.5 top-2.5 text-muted-foreground"
                       />
                       <Input
-                        className="h-9 pl-8 text-xs"
+                        className="aiflow-type-control h-11 min-h-11 pl-8 min-[1024px]:h-9 min-[1024px]:min-h-0"
                         placeholder="请输入搜索内容"
+                        aria-label="搜索当前目录中的流程"
                         value={keyword}
                         onChange={event => setKeyword(event.target.value)}
                       />
@@ -504,19 +750,22 @@ export default function WorkflowWarehouse({
                     <div className="relative">
                       <Button
                         type="button"
-                        size="icon"
-                        className="h-9 w-9"
+                        size="sm"
+                        className="aiflow-type-control h-11 min-h-11 gap-1 px-2 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                        aria-label="批量操作"
+                        aria-expanded={batchMenuOpen}
                         title="批量操作"
                         disabled={!canEdit}
                         onClick={() => setBatchMenuOpen(value => !value)}
                       >
                         <MoreHorizontal size={16} />
+                        批量
                       </Button>
                       {batchMenuOpen && (
-                        <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+                        <div className="absolute right-0 z-20 mt-1 w-32 rounded-md border border-border bg-card p-1 shadow-lg">
                           <button
                             type="button"
-                            className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs hover:bg-slate-50"
+                            className="aiflow-type-control flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-muted"
                             onClick={() => importRef.current?.click()}
                           >
                             <Upload size={13} />
@@ -524,12 +773,14 @@ export default function WorkflowWarehouse({
                           </button>
                           <button
                             type="button"
-                            className="flex w-full items-center gap-2 rounded px-2 py-2 text-left text-xs hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300"
+                            className="aiflow-type-control flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-muted disabled:cursor-not-allowed disabled:text-slate-300"
                             disabled={!checkedIds.length}
                             onClick={() => void exportSelected()}
                           >
                             <Download size={13} />
-                            批量导出
+                            {checkedIds.length
+                              ? `批量导出 (${checkedIds.length})`
+                              : "批量导出"}
                           </button>
                         </div>
                       )}
@@ -538,12 +789,12 @@ export default function WorkflowWarehouse({
                 </div>
                 <div className="max-h-[620px] overflow-y-auto p-2">
                   <button
-                    className={`flex w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-[#eaf1ff] text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
+                    className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-accent text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
                     onClick={() => setSelectedFolderId(null)}
                   >
                     <ArchiveRestore size={15} />
                     根目录{" "}
-                    <span className="ml-auto text-xs text-slate-400">
+                    <span className="aiflow-type-meta ml-auto text-muted-foreground">
                       {workflows.filter(workflow => !workflow.folderId).length}
                     </span>
                   </button>
@@ -567,21 +818,23 @@ export default function WorkflowWarehouse({
                   ))}
                 </div>
               </aside>
-              <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 p-3">
+              <section
+                className={`overflow-hidden rounded-lg border border-border bg-card shadow-sm ${selectedWorkflowId ? "hidden xl:block" : ""}`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-700">
+                    <h2 className="aiflow-type-section-title font-semibold text-foreground">
                       {selectedFolder?.name ?? "根目录流程"}
-                    </p>
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      勾选流程后可批量导出；选择一条流程在右侧查看简介和只读画布。
+                    </h2>
+                    <p className="aiflow-type-body mt-1 text-muted-foreground">
+                      勾选后可批量导出；点击流程可查看简介和只读画布。
                     </p>
                   </div>
                   {selectedFolderId && canEdit && (
                     <div className="flex gap-3">
                       <button
                         type="button"
-                        className="text-xs text-[#2d6bea] hover:underline"
+                        className="aiflow-type-control min-h-11 text-aiflow-info hover:underline min-[1024px]:min-h-9"
                         onClick={() => {
                           const description = window.prompt(
                             "目录说明",
@@ -599,7 +852,7 @@ export default function WorkflowWarehouse({
                       </button>
                       <button
                         type="button"
-                        className="text-xs text-red-600 hover:underline"
+                        className="aiflow-type-control min-h-11 text-red-600 hover:underline min-[1024px]:min-h-9"
                         onClick={() =>
                           selectedFolder &&
                           setDeleteTarget({
@@ -613,45 +866,65 @@ export default function WorkflowWarehouse({
                     </div>
                   )}
                 </div>
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-border">
                   {visibleWorkflows.map(workflow => (
                     <div
                       key={workflow.id}
-                      className={`flex items-center gap-3 p-3 transition-colors ${selectedWorkflowId === workflow.id ? "bg-blue-50" : "hover:bg-slate-50"}`}
+                      className={`flex items-start gap-1.5 p-2 transition-colors sm:gap-3 sm:p-3 ${selectedWorkflowId === workflow.id ? "bg-aiflow-info-surface" : "hover:bg-muted"}`}
                     >
-                      <input
-                        type="checkbox"
-                        aria-label={`选择${workflow.name}`}
-                        checked={checkedIds.includes(workflow.id)}
-                        onChange={() =>
-                          setCheckedIds(current =>
-                            current.includes(workflow.id)
-                              ? current.filter(id => id !== workflow.id)
-                              : current.concat(workflow.id)
-                          )
-                        }
-                      />
+                      <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-muted">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-blue-600"
+                          aria-label={`选择${workflow.name}`}
+                          checked={checkedIds.includes(workflow.id)}
+                          onChange={() =>
+                            setCheckedIds(current =>
+                              current.includes(workflow.id)
+                                ? current.filter(id => id !== workflow.id)
+                                : current.concat(workflow.id)
+                            )
+                          }
+                        />
+                      </label>
                       <button
-                        className="min-w-0 flex-1 text-left"
+                        ref={node => {
+                          if (node)
+                            workflowRowRefs.current.set(workflow.id, node);
+                          else workflowRowRefs.current.delete(workflow.id);
+                        }}
+                        className="min-w-0 flex-1 py-1 text-left"
+                        aria-label={`查看流程 ${workflow.name}`}
+                        title={workflow.name}
                         onClick={() => setSelectedWorkflowId(workflow.id)}
                       >
-                        <div className="flex items-center gap-2">
-                          <FileJson size={15} className="text-[#2d6bea]" />
-                          <p className="truncate text-sm font-medium text-slate-800">
-                            {workflow.name}
+                        <div className="flex items-start gap-1.5 sm:gap-2">
+                          <FileJson
+                            size={15}
+                            className="mt-0.5 shrink-0 text-aiflow-info"
+                          />
+                          <p className="aiflow-type-card-title min-w-0 break-words font-semibold leading-6 text-foreground">
+                            {displayWorkflowName(workflow.name)}
                           </p>
-                          <FlowBadge type={workflow.flowType} />
                         </div>
-                        <p className="mt-1 truncate text-xs text-slate-400">
-                          {workflow.description || "未填写流程简介"} · v
-                          {workflow.definitionVersion}
+                        <p
+                          className="aiflow-type-body mt-1 line-clamp-2 break-words text-muted-foreground"
+                          title={workflow.description || "未填写流程简介"}
+                        >
+                          {workflow.description || "未填写流程简介"}
                         </p>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <FlowBadge type={workflow.flowType} />
+                          <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                            v{workflow.definitionVersion}
+                          </span>
+                        </div>
                       </button>
                       {canManageSelected &&
                         selectedWorkflowId === workflow.id && (
                           <select
                             aria-label="移动流程目录"
-                            className="h-7 max-w-28 rounded border border-slate-200 bg-white px-1 text-[11px]"
+                            className="aiflow-type-control h-11 min-h-11 max-w-40 rounded border border-border bg-card px-2 min-[1024px]:h-9 min-[1024px]:min-h-0"
                             value={workflow.folderId ?? ""}
                             onChange={event =>
                               moveWorkflow.mutate({
@@ -672,44 +945,64 @@ export default function WorkflowWarehouse({
                       {canEdit && (
                         <button
                           type="button"
-                          className="rounded p-1 text-slate-400 hover:bg-amber-50 hover:text-amber-700"
-                          title="归档流程"
+                          className="aiflow-type-control inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded px-2 text-muted-foreground hover:bg-aiflow-warning-surface hover:text-aiflow-warning min-[1024px]:h-9 min-[1024px]:min-h-0"
+                          title={`归档流程 ${workflow.name}`}
                           aria-label={`归档流程 ${workflow.name}`}
                           onClick={() =>
                             setDeleteTarget({ kind: "workflow", workflow })
                           }
                         >
-                          <ArchiveRestore size={14} />
+                          <ArchiveRestore size={15} />
+                          <span>归档</span>
                         </button>
                       )}
                     </div>
                   ))}
-                  {!warehouse.isLoading && !warehouse.isError && !visibleWorkflows.length && (
-                    <div className="grid min-h-64 place-items-center p-8 text-center">
-                      <div>
-                        <FolderClosed
-                          className="mx-auto text-slate-300"
-                          size={30}
-                        />
-                        <p className="mt-3 text-sm text-slate-400">
-                          {keyword ? "没有搜到任何数据" : "该目录暂无流程。"}
-                        </p>
+                  {!warehouse.isLoading &&
+                    !warehouse.isError &&
+                    !visibleWorkflows.length && (
+                      <div className="grid min-h-64 place-items-center p-8 text-center">
+                        <div>
+                          <FolderClosed
+                            className="mx-auto text-slate-300"
+                            size={30}
+                          />
+                          <p className="mt-3 text-sm text-muted-foreground">
+                            {keyword ? "没有搜到任何数据" : "该目录暂无流程。"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               </section>
               {selectedWorkflowId && (
-                <aside className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm flex flex-col">
-                  <div className="flex items-center justify-between border-b border-slate-100 p-3">
-                    <p className="text-sm font-semibold text-slate-700">
+                <aside
+                  ref={workflowPreviewRef}
+                  className="scroll-mt-14 flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+                >
+                  <div className="flex items-center justify-between border-b border-border p-3">
+                    <p className="aiflow-type-section-title font-semibold text-foreground">
                       流程简介
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400">只读流程图</span>
+                      <span className="aiflow-type-meta text-muted-foreground">
+                        只读流程图
+                      </span>
                       <button
                         type="button"
-                        className="rounded px-1.5 py-0.5 text-xs text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                        ref={returnToWorkflowListRef}
+                        aria-label="返回流程列表"
+                        className="aiflow-type-control inline-flex min-h-11 items-center gap-1 rounded px-2 text-muted-foreground hover:bg-muted xl:hidden"
+                        onClick={() => setSelectedWorkflowId(null)}
+                        title="返回流程列表"
+                      >
+                        <ChevronLeft size={14} />
+                        返回列表
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="收起预览"
+                        className="hidden rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground xl:inline-flex"
                         onClick={() => setSelectedWorkflowId(null)}
                         title="收起预览"
                       >
@@ -717,82 +1010,115 @@ export default function WorkflowWarehouse({
                       </button>
                     </div>
                   </div>
-                {workflowDetail.data ? (
-                  <div>
-                    <div className="border-b border-slate-100 p-3">
-                      <div className="flex items-center gap-2">
-                        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-800">
-                          {workflowDetail.data.name}
+                  {workflowDetail.data ? (
+                    <div>
+                      <div className="border-b border-border p-3">
+                        <div className="flex items-start gap-2">
+                          <p
+                            aria-label={workflowDetail.data.name}
+                            className="aiflow-type-card-title min-w-0 flex-1 break-words font-semibold leading-6 text-foreground"
+                            title={workflowDetail.data.name}
+                          >
+                            {displayWorkflowName(workflowDetail.data.name)}
+                          </p>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <FlowBadge type={workflowDetail.data.flowType} />
+                            <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                              v{workflowDetail.data.definitionVersion}
+                            </span>
+                          </div>
+                        </div>
+                        <p className="aiflow-type-body mt-2 line-clamp-4 break-words text-muted-foreground">
+                          {workflowDetail.data.description || "未填写流程简介"}
                         </p>
-                        <FlowBadge type={workflowDetail.data.flowType} />
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                            size="sm"
+                            onClick={() =>
+                              onOpenWorkflow(
+                                currentProject,
+                                workflowDetail.data.id
+                              )
+                            }
+                          >
+                            打开设计器
+                          </Button>
+                          <Button
+                            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                            variant="outline"
+                            size="sm"
+                            onClick={exportCurrent}
+                          >
+                            <Download size={12} />
+                            导出流程
+                          </Button>
+                        </div>
                       </div>
-                      <p className="mt-2 text-xs leading-5 text-slate-500">
-                        {workflowDetail.data.description || "未填写流程简介"}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="min-w-0">
+                        <WorkflowCanvas
+                          workflowId={workflowDetail.data.id}
+                          definition={workflowDetail.data.definition}
+                          readOnly
+                          compactReadOnlyPreview
+                        />
+                      </div>
+                    </div>
+                  ) : workflowDetail.isLoading ? (
+                    <div
+                      role="status"
+                      aria-live="polite"
+                      className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground"
+                    >
+                      <div>
+                        <Loader2
+                          className="mx-auto animate-spin text-aiflow-info"
+                          size={24}
+                          aria-hidden="true"
+                        />
+                        <p className="mt-3">正在读取所选流程简介和只读画布…</p>
+                      </div>
+                    </div>
+                  ) : workflowDetail.isError ? (
+                    <div
+                      role="alert"
+                      className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground"
+                    >
+                      <div>
+                        <FolderClosed
+                          className="mx-auto text-slate-300"
+                          size={30}
+                          aria-hidden="true"
+                        />
+                        <p className="mt-3">
+                          暂时无法读取所选流程详情，请重试。
+                        </p>
                         <Button
-                          className="h-7 text-xs"
-                          size="sm"
-                          onClick={() =>
-                            onOpenWorkflow(
-                              currentProject,
-                              workflowDetail.data.id
-                            )
-                          }
-                        >
-                          打开设计器
-                        </Button>
-                        <Button
-                          className="h-7 text-xs"
+                          type="button"
                           variant="outline"
                           size="sm"
-                          onClick={exportCurrent}
+                          className="mt-4 min-h-11"
+                          onClick={() => void workflowDetail.refetch()}
                         >
-                          <Download size={12} />
-                          导出流程
+                          重试读取流程详情
                         </Button>
-                        <span className="inline-flex h-7 items-center gap-1 rounded border border-slate-200 px-2 text-[11px] text-slate-500">
-                          <Image size={12} />
-                          全屏与图片工具位于预览画布
-                        </span>
                       </div>
                     </div>
-                    <div className="h-[470px]">
-                      <WorkflowCanvas
-                        workflowId={workflowDetail.data.id}
-                        definition={workflowDetail.data.definition}
-                        readOnly
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-slate-400">
-                    <div>
-                      <FolderClosed
-                        className="mx-auto text-slate-300"
-                        size={30}
-                      />
-                      <p className="mt-3">
-                        从中间列表选择一条流程，查看流程简介、版本信息与只读流程图。
-                      </p>
-                      <div className="mt-4 flex flex-wrap justify-center gap-2 text-[11px]">
-                        <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">
-                          取消高亮
-                        </span>
-                        <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">
-                          整理画布
-                        </span>
-                        <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">
-                          保存为图片
-                        </span>
-                        <span className="rounded border border-slate-200 px-2 py-1 text-slate-300">
-                          全屏
-                        </span>
+                  ) : (
+                    <div className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground">
+                      <div>
+                        <FolderClosed
+                          className="mx-auto text-slate-300"
+                          size={30}
+                          aria-hidden="true"
+                        />
+                        <p className="mt-3">
+                          未能取得所选流程的详情，请返回列表重新选择。
+                        </p>
                       </div>
                     </div>
-                  </div>
-                )}
-              </aside>
+                  )}
+                </aside>
               )}
             </div>
             <input
@@ -823,7 +1149,7 @@ export default function WorkflowWarehouse({
                 文件夹仅在当前受权业务项目中创建，不会改变其他项目的仓库目录。
               </DialogDescription>
             </DialogHeader>
-            <label className="grid gap-2 text-sm font-medium text-slate-700">
+            <label className="grid gap-2 text-sm font-medium text-foreground">
               文件夹名称
               <Input
                 autoFocus
@@ -929,7 +1255,7 @@ function FolderTree({
   return (
     <div>
       <div
-        className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-[#eaf1ff] text-[#245fc8]" : "text-slate-600 hover:bg-slate-50"}`}
+        className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-accent text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
       >
         <button
           className="flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 text-left"
@@ -961,16 +1287,16 @@ function FolderTree({
               type="button"
               aria-label={`${folder.name} 的目录操作`}
               title="目录操作"
-              className="rounded p-1 text-slate-400 opacity-0 hover:bg-white hover:text-slate-700 group-hover:opacity-100 focus:opacity-100"
+              className="rounded p-1 text-muted-foreground opacity-0 hover:bg-card hover:text-foreground group-hover:opacity-100 focus:opacity-100"
               onClick={() => setMenuOpen(value => !value)}
             >
               <MoreHorizontal size={14} />
             </button>
             {menuOpen && (
-              <div className="absolute right-0 z-30 mt-1 w-28 rounded-md border border-slate-200 bg-white p-1 text-xs text-slate-700 shadow-lg">
+              <div className="absolute right-0 z-30 mt-1 w-28 rounded-md border border-border bg-card p-1 text-xs text-foreground shadow-lg">
                 <button
                   type="button"
-                  className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
+                  className="w-full rounded px-2 py-1.5 text-left hover:bg-muted"
                   onClick={() => {
                     setMenuOpen(false);
                     onAddSibling(folder);
@@ -980,7 +1306,7 @@ function FolderTree({
                 </button>
                 <button
                   type="button"
-                  className="w-full rounded px-2 py-1.5 text-left hover:bg-slate-50"
+                  className="w-full rounded px-2 py-1.5 text-left hover:bg-muted"
                   onClick={() => {
                     setMenuOpen(false);
                     onAddChild(folder);

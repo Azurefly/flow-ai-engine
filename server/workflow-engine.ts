@@ -6,6 +6,12 @@ import { isIP } from "node:net";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import {
+  decodeWorkflowRunHistoryCursor,
+  encodeWorkflowRunHistoryCursor,
+  WORKFLOW_RUN_HISTORY_MAX_PAGE_SIZE,
+  WORKFLOW_RUN_HISTORY_PAGE_SIZE,
+} from "./run-history-pagination";
+import {
   approvalRequirement,
   normalizeReferenceOperateConfig,
   type TemporaryRoleChange,
@@ -17,9 +23,12 @@ import {
 import {
   readOperateOutcomeMode,
   readOperateOutcomes,
+  resolveStateDisplayName,
 } from "../shared/workflow-node-contract";
+import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-source";
 import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
 import { ENV } from "./_core/env";
+import { loadRuntimeModelCatalog } from "./runtime-model-catalog";
 import { currentRequestId } from "./_core/http-security";
 import {
   assertWorkflowExecutionPlan,
@@ -479,6 +488,7 @@ export type RunFilters = {
   from?: Date;
   to?: Date;
   triggeredByUserId?: number;
+  triggeredByQuery?: string;
   limit?: number;
 };
 
@@ -675,7 +685,9 @@ function requestPinnedHttp(input: {
             return (options as any)(null, input.address, input.family);
           }
           if (options && typeof options === "object" && (options as any).all) {
-            return callback(null, [{ address: input.address, family: input.family }]);
+            return callback(null, [
+              { address: input.address, family: input.family },
+            ]);
           }
           return callback(null, input.address, input.family);
         }) as any,
@@ -1509,8 +1521,7 @@ async function executeNode(
           ),
           displayName: String(
             resolveTemplates(
-              firstConfiguredString(config.jdmc, config.displayName) ??
-                node.name,
+              resolveStateDisplayName(config, node.name),
               context
             )
           ),
@@ -1643,9 +1654,10 @@ async function executeNode(
     case "end":
       return {
         output: {
-          result: resolveTemplates(
-            config.resultTemplate ?? "{{vars}}",
-            context
+          // Snapshot before the engine stores this output in vars[node.id].
+          // A {{vars}} result otherwise points back to its own end output.
+          result: structuredClone(
+            resolveTemplates(config.resultTemplate ?? "{{vars}}", context)
           ),
         },
       };
@@ -1869,7 +1881,7 @@ export async function submitWorkflowRun(input: {
   triggerType?: string;
 }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
+    "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionVersion,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
     [input.workflowId]
   );
   const workflow = workflowRows[0] as PersistedWorkflow | undefined;
@@ -1887,8 +1899,15 @@ export async function submitWorkflowRun(input: {
   const storedPlan = readJson(
     workflow.publishedExecutionPlanJson
   ) as WorkflowExecutionPlan | null;
+  const executionSource = resolveWorkflowExecutionSource({
+    workflowStatus: String(workflow.status),
+    publishedPlan: storedPlan,
+    publishedPlanHash: workflow.publishedExecutionPlanHash
+      ? String(workflow.publishedExecutionPlanHash)
+      : null,
+  });
   const executablePlan =
-    storedPlan && workflow.publishedExecutionPlanHash
+    executionSource === "published_plan"
       ? assertWorkflowExecutionPlan(
           storedPlan,
           String(workflow.publishedExecutionPlanHash),
@@ -1955,7 +1974,7 @@ export async function submitWorkflowRun(input: {
   try {
     await connection.beginTransaction();
     const [lockedWorkflowRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT archivedAt,flowType FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+      "SELECT archivedAt,flowType,status,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
       [input.workflowId]
     );
     if (!lockedWorkflowRows[0]) throw new Error("流程不存在。");
@@ -1963,8 +1982,14 @@ export async function submitWorkflowRun(input: {
       throw new Error("已归档流程不能发起运行，请先恢复流程。");
     if (String(lockedWorkflowRows[0].flowType) === "data")
       throw new Error("数据流程必须通过数据流运行入口启动。");
+    if (
+      String(lockedWorkflowRows[0].status) !== String(workflow.status) ||
+      Number(lockedWorkflowRows[0].definitionVersion) !==
+        Number(workflow.definitionVersion)
+    )
+      throw new Error("流程版本在提交运行期间发生变化，请重新发起运行。");
     await connection.query(
-      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,requestId) VALUES (?,?,?,?,?,?,'queued',?,?,?,?,?,?,?)",
+      "INSERT INTO workflow_run (id,workflowId,ownerUserId,triggeredByUserId,flowType,triggerType,status,definitionSnapshotJson,inputJson,contextJson,authorizationSnapshotJson,executionPlanJson,executionPlanHash,executionSource,definitionVersion,requestId) VALUES (?,?,?,?,?,?,'queued',?,?,?,?,?,?,?,?,?)",
       [
         runId,
         input.workflowId,
@@ -1978,6 +2003,8 @@ export async function submitWorkflowRun(input: {
         JSON.stringify(authorizationSnapshot),
         JSON.stringify(executablePlan),
         hashWorkflowExecutionPlan(executablePlan),
+        executionSource,
+        Number(workflow.definitionVersion),
         input.requestId ?? currentRequestId() ?? null,
       ]
     );
@@ -2483,6 +2510,10 @@ type PersistedWorkflow = mysql.RowDataPacket & {
   projectId?: string | null;
   name: string;
   flowType: "state" | "control" | "data";
+  status: string;
+  definitionVersion: number;
+  publishedExecutionPlanJson?: unknown;
+  publishedExecutionPlanHash?: string | null;
 };
 type RunSegmentResult =
   | { status: "success"; output: unknown }
@@ -2761,9 +2792,7 @@ async function persistStateNode(input: {
   const stateCode = String(
     firstConfiguredString(config.nodeDh, config.stateCode) ?? input.node.id
   );
-  const stateName = String(
-    firstConfiguredString(config.jdmc, config.displayName) ?? input.node.name
-  );
+  const stateName = resolveStateDisplayName(config, input.node.name);
   const flowStatus = String(
     firstConfiguredString(config.flowStatus) ?? stateName
   );
@@ -4335,7 +4364,7 @@ export async function listWorkflowRuns(
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT r.id,r.workflowId,r.triggeredByUserId,r.triggerType,r.status,r.inputJson,r.finalOutputJson,r.errorJson,r.startedAt,r.finishedAt,r.durationMs,r.createdAt,u.username,u.name AS triggeredByName
        FROM workflow_run r LEFT JOIN users u ON u.id=r.triggeredByUserId
-      WHERE r.workflowId=? AND (? IS NULL OR r.status=?) AND (? IS NULL OR r.createdAt>=?) AND (? IS NULL OR r.createdAt<=?) AND (? IS NULL OR r.triggeredByUserId=?)
+      WHERE r.workflowId=? AND (? IS NULL OR r.status=?) AND (? IS NULL OR r.createdAt>=?) AND (? IS NULL OR r.createdAt<=?) AND (? IS NULL OR r.triggeredByUserId=?) AND (? IS NULL OR LOCATE(?,COALESCE(u.name,''))>0 OR LOCATE(?,COALESCE(u.username,''))>0)
       ORDER BY r.createdAt DESC LIMIT ?`,
     [
       workflowId,
@@ -4347,19 +4376,37 @@ export async function listWorkflowRuns(
       filters.to ?? null,
       filters.triggeredByUserId ?? null,
       filters.triggeredByUserId ?? null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
       limit,
     ]
   );
   return rows;
 }
 
-export async function getWorkflowRunMetrics(
+export async function listWorkflowRunHistoryPage(
   workflowId: string,
-  filters: Omit<RunFilters, "limit"> = {}
+  filters: Omit<RunFilters, "limit"> & {
+    cursor?: string;
+    pageSize?: number;
+    searchQuery?: string;
+  } = {}
 ) {
+  const pageSize = Math.min(
+    Math.max(Math.trunc(filters.pageSize ?? WORKFLOW_RUN_HISTORY_PAGE_SIZE), 1),
+    WORKFLOW_RUN_HISTORY_MAX_PAGE_SIZE
+  );
+  const cursor = filters.cursor
+    ? decodeWorkflowRunHistoryCursor(filters.cursor)
+    : null;
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT COUNT(*) AS totalRuns,COALESCE(SUM(status='success'),0) AS successfulRuns,COALESCE(SUM(status='failed'),0) AS failedRuns,COALESCE(ROUND(AVG(CASE WHEN status IN ('success','failed') THEN durationMs END)),0) AS averageDurationMs,COALESCE(MAX(durationMs),0) AS maxDurationMs
-       FROM workflow_run WHERE workflowId=? AND (? IS NULL OR status=?) AND (? IS NULL OR createdAt>=?) AND (? IS NULL OR createdAt<=?) AND (? IS NULL OR triggeredByUserId=?)`,
+    `SELECT r.id,r.workflowId,r.triggeredByUserId,r.triggerType,r.status,r.startedAt,r.finishedAt,r.durationMs,r.createdAt,u.username,u.name AS triggeredByName
+       FROM workflow_run r LEFT JOIN users u ON u.id=r.triggeredByUserId
+      WHERE r.workflowId=? AND (? IS NULL OR r.status=?) AND (? IS NULL OR r.createdAt>=?) AND (? IS NULL OR r.createdAt<=?) AND (? IS NULL OR r.triggeredByUserId=?) AND (? IS NULL OR LOCATE(?,COALESCE(u.name,''))>0 OR LOCATE(?,COALESCE(u.username,''))>0)
+        AND (? IS NULL OR LOCATE(?,r.id)>0 OR LOCATE(?,r.status)>0 OR LOCATE(?,COALESCE(u.name,''))>0 OR LOCATE(?,COALESCE(u.username,''))>0)
+        AND (? IS NULL OR r.createdAt<? OR (r.createdAt=? AND r.id<?))
+      ORDER BY r.createdAt DESC,r.id DESC LIMIT ?`,
     [
       workflowId,
       filters.status ?? null,
@@ -4370,6 +4417,59 @@ export async function getWorkflowRunMetrics(
       filters.to ?? null,
       filters.triggeredByUserId ?? null,
       filters.triggeredByUserId ?? null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.searchQuery?.trim() || null,
+      filters.searchQuery?.trim() || null,
+      filters.searchQuery?.trim() || null,
+      filters.searchQuery?.trim() || null,
+      filters.searchQuery?.trim() || null,
+      cursor?.createdAt ?? null,
+      cursor?.createdAt ?? null,
+      cursor?.createdAt ?? null,
+      cursor?.id ?? null,
+      pageSize + 1,
+    ]
+  );
+
+  const hasMore = rows.length > pageSize;
+  const items = rows.slice(0, pageSize);
+  const lastItem = items.at(-1);
+  return {
+    items,
+    hasMore,
+    nextCursor:
+      hasMore && lastItem
+        ? encodeWorkflowRunHistoryCursor({
+            createdAt: new Date(lastItem.createdAt),
+            id: String(lastItem.id),
+          })
+        : null,
+    pageSize,
+  };
+}
+
+export async function getWorkflowRunMetrics(
+  workflowId: string,
+  filters: Omit<RunFilters, "limit"> = {}
+) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT COUNT(*) AS totalRuns,COALESCE(SUM(r.status='success'),0) AS successfulRuns,COALESCE(SUM(r.status='failed'),0) AS failedRuns,COALESCE(ROUND(AVG(CASE WHEN r.status IN ('success','failed') THEN r.durationMs END)),0) AS averageDurationMs,COALESCE(MAX(r.durationMs),0) AS maxDurationMs
+       FROM workflow_run r LEFT JOIN users u ON u.id=r.triggeredByUserId WHERE r.workflowId=? AND (? IS NULL OR r.status=?) AND (? IS NULL OR r.createdAt>=?) AND (? IS NULL OR r.createdAt<=?) AND (? IS NULL OR r.triggeredByUserId=?) AND (? IS NULL OR LOCATE(?,COALESCE(u.name,''))>0 OR LOCATE(?,COALESCE(u.username,''))>0)`,
+    [
+      workflowId,
+      filters.status ?? null,
+      filters.status ?? null,
+      filters.from ?? null,
+      filters.from ?? null,
+      filters.to ?? null,
+      filters.to ?? null,
+      filters.triggeredByUserId ?? null,
+      filters.triggeredByUserId ?? null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
     ]
   );
   const row = rows[0] ?? {};
@@ -4396,12 +4496,14 @@ export async function listRunAlerts(
        FROM workflow_run_alert a
        JOIN workflow w ON w.id=a.workflowId
        JOIN workflow_run r ON r.id=a.runId
+       LEFT JOIN users actor ON actor.id=r.triggeredByUserId
       WHERE a.recipientUserId=?
         AND (? IS NULL OR a.workflowId=?)
         AND (? IS NULL OR r.status=?)
         AND (? IS NULL OR a.createdAt>=?)
         AND (? IS NULL OR a.createdAt<=?)
         AND (? IS NULL OR r.triggeredByUserId=?)
+        AND (? IS NULL OR LOCATE(?,COALESCE(actor.name,''))>0 OR LOCATE(?,COALESCE(actor.username,''))>0)
       ORDER BY a.readAt IS NULL DESC,a.createdAt DESC LIMIT 100`,
     [
       user.id,
@@ -4415,6 +4517,9 @@ export async function listRunAlerts(
       filters.to ?? null,
       filters.triggeredByUserId ?? null,
       filters.triggeredByUserId ?? null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
+      filters.triggeredByQuery?.trim() || null,
     ]
   );
   return rows;
@@ -4505,11 +4610,23 @@ export async function markRunAlertRead(alertId: string, user: WorkflowUser) {
   return Boolean(result.affectedRows);
 }
 
+export function getRecordedStateName(
+  currentStateCode: unknown,
+  transitions: readonly unknown[]
+) {
+  const latest = asRecord(transitions[transitions.length - 1]);
+  if (!currentStateCode || latest.toStateCode !== currentStateCode) return null;
+  const payload = asRecord(readJson(latest.payloadJson));
+  return typeof payload.stateName === "string" && payload.stateName.trim()
+    ? payload.stateName.trim()
+    : null;
+}
+
 export async function getWorkflowRun(
   runId: string
 ): Promise<WorkflowRunDetail | null> {
   const [runRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT * FROM workflow_run WHERE id=? LIMIT 1",
+    "SELECT r.*,w.name AS workflowName,initiator.name AS triggeredByName FROM workflow_run r LEFT JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId WHERE r.id=? LIMIT 1",
     [runId]
   );
   const run = runRows[0];
@@ -4529,6 +4646,10 @@ export async function getWorkflowRun(
   return {
     ...run,
     workflowId: String(run.workflowId),
+    currentStateName: getRecordedStateName(
+      run.currentStateCode,
+      transitionRows
+    ),
     nodeRuns: nodeRows,
     stateTransitions: transitionRows,
     milestones: milestoneRows,
@@ -4536,6 +4657,5 @@ export async function getWorkflowRun(
 }
 
 export async function getRuntimeModels() {
-  const catalog = await listLLMModels();
-  return catalog.data.map(model => ({ id: model.id, ownedBy: model.owned_by }));
+  return loadRuntimeModelCatalog(ENV.llmApiKey, listLLMModels);
 }

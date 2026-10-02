@@ -5,11 +5,34 @@ import {
   getNodeConfigEvidence,
   validateNodeConfig,
   withNodeConfigDefaults,
+  resolveStateDisplayName,
 } from "@shared/workflow-node-contract";
 import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
 
 describe("原始节点配置统一契约", () => {
+  it("状态名称兼容旧字段，但占位默认值不能覆盖自定义名称", () => {
+    const modern = withNodeConfigDefaults("state", {
+      stateCode: "RECEIVED",
+      displayName: "已接收",
+    });
+    expect(modern.jdmc).toBe("已接收");
+    expect(resolveStateDisplayName(modern, "节点")).toBe("已接收");
+    expect(
+      resolveStateDisplayName(
+        { jdmc: "业务状态", displayName: "已接收" },
+        "节点"
+      )
+    ).toBe("已接收");
+    expect(
+      resolveStateDisplayName(
+        { jdmc: "直属上级审核", displayName: "其他名称" },
+        "节点"
+      )
+    ).toBe("直属上级审核");
+    expect(resolveStateDisplayName({}, "已完成")).toBe("已完成");
+    expect(withNodeConfigDefaults("state", modern)).toEqual(modern);
+  });
   it("由共享契约统一约束画布与发布时的节点连线", () => {
     expect(FLOW_NODE_ALLOWED_TARGETS.start).toContain("llm");
     expect(canConnectFlowNodeTypes("http", "llm")).toBe(true);

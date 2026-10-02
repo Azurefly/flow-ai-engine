@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
@@ -67,7 +68,7 @@ export async function ensureProjectUnitTable() {
       UNIQUE KEY flow_project_unit_unique (projectId, unitId),
       INDEX flow_project_unit_project_idx (projectId),
       INDEX flow_project_unit_unit_idx (unitId)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
   `);
   projectUnitTableInitialized = true;
 }
@@ -123,6 +124,28 @@ async function requireProjectPermission(
   if (!access.exists || !access.permissions.has(permission))
     throw new Error("项目不存在或当前账号无权执行此操作。");
   return access;
+}
+
+async function requireDirectoryPermission(
+  user: ProjectUser,
+  projectId?: string
+) {
+  if (projectId) {
+    const access = await getProjectAccess(user, projectId);
+    if (!access.exists || !access.permissions.has("project:manage")) {
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "当前账号无权搜索此项目的成员目录。",
+      });
+    }
+    return;
+  }
+  if (!(await hasSystemPermission(user, "workflow:create"))) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "当前账号无权搜索项目成员目录。",
+    });
+  }
 }
 
 export async function listProjects(user: ProjectUser) {
@@ -343,6 +366,13 @@ export async function createProjectWorkflow(
     );
     if (!folders[0]) throw new Error("目标仓库目录不存在或不属于当前项目。");
   }
+  // Reject an invalid imported/template definition before inserting a draft.
+  const definition = input.definition
+    ? validate(input.definition, {
+        flowType: input.flowType,
+        executable: false,
+      })
+    : undefined;
   const workflow = await createWorkflow(user, input.name, input.description, {
     projectId: input.projectId,
     folderId: input.folderId ?? null,
@@ -353,12 +383,9 @@ export async function createProjectWorkflow(
     auditStatus: "init",
     projectCreationAuthorized: true,
   });
-  if (input.definition && workflow)
+  if (definition && workflow)
     await updateWorkflow((workflow as any).id, user, {
-      definition: validate(input.definition, {
-        flowType: input.flowType,
-        executable: false,
-      }),
+      definition,
     });
   await recordAuthorizationAudit({
     actorUserId: user.id,
@@ -526,7 +553,10 @@ export async function listProjectWorkflowAudit(
 export async function listProjectMembers(user: ProjectUser, projectId: string) {
   await requireProjectPermission(user, projectId, "project:view");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT pm.*,u.username,u.name,u.email FROM flow_project_member pm JOIN users u ON u.id=pm.userId WHERE pm.projectId=? ORDER BY pm.role,pm.createdAt`,
+    `SELECT pm.*,u.username,u.name FROM flow_project_member pm JOIN users u ON u.id=pm.userId
+      WHERE pm.projectId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW()
+        AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW()) AND u.status='active'
+      ORDER BY pm.role,pm.createdAt`,
     [projectId]
   );
   return rows;
@@ -671,18 +701,56 @@ export async function revokeProjectUnit(
   return true;
 }
 
-export async function listActiveUnits() {
+async function loadActiveUnits() {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id, code, name, parentUnitId, path FROM organization_unit WHERE status='active' ORDER BY sortOrder, code"
+    "SELECT id, code, name, parentUnitId FROM organization_unit WHERE status='active' ORDER BY sortOrder, code"
   );
   return attachOrganizationPaths(rows);
 }
 
-export async function listActiveUsers() {
+export async function listActiveUnits(user: ProjectUser) {
+  await requireDirectoryPermission(user);
+  return loadActiveUnits();
+}
+
+export async function searchActiveUnits(
+  user: ProjectUser,
+  input: { query: string; projectId?: string }
+) {
+  await requireDirectoryPermission(user, input.projectId);
+  const query = input.query.trim().toLocaleLowerCase();
+  if (!query) throw new Error("请输入部门名称或代号进行搜索。");
+  const matches = (await loadActiveUnits()).filter(unit =>
+    `${unit.name} ${unit.code} ${unit.displayPath ?? ""} ${unit.pathCode ?? ""}`
+      .toLocaleLowerCase()
+      .includes(query)
+  );
+  return { items: matches.slice(0, 50), hasMore: matches.length > 50 };
+}
+
+export async function listActiveUsers(user: ProjectUser) {
+  await requireDirectoryPermission(user);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id, username, name, email FROM users WHERE status='active' ORDER BY username"
+    "SELECT id, username, name FROM users WHERE status='active' ORDER BY username LIMIT 500"
   );
   return rows;
+}
+
+export async function searchActiveUsers(
+  user: ProjectUser,
+  input: { query: string; projectId?: string }
+) {
+  await requireDirectoryPermission(user, input.projectId);
+  const query = input.query.trim().toLocaleLowerCase();
+  if (!query) throw new Error("请输入姓名或账号进行搜索。");
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT id, username, name FROM users
+      WHERE status='active'
+        AND (LOCATE(?,LOWER(COALESCE(name,'')))>0 OR LOCATE(?,LOWER(username))>0)
+      ORDER BY username LIMIT 51`,
+    [query, query]
+  );
+  return { items: rows.slice(0, 50), hasMore: rows.length > 50 };
 }
 
 export async function createFolder(

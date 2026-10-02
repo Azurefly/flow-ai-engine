@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { assertWorkflowUpdateTransition } from "./workflow-service";
+import {
+  assertWorkflowUpdateTransition,
+  isWorkflowUpdateNoop,
+} from "./workflow-service";
 
 describe("workflow publication mutation policy", () => {
   it("blocks ordinary definition edits on a published workflow", () => {
@@ -24,5 +27,37 @@ describe("workflow publication mutation policy", () => {
     expect(() =>
       assertWorkflowUpdateTransition("draft", { definition: { nodes: [] } })
     ).not.toThrow();
+  });
+
+  it("does not create a new version for a draft save with no changes", () => {
+    expect(
+      isWorkflowUpdateNoop({
+        currentName: "Approval",
+        nextName: "Approval",
+        definitionChanged: false,
+      })
+    ).toBe(true);
+    expect(
+      isWorkflowUpdateNoop({
+        currentName: "Approval",
+        nextName: "Approval",
+        definitionChanged: true,
+      })
+    ).toBe(false);
+    expect(
+      isWorkflowUpdateNoop({
+        currentName: "Approval",
+        nextName: "Updated approval",
+        definitionChanged: false,
+      })
+    ).toBe(false);
+    expect(
+      isWorkflowUpdateNoop({
+        currentName: "Approval",
+        nextName: "Approval",
+        definitionChanged: false,
+        publish: true,
+      })
+    ).toBe(false);
   });
 });

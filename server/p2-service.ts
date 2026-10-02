@@ -16,6 +16,7 @@ import {
   compileWorkflowDefinition,
   type WorkflowExecutionPlan,
 } from "./workflow-compiler";
+import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-source";
 import { probeSafeHttpEndpoint } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 
@@ -2015,12 +2016,18 @@ export async function runDataflow(
       [input.workflowId, input.projectId]
     );
     const workflow = workflows[0];
-    if (!workflow)
-      throw new Error("数据流不存在、已归档或不属于当前项目。 ");
+    if (!workflow) throw new Error("数据流不存在、已归档或不属于当前项目。 ");
     if (input.triggerType === "schedule" && workflow.status !== "published")
       throw new Error("定时调度的流程必须处于已发布状态。 ");
     const publishedPlan = parseJson(workflow.publishedExecutionPlanJson, null);
-    if (publishedPlan && workflow.publishedExecutionPlanHash && workflow.status === "published") {
+    const executionSource = resolveWorkflowExecutionSource({
+      workflowStatus: String(workflow.status),
+      publishedPlan,
+      publishedPlanHash: workflow.publishedExecutionPlanHash
+        ? String(workflow.publishedExecutionPlanHash)
+        : null,
+    });
+    if (executionSource === "published_plan") {
       executionPlan = assertWorkflowExecutionPlan(
         publishedPlan,
         String(workflow.publishedExecutionPlanHash),
@@ -2037,7 +2044,7 @@ export async function runDataflow(
     definition = executionPlan.definition;
     const requestId = currentRequestId() ?? null;
     await connection.query(
-      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,requestId,inputJson,triggeredByUserId) VALUES (?,?,?,?,?, 'queued',?,?,?,?,?,?)",
+      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,executionSource,definitionVersion,requestId,inputJson,triggeredByUserId) VALUES (?,?,?,?,?, 'queued',?,?,?,?,?,?,?,?)",
       [
         runId,
         input.projectId,
@@ -2047,6 +2054,8 @@ export async function runDataflow(
         JSON.stringify(definition),
         JSON.stringify(executionPlan),
         executionPlanHash,
+        executionSource,
+        Number(workflow.definitionVersion),
         requestId,
         JSON.stringify(input.data ?? {}),
         user.id,
@@ -2144,6 +2153,11 @@ export async function getDataflowRun(
     id: String(r.id),
     projectId: String(r.projectId),
     workflowId: String(r.workflowId),
+    executionSource: r.executionSource ? String(r.executionSource) : null,
+    definitionVersion:
+      r.definitionVersion === null || r.definitionVersion === undefined
+        ? null
+        : Number(r.definitionVersion),
     status: String(r.status),
     durationMs: r.durationMs as number | null,
     startedAt: r.startedAt as Date | null,

@@ -5,7 +5,11 @@ import {
   reconcileWorkflowContinuations,
   submitWorkflowRun,
 } from "./workflow-engine";
-import { drainWorkflowJobs, stopWorkflowWorker } from "./workflow-worker";
+import {
+  drainWorkflowJobs,
+  runWorkflowWorkerOnce,
+  stopWorkflowWorker,
+} from "./workflow-worker";
 import type { Definition } from "./workflow-service";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
@@ -278,10 +282,6 @@ describe("durable workflow worker", () => {
         "SELECT COUNT(*) AS count FROM workflow_participant_state WHERE runId=? AND stateCode='APPROVED'",
         [submitted.runId]
       );
-      const [stateEvents] = await pool!.query<mysql.RowDataPacket[]>(
-        "SELECT status FROM workflow_outbox_event WHERE aggregateId=? AND eventType='workflow.state.changed'",
-        [submitted.runId]
-      );
       expect(recoveredRuns[0]).toMatchObject({
         status: "success",
         currentStateCode: "APPROVED",
@@ -289,7 +289,21 @@ describe("durable workflow worker", () => {
       });
       expect(Number(recoveredTransitions[0].count)).toBe(1);
       expect(Number(participantStates[0].count)).toBeGreaterThan(0);
-      expect(stateEvents).toEqual([{ status: "delivered" }]);
+      // A worker tick dispatches one global outbox event before executing a job.
+      // Recovery may finish while older events still precede this run's event.
+      await expect
+        .poll(
+          async () => {
+            await runWorkflowWorkerOnce();
+            const [stateEvents] = await pool!.query<mysql.RowDataPacket[]>(
+              "SELECT status FROM workflow_outbox_event WHERE aggregateId=? AND eventType='workflow.state.changed'",
+              [submitted.runId]
+            );
+            return stateEvents;
+          },
+          { timeout: 10_000, interval: 20 }
+        )
+        .toEqual([{ status: "delivered" }]);
     },
     30_000
   );

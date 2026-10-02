@@ -4,6 +4,11 @@ import { getSharedPool } from "./db";
 import { hasWorkflowPermission, recordAuthorizationAudit } from "./iam-service";
 import { resumeWorkflowTask } from "./workflow-engine";
 import { wakeWorkflowWorker } from "./workflow-worker";
+import {
+  collectAuthorizedPage,
+  decodeWorkbenchPageCursor,
+  type WorkbenchPageCursor,
+} from "./workbench-pagination";
 
 type User = { id: number; role: "user" | "admin" };
 type TaskView = "todo" | "done" | "initiated" | "all";
@@ -18,12 +23,12 @@ const parseJson = (value: unknown) => {
   }
 };
 
-function taskFilter(view: TaskView, userId: number) {
+export function taskFilter(view: TaskView, userId: number) {
   if (view === "todo")
     return {
       clause:
-        "t.status IN ('pending','claimed') AND (t.assignedUserId=? OR t.claimedByUserId=? OR (t.assignedUserId IS NULL AND (t.candidateUserIdsJson IS NULL OR JSON_LENGTH(t.candidateUserIdsJson)=0 OR JSON_CONTAINS(t.candidateUserIdsJson,?))))",
-      params: [userId, userId, JSON.stringify(userId)],
+        "t.status IN ('pending','claimed') AND ((t.status='pending' AND (t.assignedUserId=? OR (t.assignedUserId IS NULL AND JSON_CONTAINS(t.candidateUserIdsJson,?)))) OR (t.status='claimed' AND t.claimedByUserId=?))",
+      params: [userId, JSON.stringify(userId), userId],
     };
   if (view === "done")
     return {
@@ -33,6 +38,15 @@ function taskFilter(view: TaskView, userId: number) {
   if (view === "initiated")
     return { clause: "r.triggeredByUserId=?", params: [userId] };
   return { clause: "1=1", params: [] as Array<number | string> };
+}
+
+export function processInstanceStatusFilter(status?: string) {
+  const normalized = status?.trim();
+  if (!normalized) return { clause: "", params: [] as string[] };
+  return {
+    clause: "(r.status=? OR ps.stateName=?)",
+    params: [normalized, normalized],
+  };
 }
 
 function candidateIds(task: mysql.RowDataPacket) {
@@ -50,7 +64,8 @@ export function isTaskActor(userId: number, task: mysql.RowDataPacket) {
       task.completedByUserId,
       task.responsibleUserId,
       task.representedUserId,
-    ].some(value => Number(value) === userId) || candidateIds(task).includes(userId)
+    ].some(value => Number(value) === userId) ||
+    candidateIds(task).includes(userId)
   );
 }
 
@@ -186,12 +201,151 @@ function presentTask(row: mysql.RowDataPacket) {
   };
 }
 
+const taskDisplayStatusSql = `CASE t.status
+  WHEN 'pending' THEN COALESCE(NULLIF(t.pendingStatusName,''),'待审批')
+  WHEN 'claimed' THEN '处理中'
+  WHEN 'completed' THEN CASE JSON_UNQUOTE(JSON_EXTRACT(t.resultJson,'$.decision'))
+    WHEN 'rejected' THEN '已拒绝'
+    WHEN 'abstained' THEN '已弃权'
+    ELSE '已审核'
+  END
+  ELSE '已取消'
+END`;
+
+function taskRank(status: unknown) {
+  return status === "pending" ? 0 : status === "claimed" ? 1 : 2;
+}
+
+function workflowViewPermissionCache(user: User) {
+  const cache = new Map<string, Promise<boolean>>();
+  return (workflowId: string) => {
+    let result = cache.get(workflowId);
+    if (!result) {
+      result = hasWorkflowPermission(user, workflowId, "workflow:view");
+      cache.set(workflowId, result);
+    }
+    return result;
+  };
+}
+
+export async function pageWorkflowTasks(
+  user: User,
+  input: {
+    view: TaskView;
+    projectId?: string;
+    status?: string;
+    search?: string;
+    createdAtFrom?: Date;
+    createdAtBefore?: Date;
+    limit?: number;
+    scanLimit?: number;
+    cursor?: string;
+  }
+) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const initialCursor = decodeWorkbenchPageCursor(input.cursor, "task");
+  const filter = taskFilter(input.view, user.id);
+  const clauses = [filter.clause];
+  const baseParams: unknown[] = [...filter.params];
+  if (input.projectId) {
+    clauses.push("t.projectId=?");
+    baseParams.push(input.projectId);
+  }
+  if (input.status) {
+    clauses.push(`${taskDisplayStatusSql}=?`);
+    baseParams.push(input.status);
+  }
+  if (input.createdAtFrom) {
+    clauses.push("t.createdAt>=?");
+    baseParams.push(input.createdAtFrom);
+  }
+  if (input.createdAtBefore) {
+    clauses.push("t.createdAt<?");
+    baseParams.push(input.createdAtBefore);
+  }
+  const search = input.search?.trim();
+  if (search) {
+    clauses.push(
+      `LOCATE(LOWER(?),LOWER(CONCAT_WS(' ',w.name,t.nodeName,initiator.name,${taskDisplayStatusSql})))>0`
+    );
+    baseParams.push(search);
+  }
+
+  const hasTaskActorAccess = (row: mysql.RowDataPacket) =>
+    isTaskActor(user.id, row) || Number(row.triggeredByUserId) === user.id;
+  const canViewWorkflow = workflowViewPermissionCache(user);
+  return collectAuthorizedPage<
+    mysql.RowDataPacket,
+    Extract<WorkbenchPageCursor, { kind: "task" }>
+  >({
+    limit,
+    scanLimit: input.scanLimit,
+    cursor: initialCursor?.kind === "task" ? initialCursor : undefined,
+    loadBatch: async (after, batchLimit) => {
+      const batchClauses = [...clauses];
+      const params = [...baseParams];
+      if (after) {
+        const rankSql =
+          "CASE t.status WHEN 'pending' THEN 0 WHEN 'claimed' THEN 1 ELSE 2 END";
+        batchClauses.push(
+          `(${rankSql}>? OR (${rankSql}=? AND (t.createdAt<? OR (t.createdAt=? AND t.id<?))))`
+        );
+        params.push(
+          after.rank,
+          after.rank,
+          after.createdAt,
+          after.createdAt,
+          after.id
+        );
+      }
+      params.push(batchLimit);
+      const [rows] = await db().query<mysql.RowDataPacket[]>(
+        `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,
+                initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
+                DATE_FORMAT(t.createdAt,'%Y-%m-%d %H:%i:%s.%f') AS cursorCreatedAt,
+                g.totalApprovers,g.requiredApprovals,g.memberVersion,
+                (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
+                (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
+                (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
+           FROM workflow_task t JOIN workflow w ON w.id=t.workflowId JOIN workflow_run r ON r.id=t.runId
+           LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
+           LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
+           LEFT JOIN users assignee ON assignee.id=t.assignedUserId
+           LEFT JOIN users claimant ON claimant.id=t.claimedByUserId
+          WHERE ${batchClauses.join(" AND ")}
+          ORDER BY CASE t.status WHEN 'pending' THEN 0 WHEN 'claimed' THEN 1 ELSE 2 END,t.createdAt DESC,t.id DESC
+          LIMIT ?`,
+        params
+      );
+      return rows;
+    },
+    getCursor: row => ({
+      kind: "task",
+      rank: taskRank(row.status),
+      createdAt: String(row.cursorCreatedAt),
+      id: String(row.id),
+    }),
+    isAuthorized: async row =>
+      user.role === "admin" ||
+      hasTaskActorAccess(row) ||
+      (await canViewWorkflow(String(row.workflowId))),
+  }).then(page => ({
+    ...page,
+    items: page.items.map(row => ({
+      ...presentTask(row),
+      canAct: isCurrentTaskOwner(user.id, row),
+    })),
+  }));
+}
+
 export async function listWorkflowTasks(
   user: User,
   input: {
     view: TaskView;
     projectId?: string;
     status?: "pending" | "claimed" | "completed" | "cancelled";
+    createdAtFrom?: Date;
+    createdAtBefore?: Date;
     limit?: number;
   }
 ) {
@@ -206,16 +360,24 @@ export async function listWorkflowTasks(
     clauses.push("t.status=?");
     params.push(input.status);
   }
+  if (input.createdAtFrom) {
+    clauses.push("t.createdAt>=?");
+    params.push(input.createdAtFrom);
+  }
+  if (input.createdAtBefore) {
+    clauses.push("t.createdAt<?");
+    params.push(input.createdAtBefore);
+  }
   params.push(Math.min(Math.max(input.limit ?? 100, 1), 200));
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,
+    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             g.totalApprovers,g.requiredApprovals,g.memberVersion,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
        FROM workflow_task t JOIN workflow w ON w.id=t.workflowId JOIN workflow_run r ON r.id=t.runId
        LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
-       LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId
+       LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId LEFT JOIN users claimant ON claimant.id=t.claimedByUserId
       WHERE ${clauses.join(" AND ")} ORDER BY CASE t.status WHEN 'pending' THEN 0 WHEN 'claimed' THEN 1 ELSE 2 END,t.createdAt DESC LIMIT ?`,
     params
   );
@@ -227,7 +389,7 @@ export async function listWorkflowTasks(
 
 export async function getWorkflowTask(user: User, taskId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,
+    `SELECT t.*,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             responsible.name AS responsibleName,represented.name AS representedName,
             g.totalApprovers,g.requiredApprovals,g.memberVersion,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
@@ -237,6 +399,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
        LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
        LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
        LEFT JOIN users assignee ON assignee.id=t.assignedUserId
+       LEFT JOIN users claimant ON claimant.id=t.claimedByUserId
        LEFT JOIN users responsible ON responsible.id=t.responsibleUserId
        LEFT JOIN users represented ON represented.id=t.representedUserId
       WHERE t.id=? LIMIT 1`,
@@ -258,6 +421,12 @@ export async function getWorkflowTask(user: User, taskId: string) {
   }
   return {
     ...presentTask(task),
+    canAct: isCurrentTaskOwner(user.id, task),
+    canViewRun: await hasWorkflowPermission(
+      user,
+      String(task.workflowId),
+      "workflow:view"
+    ),
     nextNodeIds: parseJson(task.nextNodeIdsJson),
     approvalMembers,
   };
@@ -729,8 +898,8 @@ export function approvalRequirementAfterMemberChange(input: {
       Math.min(
         input.totalApprovers,
         Math.ceil(
-          input.totalApprovers *
-            Math.min(Math.max(input.passPercentBasisPoints, 1), 10000) /
+          (input.totalApprovers *
+            Math.min(Math.max(input.passPercentBasisPoints, 1), 10000)) /
             10000
         )
       )
@@ -966,7 +1135,10 @@ export async function removeWorkflowTaskSigner(
         ? operations.filter(item => {
             const operation =
               item && typeof item === "object" ? (item as JsonRecord) : {};
-            return String(operation.taskId ?? operation.id ?? "") !== input.memberTaskId;
+            return (
+              String(operation.taskId ?? operation.id ?? "") !==
+              input.memberTaskId
+            );
           })
         : [];
       await connection.query(
@@ -1077,32 +1249,50 @@ export async function batchCompleteWorkflowTasks(
 export async function getTaskDashboard(user: User) {
   const [todo, done, initiatedTasks, initiatedInstances, allInstances] =
     await Promise.all([
-      listWorkflowTasks(user, { view: "todo", limit: 200 }),
-      listWorkflowTasks(user, { view: "done", limit: 200 }),
-      listWorkflowTasks(user, { view: "initiated", limit: 200 }),
-      listProcessInstances(user, { view: "initiated", limit: 200 }),
-      listProcessInstances(user, { view: "all", limit: 200 }),
+      pageWorkflowTasks(user, { view: "todo", limit: 200, scanLimit: 200 }),
+      pageWorkflowTasks(user, { view: "done", limit: 200, scanLimit: 200 }),
+      pageWorkflowTasks(user, {
+        view: "initiated",
+        limit: 200,
+        scanLimit: 200,
+      }),
+      pageProcessInstances(user, {
+        view: "initiated",
+        limit: 200,
+        scanLimit: 200,
+      }),
+      pageProcessInstances(user, { view: "all", limit: 200, scanLimit: 200 }),
     ]);
+  const recentTasks: any[] = [
+    ...todo.items,
+    ...done.items,
+    ...initiatedTasks.items,
+  ];
   const recent = Array.from(
-    new Map(
-      [...todo, ...done, ...initiatedTasks].map(task => [String(task.id), task])
+    new Map<string, any>(
+      recentTasks.map(task => [String(task.id), task])
     ).values()
   )
     .sort(
-      (a, b) =>
+      (a: any, b: any) =>
         new Date(String(b.createdAt)).getTime() -
         new Date(String(a.createdAt)).getTime()
     )
     .slice(0, 8);
   return {
     counts: {
-      todo: todo.length,
-      done: done.length,
-      initiated: initiatedInstances.length,
-      all: allInstances.length,
+      todo: dashboardPageCount(todo),
+      done: dashboardPageCount(done),
+      initiated: dashboardPageCount(initiatedInstances),
+      all: dashboardPageCount(allInstances),
     },
     recent,
   };
+}
+
+function dashboardPageCount(page: { items: unknown[]; hasMore: boolean }) {
+  if (!page.hasMore) return page.items.length;
+  return page.items.length ? `≥${page.items.length}` : "待确认";
 }
 
 export async function listProcessInstances(
@@ -1142,27 +1332,131 @@ export async function listProcessInstances(
   return accessible;
 }
 
-export async function getTaskCalendar(user: User, month: Date) {
-  const start = new Date(
-    Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1)
-  );
-  const end = new Date(
-    Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1)
-  );
-  const tasks = await listWorkflowTasks(user, { view: "all", limit: 200 });
-  return tasks
-    .filter(task => {
-      const date = new Date(String(task.createdAt));
-      return date >= start && date < end;
-    })
-    .map(task => ({
+export async function pageProcessInstances(
+  user: User,
+  input: {
+    view: "initiated" | "all";
+    status?: string;
+    search?: string;
+    createdAtFrom?: Date;
+    createdAtBefore?: Date;
+    limit?: number;
+    scanLimit?: number;
+    cursor?: string;
+  }
+) {
+  const limit = Math.min(Math.max(input.limit ?? 50, 1), 200);
+  const initialCursor = decodeWorkbenchPageCursor(input.cursor, "instance");
+  const clauses: string[] = [];
+  const baseParams: unknown[] = [user.id];
+  if (input.view === "initiated") {
+    clauses.push("r.triggeredByUserId=?");
+    baseParams.push(user.id);
+  }
+  const statusFilter = processInstanceStatusFilter(input.status);
+  if (statusFilter.clause) {
+    clauses.push(statusFilter.clause);
+    baseParams.push(...statusFilter.params);
+  }
+  if (input.createdAtFrom) {
+    clauses.push("r.createdAt>=?");
+    baseParams.push(input.createdAtFrom);
+  }
+  if (input.createdAtBefore) {
+    clauses.push("r.createdAt<?");
+    baseParams.push(input.createdAtBefore);
+  }
+  const search = input.search?.trim();
+  if (search) {
+    clauses.push(
+      "LOCATE(LOWER(?),LOWER(CONCAT_WS(' ',w.name,initiator.name,ps.stateName,r.status)))>0"
+    );
+    baseParams.push(search);
+  }
+
+  const canViewWorkflow = workflowViewPermissionCache(user);
+  return collectAuthorizedPage<
+    mysql.RowDataPacket,
+    Extract<WorkbenchPageCursor, { kind: "instance" }>
+  >({
+    limit,
+    scanLimit: input.scanLimit,
+    cursor: initialCursor?.kind === "instance" ? initialCursor : undefined,
+    loadBatch: async (after, batchLimit) => {
+      const batchClauses = [...clauses];
+      const params = [...baseParams];
+      if (after) {
+        batchClauses.push("(r.createdAt<? OR (r.createdAt=? AND r.id<?))");
+        params.push(after.createdAt, after.createdAt, after.id);
+      }
+      params.push(batchLimit);
+      const [rows] = await db().query<mysql.RowDataPacket[]>(
+        `SELECT r.*,w.name AS workflowName,w.flowType,w.projectId,
+                initiator.name AS initiatedByName,ps.stateCode,ps.stateName,ps.flowStatus,
+                ps.stateColor,ps.availableOperationsJson,
+                DATE_FORMAT(r.createdAt,'%Y-%m-%d %H:%i:%s.%f') AS cursorCreatedAt
+           FROM workflow_run r JOIN workflow w ON w.id=r.workflowId
+           LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
+           LEFT JOIN workflow_participant_state ps ON ps.id=(
+             SELECT latest.id FROM workflow_participant_state latest
+              WHERE latest.runId=r.id AND latest.userId=?
+              ORDER BY latest.updatedAt DESC,latest.id DESC LIMIT 1
+           )
+          ${batchClauses.length ? `WHERE ${batchClauses.join(" AND ")}` : ""}
+          ORDER BY r.createdAt DESC,r.id DESC
+          LIMIT ?`,
+        params
+      );
+      return rows;
+    },
+    getCursor: row => ({
+      kind: "instance",
+      createdAt: String(row.cursorCreatedAt),
+      id: String(row.id),
+    }),
+    isAuthorized: async row =>
+      user.role === "admin" ||
+      Boolean(row.stateName) ||
+      (await canViewWorkflow(String(row.workflowId))),
+  }).then(page => ({
+    ...page,
+    items: page.items.map(row => ({
+      ...row,
+      displayStatus: row.stateName || row.status,
+      availableOperations: parseJson(row.availableOperationsJson),
+    })),
+  }));
+}
+
+export async function getTaskCalendar(
+  user: User,
+  range: { start: Date; end: Date; limit?: number; cursor?: string }
+) {
+  if (
+    Number.isNaN(range.start.getTime()) ||
+    Number.isNaN(range.end.getTime()) ||
+    range.start >= range.end
+  ) {
+    throw new Error("日历查询的起止时间无效。 ");
+  }
+  const page = await pageWorkflowTasks(user, {
+    view: "all",
+    createdAtFrom: range.start,
+    createdAtBefore: range.end,
+    limit: range.limit ?? 200,
+    cursor: range.cursor,
+  });
+  return {
+    ...page,
+    items: page.items.map((task: any) => ({
       id: task.id,
       title: `${task.workflowName} · ${task.nodeName}`,
       start: task.createdAt,
       status: task.status,
       workflowId: task.workflowId,
       runId: task.runId,
-    }));
+    })),
+  };
 }
 
 export type ReviewerMode = "project_owner_or_admin" | "independent_reviewer";
@@ -1205,20 +1499,70 @@ export async function isProjectApprovalRequired() {
   return Boolean((await getP1SystemSettings()).approval.requireProjectApproval);
 }
 
+function stableJson(value: unknown): string {
+  const normalize = (current: unknown): unknown => {
+    if (Array.isArray(current)) return current.map(normalize);
+    if (current && typeof current === "object") {
+      return Object.fromEntries(
+        Object.entries(current)
+          .sort(([left], [right]) => left.localeCompare(right))
+          .map(([key, entry]) => [key, normalize(entry)])
+      );
+    }
+    return current;
+  };
+  return JSON.stringify(normalize(value));
+}
+
+function validateGeneralSystemSetting(value: JsonRecord): JsonRecord {
+  const platformName =
+    typeof value.platformName === "string" ? value.platformName.trim() : "";
+  if (!platformName) throw new Error("平台名称不可为空。");
+  if (platformName.length > 120) throw new Error("平台名称最多 120 个字符。");
+  if (typeof value.watermarkEnabled !== "boolean")
+    throw new Error("系统水印状态无效。");
+  if (
+    value.watermarkText !== undefined &&
+    typeof value.watermarkText !== "string"
+  )
+    throw new Error("水印文本格式无效。");
+  const watermarkText = String(value.watermarkText ?? "").trim();
+  if (watermarkText.length > 120) throw new Error("水印文本最多 120 个字符。");
+  if (value.watermarkEnabled && !watermarkText)
+    throw new Error("开启水印时必须配置水印文本。");
+  return { ...value, platformName, watermarkText };
+}
+
 export async function updateP1SystemSetting(
   user: User,
   key: "general" | "approval",
   value: JsonRecord
 ) {
-  if (
-    key === "approval" &&
-    value.reviewerMode !== undefined &&
-    !["project_owner_or_admin", "independent_reviewer"].includes(
-      String(value.reviewerMode)
+  const currentSettings = await getP1SystemSettings();
+  const currentValue = currentSettings[key];
+  const currentRecord =
+    currentValue &&
+    typeof currentValue === "object" &&
+    !Array.isArray(currentValue)
+      ? (currentValue as JsonRecord)
+      : {};
+  const existing = {
+    ...(defaultSettings[key] as JsonRecord),
+    ...currentRecord,
+  };
+  let merged = { ...existing, ...value };
+  if (key === "general") merged = validateGeneralSystemSetting(merged);
+  if (key === "approval") {
+    if (typeof merged.requireProjectApproval !== "boolean")
+      throw new Error("发布审批状态无效。");
+    if (
+      !["project_owner_or_admin", "independent_reviewer"].includes(
+        String(merged.reviewerMode)
+      )
     )
-  )
-    throw new Error("审核人模式无效。");
-  const merged = { ...(defaultSettings[key] as JsonRecord), ...value };
+      throw new Error("审核人模式无效。");
+  }
+  if (stableJson(existing) === stableJson(merged)) return merged;
   await db().query(
     "INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId),updatedAt=NOW()",
     [key, JSON.stringify(merged), user.id]

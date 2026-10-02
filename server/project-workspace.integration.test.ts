@@ -86,13 +86,13 @@ describe("原始项目工作区 P0", () => {
   runIntegration(
     "项目成员仅能访问授权项目，并可完成流程审核、发布和仓库归档",
     async () => {
-    pool = mysql.createPool(process.env.DATABASE_URL!);
-    approvalLock = await pool.getConnection();
+      pool = mysql.createPool(process.env.DATABASE_URL!);
+      approvalLock = await pool.getConnection();
       await approvalLock.query(
         "SELECT GET_LOCK('flow_ai_engine_approval_test_lock', 90)"
       );
-    await pool.query(
-      "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW())",
+      await pool.query(
+        "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW())",
         [
           `test:${ownerUsername}`,
           ownerUsername,
@@ -117,20 +117,20 @@ describe("原始项目工作区 P0", () => {
       const [users] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT * FROM users WHERE username IN (?,?,?)",
         [ownerUsername, designerUsername, outsiderUsername]
-    );
-    owner = users.find(row => row.username === ownerUsername);
-    designer = users.find(row => row.username === designerUsername);
-    outsider = users.find(row => row.username === outsiderUsername);
-    const ownerCaller = callerFor(owner);
-    const designerCaller = callerFor(designer);
-    const outsiderCaller = callerFor(outsider);
+      );
+      owner = users.find(row => row.username === ownerUsername);
+      designer = users.find(row => row.username === designerUsername);
+      outsider = users.find(row => row.username === outsiderUsername);
+      const ownerCaller = callerFor(owner);
+      const designerCaller = callerFor(designer);
+      const outsiderCaller = callerFor(outsider);
 
       const project = await ownerCaller.project.create({
         code: `OPS${suffix.slice(0, 4)}`.toUpperCase(),
         name: "原始项目工作区验收",
         description: "真实数据库 P0 验收",
       });
-    projectId = project.id;
+      projectId = project.id;
       await ownerCaller.project.grantMember({
         projectId,
         userId: designer.id,
@@ -140,13 +140,40 @@ describe("原始项目工作区 P0", () => {
       await expect(
         outsiderCaller.project.workflows({ projectId })
       ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      await expect(
+        designerCaller.project.createWorkflow({
+          projectId,
+          name: "非法定义不得留下草稿",
+          flowType: "control",
+          definition: {
+            schemaVersion: 1,
+            viewport: { x: 0, y: 0, zoom: 1 },
+            settings: {},
+            nodes: [
+              {
+                id: "invalid-state",
+                type: "state",
+                name: "错误状态",
+                position: { x: 0, y: 0 },
+                config: {},
+              },
+            ],
+            edges: [],
+          },
+        })
+      ).rejects.toThrow();
+      const [failedDrafts] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM workflow WHERE projectId=?",
+        [projectId]
+      );
+      expect(failedDrafts).toHaveLength(0);
       const created = await designerCaller.project.createWorkflow({
         projectId,
         name: "控制流程验收",
         description: "项目内控制流程",
         flowType: "control",
       });
-    workflowId = (created as any).id;
+      workflowId = (created as any).id;
       expect(created).toMatchObject({
         projectId,
         flowType: "control",
@@ -179,9 +206,10 @@ describe("原始项目工作区 P0", () => {
         description: "由项目设计者字段化更新",
       });
       const [infoAudits] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? AND JSON_UNQUOTE(JSON_EXTRACT(detailsJson,'$.operation'))='project_workflow_info_updated'",
         [designer.id, workflowId]
       );
+      expect(infoAudits).toHaveLength(1);
       const infoDetails =
         typeof infoAudits[0].detailsJson === "string"
           ? JSON.parse(infoAudits[0].detailsJson)
@@ -223,7 +251,7 @@ describe("原始项目工作区 P0", () => {
         auditStatus: "approved",
         status: "published",
       });
-    expect(visible).toHaveLength(1);
+      expect(visible).toHaveLength(1);
       expect(visible[0]).toMatchObject({
         id: workflowId,
         projectId,
@@ -236,7 +264,7 @@ describe("原始项目工作区 P0", () => {
           input: { source: "unpublish-retention-test" },
         })
       );
-    expect(completedRun.status).toBe("success");
+      expect(completedRun.status).toBe("success");
       await expect(
         outsiderCaller.workflow.unpublish({ id: workflowId })
       ).rejects.toThrow("流程不存在或无取消发布权限");
@@ -248,12 +276,12 @@ describe("原始项目工作区 P0", () => {
         auditStatus: "approved",
         publishedAt: null,
       });
-    expect(unpublished.unpublishedAt).toBeTruthy();
+      expect(unpublished.unpublishedAt).toBeTruthy();
       const [retainedRuns] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT id FROM workflow_run WHERE id=? AND workflowId=?",
         [completedRun.runId, workflowId]
       );
-    expect(retainedRuns).toHaveLength(1);
+      expect(retainedRuns).toHaveLength(1);
       const versionsAfterUnpublish: any[] = await ownerCaller.workflow.versions(
         { workflowId }
       );
@@ -262,7 +290,7 @@ describe("原始项目工作区 P0", () => {
         changeSource: "unpublished",
       });
       const [unpublishAudits] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? AND JSON_UNQUOTE(JSON_EXTRACT(detailsJson,'$.operation'))='workflow_unpublished'",
         [designer.id, workflowId]
       );
       const unpublishDetails =
@@ -296,7 +324,7 @@ describe("原始项目工作区 P0", () => {
         afterReset.find((workflow: any) => workflow.id === workflowId)
       ).toMatchObject({ auditStatus: "init", status: "draft" });
       const [resetAudits] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? ORDER BY createdAt DESC",
+        "SELECT detailsJson FROM authorization_audit_log WHERE actorUserId=? AND resourceType='workflow' AND resourceId=? AND JSON_UNQUOTE(JSON_EXTRACT(detailsJson,'$.operation'))='workflow_audit_reset'",
         [owner.id, workflowId]
       );
       const resetDetails =
@@ -326,13 +354,13 @@ describe("原始项目工作区 P0", () => {
         name: "已发布流程",
         description: "仓库目录",
       });
-    folderId = folder.id;
+      folderId = folder.id;
       await ownerCaller.project.moveWorkflow({
         projectId,
         workflowId,
         folderId,
       });
-    const warehouse = await designerCaller.project.warehouse({ projectId });
+      const warehouse = await designerCaller.project.warehouse({ projectId });
       expect(
         warehouse.folders.some((entry: any) => entry.id === folderId)
       ).toBe(true);
@@ -347,18 +375,18 @@ describe("原始项目工作区 P0", () => {
         id: workflowId,
         flowType: "control",
       });
-    expect((exported[0] as any).definition.nodes).toHaveLength(2);
+      expect((exported[0] as any).definition.nodes).toHaveLength(2);
       await ownerCaller.project.moveWorkflow({
         projectId,
         workflowId,
         folderId: null,
       });
-    await ownerCaller.project.deleteFolder({ projectId, folderId });
-    const afterDelete = await ownerCaller.project.warehouse({ projectId });
+      await ownerCaller.project.deleteFolder({ projectId, folderId });
+      const afterDelete = await ownerCaller.project.warehouse({ projectId });
       expect(
         afterDelete.folders.some((entry: any) => entry.id === folderId)
       ).toBe(false);
-    folderId = undefined;
+      folderId = undefined;
       await expect(
         designerCaller.workflow.delete({ id: workflowId })
       ).resolves.toMatchObject({ success: true, archived: true });

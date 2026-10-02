@@ -36,8 +36,8 @@ export function assertProjectServiceTaskReferences(definition: Definition) {
       );
     const rawUrl = String(
       node.type === "http"
-        ? node.config.url ?? ""
-        : node.config.restApi ?? node.config.endpoint ?? node.config.url ?? ""
+        ? (node.config.url ?? "")
+        : (node.config.restApi ?? node.config.endpoint ?? node.config.url ?? "")
     ).trim();
     if (/^[a-z][a-z0-9+.-]*:/i.test(rawUrl) || rawUrl.startsWith("//"))
       throw new Error(
@@ -96,6 +96,20 @@ export function assertWorkflowUpdateTransition(
       "已发布流程不能直接修改定义；请先取消发布，或使用发布操作提交新版本。"
     );
   }
+}
+export function isWorkflowUpdateNoop(input: {
+  currentName: string;
+  nextName: string;
+  definitionChanged: boolean;
+  publish?: boolean;
+  unpublish?: boolean;
+}) {
+  return (
+    !input.publish &&
+    !input.unpublish &&
+    !input.definitionChanged &&
+    input.currentName === input.nextName
+  );
 }
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type VersionSource =
@@ -462,6 +476,17 @@ export async function updateWorkflow(
   const definitionChanged =
     values.definition !== undefined &&
     JSON.stringify(definition) !== JSON.stringify(current.definition);
+  const nextName = values.name ?? current.name;
+  if (
+    isWorkflowUpdateNoop({
+      currentName: current.name,
+      nextName,
+      definitionChanged,
+      publish: values.publish,
+      unpublish: values.unpublish,
+    })
+  )
+    return current;
   const compiled = executable
     ? compileWorkflowDefinition(definition, { flowType: current.flowType })
     : null;
@@ -486,7 +511,6 @@ export async function updateWorkflow(
         ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
         : "当前审批规则要求项目流程通过审核后才能发布。"
     );
-  const nextName = values.name ?? current.name;
   const nextStatus = values.unpublish
     ? "draft"
     : values.publish

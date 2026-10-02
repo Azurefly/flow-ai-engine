@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   normalizeServiceEndpointDefinition,
@@ -6,19 +9,33 @@ import {
 import { assertProjectServiceTaskReferences } from "./workflow-service";
 
 describe("项目 EndpointRef 与 SecretRef 安全边界", () => {
-  afterEach(() => delete process.env.FLOW_SECRET_TEST_TOKEN);
+  const originalSecretDirectory = process.env.FLOW_SECRET_FILE_DIR;
+  let temporarySecretDirectory: string | undefined;
+
+  afterEach(() => {
+    delete process.env.FLOW_SECRET_TEST_TOKEN;
+    if (originalSecretDirectory === undefined)
+      delete process.env.FLOW_SECRET_FILE_DIR;
+    else process.env.FLOW_SECRET_FILE_DIR = originalSecretDirectory;
+    if (temporarySecretDirectory) {
+      rmSync(temporarySecretDirectory, { recursive: true, force: true });
+      temporarySecretDirectory = undefined;
+    }
+  });
 
   it("只接受标准端口、无内嵌凭据的端点和外部密钥引用", () => {
     expect(
       normalizeServiceEndpointDefinition({
         refCode: "crm_api",
         baseUrl: "https://api.example.com/v1/",
+        targetEnvironment: "production",
         secretRef: "env:FLOW_SECRET_TEST_TOKEN",
         authHeaderName: "Authorization",
         authScheme: "Bearer",
       })
     ).toMatchObject({
       refCode: "CRM_API",
+      targetEnvironment: "production",
       allowedHosts: ["api.example.com"],
       secretRef: "env:FLOW_SECRET_TEST_TOKEN",
     });
@@ -26,16 +43,38 @@ describe("项目 EndpointRef 与 SecretRef 安全边界", () => {
       normalizeServiceEndpointDefinition({
         refCode: "BAD",
         baseUrl: "https://user:password@example.com/",
+        targetEnvironment: "test",
       })
     ).toThrow("无内嵌凭据");
     expect(() =>
       normalizeServiceEndpointDefinition({
         refCode: "BAD_SECRET",
         baseUrl: "https://example.com/",
+        targetEnvironment: "test",
         secretRef: "env:PATH",
       })
     ).toThrow("FLOW_SECRET");
+    expect(() =>
+      normalizeServiceEndpointDefinition({
+        refCode: "BAD_ENV",
+        baseUrl: "https://example.com/",
+        targetEnvironment: "unclassified" as never,
+      })
+    ).toThrow("目标环境");
   });
+
+  it.each(["development", "test", "staging", "production"] as const)(
+    "保留合法的 %s 目标环境标记",
+    targetEnvironment => {
+      expect(
+        normalizeServiceEndpointDefinition({
+          refCode: "CRM_API",
+          baseUrl: "https://api.example.com/v1/",
+          targetEnvironment,
+        }).targetEnvironment
+      ).toBe(targetEnvironment);
+    }
+  );
 
   it("只从受限命名空间读取密钥且不返回引用以外的信息", () => {
     process.env.FLOW_SECRET_TEST_TOKEN = "runtime-only-value";
@@ -43,6 +82,23 @@ describe("项目 EndpointRef 与 SecretRef 安全边界", () => {
       "runtime-only-value"
     );
     expect(() => resolveExternalSecret("env:PATH")).toThrow("命名空间");
+  });
+
+  it("生产 SecretRef 可以从受管密钥目录读取单个只读文件", () => {
+    delete process.env.FLOW_SECRET_TEST_TOKEN;
+    temporarySecretDirectory = mkdtempSync(
+      join(tmpdir(), "flow-ai-secret-test-")
+    );
+    writeFileSync(
+      join(temporarySecretDirectory, "FLOW_SECRET_TEST_TOKEN"),
+      "file-backed-value\r\n",
+      { mode: 0o400 }
+    );
+    process.env.FLOW_SECRET_FILE_DIR = temporarySecretDirectory;
+
+    expect(resolveExternalSecret("env:FLOW_SECRET_TEST_TOKEN")).toBe(
+      "file-backed-value"
+    );
   });
 
   it("项目流程发布时禁止服务节点绕过 EndpointRef", () => {
@@ -65,7 +121,12 @@ describe("项目 EndpointRef 与 SecretRef 安全边界", () => {
     expect(() =>
       assertProjectServiceTaskReferences({
         ...definition,
-        nodes: [{ ...definition.nodes[0]!, config: { method: "GET", url: "https://outside.example.com" } }],
+        nodes: [
+          {
+            ...definition.nodes[0]!,
+            config: { method: "GET", url: "https://outside.example.com" },
+          },
+        ],
       })
     ).toThrow("必须配置项目 EndpointRef");
   });

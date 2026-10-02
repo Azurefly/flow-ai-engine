@@ -28,25 +28,44 @@ export async function settleWorkflowCommand(
       [command.runId]
     );
     const run = runs[0];
-    if (!run) throw new Error(`Workflow run ${command.runId} disappeared while settling a command.`);
+    if (!run)
+      throw new Error(
+        `Workflow run ${command.runId} disappeared while settling a command.`
+      );
     if (run.status === "success") {
-      return { ...command, status: "success", output: parseJson(run.finalOutputJson) };
+      return {
+        ...command,
+        status: "success",
+        output: parseJson(run.finalOutputJson),
+      };
     }
     if (run.status === "cancelled") {
-      return { ...command, status: "cancelled", output: parseJson(run.finalOutputJson) };
+      return {
+        ...command,
+        status: "cancelled",
+        output: parseJson(run.finalOutputJson),
+      };
     }
     if (run.status === "failed") {
-      const details = parseJson(run.errorJson) as { message?: string } | undefined;
-      throw new Error(details?.message || `Workflow run ${command.runId} failed.`);
+      const details = parseJson(run.errorJson) as
+        | { message?: string }
+        | undefined;
+      throw new Error(
+        details?.message || `Workflow run ${command.runId} failed.`
+      );
     }
     const [tasks] = await pool.query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed') ORDER BY createdAt DESC,id DESC LIMIT 1",
       [command.runId]
     );
-    if (run.status === "running" && tasks[0]) {
+    // A running Worker may still be creating sibling approval tasks. Observe its
+    // durable waiting checkpoint before reading a complete task-group snapshot.
+    if (run.status === "waiting" && tasks[0]) {
       return { ...command, status: "waiting", taskId: String(tasks[0].id) };
     }
     await new Promise(resolve => setTimeout(resolve, 25));
   }
-  throw new Error(`Workflow command did not settle within 10 seconds: run=${command.runId}.`);
+  throw new Error(
+    `Workflow command did not settle within 10 seconds: run=${command.runId}.`
+  );
 }

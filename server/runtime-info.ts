@@ -4,8 +4,18 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0031_audit_and_run_indexes";
-export const DATABASE_MIGRATION_EPOCH = 1787677200000;
+export const DATABASE_MIGRATION_VERSION = "0034_project_unit_collation";
+export const DATABASE_MIGRATION_EPOCH = 1790730020616;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 41;
+export const PUBLIC_APP_VERSION = "1.0.0";
+
+export function getPublicReadiness(ready: boolean) {
+  return { ready };
+}
+
+export function getPublicVersion() {
+  return { version: PUBLIC_APP_VERSION };
+}
 
 function db() {
   return getSharedPool();
@@ -48,9 +58,13 @@ export function getCapabilityStatus() {
 
 export function getRuntimeInfo() {
   return {
-    gitSha: process.env.BUILD_SHA || process.env.GIT_SHA || "development",
-    buildTime: process.env.BUILD_TIME || "unknown",
-    imageDigest: process.env.IMAGE_DIGEST || "unknown",
+    buildId:
+      process.env.BUILD_ID ||
+      process.env.BUILD_SHA ||
+      process.env.GIT_SHA ||
+      "not-injected",
+    buildTime: process.env.BUILD_TIME || "not-injected",
+    imageId: process.env.IMAGE_ID || process.env.IMAGE_DIGEST || "not-injected",
     migrationVersion: DATABASE_MIGRATION_VERSION,
     nodeEnv: process.env.NODE_ENV || "development",
     worker: getWorkflowWorkerStatus(),
@@ -82,11 +96,12 @@ export async function checkReadiness() {
          FROM information_schema.columns
         WHERE table_schema=DATABASE() AND (
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
-          (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
+          (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
-          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson')) OR
+          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson')) OR
           (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
           (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR
+          (table_name='project_service_endpoint' AND column_name='targetEnvironment') OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -110,12 +125,21 @@ export async function checkReadiness() {
           OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
         )`
     );
+    const [projectUnitCollationRows] = await db().query<mysql.RowDataPacket[]>(
+      `SELECT COUNT(*) AS count
+         FROM information_schema.columns
+        WHERE table_schema=DATABASE()
+          AND table_name='flow_project_unit'
+          AND column_name IN ('id','projectId','unitId')
+          AND collation_name='utf8mb4_0900_ai_ci'`
+    );
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
       Number(tableRows[0]?.count ?? 0) === 13 &&
-      Number(columnRows[0]?.count ?? 0) === 36 &&
-      Number(indexRows[0]?.count ?? 0) === 13;
+      Number(columnRows[0]?.count ?? 0) === DATABASE_REQUIRED_COLUMN_COUNT &&
+      Number(indexRows[0]?.count ?? 0) === 13 &&
+      Number(projectUnitCollationRows[0]?.count ?? 0) === 3;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {

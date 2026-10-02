@@ -17,11 +17,18 @@ let employee: any;
 let unitId: string | undefined;
 let secondaryUnitId: string | undefined;
 let childUnitId: string | undefined;
+let paginationUnitId: string | undefined;
+let paginationUserIds: number[] = [];
 
 describe("BDP 参考式组织字段与部门权限组继承", () => {
   afterAll(async () => {
     if (!pool) return;
-    const unitIds = [unitId, secondaryUnitId, childUnitId].filter(Boolean);
+    const unitIds = [
+      unitId,
+      secondaryUnitId,
+      childUnitId,
+      paginationUnitId,
+    ].filter(Boolean);
     if (unitIds.length) {
       await pool.query(
         "DELETE FROM organization_unit_role WHERE unitId IN (?)",
@@ -39,7 +46,7 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
         unitIds,
       ]);
     }
-    const ids = [admin?.id, employee?.id].filter(Boolean);
+    const ids = [admin?.id, employee?.id, ...paginationUserIds].filter(Boolean);
     if (ids.length)
       await pool.query("DELETE FROM role_assignment WHERE userId IN (?)", [
         ids,
@@ -53,6 +60,10 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
       `org_admin_${suffix}`,
       `org_employee_${suffix}`,
     ]);
+    if (paginationUserIds.length)
+      await pool.query("DELETE FROM users WHERE id IN (?)", [
+        paginationUserIds,
+      ]);
     await pool.end();
   });
 
@@ -122,12 +133,109 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
           unitType: "department",
         })
       ).id;
+      paginationUnitId = (
+        await caller.config.createOrganizationUnit({
+          code: `ORG_P_${suffix.toUpperCase()}`,
+          name: "分页验收部门",
+          unitType: "department",
+        })
+      ).id;
+      const paginationUsers = Array.from({ length: 21 }, (_, index) => {
+        const ordinal = String(index + 1).padStart(2, "0");
+        return [
+          `test:org-page-${suffix}-${ordinal}`,
+          `org_page_${suffix}_${ordinal}`,
+          `分页样本${ordinal}`,
+          "user",
+          "active",
+          "internal",
+          new Date(),
+        ];
+      });
+      await pool.query(
+        "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES ?",
+        [paginationUsers]
+      );
+      const [paginationRows] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT id,username FROM users WHERE openId LIKE ? ORDER BY username",
+        [`test:org-page-${suffix}-%`]
+      );
+      paginationUserIds = paginationRows.map(row => Number(row.id));
+      await pool.query(
+        "INSERT INTO organization_membership (id,unitId,userId,title,isPrimary) VALUES ?",
+        [
+          paginationRows.map(row => [
+            randomUUID(),
+            paginationUnitId,
+            Number(row.id),
+            "分页工程师",
+            0,
+          ]),
+        ]
+      );
+      const directoryPage = await caller.config.organizationMembersPage({
+        unitId: paginationUnitId,
+        includeDescendants: false,
+        search: "",
+        page: 1,
+        pageSize: 20,
+      });
+      const finalDirectoryPage = await caller.config.organizationMembersPage({
+        unitId: paginationUnitId,
+        includeDescendants: false,
+        search: "",
+        page: 2,
+        pageSize: 20,
+      });
+      expect(directoryPage).toMatchObject({
+        total: 21,
+        page: 1,
+        totalPages: 2,
+        from: 1,
+        to: 20,
+      });
+      expect(finalDirectoryPage).toMatchObject({
+        total: 21,
+        page: 2,
+        totalPages: 2,
+        from: 21,
+        to: 21,
+      });
+      expect(directoryPage.items).toHaveLength(20);
+      expect(finalDirectoryPage.items).toHaveLength(1);
+      expect(
+        new Set([
+          ...directoryPage.items.map(member => Number(member.userId)),
+          ...finalDirectoryPage.items.map(member => Number(member.userId)),
+        ]).size
+      ).toBe(21);
+      const searchedPage = await caller.config.organizationMembersPage({
+        unitId: paginationUnitId,
+        includeDescendants: false,
+        search: "样本21",
+        page: 1,
+        pageSize: 20,
+      });
+      expect(searchedPage).toMatchObject({
+        total: 1,
+        from: 1,
+        to: 1,
+      });
+      const unassignedBefore = Number(
+        (await caller.config.organizationDirectory()).unassignedActiveUserCount
+      );
       await caller.config.assignOrganizationMember({
         unitId,
         userId: employee.id,
         title: "开发工程师",
         isPrimary: true,
       });
+      expect(
+        Number(
+          (await caller.config.organizationDirectory())
+            .unassignedActiveUserCount
+        )
+      ).toBe(unassignedBefore - 1);
       await caller.config.assignOrganizationMember({
         unitId: secondaryUnitId,
         userId: employee.id,
@@ -220,6 +328,40 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
           (binding: any) => binding.unitId === unitId
         )
       ).toMatchObject({ roleId, roleCode: "workflow_creator" });
+      const directory = await caller.config.organizationDirectory();
+      expect(
+        directory.units.find((unit: any) => unit.id === unitId)
+      ).toMatchObject({ memberCount: 1 });
+      const memberPage = await caller.config.organizationMembersPage({
+        unitId,
+        includeDescendants: false,
+        search: "平台工程师",
+        page: 1,
+        pageSize: 20,
+      });
+      expect(memberPage).toMatchObject({
+        total: 1,
+        page: 1,
+        pageSize: 20,
+        totalPages: 1,
+        from: 1,
+        to: 1,
+      });
+      expect(memberPage.items[0]).toMatchObject({
+        userId: employee.id,
+        title: "平台工程师",
+        unitDisplayPath: expect.stringContaining("研发中心"),
+      });
+      expect(memberPage.items[0].directRoles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ roleCode: "workflow_creator" }),
+        ])
+      );
+      expect(memberPage.items[0].inheritedRoles).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ unitId, roleCode: "workflow_creator" }),
+        ])
+      );
       expect(await hasSystemPermission(employee, "workflow:create")).toBe(true);
       expect(
         await resolveRoleCandidateUserIds("workflow_creator", randomUUID())
@@ -262,18 +404,58 @@ describe("BDP 参考式组织字段与部门权限组继承", () => {
         userId: employee.id,
         makePrimary: true,
       });
+      const directAfterMove = await caller.config.organizationMembersPage({
+        unitId,
+        includeDescendants: false,
+        search: "",
+        page: 1,
+        pageSize: 20,
+      });
+      const descendantsAfterMove = await caller.config.organizationMembersPage({
+        unitId,
+        includeDescendants: true,
+        search: "",
+        page: 1,
+        pageSize: 20,
+      });
+      expect(directAfterMove.total).toBe(0);
+      expect(descendantsAfterMove.total).toBe(1);
+      expect(descendantsAfterMove.items[0]).toMatchObject({
+        unitId: childUnitId,
+        userId: employee.id,
+      });
       expect(await hasSystemPermission(employee, "workflow:create")).toBe(true);
       await caller.config.bindOrganizationRole({
         unitId,
         roleId,
         includeDescendants: false,
       });
-      expect(await hasSystemPermission(employee, "workflow:create")).toBe(false);
+      expect(await hasSystemPermission(employee, "workflow:create")).toBe(
+        false
+      );
       await caller.config.bindOrganizationRole({
         unitId,
         roleId,
         includeDescendants: true,
         expiresAt: new Date(Date.now() + 60_000),
+      });
+      expect(await hasSystemPermission(employee, "workflow:create")).toBe(true);
+      await caller.config.bindOrganizationRole({
+        unitId,
+        roleId,
+        includeDescendants: true,
+        effectiveFrom: new Date(Date.now() + 60_000),
+      });
+      expect(await hasSystemPermission(employee, "workflow:create")).toBe(
+        false
+      );
+      expect(
+        await resolveRoleCandidateUserIds("workflow_creator", randomUUID())
+      ).not.toContain(employee.id);
+      await caller.config.bindOrganizationRole({
+        unitId,
+        roleId,
+        includeDescendants: true,
       });
       expect(await hasSystemPermission(employee, "workflow:create")).toBe(true);
       await caller.config.moveOrganizationMember({

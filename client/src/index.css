@@ -4,6 +4,22 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-aiflow-info: var(--aiflow-info);
+  --color-aiflow-info-surface: var(--aiflow-info-surface);
+  --color-aiflow-info-border: var(--aiflow-info-border);
+  --color-aiflow-success: var(--aiflow-success);
+  --color-aiflow-success-surface: var(--aiflow-success-surface);
+  --color-aiflow-success-border: var(--aiflow-success-border);
+  --color-aiflow-warning: var(--aiflow-warning);
+  --color-aiflow-warning-surface: var(--aiflow-warning-surface);
+  --color-aiflow-warning-border: var(--aiflow-warning-border);
+  --color-aiflow-danger: var(--aiflow-danger);
+  --color-aiflow-danger-surface: var(--aiflow-danger-surface);
+  --color-aiflow-danger-border: var(--aiflow-danger-border);
+  --color-aiflow-special: var(--aiflow-special);
+  --color-aiflow-special-surface: var(--aiflow-special-surface);
+  --color-aiflow-special-border: var(--aiflow-special-border);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -53,28 +69,46 @@
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
   --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.235 0.015 65);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.235 0.015 65);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.235 0.015 65);
-  --secondary: oklch(0.98 0.001 286.375);
-  --secondary-foreground: oklch(0.4 0.015 65);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.141 0.005 285.823);
+  /* Shared UI type scale: meta 13, controls 14, body 16, section 18, page 24, display 28px. */
+  --aiflow-font-sans:
+    "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+    system-ui, sans-serif;
+  --aiflow-type-body: 1rem;
+  --aiflow-type-meta: 0.8125rem;
+  --aiflow-type-control: 0.875rem;
+  --aiflow-type-code: 0.875rem;
+  --aiflow-type-section: 1.125rem;
+  --aiflow-type-page-title: 1.5rem;
+  --aiflow-type-display: 1.75rem;
+  --aiflow-leading-meta: 1.125rem;
+  --aiflow-leading-control: 1.25rem;
+  --aiflow-leading-code: 1.3125rem;
+  --aiflow-leading-body: 1.5rem;
+  --aiflow-leading-section: 1.5625rem;
+  --aiflow-leading-page-title: 2rem;
+  --aiflow-leading-display: 2.1875rem;
+  --background: #f4f6f9;
+  --foreground: #172033;
+  --card: #ffffff;
+  --card-foreground: #172033;
+  --popover: #ffffff;
+  --popover-foreground: #172033;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #172033;
+  --muted: #f1f5f9;
+  --muted-foreground: #53637a;
+  --accent: #eaf1ff;
+  --accent-foreground: #1d4ed8;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
+  --border: #dce3ed;
+  --input: #cbd5e1;
   --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.235 0.015 65);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-border: oklch(0.92 0.004 286.32);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #172033;
+  --sidebar-accent: #eaf1ff;
+  --sidebar-accent-foreground: #1d4ed8;
+  --sidebar-border: #dce3ed;
   --sidebar-ring: oklch(0.623 0.214 259.815);
 
   /* Flow AI Design Tokens 2.0 (v3.1) */
@@ -93,40 +127,164 @@
   --duration-surface: 180ms;
   --duration-drawer: 240ms;
   --duration-canvas: 280ms;
+  --aiflow-info: #1d4ed8;
+  --aiflow-info-surface: #eff6ff;
+  --aiflow-info-border: #bfdbfe;
+  --aiflow-success: #047857;
+  --aiflow-success-surface: #ecfdf5;
+  --aiflow-success-border: #a7f3d0;
+  --aiflow-warning: #92400e;
+  --aiflow-warning-surface: #fffbeb;
+  --aiflow-warning-border: #fde68a;
+  --aiflow-danger: #be123c;
+  --aiflow-danger-surface: #fff1f2;
+  --aiflow-danger-border: #fecdd3;
+  --aiflow-special: #6d28d9;
+  --aiflow-special-surface: #f5f3ff;
+  --aiflow-special-border: #ddd6fe;
+}
+
+/* Legacy utility compatibility only; new UI should use the semantic aiflow-type-* classes. */
+:where(
+  [class*="text-[9px]"],
+  [class*="text-[10px]"],
+  [class*="text-[11px]"],
+  [class*="text-[12px]"],
+  [class*="text-[13px]"],
+  [class*="text-[0.8rem]"],
+  [class*="text-xs"]
+) {
+  font-size: var(--aiflow-type-meta) !important;
+  line-height: var(--aiflow-leading-meta) !important;
+}
+
+:where([class*="text-sm"], [class*="text-base"]) {
+  font-size: var(--aiflow-type-body) !important;
+  line-height: var(--aiflow-leading-body) !important;
+}
+
+:where([class*="text-lg"]) {
+  font-size: var(--aiflow-type-section) !important;
+  line-height: var(--aiflow-leading-section) !important;
+}
+
+:where([class*="text-xl"]) {
+  font-size: var(--aiflow-type-page-title) !important;
+  line-height: var(--aiflow-leading-page-title) !important;
+}
+
+:where(
+  [class*="text-2xl"],
+  [class*="text-3xl"],
+  [class*="text-4xl"],
+  [class*="text-5xl"],
+  [class*="text-6xl"],
+  [class*="text-7xl"],
+  [class*="text-8xl"],
+  [class*="text-9xl"]
+) {
+  font-size: var(--aiflow-type-display) !important;
+  line-height: var(--aiflow-leading-display) !important;
+}
+
+/* Native select appearance ignores explicit line-height in Chromium. Keep the native
+   picker/keyboard behavior while rendering its closed control at the shared type size. */
+select {
+  appearance: none;
+}
+
+select:not([multiple]):not([size]),
+select[size="1"]:not([multiple]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.5rem center;
+  background-size: 1rem;
+  padding-inline-end: 2rem;
+}
+
+/* Keep visible controls at a consistent 14px control size despite legacy text classes. */
+:is(
+  button,
+  [role="button"],
+  input:not([type="checkbox"]):not([type="radio"]):not(
+      [data-aiflow-page-title]
+    ),
+  select,
+  textarea:not([data-aiflow-page-title])
+) {
+  font-size: var(--aiflow-type-control) !important;
+  line-height: var(--aiflow-leading-control);
+}
+
+label:not([class*="aiflow-type-"]) {
+  font-size: var(--aiflow-type-control) !important;
+  line-height: var(--aiflow-leading-control);
+}
+
+th:not([class*="aiflow-type-"]) {
+  font-size: var(--aiflow-type-control) !important;
+  line-height: var(--aiflow-leading-control) !important;
+}
+
+small {
+  font-size: var(--aiflow-type-meta) !important;
+  line-height: var(--aiflow-leading-meta) !important;
+}
+
+:is(h1, [data-aiflow-page-title]) {
+  font-size: var(--aiflow-type-page-title) !important;
+  line-height: var(--aiflow-leading-page-title) !important;
+}
+
+h2 {
+  font-size: var(--aiflow-type-section) !important;
+  line-height: var(--aiflow-leading-section) !important;
+}
+
+:is(h3, h4) {
+  font-size: var(--aiflow-type-body) !important;
+  line-height: var(--aiflow-leading-body) !important;
+}
+
+/* Honor explicit section/card title roles even when the markup uses h3/h4. */
+:is(h2, h3, h4).aiflow-type-section-title,
+:is(h2, h3, h4).aiflow-type-card-title {
+  font-size: var(--aiflow-type-section) !important;
+  line-height: var(--aiflow-leading-section);
 }
 
 .dark {
-  --primary: var(--color-blue-700);
+  --primary: #2563eb;
   --primary-foreground: var(--color-blue-50);
   --sidebar-primary: var(--color-blue-500);
   --sidebar-primary-foreground: var(--color-blue-50);
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.85 0.005 65);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.85 0.005 65);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.85 0.005 65);
-  --secondary: oklch(0.24 0.006 286.033);
-  --secondary-foreground: oklch(0.7 0.005 65);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground:  oklch(0.92 0.005 65);
+  --background: #0b1220;
+  --foreground: #e2e8f0;
+  --card: #111c2e;
+  --card-foreground: #e2e8f0;
+  --popover: #111c2e;
+  --popover-foreground: #e2e8f0;
+  --secondary: #19283d;
+  --secondary-foreground: #e2e8f0;
+  --muted: #19283d;
+  --muted-foreground: #adbdd2;
+  --accent: #1c304b;
+  --accent-foreground: #93c5fd;
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
+  --border: #30415a;
+  --input: #405571;
   --ring: oklch(0.488 0.243 264.376);
   --chart-1: var(--color-blue-300);
   --chart-2: var(--color-blue-500);
   --chart-3: var(--color-blue-600);
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.85 0.005 65);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground:  oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar: #111c2e;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-accent: #1c304b;
+  --sidebar-accent-foreground: #93c5fd;
+  --sidebar-border: #30415a;
   --sidebar-ring: oklch(0.488 0.243 264.376);
 
   /* Flow AI Design Tokens 2.0 (Dark Mode) */
@@ -136,6 +294,21 @@
   --flow-state: #7adbb5;
   --flow-control: #9eafff;
   --flow-data: #bda6ff;
+  --aiflow-info: #93c5fd;
+  --aiflow-info-surface: #172d4a;
+  --aiflow-info-border: #31577f;
+  --aiflow-success: #6ee7b7;
+  --aiflow-success-surface: #10352e;
+  --aiflow-success-border: #286050;
+  --aiflow-warning: #fcd34d;
+  --aiflow-warning-surface: #382b15;
+  --aiflow-warning-border: #725829;
+  --aiflow-danger: #fda4af;
+  --aiflow-danger-surface: #3b1c2c;
+  --aiflow-danger-border: #74384c;
+  --aiflow-special: #c4b5fd;
+  --aiflow-special-surface: #2a2346;
+  --aiflow-special-border: #514477;
 }
 
 @layer base {
@@ -147,6 +320,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--aiflow-font-sans);
+    font-size: var(--aiflow-type-body);
+    line-height: var(--aiflow-leading-body);
   }
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]),
@@ -162,6 +338,89 @@
   :focus-visible {
     outline: 3px solid #2563eb;
     outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .aiflow-type-display {
+    font-size: var(--aiflow-type-display) !important;
+    line-height: var(--aiflow-leading-display) !important;
+  }
+
+  .aiflow-type-page-title {
+    font-size: var(--aiflow-type-page-title) !important;
+    line-height: var(--aiflow-leading-page-title) !important;
+  }
+
+  .aiflow-type-section-title,
+  .aiflow-type-card-title {
+    font-size: var(--aiflow-type-section) !important;
+    line-height: var(--aiflow-leading-section) !important;
+  }
+
+  .aiflow-action-target {
+    min-height: 2.75rem;
+  }
+
+  [data-slot="button"],
+  .aiflow-button {
+    min-width: 2.75rem !important;
+    min-height: 2.75rem !important;
+    font-size: var(--aiflow-type-control) !important;
+    line-height: var(--aiflow-leading-control) !important;
+  }
+
+  @media (min-width: 1024px) {
+    .aiflow-action-target {
+      min-height: 2.5rem;
+    }
+    [data-slot="button"],
+    .aiflow-button {
+      min-width: 2.5rem !important;
+      min-height: 2.5rem !important;
+    }
+  }
+
+  .aiflow-type-body,
+  .aiflow-type-control {
+    line-height: var(--aiflow-leading-control) !important;
+  }
+
+  .aiflow-type-body {
+    font-size: var(--aiflow-type-body) !important;
+    line-height: var(--aiflow-leading-body) !important;
+  }
+
+  .aiflow-type-control {
+    font-size: var(--aiflow-type-control) !important;
+  }
+
+  .aiflow-type-code {
+    font-size: var(--aiflow-type-code) !important;
+    line-height: var(--aiflow-leading-code) !important;
+  }
+
+  .aiflow-type-meta {
+    font-size: var(--aiflow-type-meta) !important;
+    line-height: var(--aiflow-leading-meta) !important;
+  }
+
+  :is(
+    button,
+    [role="button"],
+    input:not([type="checkbox"]):not([type="radio"]):not(
+        [data-aiflow-page-title]
+      ),
+    select,
+    textarea:not([data-aiflow-page-title])
+  ) {
+    font-size: var(--aiflow-type-control) !important;
+    line-height: var(--aiflow-leading-control) !important;
+  }
+
+  label:not([class*="aiflow-type-"]) {
+    font-size: var(--aiflow-type-control) !important;
+    line-height: var(--aiflow-leading-control) !important;
   }
 }
 
@@ -183,9 +442,9 @@
   z-index: 100;
   transform: translateY(-160%);
   border-radius: 4px;
-  background: #ffffff;
+  background: var(--card);
   padding: 10px 14px;
-  color: #1d4ed8;
+  color: var(--aiflow-info);
   box-shadow: 0 2px 8px rgb(15 23 42 / 18%);
 }
 
@@ -200,41 +459,31 @@
 
 /* 原 AiFlowGraph 工作台采用白色标题栏、细灰边框和克制的直角面板；仅作用于已登录控制台。 */
 [data-aiflow-console] > header {
-  border-color: #d9e0e9 !important;
-  background: #ffffff !important;
-  color: #354052 !important;
+  border-color: var(--border) !important;
+  background: var(--card) !important;
+  color: var(--foreground) !important;
   box-shadow: 0 1px 3px rgb(38 56 79 / 8%) !important;
-}
-
-[data-aiflow-console] > header .bg-slate-900,
-[data-aiflow-console] > header .bg-slate-800 {
-  background: #ffffff !important;
-}
-
-[data-aiflow-console] > header .border-slate-700,
-[data-aiflow-console] > header .border-slate-600 {
-  border-color: #e0e6ee !important;
 }
 
 [data-aiflow-console] > header .text-slate-100,
 [data-aiflow-console] > header .text-slate-300,
 [data-aiflow-console] > header .text-slate-400 {
-  color: #596678 !important;
+  color: var(--muted-foreground) !important;
 }
 
 [data-aiflow-console] > header .text-blue-300 {
-  color: #2d72cf !important;
+  color: var(--aiflow-info) !important;
 }
 
 [data-aiflow-console] > header button:hover {
-  background: #f2f6fc !important;
-  color: #2469c7 !important;
+  background: var(--accent) !important;
+  color: var(--aiflow-info) !important;
 }
 
 [data-aiflow-console] > header button.border-blue-400 {
-  border-color: #3a82e4 !important;
-  background: #edf4ff !important;
-  color: #2469c7 !important;
+  border-color: var(--aiflow-info) !important;
+  background: var(--accent) !important;
+  color: var(--aiflow-info) !important;
 }
 
 [data-aiflow-console] .rounded-lg,
@@ -245,7 +494,9 @@
 
 [data-aiflow-console] .shadow-sm,
 [data-aiflow-console] .shadow-lg {
-  box-shadow: 0 1px 3px rgb(15 23 42 / 6%), 0 1px 2px rgb(15 23 42 / 4%);
+  box-shadow:
+    0 1px 3px rgb(15 23 42 / 6%),
+    0 1px 2px rgb(15 23 42 / 4%);
 }
 
 [data-aiflow-console] > header .hidden.sm\:block > p:first-child {
@@ -254,9 +505,9 @@
 
 [data-aiflow-console] > header .hidden.sm\:block::before {
   display: block;
-  color: #2d72cf;
+  color: var(--aiflow-info);
   content: "AI FLOW GRAPH";
-  font-size: 10px;
+  font-size: var(--aiflow-type-meta);
   font-weight: 700;
   letter-spacing: 0.16em;
   line-height: 1.15;
@@ -281,24 +532,19 @@
   display: none;
 }
 
-[data-aiflow-business-center] h1 {
-  font-size: 16px;
-  font-weight: 600;
-}
-
 [data-aiflow-business-center] section {
-  border-color: #dfe5ec;
+  border-color: var(--border);
   box-shadow: none;
 }
 
 [data-aiflow-business-center] section > div:first-child {
-  background: #fff;
+  background: var(--card);
   padding: 12px 16px;
 }
 
 [data-aiflow-business-center] table th {
-  background: #f6f8fb;
-  color: #697789;
+  background: var(--muted);
+  color: var(--muted-foreground);
   font-weight: 600;
 }
 
@@ -312,17 +558,22 @@
 @media (min-width: 1024px) {
   [data-aiflow-console] > div > section > div:has(> aside) > aside {
     width: 216px !important;
-    border-color: #dfe5ec;
+    border-color: var(--border);
     box-shadow: none;
   }
 
   [data-aiflow-console] > div > section > div:has(> aside) > section {
-    background: #fff;
+    background: var(--card);
     padding: 16px 20px;
   }
 }
 
-[data-aiflow-console] > div > section > div:has(> aside) > aside > div:first-child {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> aside)
+  > aside
+  > div:first-child {
   padding: 12px 14px;
 }
 
@@ -336,13 +587,19 @@
   padding: 9px 14px;
 }
 
-[data-aiflow-console] > div > section > div:has(> aside) > aside nav button[class*="bg-[#eaf1ff]"] {
-  border-left: 3px solid #2f77d2;
-  background: #edf4ff;
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> aside)
+  > aside
+  nav
+  button[class*="bg-accent"] {
+  border-left: 3px solid var(--aiflow-info);
+  background: var(--accent);
 }
 
 [data-aiflow-console] > div > section > div:has(> aside) > section h1 {
-  font-size: 20px;
+  font-size: var(--aiflow-type-page-title);
 }
 
 [data-aiflow-console] > div > section > div:has(> aside) > section .rounded-lg {
@@ -353,7 +610,7 @@
 @media (min-width: 1024px) {
   [data-aiflow-project-workspace] > aside {
     width: 216px !important;
-    border-color: #dfe5ec;
+    border-color: var(--border);
     box-shadow: none;
   }
 
@@ -363,7 +620,7 @@
 
   [data-aiflow-project-workspace] > section {
     padding: 16px 20px;
-    background: #fff;
+    background: var(--card);
   }
 }
 
@@ -381,15 +638,15 @@
   padding: 9px 14px;
 }
 
-[data-aiflow-project-workspace] > aside nav button[class*="bg-[#eaf1ff]"] {
-  border-left: 3px solid #2f77d2;
-  background: #edf4ff;
+[data-aiflow-project-workspace] > aside nav button[class*="bg-accent"] {
+  border-left: 3px solid var(--aiflow-info);
+  background: var(--accent);
 }
 
 /* 原 system_config.html 为连续左右分栏及单一卡片页签容器。 */
 [data-aiflow-system-config] {
   padding: 0;
-  background: #fff;
+  background: var(--card);
 }
 
 [data-aiflow-system-config] > div {
@@ -403,7 +660,8 @@
     grid-template-columns: 216px minmax(0, 1fr);
   }
 
-  [data-aiflow-system-config] > div:has(> aside > div > button[title="展开配置导航"]) {
+  [data-aiflow-system-config]
+    > div:has(> aside > div > button[title="展开配置导航"]) {
     grid-template-columns: 56px minmax(0, 1fr);
   }
 }
@@ -435,9 +693,9 @@
   padding: 9px 14px;
 }
 
-[data-aiflow-system-config] aside nav button[class*="bg-[#eaf1ff]"] {
-  border-left: 3px solid #2f77d2;
-  background: #edf4ff;
+[data-aiflow-system-config] aside nav button[class*="bg-accent"] {
+  border-left: 3px solid var(--aiflow-info);
+  background: var(--accent);
 }
 
 [data-aiflow-system-config] section {
@@ -447,7 +705,7 @@
 [data-aiflow-system-config] section > div:first-child {
   min-height: 45px;
   padding: 7px 16px 0;
-  background: #f6f8fb;
+  background: var(--muted);
 }
 
 [data-aiflow-system-config] section > div:last-child {
@@ -503,7 +761,10 @@
   padding: 10px 12px;
 }
 
-[data-aiflow-designer] [data-structured-run-input] > div:first-child p:last-child {
+[data-aiflow-designer]
+  [data-structured-run-input]
+  > div:first-child
+  p:last-child {
   display: none;
 }
 
@@ -511,9 +772,12 @@
   border-radius: 2px;
 }
 
-[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > div:first-child,
+[data-aiflow-designer]
+  [data-aiflow-workflow-canvas]
+  > section
+  > div:first-child,
 [data-aiflow-designer] [data-aiflow-workflow-canvas] > aside {
-  border-color: #dfe5ec;
+  border-color: var(--border);
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-node-palette] {
@@ -521,17 +785,97 @@
   padding: 0 10px;
 }
 
-[data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-node-palette] > button,
-[data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-canvas-actions] > button {
+[data-aiflow-designer]
+  [data-aiflow-workflow-canvas]
+  [data-flow-node-palette]
+  > button,
+[data-aiflow-designer]
+  [data-aiflow-workflow-canvas]
+  [data-flow-canvas-actions]
+  > button {
   min-width: max-content;
 }
 
-[data-aiflow-designer] [data-aiflow-workflow-canvas] .react-flow__node-workflowNode > div {
+[data-aiflow-designer]
+  [data-aiflow-workflow-canvas]
+  .react-flow__node-workflowNode
+  > div {
   border-radius: 16px;
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] > section > .relative {
   height: max(620px, calc(100vh - 210px));
+}
+
+@media (max-width: 639px) {
+  [data-aiflow-designer] [data-aiflow-workflow-canvas] {
+    min-height: 0;
+  }
+
+  [data-aiflow-designer] [data-aiflow-workflow-canvas] > section > .relative {
+    height: max(420px, calc(100svh - 300px));
+  }
+}
+
+[data-aiflow-workflow-canvas]
+  .flow-canvas-controls
+  .react-flow__controls-button {
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  padding: 8px;
+}
+
+@media (max-width: 1023px) {
+  [data-aiflow-workflow-canvas] .flow-canvas-controls {
+    flex-direction: row;
+  }
+
+  [data-aiflow-workflow-canvas]
+    .flow-canvas-controls
+    .react-flow__controls-button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+    border-right: 1px solid var(--border);
+    border-bottom: 0;
+    touch-action: manipulation;
+  }
+
+  [data-aiflow-workflow-canvas]
+    .flow-canvas-controls
+    .react-flow__controls-button:last-child {
+    border-right: 0;
+  }
+}
+
+[data-workflow-inspector] > div:first-child {
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+[data-workflow-inspector] button,
+[data-workflow-inspector] input:not([type="checkbox"]):not([type="radio"]),
+[data-workflow-inspector] select {
+  min-height: 2.75rem !important;
+}
+
+[data-workflow-inspector] > div:first-child button {
+  min-width: 2.75rem;
+}
+
+@media (min-width: 1024px) {
+  [data-workflow-inspector] button,
+  [data-workflow-inspector] input:not([type="checkbox"]):not([type="radio"]),
+  [data-workflow-inspector] select {
+    min-height: 2.5rem !important;
+  }
+  [data-workflow-inspector] > div:first-child button {
+    min-width: 2.5rem;
+  }
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] > aside > div:first-child {
@@ -546,76 +890,237 @@
 }
 
 /* 已启动流程：以稳定的导航 aria 标记锚定连续双栏，避免泛化 aside 选择器影响其他工作区。 */
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]),
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"]),
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"]) {
   padding: 0;
-  background: #fff;
+  background: var(--card);
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) > div,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) > div {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  > div,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  > div {
   max-width: none;
   gap: 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  aside,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  main
+  > section,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  aside,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  main
+  > section {
   border-radius: 0;
   box-shadow: none;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside {
-  border-color: #dfe5ec;
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  aside,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  aside {
+  border-color: var(--border);
   border-top: 0;
   border-bottom: 0;
   border-left: 0;
   padding: 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside nav,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside nav {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  aside
+  nav,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  aside
+  nav {
   gap: 0;
   padding: 6px 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside nav button,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside nav button {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  aside
+  nav
+  button,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  aside
+  nav
+  button {
   border-radius: 0;
   padding: 9px 14px;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  main
+  > section,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  main
+  > section {
   border: 0;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  main
+  > section
+  > header,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  main
+  > section
+  > header {
   min-height: 46px;
   padding: 7px 16px;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header > div > p:first-child,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header > div > p:first-child,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header > div > p:last-child,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header > div > p:last-child,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) aside > div.mt-4,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) aside > div.mt-4 {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  main
+  > section
+  > header
+  > div
+  > p:first-child,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  main
+  > section
+  > header
+  > div
+  > p:first-child,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  main
+  > section
+  > header
+  > div
+  > p:last-child,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  main
+  > section
+  > header
+  > div
+  > p:last-child,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  aside
+  > div.mt-4,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  aside
+  > div.mt-4 {
   display: none;
 }
 
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="收起已启动流程导航"]) main > section > header h2,
-[data-aiflow-console] > div > section > div:has(> div > aside button[aria-label="展开已启动流程导航"]) main > section > header h2 {
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
+  main
+  > section
+  > header
+  h2,
+[data-aiflow-console]
+  > div
+  > section
+  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
+  main
+  > section
+  > header
+  h2 {
   margin-top: 0;
-  font-size: 16px;
+  font-size: var(--aiflow-type-section);
+}
+
+/* 窄屏工作台将六个视图压缩为三列两行，给任务和统计留出更多首屏空间。 */
+@media (max-width: 1023px) {
+  [data-workbench-layout] {
+    gap: 0;
+  }
+
+  [data-workbench-navigation] {
+    overflow: visible;
+    border: 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
+
+  [data-workbench-nav-header] {
+    display: none;
+  }
 }
 
 /* 流程仓库：原始页面以树、流程列表、简介预览连续分栏承载，避免三张独立仪表盘卡片。 */
 [data-aiflow-warehouse] {
-  background: #fff;
+  background: var(--card);
 }
 
 [data-aiflow-warehouse] > div {
@@ -623,26 +1128,20 @@
 }
 
 [data-aiflow-warehouse] > div > div:first-child {
-  min-height: 40px;
-  margin-bottom: 0;
-  border-bottom-color: #dfe5ec;
-  padding: 5px 12px;
-}
-
-[data-aiflow-warehouse] > div > div:first-child > div {
-  display: none;
+  min-height: 0;
+  margin-bottom: 16px;
+  border-bottom-color: var(--border);
+  padding: 0 0 14px;
 }
 
 [data-aiflow-warehouse] > div > div:first-child > select {
-  height: 30px;
+  height: 44px;
   min-width: 220px;
-  border-radius: 2px;
-  font-size: 12px;
+  border-radius: 6px;
 }
 
 [data-aiflow-warehouse] > div > .grid {
   gap: 0;
-  grid-template-columns: 250px minmax(0, 1fr) 380px;
 }
 
 [data-aiflow-warehouse] > div > .grid > aside,
@@ -652,31 +1151,11 @@
 }
 
 [data-aiflow-warehouse] > div > .grid > aside:first-child {
-  border-right-color: #dfe5ec;
+  border-right-color: var(--border);
 }
 
 [data-aiflow-warehouse] > div > .grid > aside:last-child {
-  border-left-color: #dfe5ec;
-}
-
-/* 数据流资源中心沿用原始资源树—工具栏—运行审计的薄分隔线工作区。 */
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]),
-[data-resource-center] [dataflow-operation-list] {
-  border-radius: 0;
-  box-shadow: none;
-}
-
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:nth-child(2) {
-  gap: 0;
-  padding: 0;
-  background: #fff;
-}
-
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:nth-child(2) > div {
-  border-radius: 0;
-  border-top: 0;
-  border-bottom: 0;
-  padding: 12px;
+  border-left-color: var(--border);
 }
 
 /* 系统配置沿用原始 left-panel / nav-card-tabs 的连续双栏，不保留仪表盘式卡片间隙。 */
@@ -692,12 +1171,52 @@
 }
 
 [data-aiflow-system-config] > div > aside {
-  border-right-color: #dfe5ec !important;
+  border-right-color: var(--border) !important;
 }
 
 [data-aiflow-system-config] > div > section > div:first-child {
-  background: #f7f9fc !important;
+  background: var(--muted) !important;
   padding: 8px 12px 0 !important;
+}
+
+@media (max-width: 1023px) {
+  [data-system-config-navigation] {
+    border: 0 !important;
+    border-bottom: 1px solid var(--border) !important;
+    padding: 0 !important;
+  }
+
+  [data-system-config-nav-header],
+  [data-system-config-breadcrumb] {
+    display: none !important;
+  }
+
+  #system-config-card input:not([type="checkbox"]),
+  #system-config-card select,
+  #system-config-card textarea {
+    min-height: 44px;
+  }
+
+  #system-config-card input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  #system-config-card button:not([role="tab"]) {
+    min-height: 44px;
+  }
+}
+
+/* 诊断摘要在中等手机宽度两列呈现，优先级最高的就绪结果独占首行。 */
+@media (min-width: 440px) and (max-width: 639px) {
+  [data-runtime-summary] {
+    align-items: stretch;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  [data-runtime-summary] > article:first-child {
+    grid-column: 1 / -1;
+  }
 }
 
 /* 原始流程详情用虚线标题段落串接引导、基本信息、画布与实例列表。 */
@@ -707,7 +1226,7 @@
 }
 
 [data-aiflow-process-detail] > div:first-child {
-  border-bottom: 1px dotted #dfe4ed !important;
+  border-bottom: 1px dotted var(--border) !important;
   padding: 12px 16px !important;
 }
 
@@ -729,69 +1248,21 @@
   padding: 12px 16px !important;
 }
 
-[data-resource-center] > div:first-child {
-  display: none;
-}
-
 [data-resource-center] > .mb-4 > button {
   border-radius: 0 !important;
   box-shadow: none !important;
-}
-
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child {
-  min-height: 40px;
-  padding: 6px 12px;
-}
-
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child > div > p:first-child,
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child > div > p:last-child {
-  display: none;
-}
-
-[data-resource-center] > section:has(+ [dataflow-canvas-utility-actions]) > div:first-child h2 {
-  margin-top: 0;
-  font-size: 13px;
-}
-
-[data-resource-center] [dataflow-canvas-utility-actions] {
-  margin-bottom: 0;
-  min-height: 38px;
-  border: 0;
-  border-bottom: 1px solid #dfe5ec;
-  border-radius: 0;
-  padding: 5px 12px;
-  box-shadow: none;
-}
-
-[data-resource-center] [dataflow-task-summary] {
-  margin-bottom: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-[data-resource-center] [dataflow-canvas-utility-actions] > div:first-child {
-  display: none;
-}
-
-[data-resource-center] [dataflow-operation-list] > div:first-child {
-  min-height: 44px;
-  padding: 6px 12px;
-}
-
-[data-resource-center] [dataflow-operation-list] > div:first-child > div:first-child > p:first-child,
-[data-resource-center] [dataflow-operation-list] > div:first-child > div:first-child > p:last-child {
-  display: none;
-}
-
-[data-resource-center] [dataflow-operation-list] > div:first-child h2 {
-  margin-top: 0;
-  font-size: 13px;
 }
 
 @media (max-width: 1279px) {
   [data-aiflow-warehouse] > div > .grid {
     gap: 12px;
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1023px) {
+  [data-aiflow-warehouse] > div > div:first-child button {
+    min-height: 44px;
   }
 }
 
@@ -835,5 +1306,108 @@
       padding-right: 2rem;
       max-width: 1280px; /* Standard content width */
     }
+  }
+}
+
+@media (max-width: 1023px) {
+  [data-aiflow-brand] > div:first-child {
+    background: #2563eb !important;
+    color: #ffffff !important;
+  }
+
+  [data-aiflow-user-actions] {
+    flex: 0 0 auto;
+    gap: 4px;
+    padding-inline: 8px;
+  }
+
+  [data-aiflow-user-actions] button {
+    min-height: 44px;
+    white-space: nowrap;
+  }
+
+  [data-aiflow-theme-toggle] {
+    width: 44px;
+    padding-inline: 0;
+  }
+}
+
+/* 平板：主导航使用单行滚动轨道，收起品牌长文案后为画布与账户操作留出空间。 */
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-aiflow-console] > header > div {
+    min-width: 0;
+    max-width: 100%;
+    gap: 0;
+  }
+
+  [data-aiflow-brand] {
+    flex: 0 0 auto;
+    gap: 0;
+    padding-inline: 10px;
+  }
+
+  [data-aiflow-brand-name] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  [data-aiflow-primary-nav] {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-left: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+  }
+
+  [data-aiflow-primary-nav]::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  [data-aiflow-primary-nav] > button {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding-inline: 8px;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 1023px) {
+  [data-aiflow-process-detail-page] > header button,
+  [data-aiflow-process-detail-page] [data-aiflow-detail-canvas-actions] button,
+  [data-aiflow-process-detail-page] [role="tab"] {
+    min-height: 44px;
+  }
+}
+
+/* 业务中心在 1280px 以下以卡片浏览，保证浏览器实际控件盒模型可触控。 */
+@media (max-width: 1279px) {
+  [data-aiflow-business-center] button,
+  [data-aiflow-business-center] summary,
+  [data-aiflow-business-center] input:not([type="checkbox"]),
+  [data-aiflow-business-center] select,
+  [data-aiflow-business-center] textarea {
+    min-height: 44px;
+  }
+}
+
+/* 组织管理窄屏触控：弹窗表单、树节点和次级动作共享一致的目标尺寸。 */
+@media (max-width: 1023px) {
+  [data-aiflow-organization-page] button,
+  [data-aiflow-organization-page] summary,
+  [data-aiflow-organization-page] input:not([type="checkbox"]),
+  [data-aiflow-organization-page] select {
+    min-height: 44px;
+  }
+
+  [data-aiflow-organization-page] input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
   }
 }

@@ -13,6 +13,12 @@ import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 const PROJECT_ROOT = import.meta.dirname;
 const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
+const DEBUG_COLLECTOR_SCRIPT_PATH = path.join(
+  PROJECT_ROOT,
+  "scripts",
+  "dev",
+  "debug-collector.js"
+);
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
 const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
 
@@ -56,7 +62,7 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
   const logPath = path.join(LOG_DIR, `${source}.log`);
 
   // Format entries with timestamps
-  const lines = entries.map((entry) => {
+  const lines = entries.map(entry => {
     const ts = new Date().toISOString();
     return `[${ts}] ${JSON.stringify(entry)}`;
   });
@@ -98,6 +104,20 @@ function vitePluginManusDebugCollector(): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
+      server.middlewares.use(
+        "/__manus__/debug-collector.js",
+        (req, res, next) => {
+          if (req.method !== "GET") {
+            return next();
+          }
+
+          res.statusCode = 200;
+          res.setHeader("Content-Type", "text/javascript; charset=utf-8");
+          res.setHeader("Cache-Control", "no-store");
+          res.end(fs.readFileSync(DEBUG_COLLECTOR_SCRIPT_PATH, "utf8"));
+        }
+      );
+
       // POST /__manus__/logs: Browser sends logs (written directly to files)
       server.middlewares.use("/__manus__/logs", (req, res, next) => {
         if (req.method !== "POST") {
@@ -132,7 +152,7 @@ function vitePluginManusDebugCollector(): Plugin {
         }
 
         let body = "";
-        req.on("data", (chunk) => {
+        req.on("data", chunk => {
           body += chunk.toString();
         });
 
@@ -150,38 +170,52 @@ function vitePluginManusDebugCollector(): Plugin {
   };
 }
 
-const plugins = [react(), tailwindcss(), jsxLocPlugin(), vitePluginManusRuntime(), vitePluginManusDebugCollector()];
-
-export default defineConfig({
-  plugins,
-  resolve: {
-    alias: {
-      "@": path.resolve(import.meta.dirname, "client", "src"),
-      "@shared": path.resolve(import.meta.dirname, "shared"),
-      "@assets": path.resolve(import.meta.dirname, "attached_assets"),
-    },
-  },
-  envDir: path.resolve(import.meta.dirname),
-  root: path.resolve(import.meta.dirname, "client"),
-  publicDir: path.resolve(import.meta.dirname, "client", "public"),
-  build: {
-    outDir: path.resolve(import.meta.dirname, "dist/public"),
-    emptyOutDir: true,
-  },
-  server: {
-    host: true,
-    allowedHosts: [
-      ".manuspre.computer",
-      ".manus.computer",
-      ".manus-asia.computer",
-      ".manuscomputer.ai",
-      ".manusvm.computer",
-      "localhost",
-      "127.0.0.1",
+export default defineConfig(({ command }) => {
+  // The Manus editor bridge and JSX source locations are development tooling.
+  // Keep them out of normal production artifacts, but allow an explicit opt-in
+  // for deployments that intentionally embed the app inside the Manus host.
+  const includeManusRuntime =
+    command === "serve" || process.env.MANUS_RUNTIME_IN_PRODUCTION === "true";
+  return {
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(includeManusRuntime
+        ? [jsxLocPlugin(), vitePluginManusRuntime()]
+        : []),
+      ...(command === "serve" ? [vitePluginManusDebugCollector()] : []),
     ],
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
+    resolve: {
+      alias: {
+        "@": path.resolve(import.meta.dirname, "client", "src"),
+        "@shared": path.resolve(import.meta.dirname, "shared"),
+        "@assets": path.resolve(import.meta.dirname, "attached_assets"),
+      },
     },
-  },
+    envDir: path.resolve(import.meta.dirname),
+    root: path.resolve(import.meta.dirname, "client"),
+    publicDir: path.resolve(import.meta.dirname, "client", "public"),
+    build: {
+      outDir: path.resolve(import.meta.dirname, "dist/public"),
+      emptyOutDir: true,
+      minify: "terser",
+      terserOptions: { maxWorkers: 2 },
+    },
+    server: {
+      host: true,
+      allowedHosts: [
+        ".manuspre.computer",
+        ".manus.computer",
+        ".manus-asia.computer",
+        ".manuscomputer.ai",
+        ".manusvm.computer",
+        "localhost",
+        "127.0.0.1",
+      ],
+      fs: {
+        strict: true,
+        deny: ["**/.*"],
+      },
+    },
+  };
 });

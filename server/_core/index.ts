@@ -10,7 +10,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleDataflowScheduleCallback } from "../p2-service";
 import { startWorkflowWorker, stopWorkflowWorker } from "../workflow-worker";
-import { checkReadiness, getRuntimeInfo } from "../runtime-info";
+import { registerHealthRoutes } from "../health-routes";
 import { validateEnv } from "./env";
 import { closeSharedPool } from "../db";
 import {
@@ -47,13 +47,7 @@ async function startServer() {
   app.use(enforceTrustedOrigin);
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ limit: "256kb", extended: true }));
-  app.get("/healthz", (_req, res) => res.status(200).json({ ok: true }));
-  app.get("/livez", (_req, res) => res.status(200).json({ ok: true }));
-  app.get("/version", (_req, res) => res.status(200).json(getRuntimeInfo()));
-  app.get("/readyz", async (_req, res) => {
-    const readiness = await checkReadiness();
-    res.status(readiness.ready ? 200 : 503).json(readiness);
-  });
+  registerHealthRoutes(app);
   registerStorageProxy(app);
   registerOAuthRoutes(app);
   app.post("/api/scheduled/dataflow", handleDataflowScheduleCallback);

@@ -164,9 +164,13 @@ function autoLayoutNodes(nodes, edges) {
   }));
 }
 
-const baseUrl = (process.env.TEST_BASE_URL ?? "http://124.223.198.84:1180").replace(/\/$/, "");
+const baseUrl = (
+  process.env.TEST_BASE_URL ?? "http://124.223.198.84:1180"
+).replace(/\/$/, "");
 const adminUsername = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME ?? "flow_admin";
-const adminPassword = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD ?? "b2b055bfb12ed3bed70e86589fdb15478eeb1d0db5c0ff87";
+const adminPassword = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
+if (!adminPassword)
+  throw new Error("FLOW_BOOTSTRAP_ADMIN_PASSWORD is required for this test");
 
 class TrpcSession {
   constructor(name = "admin") {
@@ -176,9 +180,10 @@ class TrpcSession {
 
   async request(path, method, input = null) {
     const envelope = JSON.stringify({ json: input });
-    const url = method === "GET"
-      ? `${baseUrl}/api/trpc/${path}?input=${encodeURIComponent(envelope)}`
-      : `${baseUrl}/api/trpc/${path}`;
+    const url =
+      method === "GET"
+        ? `${baseUrl}/api/trpc/${path}?input=${encodeURIComponent(envelope)}`
+        : `${baseUrl}/api/trpc/${path}`;
     const headers = { accept: "application/json" };
     if (this.cookie) headers.cookie = this.cookie;
     if (method === "POST") headers["content-type"] = "application/json";
@@ -190,9 +195,10 @@ class TrpcSession {
       signal: AbortSignal.timeout(20000),
     });
 
-    const setCookies = typeof response.headers.getSetCookie === "function"
-      ? response.headers.getSetCookie()
-      : [response.headers.get("set-cookie")].filter(Boolean);
+    const setCookies =
+      typeof response.headers.getSetCookie === "function"
+        ? response.headers.getSetCookie()
+        : [response.headers.get("set-cookie")].filter(Boolean);
     if (setCookies.length) this.cookie = setCookies[0].split(";", 1)[0];
 
     const text = await response.text();
@@ -204,7 +210,9 @@ class TrpcSession {
     }
 
     if (!response.ok || payload.error) {
-      throw new Error(`tRPC Error ${path} (${response.status}): ${payload?.error?.json?.message || JSON.stringify(payload.error)}`);
+      throw new Error(
+        `tRPC Error ${path} (${response.status}): ${payload?.error?.json?.message || JSON.stringify(payload.error)}`
+      );
     }
     return payload.result?.data?.json;
   }
@@ -220,14 +228,20 @@ class TrpcSession {
 
 async function runRound(roundNumber, session, testProject, testAsset) {
   const roundTag = `R${roundNumber}_${Date.now().toString(36)}`;
-  console.log(`\n========================================================================`);
+  console.log(
+    `\n========================================================================`
+  );
   console.log(` 🚀 STARTING VERIFICATION ROUND ${roundNumber} (${roundTag})`);
-  console.log(`========================================================================`);
+  console.log(
+    `========================================================================`
+  );
 
   let assertions = 0;
   const assert = (condition, description) => {
     if (!condition) {
-      throw new Error(`[Round ${roundNumber}] Assertion failed: ${description}`);
+      throw new Error(
+        `[Round ${roundNumber}] Assertion failed: ${description}`
+      );
     }
     assertions++;
     console.log(`  ✓ [R${roundNumber}.${assertions}] ${description}`);
@@ -238,11 +252,31 @@ async function runRound(roundNumber, session, testProject, testAsset) {
   // -------------------------------------------------------------
   console.log(`\n--- 检查点 1: 整理画布 (Auto-layout / Neaten Canvas) ---`);
   const overlappingNodes = [
-    { id: "start", position: { x: 0, y: 0 }, data: { kind: "start", label: "起点" } },
-    { id: "n1", position: { x: 50, y: 30 }, data: { kind: "transform", label: "转换1" } },
-    { id: "n2", position: { x: 80, y: 40 }, data: { kind: "transform", label: "转换2" } },
-    { id: "n3", position: { x: 100, y: 50 }, data: { kind: "transform", label: "转换3" } },
-    { id: "end", position: { x: 120, y: 60 }, data: { kind: "end", label: "终点" } },
+    {
+      id: "start",
+      position: { x: 0, y: 0 },
+      data: { kind: "start", label: "起点" },
+    },
+    {
+      id: "n1",
+      position: { x: 50, y: 30 },
+      data: { kind: "transform", label: "转换1" },
+    },
+    {
+      id: "n2",
+      position: { x: 80, y: 40 },
+      data: { kind: "transform", label: "转换2" },
+    },
+    {
+      id: "n3",
+      position: { x: 100, y: 50 },
+      data: { kind: "transform", label: "转换3" },
+    },
+    {
+      id: "end",
+      position: { x: 120, y: 60 },
+      data: { kind: "end", label: "终点" },
+    },
   ];
   const edges = [
     { id: "e1", source: "start", target: "n1" },
@@ -267,7 +301,11 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     }
   }
   assert(!hasCollision, "整理画布算法确保任意两节点间距无重叠碰撞");
-  assert(neatNodes.find(n => n.id === "end").position.x > neatNodes.find(n => n.id === "start").position.x, "拓扑排序保证结束节点位于流程最右侧");
+  assert(
+    neatNodes.find(n => n.id === "end").position.x >
+      neatNodes.find(n => n.id === "start").position.x,
+    "拓扑排序保证结束节点位于流程最右侧"
+  );
 
   // -------------------------------------------------------------
   // Test 2: 编译检查 (Compile Check / Validate Diagnostics)
@@ -290,11 +328,49 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     viewport: { x: 0, y: 0, zoom: 1 },
     settings: {},
     nodes: [
-      { id: "start", type: "start", name: "申请开始", position: { x: 60, y: 200 }, config: { initialVariables: { docType: "TEST", amount: 100 } } },
-      { id: "s_draft", type: "state", name: "填报草稿", position: { x: 410, y: 200 }, config: { nodeDh: "ST_DRAFT_VERIFY", jdmc: "申请填报中", flowStatus: "DRAFT" } },
-      { id: "op_submit", type: "operate", name: "经办人提交", position: { x: 760, y: 200 }, config: { czmc: "提交部门初审", assigneeMode: "user" } },
-      { id: "s_archived", type: "state", name: "企业归档办结终态", position: { x: 1110, y: 200 }, config: { nodeDh: "ST_ARCHIVED_VERIFY", jdmc: "企业级综合归档办结", jdgycz: "bj" } },
-      { id: "end", type: "end", name: "状态流结束", position: { x: 1460, y: 200 }, config: {} },
+      {
+        id: "start",
+        type: "start",
+        name: "申请开始",
+        position: { x: 60, y: 200 },
+        config: { initialVariables: { docType: "TEST", amount: 100 } },
+      },
+      {
+        id: "s_draft",
+        type: "state",
+        name: "填报草稿",
+        position: { x: 410, y: 200 },
+        config: {
+          nodeDh: "ST_DRAFT_VERIFY",
+          jdmc: "申请填报中",
+          flowStatus: "DRAFT",
+        },
+      },
+      {
+        id: "op_submit",
+        type: "operate",
+        name: "经办人提交",
+        position: { x: 760, y: 200 },
+        config: { czmc: "提交部门初审", assigneeMode: "user" },
+      },
+      {
+        id: "s_archived",
+        type: "state",
+        name: "企业归档办结终态",
+        position: { x: 1110, y: 200 },
+        config: {
+          nodeDh: "ST_ARCHIVED_VERIFY",
+          jdmc: "企业级综合归档办结",
+          jdgycz: "bj",
+        },
+      },
+      {
+        id: "end",
+        type: "end",
+        name: "状态流结束",
+        position: { x: 1460, y: 200 },
+        config: {},
+      },
     ],
     edges: [
       { id: "e1", sourceNodeId: "start", targetNodeId: "s_draft" },
@@ -308,16 +384,34 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     definition: validDef,
   });
   if (compileOk.diagnostics.length > 0) {
-    console.log("Compile diagnostics detail:", JSON.stringify(compileOk.diagnostics, null, 2));
+    console.log(
+      "Compile diagnostics detail:",
+      JSON.stringify(compileOk.diagnostics, null, 2)
+    );
   }
-  assert(compileOk.ok === true && compileOk.diagnostics.length === 0, "有效流程定义通过编译检查，诊断项为 0");
+  assert(
+    compileOk.ok === true && compileOk.diagnostics.length === 0,
+    "有效流程定义通过编译检查，诊断项为 0"
+  );
 
   // Compile invalid definition (unreachable end node / missing source)
   const invalidDef = {
     schemaVersion: 1,
     nodes: [
-      { id: "start", type: "start", name: "启动", position: { x: 60, y: 200 }, config: {} },
-      { id: "orphan", type: "end", name: "孤立结束", position: { x: 500, y: 200 }, config: {} },
+      {
+        id: "start",
+        type: "start",
+        name: "启动",
+        position: { x: 60, y: 200 },
+        config: {},
+      },
+      {
+        id: "orphan",
+        type: "end",
+        name: "孤立结束",
+        position: { x: 500, y: 200 },
+        config: {},
+      },
     ],
     edges: [],
   };
@@ -325,7 +419,10 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     id: baseWorkflow.id,
     definition: invalidDef,
   });
-  assert(compileFail.ok === false && compileFail.diagnostics.length > 0, "孤立/未连线定义未通过编译检查，成功返回诊断项");
+  assert(
+    compileFail.ok === false && compileFail.diagnostics.length > 0,
+    "孤立/未连线定义未通过编译检查，成功返回诊断项"
+  );
 
   // -------------------------------------------------------------
   // Test 3: 保存画布 (Save Canvas Draft)
@@ -352,12 +449,19 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     },
   };
   const serialized = JSON.stringify(exportedEnvelope);
-  assert(serialized.length > 50, "导出功能成功序列化流程定义为标准 JSON 字符串");
+  assert(
+    serialized.length > 50,
+    "导出功能成功序列化流程定义为标准 JSON 字符串"
+  );
 
   // Import: parse JSON and verify compatibility
   const importedParsed = JSON.parse(serialized);
-  const importedDef = importedParsed.workflow?.definition ?? importedParsed.definition;
-  assert(Array.isArray(importedDef.nodes) && Array.isArray(importedDef.edges), "导入解析器正确校验节点与连线数组完整性");
+  const importedDef =
+    importedParsed.workflow?.definition ?? importedParsed.definition;
+  assert(
+    Array.isArray(importedDef.nodes) && Array.isArray(importedDef.edges),
+    "导入解析器正确校验节点与连线数组完整性"
+  );
   assert(importedDef.nodes.length === 5, "导入成功还原全部 5 个拓扑节点");
 
   // -------------------------------------------------------------
@@ -372,8 +476,14 @@ async function runRound(roundNumber, session, testProject, testAsset) {
   const publishedFlow = await session.mutate("workflow.publish", {
     id: baseWorkflow.id,
   });
-  assert(publishedFlow.status === "published", "发布操作成功将流程升级为已发布状态");
-  assert(publishedFlow.publishedExecutionPlanHash?.length > 10, "发布操作生成稳定的执行计划哈希");
+  assert(
+    publishedFlow.status === "published",
+    "发布操作成功将流程升级为已发布状态"
+  );
+  assert(
+    publishedFlow.publishedExecutionPlanHash?.length > 10,
+    "发布操作生成稳定的执行计划哈希"
+  );
 
   // -------------------------------------------------------------
   // Test 6: 复制 (Duplicate)
@@ -383,7 +493,10 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     id: baseWorkflow.id,
     name: `${savedFlow.name} · 副本`,
   });
-  assert(duplicatedFlow.id !== baseWorkflow.id, "复制操作生成全新独立的流程主键 ID");
+  assert(
+    duplicatedFlow.id !== baseWorkflow.id,
+    "复制操作生成全新独立的流程主键 ID"
+  );
   assert(duplicatedFlow.name.includes("· 副本"), "复制操作保留规范的副本命名");
   assert(duplicatedFlow.status === "draft", "复制出的新流程安全重置为草稿态");
 
@@ -391,11 +504,18 @@ async function runRound(roundNumber, session, testProject, testAsset) {
   // Test 7: 版本治理与取消发布 (Governance & Unpublish)
   // -------------------------------------------------------------
   console.log(`\n--- 检查点 7: 版本与发布治理 (Governance & Unpublish) ---`);
-  const versions = await session.query("workflow.versions", { workflowId: baseWorkflow.id });
+  const versions = await session.query("workflow.versions", {
+    workflowId: baseWorkflow.id,
+  });
   assert(versions.length >= 1, "版本中心成功记录已发布版本快照");
 
-  const unpublishedFlow = await session.mutate("workflow.unpublish", { id: baseWorkflow.id });
-  assert(unpublishedFlow.status === "draft", "版本治理成功执行取消发布，安全回到草稿状态");
+  const unpublishedFlow = await session.mutate("workflow.unpublish", {
+    id: baseWorkflow.id,
+  });
+  assert(
+    unpublishedFlow.status === "draft",
+    "版本治理成功执行取消发布，安全回到草稿状态"
+  );
 
   // -------------------------------------------------------------
   // Test 8: 保存当前定义为子流程 (Save as Subflow)
@@ -409,7 +529,10 @@ async function runRound(roundNumber, session, testProject, testAsset) {
   assert(Boolean(createdSubflow?.id), "成功将当前定义持久化为私有子流程");
 
   const subflowList = await session.query("workflow.subflows");
-  assert(subflowList.some(s => s.id === createdSubflow.id), "子流程中心可查询到新注册的子流程");
+  assert(
+    subflowList.some(s => s.id === createdSubflow.id),
+    "子流程中心可查询到新注册的子流程"
+  );
 
   // -------------------------------------------------------------
   // Test 9: 协作成员授权与撤回 (Members Grant/Revoke)
@@ -423,10 +546,18 @@ async function runRound(roundNumber, session, testProject, testAsset) {
       userId: otherUser.id,
       role: "editor",
     });
-    assert(grantRes.success === true, "成功为其他协作成员授予 editor 编辑者角色");
+    assert(
+      grantRes.success === true,
+      "成功为其他协作成员授予 editor 编辑者角色"
+    );
 
-    const members = await session.query("workflow.members", { workflowId: baseWorkflow.id });
-    assert(members.some(m => m.userId === otherUser.id), "流程成员列表中成功展示已授权成员");
+    const members = await session.query("workflow.members", {
+      workflowId: baseWorkflow.id,
+    });
+    assert(
+      members.some(m => m.userId === otherUser.id),
+      "流程成员列表中成功展示已授权成员"
+    );
 
     const revokeRes = await session.mutate("workflow.revokeMember", {
       workflowId: baseWorkflow.id,
@@ -441,18 +572,53 @@ async function runRound(roundNumber, session, testProject, testAsset) {
   // -------------------------------------------------------------
   // Test 10: 运行测试 (In-Place Test Run) - 数据流与即时结果
   // -------------------------------------------------------------
-  console.log(`\n--- 检查点 10: 运行测试 (In-Place Test Run - Dataflow & Table Result) ---`);
+  console.log(
+    `\n--- 检查点 10: 运行测试 (In-Place Test Run - Dataflow & Table Result) ---`
+  );
   // Create an enterprise data flow
   const dataflowDef = {
     schemaVersion: 1,
     viewport: { x: 0, y: 0, zoom: 1 },
     settings: {},
     nodes: [
-      { id: "start", type: "start", name: "数据启动", position: { x: 60, y: 200 }, config: {} },
-      { id: "src", type: "source", name: "订单输入源", position: { x: 410, y: 200 }, config: { assetId: testAsset.id } },
-      { id: "agg", type: "aggregate", name: "部门财务汇总", position: { x: 760, y: 200 }, config: { groupBy: ["dept"], metrics: [{ field: "amt", op: "sum", as: "totalAmt" }] } },
-      { id: "sink", type: "sink", name: "输出综合审计表", position: { x: 1110, y: 200 }, config: { writeMode: "audit_only", outputName: `AUDIT_${roundTag}` } },
-      { id: "end", type: "end", name: "结束", position: { x: 1460, y: 200 }, config: {} },
+      {
+        id: "start",
+        type: "start",
+        name: "数据启动",
+        position: { x: 60, y: 200 },
+        config: {},
+      },
+      {
+        id: "src",
+        type: "source",
+        name: "订单输入源",
+        position: { x: 410, y: 200 },
+        config: { assetId: testAsset.id },
+      },
+      {
+        id: "agg",
+        type: "aggregate",
+        name: "部门财务汇总",
+        position: { x: 760, y: 200 },
+        config: {
+          groupBy: ["dept"],
+          metrics: [{ field: "amt", op: "sum", as: "totalAmt" }],
+        },
+      },
+      {
+        id: "sink",
+        type: "sink",
+        name: "输出综合审计表",
+        position: { x: 1110, y: 200 },
+        config: { writeMode: "audit_only", outputName: `AUDIT_${roundTag}` },
+      },
+      {
+        id: "end",
+        type: "end",
+        name: "结束",
+        position: { x: 1460, y: 200 },
+        config: {},
+      },
     ],
     edges: [
       { id: "e1", sourceNodeId: "start", targetNodeId: "src" },
@@ -490,8 +656,14 @@ async function runRound(roundNumber, session, testProject, testAsset) {
     projectId: testProject.id,
     runId: runResult.runId,
   });
-  assert(runDetail.status === "success", "数据流试运行执行完成且状态为 success");
-  assert(runDetail.nodeRuns.length >= 4, "即时结果返回各算子步骤明细 (src -> agg -> sink -> end)");
+  assert(
+    runDetail.status === "success",
+    "数据流试运行执行完成且状态为 success"
+  );
+  assert(
+    runDetail.nodeRuns.length >= 4,
+    "即时结果返回各算子步骤明细 (src -> agg -> sink -> end)"
+  );
   assert(runDetail.output !== null, "终点输出综合审计表生成了真实的结构化输出");
 
   // -------------------------------------------------------------
@@ -499,18 +671,29 @@ async function runRound(roundNumber, session, testProject, testAsset) {
   // -------------------------------------------------------------
   console.log(`\n--- 检查点 11: 流程归档 (Archive) ---`);
   await session.mutate("workflow.delete", { id: duplicatedFlow.id });
-  const warehouse = await session.query("workflow.archived", { projectId: testProject.id });
-  assert(warehouse.some(w => w.id === duplicatedFlow.id), "已归档的副本流程成功进入流程仓库留存");
+  const warehouse = await session.query("workflow.archived", {
+    projectId: testProject.id,
+  });
+  assert(
+    warehouse.some(w => w.id === duplicatedFlow.id),
+    "已归档的副本流程成功进入流程仓库留存"
+  );
 
-  console.log(`\n✅ ROUND ${roundNumber} COMPLETE: ${assertions} 项全部断言通过！`);
+  console.log(
+    `\n✅ ROUND ${roundNumber} COMPLETE: ${assertions} 项全部断言通过！`
+  );
   return assertions;
 }
 
 async function main() {
-  console.log(`========================================================================`);
+  console.log(
+    `========================================================================`
+  );
   console.log(` AI FLOW GRAPH - 逐个按钮功能与即时试运行三轮全面验证`);
   console.log(` Target Server: ${baseUrl}`);
-  console.log(`========================================================================`);
+  console.log(
+    `========================================================================`
+  );
 
   const admin = new TrpcSession("flow_admin");
   await admin.mutate("auth.login", {
@@ -529,14 +712,22 @@ async function main() {
       description: "用于对流程设计器全量按钮进行三轮验证的专属业务工程",
       departmentCode: "DEPT_TECH",
     });
-    console.log(`✓ 已创建专属验收业务项目: ${testProject.name} (${testProject.id})`);
+    console.log(
+      `✓ 已创建专属验收业务项目: ${testProject.name} (${testProject.id})`
+    );
   } else {
-    console.log(`✓ 接入已有专属验收业务项目: ${testProject.name} (${testProject.id})`);
+    console.log(
+      `✓ 接入已有专属验收业务项目: ${testProject.name} (${testProject.id})`
+    );
   }
 
   // Create or retrieve verification test data asset in the project
-  const resources = await admin.query("data.resources", { projectId: testProject.id });
-  let testSource = (resources?.sources || []).find(s => s.name === "按钮验收数据源");
+  const resources = await admin.query("data.resources", {
+    projectId: testProject.id,
+  });
+  let testSource = (resources?.sources || []).find(
+    s => s.name === "按钮验收数据源"
+  );
   if (!testSource) {
     testSource = await admin.mutate("data.createSource", {
       projectId: testProject.id,
@@ -545,7 +736,9 @@ async function main() {
       connection: { records: [] },
     });
   }
-  let testAsset = (resources?.assets || []).find(a => a.name === "按钮验收订单资产");
+  let testAsset = (resources?.assets || []).find(
+    a => a.name === "按钮验收订单资产"
+  );
   if (!testAsset) {
     testAsset = await admin.mutate("data.createAsset", {
       projectId: testProject.id,
@@ -567,18 +760,39 @@ async function main() {
   console.log(`✓ 已准备数据流输入资产: ${testAsset.name} (${testAsset.id})`);
 
   // Execute 3 Full Rounds
-  const totalAssertionsRound1 = await runRound(1, admin, testProject, testAsset);
-  const totalAssertionsRound2 = await runRound(2, admin, testProject, testAsset);
-  const totalAssertionsRound3 = await runRound(3, admin, testProject, testAsset);
+  const totalAssertionsRound1 = await runRound(
+    1,
+    admin,
+    testProject,
+    testAsset
+  );
+  const totalAssertionsRound2 = await runRound(
+    2,
+    admin,
+    testProject,
+    testAsset
+  );
+  const totalAssertionsRound3 = await runRound(
+    3,
+    admin,
+    testProject,
+    testAsset
+  );
 
-  console.log(`\n========================================================================`);
+  console.log(
+    `\n========================================================================`
+  );
   console.log(` 🎉 三轮全量验证全部通过！`);
   console.log(` 轮次 1: ${totalAssertionsRound1} 项断言通过`);
   console.log(` 轮次 2: ${totalAssertionsRound2} 项断言通过`);
   console.log(` 轮次 3: ${totalAssertionsRound3} 项断言通过`);
-  console.log(` 累计测试断言: ${totalAssertionsRound1 + totalAssertionsRound2 + totalAssertionsRound3} 项全部 PASS`);
+  console.log(
+    ` 累计测试断言: ${totalAssertionsRound1 + totalAssertionsRound2 + totalAssertionsRound3} 项全部 PASS`
+  );
   console.log(` 远程服务器地址: ${baseUrl}`);
-  console.log(`========================================================================\n`);
+  console.log(
+    `========================================================================\n`
+  );
 }
 
 main().catch(err => {

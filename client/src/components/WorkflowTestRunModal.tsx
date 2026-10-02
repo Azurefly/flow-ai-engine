@@ -9,6 +9,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
+import {
+  DraftSaveBeforeRunError,
+  runAfterDraftSave,
+} from "@shared/run-after-draft-save";
+import { canStartActualWorkflowRun } from "@shared/actual-run-confirmation";
 import { toast } from "sonner";
 import {
   Play,
@@ -43,7 +48,8 @@ interface WorkflowTestRunModalProps {
   runInput: Record<string, unknown>;
   onChangeRunInput: (input: Record<string, unknown>) => void;
   canRun: boolean;
-  onSaveDraft?: () => Promise<void> | void;
+  hasUnpublishedChanges?: boolean;
+  onSaveDraft?: () => Promise<void>;
 }
 
 export default function WorkflowTestRunModal({
@@ -54,30 +60,52 @@ export default function WorkflowTestRunModal({
   runInput,
   onChangeRunInput,
   canRun,
+  hasUnpublishedChanges = false,
   onSaveDraft,
 }: WorkflowTestRunModalProps) {
   const isDataflow = workflow?.flowType === "data";
   const isStateflow = workflow?.flowType === "state";
-  const [activeTab, setActiveTab] = useState<"result" | "steps" | "input">("result");
+  const [activeTab, setActiveTab] = useState<"result" | "steps" | "input">(
+    "result"
+  );
   const [viewMode, setViewMode] = useState<"config" | "result">("config");
-  const [resultDisplayMode, setResultDisplayMode] = useState<"table" | "json">("table");
+  const [resultDisplayMode, setResultDisplayMode] = useState<"table" | "json">(
+    "table"
+  );
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [acknowledgedActualRun, setAcknowledgedActualRun] = useState(false);
   const [outputPage, setOutputPage] = useState(1);
   const OUTPUT_PAGE_SIZE = 25;
 
+  const canStartActualRun = canStartActualWorkflowRun({
+    canRun,
+    isRunning,
+    acknowledged: acknowledgedActualRun,
+  });
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) setAcknowledgedActualRun(false);
+    onOpenChange(nextOpen);
+  };
+
   // Field rows for input editor
-  const [inputRows, setInputRows] = useState<Array<{ key: string; value: string }>>([]);
+  const [inputRows, setInputRows] = useState<
+    Array<{ key: string; value: string }>
+  >([]);
 
   useEffect(() => {
     const entries = Object.entries(runInput || {});
     setInputRows(
       entries.map(([key, value]) => ({
         key,
-        value: typeof value === "object" ? JSON.stringify(value) : String(value ?? ""),
+        value:
+          typeof value === "object"
+            ? JSON.stringify(value)
+            : String(value ?? ""),
       }))
     );
   }, [open, runInput]);
@@ -120,7 +148,10 @@ export default function WorkflowTestRunModal({
       enabled: Boolean(activeRunId && !isDataflow && open),
       refetchInterval: query => {
         const status = query.state.data?.status;
-        return status === "success" || status === "failed" || status === "cancelled" || status === "terminated"
+        return status === "success" ||
+          status === "failed" ||
+          status === "cancelled" ||
+          status === "terminated"
           ? false
           : 800;
       },
@@ -130,7 +161,9 @@ export default function WorkflowTestRunModal({
   const dataflowRunQuery = trpc.data.runDetail.useQuery(
     { projectId: workflow?.projectId || "", runId: activeRunId || "" },
     {
-      enabled: Boolean(activeRunId && isDataflow && workflow?.projectId && open),
+      enabled: Boolean(
+        activeRunId && isDataflow && workflow?.projectId && open
+      ),
       refetchInterval: query => {
         const status = (query.state.data as any)?.status;
         return status === "success" || status === "failed" ? false : 800;
@@ -141,7 +174,9 @@ export default function WorkflowTestRunModal({
   const dataflowLineageQuery = trpc.data.runLineage.useQuery(
     { projectId: workflow?.projectId || "", runId: activeRunId || "" },
     {
-      enabled: Boolean(activeRunId && isDataflow && workflow?.projectId && open),
+      enabled: Boolean(
+        activeRunId && isDataflow && workflow?.projectId && open
+      ),
     }
   );
 
@@ -167,6 +202,8 @@ export default function WorkflowTestRunModal({
       return {
         id: data.id,
         status: data.status,
+        executionSource: data.executionSource ?? null,
+        definitionVersion: data.definitionVersion ?? null,
         durationMs: data.durationMs,
         startedAt: data.startedAt,
         finishedAt: data.finishedAt,
@@ -180,16 +217,35 @@ export default function WorkflowTestRunModal({
       return {
         id: data.id,
         status: data.status,
+        executionSource: data.executionSource ?? null,
+        definitionVersion: data.definitionVersion ?? null,
         durationMs: data.durationMs,
         startedAt: data.startedAt,
         finishedAt: data.finishedAt,
-        output: data.finalOutputJson ? (typeof data.finalOutputJson === "string" ? JSON.parse(data.finalOutputJson) : data.finalOutputJson) : null,
-        error: data.errorJson ? (typeof data.errorJson === "string" ? JSON.parse(data.errorJson) : data.errorJson) : null,
+        output: data.finalOutputJson
+          ? typeof data.finalOutputJson === "string"
+            ? JSON.parse(data.finalOutputJson)
+            : data.finalOutputJson
+          : null,
+        error: data.errorJson
+          ? typeof data.errorJson === "string"
+            ? JSON.parse(data.errorJson)
+            : data.errorJson
+          : null,
         nodeRuns: (data.nodeRuns || []).map((nr: any) => ({
           ...nr,
-          input: typeof nr.inputJson === "string" ? JSON.parse(nr.inputJson || "{}") : nr.inputJson,
-          output: typeof nr.outputJson === "string" ? JSON.parse(nr.outputJson || "{}") : nr.outputJson,
-          error: typeof nr.errorJson === "string" ? JSON.parse(nr.errorJson || "null") : nr.errorJson,
+          input:
+            typeof nr.inputJson === "string"
+              ? JSON.parse(nr.inputJson || "{}")
+              : nr.inputJson,
+          output:
+            typeof nr.outputJson === "string"
+              ? JSON.parse(nr.outputJson || "{}")
+              : nr.outputJson,
+          error:
+            typeof nr.errorJson === "string"
+              ? JSON.parse(nr.errorJson || "null")
+              : nr.errorJson,
         })),
       };
     }
@@ -218,7 +274,10 @@ export default function WorkflowTestRunModal({
   }, [activeRunId, open]);
 
   const totalOutputRows = outputRows?.length ?? 0;
-  const totalOutputPages = Math.max(1, Math.ceil(totalOutputRows / OUTPUT_PAGE_SIZE));
+  const totalOutputPages = Math.max(
+    1,
+    Math.ceil(totalOutputRows / OUTPUT_PAGE_SIZE)
+  );
   const paginatedOutputRows = useMemo(() => {
     if (!outputRows) return [];
     const start = (outputPage - 1) * OUTPUT_PAGE_SIZE;
@@ -226,48 +285,57 @@ export default function WorkflowTestRunModal({
   }, [outputRows, outputPage]);
 
   const handleStartRun = async () => {
-    if (!workflow?.id || isRunning) return;
+    if (!workflow?.id || !canStartActualRun) return;
     setIsRunning(true);
+    setAcknowledgedActualRun(false);
     setRunError(null);
     setViewMode("result");
     setActiveTab("result");
 
     try {
-      // 1. Automatically save canvas draft first if hook provided
-      if (onSaveDraft) {
-        await onSaveDraft();
-      }
-
-      // 2. Dispatch execution
-      if (isDataflow) {
-        if (!workflow.projectId) {
-          throw new Error("数据流缺少所属业务项目，无法执行。");
-        }
-        const res = await runDataflowMutation.mutateAsync({
-          projectId: workflow.projectId,
-          workflowId: workflow.id,
-          data: runInput,
-        });
-        setActiveRunId(res.runId);
-        void utils.data.runs.invalidate({ projectId: workflow.projectId });
-        if ((res.status as string) === "failed") {
-          setRunError("数据流执行未通过校验或内部算子失败");
-        }
-      } else {
-        const idempotencyKey = Array.from(
-          crypto.getRandomValues(new Uint8Array(16)),
-          byte => byte.toString(16).padStart(2, "0")
-        ).join("");
-        const res = await runWorkflowMutation.mutateAsync({
-          workflowId: workflow.id,
-          input: runInput,
-          idempotencyKey,
-          triggerType: "test",
-        });
-        setActiveRunId(res.runId);
-        void utils.workflow.runs.invalidate();
-      }
+      await runAfterDraftSave({
+        workflowStatus: String(workflow?.status ?? "draft"),
+        saveDraft: onSaveDraft,
+        run: async () => {
+          if (isDataflow) {
+            if (!workflow.projectId) {
+              throw new Error("数据流缺少所属业务项目，无法执行。");
+            }
+            const res = await runDataflowMutation.mutateAsync({
+              projectId: workflow.projectId,
+              workflowId: workflow.id,
+              data: runInput,
+            });
+            setActiveRunId(res.runId);
+            void utils.data.runs.invalidate({ projectId: workflow.projectId });
+            if ((res.status as string) === "failed") {
+              setRunError("数据流执行未通过校验或内部算子失败");
+            }
+          } else {
+            const idempotencyKey = Array.from(
+              crypto.getRandomValues(new Uint8Array(16)),
+              byte => byte.toString(16).padStart(2, "0")
+            ).join("");
+            const res = await runWorkflowMutation.mutateAsync({
+              workflowId: workflow.id,
+              input: runInput,
+              idempotencyKey,
+              triggerType: "test",
+            });
+            setActiveRunId(res.runId);
+            void utils.workflow.runs.invalidate();
+          }
+        },
+      });
     } catch (err: any) {
+      if (err instanceof DraftSaveBeforeRunError) {
+        const message =
+          err.originalError instanceof Error
+            ? err.originalError.message
+            : String(err.originalError);
+        setRunError(`草稿保存失败，未启动运行：${message}`);
+        return;
+      }
       const msg = err?.message || String(err) || "启动运行失败";
       setRunError(msg);
       toast.error(msg);
@@ -283,60 +351,73 @@ export default function WorkflowTestRunModal({
     toast.success("已复制到剪贴板");
   };
 
-  const isCompleted = currentRun?.status === "success" || currentRun?.status === "failed";
+  const isCompleted =
+    currentRun?.status === "success" || currentRun?.status === "failed";
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl sm:max-w-5xl max-h-[90vh] flex flex-col p-0 overflow-hidden border-slate-200 shadow-2xl">
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent className="w-[calc(100vw-1rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-1rem)] min-h-0 flex flex-col p-0 overflow-hidden border-border shadow-2xl">
         {/* Modal Header */}
-        <DialogHeader className="px-5 py-3.5 border-b border-slate-100 bg-slate-50/70 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-lg text-white shadow-2xs ${
-                isStateflow ? "bg-emerald-600" : isDataflow ? "bg-violet-600" : "bg-blue-600"
-              }`}>
+        <DialogHeader className="shrink-0 border-b border-border bg-muted/70 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex min-w-0 items-start gap-3">
+              <div
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-2xs ${
+                  isStateflow
+                    ? "bg-emerald-600"
+                    : isDataflow
+                      ? "bg-violet-600"
+                      : "bg-blue-600"
+                }`}
+              >
                 {isStateflow ? <Compass size={17} /> : <Play size={17} />}
               </div>
-              <div>
-                <DialogTitle className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <div className="min-w-0">
+                <DialogTitle className="aiflow-type-section-title flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground">
                   <span>
                     {isStateflow
-                      ? "状态流程仿真推演"
+                      ? "状态流程运行"
                       : isDataflow
-                      ? "数据流程抽样试跑"
-                      : "控制流程单步调试"}
+                        ? "数据流程运行"
+                        : "控制流程运行"}
                   </span>
-                  <span className="rounded bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-700 border border-slate-200/60">
+                  <span className="aiflow-type-meta rounded border border-border/60 bg-muted px-2 py-0.5 font-medium text-foreground">
                     {isStateflow
                       ? "状态机 Profile · 事务流转"
                       : isDataflow
-                      ? "数据流 Profile · 算子管线"
-                      : "控制流 Profile · DAG 执行"}
+                        ? "数据流 Profile · 算子管线"
+                        : "控制流 Profile · DAG 执行"}
                   </span>
                   {workflow?.status === "published" ? (
-                    <span className="rounded bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200/60">
+                    <span className="aiflow-type-meta rounded border border-aiflow-success-border/60 bg-aiflow-success-surface px-2 py-0.5 font-medium text-aiflow-success">
                       已发布态
                     </span>
                   ) : (
-                    <span className="rounded bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200/60">
-                      草稿仿真
+                    <span className="aiflow-type-meta rounded border border-aiflow-warning-border/60 bg-aiflow-warning-surface px-2 py-0.5 font-medium text-aiflow-warning">
+                      当前草稿
                     </span>
                   )}
                 </DialogTitle>
-                <DialogDescription className="text-xs text-slate-500 mt-0.5">
-                  将保存当前草稿并发起测试执行，实际影响由节点与外部服务配置决定。
+                <DialogDescription className="aiflow-type-body mt-1 text-muted-foreground">
+                  {workflow?.status === "published"
+                    ? hasUnpublishedChanges
+                      ? `画布有未发布修改；本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。发布新版本后才能按这些修改运行。`
+                      : `本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。`
+                    : onSaveDraft
+                      ? "运行前会先保存当前画布；只有保存成功才会启动运行。"
+                      : `本次会按服务端已保存的草稿定义 v${workflow?.definitionVersion ?? 1} 运行。`}{" "}
                 </DialogDescription>
               </div>
             </div>
 
             {/* View Mode Switch */}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
               {viewMode === "result" && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs text-slate-600"
+                  className="aiflow-type-control h-11 text-muted-foreground min-[1024px]:h-9"
                   onClick={() => setViewMode("config")}
                 >
                   <SlidersHorizontal size={13} className="mr-1.5" />
@@ -348,10 +429,10 @@ export default function WorkflowTestRunModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs text-blue-600 border-blue-200 bg-blue-50/50"
+                  className="aiflow-type-control h-11 border-aiflow-info-border bg-aiflow-info-surface/50 text-aiflow-info min-[1024px]:h-9"
                   onClick={() => setViewMode("result")}
                 >
-                  查看仿真轨迹
+                  查看运行轨迹
                 </Button>
               )}
             </div>
@@ -359,51 +440,94 @@ export default function WorkflowTestRunModal({
 
           {/* Status banner when in result view */}
           {viewMode === "result" && (
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-2.5 shadow-sm">
-              <div className="flex items-center gap-3">
+            <div className="mt-3 flex flex-col gap-3 rounded-lg border border-border/80 bg-card p-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-3">
                 {isRunning || (!isCompleted && activeRunId && !runError) ? (
-                  currentRun?.status === "waiting" || currentRun?.status === "blocked" ? (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-amber-700">
-                      <Clock size={16} className="text-amber-600" />
-                      <span>{isStateflow ? "流转挂起：等待参与人审批操作" : "流程等待外部事件挂起"}</span>
+                  currentRun?.status === "waiting" ||
+                  currentRun?.status === "blocked" ? (
+                    <div className="aiflow-type-body flex items-center gap-2 font-semibold text-aiflow-warning">
+                      <Clock size={16} className="text-aiflow-warning" />
+                      <span>
+                        {isStateflow
+                          ? "流转挂起：等待参与人审批操作"
+                          : "流程等待外部事件挂起"}
+                      </span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-2 text-xs font-semibold text-blue-600">
-                      <Loader2 size={16} className="animate-spin text-blue-600" />
-                      <span>正在调度推演…</span>
+                    <div className="aiflow-type-body flex items-center gap-2 font-semibold text-aiflow-info">
+                      <Loader2
+                        size={16}
+                        className="animate-spin text-aiflow-info"
+                      />
+                      <span>
+                        {currentRun?.status === "queued"
+                          ? "运行已排队，等待执行器…"
+                          : "流程执行中…"}
+                      </span>
                     </div>
                   )
                 ) : currentRun?.status === "success" ? (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-700">
-                    <CheckCircle2 size={16} className="text-emerald-600" />
-                    <span>{isStateflow ? "状态流转抵达终态" : "执行顺利完成"}</span>
+                  <div className="aiflow-type-body flex items-center gap-2 font-semibold text-aiflow-success">
+                    <CheckCircle2 size={16} className="text-aiflow-success" />
+                    <span>
+                      {isStateflow ? "状态流转抵达终态" : "执行顺利完成"}
+                    </span>
                   </div>
                 ) : currentRun?.status === "failed" || runError ? (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-red-700">
+                  <div className="aiflow-type-body flex items-center gap-2 font-semibold text-red-700">
                     <XCircle size={16} className="text-red-600" />
-                    <span>{isStateflow ? "状态流转异常阻断" : "试运行失败"}</span>
+                    <span>{isStateflow ? "状态流转异常阻断" : "运行失败"}</span>
                   </div>
                 ) : (
-                  <div className="text-xs text-slate-500 font-medium">准备就绪</div>
+                  <div className="aiflow-type-body font-medium text-muted-foreground">
+                    准备就绪
+                  </div>
                 )}
 
                 {activeRunId && (
-                  <span className="font-mono text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                  <span className="aiflow-type-meta rounded bg-muted px-2 py-0.5 font-mono text-muted-foreground">
                     ID: {activeRunId.slice(0, 8)}
                   </span>
                 )}
-                {currentRun?.durationMs !== undefined && currentRun?.durationMs !== null && (
-                  <span className="text-xs text-slate-500">
-                    耗时: <strong className="text-slate-800">{String(currentRun.durationMs)} ms</strong>
+                {currentRun && (
+                  <span className="aiflow-type-meta rounded bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">
+                    {currentRun.executionSource === "published_plan"
+                      ? "已发布执行计划"
+                      : currentRun.executionSource === "saved_definition"
+                        ? "已发布定义（未记录执行计划）"
+                        : currentRun.executionSource === "draft"
+                          ? "当前草稿"
+                          : "旧运行记录：未记录执行版本"}
+                    {currentRun.definitionVersion !== null &&
+                    currentRun.definitionVersion !== undefined
+                      ? ` · v${currentRun.definitionVersion}`
+                      : ""}
                   </span>
                 )}
+                {currentRun?.durationMs !== undefined &&
+                  currentRun?.durationMs !== null && (
+                    <span className="aiflow-type-meta text-muted-foreground">
+                      耗时:{" "}
+                      <strong className="text-foreground">
+                        {String(currentRun.durationMs)} ms
+                      </strong>
+                    </span>
+                  )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex w-full items-center gap-2 sm:w-auto">
                 <Button
+                  type="button"
                   size="sm"
-                  className="h-7 text-xs bg-blue-600 hover:bg-blue-700 text-white"
-                  disabled={isRunning || !canRun}
+                  className="aiflow-type-control h-11 min-h-11 w-full justify-center bg-blue-600 text-white hover:bg-blue-700 sm:w-auto min-[1024px]:h-9 min-[1024px]:min-h-0"
+                  disabled={!canStartActualRun}
+                  title={
+                    !canRun
+                      ? "当前账号没有运行权限"
+                      : !acknowledgedActualRun
+                        ? "请先确认本次会执行真实流程"
+                        : undefined
+                  }
                   onClick={handleStartRun}
                 >
                   {isRunning ? (
@@ -411,26 +535,35 @@ export default function WorkflowTestRunModal({
                   ) : (
                     <RefreshCw size={13} className="mr-1" />
                   )}
-                  再次运行
+                  再次创建实际运行
                 </Button>
               </div>
             </div>
           )}
+          {viewMode === "result" && (
+            <ActualRunAcknowledgement
+              checked={acknowledgedActualRun}
+              onChange={setAcknowledgedActualRun}
+            />
+          )}
         </DialogHeader>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto min-h-[380px] p-6 bg-slate-50/30">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 p-4 sm:p-6">
           {viewMode === "config" ? (
             /* Parameter Configuration View */
-            <div className="max-w-2xl mx-auto py-2">
-              <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="mx-auto w-full max-w-2xl min-w-0 py-2">
+              <div className="min-w-0 rounded-lg border border-border bg-card p-4 shadow-sm sm:p-5">
+                <div className="flex flex-col gap-3 border-b border-border pb-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                      <SlidersHorizontal size={15} className="text-blue-600" />
-                      填写运行测试参数
+                    <h3 className="aiflow-type-section-title flex items-center gap-2 font-semibold text-foreground">
+                      <SlidersHorizontal
+                        size={15}
+                        className="text-aiflow-info"
+                      />
+                      配置运行输入
                     </h3>
-                    <p className="text-xs text-slate-500 mt-0.5">
+                    <p className="aiflow-type-body mt-0.5 text-muted-foreground">
                       定义将传入首个节点或用于替换变量的输入参数，数值与布尔会自动识别类型。
                     </p>
                   </div>
@@ -438,8 +571,10 @@ export default function WorkflowTestRunModal({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-7 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
-                    onClick={() => updateInputRows([...inputRows, { key: "", value: "" }])}
+                    className="aiflow-type-control h-11 min-h-11 shrink-0 border-aiflow-info-border text-aiflow-info hover:bg-aiflow-info-surface min-[1024px]:h-9 min-[1024px]:min-h-0"
+                    onClick={() =>
+                      updateInputRows([...inputRows, { key: "", value: "" }])
+                    }
                   >
                     <Plus size={13} className="mr-1" />
                     添加字段
@@ -448,19 +583,20 @@ export default function WorkflowTestRunModal({
 
                 <div className="mt-4 space-y-2.5">
                   {!inputRows.length && (
-                    <div className="rounded border border-dashed border-slate-200 bg-slate-50 p-4 text-center text-xs text-slate-500">
-                      当前未配置输入字段。如果此流程不需要外部输入，可直接点击“立即开始试运行”。
+                    <div className="aiflow-type-body rounded border border-dashed border-border bg-muted p-4 text-center text-muted-foreground">
+                      当前未配置输入字段。确认流程无需额外输入后，可发起本次实际运行。
                     </div>
                   )}
 
                   {inputRows.map((row, index) => (
                     <div
                       key={index}
-                      className="grid grid-cols-[160px_1fr_32px] gap-2 items-center"
+                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 sm:grid-cols-[minmax(130px,0.4fr)_minmax(0,1fr)_2rem]"
                     >
                       <Input
                         placeholder="字段名 (key)"
-                        className="h-8 text-xs font-mono"
+                        aria-label={`输入字段 ${index + 1} 名称`}
+                        className="aiflow-type-control h-11 min-h-11 min-w-0 font-mono min-[1024px]:h-9 min-[1024px]:min-h-0"
                         value={row.key}
                         onChange={e =>
                           updateInputRows(
@@ -472,7 +608,8 @@ export default function WorkflowTestRunModal({
                       />
                       <Input
                         placeholder="字段值 (value，支持文本/数字/JSON)"
-                        className="h-8 text-xs"
+                        aria-label={`输入字段 ${index + 1} 的值`}
+                        className="aiflow-type-control col-span-2 h-11 min-h-11 min-w-0 sm:col-span-1 min-[1024px]:h-9 min-[1024px]:min-h-0"
                         value={row.value}
                         onChange={e =>
                           updateInputRows(
@@ -484,9 +621,12 @@ export default function WorkflowTestRunModal({
                       />
                       <button
                         type="button"
-                        className="flex h-8 w-8 items-center justify-center rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        aria-label={`删除输入字段 ${row.key || index + 1}`}
+                        className="aiflow-type-control flex h-11 min-h-11 w-11 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 min-[1024px]:h-9 min-[1024px]:min-h-0 min-[1024px]:w-9"
                         onClick={() =>
-                          updateInputRows(inputRows.filter((_, i) => i !== index))
+                          updateInputRows(
+                            inputRows.filter((_, i) => i !== index)
+                          )
                         }
                       >
                         <Trash2 size={15} />
@@ -495,18 +635,36 @@ export default function WorkflowTestRunModal({
                   ))}
                 </div>
 
-                <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <div className="text-xs text-slate-400">
-                    {isStateflow
-                      ? "仿真将保存画布草稿并在沙箱中推演业务生命周期"
-                      : isDataflow
-                      ? "抽样试跑将读取样例数据源并在沙箱中进行流式处理"
-                      : "调试将优先保存当前画布草稿，并在后台沙箱中完成自动化运算"}
-                  </div>
+                <div
+                  role="note"
+                  className="aiflow-type-body mt-5 flex items-start gap-2 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface p-3 leading-5 text-amber-900"
+                >
+                  <AlertTriangle
+                    className="mt-0.5 shrink-0 text-aiflow-warning"
+                    size={15}
+                  />
+                  <p>
+                    <span className="font-semibold">实际运行提示：</span>
+                    提交后会直接执行并创建运行记录；当前入口不提供沙箱隔离，节点可能读写已配置资源或调用外部服务。
+                  </p>
+                </div>
+                <ActualRunAcknowledgement
+                  checked={acknowledgedActualRun}
+                  onChange={setAcknowledgedActualRun}
+                />
+                <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
                   <Button
-                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+                    type="button"
+                    className="min-h-11 w-full justify-center bg-blue-600 font-medium text-white hover:bg-blue-700 sm:w-auto"
                     size="sm"
-                    disabled={isRunning || !canRun}
+                    disabled={!canStartActualRun}
+                    title={
+                      !canRun
+                        ? "当前账号没有运行权限"
+                        : !acknowledgedActualRun
+                          ? "请先确认本次会执行真实流程"
+                          : undefined
+                    }
                     onClick={handleStartRun}
                   >
                     {isRunning ? (
@@ -516,7 +674,11 @@ export default function WorkflowTestRunModal({
                     ) : (
                       <Play size={14} className="mr-1.5" />
                     )}
-                    {isStateflow ? "开始仿真推演" : isDataflow ? "开始抽样试跑" : "立即开始单步调试"}
+                    {isStateflow
+                      ? "开始实际状态流转"
+                      : isDataflow
+                        ? "开始实际数据流程"
+                        : "开始实际控制流程"}
                   </Button>
                 </div>
               </div>
@@ -525,37 +687,41 @@ export default function WorkflowTestRunModal({
             /* Results View */
             <div className="space-y-4">
               {/* State flow waiting prompt */}
-              {isStateflow && (currentRun?.status === "waiting" || currentRun?.status === "blocked") && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50/80 p-3.5 shadow-2xs">
-                  <div className="flex items-start gap-3">
-                    <Clock className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="text-xs text-amber-800">
-                      <p className="font-semibold text-amber-900">
-                        状态流转已就绪：当前处于等待参与人操作（审批/签署/提交）阶段
-                      </p>
-                      <p className="mt-1 leading-relaxed text-amber-700">
-                        状态流程本质是长周期的业务对象生命周期，当前节点已成功流转至人工待办任务。在实际业务运行中，需由对应角色成员（如经办人、风控初审员、主管）在【已启动流程-工作台】中完成审批后方可继续流转。下方已为您呈现当前到达的状态节点与上下文数据。
-                      </p>
+              {isStateflow &&
+                (currentRun?.status === "waiting" ||
+                  currentRun?.status === "blocked") && (
+                  <div className="rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface/80 p-3.5 shadow-2xs">
+                    <div className="flex items-start gap-3">
+                      <Clock className="h-5 w-5 text-aiflow-warning shrink-0 mt-0.5" />
+                      <div className="aiflow-type-body text-aiflow-warning">
+                        <p className="font-semibold text-amber-900">
+                          状态流转已就绪：当前处于等待参与人操作（审批/签署/提交）阶段
+                        </p>
+                        <p className="mt-1 leading-relaxed text-aiflow-warning">
+                          状态流程本质是长周期的业务对象生命周期，当前节点已成功流转至人工待办任务。在实际业务运行中，需由对应角色成员（如经办人、风控初审员、主管）在【已启动流程-工作台】中完成审批后方可继续流转。下方已为您呈现当前到达的状态节点与上下文数据。
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Tabs */}
-              <div className="flex items-center gap-1 border-b border-slate-200 bg-white px-3 py-1 rounded-t-lg">
+              <div className="flex items-center gap-1 border-b border-border bg-card px-3 py-1 rounded-t-lg">
                 <button
                   type="button"
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === "result"
-                      ? "border-blue-600 text-blue-600"
-                      : "border-transparent text-slate-500 hover:text-slate-700"
+                      ? "border-blue-600 text-aiflow-info"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() => setActiveTab("result")}
                 >
                   <FileSpreadsheet size={14} />
-                  <span>{isStateflow ? "当前状态与业务上下文" : "最终输出结果"}</span>
+                  <span>
+                    {isStateflow ? "当前状态与业务上下文" : "最终输出结果"}
+                  </span>
                   {outputRows && (
-                    <span className="rounded bg-blue-100/70 px-1.5 py-0.2 text-[10px] text-blue-800 font-semibold">
+                    <span className="rounded bg-aiflow-info-surface/70 px-1.5 py-0.2 text-[10px] text-aiflow-info font-semibold">
                       {outputRows.length} 条
                     </span>
                   )}
@@ -565,16 +731,23 @@ export default function WorkflowTestRunModal({
                   type="button"
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === "steps"
-                      ? "border-blue-600 text-blue-600"
-                      : "border-transparent text-slate-500 hover:text-slate-700"
+                      ? "border-blue-600 text-aiflow-info"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() => setActiveTab("steps")}
                 >
                   <Layers size={14} />
-                  <span>{isStateflow ? "状态跃迁与节点轨迹" : "算子执行明细"}</span>
-                  {Boolean(currentRun?.nodeRuns?.length || dataflowLineageQuery.data?.artifacts?.length) && (
-                    <span className="rounded bg-slate-100 px-1.5 py-0.2 text-[10px] text-slate-600">
-                      {currentRun?.nodeRuns?.length || dataflowLineageQuery.data?.artifacts?.length} 节点
+                  <span>
+                    {isStateflow ? "状态跃迁与节点轨迹" : "算子执行明细"}
+                  </span>
+                  {Boolean(
+                    currentRun?.nodeRuns?.length ||
+                      dataflowLineageQuery.data?.artifacts?.length
+                  ) && (
+                    <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground">
+                      {currentRun?.nodeRuns?.length ||
+                        dataflowLineageQuery.data?.artifacts?.length}{" "}
+                      节点
                     </span>
                   )}
                 </button>
@@ -583,8 +756,8 @@ export default function WorkflowTestRunModal({
                   type="button"
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === "input"
-                      ? "border-blue-600 text-blue-600"
-                      : "border-transparent text-slate-500 hover:text-slate-700"
+                      ? "border-blue-600 text-aiflow-info"
+                      : "border-transparent text-muted-foreground hover:text-foreground"
                   }`}
                   onClick={() => setActiveTab("input")}
                 >
@@ -595,18 +768,25 @@ export default function WorkflowTestRunModal({
 
               {/* Tab 1: Result Output */}
               {activeTab === "result" && (
-                <div className="rounded-b-lg border border-t-0 border-slate-200 bg-white p-4 shadow-sm min-h-[300px]">
+                <div className="rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]">
                   {/* Error view if failed */}
                   {(runError || currentRun?.error) && (
-                    <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-xs text-red-900">
+                    <div className="aiflow-type-body mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
                       <div className="flex items-start gap-2.5">
-                        <AlertTriangle size={18} className="text-red-600 mt-0.5 flex-shrink-0" />
+                        <AlertTriangle
+                          size={18}
+                          className="text-red-600 mt-0.5 flex-shrink-0"
+                        />
                         <div className="flex-1">
-                          <p className="font-semibold text-red-950">执行未通过或报错中断</p>
+                          <p className="font-semibold text-red-950">
+                            执行未通过或报错中断
+                          </p>
                           <p className="mt-1 leading-5 text-red-800">
                             {typeof currentRun?.error === "string"
                               ? currentRun.error
-                              : currentRun?.error?.message || runError || "节点运行抛出异常，请检查节点配置。"}
+                              : currentRun?.error?.message ||
+                                runError ||
+                                "节点运行抛出异常，请检查节点配置。"}
                           </p>
                         </div>
                       </div>
@@ -615,10 +795,15 @@ export default function WorkflowTestRunModal({
 
                   {/* Loading State */}
                   {isRunning && !currentRun?.output && (
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-400">
-                      <Loader2 size={32} className="animate-spin text-blue-500 mb-3" />
-                      <p className="text-sm font-medium text-slate-700">正在执行流程算子计算…</p>
-                      <p className="text-xs text-slate-400 mt-1">
+                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                      <Loader2
+                        size={32}
+                        className="animate-spin text-blue-500 mb-3"
+                      />
+                      <p className="text-sm font-medium text-foreground">
+                        正在执行流程算子计算…
+                      </p>
+                      <p className="aiflow-type-body mt-1 text-muted-foreground">
                         系统正在处理流转数据并生成各算子输出，请稍候
                       </p>
                     </div>
@@ -630,9 +815,11 @@ export default function WorkflowTestRunModal({
                       {/* Top Bar for Result Format Toggle */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-slate-700">输出内容</span>
+                          <span className="text-xs font-semibold text-foreground">
+                            输出内容
+                          </span>
                           {outputRows && (
-                            <span className="text-xs text-slate-500">
+                            <span className="text-xs text-muted-foreground">
                               (共 {outputRows.length} 行记录)
                             </span>
                           )}
@@ -640,13 +827,13 @@ export default function WorkflowTestRunModal({
 
                         <div className="flex items-center gap-2">
                           {outputRows && (
-                            <div className="flex rounded-md border border-slate-200 bg-slate-50 p-0.5 text-xs">
+                            <div className="flex rounded-md border border-border bg-muted p-0.5 text-xs">
                               <button
                                 type="button"
                                 className={`flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                   resultDisplayMode === "table"
-                                    ? "bg-white text-blue-700 shadow-xs"
-                                    : "text-slate-600 hover:text-slate-900"
+                                    ? "bg-card text-aiflow-info shadow-xs"
+                                    : "text-muted-foreground hover:text-foreground"
                                 }`}
                                 onClick={() => setResultDisplayMode("table")}
                               >
@@ -657,8 +844,8 @@ export default function WorkflowTestRunModal({
                                 type="button"
                                 className={`flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                   resultDisplayMode === "json"
-                                    ? "bg-white text-blue-700 shadow-xs"
-                                    : "text-slate-600 hover:text-slate-900"
+                                    ? "bg-card text-aiflow-info shadow-xs"
+                                    : "text-muted-foreground hover:text-foreground"
                                 }`}
                                 onClick={() => setResultDisplayMode("json")}
                               >
@@ -672,11 +859,14 @@ export default function WorkflowTestRunModal({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-7 text-xs text-slate-600"
+                            className="h-7 text-xs text-muted-foreground"
                             onClick={() => handleCopyJson(currentRun.output)}
                           >
                             {copied ? (
-                              <Check size={13} className="text-emerald-600 mr-1" />
+                              <Check
+                                size={13}
+                                className="text-aiflow-success mr-1"
+                              />
                             ) : (
                               <Copy size={13} className="mr-1" />
                             )}
@@ -688,63 +878,97 @@ export default function WorkflowTestRunModal({
                       {/* Tabular Data View */}
                       {outputRows && resultDisplayMode === "table" ? (
                         <div className="space-y-2">
-                          <div className="overflow-x-auto rounded border border-slate-200 max-h-[360px]">
+                          <div className="overflow-x-auto rounded border border-border max-h-[360px]">
                             <table className="w-full text-left text-xs">
-                              <thead className="bg-slate-100 text-slate-600 sticky top-0 z-10">
+                              <thead className="sticky top-0 z-10 bg-muted text-sm text-muted-foreground">
                                 <tr>
-                                  <th className="px-3 py-2 w-12 text-slate-400 font-mono">#</th>
+                                  <th className="px-3 py-2 w-12 text-muted-foreground font-mono">
+                                    #
+                                  </th>
                                   {outputColumns.map(col => (
-                                    <th key={col} className="px-3 py-2 font-semibold text-slate-700 whitespace-nowrap">
+                                    <th
+                                      key={col}
+                                      className="px-3 py-2 font-semibold text-foreground whitespace-nowrap"
+                                    >
                                       {col}
                                     </th>
                                   ))}
                                 </tr>
                               </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                {paginatedOutputRows.map((row: any, idx: number) => {
-                                  const rowIndex = (outputPage - 1) * OUTPUT_PAGE_SIZE + idx;
-                                  return (
-                                    <tr
-                                      key={rowIndex}
-                                      className="hover:bg-blue-50/40 transition-colors"
-                                    >
-                                      <td className="px-3 py-2 text-slate-400 font-mono text-[11px]">
-                                        {rowIndex + 1}
-                                      </td>
-                                      {outputColumns.map(col => {
-                                        const val = typeof row === "object" && row !== null ? row[col] : row;
-                                        return (
-                                          <td
-                                            key={col}
-                                            className="px-3 py-2 text-slate-800 whitespace-nowrap max-w-xs truncate"
-                                            title={val === null || val === undefined ? "" : typeof val === "object" ? JSON.stringify(val) : String(val)}
-                                          >
-                                            {val === null || val === undefined ? (
-                                              <span className="text-slate-300 italic">null</span>
-                                            ) : typeof val === "boolean" ? (
-                                              <span className={val ? "text-emerald-600 font-semibold" : "text-slate-400"}>
-                                                {String(val)}
-                                              </span>
-                                            ) : typeof val === "object" ? (
-                                              <code className="text-[10px] text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">
-                                                {JSON.stringify(val)}
-                                              </code>
-                                            ) : (
-                                              String(val)
-                                            )}
-                                          </td>
-                                        );
-                                      })}
-                                    </tr>
-                                  );
-                                })}
+                              <tbody className="divide-y divide-border">
+                                {paginatedOutputRows.map(
+                                  (row: any, idx: number) => {
+                                    const rowIndex =
+                                      (outputPage - 1) * OUTPUT_PAGE_SIZE + idx;
+                                    return (
+                                      <tr
+                                        key={rowIndex}
+                                        className="hover:bg-aiflow-info-surface/40 transition-colors"
+                                      >
+                                        <td className="px-3 py-2 text-muted-foreground font-mono text-[11px]">
+                                          {rowIndex + 1}
+                                        </td>
+                                        {outputColumns.map(col => {
+                                          const val =
+                                            typeof row === "object" &&
+                                            row !== null
+                                              ? row[col]
+                                              : row;
+                                          return (
+                                            <td
+                                              key={col}
+                                              className="px-3 py-2 text-foreground whitespace-nowrap max-w-xs truncate"
+                                              title={
+                                                val === null ||
+                                                val === undefined
+                                                  ? ""
+                                                  : typeof val === "object"
+                                                    ? JSON.stringify(val)
+                                                    : String(val)
+                                              }
+                                            >
+                                              {val === null ||
+                                              val === undefined ? (
+                                                <span className="text-slate-300 italic">
+                                                  null
+                                                </span>
+                                              ) : typeof val === "boolean" ? (
+                                                <span
+                                                  className={
+                                                    val
+                                                      ? "text-aiflow-success font-semibold"
+                                                      : "text-muted-foreground"
+                                                  }
+                                                >
+                                                  {String(val)}
+                                                </span>
+                                              ) : typeof val === "object" ? (
+                                                <code className="text-[10px] text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded">
+                                                  {JSON.stringify(val)}
+                                                </code>
+                                              ) : (
+                                                String(val)
+                                              )}
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    );
+                                  }
+                                )}
                               </tbody>
                             </table>
                           </div>
                           {totalOutputPages > 1 && (
-                            <div className="flex items-center justify-between px-1 py-1 text-xs text-slate-500 border-t border-slate-100 pt-2">
+                            <div className="flex items-center justify-between px-1 py-1 text-xs text-muted-foreground border-t border-border pt-2">
                               <span>
-                                显示第 {(outputPage - 1) * OUTPUT_PAGE_SIZE + 1} ~ {Math.min(outputPage * OUTPUT_PAGE_SIZE, totalOutputRows)} 条，共 {totalOutputRows} 条
+                                显示第 {(outputPage - 1) * OUTPUT_PAGE_SIZE + 1}{" "}
+                                ~{" "}
+                                {Math.min(
+                                  outputPage * OUTPUT_PAGE_SIZE,
+                                  totalOutputRows
+                                )}{" "}
+                                条，共 {totalOutputRows} 条
                               </span>
                               <div className="flex items-center gap-1.5">
                                 <Button
@@ -753,11 +977,13 @@ export default function WorkflowTestRunModal({
                                   size="sm"
                                   className="h-6 px-2 text-xs"
                                   disabled={outputPage <= 1}
-                                  onClick={() => setOutputPage(p => Math.max(1, p - 1))}
+                                  onClick={() =>
+                                    setOutputPage(p => Math.max(1, p - 1))
+                                  }
                                 >
                                   上一页
                                 </Button>
-                                <span className="font-mono text-xs px-1 text-slate-600">
+                                <span className="font-mono text-xs px-1 text-muted-foreground">
                                   {outputPage} / {totalOutputPages}
                                 </span>
                                 <Button
@@ -766,7 +992,11 @@ export default function WorkflowTestRunModal({
                                   size="sm"
                                   className="h-6 px-2 text-xs"
                                   disabled={outputPage >= totalOutputPages}
-                                  onClick={() => setOutputPage(p => Math.min(totalOutputPages, p + 1))}
+                                  onClick={() =>
+                                    setOutputPage(p =>
+                                      Math.min(totalOutputPages, p + 1)
+                                    )
+                                  }
                                 >
                                   下一页
                                 </Button>
@@ -776,220 +1006,285 @@ export default function WorkflowTestRunModal({
                         </div>
                       ) : (
                         /* JSON / Code View */
-                        <pre className="max-h-[380px] overflow-auto rounded-lg bg-slate-950 p-4 text-xs font-mono leading-5 text-emerald-300">
+                        <pre className="aiflow-type-code max-h-[380px] overflow-auto rounded-lg bg-slate-950 p-4 font-mono text-emerald-300">
                           {JSON.stringify(currentRun.output, null, 2)}
                         </pre>
                       )}
                     </div>
                   )}
 
-                  {!isRunning && !currentRun?.output && !runError && !currentRun?.error && (
-                    <div className="py-12 text-center text-xs text-slate-400">
-                      本次运行未返回结构化输出，请查看“算子执行明细”。
-                    </div>
-                  )}
+                  {!isRunning &&
+                    !currentRun?.output &&
+                    !runError &&
+                    !currentRun?.error && (
+                      <div className="aiflow-type-body py-12 text-center text-muted-foreground">
+                        本次运行未返回结构化输出，请查看“算子执行明细”。
+                      </div>
+                    )}
                 </div>
               )}
 
               {/* Tab 2: Execution Steps / Node Details */}
               {activeTab === "steps" && (
-                <div className="rounded-b-lg border border-t-0 border-slate-200 bg-white p-4 shadow-sm min-h-[300px]">
-                  <p className="text-xs text-slate-500 mb-3">
+                <div className="rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]">
+                  <p className="aiflow-type-body mb-3 text-muted-foreground">
                     按照流程拓扑顺序记录各算子的实际执行状态、耗时与输入输出数据：
                   </p>
 
                   <div className="space-y-2">
                     {/* Dataflow Artifacts / Nodes */}
-                    {isDataflow && (currentRun?.nodeRuns?.length ? currentRun.nodeRuns : (dataflowLineageQuery.data?.artifacts || [])).map((item: any, index: number) => {
-                      const nodeId = String(item.nodeId);
-                      const nodeInfo = nodeNameMap.get(nodeId);
-                      const artifact = (dataflowLineageQuery.data?.artifacts || []).find((a: any) => String(a.nodeId) === nodeId);
-                      const isExpanded = expandedNodeId === item.id;
-                      const isSuccess = item.status === "success" || !item.status;
-                      const rowCount = item.rowCount ?? (artifact as any)?.rowCount ?? (Array.isArray(item.output?.rows) ? item.output.rows.length : null);
-                      return (
-                        <div
-                          key={item.id}
-                          className="rounded-lg border border-slate-200 bg-slate-50/50 overflow-hidden"
-                        >
+                    {isDataflow &&
+                      (currentRun?.nodeRuns?.length
+                        ? currentRun.nodeRuns
+                        : dataflowLineageQuery.data?.artifacts || []
+                      ).map((item: any, index: number) => {
+                        const nodeId = String(item.nodeId);
+                        const nodeInfo = nodeNameMap.get(nodeId);
+                        const artifact = (
+                          dataflowLineageQuery.data?.artifacts || []
+                        ).find((a: any) => String(a.nodeId) === nodeId);
+                        const isExpanded = expandedNodeId === item.id;
+                        const isSuccess =
+                          item.status === "success" || !item.status;
+                        const rowCount =
+                          item.rowCount ??
+                          (artifact as any)?.rowCount ??
+                          (Array.isArray(item.output?.rows)
+                            ? item.output.rows.length
+                            : null);
+                        return (
                           <div
-                            className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-slate-100/60 transition-colors"
-                            onClick={() => setExpandedNodeId(isExpanded ? null : item.id)}
+                            key={item.id}
+                            className="rounded-lg border border-border bg-muted/50 overflow-hidden"
                           >
-                            <div className="flex items-center gap-2.5">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
-                                {index + 1}
-                              </span>
-                              <span
-                                className={`h-2 w-2 rounded-full ${
-                                  isSuccess ? "bg-emerald-500" : "bg-red-500"
-                                }`}
-                              />
-                              <span className="text-xs font-semibold text-slate-800">
-                                {nodeInfo?.name || item.nodeId}
-                              </span>
-                              <code className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase">
-                                {item.nodeType || nodeInfo?.type}
-                              </code>
+                            <div
+                              className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors"
+                              onClick={() =>
+                                setExpandedNodeId(isExpanded ? null : item.id)
+                              }
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-aiflow-info-surface text-[10px] font-bold text-aiflow-info">
+                                  {index + 1}
+                                </span>
+                                <span
+                                  className={`h-2 w-2 rounded-full ${
+                                    isSuccess ? "bg-emerald-500" : "bg-red-500"
+                                  }`}
+                                />
+                                <span className="text-xs font-semibold text-foreground">
+                                  {nodeInfo?.name || item.nodeId}
+                                </span>
+                                <code className="text-[10px] bg-slate-200 text-muted-foreground px-1.5 py-0.5 rounded uppercase">
+                                  {item.nodeType || nodeInfo?.type}
+                                </code>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                {rowCount !== null &&
+                                  rowCount !== undefined && (
+                                    <span className="text-xs font-medium text-aiflow-info bg-aiflow-info-surface px-2 py-0.5 rounded border border-aiflow-info-border/50">
+                                      产出 {rowCount} 行
+                                    </span>
+                                  )}
+                                {item.durationMs !== undefined &&
+                                  item.durationMs !== null && (
+                                    <span className="text-xs text-muted-foreground font-mono">
+                                      {item.durationMs} ms
+                                    </span>
+                                  )}
+                                {isExpanded ? (
+                                  <ChevronDown
+                                    size={15}
+                                    className="text-muted-foreground"
+                                  />
+                                ) : (
+                                  <ChevronRight
+                                    size={15}
+                                    className="text-muted-foreground"
+                                  />
+                                )}
+                              </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                              {rowCount !== null && rowCount !== undefined && (
-                                <span className="text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200/50">
-                                  产出 {rowCount} 行
-                                </span>
-                              )}
-                              {item.durationMs !== undefined && item.durationMs !== null && (
-                                <span className="text-xs text-slate-400 font-mono">
-                                  {item.durationMs} ms
-                                </span>
-                              )}
-                              {isExpanded ? (
-                                <ChevronDown size={15} className="text-slate-400" />
-                              ) : (
-                                <ChevronRight size={15} className="text-slate-400" />
-                              )}
-                            </div>
-                          </div>
-
-                          {isExpanded && (
-                            <div className="border-t border-slate-200 bg-white p-3.5 space-y-3">
-                              {item.error && (
-                                <div className="rounded bg-red-50 p-2.5 text-xs text-red-700 border border-red-200">
-                                  <p className="font-semibold text-red-900 mb-0.5">算子执行失败</p>
-                                  <pre className="whitespace-pre-wrap font-mono text-[11px]">
-                                    {typeof item.error === "string" ? item.error : item.error?.message || JSON.stringify(item.error)}
-                                  </pre>
-                                </div>
-                              )}
-                              {(artifact?.sample?.length || (Array.isArray(item.output?.rows) && item.output.rows.length)) ? (
-                                <div>
-                                  <p className="text-[11px] font-semibold text-slate-600 mb-1.5">
-                                    节点输出数据 (
-                                    {artifact?.sample?.length || item.output?.rows?.length} 条)
-                                  </p>
-                                  <pre className="max-h-40 overflow-auto rounded bg-slate-900 p-2.5 text-[11px] text-emerald-300 font-mono">
-                                    {JSON.stringify(artifact?.sample || item.output?.rows, null, 2)}
-                                  </pre>
-                                </div>
-                              ) : item.output ? (
-                                <div>
-                                  <p className="text-[11px] font-semibold text-slate-600 mb-1.5">节点输出</p>
-                                  <pre className="max-h-40 overflow-auto rounded bg-slate-900 p-2.5 text-[11px] text-emerald-300 font-mono">
-                                    {JSON.stringify(item.output, null, 2)}
-                                  </pre>
-                                </div>
-                              ) : null}
-                              {artifact?.schema && artifact.schema.length > 0 && (
-                                <div>
-                                  <p className="text-[11px] font-semibold text-slate-600 mb-1">字段 Schema</p>
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {artifact.schema.map((f: any, fi: number) => (
-                                      <span
-                                        key={fi}
-                                        className="text-[11px] font-mono bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200"
-                                      >
-                                        {f.name}: {f.type}
-                                      </span>
-                                    ))}
+                            {isExpanded && (
+                              <div className="border-t border-border bg-card p-3.5 space-y-3">
+                                {item.error && (
+                                  <div className="aiflow-type-body rounded border border-red-200 bg-red-50 p-2.5 text-red-700">
+                                    <p className="font-semibold text-red-900 mb-0.5">
+                                      算子执行失败
+                                    </p>
+                                    <pre className="aiflow-type-code whitespace-pre-wrap font-mono">
+                                      {typeof item.error === "string"
+                                        ? item.error
+                                        : item.error?.message ||
+                                          JSON.stringify(item.error)}
+                                    </pre>
                                   </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                                )}
+                                {artifact?.sample?.length ||
+                                (Array.isArray(item.output?.rows) &&
+                                  item.output.rows.length) ? (
+                                  <div>
+                                    <p className="aiflow-type-body mb-1.5 font-semibold text-muted-foreground">
+                                      节点输出数据 (
+                                      {artifact?.sample?.length ||
+                                        item.output?.rows?.length}{" "}
+                                      条)
+                                    </p>
+                                    <pre className="aiflow-type-code max-h-40 overflow-auto rounded bg-slate-900 p-2.5 font-mono text-emerald-300">
+                                      {JSON.stringify(
+                                        artifact?.sample || item.output?.rows,
+                                        null,
+                                        2
+                                      )}
+                                    </pre>
+                                  </div>
+                                ) : item.output ? (
+                                  <div>
+                                    <p className="aiflow-type-body mb-1.5 font-semibold text-muted-foreground">
+                                      节点输出
+                                    </p>
+                                    <pre className="aiflow-type-code max-h-40 overflow-auto rounded bg-slate-900 p-2.5 font-mono text-emerald-300">
+                                      {JSON.stringify(item.output, null, 2)}
+                                    </pre>
+                                  </div>
+                                ) : null}
+                                {artifact?.schema &&
+                                  artifact.schema.length > 0 && (
+                                    <div>
+                                      <p className="text-[11px] font-semibold text-muted-foreground mb-1">
+                                        字段 Schema
+                                      </p>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {artifact.schema.map(
+                                          (f: any, fi: number) => (
+                                            <span
+                                              key={fi}
+                                              className="aiflow-type-code rounded border border-border bg-muted px-2 py-0.5 font-mono text-foreground"
+                                            >
+                                              {f.name}: {f.type}
+                                            </span>
+                                          )
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
 
                     {/* Standard Workflow Node Runs */}
-                    {!isDataflow && currentRun?.nodeRuns?.map((node: any, index: number) => {
-                      const isExpanded = expandedNodeId === node.id;
-                      const isSuccess = node.status === "success";
-                      return (
-                        <div
-                          key={node.id}
-                          className="rounded-lg border border-slate-200 bg-slate-50/50 overflow-hidden"
-                        >
+                    {!isDataflow &&
+                      currentRun?.nodeRuns?.map((node: any, index: number) => {
+                        const isExpanded = expandedNodeId === node.id;
+                        const isSuccess = node.status === "success";
+                        return (
                           <div
-                            className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-slate-100/60 transition-colors"
-                            onClick={() => setExpandedNodeId(isExpanded ? null : node.id)}
+                            key={node.id}
+                            className="rounded-lg border border-border bg-muted/50 overflow-hidden"
                           >
-                            <div className="flex items-center gap-2.5">
-                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 text-[10px] font-bold text-blue-700">
-                                {index + 1}
-                              </span>
-                              <span
-                                className={`h-2 w-2 rounded-full ${
-                                  isSuccess ? "bg-emerald-500" : "bg-red-500"
-                                }`}
-                              />
-                              <span className="text-xs font-semibold text-slate-800">
-                                {node.nodeName || node.nodeId}
-                              </span>
-                              <code className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
-                                {node.nodeType}
-                              </code>
-                            </div>
-
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs text-slate-500 font-mono">
-                                {node.durationMs ?? 0} ms
-                              </span>
-                              {isExpanded ? (
-                                <ChevronDown size={15} className="text-slate-400" />
-                              ) : (
-                                <ChevronRight size={15} className="text-slate-400" />
-                              )}
-                            </div>
-                          </div>
-
-                          {isExpanded && (
-                            <div className="border-t border-slate-200 bg-white p-3.5 grid gap-3 sm:grid-cols-2">
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-500 mb-1">节点输入</p>
-                                <pre className="max-h-36 overflow-auto rounded bg-slate-900 p-2 text-[10px] text-slate-200">
-                                  {JSON.stringify(node.input || {}, null, 2)}
-                                </pre>
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-semibold text-slate-500 mb-1">
-                                  {node.error ? "节点报错" : "节点输出"}
-                                </p>
-                                <pre
-                                  className={`max-h-36 overflow-auto rounded p-2 text-[10px] ${
-                                    node.error
-                                      ? "bg-red-950 text-red-200"
-                                      : "bg-slate-900 text-emerald-300"
+                            <div
+                              className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors"
+                              onClick={() =>
+                                setExpandedNodeId(isExpanded ? null : node.id)
+                              }
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-aiflow-info-surface text-[10px] font-bold text-aiflow-info">
+                                  {index + 1}
+                                </span>
+                                <span
+                                  className={`h-2 w-2 rounded-full ${
+                                    isSuccess ? "bg-emerald-500" : "bg-red-500"
                                   }`}
-                                >
-                                  {JSON.stringify(node.error || node.output || {}, null, 2)}
-                                </pre>
+                                />
+                                <span className="aiflow-type-body font-semibold text-foreground">
+                                  {node.nodeName || node.nodeId}
+                                </span>
+                                <code className="text-[10px] bg-slate-200 text-muted-foreground px-1.5 py-0.5 rounded">
+                                  {node.nodeType}
+                                </code>
+                              </div>
+
+                              <div className="flex items-center gap-3">
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  {node.durationMs ?? 0} ms
+                                </span>
+                                {isExpanded ? (
+                                  <ChevronDown
+                                    size={15}
+                                    className="text-muted-foreground"
+                                  />
+                                ) : (
+                                  <ChevronRight
+                                    size={15}
+                                    className="text-muted-foreground"
+                                  />
+                                )}
                               </div>
                             </div>
-                          )}
-                        </div>
-                      );
-                    })}
 
-                    {!dataflowLineageQuery.data?.artifacts?.length && !currentRun?.nodeRuns?.length && (
-                      <div className="py-8 text-center text-xs text-slate-400">
-                        {isRunning ? "正在搜集各节点执行信息…" : "暂无节点执行明细"}
-                      </div>
-                    )}
+                            {isExpanded && (
+                              <div className="border-t border-border bg-card p-3.5 grid gap-3 sm:grid-cols-2">
+                                <div>
+                                  <p className="aiflow-type-body mb-1 font-semibold text-muted-foreground">
+                                    节点输入
+                                  </p>
+                                  <pre className="aiflow-type-code max-h-36 overflow-auto rounded bg-slate-900 p-2 text-slate-200">
+                                    {JSON.stringify(node.input || {}, null, 2)}
+                                  </pre>
+                                </div>
+                                <div>
+                                  <p className="aiflow-type-body mb-1 font-semibold text-muted-foreground">
+                                    {node.error ? "节点报错" : "节点输出"}
+                                  </p>
+                                  <pre
+                                    className={`aiflow-type-code max-h-36 overflow-auto rounded p-2 ${
+                                      node.error
+                                        ? "bg-red-950 text-red-200"
+                                        : "bg-slate-900 text-emerald-300"
+                                    }`}
+                                  >
+                                    {JSON.stringify(
+                                      node.error || node.output || {},
+                                      null,
+                                      2
+                                    )}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                    {!dataflowLineageQuery.data?.artifacts?.length &&
+                      !currentRun?.nodeRuns?.length && (
+                        <div className="aiflow-type-body py-8 text-center text-muted-foreground">
+                          {isRunning
+                            ? "正在搜集各节点执行信息…"
+                            : "暂无节点执行明细"}
+                        </div>
+                      )}
                   </div>
                 </div>
               )}
 
               {/* Tab 3: Run Input Parameters */}
               {activeTab === "input" && (
-                <div className="rounded-b-lg border border-t-0 border-slate-200 bg-white p-4 shadow-sm min-h-[300px]">
+                <div className="rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs text-slate-500">本次试运行提交的输入字段：</p>
+                    <p className="aiflow-type-body text-muted-foreground">
+                      本次运行提交的输入字段：
+                    </p>
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 text-xs text-blue-600"
+                      className="h-7 text-xs text-aiflow-info"
                       onClick={() => setViewMode("config")}
                     >
                       修改参数
@@ -997,12 +1292,12 @@ export default function WorkflowTestRunModal({
                   </div>
 
                   {Object.keys(runInput || {}).length > 0 ? (
-                    <pre className="max-h-[350px] overflow-auto rounded-lg bg-slate-950 p-4 text-xs font-mono leading-5 text-blue-300">
+                    <pre className="aiflow-type-code max-h-[350px] overflow-auto rounded-lg bg-slate-950 p-4 font-mono text-blue-300">
                       {JSON.stringify(runInput, null, 2)}
                     </pre>
                   ) : (
-                    <div className="py-8 text-center text-xs text-slate-400">
-                      本次试运行未传入额外自定义输入参数（使用默认配置运行）。
+                    <div className="aiflow-type-body py-8 text-center text-muted-foreground">
+                      本次运行未传入额外自定义输入参数（使用默认配置运行）。
                     </div>
                   )}
                 </div>
@@ -1012,25 +1307,50 @@ export default function WorkflowTestRunModal({
         </div>
 
         {/* Modal Footer */}
-        <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
-          <div className="text-xs text-slate-400 flex items-center gap-2">
-            <span>{workflow?.name || "当前流程"}</span>
-            <span>·</span>
-            <span>试运行结果仅供画布实时调试</span>
+        <div className="flex shrink-0 items-center gap-3 border-t border-border bg-muted px-4 py-3 sm:px-6">
+          <div className="aiflow-type-meta flex min-w-0 flex-1 flex-col gap-0.5 text-muted-foreground">
+            <span
+              className="block truncate font-mono"
+              title={workflow?.name || "当前流程"}
+            >
+              {workflow?.name || "当前流程"}
+            </span>
+            <span>本页展示本次运行结果与节点轨迹</span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onOpenChange(false)}
-            >
-              关闭
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="aiflow-type-control h-11 min-h-11 shrink-0 px-4 min-[1024px]:h-9 min-[1024px]:min-h-0"
+            onClick={() => handleDialogOpenChange(false)}
+          >
+            关闭
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function ActualRunAcknowledgement({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="aiflow-type-body mt-3 flex min-h-11 cursor-pointer items-start gap-2 rounded-md border border-border bg-card px-3 py-2 leading-5 text-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={event => onChange(event.target.checked)}
+        className="mt-1 h-4 w-4 shrink-0 accent-blue-600"
+      />
+      <span>
+        我已了解并确认：本次会直接真实执行，可能推进业务状态、读写数据或调用外部服务，且当前没有沙箱隔离。
+      </span>
+    </label>
   );
 }

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Clock3, Flag, Loader2 } from "lucide-react";
+import { RunPayloadDetails } from "./RunPayloadDetails";
 
 function parse(value: unknown) {
   if (typeof value !== "string") return value;
@@ -53,17 +54,21 @@ export function flattenInstanceFields(
 
 function statusLabel(status: unknown) {
   const value = String(status || "unknown");
-  return value === "success"
-    ? "成功"
-    : value === "failed"
-      ? "失败"
-      : value === "waiting"
-        ? "等待处理"
-        : value === "running"
-          ? "执行中"
-          : value === "skipped"
-            ? "已跳过"
-            : value;
+  const labels: Record<string, string> = {
+    queued: "排队中",
+    running: "运行中",
+    waiting: "等待中",
+    blocked: "已阻塞",
+    success: "成功",
+    failed: "失败",
+    cancelled: "已取消",
+    terminated: "已终止",
+    skipped: "已跳过",
+  };
+  return (
+    labels[value] ??
+    (value === "unknown" ? "未知状态" : `未知状态（原值：${value}）`)
+  );
 }
 
 function DetailFields({ title, value }: { title: string; value: unknown }) {
@@ -72,18 +77,20 @@ function DetailFields({ title, value }: { title: string; value: unknown }) {
   if (!rows.length) return null;
   return (
     <section className="min-w-0">
-      <h4 className="mb-2 text-xs font-semibold text-slate-700">{title}</h4>
-      <div className="overflow-hidden rounded-md border border-slate-200">
-        <dl className="divide-y divide-slate-100">
+      <h4 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+        {title}
+      </h4>
+      <div className="overflow-hidden rounded-md border border-border">
+        <dl className="divide-y divide-border">
           {rows.map((row, index) => (
             <div
               key={`${row.field}-${index}`}
-              className="grid min-w-0 gap-1 px-3 py-2 text-xs sm:grid-cols-[minmax(120px,0.35fr)_minmax(0,1fr)]"
+              className="aiflow-type-body grid min-w-0 gap-1 px-3 py-2 sm:grid-cols-[minmax(120px,0.35fr)_minmax(0,1fr)]"
             >
-              <dt className="break-all font-mono text-slate-500">
+              <dt className="aiflow-type-meta break-all font-mono text-muted-foreground">
                 {row.field}
               </dt>
-              <dd className="min-w-0 whitespace-pre-wrap break-words text-slate-700">
+              <dd className="aiflow-type-body min-w-0 whitespace-pre-wrap break-words text-foreground">
                 {row.value}
               </dd>
             </div>
@@ -91,7 +98,7 @@ function DetailFields({ title, value }: { title: string; value: unknown }) {
         </dl>
       </div>
       {allRows.length > rows.length && (
-        <p className="mt-1 text-[10px] text-slate-400">
+        <p className="aiflow-type-body mt-1 text-muted-foreground">
           字段较多，仅展示前 {rows.length} 项。
         </p>
       )}
@@ -103,10 +110,13 @@ export function RunDetailContent({ run }: { run: any }) {
   if (!run)
     return (
       <div className="grid min-h-48 place-items-center">
-        <Loader2 className="animate-spin text-slate-400" size={22} />
+        <Loader2 className="animate-spin text-muted-foreground" size={22} />
       </div>
     );
-  const actions = sortInstanceActions(run.nodeRuns ?? [], run.definitionSnapshotJson);
+  const actions = sortInstanceActions(
+    run.nodeRuns ?? [],
+    run.definitionSnapshotJson
+  );
   return (
     <div className="space-y-4 p-5">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -126,7 +136,12 @@ export function RunDetailContent({ run }: { run: any }) {
         <Summary label="结束时间" value={formatTime(run.finishedAt)} />
         <Summary
           label="当前业务状态"
-          value={run.currentStateCode || (run.flowType === "state" ? "尚未进入状态" : "不适用")}
+          value={
+            run.currentStateName ||
+            run.currentStateCode ||
+            (run.flowType === "state" ? "尚未进入状态" : "不适用")
+          }
+          secondary={run.currentStateName ? run.currentStateCode : undefined}
         />
         <Summary label="状态版本" value={String(run.stateVersion ?? 0)} />
       </section>
@@ -134,12 +149,14 @@ export function RunDetailContent({ run }: { run: any }) {
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">控制流程里程碑</h3>
-              <p className="mt-1 text-xs text-slate-500">
+              <h3 className="aiflow-type-section-title font-semibold text-foreground">
+                控制流程里程碑
+              </h3>
+              <p className="aiflow-type-body mt-1 text-muted-foreground">
                 里程碑是不可变执行标记，不会改变业务状态或参与人权限。
               </p>
             </div>
-            <span className="rounded-full bg-teal-50 px-2.5 py-1 text-[10px] text-teal-700">
+            <span className="aiflow-type-meta rounded-full bg-teal-50 px-2.5 py-1 text-teal-700">
               {(run.milestones ?? []).length} 个
             </span>
           </div>
@@ -152,13 +169,13 @@ export function RunDetailContent({ run }: { run: any }) {
                 <div className="flex items-start gap-2">
                   <Flag size={14} className="mt-0.5 shrink-0 text-teal-700" />
                   <div className="min-w-0">
-                    <p className="break-words text-sm font-semibold text-slate-800">
+                    <p className="aiflow-type-body break-words font-semibold text-foreground">
                       {milestone.displayName}
                     </p>
-                    <p className="mt-0.5 break-all font-mono text-[10px] text-teal-700">
+                    <p className="aiflow-type-meta mt-0.5 break-all font-mono text-teal-700">
                       {milestone.milestoneCode} · {milestone.category}
                     </p>
-                    <p className="mt-1 text-[10px] text-slate-500">
+                    <p className="aiflow-type-meta mt-1 text-muted-foreground">
                       {formatTime(milestone.occurredAt)}
                     </p>
                   </div>
@@ -166,7 +183,7 @@ export function RunDetailContent({ run }: { run: any }) {
               </article>
             ))}
             {!(run.milestones ?? []).length && (
-              <p className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500 sm:col-span-2 xl:col-span-3">
+              <p className="aiflow-type-body rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground sm:col-span-2 xl:col-span-3">
                 当前控制流程尚未产生里程碑。
               </p>
             )}
@@ -177,12 +194,14 @@ export function RunDetailContent({ run }: { run: any }) {
         <section>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="text-sm font-semibold text-slate-800">状态迁移历史</h3>
-              <p className="mt-1 text-xs text-slate-500">
+              <h3 className="aiflow-type-section-title font-semibold text-foreground">
+                状态迁移历史
+              </h3>
+              <p className="aiflow-type-body mt-1 text-muted-foreground">
                 以服务端不可变迁移事实为准，不从任务状态反向推断。
               </p>
             </div>
-            <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] text-blue-700">
+            <span className="aiflow-type-meta rounded-full bg-aiflow-info-surface px-2.5 py-1 text-aiflow-info">
               {(run.stateTransitions ?? []).length} 次迁移
             </span>
           </div>
@@ -190,24 +209,24 @@ export function RunDetailContent({ run }: { run: any }) {
             {(run.stateTransitions ?? []).map((transition: any) => (
               <article
                 key={transition.id}
-                className="grid min-w-0 gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_150px] sm:items-center"
+                className="grid min-w-0 gap-2 rounded-lg border border-border bg-muted p-3 sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_150px] sm:items-center"
               >
-                <span className="font-mono font-semibold text-blue-700">
+                <span className="aiflow-type-meta font-mono font-semibold text-aiflow-info">
                   #{transition.sequenceNo}
                 </span>
-                <span className="min-w-0 break-words text-slate-500">
+                <span className="aiflow-type-body min-w-0 break-words text-muted-foreground">
                   {transition.fromStateCode || "流程启动"}
                 </span>
-                <span className="min-w-0 break-words font-semibold text-slate-800">
+                <span className="aiflow-type-body min-w-0 break-words font-semibold text-foreground">
                   → {transition.toStateCode}
                 </span>
-                <span className="text-slate-500">
+                <span className="aiflow-type-meta text-muted-foreground">
                   {formatTime(transition.createdAt)}
                 </span>
               </article>
             ))}
             {!(run.stateTransitions ?? []).length && (
-              <p className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-500">
+              <p className="aiflow-type-body rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground">
                 当前实例尚未写入状态迁移事实。
               </p>
             )}
@@ -217,12 +236,14 @@ export function RunDetailContent({ run }: { run: any }) {
       <section>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h3 className="text-sm font-semibold text-slate-800">操作记录</h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <h3 className="aiflow-type-section-title font-semibold text-foreground">
+              操作记录
+            </h3>
+            <p className="aiflow-type-body mt-1 text-muted-foreground">
               默认仅展示必要字段，并按操作时间倒序排列。
             </p>
           </div>
-          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] text-slate-500">
+          <span className="aiflow-type-meta rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
             {actions.length} 条
           </span>
         </div>
@@ -230,66 +251,75 @@ export function RunDetailContent({ run }: { run: any }) {
           {actions.map((node: any) => (
             <article
               key={node.id}
-              className="min-w-0 rounded-lg border border-slate-200 bg-white shadow-sm"
+              className="min-w-0 rounded-lg border border-border bg-card shadow-sm"
             >
               <div className="grid min-w-0 gap-3 p-3 sm:grid-cols-[150px_minmax(0,1fr)_90px_90px] sm:items-center">
-                <div className="flex min-w-0 items-center gap-2 text-xs text-slate-500">
+                <div className="aiflow-type-meta flex min-w-0 items-center gap-2 text-muted-foreground">
                   <Clock3 size={13} className="shrink-0" />
                   <span className="break-words">
                     {formatTime(operationTime(node))}
                   </span>
                 </div>
                 <div className="min-w-0">
-                  <p className="break-words text-sm font-medium text-slate-800">
+                  <p className="aiflow-type-body break-words font-medium text-foreground">
                     {node.nodeName || "未命名操作"}
                   </p>
-                  <p className="mt-0.5 break-all font-mono text-[10px] text-slate-400">
-                    {node.nodeType || "unknown"} ·{" "}
-                    {String(node.nodeId || node.id).slice(0, 24)}
+                  <p className="aiflow-type-meta mt-0.5 break-all font-mono text-muted-foreground">
+                    {node.nodeType || "unknown"}
                   </p>
                 </div>
                 <span
-                  className={`w-fit rounded-full px-2 py-1 text-[10px] ${node.status === "success" ? "bg-emerald-100 text-emerald-700" : node.status === "failed" ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"}`}
+                  className={`aiflow-type-meta w-fit rounded-full px-2 py-1 ${node.status === "success" ? "bg-aiflow-success-surface text-aiflow-success" : node.status === "failed" ? "bg-aiflow-danger-surface text-aiflow-danger" : "bg-aiflow-warning-surface text-aiflow-warning"}`}
                 >
                   {statusLabel(node.status)}
                 </span>
-                <span className="text-xs text-slate-500">
+                <span className="aiflow-type-meta text-muted-foreground">
                   {node.durationMs ?? "—"} ms
                 </span>
               </div>
-              <details className="group border-t border-slate-100">
-                <summary className="flex cursor-pointer list-none items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50">
+              <details className="group border-t border-border">
+                <summary className="aiflow-type-control flex cursor-pointer list-none items-center justify-center gap-1 px-3 py-2 font-medium text-aiflow-info hover:bg-aiflow-info-surface">
                   查看详情
                   <ChevronDown
                     size={13}
                     className="transition-transform group-open:rotate-180"
                   />
                 </summary>
-                <div className="grid min-w-0 gap-4 border-t border-slate-100 bg-slate-50/60 p-3">
-                  <DetailFields title="输入字段" value={node.inputJson} />
-                  <DetailFields title="输出字段" value={node.outputJson} />
-                  <DetailFields title="错误字段" value={node.errorJson} />
-                  <DetailFields
-                    title="其余字段"
-                    value={{
-                      id: node.id,
-                      runId: node.runId,
-                      nodeId: node.nodeId,
-                      nodeType: node.nodeType,
-                      status: node.status,
-                      startedAt: node.startedAt,
-                      finishedAt: node.finishedAt,
-                      createdAt: node.createdAt,
-                      sequenceNo: node.sequenceNo,
-                      durationMs: node.durationMs,
-                    }}
-                  />
+                <div className="grid min-w-0 gap-4 border-t border-border bg-muted/60 p-3">
+                  <RunPayloadDetails title="节点输入" value={node.inputJson} />
+                  <RunPayloadDetails title="节点输出" value={node.outputJson} />
+                  <RunPayloadDetails title="节点错误" value={node.errorJson} />
+                  <details className="overflow-hidden rounded-md border border-border bg-card">
+                    <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
+                      节点技术信息（内部标识与时间）
+                      <span className="aiflow-type-meta font-normal text-muted-foreground">
+                        展开
+                      </span>
+                    </summary>
+                    <div className="border-t border-border p-2">
+                      <DetailFields
+                        title="节点技术信息"
+                        value={{
+                          id: node.id,
+                          runId: node.runId,
+                          nodeId: node.nodeId,
+                          nodeType: node.nodeType,
+                          status: node.status,
+                          startedAt: node.startedAt,
+                          finishedAt: node.finishedAt,
+                          createdAt: node.createdAt,
+                          sequenceNo: node.sequenceNo,
+                          durationMs: node.durationMs,
+                        }}
+                      />
+                    </div>
+                  </details>
                 </div>
               </details>
             </article>
           ))}
           {!actions.length && (
-            <p className="rounded-lg border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
+            <p className="aiflow-type-body rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
               该实例尚无节点操作记录。
             </p>
           )}
@@ -306,33 +336,47 @@ function operationTimestamp(node: any) {
 
 function definitionNodeOrder(definitionSnapshot: unknown) {
   const definition = parse(definitionSnapshot);
-  if (!definition || typeof definition !== "object") return new Map<string, number>();
+  if (!definition || typeof definition !== "object")
+    return new Map<string, number>();
   const nodes = (definition as { nodes?: unknown }).nodes;
   if (!Array.isArray(nodes)) return new Map<string, number>();
-  return new Map(nodes.flatMap((node, index) => {
-    if (!node || typeof node !== "object" || !("id" in node)) return [];
-    return [[String((node as { id: unknown }).id), index] as const];
-  }));
+  return new Map(
+    nodes.flatMap((node, index) => {
+      if (!node || typeof node !== "object" || !("id" in node)) return [];
+      return [[String((node as { id: unknown }).id), index] as const];
+    })
+  );
 }
 
-export function sortInstanceActions(actions: any[], definitionSnapshot?: unknown) {
+export function sortInstanceActions(
+  actions: any[],
+  definitionSnapshot?: unknown
+) {
   const nodeOrder = definitionNodeOrder(definitionSnapshot);
   return actions
     .map((action, originalIndex) => ({ action, originalIndex }))
     .sort((left, right) => {
-      const timeDifference = operationTimestamp(right.action) - operationTimestamp(left.action);
+      const timeDifference =
+        operationTimestamp(right.action) - operationTimestamp(left.action);
       if (timeDifference) return timeDifference;
 
       const leftSequence = Number(left.action.sequenceNo);
       const rightSequence = Number(right.action.sequenceNo);
-      const leftHasSequence = Number.isInteger(leftSequence) && leftSequence > 0;
-      const rightHasSequence = Number.isInteger(rightSequence) && rightSequence > 0;
-      if (leftHasSequence && rightHasSequence) return rightSequence - leftSequence;
+      const leftHasSequence =
+        Number.isInteger(leftSequence) && leftSequence > 0;
+      const rightHasSequence =
+        Number.isInteger(rightSequence) && rightSequence > 0;
+      if (leftHasSequence && rightHasSequence)
+        return rightSequence - leftSequence;
       if (leftHasSequence !== rightHasSequence) return leftHasSequence ? -1 : 1;
 
       const leftDefinitionOrder = nodeOrder.get(String(left.action.nodeId));
       const rightDefinitionOrder = nodeOrder.get(String(right.action.nodeId));
-      if (leftDefinitionOrder !== undefined && rightDefinitionOrder !== undefined && leftDefinitionOrder !== rightDefinitionOrder) {
+      if (
+        leftDefinitionOrder !== undefined &&
+        rightDefinitionOrder !== undefined &&
+        leftDefinitionOrder !== rightDefinitionOrder
+      ) {
         return rightDefinitionOrder - leftDefinitionOrder;
       }
 
@@ -341,13 +385,28 @@ export function sortInstanceActions(actions: any[], definitionSnapshot?: unknown
     .map(({ action }) => action);
 }
 
-function Summary({ label, value }: { label: string; value: string }) {
+function Summary({
+  label,
+  value,
+  secondary,
+}: {
+  label: string;
+  value: string;
+  secondary?: string;
+}) {
   return (
-    <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3">
-      <p className="text-[10px] font-medium text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-sm font-semibold text-slate-700">
+    <div className="min-w-0 rounded-lg border border-border bg-muted p-3">
+      <p className="aiflow-type-meta font-medium text-muted-foreground">
+        {label}
+      </p>
+      <p className="aiflow-type-body mt-1 break-words font-semibold text-foreground">
         {value}
       </p>
+      {secondary && (
+        <p className="aiflow-type-code mt-1 break-all font-mono text-muted-foreground">
+          {secondary}
+        </p>
+      )}
     </div>
   );
 }
@@ -366,16 +425,16 @@ export function RunDetailDialog({
       aria-modal="true"
       aria-label="流程实例详情"
     >
-      <section className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-white shadow-2xl">
-        <header className="flex items-start justify-between border-b border-slate-100 p-5">
+      <section className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-card shadow-2xl">
+        <header className="flex items-start justify-between border-b border-border p-5">
           <div className="min-w-0">
-            <p className="text-[10px] font-bold tracking-[.18em] text-blue-600">
+            <p className="aiflow-type-meta font-bold tracking-[.18em] text-aiflow-info">
               PROCESS INSTANCE
             </p>
-            <h3 className="mt-1 text-lg font-semibold text-slate-900">
+            <h3 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
               实例详情
             </h3>
-            <p className="mt-1 break-all font-mono text-xs text-slate-500">
+            <p className="aiflow-type-meta mt-1 break-all font-mono text-muted-foreground">
               {run?.id ?? "正在读取…"}
             </p>
           </div>

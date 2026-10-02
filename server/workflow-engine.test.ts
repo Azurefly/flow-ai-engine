@@ -6,6 +6,7 @@ import {
   assertJsonSchemaValue,
   evaluateApprovalResults,
   interpolate,
+  getRecordedStateName,
   normalizeApprovalResult,
   normalizeReferenceHttpConfig,
   parseLlmModelPricingCatalog,
@@ -20,6 +21,20 @@ import {
 } from "./workflow-engine";
 
 describe("工作流变量插值", () => {
+  it("业务状态名称来自最后一条匹配当前状态的不可变事实", () => {
+    const transitions = [
+      { toStateCode: "RECEIVED", payloadJson: { stateName: "旧名称" } },
+      { toStateCode: "RECEIVED", payloadJson: '{"stateName":"已接收"}' },
+    ];
+    expect(getRecordedStateName("RECEIVED", transitions)).toBe("已接收");
+    expect(getRecordedStateName("APPROVED", transitions)).toBeNull();
+    expect(getRecordedStateName(null, transitions)).toBeNull();
+    expect(
+      getRecordedStateName("RECEIVED", [
+        { toStateCode: "RECEIVED", payloadJson: "invalid json" },
+      ])
+    ).toBeNull();
+  });
   const context = {
     input: { topic: "流程引擎" },
     nodes: { request: { body: { id: 7 } } },
@@ -54,10 +69,18 @@ describe("表单节点服务端校验", () => {
         ignored: "drop",
       })
     ).toEqual({ name: "张三", days: 3, category: "annual", internal: "fixed" });
-    expect(() => validateFormSubmission(fields, { days: 3 })).toThrow("必填字段");
-    expect(() => validateFormSubmission(fields, { name: "张三", days: "3" })).toThrow("有限数值");
-    expect(() => validateFormSubmission(fields, { name: "张三", category: "other" })).toThrow("选项范围外");
-    expect(() => validateFormSubmission(fields, { name: "张三", internal: "changed" })).toThrow("只读");
+    expect(() => validateFormSubmission(fields, { days: 3 })).toThrow(
+      "必填字段"
+    );
+    expect(() =>
+      validateFormSubmission(fields, { name: "张三", days: "3" })
+    ).toThrow("有限数值");
+    expect(() =>
+      validateFormSubmission(fields, { name: "张三", category: "other" })
+    ).toThrow("选项范围外");
+    expect(() =>
+      validateFormSubmission(fields, { name: "张三", internal: "changed" })
+    ).toThrow("只读");
   });
 });
 
@@ -72,10 +95,16 @@ describe("LLM 结构化输出边界", () => {
     },
   };
   it("校验必填字段、类型、枚举和额外字段", () => {
-    expect(() => assertJsonSchemaValue({ decision: "approved", score: 0.9 }, schema)).not.toThrow();
+    expect(() =>
+      assertJsonSchemaValue({ decision: "approved", score: 0.9 }, schema)
+    ).not.toThrow();
     expect(() => assertJsonSchemaValue({}, schema)).toThrow("缺少必填字段");
-    expect(() => assertJsonSchemaValue({ decision: "maybe" }, schema)).toThrow("枚举值");
-    expect(() => assertJsonSchemaValue({ decision: "approved", extra: true }, schema)).toThrow("未允许字段");
+    expect(() => assertJsonSchemaValue({ decision: "maybe" }, schema)).toThrow(
+      "枚举值"
+    );
+    expect(() =>
+      assertJsonSchemaValue({ decision: "approved", extra: true }, schema)
+    ).toThrow("未允许字段");
   });
 
   it("持久化输入前递归脱敏凭据和授权字段", () => {
@@ -179,12 +208,20 @@ describe("HTTP 节点 SSRF 防护", () => {
   });
 
   it("为有副作用的请求注入稳定运行幂等键，并尊重显式配置", () => {
-    const context = { runtime: { executionRunId: "run-1", executionNodeId: "notify" } };
+    const context = {
+      runtime: { executionRunId: "run-1", executionNodeId: "notify" },
+    };
     expect(withWorkflowIdempotencyHeader("POST", {}, context)).toEqual({
       "Idempotency-Key": "flow:run-1:notify",
     });
     expect(withWorkflowIdempotencyHeader("GET", {}, context)).toEqual({});
-    expect(withWorkflowIdempotencyHeader("PATCH", { "idempotency-key": "business-key" }, context)).toEqual({
+    expect(
+      withWorkflowIdempotencyHeader(
+        "PATCH",
+        { "idempotency-key": "business-key" },
+        context
+      )
+    ).toEqual({
       "idempotency-key": "business-key",
     });
   });

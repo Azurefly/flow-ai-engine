@@ -2,15 +2,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StructuredResourceForm } from "@/components/StructuredResourceForm";
 import { CreationDialog } from "@/components/CreationDialog";
+import { ResourceDetails } from "@/components/ResourceDetails";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
 import {
+  ArrowLeftRight,
   Braces,
   CalendarClock,
-  ChevronDown,
   Database,
   FileCode2,
   FileText,
-  Image,
   Loader2,
   Play,
   Plus,
@@ -18,9 +26,8 @@ import {
   Table2,
   Tags,
   Trash2,
-  Wand2,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Children, isValidElement, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 type Tab = "sources" | "assets" | "udfs" | "tags" | "plugins" | "flows";
@@ -44,6 +51,10 @@ export default function DataResourceCenter({
     projects.data?.find(project => project.id === projectId)?.name ??
     "当前业务";
   const [tab, setTab] = useState<Tab>("sources");
+  const [dataflowSection, setDataflowSection] = useState<
+    "overview" | "runs" | "schedules"
+  >("overview");
+  const [activeFlowId, setActiveFlowId] = useState("");
   const resources = trpc.data.resources.useQuery({ projectId });
   const flows = trpc.data.flows.useQuery({ projectId });
   const runs = trpc.data.runs.useQuery({ projectId, limit: 30 });
@@ -73,7 +84,7 @@ export default function DataResourceCenter({
   const createSource = trpc.data.createSource.useMutation({
     onSuccess: () => {
       invalidate();
-      toast.success("数据源草稿已创建；尚未执行真实连接测试。");
+      toast.success("数据源草稿已创建；请按类型校验登记或测试连接。");
     },
     onError: error => toast.error(error.message),
   });
@@ -138,7 +149,9 @@ export default function DataResourceCenter({
       invalidate();
       toast[result.status === "success" ? "success" : "error"](
         result.status === "success"
-          ? "数据源连接测试通过。"
+          ? result.evidence?.probe === "inline_metadata"
+            ? "内联数据源登记信息已校验；未连接外部系统。"
+            : "数据源连接测试通过。"
           : `连接测试未通过：${result.error?.message || result.errorCategory || "请查看测试证据"}`
       );
     },
@@ -191,6 +204,31 @@ export default function DataResourceCenter({
       schedule,
     ])
   );
+  const flowList = (flows.data ?? []) as any[];
+  const publishedFlows = flowList.filter(flow => flow.status === "published");
+  const selectedQueryLoading =
+    tab === "flows"
+      ? resources.isLoading ||
+        flows.isLoading ||
+        runs.isLoading ||
+        schedules.isLoading
+      : resources.isLoading;
+  const selectedQueryError =
+    tab === "flows"
+      ? resources.error || flows.error || runs.error || schedules.error
+      : resources.error;
+  const retrySelectedQueries = () => {
+    if (tab === "flows") {
+      void Promise.all([
+        resources.refetch(),
+        flows.refetch(),
+        runs.refetch(),
+        schedules.refetch(),
+      ]);
+      return;
+    }
+    void resources.refetch();
+  };
 
   const entries = useMemo(
     () => [
@@ -198,111 +236,253 @@ export default function DataResourceCenter({
         id: "sources" as const,
         label: "数据源",
         icon: Database,
-        count: resources.data?.sources.length ?? 0,
+        count: resources.isLoading
+          ? null
+          : resources.error
+            ? null
+            : (resources.data?.sources.length ?? 0),
       },
       {
         id: "assets" as const,
         label: "资源探查",
         icon: Table2,
-        count: resources.data?.assets.length ?? 0,
+        count: resources.isLoading
+          ? null
+          : resources.error
+            ? null
+            : (resources.data?.assets.length ?? 0),
       },
       {
         id: "udfs" as const,
         label: "UDF",
         icon: FileCode2,
-        count: resources.data?.udfs.length ?? 0,
+        count: resources.isLoading
+          ? null
+          : resources.error
+            ? null
+            : (resources.data?.udfs.length ?? 0),
       },
       {
         id: "tags" as const,
         label: "标签",
         icon: Tags,
-        count: resources.data?.tags.length ?? 0,
+        count: resources.isLoading
+          ? null
+          : resources.error
+            ? null
+            : (resources.data?.tags.length ?? 0),
       },
       {
         id: "plugins" as const,
         label: "项目插件",
         icon: Puzzle,
-        count: resources.data?.plugins.length ?? 0,
+        count: resources.isLoading
+          ? null
+          : resources.error
+            ? null
+            : (resources.data?.plugins.length ?? 0),
       },
       {
         id: "flows" as const,
         label: "数据流",
         icon: Braces,
-        count: flows.data?.length ?? 0,
+        count:
+          flows.isLoading || flows.error ? null : (flows.data?.length ?? 0),
       },
     ],
-    [flows.data, resources.data]
+    [
+      flows.data,
+      flows.error,
+      flows.isLoading,
+      resources.data,
+      resources.error,
+      resources.isLoading,
+    ]
   );
 
   return (
     <div data-resource-center="">
-      <div className="mb-5 border-b border-slate-200 pb-4">
-        <p className="text-[11px] font-bold tracking-[.16em] text-[#5b72a8]">
+      <div className="mb-5 border-b border-border pb-4">
+        <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
           PROJECT RESOURCE CENTER
         </p>
-        <h1 className="mt-1 text-xl font-semibold text-slate-800">
+        <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
           资源配置中心
         </h1>
-        <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
-          参考原始数据流模块集中管理项目内数据源、资源目录、函数、标签和插件。连接凭据仅能以引用形式保存，页面不会返回明文秘密。当前数据流为实验性元数据/样例执行器，数据源保存成功不代表网络、凭据或查询权限已验证。
+        <p className="aiflow-type-body mt-1 max-w-3xl text-muted-foreground">
+          管理当前业务的数据源、资源目录、函数、标签和插件。凭据只保存环境密钥引用；登记成功不代表连接或查询权限已验证。
         </p>
       </div>
-      <div className="mb-4 flex flex-wrap gap-2">
+      <label
+        data-resource-category-mobile=""
+        className="mb-4 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 lg:hidden"
+      >
+        <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
+          资源类别
+        </span>
+        <select
+          data-resource-category-select=""
+          aria-label="项目资源类别"
+          value={tab}
+          onChange={event => setTab(event.target.value as Tab)}
+          className="aiflow-type-control h-11 min-w-0 rounded-md border border-border bg-card px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        >
+          {entries.map(item => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+              {`（${item.count ?? "…"}）`}
+            </option>
+          ))}
+        </select>
+      </label>
+      <nav
+        data-resource-category-desktop=""
+        aria-label="项目资源类别"
+        className="mb-4 hidden min-w-0 gap-2 pb-1 lg:flex lg:flex-wrap"
+      >
         {entries.map(item => (
           <button
             key={item.id}
+            type="button"
+            aria-current={tab === item.id ? "page" : undefined}
             onClick={() => setTab(item.id)}
-            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors ${tab === item.id ? "border-[#b9d2ff] bg-[#eaf1ff] font-semibold text-[#245fc8]" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+            title={item.label}
+            className={`aiflow-type-control flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2 py-2 transition-colors sm:px-3 ${tab === item.id ? "border-aiflow-info-border bg-accent font-semibold text-aiflow-info" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}
           >
-            <item.icon size={15} />
-            {item.label}
-            <span className="rounded bg-white/70 px-1.5 text-[10px] text-slate-400">
-              {item.count}
+            <item.icon className="shrink-0" size={15} />
+            <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
+              {item.label}
+            </span>
+            <span className="aiflow-type-meta min-w-6 shrink-0 rounded bg-card/70 px-1.5 text-center text-muted-foreground">
+              {item.count ?? "…"}
             </span>
           </button>
         ))}
-      </div>
-      {tab === "flows" && (
-        <>
-          <DataFlowCanvasReferenceShell
-            projectName={projectName}
-            resources={resources.data as any}
-            flows={(flows.data ?? []) as any[]}
-            runs={(runs.data ?? []) as any[]}
-            onOpenWorkflow={onOpenWorkflow}
-            onTestRun={workflowId => run.mutate({ projectId, workflowId })}
-            runPending={run.isPending}
-          />
-          <DataFlowTaskSummary
-            flows={(flows.data ?? []) as any[]}
-            runs={(runs.data ?? []) as any[]}
-            schedules={(schedules.data ?? []) as any[]}
-          />
-          <DataflowCanvasUtilityActions
-            flows={(flows.data ?? []) as any[]}
-            onOpenWorkflow={onOpenWorkflow}
-          />
-          <DataflowOperationList runs={(runs.data ?? []) as any[]} />
-        </>
-      )}
-      {resources.isLoading && (
-        <div className="rounded-lg border border-slate-200 bg-white p-8 text-sm text-slate-400">
-          正在读取项目资源目录…
+      </nav>
+      {selectedQueryLoading && (
+        <div
+          role="status"
+          data-resource-loading=""
+          className="rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground"
+        >
+          正在读取当前资源类别…
         </div>
       )}
-      {(tab === "sources" || tab === "assets") && (
-        <StructuredResourceForm
-          tab={tab}
-          projectId={projectId}
-          sources={(resources.data?.sources ?? []) as any[]}
-          createSource={createSource}
-          createAsset={createAsset}
+      {!selectedQueryLoading && selectedQueryError && (
+        <div
+          role="alert"
+          data-resource-error=""
+          className="flex flex-col gap-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <p className="text-sm text-aiflow-danger">
+            当前资源未能加载，列表内容不会按空数据展示。请重试或检查服务状态。
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit border-aiflow-danger-border bg-card text-aiflow-danger"
+            onClick={retrySelectedQueries}
+          >
+            重试
+          </Button>
+        </div>
+      )}
+      {!selectedQueryLoading && !selectedQueryError && tab === "flows" && (
+        <DataflowWorkspace
+          projectName={projectName}
+          resources={resources.data as any}
+          flows={flowList}
+          publishedFlows={publishedFlows}
+          runs={(runs.data ?? []) as any[]}
+          schedules={(schedules.data ?? []) as any[]}
+          schedulesByWorkflow={scheduleByWorkflow}
+          section={dataflowSection}
+          setSection={setDataflowSection}
+          activeFlowId={activeFlowId}
+          setActiveFlowId={setActiveFlowId}
+          scheduleForm={scheduleForm}
+          setScheduleForm={setScheduleForm}
+          onOpenWorkflow={onOpenWorkflow}
+          onOpenResourceTab={setTab}
+          onRunFlow={workflowId => run.mutate({ projectId, workflowId })}
+          runPending={run.isPending}
+          onSaveSchedule={() =>
+            saveSchedule.mutate({ projectId, ...scheduleForm })
+          }
+          saveSchedulePending={saveSchedule.isPending}
+          onActivateSchedule={workflowId =>
+            activateSchedule.mutate({ projectId, workflowId })
+          }
+          activateSchedulePending={activateSchedule.isPending}
+          onPauseSchedule={workflowId =>
+            pauseSchedule.mutate({ projectId, workflowId })
+          }
+          pauseSchedulePending={pauseSchedule.isPending}
+          onDeleteSchedule={workflowId =>
+            deleteSchedule.mutateAsync({ projectId, workflowId })
+          }
+          deleteSchedulePending={deleteSchedule.isPending}
         />
       )}
-      {tab === "sources" && (
+      {!selectedQueryLoading &&
+        !selectedQueryError &&
+        (tab === "sources" || tab === "assets") && (
+          <StructuredResourceForm
+            tab={tab}
+            projectId={projectId}
+            sources={(resources.data?.sources ?? []) as any[]}
+            createSource={createSource}
+            createAsset={createAsset}
+          />
+        )}
+      {!selectedQueryLoading && !selectedQueryError && tab === "sources" && (
         <ResourceTable
           columns={["名称", "类型", "状态", "最近校验", "操作"]}
           empty="尚未配置数据源。"
+          mobileCards={(resources.data?.sources ?? []).map((source: any) => (
+            <ResourceTableCard
+              key={source.id}
+              primary={source.name}
+              secondary={source.connection?.description || "连接元数据已隐藏"}
+              status={<State value={source.status} />}
+              fields={[
+                { label: "类型", value: source.sourceType },
+                {
+                  label: "最近校验",
+                  value: source.lastTestedAt
+                    ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
+                    : "—",
+                },
+              ]}
+              actions={
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="aiflow-type-control min-h-11 flex-1"
+                    disabled={testSource.isPending}
+                    onClick={() =>
+                      testSource.mutate({ projectId, sourceId: source.id })
+                    }
+                  >
+                    {source.sourceType === "inline" ? "校验登记" : "测试连接"}
+                  </Button>
+                  <DeleteButton
+                    actionLabel="删除数据源"
+                    resourceName={source.name}
+                    visibleLabel="删除数据源"
+                    onDelete={() =>
+                      removeSource.mutateAsync({
+                        projectId,
+                        sourceId: source.id,
+                      })
+                    }
+                  />
+                </>
+              }
+            />
+          ))}
         >
           {(resources.data?.sources ?? []).map((source: any) => (
             <tr key={source.id}>
@@ -310,13 +490,13 @@ export default function DataResourceCenter({
                 primary={source.name}
                 secondary={source.connection?.description || "连接元数据已隐藏"}
               />
-              <td className="px-4 py-3 text-xs text-slate-600">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {source.sourceType}
               </td>
               <td className="px-4 py-3">
                 <State value={source.status} />
               </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {source.lastTestedAt
                   ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
                   : "—"}
@@ -326,17 +506,19 @@ export default function DataResourceCenter({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="mr-2 h-7 text-xs"
+                  className="aiflow-type-control mr-2 h-10"
                   disabled={testSource.isPending}
                   onClick={() =>
                     testSource.mutate({ projectId, sourceId: source.id })
                   }
                 >
-                  测试连接
+                  {source.sourceType === "inline" ? "校验登记" : "测试连接"}
                 </Button>
                 <DeleteButton
-                  onClick={() =>
-                    removeSource.mutate({ projectId, sourceId: source.id })
+                  actionLabel="删除数据源"
+                  resourceName={source.name}
+                  onDelete={() =>
+                    removeSource.mutateAsync({ projectId, sourceId: source.id })
                   }
                 />
               </td>
@@ -344,10 +526,38 @@ export default function DataResourceCenter({
           ))}
         </ResourceTable>
       )}
-      {tab === "assets" && (
+      {!selectedQueryLoading && !selectedQueryError && tab === "assets" && (
         <ResourceTable
           columns={["资源名称", "类型 / 数据源", "结构 / 样本", "状态", "操作"]}
           empty="尚无已探查资源。"
+          mobileCards={(resources.data?.assets ?? []).map((asset: any) => (
+            <ResourceTableCard
+              key={asset.id}
+              primary={asset.name}
+              secondary={asset.sourceName || "未关联数据源"}
+              status={<State value={asset.status} />}
+              fields={[
+                { label: "资源类型", value: asset.assetType },
+                {
+                  label: "结构 / 样本",
+                  value: `${asset.schema?.length ?? 0} 字段 · ${asset.sample?.length ?? 0} 行样本`,
+                },
+              ]}
+              actions={
+                <>
+                  <ResourceDetails asset={asset} />
+                  <DeleteButton
+                    actionLabel="删除资源"
+                    resourceName={asset.name}
+                    visibleLabel="删除资源"
+                    onDelete={() =>
+                      removeAsset.mutateAsync({ projectId, assetId: asset.id })
+                    }
+                  />
+                </>
+              }
+            />
+          ))}
         >
           {(resources.data?.assets ?? []).map((asset: any) => (
             <tr key={asset.id}>
@@ -355,10 +565,10 @@ export default function DataResourceCenter({
                 primary={asset.name}
                 secondary={asset.sourceName || "未关联数据源"}
               />
-              <td className="px-4 py-3 text-xs text-slate-600">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {asset.assetType}
               </td>
-              <td className="px-4 py-3 text-xs text-slate-500">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {asset.schema?.length ?? 0} 字段 · {asset.sample?.length ?? 0}{" "}
                 行样本
               </td>
@@ -366,9 +576,12 @@ export default function DataResourceCenter({
                 <State value={asset.status} />
               </td>
               <td className="px-4 py-3 text-right">
+                <ResourceDetails asset={asset} />
                 <DeleteButton
-                  onClick={() =>
-                    removeAsset.mutate({ projectId, assetId: asset.id })
+                  actionLabel="删除资源"
+                  resourceName={asset.name}
+                  onDelete={() =>
+                    removeAsset.mutateAsync({ projectId, assetId: asset.id })
                   }
                 />
               </td>
@@ -376,8 +589,8 @@ export default function DataResourceCenter({
           ))}
         </ResourceTable>
       )}
-      {tab === "udfs" && (
-        <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+      {!selectedQueryLoading && !selectedQueryError && tab === "udfs" && (
+        <section className="grid min-w-0 gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
             title="注册 UDF"
             description="登记函数元数据；数据流仅允许引用已审核 UDF，运行时不执行任意上传代码。"
@@ -392,47 +605,77 @@ export default function DataResourceCenter({
             }
             pending={createUdf.isPending}
           >
-            <Input
-              placeholder="函数名称"
-              value={udfForm.name}
-              onChange={event =>
-                setUdfForm({ ...udfForm, name: event.target.value })
-              }
-              required
-            />
-            <select
-              className="h-9 rounded border border-slate-200 bg-white px-2 text-sm"
-              value={udfForm.udfType}
-              onChange={event =>
-                setUdfForm({
-                  ...udfForm,
-                  udfType: event.target.value as typeof udfForm.udfType,
-                })
-              }
-            >
-              <option value="javascript">JavaScript</option>
-              <option value="sql">SQL</option>
-              <option value="python">Python</option>
-              <option value="jar">JAR</option>
-            </select>
-            <Input
-              placeholder="函数说明"
-              value={udfForm.description}
-              onChange={event =>
-                setUdfForm({ ...udfForm, description: event.target.value })
-              }
-            />
-            <Input
-              placeholder="返回类型"
-              value={udfForm.returnType}
-              onChange={event =>
-                setUdfForm({ ...udfForm, returnType: event.target.value })
-              }
-            />
+            <ResourceField label="函数名称">
+              <Input
+                placeholder="例如：maskSensitivePhone"
+                value={udfForm.name}
+                onChange={event =>
+                  setUdfForm({ ...udfForm, name: event.target.value })
+                }
+                required
+              />
+            </ResourceField>
+            <ResourceField label="函数类型">
+              <select
+                className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
+                value={udfForm.udfType}
+                onChange={event =>
+                  setUdfForm({
+                    ...udfForm,
+                    udfType: event.target.value as typeof udfForm.udfType,
+                  })
+                }
+              >
+                <option value="javascript">JavaScript</option>
+                <option value="sql">SQL</option>
+                <option value="python">Python</option>
+                <option value="jar">JAR</option>
+              </select>
+            </ResourceField>
+            <ResourceField label="函数说明">
+              <Input
+                placeholder="说明函数用途和适用范围"
+                value={udfForm.description}
+                onChange={event =>
+                  setUdfForm({ ...udfForm, description: event.target.value })
+                }
+              />
+            </ResourceField>
+            <ResourceField label="返回类型">
+              <Input
+                placeholder="例如：string"
+                value={udfForm.returnType}
+                onChange={event =>
+                  setUdfForm({ ...udfForm, returnType: event.target.value })
+                }
+              />
+            </ResourceField>
           </ResourceForm>
           <ResourceTable
             columns={["函数", "类型", "描述", "状态", "操作"]}
             empty="尚未注册 UDF。"
+            mobileCards={(resources.data?.udfs ?? []).map((udf: any) => (
+              <ResourceTableCard
+                key={udf.id}
+                primary={udf.name}
+                secondary={udf.returnType || "未声明返回类型"}
+                status={<State value={udf.status} />}
+                fields={[
+                  { label: "函数类型", value: udf.udfType },
+                  { label: "说明", value: udf.description || "—" },
+                ]}
+                actions={
+                  <DeleteButton
+                    actionLabel="删除 UDF"
+                    resourceName={udf.name}
+                    visibleLabel="删除 UDF"
+                    onDelete={() =>
+                      removeUdf.mutateAsync({ projectId, udfId: udf.id })
+                    }
+                  />
+                }
+              />
+            ))}
           >
             {(resources.data?.udfs ?? []).map((udf: any) => (
               <tr key={udf.id}>
@@ -440,19 +683,26 @@ export default function DataResourceCenter({
                   primary={udf.name}
                   secondary={udf.returnType || "未声明返回类型"}
                 />
-                <td className="px-4 py-3 text-xs text-slate-600">
+                <td className="px-4 py-3 text-xs text-muted-foreground">
                   {udf.udfType}
                 </td>
-                <td className="max-w-[300px] truncate px-4 py-3 text-xs text-slate-500">
-                  {udf.description || "—"}
+                <td className="max-w-[300px] px-4 py-3">
+                  <p
+                    className="aiflow-type-body line-clamp-2 break-words text-muted-foreground"
+                    title={udf.description || undefined}
+                  >
+                    {udf.description || "—"}
+                  </p>
                 </td>
                 <td className="px-4 py-3">
                   <State value={udf.status} />
                 </td>
                 <td className="px-4 py-3 text-right">
                   <DeleteButton
-                    onClick={() =>
-                      removeUdf.mutate({ projectId, udfId: udf.id })
+                    actionLabel="删除 UDF"
+                    resourceName={udf.name}
+                    onDelete={() =>
+                      removeUdf.mutateAsync({ projectId, udfId: udf.id })
                     }
                   />
                 </td>
@@ -461,22 +711,24 @@ export default function DataResourceCenter({
           </ResourceTable>
         </section>
       )}
-      {tab === "tags" && (
-        <section className="grid gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
+      {!selectedQueryLoading && !selectedQueryError && tab === "tags" && (
+        <section className="grid min-w-0 gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
           <ResourceForm
             title="新建标签"
             description="项目级数据标签用于资源分类，不会跨越项目可见范围。"
             onSubmit={() => createTag.mutateAsync({ projectId, name: tagName })}
             pending={createTag.isPending}
           >
-            <Input
-              placeholder="标签名称"
-              value={tagName}
-              onChange={event => setTagName(event.target.value)}
-              required
-            />
+            <ResourceField label="标签名称">
+              <Input
+                placeholder="例如：核心业务指标"
+                value={tagName}
+                onChange={event => setTagName(event.target.value)}
+                required
+              />
+            </ResourceField>
           </ResourceForm>
-          <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="rounded-lg border border-border bg-card p-5">
             <div className="flex flex-wrap gap-2">
               {(resources.data?.tags ?? []).map((tag: any) => (
                 <span
@@ -492,25 +744,26 @@ export default function DataResourceCenter({
                     style={{ backgroundColor: tag.color }}
                   />
                   {tag.name}
-                  <button
-                    className="ml-1 text-current/70 hover:text-red-600"
-                    onClick={() =>
-                      removeTag.mutate({ projectId, tagId: tag.id })
+                  <DeleteButton
+                    actionLabel="删除标签"
+                    resourceName={tag.name}
+                    onDelete={() =>
+                      removeTag.mutateAsync({ projectId, tagId: tag.id })
                     }
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  />
                 </span>
               ))}
               {!(resources.data?.tags ?? []).length && (
-                <span className="text-sm text-slate-400">尚未创建标签。</span>
+                <span className="text-sm text-muted-foreground">
+                  尚未创建标签。
+                </span>
               )}
             </div>
           </div>
         </section>
       )}
-      {tab === "plugins" && (
-        <section className="grid gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+      {!selectedQueryLoading && !selectedQueryError && tab === "plugins" && (
+        <section className="grid min-w-0 gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
             title="登记项目插件"
             description="仅保存已批准插件的配置元数据；插件运行仍受服务端安全策略控制。"
@@ -525,49 +778,80 @@ export default function DataResourceCenter({
             }
             pending={createPlugin.isPending}
           >
-            <Input
-              placeholder="插件名称"
-              value={pluginForm.name}
-              onChange={event =>
-                setPluginForm({ ...pluginForm, name: event.target.value })
-              }
-              required
-            />
-            <select
-              className="h-9 rounded border border-slate-200 bg-white px-2 text-sm"
-              value={pluginForm.pluginType}
-              onChange={event =>
-                setPluginForm({
-                  ...pluginForm,
-                  pluginType: event.target
-                    .value as typeof pluginForm.pluginType,
-                })
-              }
-            >
-              <option value="transform">转换</option>
-              <option value="connector">连接器</option>
-              <option value="visualization">可视化</option>
-            </select>
-            <Input
-              placeholder="版本"
-              value={pluginForm.version}
-              onChange={event =>
-                setPluginForm({ ...pluginForm, version: event.target.value })
-              }
-              required
-            />
+            <ResourceField label="插件名称">
+              <Input
+                placeholder="例如：order-transformer"
+                value={pluginForm.name}
+                onChange={event =>
+                  setPluginForm({ ...pluginForm, name: event.target.value })
+                }
+                required
+              />
+            </ResourceField>
+            <ResourceField label="插件类型">
+              <select
+                className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
+                value={pluginForm.pluginType}
+                onChange={event =>
+                  setPluginForm({
+                    ...pluginForm,
+                    pluginType: event.target
+                      .value as typeof pluginForm.pluginType,
+                  })
+                }
+              >
+                <option value="transform">转换</option>
+                <option value="connector">连接器</option>
+                <option value="visualization">可视化</option>
+              </select>
+            </ResourceField>
+            <ResourceField label="版本">
+              <Input
+                placeholder="例如：1.0.0"
+                value={pluginForm.version}
+                onChange={event =>
+                  setPluginForm({ ...pluginForm, version: event.target.value })
+                }
+                required
+              />
+            </ResourceField>
           </ResourceForm>
           <ResourceTable
             columns={["插件", "类型", "版本", "状态", "操作"]}
             empty="尚未登记项目插件。"
+            mobileCards={(resources.data?.plugins ?? []).map((plugin: any) => (
+              <ResourceTableCard
+                key={plugin.id}
+                primary={plugin.name}
+                secondary="项目级插件"
+                status={<State value={plugin.status} />}
+                fields={[
+                  { label: "插件类型", value: plugin.pluginType },
+                  { label: "版本", value: plugin.version },
+                ]}
+                actions={
+                  <DeleteButton
+                    actionLabel="删除插件"
+                    resourceName={plugin.name}
+                    visibleLabel="删除插件"
+                    onDelete={() =>
+                      removePlugin.mutateAsync({
+                        projectId,
+                        pluginId: plugin.id,
+                      })
+                    }
+                  />
+                }
+              />
+            ))}
           >
             {(resources.data?.plugins ?? []).map((plugin: any) => (
               <tr key={plugin.id}>
                 <Cell primary={plugin.name} secondary="项目级插件" />
-                <td className="px-4 py-3 text-xs text-slate-600">
+                <td className="px-4 py-3 text-xs text-muted-foreground">
                   {plugin.pluginType}
                 </td>
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">
+                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                   {plugin.version}
                 </td>
                 <td className="px-4 py-3">
@@ -575,8 +859,13 @@ export default function DataResourceCenter({
                 </td>
                 <td className="px-4 py-3 text-right">
                   <DeleteButton
-                    onClick={() =>
-                      removePlugin.mutate({ projectId, pluginId: plugin.id })
+                    actionLabel="删除插件"
+                    resourceName={plugin.name}
+                    onDelete={() =>
+                      removePlugin.mutateAsync({
+                        projectId,
+                        pluginId: plugin.id,
+                      })
                     }
                   />
                 </td>
@@ -585,311 +874,17 @@ export default function DataResourceCenter({
           </ResourceTable>
         </section>
       )}
-      {tab === "flows" && (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="grid gap-4">
-            <ResourceTable
-              columns={["数据流", "发布状态", "运行次数", "调度", "操作"]}
-              empty="尚未创建数据流程。请从流程设计中心创建“数据流程”。"
-            >
-              {(flows.data ?? []).map((flow: any) => {
-                const schedule: any = scheduleByWorkflow.get(flow.id);
-                return (
-                  <tr key={flow.id}>
-                    <Cell
-                      primary={flow.name}
-                      secondary={`${flow.definition?.nodes?.length ?? 0} 个画布节点`}
-                    />
-                    <td className="px-4 py-3">
-                      <State
-                        value={
-                          flow.status === "published" ? "published" : "draft"
-                        }
-                      />
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {flow.dataflowRunCount}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">
-                      {schedule
-                        ? `${schedule.status === "active" ? "已启用" : "草稿 / 暂停"} · ${schedule.cronExpression}`
-                        : "未配置"}
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <button
-                        className="mr-3 text-xs text-[#245fc8] hover:underline"
-                        onClick={() => onOpenWorkflow(flow.id)}
-                      >
-                        设计
-                      </button>
-                      <Button
-                        size="sm"
-                        className="mr-2 h-7 bg-emerald-600 text-xs hover:bg-emerald-500"
-                        disabled={flow.status !== "published" || run.isPending}
-                        onClick={() =>
-                          run.mutate({ projectId, workflowId: flow.id })
-                        }
-                      >
-                        <Play size={12} />
-                        运行
-                      </Button>
-                      {schedule && (
-                        <>
-                          {schedule.status === "active" ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mr-2 h-7 text-xs"
-                              disabled={pauseSchedule.isPending}
-                              onClick={() =>
-                                pauseSchedule.mutate({
-                                  projectId,
-                                  workflowId: flow.id,
-                                })
-                              }
-                            >
-                              暂停计划
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="mr-2 h-7 text-xs"
-                              disabled={activateSchedule.isPending}
-                              onClick={() =>
-                                activateSchedule.mutate({
-                                  projectId,
-                                  workflowId: flow.id,
-                                })
-                              }
-                            >
-                              启用计划
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-red-600 hover:text-red-700"
-                            disabled={deleteSchedule.isPending}
-                            onClick={() =>
-                              deleteSchedule.mutate({
-                                projectId,
-                                workflowId: flow.id,
-                              })
-                            }
-                          >
-                            删除计划
-                          </Button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </ResourceTable>
-            <form
-              className="grid gap-3 rounded-lg border border-[#cbd9f5] bg-white p-4 shadow-sm md:grid-cols-[1.3fr_1fr_auto]"
-              onSubmit={event => {
-                event.preventDefault();
-                saveSchedule.mutate({ projectId, ...scheduleForm });
-              }}
-            >
-              <div>
-                <p className="font-semibold text-slate-800">数据流调度草稿</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  使用六段 UTC 表达式（秒 分 时 日 月
-                  星期）。保存草稿后，可由有项目编辑权限的成员启用或暂停托管计划。
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <select
-                  className="h-9 rounded border border-slate-200 bg-white px-2 text-sm"
-                  value={scheduleForm.workflowId}
-                  onChange={event =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      workflowId: event.target.value,
-                    })
-                  }
-                  required
-                >
-                  <option value="">选择已发布数据流</option>
-                  {(flows.data ?? [])
-                    .filter((flow: any) => flow.status === "published")
-                    .map((flow: any) => (
-                      <option key={flow.id} value={flow.id}>
-                        {flow.name}
-                      </option>
-                    ))}
-                </select>
-                <Input
-                  className="font-mono text-xs"
-                  value={scheduleForm.cronExpression}
-                  onChange={event =>
-                    setScheduleForm({
-                      ...scheduleForm,
-                      cronExpression: event.target.value,
-                    })
-                  }
-                  placeholder="0 0 9 * * *"
-                  required
-                />
-              </div>
-              <Button
-                className="self-end bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
-                disabled={saveSchedule.isPending}
-              >
-                {saveSchedule.isPending && (
-                  <Loader2 className="animate-spin" size={14} />
-                )}
-                保存草稿
-              </Button>
-            </form>
-          </div>
-          <div className="rounded-lg border border-slate-200 bg-white">
-            <div className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">
-              数据流运行审计
-            </div>
-            <div className="max-h-[560px] overflow-y-auto">
-              {(runs.data ?? []).map((item: any) => (
-                <details
-                  key={item.id}
-                  className="border-b border-slate-100 p-4"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm">
-                    <div>
-                      <p className="font-medium text-slate-700">
-                        {item.workflowName}
-                      </p>
-                      <p className="mt-1 font-mono text-[10px] text-slate-400">
-                        {item.id.slice(0, 8)} · {item.triggerType}
-                      </p>
-                    </div>
-                    <State value={item.status} />
-                  </summary>
-                  <pre className="mt-3 max-h-44 overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-200">
-                    {JSON.stringify(item.output ?? item.error ?? {}, null, 2)}
-                  </pre>
-                </details>
-              ))}
-              {!(runs.data ?? []).length && (
-                <p className="p-6 text-center text-sm text-slate-400">
-                  尚无数据流运行记录。
-                </p>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
     </div>
   );
 }
 
-function DataflowCanvasUtilityActions({
-  flows,
-  onOpenWorkflow,
-}: {
-  flows: any[];
-  onOpenWorkflow: (workflowId: string) => void;
-}) {
-  const flow = flows[0];
-  const openDesigner = (action: string) => {
-    if (!flow) return;
-    toast.message(`已打开“${flow.name}”设计器，可继续${action}。`);
-    onOpenWorkflow(flow.id);
-  };
-  return (
-    <section
-      dataflow-canvas-utility-actions=""
-      className="mb-4 flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between"
-    >
-      <div>
-        <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
-          CANVAS UTILITIES
-        </p>
-        <h2 className="mt-1 text-sm font-semibold text-slate-800">
-          画布辅助工具
-        </h2>
-        <p className="mt-1 text-xs text-slate-500">
-          沿用原始数据流画布入口；当前安全设计器中执行保存图片或整理画布，不会在资源中心修改数据流定义。
-        </p>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!flow}
-          onClick={() => openDesigner("保存画布图片")}
-        >
-          <Image size={14} />
-          保存为图片
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!flow}
-          onClick={() => openDesigner("整理画布")}
-        >
-          <Wand2 size={14} />
-          整理画布
-        </Button>
-      </div>
-    </section>
-  );
-}
-function DataFlowTaskSummary({
-  flows,
+function DataflowOperationList({
   runs,
-  schedules,
+  projectName,
 }: {
-  flows: any[];
   runs: any[];
-  schedules: any[];
+  projectName: string;
 }) {
-  const flow = flows[0];
-  const latestRun = runs.find(run => run.workflowId === flow?.id);
-  const schedule = schedules.find(item => item.workflowId === flow?.id);
-  return (
-    <details
-      dataflow-task-summary=""
-      className="mb-0 border-x border-b border-slate-200 bg-white"
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2 text-sm font-semibold text-slate-700">
-        <span>任务详情</span>
-        <span className="text-xs font-normal text-slate-400">
-          查看当前受权数据流摘要
-        </span>
-      </summary>
-      <div className="grid gap-px border-t border-slate-100 bg-slate-100 text-xs sm:grid-cols-3">
-        <div className="bg-white p-3">
-          <p className="text-slate-400">数据流</p>
-          <p className="mt-1 font-medium text-slate-800">
-            {flow?.name || "暂无数据流"}
-          </p>
-        </div>
-        <div className="bg-white p-3">
-          <p className="text-slate-400">最近运行</p>
-          <p className="mt-1 font-medium text-slate-800">
-            {latestRun
-              ? `${latestRun.status === "success" ? "成功" : latestRun.status} · ${formatDataflowTime(latestRun.finishedAt ?? latestRun.startedAt)}`
-              : "尚无运行记录"}
-          </p>
-        </div>
-        <div className="bg-white p-3">
-          <p className="text-slate-400">托管计划</p>
-          <p className="mt-1 font-medium text-slate-800">
-            {schedule
-              ? `${schedule.status === "active" ? "已启用" : "草稿 / 暂停"} · ${schedule.cronExpression}`
-              : "未配置"}
-          </p>
-        </div>
-      </div>
-    </details>
-  );
-}
-function DataflowOperationList({ runs }: { runs: any[] }) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
   const visibleRuns = runs.filter(run =>
@@ -900,114 +895,191 @@ function DataflowOperationList({ runs }: { runs: any[] }) {
   const expandedRun = runs.find(run => run.id === expandedRunId);
   return (
     <section
-      dataflow-operation-list=""
-      className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
+      dataflow-run-list=""
+      className="overflow-hidden rounded-lg border border-border bg-card"
     >
-      <div className="flex flex-col gap-2 border-b border-slate-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
-            DATAFLOW PROCESS DETAIL
-          </p>
-          <h2 className="mt-1 text-sm font-semibold text-slate-800">
-            已操作流程列表
+          <h2 className="aiflow-type-section-title font-semibold text-foreground">
+            运行记录与审计
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            仅展示当前项目中具备查看权限的数据流运行审计；结束时间来自服务端真实完成记录。
+          <p className="aiflow-type-body mt-1 max-w-2xl text-muted-foreground">
+            {projectName} · 当前接口最多返回最近 30
+            条；关键词筛选仅覆盖已加载记录。
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="grid min-w-0 gap-2 sm:flex sm:items-center">
           <Input
-            className="h-8 w-full min-w-[220px] text-xs sm:w-[280px]"
-            placeholder="请输入关键词按 Enter 键搜索"
+            className="aiflow-type-body h-11 w-full min-w-0 sm:h-9 sm:w-[280px] xl:h-8 xl:min-w-[220px]"
+            aria-label="搜索已加载的运行记录"
+            placeholder="搜索流程、触发人或运行 ID"
             value={keyword}
             onChange={event => setKeyword(event.target.value)}
           />
-          <span className="whitespace-nowrap rounded bg-slate-100 px-2 py-1 text-xs text-slate-600">
-            {visibleRuns.length} 条运行记录
+          <span className="aiflow-type-meta w-fit whitespace-nowrap rounded bg-muted px-2 py-1 text-muted-foreground">
+            {visibleRuns.length} / {runs.length} 条匹配
           </span>
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[960px] text-left text-sm">
-          <thead className="bg-[#f8faff] text-xs font-medium text-slate-500">
-            <tr>
-              <th className="px-4 py-3 whitespace-nowrap">操作 ID</th>
-              <th className="px-4 py-3 whitespace-nowrap">业务名称</th>
-              <th className="px-4 py-3 whitespace-nowrap">流程名称</th>
-              <th className="px-4 py-3 whitespace-nowrap">启动时间</th>
-              <th className="px-4 py-3 whitespace-nowrap">结束时间</th>
-              <th className="px-4 py-3 whitespace-nowrap">状态</th>
-              <th className="px-4 py-3 text-right whitespace-nowrap">操作</th>
-            </tr>
-          </thead>
-          <tbody>
+      {visibleRuns.length > 0 ? (
+        <>
+          <div
+            dataflow-run-cards=""
+            role="list"
+            aria-label="数据流运行记录"
+            className="divide-y divide-border xl:hidden"
+          >
             {visibleRuns.map(run => (
-              <tr
-                key={run.id}
-                className="border-t border-slate-100 hover:bg-blue-50/40"
-              >
-                <td className="px-4 py-3 font-mono text-xs text-slate-500">
-                  {String(run.id).slice(0, 8)}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-600">当前业务</td>
-                <td className="px-4 py-3">
-                  <p className="font-medium text-slate-800">
-                    {run.workflowName}
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-slate-400">
-                    {run.triggerType === "schedule" ? "托管调度" : "手动运行"} ·{" "}
-                    {run.triggerName || "系统用户"}
-                  </p>
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500">
-                  {formatDataflowTime(run.startedAt ?? run.createdAt)}
-                </td>
-                <td className="px-4 py-3 text-xs text-slate-500">
-                  {formatDataflowTime(run.finishedAt)}
-                </td>
-                <td className="px-4 py-3">
+              <article role="listitem" key={run.id} className="space-y-3 p-4">
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="aiflow-type-card-title break-words font-medium text-foreground">
+                      {run.workflowName}
+                    </h3>
+                    <p className="aiflow-type-meta mt-1 break-words text-muted-foreground">
+                      {projectName}
+                    </p>
+                  </div>
                   <State value={run.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-[#245fc8]"
-                    onClick={() =>
-                      setExpandedRunId(current =>
-                        current === run.id ? null : run.id
-                      )
-                    }
-                  >
-                    {expandedRunId === run.id ? "收起详情" : "查看审计"}
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {!visibleRuns.length && (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-12 text-center text-sm text-slate-400"
+                </div>
+                <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3">
+                  <div className="min-w-0">
+                    <dt className="aiflow-type-meta text-muted-foreground">
+                      操作 ID
+                    </dt>
+                    <dd className="aiflow-type-code mt-1 break-all font-mono text-foreground">
+                      {String(run.id).slice(0, 8)}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="aiflow-type-meta text-muted-foreground">
+                      触发方式 / 人员
+                    </dt>
+                    <dd className="aiflow-type-body mt-1 break-words text-foreground">
+                      {run.triggerType === "schedule" ? "托管调度" : "手动运行"}{" "}
+                      · {run.triggerName || "系统用户"}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="aiflow-type-meta text-muted-foreground">
+                      启动时间
+                    </dt>
+                    <dd className="aiflow-type-meta mt-1 break-words text-foreground">
+                      {formatDataflowTime(run.startedAt ?? run.createdAt)}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="aiflow-type-meta text-muted-foreground">
+                      结束时间
+                    </dt>
+                    <dd className="aiflow-type-meta mt-1 break-words text-foreground">
+                      {formatDataflowTime(run.finishedAt)}
+                    </dd>
+                  </div>
+                </dl>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="aiflow-type-control min-h-11 w-full text-aiflow-info"
+                  aria-expanded={expandedRunId === run.id}
+                  onClick={() =>
+                    setExpandedRunId(current =>
+                      current === run.id ? null : run.id
+                    )
+                  }
                 >
-                  {keyword
-                    ? "未找到匹配的已操作流程。"
-                    : "当前项目尚无数据流运行记录。"}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  {expandedRunId === run.id ? "收起详情" : "查看审计详情"}
+                </Button>
+              </article>
+            ))}
+          </div>
+          <div
+            dataflow-run-table=""
+            className="hidden overflow-x-auto xl:block"
+          >
+            <table className="w-full min-w-[960px] text-left text-sm">
+              <thead className="bg-muted text-sm font-medium text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 whitespace-nowrap">操作 ID</th>
+                  <th className="px-4 py-3 whitespace-nowrap">业务名称</th>
+                  <th className="px-4 py-3 whitespace-nowrap">流程名称</th>
+                  <th className="px-4 py-3 whitespace-nowrap">启动时间</th>
+                  <th className="px-4 py-3 whitespace-nowrap">结束时间</th>
+                  <th className="px-4 py-3 whitespace-nowrap">状态</th>
+                  <th className="px-4 py-3 text-right whitespace-nowrap">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRuns.map(run => (
+                  <tr
+                    key={run.id}
+                    className="border-t border-border hover:bg-aiflow-info-surface/40"
+                  >
+                    <td className="aiflow-type-code px-4 py-3 font-mono text-muted-foreground">
+                      {String(run.id).slice(0, 8)}
+                    </td>
+                    <td className="aiflow-type-body px-4 py-3 text-muted-foreground">
+                      {projectName}
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-foreground">
+                        {run.workflowName}
+                      </p>
+                      <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
+                        {run.triggerType === "schedule"
+                          ? "托管调度"
+                          : "手动运行"}{" "}
+                        · {run.triggerName || "系统用户"}
+                      </p>
+                    </td>
+                    <td className="aiflow-type-meta px-4 py-3 text-muted-foreground">
+                      {formatDataflowTime(run.startedAt ?? run.createdAt)}
+                    </td>
+                    <td className="aiflow-type-meta px-4 py-3 text-muted-foreground">
+                      {formatDataflowTime(run.finishedAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <State value={run.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-aiflow-info"
+                        onClick={() =>
+                          setExpandedRunId(current =>
+                            current === run.id ? null : run.id
+                          )
+                        }
+                      >
+                        {expandedRunId === run.id ? "收起详情" : "查看审计"}
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div
+          role="status"
+          className="px-4 py-10 text-center text-sm text-muted-foreground"
+        >
+          {keyword ? "未找到匹配的运行记录。" : "当前项目尚无数据流运行记录。"}
+        </div>
+      )}
       {expandedRun && (
-        <div className="border-t border-slate-100 bg-slate-50 p-4">
+        <div className="border-t border-border bg-muted p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-slate-800">
+              <p className="text-sm font-semibold text-foreground">
                 运行详情 · {String(expandedRun.id).slice(0, 8)}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="aiflow-type-meta mt-1 text-muted-foreground">
                 触发人：{expandedRun.triggerName || "系统用户"} · 耗时：
                 {expandedRun.durationMs === null ||
                 expandedRun.durationMs === undefined
@@ -1017,24 +1089,225 @@ function DataflowOperationList({ runs }: { runs: any[] }) {
             </div>
             <State value={expandedRun.status} />
           </div>
-          <details className="mt-3 rounded border border-slate-200 bg-white p-3">
-            <summary className="cursor-pointer text-xs font-medium text-slate-700">
+          <details className="mt-3 min-w-0 rounded border border-border bg-card p-3">
+            <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center font-medium text-foreground">
               查看运行结果或报错信息
             </summary>
-            <pre className="mt-3 max-h-52 overflow-auto rounded bg-slate-950 p-3 text-[11px] leading-5 text-emerald-200">
-              {JSON.stringify(
-                expandedRun.output ??
-                  expandedRun.error ?? { message: "当前运行未生成额外输出。" },
-                null,
-                2
-              )}
-            </pre>
+            <DataflowRunOutput run={expandedRun} />
           </details>
         </div>
       )}
     </section>
   );
 }
+
+function parseDataflowResult(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function formatDataflowValue(value: unknown): string {
+  if (value === null || value === undefined) return "—";
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  if (!text) return String(value);
+  return text.length > 96 ? `${text.slice(0, 93)}…` : text;
+}
+
+function DataflowRunOutput({ run }: { run: any }) {
+  const [showRaw, setShowRaw] = useState(false);
+  const rawResult = run.output ??
+    run.error ?? { message: "当前运行未生成额外输出。" };
+  const result = parseDataflowResult(rawResult) as any;
+  const nodes = Array.isArray(result?.nodes) ? result.nodes : [];
+  const terminals = Array.isArray(result?.terminals) ? result.terminals : [];
+  const terminal = terminals.find((item: any) => Array.isArray(item?.rows));
+  const lastNode = [...nodes]
+    .reverse()
+    .find((node: any) => Array.isArray(node?.output?.rows));
+  const terminalRows = terminal?.rows ?? lastNode?.output?.rows ?? [];
+  const previewRows = terminalRows.slice(0, 3);
+  const columns = Object.keys(previewRows[0] ?? {}).slice(0, 6);
+  const rowCount = terminal ? terminalRows.length : (lastNode?.rowCount ?? "—");
+  const errorMessage =
+    result && typeof result === "object" && "message" in result
+      ? String(result.message)
+      : typeof result === "string"
+        ? result
+        : "运行失败，展开原始数据可查看完整错误信息。";
+  const visibleErrorMessage =
+    errorMessage.length > 240
+      ? `${errorMessage.slice(0, 237)}…（完整错误见原始数据）`
+      : errorMessage;
+  const rawText = useMemo(() => {
+    if (!showRaw) return "";
+    return typeof rawResult === "string"
+      ? rawResult
+      : (JSON.stringify(rawResult, null, 2) ?? String(rawResult));
+  }, [rawResult, showRaw]);
+
+  return (
+    <div dataflow-output-summary="" className="mt-3 space-y-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="rounded-md border border-border bg-muted px-3 py-2">
+          <p className="aiflow-type-meta text-muted-foreground">执行节点</p>
+          <p className="aiflow-type-body mt-1 font-semibold text-foreground">
+            {nodes.length || "—"}
+          </p>
+        </div>
+        <div className="rounded-md border border-border bg-muted px-3 py-2">
+          <p className="aiflow-type-meta text-muted-foreground">最终结果行数</p>
+          <p className="aiflow-type-body mt-1 font-semibold text-foreground">
+            {rowCount}
+          </p>
+        </div>
+        <div className="col-span-2 rounded-md border border-border bg-muted px-3 py-2 sm:col-span-1">
+          <p className="aiflow-type-meta text-muted-foreground">运行状态</p>
+          <div className="mt-1">
+            <State value={run.status} />
+          </div>
+        </div>
+      </div>
+
+      {run.error && (
+        <div
+          role="alert"
+          className="rounded-md border border-aiflow-danger-border bg-aiflow-danger-surface px-3 py-2 text-sm text-aiflow-danger"
+        >
+          {visibleErrorMessage}
+        </div>
+      )}
+
+      {columns.length > 0 ? (
+        <section className="min-w-0 rounded-md border border-border bg-card p-3">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="aiflow-type-body font-semibold text-foreground">
+              最终结果预览
+            </h3>
+            <span className="aiflow-type-meta text-muted-foreground">
+              显示 {previewRows.length} / {terminalRows.length} 行
+            </span>
+          </div>
+          <div className="max-w-full overflow-x-auto">
+            <table className="w-full min-w-[360px] text-left">
+              <thead className="bg-muted text-sm text-muted-foreground">
+                <tr>
+                  {columns.map(column => (
+                    <th
+                      key={column}
+                      className="aiflow-type-meta whitespace-nowrap px-2 py-1.5 font-medium"
+                    >
+                      {column}
+                    </th>
+                  ))}
+                  {Object.keys(previewRows[0] ?? {}).length >
+                    columns.length && (
+                    <th className="aiflow-type-meta whitespace-nowrap px-2 py-1.5 font-medium">
+                      其余字段
+                    </th>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row: any, rowIndex: number) => (
+                  <tr key={rowIndex} className="border-t border-border">
+                    {columns.map(column => (
+                      <td
+                        key={column}
+                        className="aiflow-type-meta max-w-48 truncate px-2 py-1.5 text-foreground"
+                      >
+                        {formatDataflowValue(row[column])}
+                      </td>
+                    ))}
+                    {Object.keys(previewRows[0] ?? {}).length >
+                      columns.length && (
+                      <td className="aiflow-type-meta px-2 py-1.5 text-muted-foreground">
+                        +
+                        {Object.keys(previewRows[0] ?? {}).length -
+                          columns.length}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : (
+        !run.error && (
+          <p className="aiflow-type-body rounded-md border border-border bg-card px-3 py-3 text-muted-foreground">
+            {nodes.length > 0
+              ? "本次运行没有可展示的终端结果行。"
+              : "暂无可结构化展示的运行结果。"}
+          </p>
+        )
+      )}
+
+      {nodes.length > 0 && (
+        <details className="min-w-0 rounded border border-border bg-card px-3">
+          <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center font-medium text-foreground">
+            节点执行摘要（{nodes.length}）
+          </summary>
+          <div className="mt-1 max-h-60 overflow-auto pb-3">
+            <table className="w-full min-w-[360px] text-left">
+              <thead className="sticky top-0 bg-muted text-sm text-muted-foreground">
+                <tr>
+                  <th className="aiflow-type-meta px-2 py-1.5 font-medium">
+                    节点
+                  </th>
+                  <th className="aiflow-type-meta px-2 py-1.5 font-medium">
+                    类型
+                  </th>
+                  <th className="aiflow-type-meta px-2 py-1.5 text-right font-medium">
+                    输出行数
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {nodes.map((node: any, index: number) => (
+                  <tr
+                    key={node.nodeId ?? index}
+                    className="border-t border-border"
+                  >
+                    <td className="aiflow-type-meta px-2 py-1.5 font-mono text-foreground">
+                      {node.nodeId ?? `节点 ${index + 1}`}
+                    </td>
+                    <td className="aiflow-type-meta px-2 py-1.5 text-muted-foreground">
+                      {node.nodeType ?? "—"}
+                    </td>
+                    <td className="aiflow-type-meta px-2 py-1.5 text-right tabular-nums text-foreground">
+                      {node.rowCount ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </details>
+      )}
+
+      <div className="min-w-0 rounded border border-border bg-card px-3">
+        <button
+          type="button"
+          aria-expanded={showRaw}
+          className="aiflow-type-control flex min-h-11 w-full items-center text-left font-medium text-foreground"
+          onClick={() => setShowRaw(value => !value)}
+        >
+          {showRaw ? "收起完整原始数据（JSON）" : "查看完整原始数据（JSON）"}
+        </button>
+        {showRaw && (
+          <pre className="aiflow-type-code my-2 max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-3 font-mono text-emerald-200">
+            {rawText}
+          </pre>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ResourceForm({
   title,
   description,
@@ -1059,14 +1332,16 @@ function ResourceForm({
     }
   };
   return (
-    <div className="grid h-fit gap-3 rounded-lg border border-[#cbd9f5] bg-white p-4 shadow-sm">
+    <div className="grid h-fit min-w-0 gap-3 rounded-lg border border-aiflow-info-border bg-card p-4 shadow-sm">
       <div>
-        <p className="font-semibold text-slate-800">{title}</p>
-        <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>
+        <p className="font-semibold text-foreground">{title}</p>
+        <p className="aiflow-type-body mt-1 text-muted-foreground">
+          {description}
+        </p>
       </div>
       <Button
         type="button"
-        className="w-fit bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+        className="h-11 w-fit bg-blue-600 text-white shadow-2xs hover:bg-blue-700 sm:h-9"
         onClick={() => setOpen(true)}
       >
         <Plus size={14} />
@@ -1086,273 +1361,665 @@ function ResourceForm({
     </div>
   );
 }
-function DataFlowCanvasReferenceShell({
+
+function ResourceField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground [&_input]:h-11 [&_select]:h-11 sm:[&_input]:h-10 sm:[&_select]:h-10">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+type DataflowSection = "overview" | "runs" | "schedules";
+type DataflowScheduleForm = {
+  workflowId: string;
+  cronExpression: string;
+};
+
+function DataflowWorkspace({
   projectName,
   resources,
   flows,
+  publishedFlows,
   runs,
+  schedules,
+  schedulesByWorkflow,
+  section,
+  setSection,
+  activeFlowId,
+  setActiveFlowId,
+  scheduleForm,
+  setScheduleForm,
   onOpenWorkflow,
-  onTestRun,
+  onOpenResourceTab,
+  onRunFlow,
   runPending,
+  onSaveSchedule,
+  saveSchedulePending,
+  onActivateSchedule,
+  activateSchedulePending,
+  onPauseSchedule,
+  pauseSchedulePending,
+  onDeleteSchedule,
+  deleteSchedulePending,
 }: {
   projectName: string;
   resources: any;
   flows: any[];
+  publishedFlows: any[];
   runs: any[];
+  schedules: any[];
+  schedulesByWorkflow: Map<string, any>;
+  section: DataflowSection;
+  setSection: (section: DataflowSection) => void;
+  activeFlowId: string;
+  setActiveFlowId: (flowId: string) => void;
+  scheduleForm: DataflowScheduleForm;
+  setScheduleForm: (form: DataflowScheduleForm) => void;
   onOpenWorkflow: (workflowId: string) => void;
-  onTestRun: (workflowId: string) => void;
+  onOpenResourceTab: (tab: Tab) => void;
+  onRunFlow: (workflowId: string) => void;
   runPending: boolean;
+  onSaveSchedule: () => void;
+  saveSchedulePending: boolean;
+  onActivateSchedule: (workflowId: string) => void;
+  activateSchedulePending: boolean;
+  onPauseSchedule: (workflowId: string) => void;
+  pauseSchedulePending: boolean;
+  onDeleteSchedule: (workflowId: string) => Promise<unknown>;
+  deleteSchedulePending: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [taskOpen, setTaskOpen] = useState(false);
-  const [scheduleOpen, setScheduleOpen] = useState(false);
-  const flow = flows[0];
-  const canTestRun = Boolean(flow && flow.status === "published");
+  const flow = flows.find(item => item.id === activeFlowId) ?? flows[0];
+  const latestRun = flow
+    ? runs.find(item => item.workflowId === flow.id)
+    : runs[0];
+  const schedule = flow ? schedulesByWorkflow.get(flow.id) : undefined;
+  const sections = [
+    { id: "overview" as const, label: "概览", icon: Database },
+    { id: "runs" as const, label: "运行记录", icon: FileText },
+    { id: "schedules" as const, label: "调度计划", icon: CalendarClock },
+  ];
+  const assets = resources?.assets ?? [];
+  const udfs = resources?.udfs ?? [];
+  const assetPreview = assets.slice(0, 5);
+  const udfPreview = udfs.slice(0, 5);
+
   return (
-    <section className="mb-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-col gap-3 border-b border-slate-100 p-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-[10px] font-bold tracking-[.18em] text-[#5b72a8]">
-            DATAFLOW CANVAS REFERENCE
-          </p>
-          <h2 className="mt-1 text-sm font-semibold text-slate-800">
-            {projectName} · 数据流画布
+    <section dataflow-workspace="" className="grid gap-4">
+      <div
+        role="note"
+        dataflow-experimental-notice=""
+        className="flex flex-col gap-1 rounded-md border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-sm leading-5 text-amber-900 sm:flex-row sm:items-center sm:justify-between"
+      >
+        <span className="font-semibold">实验功能</span>
+        <span id="dataflow-execution-warning">
+          生产
+          Connector、外部存储和真实重启验收尚未完成；当前运行能力不能视为生产就绪。
+          执行会创建真实运行，可能读取或写入外部数据。
+        </span>
+      </div>
+
+      <header className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="truncate text-base font-semibold text-foreground">
+            {projectName} · 数据流
           </h2>
-          <p className="mt-1 text-xs text-slate-500">
-            保留原始资源树、函数树、任务详情和调度配置入口；真实编辑仍在受项目权限保护的设计器中完成。
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            在流程设计中心编辑定义；在此查看运行、资源引用和调度状态。
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          {flows.length > 0 && (
+            <select
+              aria-label="当前数据流"
+              className="col-span-2 h-11 w-full min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-sm sm:col-span-1 sm:h-9 sm:min-w-48 sm:w-auto"
+              value={flow?.id ?? ""}
+              onChange={event => setActiveFlowId(event.target.value)}
+            >
+              {flows.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.name} ·{" "}
+                  {item.status === "published" ? "已发布" : "草稿"}
+                </option>
+              ))}
+            </select>
+          )}
           <Button
             type="button"
             variant="outline"
             size="sm"
-            aria-expanded={expanded}
-            aria-controls="dataflow-resource-trees"
-            onClick={() => setExpanded(value => !value)}
-          >
-            <ChevronDown size={14} className={expanded ? "rotate-180" : ""} />
-            {expanded ? "收起资源树" : "一键展开"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setTaskOpen(value => !value)}
-          >
-            <FileText size={14} />
-            任务详情
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setScheduleOpen(value => !value)}
-          >
-            <CalendarClock size={14} />
-            调度配置
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={!canTestRun || runPending}
-            title={
-              canTestRun
-                ? "对当前已发布数据流执行一次受权限保护的测试运行"
-                : "仅已发布数据流可测试执行"
-            }
-            onClick={() => flow && onTestRun(flow.id)}
-          >
-            {runPending ? (
-              <Loader2 className="animate-spin" size={14} />
-            ) : (
-              <Play size={14} />
-            )}
-            测试执行
-          </Button>
-          <Button
-            type="button"
-            size="sm"
+            className="min-h-11 w-full sm:h-8 sm:min-h-0 sm:w-auto"
             disabled={!flow}
-            title="在受权限保护的设计器中编辑并保存画布"
             onClick={() => flow && onOpenWorkflow(flow.id)}
           >
-            <Braces size={14} />
-            {flow ? "打开设计器" : "暂无数据流"}
+            打开设计器
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            className="min-h-11 w-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 sm:h-8 sm:min-h-0 sm:w-auto"
+            disabled={!flow || flow.status !== "published" || runPending}
+            aria-describedby="dataflow-execution-warning"
+            title={
+              flow?.status === "published"
+                ? "执行真实数据流；可能读取或写入外部数据"
+                : "仅已发布数据流可运行"
+            }
+            onClick={() => flow && onRunFlow(flow.id)}
+          >
+            {runPending && <Loader2 className="animate-spin" size={14} />}
+            <Play size={14} />
+            运行数据流
           </Button>
         </div>
-      </div>
-      <div
-        id="dataflow-resource-trees"
-        className="grid gap-3 border-b border-slate-100 bg-slate-50 p-3 lg:grid-cols-[230px_230px_minmax(0,1fr)]"
+      </header>
+
+      <nav
+        aria-label="数据流工作区视图"
+        className="grid grid-cols-2 gap-1 border-b border-border md:flex md:flex-wrap md:gap-2"
       >
-        <TreePanel
-          title="数据资源"
-          placeholder="请输入资源名称"
-          entries={(resources?.assets ?? []).map(
-            (asset: any) => `${asset.name} · ${asset.assetType}`
-          )}
-          expanded={expanded}
-        />
-        <TreePanel
-          title="函数资源"
-          placeholder="请输入函数名称"
-          entries={(resources?.udfs ?? []).map(
-            (udf: any) => `${udf.name} · ${udf.udfType}`
-          )}
-          expanded={expanded}
-        />
-        <div className="rounded border border-slate-200 bg-white p-3">
-          <p className="text-xs font-semibold text-slate-700">数据流工具栏</p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {[
-              ["交集", "当前执行器未启用此原始节点"],
-              ["差集", "当前执行器未启用此原始节点"],
-              ["并集", "当前执行器未启用此原始节点"],
-              ["SQL", "在数据流画布的 SQL 节点配置"],
-              ["TSML", "原始页面亦为禁用状态"],
-              ["中间表", "在数据流画布的表节点配置"],
-            ].map(([label, title]) => (
-              <button
-                key={label}
-                type="button"
-                disabled={label === "TSML" || !flow}
-                title={title}
-                onClick={() => flow && onOpenWorkflow(flow.id)}
-                className="inline-flex items-center gap-1 rounded border border-slate-200 px-2 py-1.5 text-xs text-slate-600 transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-45"
-              >
-                {label === "SQL" ? (
-                  <Braces size={13} />
-                ) : label === "中间表" ? (
-                  <Table2 size={13} />
-                ) : (
-                  <Wand2 size={13} />
-                )}
-                {label}
-              </button>
-            ))}
-            <span className="ml-auto inline-flex items-center gap-1 text-xs text-slate-500">
-              <Image size={13} />
-              保存为图片、整理画布可在设计器中使用
-            </span>
+        {sections.map(item => (
+          <button
+            key={item.id}
+            type="button"
+            aria-current={section === item.id ? "page" : undefined}
+            onClick={() => setSection(item.id)}
+            className={`aiflow-type-control inline-flex min-h-11 min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-2 transition-colors last:col-span-2 md:min-h-0 md:justify-start md:px-3 ${section === item.id ? "border-blue-600 font-semibold text-aiflow-info" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+          >
+            <item.icon size={15} />
+            {item.label}
+            {item.id === "runs" && (
+              <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                {runs.length}
+              </span>
+            )}
+            {item.id === "schedules" && (
+              <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+                {schedules.length}
+              </span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {section === "overview" &&
+        (flows.length === 0 ? (
+          <div
+            role="status"
+            className="rounded-lg border border-dashed border-input bg-card px-5 py-8 text-center"
+          >
+            <p className="text-sm font-medium text-foreground">
+              尚未创建数据流程
+            </p>
+            <p className="mt-1 text-sm leading-5 text-muted-foreground">
+              请先在流程设计中心创建并发布数据流；发布前不会显示运行和调度操作。
+            </p>
           </div>
-        </div>
-      </div>
-      {taskOpen && (
-        <div className="border-b border-slate-100 bg-white p-4 text-xs text-slate-600">
-          <p className="font-semibold text-slate-800">任务详情</p>
-          <p className="mt-1">
-            当前项目共有 {flows.length} 个数据流，最近已记录 {runs.length}{" "}
-            次数据流运行；下方“数据流运行审计”列出真实运行输出或错误。
-          </p>
-        </div>
+        ) : (
+          <div className="grid gap-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="aiflow-type-meta text-muted-foreground">
+                  当前数据流
+                </p>
+                <div className="mt-2 flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-medium text-foreground">
+                    {flow?.name}
+                  </p>
+                  {flow && <State value={flow.status} />}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="aiflow-type-meta text-muted-foreground">
+                  最近运行
+                </p>
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  {latestRun
+                    ? `${latestRun.status === "success" ? "成功" : latestRun.status} · ${formatDataflowTime(latestRun.finishedAt ?? latestRun.startedAt)}`
+                    : "尚无运行记录"}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border bg-card p-4">
+                <p className="aiflow-type-meta text-muted-foreground">
+                  托管计划
+                </p>
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  {schedule
+                    ? `${schedule.status === "active" ? "已启用" : "草稿 / 已暂停"} · ${schedule.cronExpression} UTC`
+                    : "未配置"}
+                </p>
+              </div>
+            </div>
+
+            <section className="rounded-lg border border-border bg-card p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 className="aiflow-type-section-title font-semibold text-foreground">
+                    流程摘要
+                  </h3>
+                  <p className="mt-1 text-sm text-foreground">{flow?.name}</p>
+                </div>
+                {flow && <State value={flow.status} />}
+              </div>
+              <div className="aiflow-type-meta mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground">
+                <span>画布节点：{flow?.definition?.nodes?.length ?? 0}</span>
+                <span>累计运行：{flow?.dataflowRunCount ?? 0}</span>
+                <span>项目数据流：{flows.length}</span>
+              </div>
+              <p className="aiflow-type-body mt-3 border-t border-border pt-3 text-muted-foreground">
+                资源中心不提供模拟算子按钮。节点编排、保存和画布导出均在受权限控制的流程设计器中完成。
+              </p>
+            </section>
+
+            <details className="rounded-lg border border-border bg-card">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground">
+                <span>资源引用</span>
+                <span className="aiflow-type-meta font-normal text-muted-foreground">
+                  数据资源 {assets.length} · UDF {udfs.length}
+                </span>
+              </summary>
+              <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
+                <div>
+                  <h4 className="aiflow-type-section-title font-semibold text-foreground">
+                    数据资源
+                  </h4>
+                  {assets.length > 0 ? (
+                    <ul className="mt-2 grid gap-1">
+                      {assetPreview.map((asset: any) => (
+                        <li
+                          key={asset.id}
+                          className="aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground"
+                        >
+                          {asset.name} · {asset.assetType}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="aiflow-type-body mt-2 text-muted-foreground">
+                      尚无可引用的数据资源。
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    {assets.length > assetPreview.length && (
+                      <span className="aiflow-type-meta text-muted-foreground">
+                        另有 {assets.length - assetPreview.length} 项
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0"
+                      onClick={() => onOpenResourceTab("assets")}
+                    >
+                      查看资源目录
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <h4 className="aiflow-type-section-title font-semibold text-foreground">
+                    函数资源
+                  </h4>
+                  {udfs.length > 0 ? (
+                    <ul className="mt-2 grid gap-1">
+                      {udfPreview.map((udf: any) => (
+                        <li
+                          key={udf.id}
+                          className="aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground"
+                        >
+                          {udf.name} · {udf.udfType}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="aiflow-type-body mt-2 text-muted-foreground">
+                      尚无可引用的函数资源。
+                    </p>
+                  )}
+                  <div className="mt-2 flex items-center gap-2">
+                    {udfs.length > udfPreview.length && (
+                      <span className="aiflow-type-meta text-muted-foreground">
+                        另有 {udfs.length - udfPreview.length} 项
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0"
+                      onClick={() => onOpenResourceTab("udfs")}
+                    >
+                      查看 UDF 目录
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+        ))}
+
+      {section === "runs" && (
+        <DataflowOperationList runs={runs} projectName={projectName} />
       )}
-      {scheduleOpen && (
-        <div className="border-b border-slate-100 bg-amber-50 p-4 text-xs text-amber-900">
-          <p className="font-semibold">调度配置</p>
-          <p className="mt-1">
-            请使用下方“数据流调度草稿”保存 UTC
-            六段式表达式，再由项目编辑权限成员启用、暂停或删除托管计划。
-          </p>
+
+      {section === "schedules" && (
+        <div className="grid gap-3">
+          <section className="rounded-lg border border-border bg-card p-4">
+            <h3 className="aiflow-type-section-title font-semibold text-foreground">
+              新增调度草稿
+            </h3>
+            <p className="aiflow-type-body mt-1 text-muted-foreground">
+              使用六段 UTC 表达式：秒 分 时 日 月
+              星期。保存只创建草稿；启用后会按计划真实运行数据流，可能产生外部系统读写副作用。
+            </p>
+            {publishedFlows.length > 0 ? (
+              <form
+                className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)_auto] sm:items-end"
+                onSubmit={event => {
+                  event.preventDefault();
+                  onSaveSchedule();
+                }}
+              >
+                <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+                  已发布数据流
+                  <select
+                    className="h-11 rounded-md border border-border bg-card px-2 text-sm font-normal sm:h-9"
+                    value={scheduleForm.workflowId}
+                    onChange={event =>
+                      setScheduleForm({
+                        ...scheduleForm,
+                        workflowId: event.target.value,
+                      })
+                    }
+                    required
+                  >
+                    <option value="">选择数据流</option>
+                    {publishedFlows.map(item => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+                  Cron 表达式（UTC）
+                  <Input
+                    aria-label="Cron 表达式（UTC）"
+                    className="h-11 font-mono text-xs font-normal sm:h-9"
+                    value={scheduleForm.cronExpression}
+                    onChange={event =>
+                      setScheduleForm({
+                        ...scheduleForm,
+                        cronExpression: event.target.value,
+                      })
+                    }
+                    placeholder="0 0 9 * * *"
+                    required
+                  />
+                </label>
+                <Button
+                  type="submit"
+                  className="min-h-11 bg-blue-600 text-white hover:bg-blue-700 sm:min-h-0"
+                  disabled={saveSchedulePending}
+                >
+                  {saveSchedulePending && (
+                    <Loader2 className="animate-spin" size={14} />
+                  )}
+                  保存调度草稿
+                </Button>
+              </form>
+            ) : (
+              <div
+                role="status"
+                dataflow-schedule-empty=""
+                className="aiflow-type-body mt-3 rounded-md border border-dashed border-input bg-muted px-3 py-3 text-muted-foreground"
+              >
+                当前没有已发布数据流。发布后再创建调度，不显示可保存的 Cron
+                输入。
+              </div>
+            )}
+          </section>
+
+          {schedules.length > 0 ? (
+            <ResourceTable
+              columns={["数据流", "计划状态", "执行时间（UTC）", "操作"]}
+              empty="尚未配置托管调度。"
+              mobileCards={schedules.map((item: any) => {
+                const scheduledFlow = flows.find(
+                  flowItem => flowItem.id === item.workflowId
+                );
+                return (
+                  <ResourceTableCard
+                    key={item.workflowId}
+                    primary={scheduledFlow?.name ?? "数据流不可见"}
+                    secondary={
+                      scheduledFlow?.status === "published"
+                        ? "已发布"
+                        : "当前流程尚未发布"
+                    }
+                    status={<State value={item.status} />}
+                    fields={[
+                      { label: "执行时间（UTC）", value: item.cronExpression },
+                    ]}
+                    actions={
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="min-h-11 flex-1 text-xs"
+                          disabled={
+                            item.status === "active"
+                              ? pauseSchedulePending
+                              : activateSchedulePending
+                          }
+                          onClick={() =>
+                            item.status === "active"
+                              ? onPauseSchedule(item.workflowId)
+                              : onActivateSchedule(item.workflowId)
+                          }
+                        >
+                          {item.status === "active" ? "暂停计划" : "启用计划"}
+                        </Button>
+                        <DeleteButton
+                          resourceName={scheduledFlow?.name ?? item.workflowId}
+                          disabled={deleteSchedulePending}
+                          visibleLabel="删除计划"
+                          onDelete={() => onDeleteSchedule(item.workflowId)}
+                        />
+                      </>
+                    }
+                  />
+                );
+              })}
+            >
+              {schedules.map((item: any) => {
+                const scheduledFlow = flows.find(
+                  flowItem => flowItem.id === item.workflowId
+                );
+                return (
+                  <tr key={item.workflowId}>
+                    <Cell
+                      primary={scheduledFlow?.name ?? "数据流不可见"}
+                      secondary={
+                        scheduledFlow?.status === "published"
+                          ? "已发布"
+                          : "当前流程尚未发布"
+                      }
+                    />
+                    <td className="px-4 py-3">
+                      <State value={item.status} />
+                    </td>
+                    <td className="aiflow-type-code px-4 py-3 font-mono text-muted-foreground">
+                      {item.cronExpression} UTC
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {item.status === "active" ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mr-2 h-8 text-xs"
+                          disabled={pauseSchedulePending}
+                          onClick={() => onPauseSchedule(item.workflowId)}
+                        >
+                          暂停
+                        </Button>
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="mr-2 h-8 text-xs"
+                          disabled={activateSchedulePending}
+                          onClick={() => onActivateSchedule(item.workflowId)}
+                        >
+                          启用
+                        </Button>
+                      )}
+                      <DeleteButton
+                        visibleLabel="删除计划"
+                        resourceName={scheduledFlow?.name ?? item.workflowId}
+                        disabled={deleteSchedulePending}
+                        onDelete={() => onDeleteSchedule(item.workflowId)}
+                      />
+                    </td>
+                  </tr>
+                );
+              })}
+            </ResourceTable>
+          ) : (
+            <div className="aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-5 text-center text-muted-foreground">
+              尚未配置托管调度。
+            </div>
+          )}
         </div>
       )}
     </section>
   );
 }
-function TreePanel({
-  title,
-  placeholder,
-  entries,
-  expanded,
-}: {
-  title: string;
-  placeholder: string;
-  entries: string[];
-  expanded: boolean;
-}) {
-  const [keyword, setKeyword] = useState("");
-  const visible = entries.filter(entry =>
-    entry.toLowerCase().includes(keyword.toLowerCase())
-  );
-  const shown = expanded ? visible : visible.slice(0, 4);
-  return (
-    <div className="rounded border border-slate-200 bg-white p-3">
-      <p className="text-xs font-semibold text-slate-700">{title}</p>
-      <Input
-        className="mt-2 h-8 text-xs"
-        placeholder={placeholder}
-        value={keyword}
-        onChange={event => setKeyword(event.target.value)}
-      />
-      <div className="mt-2 grid gap-1">
-        {shown.map(entry => (
-          <span
-            key={entry}
-            className="truncate rounded bg-slate-50 px-2 py-1 text-[11px] text-slate-600"
-          >
-            {entry}
-          </span>
-        ))}
-        {!shown.length && (
-          <span className="py-2 text-[11px] text-slate-400">
-            暂无可用资源。
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
+
 function ResourceTable({
   columns,
   children,
   empty,
+  mobileCards,
 }: {
   columns: string[];
   children: React.ReactNode;
   empty: string;
+  mobileCards?: React.ReactNode;
 }) {
-  const hasRows = Array.isArray(children)
-    ? children.length > 0
-    : Boolean(children);
+  const hasRows = Children.toArray(children).some(isValidElement);
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[620px] text-left text-sm">
-          <thead className="bg-[#f8faff] text-xs font-medium text-slate-500">
-            <tr>
-              {columns.map(column => (
-                <th key={column} className="px-4 py-3">
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {hasRows ? (
-              children
-            ) : (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-14 text-center text-sm text-slate-400"
-                >
-                  {empty}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+    <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      {hasRows ? (
+        <>
+          {mobileCards !== undefined && (
+            <div
+              data-resource-table-mobile=""
+              role="list"
+              aria-label={`${columns[0]}列表`}
+              className="divide-y divide-border md:hidden"
+            >
+              {mobileCards}
+            </div>
+          )}
+          {mobileCards === undefined && (
+            <div className="aiflow-type-body flex items-center gap-2 border-b border-border px-3 py-2 text-muted-foreground md:hidden">
+              <ArrowLeftRight size={14} aria-hidden="true" />
+              <span>左右滑动表格可查看其余字段</span>
+            </div>
+          )}
+          <div
+            data-resource-table-desktop=""
+            role="region"
+            aria-label={`${columns[0]}列表，可横向滚动查看其余字段`}
+            tabIndex={0}
+            className={`${mobileCards === undefined ? "" : "hidden md:block"} overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500`}
+          >
+            <table className="w-full min-w-[620px] text-left text-sm [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-muted [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:left-0 [&_tbody_td:first-child]:z-10 [&_tbody_td:first-child]:bg-card">
+              <thead className="bg-muted text-sm font-medium text-muted-foreground">
+                <tr>
+                  {columns.map(column => (
+                    <th key={column} className="whitespace-nowrap px-4 py-3">
+                      {column}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>{children}</tbody>
+            </table>
+          </div>
+        </>
+      ) : (
+        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+          {empty}
+        </div>
+      )}
     </section>
   );
 }
+
+function ResourceTableCard({
+  primary,
+  secondary,
+  status,
+  fields,
+  actions,
+}: {
+  primary: string;
+  secondary?: string;
+  status?: React.ReactNode;
+  fields: { label: string; value: React.ReactNode }[];
+  actions?: React.ReactNode;
+}) {
+  return (
+    <article role="listitem" className="space-y-3 p-4">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="aiflow-type-section-title break-words font-medium text-foreground">
+            {primary}
+          </h3>
+          {secondary && (
+            <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+              {secondary}
+            </p>
+          )}
+        </div>
+        {status}
+      </div>
+      <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3">
+        {fields.map(field => (
+          <div key={field.label} className="min-w-0">
+            <dt className="aiflow-type-control text-muted-foreground">
+              {field.label}
+            </dt>
+            <dd className="aiflow-type-body mt-1 break-words text-foreground">
+              {field.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {actions && (
+        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+          {actions}
+        </div>
+      )}
+    </article>
+  );
+}
+
 function Cell({ primary, secondary }: { primary: string; secondary?: string }) {
   return (
     <td className="px-4 py-3">
-      <p className="font-medium text-slate-800">{primary}</p>
+      <p className="font-medium text-foreground">{primary}</p>
       {secondary && (
-        <p className="mt-0.5 max-w-[220px] truncate text-xs text-slate-400">
+        <p
+          className="aiflow-type-body mt-0.5 line-clamp-2 max-w-[320px] break-words text-muted-foreground"
+          title={secondary}
+        >
           {secondary}
         </p>
       )}
@@ -1368,10 +2035,10 @@ function State({ value }: { value: string }) {
     "published",
     "approved",
   ].includes(value)
-    ? "bg-emerald-100 text-emerald-700"
+    ? "bg-aiflow-success-surface text-aiflow-success"
     : ["failed", "disabled"].includes(value)
-      ? "bg-slate-100 text-slate-600"
-      : "bg-amber-100 text-amber-700";
+      ? "bg-muted text-muted-foreground"
+      : "bg-aiflow-warning-surface text-aiflow-warning";
   const labels: Record<string, string> = {
     verified: "已校验",
     active: "启用",
@@ -1386,19 +2053,108 @@ function State({ value }: { value: string }) {
     queued: "排队中",
   };
   return (
-    <span className={`rounded px-2 py-1 text-xs ${tone}`}>
+    <span
+      className={`aiflow-type-meta whitespace-nowrap rounded px-2 py-1 ${tone}`}
+    >
       {labels[value] || value}
     </span>
   );
 }
-function DeleteButton({ onClick }: { onClick: () => void }) {
+function DeleteButton({
+  onDelete,
+  resourceName,
+  visibleLabel,
+  actionLabel,
+  disabled = false,
+}: {
+  onDelete: () => Promise<unknown>;
+  resourceName: string;
+  visibleLabel?: string;
+  actionLabel?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const label = actionLabel || visibleLabel || "删除资源";
+  const confirmDelete = async () => {
+    if (pending || disabled) return;
+    setPending(true);
+    setError("");
+    try {
+      await onDelete();
+      setOpen(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "删除失败，请重试。");
+    } finally {
+      setPending(false);
+    }
+  };
   return (
-    <button
-      className="text-slate-400 hover:text-red-600"
-      onClick={onClick}
-      title="删除"
-    >
-      <Trash2 size={15} />
-    </button>
+    <>
+      <button
+        type="button"
+        aria-label={`${label} ${resourceName}`}
+        className={
+          visibleLabel
+            ? "aiflow-type-control inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-aiflow-danger hover:bg-aiflow-danger-surface"
+            : "aiflow-type-control inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-aiflow-danger lg:min-h-10 lg:min-w-10"
+        }
+        disabled={disabled || pending}
+        onClick={() => {
+          setError("");
+          setOpen(true);
+        }}
+        title={`${label} ${resourceName}`}
+      >
+        <Trash2 size={15} />
+        {visibleLabel}
+      </button>
+      <Dialog
+        open={open}
+        onOpenChange={next => {
+          if (!pending) setOpen(next);
+        }}
+      >
+        <DialogContent showCloseButton={!pending} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>确认{label}</DialogTitle>
+            <DialogDescription className="aiflow-type-body break-words">
+              将删除“{resourceName}
+              ”的登记记录。此操作无法撤销；引用它的流程或计划可能需要重新配置。取消会保留当前记录。
+            </DialogDescription>
+          </DialogHeader>
+          {error && (
+            <p
+              role="alert"
+              className="aiflow-type-body break-words text-aiflow-danger"
+            >
+              {error}
+            </p>
+          )}
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11"
+              disabled={pending}
+              onClick={() => setOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              className="min-h-11"
+              disabled={pending || disabled}
+              onClick={() => void confirmDelete()}
+            >
+              {pending && <Loader2 size={14} className="animate-spin" />}
+              {pending ? "删除中…" : "确认删除"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
