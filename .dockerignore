@@ -8,3 +8,15 @@ dist
 !.env.example
 reference-analysis-temp
 *.log
+
+# 本地运行态、人工审查资料和测试输出不得进入构建上下文
+.claude/
+.manus-logs/
+.pnpm-store/
+01-test/
+docs/
+tests/
+coverage/
+playwright-report/
+test-results/
+scripts/dev/
