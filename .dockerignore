@@ -1,5 +1,6 @@
 .git
 .gitignore
+.cache
 node_modules
 dist
 .env
@@ -7,4 +8,3 @@ dist
 !.env.example
 reference-analysis-temp
 *.log
-

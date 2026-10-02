@@ -37,10 +37,11 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        BUILD_SHA: ${BUILD_SHA:-unknown}
-        BUILD_TIME: ${BUILD_TIME:-unknown}
+        BUILD_ID: ${BUILD_ID:-not-injected}
+        BUILD_TIME: ${BUILD_TIME:-not-injected}
     image: flow-ai-engine:local
     restart: unless-stopped
+    user: "1000:1000"
     mem_limit: 768m
     mem_reservation: 256m
     memswap_limit: 768m
@@ -50,19 +51,26 @@ services:
       DATABASE_URL: mysql://flow_ai:${MYSQL_PASSWORD:?MYSQL_PASSWORD is required}@mysql:3306/flow_ai_engine
       FLOW_BOOTSTRAP_ADMIN_USERNAME: ${FLOW_BOOTSTRAP_ADMIN_USERNAME:?FLOW_BOOTSTRAP_ADMIN_USERNAME is required}
       FLOW_BOOTSTRAP_ADMIN_PASSWORD: ${FLOW_BOOTSTRAP_ADMIN_PASSWORD:?FLOW_BOOTSTRAP_ADMIN_PASSWORD is required}
-      JWT_SECRET: ${JWT_SECRET:-${FLOW_BOOTSTRAP_ADMIN_PASSWORD}}
+      # Keep the signing key independent from the bootstrap administrator password.
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       LLM_MODEL_PRICING_JSON: ${LLM_MODEL_PRICING_JSON:-}
-      IMAGE_DIGEST: ${IMAGE_DIGEST:-unknown}
+      IMAGE_ID: ${IMAGE_ID:-not-injected}
       WORKFLOW_WORKER_ENABLED: ${WORKFLOW_WORKER_ENABLED:-true}
       DATA_CONNECTOR_ALLOWED_HOSTS: ${DATA_CONNECTOR_ALLOWED_HOSTS:-mysql}
+      FLOW_SECRET_FILE_DIR: /run/flow-secrets
     depends_on:
       mysql:
         condition: service_healthy
     ports:
       - "${FLOW_HTTP_PORT:-1180}:3000"
     read_only: true
+    volumes:
+      - type: bind
+        source: ${FLOW_SECRET_DIR:-/opt/flow-ai-engine/secrets}
+        target: /run/flow-secrets
+        read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
     security_opt:

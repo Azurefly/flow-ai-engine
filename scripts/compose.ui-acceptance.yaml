@@ -1,0 +1,84 @@
+name: flow-ai-ui-acceptance
+
+# 独立验收实例：独立 MySQL 卷、独立网络，HTTP 只绑定服务器回环地址。
+# 使用专用 --env-file，禁止使用生产 .env 或生产数据库 URL。
+services:
+  mysql:
+    image: mysql:8.4
+    mem_limit: 512m
+    memswap_limit: 768m
+    cpus: 0.5
+    environment:
+      MYSQL_DATABASE: flow_ui_acceptance
+      MYSQL_USER: ui_acceptance
+      MYSQL_PASSWORD: ${UI_ACCEPTANCE_DB_PASSWORD:?Dedicated database password required}
+      MYSQL_ROOT_PASSWORD: ${UI_ACCEPTANCE_ROOT_PASSWORD:?Dedicated root password required}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --innodb-buffer-pool-size=64M
+      - --performance-schema=OFF
+      - --mysqlx=OFF
+    volumes:
+      - acceptance_mysql_data:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - 'MYSQL_PWD="$$MYSQL_ROOT_PASSWORD" mysqladmin ping -h 127.0.0.1 -uroot --silent'
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  app:
+    image: ${UI_ACCEPTANCE_IMAGE:?Verified candidate image required}
+    user: "1000:1000"
+    mem_limit: 384m
+    memswap_limit: 640m
+    cpus: 0.5
+    pids_limit: 128
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: mysql://ui_acceptance:${UI_ACCEPTANCE_DB_PASSWORD:?Dedicated database password required}@mysql:3306/flow_ui_acceptance
+      FLOW_BOOTSTRAP_ADMIN_USERNAME: ui_review_admin
+      FLOW_BOOTSTRAP_ADMIN_PASSWORD: ${UI_ACCEPTANCE_ADMIN_PASSWORD:?Dedicated administrator password required}
+      JWT_SECRET: ${UI_ACCEPTANCE_JWT_SECRET:?Dedicated signing key required}
+      WORKFLOW_WORKER_ENABLED: "true"
+      DATA_CONNECTOR_ALLOWED_HOSTS: mysql
+      IMAGE_ID: ${UI_ACCEPTANCE_IMAGE_ID:?Verified image ID required}
+    ports:
+      - "127.0.0.1:${UI_ACCEPTANCE_PORT:-1181}:3000"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/readyz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+volumes:
+  acceptance_mysql_data:
+
+networks:
+  backend:
+    internal: true
+  frontend:
