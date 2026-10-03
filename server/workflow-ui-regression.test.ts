@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_324 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_326 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 400 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -2658,9 +2658,6 @@ describe("流程设计器界面回归约束", () => {
       "canAct: isCurrentTaskOwner(user.id, row)"
     );
     expect(processWorkbenchSource.match(/\{canManage && \(/g)).toHaveLength(2);
-    expect(processWorkbenchSource).toContain(
-      '(task?.status === "pending" || task?.status === "claimed") && task?.canAct === true'
-    );
     expect(processWorkbenchSource).toContain(
       "此任务仅供查看；处理操作由指定处理人完成。"
     );

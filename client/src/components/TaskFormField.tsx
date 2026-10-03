@@ -3,7 +3,7 @@ export function TaskFormField({
   value,
   onChange,
 }: {
-  field: { type: string; readOnly: boolean; options: unknown[] };
+  field: { label: string; type: string; readOnly: boolean; options: unknown[] };
   value: string;
   onChange: (value: string) => void;
 }) {
@@ -13,6 +13,7 @@ export function TaskFormField({
     return (
       <input
         type="checkbox"
+        aria-label={field.label}
         className="size-5 accent-blue-600"
         checked={value === "true"}
         disabled={field.readOnly}
@@ -28,39 +29,60 @@ export function TaskFormField({
         selected = Array.isArray(parsed) ? parsed : [];
       } catch {}
     }
+    const options = field.options.map(item =>
+      item && typeof item === "object" && !Array.isArray(item)
+        ? (item as Record<string, unknown>)
+        : { value: item, label: item }
+    );
+    if (multiple)
+      return (
+        <div
+          role="group"
+          aria-label={field.label}
+          className="grid max-h-48 gap-1 overflow-y-auto rounded border border-border p-2"
+        >
+          {options.map((option, index) => {
+            const matches = (item: unknown) =>
+              JSON.stringify(item) === JSON.stringify(option.value);
+            const checked = selected.some(matches);
+            return (
+              <label
+                key={index}
+                className="flex min-h-11 cursor-pointer items-center gap-2 rounded px-2 text-sm font-normal hover:bg-muted"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={field.readOnly}
+                  className="size-5 accent-blue-600"
+                  onChange={event =>
+                    onChange(
+                      JSON.stringify(
+                        event.target.checked
+                          ? [...selected, option.value]
+                          : selected.filter(item => !matches(item))
+                      )
+                    )
+                  }
+                />
+                {String(option.label ?? option.value ?? "")}
+              </label>
+            );
+          })}
+        </div>
+      );
     return (
       <select
+        aria-label={field.label}
         className={className}
-        multiple={multiple}
         disabled={field.readOnly}
-        value={multiple ? selected.map(item => JSON.stringify(item)) : value}
-        onChange={event =>
-          onChange(
-            multiple
-              ? JSON.stringify(
-                  Array.from(event.target.selectedOptions, option =>
-                    JSON.parse(option.value)
-                  )
-                )
-              : event.target.value
-          )
-        }
+        value={value}
+        onChange={event => onChange(event.target.value)}
       >
-        {!multiple && <option value="">请选择</option>}
-        {field.options.map((item, index) => {
-          const option =
-            item && typeof item === "object" && !Array.isArray(item)
-              ? (item as Record<string, unknown>)
-              : { value: item, label: item };
+        <option value="">请选择</option>
+        {options.map((option, index) => {
           return (
-            <option
-              key={index}
-              value={
-                multiple
-                  ? JSON.stringify(option.value)
-                  : String(option.value ?? "")
-              }
-            >
+            <option key={index} value={String(option.value ?? "")}>
               {String(option.label ?? option.value ?? "")}
             </option>
           );
@@ -71,6 +93,7 @@ export function TaskFormField({
   if (field.type === "textarea")
     return (
       <textarea
+        aria-label={field.label}
         className={`${className} min-h-20 resize-y`}
         value={value}
         readOnly={field.readOnly}
@@ -79,6 +102,7 @@ export function TaskFormField({
     );
   return (
     <input
+      aria-label={field.label}
       type={
         ["number", "email", "date"].includes(field.type) ? field.type : "text"
       }

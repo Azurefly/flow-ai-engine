@@ -6,6 +6,7 @@ import {
   validateNodeConfig,
   withNodeConfigDefaults,
   resolveStateDisplayName,
+  readOperateOutcomes,
 } from "@shared/workflow-node-contract";
 import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
@@ -524,5 +525,46 @@ describe("原始节点配置统一契约", () => {
         assigneeMode: "initiator",
       })
     ).toMatchObject({ outcomeMode: "legacy_cancel", outcomes: [] });
+  });
+  it("拒绝被静默过滤或强制转换的审批结果配置", () => {
+    const config = createDefaultNodeConfig("operate");
+    const valid = { code: "approved", label: "同意", sourceHandle: "approved" };
+    for (const invalid of [
+      null,
+      "approved",
+      [],
+      1,
+      { ...valid, code: 1 },
+      { ...valid, label: {} },
+      { ...valid, sourceHandle: false },
+      { ...valid, requireComment: "true" },
+      { ...valid, requireComment: null },
+    ]) {
+      expect(() =>
+        validateNodeConfig("operate", { ...config, outcomes: [valid, invalid] })
+      ).toThrow();
+    }
+    expect(() =>
+      validateNodeConfig("operate", {
+        ...config,
+        outcomes: [{ ...valid, requireComment: false }],
+      })
+    ).not.toThrow();
+    expect(() =>
+      validateNodeConfig("operate", {
+        ...config,
+        outcomes: [{ ...valid, requireComment: true }],
+      })
+    ).not.toThrow();
+  });
+  it("保留损坏草稿的可读取性以便修复，但不允许发布", () => {
+    const config = {
+      ...createDefaultNodeConfig("operate"),
+      outcomes: [null, { code: "approved", requireComment: "true" }],
+    };
+    expect(readOperateOutcomes(config)).toEqual([
+      { code: "approved", label: "approved", sourceHandle: "approved" },
+    ]);
+    expect(() => validateNodeConfig("operate", config)).toThrow();
   });
 });

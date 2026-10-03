@@ -235,4 +235,36 @@ describe("flow profile contract", () => {
         ])
       );
   });
+  it("returns a node diagnostic instead of publishing malformed operation outcomes", () => {
+    for (const invalid of [
+      null,
+      { code: "approved", requireComment: "true" },
+      { code: 1 },
+    ]) {
+      const definition = withMiddle("operate", {
+        nodeDh: "REVIEW",
+        instruction: "请审核",
+        assigneeMode: "initiator",
+        outcomeMode: "explicit",
+        outcomes: [
+          { code: "approved", label: "同意", sourceHandle: "approved" },
+          invalid,
+        ],
+      });
+      definition.edges[1]!.sourceHandle = "approved";
+      const result = analyzeWorkflowDefinition(definition, {
+        flowType: "control",
+        executable: true,
+      });
+      expect(result.ok).toBe(false);
+      expect(result.diagnostics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: "WF_NODE_CONFIG_REQUIRED",
+            location: expect.objectContaining({ nodeId: "middle" }),
+          }),
+        ])
+      );
+    }
+  });
 });

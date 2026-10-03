@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { taskFormInputValue } from "@shared/task-form";
+import { canManageTask } from "@shared/task-assignment";
 import { TaskFormField } from "./TaskFormField";
 import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
@@ -251,9 +252,17 @@ export default function ProcessWorkbench() {
   );
   const assignees = trpc.task.assignees.useQuery(
     { taskId: selectedTaskId ?? "00000000-0000-0000-0000-000000000000" },
-    { enabled: Boolean(selectedTaskId), retry: false }
+    {
+      enabled: Boolean(
+        selectedTaskId &&
+          (taskDetail.data as { id?: string } | undefined)?.id ===
+            selectedTaskId &&
+          canManageTask(taskDetail.data)
+      ),
+      retry: false,
+    }
   );
-  const invalidate = () => {
+  const invalidate = (refreshAssignees = true) => {
     void utils.task.dashboard.invalidate();
     void utils.task.list.invalidate();
     void utils.task.page.invalidate();
@@ -262,7 +271,8 @@ export default function ProcessWorkbench() {
     void utils.task.calendar.invalidate();
     if (selectedTaskId) {
       void utils.task.get.invalidate({ taskId: selectedTaskId });
-      void utils.task.assignees.invalidate({ taskId: selectedTaskId });
+      if (refreshAssignees)
+        void utils.task.assignees.invalidate({ taskId: selectedTaskId });
     }
   };
   const claim = trpc.task.claim.useMutation({
@@ -274,7 +284,8 @@ export default function ProcessWorkbench() {
   });
   const complete = trpc.task.complete.useMutation({
     onSuccess: result => {
-      invalidate();
+      setSelectedTaskId(null);
+      invalidate(false);
       if (result.status === "cancelled")
         toast.warning("审批已拒绝，流程已按安全策略终止。");
       else
@@ -291,7 +302,7 @@ export default function ProcessWorkbench() {
   });
   const execute = trpc.task.execute.useMutation({
     onSuccess: result => {
-      invalidate();
+      invalidate(false);
       if (result.status === "cancelled")
         toast.warning("审批已拒绝，流程已按安全策略终止。");
       else
@@ -309,14 +320,16 @@ export default function ProcessWorkbench() {
   });
   const handover = trpc.task.handover.useMutation({
     onSuccess: () => {
-      invalidate();
+      setSelectedTaskId(null);
+      invalidate(false);
       toast.success("人工任务已移交，已恢复为指定处理人的待办。");
     },
     onError: error => toast.error(error.message),
   });
   const delegate = trpc.task.delegate.useMutation({
     onSuccess: () => {
-      invalidate();
+      setSelectedTaskId(null);
+      invalidate(false);
       toast.success("任务已代理给指定处理人，已保留被代理主体审计。");
     },
     onError: error => toast.error(error.message),
@@ -356,7 +369,7 @@ export default function ProcessWorkbench() {
   });
   const batchComplete = trpc.task.batchComplete.useMutation({
     onSuccess: results => {
-      invalidate();
+      invalidate(false);
       setSelectedTaskIds([]);
       const success = results.filter(item => item.success).length;
       const failed = results.length - success;
@@ -2526,9 +2539,7 @@ function TaskDrawer({
     outcome: selectedOutcome?.code ?? decision,
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   });
-  const canManage =
-    (task?.status === "pending" || task?.status === "claimed") &&
-    task?.canAct === true;
+  const canManage = canManageTask(task);
   const isHistoricalTask =
     task?.status === "completed" || task?.status === "cancelled";
   const taskHistoryNotice =
@@ -2821,7 +2832,7 @@ function TaskDrawer({
                     </p>
                     <div className="mt-3 grid gap-3">
                       {formFields.map(field => (
-                        <label
+                        <div
                           key={field.key}
                           className="grid gap-1 text-sm font-medium text-foreground"
                         >
@@ -2837,7 +2848,7 @@ function TaskDrawer({
                               setFormFieldValue(field.key, value)
                             }
                           />
-                        </label>
+                        </div>
                       ))}
                     </div>
                   </div>

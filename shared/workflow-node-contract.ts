@@ -2377,6 +2377,20 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         !["explicit", "legacy_cancel"].includes(String(config.outcomeMode))
       )
         throw new Error("操作节点结果路由模式无效。");
+      if (config.outcomeMode === "explicit" && Array.isArray(config.outcomes)) {
+        for (const item of config.outcomes) {
+          assertObject(item, "操作结果项必须是对象。");
+          const outcome = item as NodeConfig;
+          for (const key of ["code", "label", "sourceHandle"])
+            if (outcome[key] !== undefined && typeof outcome[key] !== "string")
+              throw new Error(`操作结果 ${key} 必须是字符串。`);
+          if (
+            outcome.requireComment !== undefined &&
+            typeof outcome.requireComment !== "boolean"
+          )
+            throw new Error("操作结果意见必填开关必须是布尔值。");
+        }
+      }
       const outcomes = readOperateOutcomes(config);
       if (config.outcomeMode === "explicit" && !outcomes.length)
         throw new Error("显式结果路由必须至少配置一个结果出口。");

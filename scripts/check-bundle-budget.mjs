@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Allow 4 KiB for the searchable workflow participant picker; keep chunk and gzip limits unchanged.
-const maxTotalBytes = 1_324 * 1024;
+// Allow 6 KiB for participant picking and form/outcome validation; keep chunk and gzip limits unchanged.
+const maxTotalBytes = 1_326 * 1024;
 const maxTotalGzipBytes = 400 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
