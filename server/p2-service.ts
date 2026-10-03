@@ -21,6 +21,7 @@ import { probeSafeHttpEndpoint, resolveTemplates } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
 import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
+import { joinDataflowRows } from "./dataflow-join-rows";
 import { prepareReadOnlyDataflowSql } from "./dataflow-sql-binding";
 import {
   aggregateDataflowRows,
@@ -1456,42 +1457,7 @@ async function runDataflowDefinition(
         );
         const left = normalizeRows(outputs.get(leftParent)?.rows ?? []);
         const right = normalizeRows(outputs.get(rightParent)?.rows ?? []);
-        const leftKeys = Array.isArray(config.leftKeys)
-          ? config.leftKeys.map(String)
-          : [];
-        const rightKeys = Array.isArray(config.rightKeys)
-          ? config.rightKeys.map(String)
-          : [];
-        const index = new Map<string, JsonRecord[]>();
-        for (const row of right) {
-          const key = JSON.stringify(rightKeys.map(field => row[field]));
-          const bucket = index.get(key) ?? [];
-          bucket.push(row);
-          index.set(key, bucket);
-        }
-        const rows: JsonRecord[] = [];
-        for (const row of left) {
-          const matches =
-            index.get(JSON.stringify(leftKeys.map(field => row[field]))) ?? [];
-          if (!matches.length && config.kind === "left") rows.push({ ...row });
-          for (const match of matches) {
-            if (rows.length >= maxDataflowDatasetRows)
-              throw new Error(
-                `关联结果超过 ${maxDataflowDatasetRows} 行执行上限，请先筛选；不会截断后继续运行。`
-              );
-            rows.push({
-              ...row,
-              ...Object.fromEntries(
-                Object.entries(match).map(([key, value]) => [
-                  Object.prototype.hasOwnProperty.call(row, key)
-                    ? `${String(config.rightPrefix ?? "right_")}${key}`
-                    : key,
-                  value,
-                ])
-              ),
-            });
-          }
-        }
+        const rows = joinDataflowRows(left, right, config);
         output = { rows, operation: "join" };
       } else if (String(node.type) === "union") {
         let rows = rowsFromInput(inputs);

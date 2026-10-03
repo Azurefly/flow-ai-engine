@@ -347,7 +347,29 @@ describe("P2 项目数据资源与数据流", () => {
             { name: "orderId", type: "string" },
             { name: "customer", type: "string" },
           ],
-          sample: [{ orderId: "A-01", customer: "张三" }],
+          sample: [
+            { orderId: "A-01", customer: "张三" },
+            { orderId: null, customer: "空键不能匹配" },
+            { customer: "缺失键不能匹配" },
+          ],
+        })
+      ).id;
+      const joinLeftAssetId = (
+        await owner.data.createAsset({
+          projectId,
+          sourceId,
+          name: "关联空键样本",
+          assetType: "dataset",
+          schema: [
+            { name: "orderId", type: "string" },
+            { name: "amount", type: "number" },
+          ],
+          sample: [
+            { orderId: "A-01", amount: 12 },
+            { orderId: "A-02", amount: 34 },
+            { orderId: null, amount: 7 },
+            { amount: 8 },
+          ],
         })
       ).id;
       const joinWorkflowId = (
@@ -359,7 +381,7 @@ describe("P2 项目数据资源与数据流", () => {
             ...definition,
             nodes: [
               definition.nodes[0],
-              definition.nodes[1],
+              { ...definition.nodes[1], config: { assetId: joinLeftAssetId } },
               {
                 id: "lookup",
                 type: "source",
@@ -410,7 +432,23 @@ describe("P2 项目数据资源与数据流", () => {
           amount: 12,
           customer: "张三",
         }),
-        expect.objectContaining({ orderId: "A-02", amount: 34 }),
+        expect.objectContaining({
+          orderId: "A-02",
+          amount: 34,
+          right_orderId: null,
+          customer: null,
+        }),
+        expect.objectContaining({
+          orderId: null,
+          amount: 7,
+          right_orderId: null,
+          customer: null,
+        }),
+        expect.objectContaining({
+          amount: 8,
+          right_orderId: null,
+          customer: null,
+        }),
       ]);
       const nullableAssetId = (
         await owner.data.createAsset({
