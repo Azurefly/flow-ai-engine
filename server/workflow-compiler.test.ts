@@ -42,6 +42,51 @@ function state(id = "state") {
 }
 
 describe("WorkflowCompiler", () => {
+  it("compiles configured condition handles and rejects stale branch connections", () => {
+    const definition = base();
+    definition.nodes.splice(1, 0, {
+      id: "condition",
+      type: "condition",
+      name: "自定义条件分支",
+      position: { x: 120, y: 0 },
+      config: {
+        left: "{{input.value}}",
+        operator: "equals",
+        right: true,
+        trueHandle: "approved",
+        falseHandle: "rejected",
+      },
+    });
+    definition.edges = [
+      { id: "s-c", sourceNodeId: "start", targetNodeId: "condition" },
+      {
+        id: "c-yes",
+        sourceNodeId: "condition",
+        sourceHandle: "approved",
+        targetNodeId: "end",
+      },
+      {
+        id: "c-no",
+        sourceNodeId: "condition",
+        sourceHandle: "rejected",
+        targetNodeId: "end",
+      },
+    ];
+    expect(() =>
+      compileWorkflowDefinition(definition, { flowType: "control" })
+    ).not.toThrow();
+    definition.edges[1].sourceHandle = "true";
+    const result = analyzeWorkflowDefinition(definition, {
+      flowType: "control",
+      executable: true,
+    });
+    expect(result.diagnostics.map(item => item.code)).toEqual(
+      expect.arrayContaining([
+        "WF_CONDITION_BRANCH_INVALID",
+        "WF_CONDITION_HANDLE_UNKNOWN",
+      ])
+    );
+  });
   it("compiles a canonical immutable plan and produces a stable hash", () => {
     const first = compileWorkflowDefinition(base(), { flowType: "control" });
     const second = compileWorkflowDefinition(

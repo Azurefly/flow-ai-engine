@@ -42,6 +42,13 @@ export const FLOW_NODE_TYPES = [
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
 export type NodeConfig = Record<string, unknown>;
 
+export function readConditionHandles(config: NodeConfig): [string, string] {
+  return [
+    String(config.trueHandle ?? "true").trim() || "true",
+    String(config.falseHandle ?? "false").trim() || "false",
+  ];
+}
+
 export type OperateOutcome = {
   code: string;
   label: string;
@@ -2574,6 +2581,8 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         throw new Error("条件节点操作符无效。");
       assertString(config.trueHandle, "条件节点必须配置成立分支句柄。");
       assertString(config.falseHandle, "条件节点必须配置不成立分支句柄。");
+      if (readConditionHandles(config)[0] === readConditionHandles(config)[1])
+        throw new Error("条件节点的成立与不成立分支句柄必须不同。");
       break;
     case "llm":
       assertString(config.systemPrompt, "LLM 节点必须配置系统提示词。");

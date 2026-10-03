@@ -9,6 +9,7 @@ import {
   useEdgesState,
   useNodesState,
   useStore,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Node,
@@ -64,6 +65,7 @@ import {
   FLOW_NODE_ALLOWED_TARGETS,
   FLOW_NODE_DEFINITIONS,
   getNodeConfigEvidence,
+  readConditionHandles,
   readOperateOutcomeMode,
   readOperateOutcomes,
   type FlowNodeDefinition,
@@ -245,7 +247,8 @@ function assessNodeConfig(
 
 function sourceHandles(kind: NodeKind, config: NodeConfig) {
   if (kind === "end") return [];
-  if (kind === "condition") return ["true", "false"];
+  if (kind === "condition")
+    return Array.from(new Set(readConditionHandles(config)));
   if (kind === "router") {
     const configured = Array.isArray(config.routes)
       ? config.routes
@@ -290,6 +293,11 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
   const configAssessment = assessNodeConfig(nodeData.kind, nodeData.config);
   const configState = configAssessment.state;
   const handles = sourceHandles(nodeData.kind, nodeData.config);
+  const updateNodeInternals = useUpdateNodeInternals();
+  const handleSignature = JSON.stringify(handles);
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, handleSignature, updateNodeInternals]);
   const hasTarget = nodeData.kind !== "start";
   const routeItems =
     nodeData.kind === "router" && Array.isArray(nodeData.config.routes)
@@ -3020,7 +3028,7 @@ export default function WorkflowCanvas({
       }
       const sourceHandle =
         source.data.kind === "condition"
-          ? "true"
+          ? readConditionHandles(source.data.config)[0]
           : source.data.kind === "router"
             ? String(source.data.config.defaultRoute ?? "default")
             : source.data.kind === "operate" &&
@@ -3354,6 +3362,34 @@ export default function WorkflowCanvas({
   }, [contextMenu]);
   const updateSelected = (updates: Partial<FlowNodeData>) => {
     if (!selectedId || inspectorDisabled) return;
+    if (selected?.data.kind === "condition" && updates.config) {
+      const before = readConditionHandles(selected.data.config);
+      const after = readConditionHandles(updates.config);
+      if (after[0] === after[1]) {
+        toast.error("成立与不成立分支句柄必须不同，请使用不同名称。");
+        return;
+      }
+      if (before[0] !== after[0] || before[1] !== after[1]) {
+        pushHistory();
+        setEdges(current =>
+          current.map(edge => {
+            if (edge.source !== selectedId) return edge;
+            const branchIndex = before.indexOf(edge.sourceHandle ?? "default");
+            return branchIndex < 0
+              ? edge
+              : { ...edge, sourceHandle: after[branchIndex] };
+          })
+        );
+        setNodes(current =>
+          current.map(node =>
+            node.id === selectedId
+              ? { ...node, data: { ...node.data, ...updates } }
+              : node
+          )
+        );
+        return;
+      }
+    }
     pushHistory();
     setNodes(current =>
       current.map(node =>

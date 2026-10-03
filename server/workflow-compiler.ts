@@ -6,6 +6,7 @@ import {
 import {
   canConnectFlowNodeTypes,
   isFlowNodeType,
+  readConditionHandles,
   readOperateOutcomeMode,
   readOperateOutcomes,
   validateNodeConfig,
@@ -543,19 +544,23 @@ export function analyzeWorkflowDefinition(
       const stateNodes = validNodes.filter(node => node.type === "state");
       if (!stateNodes.length)
         diagnostics.push(
-          diagnostic(
-            "WF_STATE_REQUIRED",
-            "状态流程必须至少包含一个状态节点。"
-          )
+          diagnostic("WF_STATE_REQUIRED", "状态流程必须至少包含一个状态节点。")
         );
 
       const stateCodes = new Map<string, string>();
       for (const stateNode of stateNodes) {
-        const rawDh = typeof stateNode.config.nodeDh === "string" ? stateNode.config.nodeDh.trim() : "";
-        const rawCode = typeof stateNode.config.stateCode === "string" ? stateNode.config.stateCode.trim() : "";
-        const stateCode = (rawDh && (!rawCode || rawCode === "STATE_CODE"))
-          ? rawDh
-          : (rawCode || rawDh);
+        const rawDh =
+          typeof stateNode.config.nodeDh === "string"
+            ? stateNode.config.nodeDh.trim()
+            : "";
+        const rawCode =
+          typeof stateNode.config.stateCode === "string"
+            ? stateNode.config.stateCode.trim()
+            : "";
+        const stateCode =
+          rawDh && (!rawCode || rawCode === "STATE_CODE")
+            ? rawDh
+            : rawCode || rawDh;
         const previousNodeId = stateCodes.get(stateCode);
         if (stateCode && previousNodeId)
           diagnostics.push(
@@ -602,7 +607,9 @@ export function analyzeWorkflowDefinition(
       const terminalStates = stateNodes.filter(
         node =>
           String(node.config.stateType ?? "") === "terminal" ||
-          (outgoing.get(node.id) ?? []).some(edge => edge.targetNodeId === endId)
+          (outgoing.get(node.id) ?? []).some(
+            edge => edge.targetNodeId === endId
+          )
       );
       if (!terminalStates.length)
         diagnostics.push(
@@ -699,7 +706,8 @@ export function analyzeWorkflowDefinition(
           );
       }
       if (node.type === "condition") {
-        for (const handle of ["true", "false"]) {
+        const conditionHandles = readConditionHandles(node.config);
+        for (const handle of conditionHandles) {
           const matching = nodeOutgoing.filter(
             edge => (edge.sourceHandle?.trim() || "default") === handle
           );
@@ -715,9 +723,7 @@ export function analyzeWorkflowDefinition(
         nodeOutgoing
           .filter(
             edge =>
-              !["true", "false"].includes(
-                edge.sourceHandle?.trim() || "default"
-              )
+              !conditionHandles.includes(edge.sourceHandle?.trim() || "default")
           )
           .forEach(edge =>
             diagnostics.push(
@@ -798,9 +804,7 @@ export function analyzeWorkflowDefinition(
             const candidate = nodesById.get(candidateId);
             if (!candidate || candidate.type === "operate") continue;
             if (
-              ["condition", "router", "state", "end"].includes(
-                candidate.type
-              )
+              ["condition", "router", "state", "end"].includes(candidate.type)
             ) {
               reachesDecisionBeforeReview = true;
               break;
@@ -1067,7 +1071,11 @@ export function analyzeWorkflowDefinition(
             diagnostic(
               "WF_SERVICE_COMPENSATION_NODE_INVALID",
               `写服务任务“${node.name}”配置的补偿节点不存在。`,
-              { kind: "node", nodeId: node.id, field: "config.compensationNodeId" }
+              {
+                kind: "node",
+                nodeId: node.id,
+                field: "config.compensationNodeId",
+              }
             )
           );
         const compensationEdge = validEdges.some(
@@ -1081,7 +1089,11 @@ export function analyzeWorkflowDefinition(
             diagnostic(
               "WF_SERVICE_COMPENSATION_EDGE_REQUIRED",
               `写服务任务“${node.name}”必须通过 compensation 出口连接补偿节点。`,
-              { kind: "node", nodeId: node.id, field: "config.compensationNodeId" }
+              {
+                kind: "node",
+                nodeId: node.id,
+                field: "config.compensationNodeId",
+              }
             )
           );
       }

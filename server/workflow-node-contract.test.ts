@@ -11,6 +11,15 @@ import { describe, expect, it } from "vitest";
 import { emptyDefinition, validate } from "./workflow-service";
 
 describe("原始节点配置统一契约", () => {
+  it("条件节点拒绝两个分支使用同一句柄，包括首尾空白碰撞", () => {
+    expect(() =>
+      validateNodeConfig("condition", {
+        ...createDefaultNodeConfig("condition"),
+        trueHandle: "accepted",
+        falseHandle: " accepted ",
+      })
+    ).toThrow("成立与不成立分支句柄必须不同");
+  });
   it("状态名称兼容旧字段，但占位默认值不能覆盖自定义名称", () => {
     const modern = withNodeConfigDefaults("state", {
       stateCode: "RECEIVED",

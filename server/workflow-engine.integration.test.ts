@@ -85,8 +85,8 @@ const definition: Definition = {
         left: "{{nodes.transform.completed}}",
         operator: "equals",
         right: false,
-        trueHandle: "true",
-        falseHandle: "false",
+        trueHandle: "unfinished",
+        falseHandle: "completed",
       },
     },
     {
@@ -124,13 +124,13 @@ const definition: Definition = {
     {
       id: "condition-end",
       sourceNodeId: "condition",
-      sourceHandle: "true",
+      sourceHandle: "unfinished",
       targetNodeId: "end",
     },
     {
       id: "condition-false-end",
       sourceNodeId: "condition",
-      sourceHandle: "false",
+      sourceHandle: "completed",
       targetNodeId: "end",
     },
   ],

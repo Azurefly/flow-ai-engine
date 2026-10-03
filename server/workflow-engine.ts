@@ -21,6 +21,7 @@ import {
   type NormalizedRouterRule,
 } from "../shared/reference-router-config";
 import {
+  readConditionHandles,
   readOperateOutcomeMode,
   readOperateOutcomes,
   resolveStateDisplayName,
@@ -1627,9 +1628,7 @@ async function executeNode(
       );
       return {
         output: { matched, left, right },
-        route: matched
-          ? String(config.trueHandle ?? "true")
-          : String(config.falseHandle ?? "false"),
+        route: readConditionHandles(config)[matched ? 0 : 1],
       };
     }
     case "http": {
