@@ -1193,9 +1193,14 @@ export const appRouter = router({
         return result;
       }),
     assignees: protectedProcedure
-      .input(z.object({ taskId: z.string().uuid() }))
+      .input(
+        z.object({
+          taskId: z.string().uuid(),
+          search: z.string().trim().max(100).optional(),
+        })
+      )
       .query(({ ctx, input }) =>
-        listWorkflowTaskAssignees(ctx.user, input.taskId)
+        listWorkflowTaskAssignees(ctx.user, input.taskId, input.search)
       ),
     claim: protectedProcedure
       .input(z.object({ taskId: z.string().uuid() }))

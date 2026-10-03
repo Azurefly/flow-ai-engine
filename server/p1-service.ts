@@ -1,3 +1,4 @@
+import { eligibleDirectoryPage } from "./eligible-directory-page";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
@@ -698,40 +699,42 @@ async function grantParticipantTaskOperation(
   );
 }
 
-export async function listWorkflowTaskAssignees(user: User, taskId: string) {
+export async function listWorkflowTaskAssignees(
+  user: User,
+  taskId: string,
+  search?: string
+) {
   const task: any = await getWorkflowTask(user, taskId);
   if (!task || !(await canAccessTask(user, task, true)))
     throw new Error("人工任务不存在或无分配权限。 ");
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,username,name,email,role FROM users WHERE status='active' ORDER BY COALESCE(name,username),id LIMIT 200"
-  );
-  const eligible: Array<{
-    id: number;
-    username: string;
-    name: string | null;
-    email: string | null;
-  }> = [];
-  for (const candidate of rows) {
-    const candidateUser: User = {
-      id: Number(candidate.id),
-      role: candidate.role === "admin" ? "admin" : "user",
-    };
-    if (
-      await hasWorkflowPermission(
-        candidateUser,
+  const query = search?.trim().toLocaleLowerCase();
+  if (search !== undefined && !query) return [];
+  const rows = await eligibleDirectoryPage<
+    mysql.RowDataPacket & { id: number }
+  >(
+    async afterId => {
+      const [page] = await db().query<(mysql.RowDataPacket & { id: number })[]>(
+        "SELECT id,username,name,role FROM users WHERE status='active' AND id>? AND (? IS NULL OR LOCATE(?,LOWER(COALESCE(name,'')))>0 OR LOCATE(?,LOWER(username))>0) ORDER BY id LIMIT 200",
+        [afterId, query ?? null, query ?? null, query ?? null]
+      );
+      return page;
+    },
+    candidate =>
+      hasWorkflowPermission(
+        {
+          id: Number(candidate.id),
+          role: candidate.role === "admin" ? "admin" : "user",
+        },
         String(task.workflowId),
         "workflow:run"
-      )
-    ) {
-      eligible.push({
-        id: Number(candidate.id),
-        username: String(candidate.username),
-        name: candidate.name ?? null,
-        email: candidate.email ?? null,
-      });
-    }
-  }
-  return eligible;
+      ),
+    search === undefined ? 200 : 51
+  );
+  return rows.map(candidate => ({
+    id: Number(candidate.id),
+    username: String(candidate.username),
+    name: candidate.name ?? null,
+  }));
 }
 
 export async function handoverWorkflowTask(

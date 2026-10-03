@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Include measured role picker growth; keep chunk and gzip limits unchanged.
-const maxTotalBytes = 1_342 * 1024;
+// Include measured task assignee search growth; keep chunk and gzip limits unchanged.
+const maxTotalBytes = 1_343 * 1024;
 const maxTotalGzipBytes = 400 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

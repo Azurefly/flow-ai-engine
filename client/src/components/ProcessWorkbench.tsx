@@ -8,6 +8,7 @@ import {
 import { canManageTask } from "@shared/task-assignment";
 import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
+import { SearchableMultiSelect } from "./SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
 import { trpc } from "@/lib/trpc";
@@ -256,8 +257,24 @@ export default function ProcessWorkbench() {
     { taskId: selectedTaskId ?? "00000000-0000-0000-0000-000000000000" },
     { enabled: Boolean(selectedTaskId), retry: false }
   );
+  const [assigneeQuery, setAssigneeQuery] = useState("");
+  const [assigneeSearch, setAssigneeSearch] = useState("");
+  useEffect(() => {
+    setAssigneeQuery("");
+    setAssigneeSearch("");
+  }, [selectedTaskId]);
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setAssigneeSearch(assigneeQuery.trim()),
+      250
+    );
+    return () => clearTimeout(timer);
+  }, [assigneeQuery]);
   const assignees = trpc.task.assignees.useQuery(
-    { taskId: selectedTaskId ?? "00000000-0000-0000-0000-000000000000" },
+    {
+      taskId: selectedTaskId ?? "00000000-0000-0000-0000-000000000000",
+      search: assigneeSearch,
+    },
     {
       enabled: Boolean(
         selectedTaskId &&
@@ -818,6 +835,15 @@ export default function ProcessWorkbench() {
         <TaskDrawer
           task={taskDetail.data as any}
           assignees={(assignees.data ?? []) as any[]}
+          assigneeQuery={assigneeQuery}
+          onAssigneeQueryChange={(query: string) =>
+            setAssigneeQuery(query.slice(0, 100))
+          }
+          assigneesLoading={
+            assignees.isFetching || assigneeQuery.trim() !== assigneeSearch
+          }
+          assigneesError={assignees.isError}
+          onRetryAssignees={() => void assignees.refetch()}
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
           onOpenRun={(runId: string) => {
@@ -2450,6 +2476,11 @@ function taskFormFields(task: any): Array<{
 function TaskDrawer({
   task,
   assignees,
+  assigneeQuery,
+  onAssigneeQueryChange,
+  assigneesLoading,
+  assigneesError,
+  onRetryAssignees,
   busy,
   onClose,
   onOpenRun,
@@ -2697,19 +2728,37 @@ function TaskDrawer({
                   仅显示拥有该流程运行权限的内部用户。移交变更责任人；代理同时保留被代理主体。两者都不会直接推进流程。
                 </p>
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <select
-                    aria-label="选择移交处理人"
-                    value={targetUserId}
-                    onChange={event => setTargetUserId(event.target.value)}
-                    className="h-9 min-w-0 flex-1 rounded border border-border bg-card px-2 text-sm"
-                  >
-                    <option value="">选择可分配处理人</option>
-                    {assignees.map((item: any) => (
-                      <option key={item.id} value={item.id}>
-                        {item.name || item.username}（{item.username}）
-                      </option>
-                    ))}
-                  </select>
+                  <div className="min-w-0 flex-1">
+                    <SearchableMultiSelect
+                      ariaLabel="选择移交处理人"
+                      value={targetUserId ? [targetUserId] : []}
+                      options={assignees.map((item: any) => ({
+                        value: String(item.id),
+                        label: `${item.name || item.username}（${item.username}）`,
+                      }))}
+                      query={assigneeQuery}
+                      onQueryChange={onAssigneeQueryChange}
+                      onChange={ids => setTargetUserId(ids[0] ?? "")}
+                      placeholder="选择可分配处理人"
+                      searchPlaceholder="搜索姓名或账号"
+                      emptyMessage="没有可分配处理人。"
+                      loading={assigneesLoading}
+                      error={assigneesError}
+                      disabled={busy}
+                      requireSearch
+                      maxSelected={1}
+                      hasMore={assignees.length > 50}
+                    />
+                    {assigneesError && (
+                      <button
+                        type="button"
+                        className="mt-1 text-sm text-blue-600 underline"
+                        onClick={onRetryAssignees}
+                      >
+                        重新查询处理人
+                      </button>
+                    )}
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
