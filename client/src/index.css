@@ -405,6 +405,17 @@ h2 {
     line-height: var(--aiflow-leading-meta) !important;
   }
 
+  /* Keep the business landing page compact and readable without tiny labels. */
+  [data-aiflow-business-center] .aiflow-type-body {
+    font-size: 0.9375rem !important;
+    line-height: 1.4375rem !important;
+  }
+
+  [data-aiflow-business-center] .aiflow-type-meta {
+    font-size: 0.875rem !important;
+    line-height: 1.25rem !important;
+  }
+
   :is(
     button,
     [role="button"],

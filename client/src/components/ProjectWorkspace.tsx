@@ -543,13 +543,7 @@ function BusinessCenterView({
   onOpenProject,
 }: BusinessCenterViewProps) {
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(() =>
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(max-width: 1279px)").matches
-      ? 10
-      : 25
-  );
+  const [pageSize, setPageSize] = useState(10);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [domainSelectorQuery, setDomainSelectorQuery] = useState("");
   useEffect(() => {
