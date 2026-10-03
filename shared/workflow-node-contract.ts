@@ -83,6 +83,46 @@ export function readOperateOutcomes(config: NodeConfig): OperateOutcome[] {
     });
 }
 
+export function assertOperateOutcomes(config: NodeConfig) {
+  if (config.outcomes !== undefined && !Array.isArray(config.outcomes))
+    throw new Error("操作节点结果出口必须是数组。");
+  if (
+    config.outcomeMode !== undefined &&
+    !["explicit", "legacy_cancel"].includes(String(config.outcomeMode))
+  )
+    throw new Error("操作节点结果路由模式无效。");
+  if (config.outcomeMode === "explicit" && Array.isArray(config.outcomes)) {
+    for (const item of config.outcomes) {
+      assertObject(item, "操作结果项必须是对象。");
+      const outcome = item as NodeConfig;
+      for (const key of ["code", "label", "sourceHandle"])
+        if (outcome[key] !== undefined && typeof outcome[key] !== "string")
+          throw new Error(`操作结果 ${key} 必须是字符串。`);
+      if (
+        outcome.requireComment !== undefined &&
+        typeof outcome.requireComment !== "boolean"
+      )
+        throw new Error("操作结果意见必填开关必须是布尔值。");
+    }
+  }
+  const outcomes = readOperateOutcomes(config);
+  if (config.outcomeMode === "explicit" && !outcomes.length)
+    throw new Error("显式结果路由必须至少配置一个结果出口。");
+  const outcomeCodes = new Set<string>();
+  const outcomeHandles = new Set<string>();
+  for (const outcome of outcomes) {
+    assertString(outcome.code, "操作结果必须配置结果代号。");
+    assertString(outcome.label, "操作结果必须配置显示名称。");
+    assertString(outcome.sourceHandle, "操作结果必须配置分支句柄。");
+    if (outcomeCodes.has(outcome.code))
+      throw new Error("操作结果代号不可重复。");
+    if (outcomeHandles.has(outcome.sourceHandle))
+      throw new Error("操作结果分支句柄不可重复。");
+    outcomeCodes.add(outcome.code);
+    outcomeHandles.add(outcome.sourceHandle);
+  }
+}
+
 /** Shared source/target contract used by both the designer and publish-time validation. */
 export const FLOW_NODE_ALLOWED_TARGETS: Partial<
   Record<FlowNodeType, readonly FlowNodeType[]>
@@ -2370,43 +2410,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         throw new Error("操作节点权限控制必须是数组。");
       if (config.bddx !== undefined && !Array.isArray(config.bddx))
         throw new Error("操作节点绑定对象必须是数组。");
-      if (config.outcomes !== undefined && !Array.isArray(config.outcomes))
-        throw new Error("操作节点结果出口必须是数组。");
-      if (
-        config.outcomeMode !== undefined &&
-        !["explicit", "legacy_cancel"].includes(String(config.outcomeMode))
-      )
-        throw new Error("操作节点结果路由模式无效。");
-      if (config.outcomeMode === "explicit" && Array.isArray(config.outcomes)) {
-        for (const item of config.outcomes) {
-          assertObject(item, "操作结果项必须是对象。");
-          const outcome = item as NodeConfig;
-          for (const key of ["code", "label", "sourceHandle"])
-            if (outcome[key] !== undefined && typeof outcome[key] !== "string")
-              throw new Error(`操作结果 ${key} 必须是字符串。`);
-          if (
-            outcome.requireComment !== undefined &&
-            typeof outcome.requireComment !== "boolean"
-          )
-            throw new Error("操作结果意见必填开关必须是布尔值。");
-        }
-      }
-      const outcomes = readOperateOutcomes(config);
-      if (config.outcomeMode === "explicit" && !outcomes.length)
-        throw new Error("显式结果路由必须至少配置一个结果出口。");
-      const outcomeCodes = new Set<string>();
-      const outcomeHandles = new Set<string>();
-      for (const outcome of outcomes) {
-        assertString(outcome.code, "操作结果必须配置结果代号。");
-        assertString(outcome.label, "操作结果必须配置显示名称。");
-        assertString(outcome.sourceHandle, "操作结果必须配置分支句柄。");
-        if (outcomeCodes.has(outcome.code))
-          throw new Error("操作结果代号不可重复。");
-        if (outcomeHandles.has(outcome.sourceHandle))
-          throw new Error("操作结果分支句柄不可重复。");
-        outcomeCodes.add(outcome.code);
-        outcomeHandles.add(outcome.sourceHandle);
-      }
+      assertOperateOutcomes(config);
       for (const key of ["bdcz", "sxsz", "fsfsz", "jsfsz", "zdzx"])
         if (config[key] !== undefined)
           assertObject(config[key], "操作节点" + key + "配置必须是对象。");

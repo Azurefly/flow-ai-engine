@@ -21,6 +21,7 @@ import { normalizeReferenceRouterConfig } from "@shared/reference-router-config"
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
 import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
+import { WorkflowOutcomeEditor } from "./WorkflowOutcomeEditor";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -730,6 +731,7 @@ function ConfigFieldEditor({
   aggregateMetrics = false,
   nodeKind,
   routeTargetLabels,
+  outcomeMode,
   onChange,
 }: {
   field: FlowNodeDefinition["fields"][number];
@@ -743,6 +745,7 @@ function ConfigFieldEditor({
   aggregateMetrics?: boolean;
   nodeKind?: NodeKind;
   routeTargetLabels?: Record<string, string>;
+  outcomeMode?: string;
   onChange: (value: unknown) => void;
 }) {
   const effectiveValue = value ?? fallback;
@@ -762,6 +765,23 @@ function ConfigFieldEditor({
   );
   const inputClass =
     "aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground min-[1024px]:h-9 min-[1024px]:min-h-0";
+  if (nodeKind === "operate" && field.key === "outcomes")
+    return (
+      <WorkflowOutcomeEditor
+        value={effectiveValue}
+        mode={outcomeMode ?? "legacy_cancel"}
+        disabled={disabled}
+        targets={routeTargetLabels}
+        onChange={onChange}
+        advanced={
+          <NestedStructuredValueEditor
+            value={effectiveValue}
+            disabled={disabled}
+            onChange={onChange}
+          />
+        }
+      />
+    );
   if (nodeKind === "operate" && field.key === "formSchema")
     return (
       <TaskFormSchemaEditor
@@ -2765,14 +2785,21 @@ export default function WorkflowCanvas({
   );
   const selectedRouteTargetLabels = useMemo(
     () =>
-      Object.fromEntries(
-        edges
-          .filter(edge => edge.source === selectedId)
-          .map(edge => [
-            edge.sourceHandle || "default",
-            String(nodeMap.get(edge.target)?.data.label || edge.target),
-          ])
-      ),
+      edges
+        .filter(edge => edge.source === selectedId)
+        .reduce<Record<string, string>>(
+          (labels, edge) => {
+            const handle = edge.sourceHandle || "default";
+            const target = String(
+              nodeMap.get(edge.target)?.data.label || edge.target
+            );
+            labels[handle] = labels[handle]
+              ? `${labels[handle]}、${target}`
+              : target;
+            return labels;
+          },
+          Object.create(null) as Record<string, string>
+        ),
     [edges, nodeMap, selectedId]
   );
   const displayedEdges = useMemo(
@@ -4708,6 +4735,9 @@ export default function WorkflowCanvas({
                                   : undefined
                             }
                             routeTargetLabels={selectedRouteTargetLabels}
+                            outcomeMode={String(
+                              selectedConfig.outcomeMode ?? "legacy_cancel"
+                            )}
                             onChange={value => {
                               if (field.key === "endpointRef" && projectId) {
                                 try {
