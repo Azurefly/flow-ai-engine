@@ -4,6 +4,61 @@ import {
   taskFormInputValue,
   validateFormSubmission,
 } from "../shared/task-form";
+it("rejects unusable or duplicate choices while keeping numeric and text values distinct", () => {
+  for (const options of [
+    [""],
+    [" "],
+    ["a", "a"],
+    [
+      { value: "a", label: "甲" },
+      { value: "a", label: "乙" },
+    ],
+  ]) {
+    expect(() =>
+      assertTaskFormSchema({
+        fields: [{ key: "choice", type: "select", options }],
+      })
+    ).toThrow();
+  }
+  expect(() =>
+    assertTaskFormSchema({
+      fields: [
+        {
+          key: "tags",
+          type: "multiselect",
+          options: [1, "1"],
+          defaultValue: [1, "1"],
+        },
+      ],
+    })
+  ).not.toThrow();
+});
+it("validates actual calendar dates consistently for defaults and submissions", () => {
+  for (const date of [
+    "2026-02-30",
+    "2025-02-29",
+    "2026-04-31",
+    "2026-13-01",
+    "0000-01-01",
+    "2026/10/03",
+    "2026-10-03T12:00:00Z",
+  ]) {
+    const field = { key: "day", type: "date", required: true };
+    expect(() => validateFormSubmission([field], { day: date })).toThrow(
+      "日期"
+    );
+    expect(() =>
+      assertTaskFormSchema({
+        fields: [{ ...field, readOnly: true, defaultValue: date }],
+      })
+    ).toThrow("默认值无效");
+  }
+  for (const day of ["2024-02-29", "2026-10-03", "0001-01-01"]) {
+    expect(
+      validateFormSubmission([{ key: "day", type: "date" }], { day })
+    ).toEqual({ day });
+  }
+});
 it("rejects impossible bounds and unchangeable invalid defaults before publication", () => {
   for (const field of [
     { key: "x", type: "number", min: 10, max: 2 },

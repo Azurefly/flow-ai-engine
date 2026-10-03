@@ -79,6 +79,21 @@ export function assertTaskFormSchema(schema: unknown) {
         )
       )
         throw new Error(`单选字段“${key}”的选项值必须是字符串。`);
+      const optionValues = field.options.map(option =>
+        Object.prototype.hasOwnProperty.call(asRecord(option), "value")
+          ? asRecord(option).value
+          : option
+      );
+      if (
+        type === "select" &&
+        optionValues.some(value => !String(value).trim())
+      )
+        throw new Error(`单选字段“${key}”的选项值不能为空。`);
+      if (
+        new Set(optionValues.map(value => JSON.stringify(value))).size !==
+        optionValues.length
+      )
+        throw new Error(`字段“${key}”的选项值不可重复。`);
     }
     // Defaults must obey the same rules as actual submissions. Editable required
     // fields may omit a default; read-only required fields cannot be repaired by users.
@@ -148,7 +163,7 @@ export function validateFormSubmission(
       throw new Error(`表单字段“${key}”必须是字符串。`);
     if (type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value)))
       throw new Error(`表单字段“${key}”不是有效邮箱。`);
-    if (type === "date" && Number.isNaN(Date.parse(String(value))))
+    if (type === "date" && !isCalendarDate(String(value)))
       throw new Error(`表单字段“${key}”不是有效日期。`);
     if (
       type === "number" &&
@@ -198,6 +213,16 @@ export function validateFormSubmission(
     result[key] = value;
   }
   return result;
+}
+
+function isCalendarDate(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number(value.slice(0, 4)) < 1)
+    return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
 }
 
 export function taskFormInputValue(type: string, value: string): unknown {
