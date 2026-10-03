@@ -1,3 +1,4 @@
+import { OPERATE_CONFIG_GROUPS } from "@shared/operate-config-groups";
 import {
   addEdge,
   Background,
@@ -2177,68 +2178,7 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
       keys: ["flowStatus", "bdym"],
     },
   ],
-  operate: [
-    {
-      label: "基础信息",
-      keys: ["nodeDh", "czmc", "lsWorkZone"],
-    },
-    {
-      label: "权限控制",
-      keys: ["bddxcrjsrsx", "bdczcrjsrsx", "qxkz"],
-    },
-    {
-      label: "绑定对象",
-      keys: ["bddx"],
-    },
-    {
-      label: "绑定操作",
-      keys: ["bdcz"],
-    },
-    {
-      label: "属性设置",
-      keys: ["sxsz"],
-    },
-    {
-      label: "发送方设置",
-      keys: ["fsfsz"],
-    },
-    {
-      label: "接收方设置",
-      keys: ["jsfsz"],
-    },
-    {
-      label: "自动执行",
-      keys: ["zdzx"],
-    },
-    {
-      label: "当前运行设置",
-      keys: [
-        "assigneeMode",
-        "assigneeRoleCode",
-        "instruction",
-        "assigneeUserId",
-        "assigneeFallback",
-        "managerLevel",
-        "assigneeUnitIds",
-        "includeDescendants",
-        "assigneeFormField",
-      ],
-    },
-    {
-      label: "表单与时限",
-      keys: [
-        "formSchemaVersion",
-        "formSchema",
-        "dueAfterSeconds",
-        "reminderAfterSeconds",
-        "escalationAfterSeconds",
-      ],
-    },
-    {
-      label: "结果与分支",
-      keys: ["outcomeMode", "outcomes"],
-    },
-  ],
+  operate: OPERATE_CONFIG_GROUPS,
   router: [
     {
       label: "基础信息",
@@ -4563,6 +4503,12 @@ export default function WorkflowCanvas({
                       <h3 className="aiflow-type-section-title font-semibold text-foreground">
                         {activeInspectorGroup.label}
                       </h3>
+                      {selected.data.kind === "operate" &&
+                        activeInspectorGroup.label === "高级配置" && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            对象绑定、身份传递和历史自动执行配置。常规人工办理请先设置处理人、表单与结果分支。
+                          </p>
+                        )}
                     </div>
                     <div className="space-y-4">
                       {activeInspectorGroup.fields.map(field => {
