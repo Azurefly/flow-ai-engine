@@ -4,6 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { TrpcContext } from "./_core/context";
 import { ensureIamCatalog } from "./iam-service";
 import { appRouter } from "./routers";
+import { createIntegrationAdmin } from "./integration-user-test-support";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8).toLowerCase();
@@ -13,10 +14,12 @@ let pool: mysql.Pool | undefined;
 let unitId: string | undefined;
 let roleId: number | undefined;
 let userIds: number[] = [];
+let adminId: number | undefined;
 
 describe("AI 批量用户与内部账号权限中心真实数据库闭环", () => {
   afterAll(async () => {
     if (!pool) return;
+    if (adminId) userIds.push(adminId);
     if (userIds.length)
       await pool.query("DELETE FROM role_assignment WHERE userId IN (?)", [
         userIds,
@@ -38,8 +41,8 @@ describe("AI 批量用户与内部账号权限中心真实数据库闭环", () =
         userIds,
       ]);
       await pool.query(
-        "DELETE FROM authorization_audit_log WHERE targetUserId IN (?) OR (resourceType='iam_role' AND resourceId=?)",
-        [userIds, roleCode]
+        "DELETE FROM authorization_audit_log WHERE targetUserId IN (?) OR actorUserId IN (?) OR (resourceType='iam_role' AND resourceId=?)",
+        [userIds, userIds, roleCode]
       );
       await pool.query("DELETE FROM users WHERE id IN (?)", [userIds]);
     }
@@ -51,11 +54,8 @@ describe("AI 批量用户与内部账号权限中心真实数据库闭环", () =
     async () => {
       pool = mysql.createPool(process.env.DATABASE_URL!);
       await ensureIamCatalog();
-      const [adminRows] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT * FROM users WHERE role='admin' AND status='active' ORDER BY id LIMIT 1"
-      );
-      const admin = adminRows[0];
-      expect(admin).toBeTruthy();
+      const admin = await createIntegrationAdmin(pool, "account_center");
+      adminId = admin.id;
       const caller = appRouter.createCaller({
         user: admin,
         req: { headers: {}, protocol: "https" },
