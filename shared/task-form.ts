@@ -8,8 +8,7 @@ export function assertTaskFormSchema(schema: unknown) {
   for (const raw of record.fields) {
     const field = asRecord(raw);
     const key = typeof field.key === "string" ? field.key.trim() : "";
-    if (!key || keys.has(key))
-      throw new Error("表单代号不能为空或重复。");
+    if (!key || keys.has(key)) throw new Error("表单代号不能为空或重复。");
     if (
       [
         "decision",
@@ -46,6 +45,20 @@ export function assertTaskFormSchema(schema: unknown) {
     for (const flag of ["required", "readOnly"])
       if (field[flag] !== undefined && typeof field[flag] !== "boolean")
         throw new Error(`任务表单字段“${key}”的 ${flag} 必须是布尔值。`);
+    for (const bound of ["min", "max", "maxLength"] as const) {
+      const value = field[bound];
+      if (value === undefined) continue;
+      if (typeof value !== "number" || !Number.isFinite(value))
+        throw new Error(`字段“${key}”的 ${bound} 必须是有限数值。`);
+      if (bound === "maxLength" && (!Number.isInteger(value) || value < 0))
+        throw new Error(`字段“${key}”的最大长度必须是非负整数。`);
+    }
+    if (
+      typeof field.min === "number" &&
+      typeof field.max === "number" &&
+      field.min > field.max
+    )
+      throw new Error(`字段“${key}”的最小值不能大于最大值。`);
     if (["select", "multiselect"].includes(type)) {
       if (!Array.isArray(field.options) || !field.options.length)
         throw new Error(`任务表单字段“${key}”必须配置选项。`);
@@ -66,6 +79,28 @@ export function assertTaskFormSchema(schema: unknown) {
         )
       )
         throw new Error(`单选字段“${key}”的选项值必须是字符串。`);
+    }
+    // Defaults must obey the same rules as actual submissions. Editable required
+    // fields may omit a default; read-only required fields cannot be repaired by users.
+    if (
+      field.defaultValue !== undefined ||
+      (field.required === true && field.readOnly === true)
+    ) {
+      try {
+        validateFormSubmission(
+          [
+            {
+              ...field,
+              required: field.readOnly === true && field.required === true,
+            },
+          ],
+          {}
+        );
+      } catch (error) {
+        throw new Error(
+          `字段“${key}”默认值无效：${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
   }
 }
