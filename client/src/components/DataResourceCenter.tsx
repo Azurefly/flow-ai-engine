@@ -23,6 +23,7 @@ import {
   Play,
   Plus,
   Puzzle,
+  RefreshCw,
   Table2,
   Tags,
   Trash2,
@@ -57,8 +58,30 @@ export default function DataResourceCenter({
   const [activeFlowId, setActiveFlowId] = useState("");
   const resources = trpc.data.resources.useQuery({ projectId });
   const flows = trpc.data.flows.useQuery({ projectId });
-  const runs = trpc.data.runs.useQuery({ projectId, limit: 30 });
-  const schedules = trpc.data.schedules.useQuery({ projectId });
+  const schedules = trpc.data.schedules.useQuery(
+    { projectId },
+    { enabled: tab === "flows" }
+  );
+  const hasActiveSchedule =
+    schedules.data?.some(schedule => schedule.status === "active") ?? false;
+  const runs = trpc.data.runs.useQuery(
+    { projectId, limit: 30 },
+    {
+      enabled: tab === "flows",
+      refetchInterval: query => {
+        if (tab !== "flows") return false;
+        const hasActiveRun = query.state.data?.some(
+          run => run.status === "queued" || run.status === "running"
+        );
+        return hasActiveRun ? 3_000 : hasActiveSchedule ? 15_000 : false;
+      },
+      refetchIntervalInBackground: false,
+    }
+  );
+  const hasActiveRun =
+    runs.data?.some(
+      run => run.status === "queued" || run.status === "running"
+    ) ?? false;
   const [udfForm, setUdfForm] = useState({
     name: "",
     udfType: "javascript" as "sql" | "javascript" | "python" | "jar",
@@ -158,13 +181,19 @@ export default function DataResourceCenter({
     onError: error => toast.error(error.message),
   });
   const run = trpc.data.run.useMutation({
-    onSuccess: result => {
+    onSuccess: (result, variables) => {
       invalidate();
+      setActiveFlowId(variables.workflowId);
+      setDataflowSection("runs");
       toast.success(
         `${result.status === "success" ? "数据流运行完成" : "数据流已进入持久化执行队列"}：${result.runId.slice(0, 8)}`
       );
     },
-    onError: error => toast.error(error.message),
+    onError: error => {
+      // Execution errors can arrive after a failed run has already been saved.
+      invalidate();
+      toast.error(error.message);
+    },
   });
   const refreshSchedules = () => {
     void utils.data.schedules.invalidate({ projectId });
@@ -407,6 +436,14 @@ export default function DataResourceCenter({
           onOpenResourceTab={setTab}
           onRunFlow={workflowId => run.mutate({ projectId, workflowId })}
           runPending={run.isPending}
+          onRefresh={retrySelectedQueries}
+          refreshPending={
+            runs.isFetching ||
+            flows.isFetching ||
+            schedules.isFetching ||
+            resources.isFetching
+          }
+          autoRefreshActive={hasActiveRun || hasActiveSchedule}
           onSaveSchedule={() =>
             saveSchedule.mutate({ projectId, ...scheduleForm })
           }
@@ -1400,6 +1437,9 @@ function DataflowWorkspace({
   onOpenResourceTab,
   onRunFlow,
   runPending,
+  onRefresh,
+  refreshPending,
+  autoRefreshActive,
   onSaveSchedule,
   saveSchedulePending,
   onActivateSchedule,
@@ -1426,6 +1466,9 @@ function DataflowWorkspace({
   onOpenResourceTab: (tab: Tab) => void;
   onRunFlow: (workflowId: string) => void;
   runPending: boolean;
+  onRefresh: () => void;
+  refreshPending: boolean;
+  autoRefreshActive: boolean;
   onSaveSchedule: () => void;
   saveSchedulePending: boolean;
   onActivateSchedule: (workflowId: string) => void;
@@ -1475,6 +1518,19 @@ function DataflowWorkspace({
           </p>
         </div>
         <div className="grid w-full min-w-0 grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 w-full sm:min-h-0 sm:w-auto"
+            disabled={refreshPending}
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              size={14}
+              className={refreshPending ? "animate-spin" : undefined}
+            />
+            {refreshPending ? "刷新中" : "刷新状态"}
+          </Button>
           {flows.length > 0 && (
             <select
               aria-label="当前数据流"
@@ -1519,6 +1575,16 @@ function DataflowWorkspace({
           </Button>
         </div>
       </header>
+
+      <p
+        role="status"
+        aria-live="polite"
+        className="aiflow-type-meta text-muted-foreground"
+      >
+        {autoRefreshActive
+          ? "运行及调度状态自动刷新中；后台页面暂停自动刷新。"
+          : "当前没有执行中的运行或已启用计划，可手动刷新状态。"}
+      </p>
 
       <nav
         aria-label="数据流工作区视图"
@@ -1580,9 +1646,18 @@ function DataflowWorkspace({
                   最近运行
                 </p>
                 <p className="mt-2 text-sm font-medium text-foreground">
-                  {latestRun
-                    ? `${latestRun.status === "success" ? "成功" : latestRun.status} · ${formatDataflowTime(latestRun.finishedAt ?? latestRun.startedAt)}`
-                    : "尚无运行记录"}
+                  {latestRun ? (
+                    <>
+                      <State value={latestRun.status} /> ·{" "}
+                      {formatDataflowTime(
+                        latestRun.finishedAt ??
+                          latestRun.startedAt ??
+                          latestRun.createdAt
+                      )}
+                    </>
+                  ) : (
+                    "尚无运行记录"
+                  )}
                 </p>
               </div>
               <div className="rounded-lg border border-border bg-card p-4">

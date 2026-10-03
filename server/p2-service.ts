@@ -2113,6 +2113,7 @@ export async function listDataflowRuns(
   return rows.map(row => ({
     ...row,
     input: parseJson(row.inputJson, {}),
+    status: String(row.status),
     output: parseJson(row.outputJson, null),
     error: parseJson(row.errorJson, null),
     checkpoint: parseJson(row.checkpointJson, null),
@@ -2273,6 +2274,7 @@ export async function listDataflowSchedules(
   return rows.map(row => ({
     ...row,
     taskConfigured: Boolean(row.scheduleCronTaskUid),
+    status: String(row.status),
     scheduleCronTaskUid: undefined,
   }));
 }
