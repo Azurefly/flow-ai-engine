@@ -9,6 +9,24 @@ import { normalizeReferenceRouterRule } from "@shared/reference-router-config";
 type OutgoingEdge = { sourceHandle?: string | null; target: string };
 type RouterEdge = OutgoingEdge & { source: string };
 
+export function updateLlmConnections<T extends RouterEdge>(
+  sourceId: string,
+  before: NodeConfig,
+  requested: NodeConfig,
+  edges: T[]
+): T[] {
+  const previous = String(before.failureHandle ?? "").trim();
+  const next = String(requested.failureHandle ?? "").trim();
+  if (next === "default")
+    throw new Error("LLM 失败分支不能与成功分支 default 同名。");
+  if (!previous || previous === "default" || previous === next) return edges;
+  return edges.flatMap(edge => {
+    if (edge.source !== sourceId || edge.sourceHandle?.trim() !== previous)
+      return [edge];
+    return next ? [{ ...edge, sourceHandle: next }] : [];
+  });
+}
+
 /** Keep operation connections attached to their result code when ports change. */
 export function updateOperateConnections<T extends RouterEdge>(
   sourceId: string,

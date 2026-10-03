@@ -1472,7 +1472,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "failureHandle",
         label: "失败分支句柄",
-        help: "LLM 超时、Provider 或结构化解析失败时，沿此句柄进入补偿/人工处理分支。",
+        help: "留空时运行失败并停止；填写后必须连接失败处理节点。此名称不能为成功分支 default。",
         kind: "text",
       },
       {
@@ -2627,6 +2627,8 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           config.failureHandle,
           "LLM 节点失败分支句柄必须是字符串。"
         );
+      if (String(config.failureHandle ?? "").trim() === "default")
+        throw new Error("LLM 失败分支不能与成功分支 default 同名。");
       if (config.governance !== undefined) {
         assertObject(config.governance, "LLM 治理策略必须是对象。");
         const governance = config.governance as NodeConfig;

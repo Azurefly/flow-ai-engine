@@ -54,6 +54,7 @@ import { Button } from "@/components/ui/button";
 import { useMotionPreference } from "@/hooks/useMotionPreference";
 import {
   syncRouterConfigTargets,
+  updateLlmConnections,
   updateOperateConnections,
   updateRouterConnections,
 } from "./workflow-canvas-routing";
@@ -3261,6 +3262,34 @@ export default function WorkflowCanvas({
   }, [contextMenu]);
   const updateSelected = (updates: Partial<FlowNodeData>) => {
     if (!selectedId || inspectorDisabled) return;
+    if (
+      selected?.data.kind === "llm" &&
+      updates.config &&
+      updates.config.failureHandle !== selected.data.config.failureHandle
+    ) {
+      try {
+        const nextEdges = updateLlmConnections(
+          selectedId,
+          selected.data.config,
+          updates.config,
+          edges
+        );
+        pushHistory();
+        setEdges(nextEdges);
+        setNodes(current =>
+          current.map(node =>
+            node.id === selectedId
+              ? { ...node, data: { ...node.data, ...updates } }
+              : node
+          )
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "LLM 失败分支更新失败。"
+        );
+      }
+      return;
+    }
     if (
       selected?.data.kind === "operate" &&
       updates.config &&

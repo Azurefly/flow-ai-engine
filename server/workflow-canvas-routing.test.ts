@@ -3,8 +3,44 @@ import {
   syncRouterConfigTargets,
   updateRouterConnections,
   updateOperateConnections,
+  updateLlmConnections,
 } from "../client/src/components/workflow-canvas-routing";
 import { normalizeReferenceRouterConfig } from "../shared/reference-router-config";
+
+describe("LLM 失败分支连线同步", () => {
+  const edges = [
+    { source: "llm", sourceHandle: "default", target: "success" },
+    { source: "llm", sourceHandle: "failed", target: "review" },
+    { source: "other", sourceHandle: "failed", target: "review" },
+  ];
+  it("修改及清除失败出口时保留成功分支和其他节点的连线", () => {
+    expect(
+      updateLlmConnections(
+        "llm",
+        { failureHandle: "failed" },
+        { failureHandle: " error " },
+        edges
+      )
+    ).toEqual([edges[0], { ...edges[1], sourceHandle: "error" }, edges[2]]);
+    expect(
+      updateLlmConnections(
+        "llm",
+        { failureHandle: "failed" },
+        { failureHandle: "" },
+        edges
+      )
+    ).toEqual([edges[0], edges[2]]);
+    expect(edges[1].sourceHandle).toBe("failed");
+  });
+  it("阻止失败与成功同名，新增失败出口不移动已有成功连线", () => {
+    expect(() =>
+      updateLlmConnections("llm", {}, { failureHandle: "default" }, edges)
+    ).toThrow("不能与成功分支");
+    expect(
+      updateLlmConnections("llm", {}, { failureHandle: "failed" }, [edges[0]])
+    ).toEqual([edges[0]]);
+  });
+});
 
 describe("人工操作结果连线同步", () => {
   const before = {

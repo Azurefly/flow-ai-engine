@@ -276,6 +276,9 @@ describe("原始节点配置统一契约", () => {
       validateNodeConfig("llm", { ...valid, failureHandle: 1 })
     ).toThrow("失败分支句柄必须是字符串");
     expect(() =>
+      validateNodeConfig("llm", { ...valid, failureHandle: " default " })
+    ).toThrow("不能与成功分支 default 同名");
+    expect(() =>
       validateNodeConfig("llm", {
         ...valid,
         governance: {
