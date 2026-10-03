@@ -11,14 +11,13 @@ describe("dataflow connector contract", () => {
     expect(source).toContain('source.status !== "verified"');
     expect(source).toContain("DATA_CONNECTOR_ALLOWED_HOSTS");
     expect(source).toContain("SELECT ${projection} FROM");
-    expect(source).toContain("assertReadOnlySql");
+    expect(source).toContain("prepareReadOnlyDataflowSql");
     expect(source).toContain("mysql_read_connector");
   });
 
   it("binds named SQL parameters instead of interpolating values", () => {
-    expect(source).toMatch(/safeStatement\.replace\(\s*\/:\(\[A-Za-z_\]\[A-Za-z0-9_\]\*\)\/g/);
-    expect(source).toContain('return "?"');
-    expect(source).toContain("SQL 参数 ${name} 未提供");
-    expect(source).toContain("SELECT * FROM (${bound}) AS _flow_query");
+    expect(source).toContain("connection.execute<mysql.RowDataPacket[]>");
+    expect(source).toContain("NO_BACKSLASH_ESCAPES");
+    expect(source).toContain("AS _flow_query LIMIT ${limit}");
   });
 });

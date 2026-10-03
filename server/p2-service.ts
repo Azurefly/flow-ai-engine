@@ -21,6 +21,7 @@ import { probeSafeHttpEndpoint } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
 import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
+import { prepareReadOnlyDataflowSql } from "./dataflow-sql-binding";
 import {
   aggregateDataflowRows,
   distinctDataflowRows,
@@ -1064,24 +1065,6 @@ function rowsFromInput(values: unknown[]) {
   );
 }
 
-function assertReadOnlySql(statement: string) {
-  const normalized = statement.trim();
-  if (
-    !/^select\b/i.test(normalized) ||
-    /;|\b(insert|update|delete|drop|alter|create|grant|revoke|truncate|call|load)\b/i.test(
-      normalized
-    )
-  )
-    throw new Error("SQL 节点仅支持单条只读 SELECT 语句。 ");
-  if (
-    /into\s+(outfile|dumpfile)|\bfor\s+update\b|lock\s+in\s+share\s+mode/i.test(
-      normalized
-    )
-  )
-    throw new Error("SQL 节点禁止文件写出。 ");
-  return normalized;
-}
-
 async function loadVerifiedConnector(projectId: string, sourceId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT id,sourceType,status,connectionJson,credentialRef FROM data_source WHERE id=? AND projectId=? LIMIT 1",
@@ -1199,27 +1182,26 @@ async function executeSqlConnector(
   parameters: JsonRecord = {},
   maxRows = 1_000
 ) {
-  const safeStatement = assertReadOnlySql(statement);
   const source = await loadVerifiedConnector(projectId, sourceId);
   if (source.sourceType !== "jdbc")
     throw new Error("SQL Connector 目前仅支持已验证的 MySQL 数据源。 ");
-  const values: unknown[] = [];
-  const bound = safeStatement.replace(
-    /:([A-Za-z_][A-Za-z0-9_]*)/g,
-    (_, name: string) => {
-      if (!Object.prototype.hasOwnProperty.call(parameters, name))
-        throw new Error(`SQL 参数 ${name} 未提供。`);
-      values.push(parameters[name]);
-      return "?";
-    }
-  );
   const limit = Math.min(Math.max(Math.trunc(Number(maxRows)), 1), 1_000);
-  const result = await withMysqlConnector(source, connection =>
-    connection.query<mysql.RowDataPacket[]>(
-      `SELECT * FROM (${bound}) AS _flow_query LIMIT ${limit}`,
+  const result = await withMysqlConnector(source, async connection => {
+    const [modes] = await connection.execute<mysql.RowDataPacket[]>(
+      "SELECT @@SESSION.sql_mode AS mode"
+    );
+    const { sql, values } = prepareReadOnlyDataflowSql(
+      statement,
+      parameters,
+      String(modes[0]?.mode ?? "")
+        .split(",")
+        .includes("NO_BACKSLASH_ESCAPES")
+    );
+    return connection.execute<mysql.RowDataPacket[]>(
+      `SELECT * FROM (${sql}\n) AS _flow_query LIMIT ${limit}`,
       values
-    )
-  );
+    );
+  });
   return normalizeRows(result[0]);
 }
 

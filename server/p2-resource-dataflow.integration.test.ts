@@ -539,7 +539,7 @@ describe("P2 项目数据资源与数据流", () => {
                 config: {
                   datasourceId: mysqlSourceId,
                   statement:
-                    "SELECT username FROM users WHERE username=:username",
+                    "SELECT username, ':ignored?' AS literal, 'update; delete' AS label, :username AS echo FROM users WHERE username=:username /* :comment ? */ -- :line ?\n",
                   parameters: { username: adminName },
                   maxRows: 10,
                 },
@@ -571,7 +571,12 @@ describe("P2 项目数据资源与数据流", () => {
       });
       expect(sqlRun.status).toBe("success");
       expect((sqlRun.output.terminals[0] as any).rows).toEqual([
-        { username: adminName },
+        {
+          username: adminName,
+          literal: ":ignored?",
+          label: "update; delete",
+          echo: adminName,
+        },
       ]);
       const digits = Array.from(
         { length: 10 },
