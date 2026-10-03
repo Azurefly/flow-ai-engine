@@ -51,6 +51,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMotionPreference } from "@/hooks/useMotionPreference";
+import { syncRouterConfigTargets } from "./workflow-canvas-routing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -725,116 +726,12 @@ function syncRouterRouteTargets(
     )
       return node;
     const outgoing = edges.filter(edge => edge.source === node.id);
-    const handles = new Set(
-      outgoing.map(edge => edge.sourceHandle || "default")
-    );
-    const config = node.data.config as NodeConfig;
-    const existingRoutes = Array.isArray(config.routes) ? config.routes : [];
-    const existingLegacy = Array.isArray(config.lysz) ? config.lysz : [];
-    const routes = existingRoutes
-      .filter(
-        item =>
-          item &&
-          typeof item === "object" &&
-          handles.has(
-            String(
-              (item as NodeConfig).handle ??
-                (item as NodeConfig).code ??
-                "default"
-            )
-          )
-      )
-      .map(item => {
-        const route = item as NodeConfig;
-        const handle = String(route.handle ?? route.code ?? "default");
-        const target = outgoing.find(
-          edge => (edge.sourceHandle || "default") === handle
-        )?.target;
-        return target
-          ? { ...route, handle, target, targetNodeId: target }
-          : route;
-      });
-    for (const edge of outgoing) {
-      const handle = edge.sourceHandle || "default";
-      if (
-        !routes.some(
-          route =>
-            String(
-              (route as NodeConfig).handle ??
-                (route as NodeConfig).code ??
-                "default"
-            ) === handle
-        )
-      )
-        routes.push({
-          handle,
-          label: handle === "default" ? "默认" : handle,
-          target: edge.target,
-          targetNodeId: edge.target,
-        });
-    }
-    const lysz = existingLegacy
-      .filter(item => item && typeof item === "object")
-      .filter(item => {
-        const value = item as NodeConfig;
-        const route =
-          value.route && typeof value.route === "object"
-            ? (value.route as NodeConfig)
-            : value;
-        return handles.has(
-          String(route.handle ?? route.routerRuleId ?? route.code ?? "default")
-        );
-      })
-      .map(item => {
-        const value = item as NodeConfig;
-        const route =
-          value.route && typeof value.route === "object"
-            ? (value.route as NodeConfig)
-            : value;
-        const handle = String(
-          route.handle ?? route.routerRuleId ?? route.code ?? "default"
-        );
-        const target = outgoing.find(
-          edge => (edge.sourceHandle || "default") === handle
-        )?.target;
-        return target
-          ? {
-              ...value,
-              routerTargetId: target,
-              routerTargetyId: target,
-              route: { ...route, routerTargetId: target },
-            }
-          : value;
-      });
-    for (const edge of outgoing) {
-      const handle = edge.sourceHandle || "default";
-      if (
-        !lysz.some(item => {
-          const value = item as NodeConfig;
-          const route =
-            value.route && typeof value.route === "object"
-              ? (value.route as NodeConfig)
-              : value;
-          return (
-            String(
-              route.handle ?? route.routerRuleId ?? route.code ?? "default"
-            ) === handle
-          );
-        })
-      )
-        lysz.push({
-          routerTargetId: edge.target,
-          routerTargetyId: edge.target,
-          route: {
-            routerRuleId: handle,
-            routerRuleName: handle,
-            routerTargetId: edge.target,
-          },
-        });
-    }
     return {
       ...node,
-      data: { ...node.data, config: { ...config, routes, lysz } },
+      data: {
+        ...node.data,
+        config: syncRouterConfigTargets(node.data.config, outgoing),
+      },
     };
   });
 }
