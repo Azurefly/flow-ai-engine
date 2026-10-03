@@ -2135,7 +2135,7 @@ function ProcessCenter({
     dataSources.map(source => [source.id, source.name])
   );
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
+  const [pageSize, setPageSize] = useState(10);
   const totalPages = Math.max(1, Math.ceil(workflows.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageWorkflows = useMemo(() => {
@@ -2734,6 +2734,17 @@ function ProcessCenter({
                   </td>
                   <td className="min-w-[170px] px-3 py-3 text-right">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
+                      {workflow.status === "published" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="aiflow-type-control h-9 px-3"
+                          onClick={() => onOpenWorkflow(workflow.id)}
+                        >
+                          设计
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         size="sm"
@@ -2834,6 +2845,16 @@ function ProcessCenter({
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
+                {workflow.status === "published" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="aiflow-type-control h-11 min-h-11 flex-1 px-3 font-semibold"
+                    onClick={() => onOpenWorkflow(workflow.id)}
+                  >
+                    设计流程
+                  </Button>
+                )}
                 <Button
                   type="button"
                   className="aiflow-type-control h-11 min-h-11 flex-1 px-3 font-semibold"
@@ -2884,6 +2905,7 @@ function ProcessCenter({
                 }}
                 aria-label="每页显示流程数量"
               >
+                <option value={10}>10 条</option>
                 <option value={25}>25 条</option>
                 <option value={50}>50 条</option>
               </select>
