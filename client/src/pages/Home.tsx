@@ -2154,6 +2154,7 @@ function FlowDesigner({
   const unpublishFlow = trpc.workflow.unpublish.useMutation({
     onSuccess: () => {
       void utils.workflow.list.invalidate();
+      void utils.workflow.get.invalidate({ id: workflow.id });
       toast.success("流程已取消发布；历史版本与运行审计已保留。");
     },
     onError: error => toast.error(error.message),
@@ -2197,6 +2198,8 @@ function FlowDesigner({
     workflow.status,
     hasUnpublishedChanges
   );
+  const canModifyDefinition =
+    canEdit && (workflow.status !== "published" || canPublish);
   return (
     <div
       data-aiflow-designer=""
@@ -2244,7 +2247,7 @@ function FlowDesigner({
               className="aiflow-type-page-title min-h-11 max-h-24 w-full min-w-0 resize-none overflow-y-auto whitespace-pre-wrap rounded border border-transparent px-1.5 py-1 font-bold text-foreground shadow-none transition-colors hover:border-border hover:bg-muted/70 focus-visible:border-blue-400 focus-visible:bg-card focus-visible:outline-none focus-visible:ring-0 disabled:opacity-100 [overflow-wrap:anywhere] min-[1024px]:min-h-9"
               rows={1}
               value={name}
-              disabled={!canEdit}
+              disabled={!canModifyDefinition}
               onChange={event => {
                 setName(event.currentTarget.value.replace(/[\r\n]+/g, " "));
               }}
@@ -2273,7 +2276,7 @@ function FlowDesigner({
             }
             title={
               workflow.status === "published"
-                ? "已发布流程不可直接编辑草稿，请创建新版本或另存副本"
+                ? "修改后使用“发布新版本”；需要保存草稿时，请先取消发布"
                 : hasUnpublishedChanges
                   ? "保存当前画布草稿 (Ctrl+S / ⌘S)"
                   : "没有未保存修改"
@@ -2401,7 +2404,7 @@ function FlowDesigner({
               <DropdownMenuItem
                 className="aiflow-type-control"
                 onClick={onImport}
-                disabled={!canEdit}
+                disabled={!canModifyDefinition}
               >
                 <Upload size={13} className="mr-2 text-muted-foreground" />
                 <span>导入定义 (JSON)</span>
@@ -2463,6 +2466,36 @@ function FlowDesigner({
           </DropdownMenu>
         </div>
       </div>
+      {workflow.status === "published" && (
+        <section
+          aria-label="已发布流程编辑说明"
+          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-aiflow-info-border bg-aiflow-info-surface p-3"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="aiflow-type-control font-semibold text-aiflow-info">
+              {canModifyDefinition ? "正在查看已发布版本" : "已发布版本只读"}
+            </p>
+            <p className="aiflow-type-control mt-1 leading-6 text-foreground">
+              {canModifyDefinition
+                ? "修改暂存在当前页面，需通过“发布新版本”提交。若项目要求审核，请先取消发布、保存草稿，再返回流程中心提交审核。"
+                : canEdit
+                  ? "当前账号无法提交已发布版本的修改。请由有发布权限的人员取消发布后，再编辑并保存草稿。"
+                  : "当前账号仅可查看流程配置；编辑或发布请联系流程负责人。"}
+            </p>
+          </div>
+          {canEdit && canPublish && (
+            <Button
+              type="button"
+              variant="outline"
+              className="aiflow-type-control"
+              disabled={unpublishFlow.isPending}
+              onClick={onUnpublish}
+            >
+              取消发布后编辑草稿
+            </Button>
+          )}
+        </section>
+      )}
       {compileCheck.status !== "idle" && (
         <section
           role={compileCheck.status === "failed" ? "alert" : "status"}
@@ -2581,7 +2614,7 @@ function FlowDesigner({
           workflowId={workflow.id}
           flowType={workflow.flowType ?? "state"}
           definition={definition}
-          readOnly={!canEdit}
+          readOnly={!canModifyDefinition}
           onDefinitionChange={onDefinitionChange}
           templates={templates}
           subflows={subflows}
