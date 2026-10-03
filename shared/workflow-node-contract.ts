@@ -715,8 +715,8 @@ const referenceHttpFields: NodeField[] = [
   },
   {
     key: "compensationNodeId",
-    label: "补偿节点 ID",
-    help: "写操作选择补偿策略时必须指向当前流程中的后继补偿节点。",
+    label: "补偿目标节点",
+    help: "按名称选择当前流程中的节点，并从本节点的“补偿”出口连线至该节点。选择补偿策略时必填。",
     kind: "text",
   },
   {
@@ -1646,8 +1646,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
       {
         key: "compensationNodeId",
-        label: "补偿节点 ID",
-        help: "补偿策略使用。",
+        label: "补偿目标节点",
+        help: "按名称选择当前流程中的节点，并从本节点的“补偿”出口连线至该节点。选择补偿策略时必填。",
         kind: "text",
       },
       {

@@ -758,6 +758,7 @@ function ConfigFieldEditor({
   fallback,
   disabled,
   runtimeOptions,
+  runtimePlaceholder = "请选择已启用的私有子流程",
   routeTargetLabels,
   onChange,
 }: {
@@ -766,6 +767,7 @@ function ConfigFieldEditor({
   fallback: unknown;
   disabled: boolean;
   runtimeOptions?: Array<{ value: string; label: string }>;
+  runtimePlaceholder?: string;
   routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
@@ -800,9 +802,9 @@ function ConfigFieldEditor({
           value={current}
           onChange={event => onChange(event.target.value)}
         >
-          <option value="">请选择已启用的私有子流程</option>
+          <option value="">{runtimePlaceholder}</option>
           {current && !currentAvailable && (
-            <option value={current}>当前映射不可用 · {current}</option>
+            <option value={current}>当前选择不可用 · {current}</option>
           )}
           {runtimeOptions.map(option => (
             <option key={option.value} value={option.value}>
@@ -4442,7 +4444,21 @@ export default function WorkflowCanvas({
                                   value: subflow.id,
                                   label: subflow.name,
                                 }))
-                            : undefined;
+                            : field.key === "compensationNodeId"
+                              ? nodes
+                                  .filter(
+                                    node =>
+                                      node.id !== selected.id &&
+                                      canConnectFlowNodeTypes(
+                                        selected.data.kind,
+                                        node.data.kind
+                                      )
+                                  )
+                                  .map(node => ({
+                                    value: node.id,
+                                    label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                                  }))
+                              : undefined;
                         return (
                           <ConfigFieldEditor
                             key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
@@ -4451,6 +4467,11 @@ export default function WorkflowCanvas({
                             fallback={selectedDefaults[field.key]}
                             disabled={inspectorDisabled}
                             runtimeOptions={runtimeOptions}
+                            runtimePlaceholder={
+                              field.key === "compensationNodeId"
+                                ? "请选择当前流程的补偿节点"
+                                : undefined
+                            }
                             routeTargetLabels={selectedRouteTargetLabels}
                             onChange={value => {
                               if (field.key !== "subflowId")
