@@ -623,7 +623,9 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).not.toMatch(
       /<details\s+data-project-permission-grant="(?:department|member)"[^>]*\bopen\b/
     );
-    expect(projectWorkspaceSource).toContain("{members.length} 位成员");
+    expect(projectWorkspaceSource).toContain(
+      "new Set(members.map(member => member.userId)).size"
+    );
     expect(projectWorkspaceSource).toContain(
       "{(projectUnits.data ?? []).length} 个部门"
     );

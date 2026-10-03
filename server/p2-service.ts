@@ -20,6 +20,7 @@ import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-sou
 import { probeSafeHttpEndpoint } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
+import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
 import {
   aggregateDataflowRows,
   distinctDataflowRows,
@@ -106,18 +107,6 @@ function parseJson(value: unknown, fallback: unknown = {}) {
   }
 }
 
-function normalizeRows(value: unknown) {
-  const rows = Array.isArray(value)
-    ? value
-    : Array.isArray((value as JsonRecord | undefined)?.rows)
-      ? ((value as JsonRecord).rows as unknown[])
-      : [];
-  return rows
-    .slice(0, 200)
-    .filter(row => row && typeof row === "object")
-    .map(row => JSON.parse(JSON.stringify(row)) as JsonRecord);
-}
-
 function assertNoInlineSecret(value: unknown) {
   const serialized = JSON.stringify(value ?? {}).toLowerCase();
   if (/(password|passwd|secret|token|api[_-]?key)\s*["':=]/.test(serialized))
@@ -201,7 +190,7 @@ export async function listDataResources(user: DataflowUser, projectId: string) {
     assets: assets[0].map(row => ({
       ...row,
       schema: parseJson(row.schemaJson, []),
-      sample: normalizeRows(parseJson(row.sampleJson, [])),
+      sample: normalizeRows(parseJson(row.sampleJson, []), 200),
       schemaJson: undefined,
       sampleJson: undefined,
     })),
@@ -806,7 +795,7 @@ export async function createDataAsset(
       input.name.trim(),
       input.assetType,
       JSON.stringify(input.schema.slice(0, 100)),
-      JSON.stringify(normalizeRows(input.sample)),
+      JSON.stringify(normalizeRows(input.sample, 200)),
       user.id,
     ]
   );
@@ -838,8 +827,8 @@ export async function updateDataAsset(
       JSON.stringify(input.schema ?? parseJson(current.schemaJson, [])),
       JSON.stringify(
         input.sample === undefined
-          ? normalizeRows(parseJson(current.sampleJson, []))
-          : normalizeRows(input.sample)
+          ? normalizeRows(parseJson(current.sampleJson, []), 200)
+          : normalizeRows(input.sample, 200)
       ),
       input.status ?? current.status,
       input.assetId,
@@ -1441,11 +1430,13 @@ async function runDataflowDefinition(
           rows = rows.map(row =>
             Object.fromEntries(columns.map(column => [column, row[column]]))
           );
-        const limit = Number(config.limit ?? 200);
+        const limit = config.limit == null ? rows.length : Number(config.limit);
         output = {
           rows: rows.slice(
             0,
-            Number.isFinite(limit) ? Math.max(1, Math.min(limit, 200)) : 200
+            Number.isFinite(limit)
+              ? Math.max(0, Math.min(limit, maxDataflowDatasetRows))
+              : rows.length
           ),
           operation: "safe_transform",
         };
@@ -1501,7 +1492,11 @@ async function runDataflowDefinition(
           const matches =
             index.get(JSON.stringify(leftKeys.map(field => row[field]))) ?? [];
           if (!matches.length && config.kind === "left") rows.push({ ...row });
-          for (const match of matches)
+          for (const match of matches) {
+            if (rows.length >= maxDataflowDatasetRows)
+              throw new Error(
+                `关联结果超过 ${maxDataflowDatasetRows} 行执行上限，请先筛选；不会截断后继续运行。`
+              );
             rows.push({
               ...row,
               ...Object.fromEntries(
@@ -1513,6 +1508,7 @@ async function runDataflowDefinition(
                 ])
               ),
             });
+          }
         }
         output = { rows, operation: "join" };
       } else if (String(node.type) === "union") {
@@ -1582,11 +1578,13 @@ async function runDataflowDefinition(
           rows = rows.map(row =>
             Object.fromEntries(columns.map(column => [column, row[column]]))
           );
-        const limit = Number(config.limit ?? 200);
+        const limit = config.limit == null ? rows.length : Number(config.limit);
         output = {
           rows: rows.slice(
             0,
-            Number.isFinite(limit) ? Math.max(1, Math.min(limit, 200)) : 200
+            Number.isFinite(limit)
+              ? Math.max(0, Math.min(limit, maxDataflowDatasetRows))
+              : rows.length
           ),
           operation: "safe_transform",
         };

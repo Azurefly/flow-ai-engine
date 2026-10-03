@@ -573,6 +573,129 @@ describe("P2 项目数据资源与数据流", () => {
       expect((sqlRun.output.terminals[0] as any).rows).toEqual([
         { username: adminName },
       ]);
+      const digits = Array.from(
+        { length: 10 },
+        (_, n) => `SELECT ${n} AS n`
+      ).join(" UNION ALL ");
+      const batchWorkflowId = (
+        await owner.project.createWorkflow({
+          projectId,
+          name: "完整500行执行与450行映射",
+          flowType: "data",
+          definition: {
+            ...definition,
+            nodes: [
+              definition.nodes[0],
+              {
+                id: "sql",
+                type: "edit_sql",
+                name: "查询500行",
+                position: { x: 180, y: 0 },
+                config: {
+                  datasourceId: mysqlSourceId,
+                  sql: `SELECT hundreds.n*100+tens.n*10+ones.n+1 AS n FROM (${digits}) hundreds CROSS JOIN (${digits}) tens CROSS JOIN (${digits}) ones WHERE hundreds.n<5 ORDER BY n`,
+                  maxRows: 500,
+                },
+              },
+              {
+                id: "project",
+                type: "project",
+                name: "投影保留完整输入",
+                position: { x: 300, y: 0 },
+                config: { fields: [{ source: "n", target: "n" }] },
+              },
+              {
+                id: "map",
+                type: "map",
+                name: "按配置保留450行",
+                position: { x: 420, y: 0 },
+                config: { columns: ["n"], limit: 450 },
+              },
+              {
+                id: "transform",
+                type: "transform",
+                name: "转换不隐式截断",
+                position: { x: 540, y: 0 },
+                config: { columns: ["n"] },
+              },
+              {
+                id: "aggregate",
+                type: "aggregate",
+                name: "统计完整450行",
+                position: { x: 660, y: 0 },
+                config: {
+                  groupBy: [],
+                  metrics: [
+                    { name: "rows", operation: "count" },
+                    { name: "total", operation: "sum", field: "n" },
+                  ],
+                },
+              },
+              definition.nodes[3],
+            ],
+            edges: [
+              "start",
+              "sql",
+              "project",
+              "map",
+              "transform",
+              "aggregate",
+              "end",
+            ]
+              .slice(1)
+              .map((targetNodeId, index) => ({
+                id: `batch-${index}`,
+                sourceNodeId: [
+                  "start",
+                  "sql",
+                  "project",
+                  "map",
+                  "transform",
+                  "aggregate",
+                ][index],
+                targetNodeId,
+              })),
+          },
+        })
+      ).id;
+      await owner.project.auditWorkflow({
+        projectId,
+        workflowId: batchWorkflowId,
+        auditStatus: "approved",
+      });
+      await owner.workflow.publish({ id: batchWorkflowId });
+      const batch = await owner.data.run({
+        projectId,
+        workflowId: batchWorkflowId,
+      });
+      expect(batch.status).toBe("success");
+      expect((batch.output.terminals[0] as any).rows).toEqual([
+        { rows: 450, total: 101475 },
+      ]);
+      const batchDetail = await owner.data.runDetail({
+        projectId,
+        runId: batch.runId,
+      });
+      expect(
+        Object.fromEntries(
+          batchDetail.nodeRuns.map(node => [node.nodeId, node.rowCount])
+        )
+      ).toMatchObject({
+        sql: 500,
+        project: 500,
+        map: 450,
+        transform: 450,
+        aggregate: 1,
+      });
+      const batchLineage = await owner.data.runLineage({
+        projectId,
+        runId: batch.runId,
+      });
+      const sqlArtifact = batchLineage.artifacts.find(
+        artifact => artifact.nodeId === "sql"
+      )!;
+      expect(sqlArtifact.rowCount).toBe(500);
+      expect(sqlArtifact.sample).toHaveLength(20);
       const failedWorkflowId = (
         await owner.project.createWorkflow({
           projectId,
