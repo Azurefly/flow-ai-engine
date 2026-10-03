@@ -2,6 +2,7 @@ import { normalizeReferenceOperateConfig } from "./reference-operate-config";
 import { normalizeReferenceRouterConfig } from "./reference-router-config";
 import { readAggregateConfig } from "./dataflow-aggregate-config";
 import { validateDataflowFields } from "./dataflow-field-config";
+import { dataflowReadLimit } from "./dataflow-read-limit";
 
 export type FlowType = "state" | "control" | "data";
 
@@ -592,6 +593,22 @@ const conditionOperators = [
 
 const templateHelp =
   "支持 {{input.field}}、{{vars.field}} 与 {{nodes.节点ID.字段}}，不执行任意表达式。";
+
+const readLimitField: NodeField = {
+  key: "maxRows",
+  label: "读取行数上限",
+  kind: "number",
+  help: "1 至 1000 的整数；达到上限后停止读取。",
+};
+const sourceReadFields: NodeField[] = [
+  {
+    key: "columns",
+    label: "读取字段",
+    kind: "json",
+    help: "留空读取全部字段。",
+  },
+  { ...readLimitField, key: "limit", help: "默认 200，范围 1 至 1000。" },
+];
 
 const referenceHttpDefaultConfig = {
   nodeDh: "",
@@ -1330,6 +1347,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       datasourceId: "",
       statement: "SELECT * FROM source",
       parameters: {},
+      maxRows: 1000,
     },
     fields: [
       {
@@ -1349,9 +1367,10 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "parameters",
         label: "参数",
-        help: "供 SQL 模板或数据流执行器使用的 JSON 参数对象。",
+        help: "绑定 :参数名，占位符使用预编译查询。",
         kind: "json",
       },
+      readLimitField,
     ],
   },
   transform: {
@@ -1703,7 +1722,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     label: "资源",
     description: "引用项目内已探查的数据资源",
     flowTypes: ["data"],
-    defaultConfig: { assetId: "" },
+    defaultConfig: { assetId: "", columns: [], limit: 200 },
     fields: [
       {
         key: "assetId",
@@ -1712,6 +1731,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         kind: "text",
         required: true,
       },
+      ...sourceReadFields,
     ],
   },
   table: {
@@ -1719,7 +1739,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     label: "中间表",
     description: "读取项目资源或中间数据集",
     flowTypes: ["data"],
-    defaultConfig: { assetId: "" },
+    defaultConfig: { assetId: "", columns: [], limit: 200 },
     fields: [
       {
         key: "assetId",
@@ -1728,6 +1748,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         kind: "text",
         required: true,
       },
+      ...sourceReadFields,
     ],
   },
   filter: {
@@ -1980,6 +2001,13 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         kind: "textarea",
         required: true,
       },
+      {
+        key: "parameters",
+        label: "参数",
+        kind: "json",
+        help: "绑定 :参数名。",
+      },
+      readLimitField,
     ],
   },
   udf: {
@@ -2596,6 +2624,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       break;
     }
     case "sql":
+      dataflowReadLimit(config.maxRows, 1000);
       assertString(config.datasourceId, "SQL 节点必须选择数据源。");
       assertString(
         firstNonBlank(config.statement, config.sql, config.query),
@@ -2750,6 +2779,15 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       break;
     case "source":
     case "table":
+      dataflowReadLimit(config.limit, 200);
+      if (
+        config.columns !== undefined &&
+        (!Array.isArray(config.columns) ||
+          config.columns.some(
+            field => typeof field !== "string" || !field.trim()
+          ))
+      )
+        throw new Error("读取字段必须是非空字段名数组。");
       assertString(config.assetId, "资源节点必须选择项目数据资源。");
       break;
     case "filter":
@@ -2814,6 +2852,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       );
       break;
     case "edit_sql":
+      dataflowReadLimit(config.maxRows, 1000);
       assertString(config.datasourceId, "SQL 编辑节点必须选择数据源。");
       assertString(config.sql, "SQL 编辑节点必须配置 SQL 语句。");
       break;

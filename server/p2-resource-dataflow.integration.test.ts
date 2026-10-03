@@ -294,7 +294,7 @@ describe("P2 项目数据资源与数据流", () => {
             type: "source",
             name: "读取订单样本",
             position: { x: 180, y: 0 },
-            config: { assetId },
+            config: { assetId, columns: ["orderId", "amount"], limit: 1 },
           },
           {
             id: "transform",
@@ -335,8 +335,14 @@ describe("P2 项目数据资源与数据流", () => {
       expect(run.status).toBe("success");
       expect((run.output.terminals[0] as any).rows).toEqual([
         { orderId: "A-01", amount: 12 },
-        { orderId: "A-02", amount: 34 },
       ]);
+      const limitedLineage = await owner.data.runLineage({
+        projectId,
+        runId: run.runId,
+      });
+      expect(
+        limitedLineage.artifacts.find(item => item.nodeId === "source")?.sample
+      ).toEqual([{ orderId: "A-01", amount: 12 }]);
       const lookupAssetId = (
         await owner.data.createAsset({
           projectId,
@@ -616,6 +622,64 @@ describe("P2 项目数据资源与数据流", () => {
           echo: adminName,
         },
       ]);
+      const jdbcAssetId = (
+        await owner.data.createAsset({
+          projectId,
+          sourceId: mysqlSourceId,
+          name: "users",
+          assetType: "table",
+          schema: [{ name: "username", type: "string" }],
+          sample: [],
+        })
+      ).id;
+      const jdbcReadWorkflowId = (
+        await owner.project.createWorkflow({
+          projectId,
+          name: "MySQL字段与行数读取限制",
+          flowType: "data",
+          definition: {
+            ...definition,
+            nodes: definition.nodes.map(node =>
+              node.id === "source"
+                ? {
+                    ...node,
+                    config: {
+                      assetId: jdbcAssetId,
+                      columns: ["username"],
+                      limit: 1,
+                    },
+                  }
+                : node.id === "transform"
+                  ? {
+                      ...node,
+                      config: { mappings: { account: "{{username}}" } },
+                    }
+                  : node
+            ),
+          },
+        })
+      ).id;
+      await owner.project.auditWorkflow({
+        projectId,
+        workflowId: jdbcReadWorkflowId,
+        auditStatus: "approved",
+      });
+      await owner.workflow.publish({ id: jdbcReadWorkflowId });
+      const jdbcRead = await owner.data.run({
+        projectId,
+        workflowId: jdbcReadWorkflowId,
+      });
+      expect(jdbcRead.status).toBe("success");
+      expect((jdbcRead.output.terminals[0] as any).rows).toEqual([
+        { account: expect.any(String) },
+      ]);
+      const jdbcLineage = await owner.data.runLineage({
+        projectId,
+        runId: jdbcRead.runId,
+      });
+      expect(
+        jdbcLineage.artifacts.find(item => item.nodeId === "source")?.sample
+      ).toEqual([{ username: expect.any(String) }]);
       const digits = Array.from(
         { length: 10 },
         (_, n) => `SELECT ${n} AS n`

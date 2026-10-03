@@ -1874,7 +1874,6 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain('label: "入口映射"');
     expect(canvasSource).toContain('label: "出口映射"');
     expect(canvasSource).toContain('label: "当前运行映射"');
-    expect(canvasSource).toContain("不会覆盖上面的原版兼容配置");
   });
 
   it("新增治理、运行分析与复用资产面板在窄屏保持可访问结构", () => {

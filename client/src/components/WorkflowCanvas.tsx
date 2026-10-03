@@ -2082,8 +2082,7 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   join: [
     {
       label: "输入数据",
-      description:
-        "先连接两个上游数据节点，再按名称明确左右侧；左连接保留左侧未匹配记录。",
+      description: "选择已连接的左右输入；左连接保留未匹配行。",
       keys: ["leftInputNodeId", "rightInputNodeId"],
     },
     {
@@ -2095,12 +2094,12 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   http: [
     {
       label: "请求配置",
-      description: "选择项目服务端点，配置请求路径、方法、请求头与请求体。",
+      description: "配置服务端点和请求内容。",
       keys: ["endpointRef", "secretRef", "url", "method", "headers", "body"],
     },
     {
       label: "超时与重试",
-      description: "设置请求等待时间及失败后的重试次数与间隔。",
+      description: "设置超时、重试次数和间隔。",
       keys: ["timeout", "retryMaxAttempts", "retryBaseDelayMs"],
     },
     {
@@ -2120,7 +2119,7 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   llm: [
     {
       label: "模型与提示词",
-      description: "选择模型，并说明模型需要完成的任务与输入数据。",
+      description: "选择模型并配置提示词。",
       keys: ["model", "systemPrompt", "prompt"],
     },
     {
@@ -2142,28 +2141,24 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
     },
     {
       label: "人员与操作",
-      description:
-        "保留原版绑定角色、状态固有操作和业务操作，决定不同人员在该状态可执行什么。",
+      description: "配置角色与可执行操作。",
       keys: ["bdjs", "jdgycz", "ywcz"],
     },
     {
       label: "流程参与方显示",
-      description:
-        "流程状态是发起人等参与方看到的文案，可与当前办理人的状态名称不同。",
+      description: "参与方看到的状态，可与办理人状态不同。",
       keys: ["flowStatus", "bdym"],
     },
   ],
   operate: [
     {
       label: "基础信息",
-      description:
-        "标识这个操作节点。操作代号用于流程识别，操作名称展示给办理人。",
+      description: "代号标识节点，名称展示给办理人。",
       keys: ["nodeDh", "czmc", "lsWorkZone"],
     },
     {
       label: "权限控制",
-      description:
-        "决定哪些角色可以看见或办理该操作，以及绑定数据是否影响接收人。",
+      description: "设置可见、办理角色及数据对接收人的影响。",
       keys: ["bddxcrjsrsx", "bdczcrjsrsx", "qxkz"],
     },
     {
@@ -2193,14 +2188,12 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
     },
     {
       label: "自动执行",
-      description:
-        "决定该操作是否自动执行及其触发条件。旧版代码仅保存，不会直接运行。",
+      description: "设置触发条件；旧版代码仅保存，不执行。",
       keys: ["zdzx"],
     },
     {
       label: "当前运行设置",
-      description:
-        "将原版接收方、权限角色或组织关系解析为人员级待办；不会覆盖上面的原版兼容配置。",
+      description: "将角色和组织关系解析为待办人员；保留兼容配置。",
       keys: [
         "assigneeMode",
         "assigneeRoleCode",
@@ -2217,20 +2210,19 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
     },
     {
       label: "原版路由设置",
-      description:
-        "保留原页面的目标节点、优先权重、条件和代码结构，用于兼容已有流程。",
+      description: "兼容目标节点、权重、条件与代码配置。",
       keys: ["lysz"],
     },
     {
       label: "当前安全路由规则",
-      description: "运行时按顺序匹配这些规则；默认分支用于所有规则都未命中时。",
+      description: "依次匹配规则；未命中走默认分支。",
       keys: ["routes", "defaultRoute"],
     },
   ],
   subflow: [
     {
       label: "基础信息",
-      description: "选择要调用的原版子流程，并设置当前节点代号。",
+      description: "选择兼容子流程并设置节点代号。",
       keys: ["zlcxz", "nodeDh"],
     },
     {
@@ -2241,18 +2233,17 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
     },
     {
       label: "入口映射",
-      description: "把当前流程数据映射到子流程的开始节点和入口操作。",
+      description: "映射子流程入口数据。",
       keys: ["zlcrk"],
     },
     {
       label: "出口映射",
-      description: "定义子流程结束后回到当前流程的连接节点。",
+      description: "设置子流程返回节点。",
       keys: ["zlcck"],
     },
     {
       label: "当前运行映射",
-      description:
-        "将原版流程选择映射到当前已启用的私有子流程，并设置传入数据。",
+      description: "选择已启用的私有子流程并传入数据。",
       keys: ["subflowId", "input"],
     },
   ],
@@ -2692,6 +2683,7 @@ export default function WorkflowCanvas({
             source: "assetId",
             table: "assetId",
             edit_sql: "datasourceId",
+            sql: "datasourceId",
             udf: "udfId",
           } as Record<string, string>
         )[selected.data.kind]

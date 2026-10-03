@@ -22,6 +22,7 @@ import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
 import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
 import { joinDataflowRows } from "./dataflow-join-rows";
+import { dataflowReadLimit } from "../shared/dataflow-read-limit";
 import { prepareReadOnlyDataflowSql } from "./dataflow-sql-binding";
 import {
   aggregateDataflowRows,
@@ -1130,6 +1131,15 @@ async function readConnectorAsset(
   assetId: string,
   options: { columns?: string[]; limit?: number } = {}
 ) {
+  const limit = dataflowReadLimit(options.limit, 200);
+  const readInlineRows = (value: unknown) => {
+    const rows = normalizeRows(value).slice(0, limit);
+    return options.columns?.length
+      ? rows.map(row =>
+          Object.fromEntries(options.columns!.map(field => [field, row[field]]))
+        )
+      : rows;
+  };
   const [assets] = await db().query<mysql.RowDataPacket[]>(
     "SELECT id,name,assetType,schemaJson,sampleJson,sourceId,status FROM data_asset WHERE id=? AND projectId=? AND status='active' LIMIT 1",
     [assetId, projectId]
@@ -1138,13 +1148,13 @@ async function readConnectorAsset(
   if (!asset) throw new Error("数据资源不存在、已停用或不属于当前项目。 ");
   if (!asset.sourceId)
     return {
-      rows: normalizeRows(parseJson(asset.sampleJson, [])),
+      rows: readInlineRows(parseJson(asset.sampleJson, [])),
       schema: parseJson(asset.schemaJson, []),
     };
   const source = await loadVerifiedConnector(projectId, String(asset.sourceId));
   if (source.sourceType === "inline")
     return {
-      rows: normalizeRows(parseJson(asset.sampleJson, [])),
+      rows: readInlineRows(parseJson(asset.sampleJson, [])),
       schema: parseJson(asset.schemaJson, []),
     };
   if (source.sourceType !== "jdbc")
@@ -1160,10 +1170,6 @@ async function readConnectorAsset(
   const projection = columns.length
     ? columns.map(column => `\`${column}\``).join(",")
     : "*";
-  const limit = Math.min(
-    Math.max(Math.trunc(Number(options.limit ?? 200)), 1),
-    1_000
-  );
   const result = await withMysqlConnector(source, connection =>
     connection.query<mysql.RowDataPacket[]>(
       `SELECT ${projection} FROM \`${identifier}\` LIMIT ?`,
@@ -1186,7 +1192,7 @@ async function executeSqlConnector(
   const source = await loadVerifiedConnector(projectId, sourceId);
   if (source.sourceType !== "jdbc")
     throw new Error("SQL Connector 目前仅支持已验证的 MySQL 数据源。 ");
-  const limit = Math.min(Math.max(Math.trunc(Number(maxRows)), 1), 1_000);
+  const limit = dataflowReadLimit(maxRows, 1000);
   const result = await withMysqlConnector(source, async connection => {
     const [modes] = await connection.execute<mysql.RowDataPacket[]>(
       "SELECT @@SESSION.sql_mode AS mode"
@@ -1359,7 +1365,7 @@ async function runDataflowDefinition(
           columns: Array.isArray(config.columns)
             ? config.columns.map(String)
             : undefined,
-          limit: Number(config.limit ?? 200),
+          limit: dataflowReadLimit(config.limit, 200),
         });
         output = {
           assetId,
@@ -1565,7 +1571,7 @@ async function runDataflowDefinition(
           datasourceId,
           statement,
           (config.parameters ?? {}) as JsonRecord,
-          Number(config.maxRows ?? 1_000)
+          dataflowReadLimit(config.maxRows, 1000)
         );
         output = {
           rows,
