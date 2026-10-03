@@ -2245,7 +2245,7 @@ describe("流程设计器界面回归约束", () => {
       'compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]"'
     );
     expect(canvasSource).toContain(
-      "padding: compactReadOnlyPreview ? 0.12 : 0.22, minZoom: 0.1, maxZoom: 1.25"
+      "automaticCanvasFit(compactReadOnlyPreview)"
     );
     expect(canvasSource).toContain(
       'compactReadOnlyPreview ? "hidden" : "hidden md:block"'
@@ -2722,7 +2722,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(canvasSource).toContain("previousInspectorExpandedRef");
     expect(canvasSource).toContain(
-      "reactFlow.fitView({ padding: compactReadOnlyPreview ? 0.12 : 0.22, minZoom: 0.1, maxZoom: 1.25, duration: 180,"
+      "automaticCanvasFit(compactReadOnlyPreview, selectedId)"
     );
     expect(canvasSource).toContain('aria-label="保存为图片"');
     expect(canvasSource).toContain('aria-label="取消高亮"');

@@ -20,6 +20,7 @@ import "@xyflow/react/dist/style.css";
 import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
+import { automaticCanvasFit } from "./workflow-canvas-viewport";
 import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
 import { WorkflowOutcomeEditor } from "./WorkflowOutcomeEditor";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2527,9 +2528,7 @@ export default function WorkflowCanvas({
       secondFrame = window.requestAnimationFrame(() => {
         void reactFlow
           .fitView({
-            padding: compactReadOnlyPreview ? 0.12 : 0.22,
-            minZoom: 0.1,
-            maxZoom: 1.25,
+            ...automaticCanvasFit(compactReadOnlyPreview),
             duration: 0,
           })
           .then(applied => {
@@ -2562,9 +2561,7 @@ export default function WorkflowCanvas({
     firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
         void reactFlow.fitView({
-          padding: compactReadOnlyPreview ? 0.12 : 0.22,
-          minZoom: 0.1,
-          maxZoom: 1.25,
+          ...automaticCanvasFit(compactReadOnlyPreview, selectedId),
           duration: 180,
         });
       });
@@ -2574,11 +2571,16 @@ export default function WorkflowCanvas({
       window.cancelAnimationFrame(firstFrame);
       window.cancelAnimationFrame(secondFrame);
     };
-  }, [compactReadOnlyPreview, inspectorExpanded, reactFlow]);
+  }, [compactReadOnlyPreview, inspectorExpanded, reactFlow, selectedId]);
 
   useEffect(() => {
     const viewport = flowViewportRef.current;
-    if (!reactFlow || !viewport || typeof ResizeObserver === "undefined")
+    if (
+      !compactReadOnlyPreview ||
+      !reactFlow ||
+      !viewport ||
+      typeof ResizeObserver === "undefined"
+    )
       return;
 
     const initialRect = viewport.getBoundingClientRect();
