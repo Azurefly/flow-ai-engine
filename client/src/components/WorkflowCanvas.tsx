@@ -68,13 +68,17 @@ import { trpc } from "@/lib/trpc";
 import { selectWorkflowEndpoint } from "./workflow-endpoint-selection";
 import { canConnectCanvasNodes } from "./workflow-canvas-connections";
 import { AggregateMetricEditor } from "./aggregate-metric-editor";
+import {
+  DATA_FIELD_EDITOR_PROFILES,
+  dataFieldEditorKey,
+  newDataFieldItem,
+} from "./workflow-data-field-editor";
 import type { Definition } from "../../../server/workflow-service";
 import {
   canConnectFlowNodeTypes,
   createDefaultNodeConfig,
   FLOW_NODE_ALLOWED_TARGETS,
   FLOW_NODE_DEFINITIONS,
-  getNodeConfigEvidence,
   readConditionHandles,
   readOperateOutcomeMode,
   readOperateOutcomes,
@@ -721,6 +725,7 @@ function ConfigFieldEditor({
   runtimeError,
   onRetryOptions,
   aggregateMetrics = false,
+  nodeKind,
   routeTargetLabels,
   onChange,
 }: {
@@ -733,6 +738,7 @@ function ConfigFieldEditor({
   runtimeError?: string;
   onRetryOptions?: () => void;
   aggregateMetrics?: boolean;
+  nodeKind?: NodeKind;
   routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
@@ -865,6 +871,7 @@ function ConfigFieldEditor({
     return (
       <StructuredValueEditor
         field={field}
+        nodeKind={nodeKind}
         value={effectiveValue}
         disabled={disabled}
         routeTargetLabels={routeTargetLabels}
@@ -879,6 +886,7 @@ function ConfigFieldEditor({
     return (
       <StructuredValueEditor
         field={field}
+        nodeKind={nodeKind}
         value={effectiveValue}
         disabled={disabled}
         onChange={onChange}
@@ -1574,12 +1582,14 @@ function OriginalObjectEditor({
 
 function StructuredValueEditor({
   field,
+  nodeKind,
   value,
   disabled,
   routeTargetLabels,
   onChange,
 }: {
   field: FlowNodeDefinition["fields"][number];
+  nodeKind?: NodeKind;
   value: unknown;
   disabled: boolean;
   routeTargetLabels?: Record<string, string>;
@@ -1587,15 +1597,20 @@ function StructuredValueEditor({
 }) {
   const isList = Array.isArray(value);
   const list = isList ? value : [];
+  const editorKey = dataFieldEditorKey(nodeKind, field.key);
   const isSpecializedList =
     isList &&
     (["routes", "fields", "restHeaderParam", "restGetBodyParam"].includes(
       field.key
     ) ||
-      Boolean(ORIGINAL_LIST_ITEM_SPECS[field.key]));
+      Boolean(
+        ORIGINAL_LIST_ITEM_SPECS[editorKey] ||
+          DATA_FIELD_EDITOR_PROFILES[editorKey]
+      ));
   const updateList = (next: unknown[]) => onChange(next);
   const newListItem =
-    field.key === "routes"
+    newDataFieldItem(editorKey) ??
+    (field.key === "routes"
       ? {
           handle: "route",
           label: "新分支",
@@ -1638,7 +1653,7 @@ function StructuredValueEditor({
                   ? { czid: "", czmc: "" }
                   : field.key === "zlcck"
                     ? { connect: { id: "", text: "", yId: "" }, end: "" }
-                    : "";
+                    : "");
   const originalObject = ORIGINAL_OBJECT_FIELD_SPECS[field.key];
   return (
     <fieldset className="grid gap-2 rounded-md border border-border bg-muted p-2.5">
@@ -1651,7 +1666,7 @@ function StructuredValueEditor({
           {list.map((item, index) => (
             <StructuredListRow
               key={field.key + "-" + index}
-              fieldKey={field.key}
+              fieldKey={editorKey}
               item={item}
               disabled={disabled}
               routeTargetLabels={routeTargetLabels}
@@ -1717,12 +1732,16 @@ function StructuredListRow({
 }) {
   const inputClass =
     "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
-  const originalSpecs = ORIGINAL_LIST_ITEM_SPECS[fieldKey];
+  const originalSpecs =
+    DATA_FIELD_EDITOR_PROFILES[fieldKey]?.fields ??
+    ORIGINAL_LIST_ITEM_SPECS[fieldKey];
   if (originalSpecs) {
     const record =
-      item && typeof item === "object" && !Array.isArray(item)
-        ? (item as NodeConfig)
-        : {};
+      fieldKey === "data_sort" && typeof item === "string"
+        ? { field: item, direction: "asc" }
+        : item && typeof item === "object" && !Array.isArray(item)
+          ? (item as NodeConfig)
+          : {};
     const knownKeys = new Set(originalSpecs.map(spec => spec.key));
     const extras = Object.fromEntries(
       Object.entries(record).filter(([key]) => !knownKeys.has(key))
@@ -1731,16 +1750,17 @@ function StructuredListRow({
       <div className="grid gap-2 rounded border border-border bg-card p-2">
         <div className="flex items-center justify-between">
           <span className="aiflow-type-control font-semibold text-muted-foreground">
-            原版
-            {fieldKey === "lysz"
-              ? "路由"
-              : fieldKey === "qxkz"
-                ? "权限"
-                : fieldKey === "bddx"
-                  ? "绑定对象"
-                  : fieldKey === "ywcz"
-                    ? "业务操作"
-                    : "子流程出口"}
+            {!DATA_FIELD_EDITOR_PROFILES[fieldKey] && "原版"}
+            {DATA_FIELD_EDITOR_PROFILES[fieldKey]?.label ??
+              (fieldKey === "lysz"
+                ? "路由"
+                : fieldKey === "qxkz"
+                  ? "权限"
+                  : fieldKey === "bddx"
+                    ? "绑定对象"
+                    : fieldKey === "ywcz"
+                      ? "业务操作"
+                      : "子流程出口")}
             配置
           </span>
           <button
@@ -1748,7 +1768,11 @@ function StructuredListRow({
             className="text-muted-foreground hover:text-red-600"
             disabled={disabled}
             onClick={onRemove}
-            aria-label="删除原版配置项"
+            aria-label={
+              DATA_FIELD_EDITOR_PROFILES[fieldKey]
+                ? "删除数据字段"
+                : "删除原版配置项"
+            }
           >
             <Trash2 size={14} />
           </button>
@@ -1761,7 +1785,11 @@ function StructuredListRow({
             <span>{spec.label}</span>
             <OriginalFieldControl
               spec={spec}
-              value={record[spec.key]}
+              value={
+                fieldKey === "data_sort" && spec.key === "direction"
+                  ? String(record[spec.key] ?? "asc").toLowerCase()
+                  : record[spec.key]
+              }
               disabled={disabled}
               onChange={next => onChange({ ...record, [spec.key]: next })}
             />
@@ -2638,16 +2666,7 @@ export default function WorkflowCanvas({
     [nodes, selectedId]
   );
   const selectedDefinition = selected
-    ? (() => {
-        const item = FLOW_NODE_DEFINITIONS[selected.data.kind];
-        return getNodeConfigEvidence(selected.data.kind) ===
-          "compatibility-extension"
-          ? {
-              ...item,
-              description: `${item.description} 当前裁剪安装包未保留节点打包脚本；以下字段按安全兼容契约呈现，并会保留未知扩展字段。`,
-            }
-          : item;
-      })()
+    ? FLOW_NODE_DEFINITIONS[selected.data.kind]
     : null;
   const selectedConfig = (selected?.data.config ?? {}) as NodeConfig;
   const selectedServiceNode = Boolean(
@@ -4582,6 +4601,7 @@ export default function WorkflowCanvas({
                                   : field
                             }
                             value={fieldValue}
+                            nodeKind={selected.data.kind}
                             aggregateMetrics={
                               selected.data.kind === "aggregate" &&
                               field.key === "metrics"

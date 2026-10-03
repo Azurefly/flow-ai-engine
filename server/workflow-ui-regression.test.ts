@@ -2328,7 +2328,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("画布说明");
     expect(canvasSource).toContain("RotateCcw");
     expect(canvasSource).toContain("若无元件，请添加元件。");
-    expect(canvasSource).toContain("当前裁剪安装包未保留节点打包脚本");
+    expect(canvasSource).not.toContain("当前裁剪安装包未保留节点打包脚本");
     expect(canvasSource).toContain(
       "next.nodes.some(node => node.id === current)"
     );

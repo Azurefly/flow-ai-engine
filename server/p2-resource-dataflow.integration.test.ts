@@ -603,11 +603,25 @@ describe("P2 项目数据资源与数据流", () => {
                 },
               },
               {
+                id: "derive",
+                type: "derive",
+                name: "派生字段",
+                position: { x: 220, y: 0 },
+                config: { fields: [{ name: "copied", expression: "{{n}}" }] },
+              },
+              {
+                id: "sort",
+                type: "sort",
+                name: "降序排序",
+                position: { x: 260, y: 0 },
+                config: { fields: [{ field: "copied", direction: "desc" }] },
+              },
+              {
                 id: "project",
                 type: "project",
                 name: "投影保留完整输入",
                 position: { x: 300, y: 0 },
-                config: { fields: [{ source: "n", target: "n" }] },
+                config: { fields: [{ source: "copied", target: "n" }] },
               },
               {
                 id: "map",
@@ -641,6 +655,8 @@ describe("P2 项目数据资源与数据流", () => {
             edges: [
               "start",
               "sql",
+              "derive",
+              "sort",
               "project",
               "map",
               "transform",
@@ -653,6 +669,8 @@ describe("P2 项目数据资源与数据流", () => {
                 sourceNodeId: [
                   "start",
                   "sql",
+                  "derive",
+                  "sort",
                   "project",
                   "map",
                   "transform",
@@ -675,7 +693,7 @@ describe("P2 项目数据资源与数据流", () => {
       });
       expect(batch.status).toBe("success");
       expect((batch.output.terminals[0] as any).rows).toEqual([
-        { rows: 450, total: 101475 },
+        { rows: 450, total: 123975 },
       ]);
       const batchDetail = await owner.data.runDetail({
         projectId,
@@ -687,6 +705,8 @@ describe("P2 项目数据资源与数据流", () => {
         )
       ).toMatchObject({
         sql: 500,
+        derive: 500,
+        sort: 500,
         project: 500,
         map: 450,
         transform: 450,

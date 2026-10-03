@@ -1,6 +1,7 @@
 import { normalizeReferenceOperateConfig } from "./reference-operate-config";
 import { normalizeReferenceRouterConfig } from "./reference-router-config";
 import { readAggregateConfig } from "./dataflow-aggregate-config";
+import { validateDataflowFields } from "./dataflow-field-config";
 
 export type FlowType = "state" | "control" | "data";
 
@@ -1782,7 +1783,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "字段映射",
-        help: "[{source,target}]。",
+        help: "设置输入和输出字段；输出名称不能重复。",
         kind: "json",
         required: true,
       },
@@ -1798,7 +1799,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "派生字段",
-        help: "[{name,expression,type}]。",
+        help: "引用使用 {{字段名}}；也可填数字、true/false 或固定文本。",
         kind: "json",
         required: true,
       },
@@ -1888,7 +1889,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "metrics",
         label: "指标",
-        help: '例如 [{"name":"total","operation":"sum","field":"amount"}]。支持 count/sum/min/max/avg；count 不填 field 统计总行数，填写 field 统计非空值。数值运算忽略空值，无有效值时返回 null。',
+        help: "添加指标并选择 count、sum、min、max 或 avg；数值计算忽略空值。",
         kind: "json",
         required: true,
       },
@@ -1904,7 +1905,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "排序字段",
-        help: "[{field,direction}]。",
+        help: "按顺序设置字段和升降序；前面的字段优先。",
         kind: "json",
         required: true,
       },
@@ -2759,12 +2760,8 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       );
       break;
     case "project":
-      if (!Array.isArray(config.fields))
-        throw new Error("投影节点 fields 必须是数组。");
-      break;
     case "derive":
-      if (!Array.isArray(config.fields))
-        throw new Error("派生节点 fields 必须是数组。");
+      validateDataflowFields(type, config.fields);
       break;
     case "join":
       assertString(config.leftInputNodeId, "关联节点必须选择左侧输入。");
@@ -2790,8 +2787,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       readAggregateConfig(config);
       break;
     case "sort":
-      if (!Array.isArray(config.fields) || !config.fields.length)
-        throw new Error("排序节点必须配置字段。");
+      validateDataflowFields(type, config.fields);
       break;
     case "deduplicate":
       if (!Array.isArray(config.keys) || !config.keys.length)
