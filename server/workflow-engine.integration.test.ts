@@ -40,6 +40,7 @@ vi.mock("node:http", async importOriginal => {
 const workflowId = randomUUID();
 let pool: mysql.Pool | undefined;
 let fixtureServer: http.Server | undefined;
+let fixtureUserId: number | undefined;
 
 const definition: Definition = {
   schemaVersion: 1,
@@ -159,6 +160,8 @@ describe("工作流引擎受控 HTTP 与真实 MySQL 集成", () => {
         workflowId,
       ]);
       await pool.query("DELETE FROM workflow WHERE id=?", [workflowId]);
+      if (fixtureUserId)
+        await pool.query("DELETE FROM users WHERE id=?", [fixtureUserId]);
       await pool.end();
     }
   });
@@ -182,11 +185,16 @@ describe("工作流引擎受控 HTTP 与真实 MySQL 集成", () => {
       });
       fixture.port = (fixtureServer.address() as { port: number }).port;
       pool = mysql.createPool(process.env.DATABASE_URL!);
-      const [users] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT id,role FROM users WHERE status='active' ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END,id LIMIT 1"
+      const [created] = await pool.query<mysql.ResultSetHeader>(
+        "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,'admin','active','internal',NOW())",
+        [
+          `test:control-engine:${workflowId}`,
+          `control_engine_${workflowId.slice(0, 8)}`,
+          "控制流程集成测试用户",
+        ]
       );
-      const user = users[0];
-      expect(user).toBeTruthy();
+      fixtureUserId = Number(created.insertId);
+      const user = { id: fixtureUserId, role: "admin" as const };
       await pool.query(
         "INSERT INTO workflow (id,ownerUserId,name,description,flowType,status,definitionVersion,definitionJson) VALUES (?,?,?,'integration test','control','published',1,?)",
         [
