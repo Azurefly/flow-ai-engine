@@ -242,3 +242,49 @@ export function taskFormInputValue(type: string, value: string): unknown {
       return value;
   }
 }
+
+/** Use the submission contract to explain each field before a task is claimed. */
+export function taskFormFieldErrors(fields: unknown[], submitted: unknown) {
+  const errors: Record<string, string> = Object.create(null);
+  for (const raw of fields) {
+    const field = asRecord(raw);
+    const key = String(field.key ?? "").trim();
+    if (!key) continue;
+    try {
+      validateFormSubmission([field], submitted);
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : String(cause);
+      const label = String(field.label ?? "").trim() || key;
+      errors[key] = message.replaceAll(`“${key}”`, `“${label}”`);
+    }
+  }
+  return errors;
+}
+
+export function taskFormRowValues(
+  fields: unknown[],
+  rows: Array<{ key: string; value: string }>
+) {
+  const values: Array<[string, unknown]> = [];
+  for (const row of rows) {
+    const key = row.key.trim();
+    if (!key || ["decision", "outcome", "comment"].includes(key)) continue;
+    const field = fields
+      .map(asRecord)
+      .find(item => String(item.key ?? "").trim() === key);
+    // An unset read-only field must use its frozen default. An editable empty
+    // value is deliberate and must not restore the default on submission.
+    if (field?.readOnly === true && row.value === "") continue;
+    const value = field
+      ? taskFormInputValue(String(field.type ?? "text"), row.value)
+      : row.value === "true"
+        ? true
+        : row.value === "false"
+          ? false
+          : row.value !== "" && Number.isFinite(Number(row.value))
+            ? Number(row.value)
+            : row.value;
+    values.push([key, value]);
+  }
+  return Object.fromEntries(values);
+}

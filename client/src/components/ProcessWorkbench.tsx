@@ -1,5 +1,10 @@
 import { Button } from "@/components/ui/button";
-import { taskFormInputValue } from "@shared/task-form";
+import {
+  taskFormInputValue,
+  taskFormFieldErrors,
+  taskFormRowValues,
+  validateFormSubmission,
+} from "@shared/task-form";
 import { canManageTask } from "@shared/task-assignment";
 import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
@@ -2506,36 +2511,8 @@ function TaskDrawer({
       formFields.map(field => ({ key: field.key, value: field.defaultValue }))
     );
   }, [task?.id, task?.formSchemaVersion]);
-  const toValue = (value: string): unknown =>
-    value === "true"
-      ? true
-      : value === "false"
-        ? false
-        : value !== "" && Number.isFinite(Number(value))
-          ? Number(value)
-          : value;
   const createPayload = (rows: Array<{ key: string; value: string }>) => ({
-    ...Object.fromEntries(
-      rows
-        .filter(
-          row =>
-            row.key.trim() &&
-            !["decision", "comment", "outcome"].includes(row.key.trim()) &&
-            !(
-              row.value === "" &&
-              formFields.some(field => field.key === row.key)
-            )
-        )
-        .map(row => {
-          const field = formFields.find(field => field.key === row.key);
-          return [
-            row.key,
-            field
-              ? taskFormInputValue(field.type, row.value)
-              : toValue(row.value),
-          ];
-        })
-    ),
+    ...taskFormRowValues(formFields, rows),
     decision,
     outcome: selectedOutcome?.code ?? decision,
     ...(comment.trim() ? { comment: comment.trim() } : {}),
@@ -2562,12 +2539,12 @@ function TaskDrawer({
     : canManage
       ? "操作说明"
       : "指定处理人办理说明";
-  const missingRequiredFormField = formFields.some(field => {
-    if (!field.required) return false;
-    const value = resultRows.find(row => row.key === field.key)?.value ?? "";
-    const parsed = taskFormInputValue(field.type, value);
-    return !value.trim() || (Array.isArray(parsed) && !parsed.length);
-  });
+  const rawFormFields = task?.payload?.config?.formSchema?.fields;
+  const submissionFields = Array.isArray(rawFormFields) ? rawFormFields : [];
+  const formErrors = taskFormFieldErrors(
+    submissionFields,
+    createPayload(resultRows)
+  );
   const setFormFieldValue = (key: string, value: string) =>
     setResultRows(rows => {
       const index = rows.findIndex(row => row.key === key);
@@ -2579,6 +2556,14 @@ function TaskDrawer({
     });
   const submitResult = () => {
     const payload = createPayload(resultRows);
+    try {
+      validateFormSubmission(submissionFields, payload);
+    } catch (cause) {
+      toast.error(
+        cause instanceof Error ? cause.message : "请检查表单填写内容。"
+      );
+      return;
+    }
     if (task.status === "pending") onExecute(payload);
     else onComplete(payload);
   };
@@ -2842,6 +2827,7 @@ function TaskDrawer({
                           {field.required ? "（必填）" : "（可选）"}
                           <TaskFormField
                             field={field}
+                            error={formErrors[field.key]}
                             value={
                               resultRows.find(row => row.key === field.key)
                                 ?.value ?? ""
@@ -2850,6 +2836,14 @@ function TaskDrawer({
                               setFormFieldValue(field.key, value)
                             }
                           />
+                          {formErrors[field.key] && (
+                            <p
+                              role="alert"
+                              className="text-xs font-normal text-red-600"
+                            >
+                              {formErrors[field.key]}
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2947,7 +2941,7 @@ function TaskDrawer({
                   className={`mt-3 min-h-11 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
                   disabled={
                     busy ||
-                    missingRequiredFormField ||
+                    Object.keys(formErrors).length > 0 ||
                     (commentRequired && !comment.trim())
                   }
                   onClick={submitResult}

@@ -3,7 +3,64 @@ import {
   assertTaskFormSchema,
   taskFormInputValue,
   validateFormSubmission,
+  taskFormFieldErrors,
+  taskFormRowValues,
 } from "../shared/task-form";
+it("keeps deliberate empty input instead of restoring defaults and preserves field types", () => {
+  const fields = [
+    { key: "text", type: "text", defaultValue: "001" },
+    { key: "amount", type: "number" },
+    { key: "fixed", readOnly: true },
+  ];
+  const values = taskFormRowValues(fields, [
+    { key: "text", value: "" },
+    { key: "amount", value: "0" },
+    { key: "fixed", value: "" },
+    { key: "decision", value: "rejected" },
+  ]);
+  expect(values).toEqual({ text: "", amount: 0 });
+  expect(validateFormSubmission(fields, values)).toEqual({ amount: 0 });
+  expect(
+    taskFormFieldErrors([{ ...fields[0], required: true }], values).text
+  ).toContain("必填");
+  expect(taskFormRowValues(fields, [{ key: "text", value: "true" }])).toEqual({
+    text: "true",
+  });
+});
+it("explains field errors with business names before submission and clears them after repair", () => {
+  const fields = [
+    {
+      key: "amount",
+      label: "报销金额",
+      type: "number",
+      min: 0,
+      max: 100,
+      required: true,
+    },
+    { key: "email", label: "联系邮箱", type: "email" },
+    { key: "flag", type: "boolean", required: true },
+    { key: "fixed", label: "固定编号", readOnly: true, defaultValue: "001" },
+  ];
+  const errors = taskFormFieldErrors(fields, {
+    amount: 101,
+    email: "invalid",
+    flag: false,
+    fixed: "002",
+  });
+  expect(errors.amount).toContain("报销金额");
+  expect(errors.amount).toContain("最大值");
+  expect(errors.email).toContain("联系邮箱");
+  expect(errors.fixed).toContain("只读");
+  expect(errors.flag).toBeUndefined();
+  expect(
+    taskFormFieldErrors(fields, {
+      amount: 0,
+      email: "user@example.com",
+      flag: false,
+      fixed: "001",
+    })
+  ).toEqual({});
+});
 it("rejects unusable or duplicate choices while keeping numeric and text values distinct", () => {
   for (const options of [
     [""],

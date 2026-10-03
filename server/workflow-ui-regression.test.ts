@@ -2579,7 +2579,6 @@ describe("流程设计器界面回归约束", () => {
       "const payload = createPayload(resultRows)"
     );
     expect(processWorkbenchSource).toContain("任务表单 · v");
-    expect(processWorkbenchSource).toContain("missingRequiredFormField");
     expect(canvasSource).toContain(
       "trpc.workflow.previewParticipants.useMutation"
     );
