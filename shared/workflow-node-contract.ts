@@ -1,5 +1,6 @@
 import { normalizeReferenceOperateConfig } from "./reference-operate-config";
 import { normalizeReferenceRouterConfig } from "./reference-router-config";
+import { readAggregateConfig } from "./dataflow-aggregate-config";
 
 export type FlowType = "state" | "control" | "data";
 
@@ -1871,7 +1872,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   aggregate: {
     type: "aggregate",
     label: "聚合",
-    description: "分组并计算 count/sum/min/max",
+    description: "分组并计算记录数、求和、最值和平均值",
     flowTypes: ["data"],
     defaultConfig: { groupBy: [], metrics: [] },
     fields: [
@@ -1879,7 +1880,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "metrics",
         label: "指标",
-        help: "[{name,operation,field}]。",
+        help: '例如 [{"name":"total","operation":"sum","field":"amount"}]。支持 count/sum/min/max/avg；count 不填 field 统计总行数，填写 field 统计非空值。数值运算忽略空值，无有效值时返回 null。',
         kind: "json",
         required: true,
       },
@@ -2778,8 +2779,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         throw new Error("Union 模式无效。");
       break;
     case "aggregate":
-      if (!Array.isArray(config.groupBy) || !Array.isArray(config.metrics))
-        throw new Error("聚合节点配置必须是数组。");
+      readAggregateConfig(config);
       break;
     case "sort":
       if (!Array.isArray(config.fields) || !config.fields.length)

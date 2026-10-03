@@ -412,6 +412,108 @@ describe("P2 项目数据资源与数据流", () => {
         }),
         expect.objectContaining({ orderId: "A-02", amount: 34 }),
       ]);
+      const nullableAssetId = (
+        await owner.data.createAsset({
+          projectId,
+          sourceId,
+          name: "空值聚合样本",
+          assetType: "dataset",
+          schema: [{ name: "amount", type: "number" }],
+          sample: [{ amount: null }, { amount: 6 }, { amount: 10 }],
+        })
+      ).id;
+      for (const empty of [false, true]) {
+        const aggregateWorkflowId = (
+          await owner.project.createWorkflow({
+            projectId,
+            name: empty ? "空输入统计" : "空值统计",
+            flowType: "data",
+            definition: {
+              ...definition,
+              nodes: [
+                definition.nodes[0],
+                {
+                  ...definition.nodes[1],
+                  config: { assetId: nullableAssetId },
+                },
+                ...(empty
+                  ? [
+                      {
+                        id: "filter",
+                        type: "filter",
+                        name: "筛空",
+                        position: { x: 270, y: 0 },
+                        config: {
+                          filterField: "amount",
+                          operator: "equals",
+                          filterValue: "missing",
+                        },
+                      },
+                    ]
+                  : []),
+                {
+                  id: "aggregate",
+                  type: "aggregate",
+                  name: "统计",
+                  position: { x: 360, y: 0 },
+                  config: {
+                    groupBy: [],
+                    metrics: [
+                      { name: "rows", operation: "count" },
+                      { name: "present", operation: "count", field: "amount" },
+                      { name: "min", operation: "min", field: "amount" },
+                      { name: "avg", operation: "avg", field: "amount" },
+                    ],
+                  },
+                },
+                definition.nodes[3],
+              ],
+              edges: [
+                {
+                  id: "s-source",
+                  sourceNodeId: "start",
+                  targetNodeId: "source",
+                },
+                ...(empty
+                  ? [
+                      {
+                        id: "source-filter",
+                        sourceNodeId: "source",
+                        targetNodeId: "filter",
+                      },
+                    ]
+                  : []),
+                {
+                  id: "to-agg",
+                  sourceNodeId: empty ? "filter" : "source",
+                  targetNodeId: "aggregate",
+                },
+                {
+                  id: "agg-end",
+                  sourceNodeId: "aggregate",
+                  targetNodeId: "end",
+                },
+              ],
+            },
+          })
+        ).id;
+        await owner.project.auditWorkflow({
+          projectId,
+          workflowId: aggregateWorkflowId,
+          auditStatus: "approved",
+        });
+        await owner.workflow.publish({ id: aggregateWorkflowId });
+        const aggregated = await owner.data.run({
+          projectId,
+          workflowId: aggregateWorkflowId,
+        });
+        expect(aggregated.status).toBe("success");
+        expect((aggregated.output.terminals[0] as any).rows).toEqual([
+          empty
+            ? { rows: 0, present: 0, min: null, avg: null }
+            : { rows: 3, present: 2, min: 6, avg: 8 },
+        ]);
+      }
       const sqlWorkflowId = (
         await owner.project.createWorkflow({
           projectId,

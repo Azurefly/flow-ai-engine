@@ -20,6 +20,10 @@ import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-sou
 import { probeSafeHttpEndpoint } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
+import {
+  aggregateDataflowRows,
+  distinctDataflowRows,
+} from "./dataflow-row-operations";
 
 type JsonRecord = Record<string, unknown>;
 type ResourceKind = "source" | "asset" | "udf" | "tag" | "plugin";
@@ -1513,50 +1517,12 @@ async function runDataflowDefinition(
         output = { rows, operation: "join" };
       } else if (String(node.type) === "union") {
         let rows = rowsFromInput(inputs);
-        if (String(config.mode) === "distinct") {
-          const seen = new Set<string>();
-          rows = rows.filter(row => {
-            const key = JSON.stringify(row);
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-        }
+        if (String(config.mode) === "distinct")
+          rows = distinctDataflowRows(rows);
         output = { rows, operation: "union" };
       } else if (String(node.type) === "aggregate") {
-        const groupBy = Array.isArray(config.groupBy)
-          ? config.groupBy.map(String)
-          : [];
-        const metrics = Array.isArray(config.metrics) ? config.metrics : [];
-        const groups = new Map<string, JsonRecord[]>();
-        for (const row of rowsFromInput(inputs)) {
-          const key = JSON.stringify(groupBy.map(field => row[field]));
-          const bucket = groups.get(key) ?? [];
-          bucket.push(row);
-          groups.set(key, bucket);
-        }
         output = {
-          rows: Array.from(groups.values()).map((bucket: JsonRecord[]) => {
-            const out: JsonRecord = {};
-            for (const field of groupBy) out[field] = bucket[0]?.[field];
-            for (const metric of metrics) {
-              const item = metric as JsonRecord;
-              const field = String(item.field ?? "");
-              const values = bucket
-                .map((row: JsonRecord) => Number(row[field]))
-                .filter(Number.isFinite);
-              const op = String(item.operation ?? "count");
-              out[String(item.name ?? field ?? "metric")] =
-                op === "count"
-                  ? bucket.length
-                  : op === "sum"
-                    ? values.reduce((a: number, b: number) => a + b, 0)
-                    : op === "min"
-                      ? Math.min(...values)
-                      : Math.max(...values);
-            }
-            return out;
-          }),
+          rows: aggregateDataflowRows(rowsFromInput(inputs), config),
           operation: "aggregate",
         };
       } else if (String(node.type) === "deduplicate") {
