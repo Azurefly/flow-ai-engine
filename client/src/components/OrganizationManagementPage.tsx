@@ -263,6 +263,13 @@ export default function OrganizationManagementPage({
     await Promise.all([
       utils.config.organizationDirectory.invalidate(),
       utils.config.organizationMembersPage.invalidate(),
+      utils.iam.userDirectory.invalidate(),
+      utils.iam.userAuthorizationDetails.invalidate(),
+      utils.iam.roleAuthorizationDetails.invalidate(),
+      utils.workflow.access.invalidate(),
+      utils.project.access.invalidate(),
+      utils.workflow.list.invalidate(),
+      utils.project.list.invalidate(),
     ]);
   };
 
@@ -670,7 +677,6 @@ export default function OrganizationManagementPage({
               title={`${unit.name}${isDuplicateName ? `（${unit.code}）` : ""}`}
               onClick={() => {
                 setSelectedId(unit.id);
-                setTab("overview");
                 setMobileDirectoryOpen(false);
               }}
             >
@@ -2022,6 +2028,7 @@ function OrganizationUserSelect({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [searchPage, setSearchPage] = useState(0);
   const [selectedUser, setSelectedUser] = useState<{
     id: string;
     label: string;
@@ -2039,6 +2046,7 @@ function OrganizationUserSelect({
     if (!open) {
       setSearch("");
       setDebouncedSearch("");
+      setSearchPage(0);
     }
   }, [open]);
 
@@ -2046,7 +2054,7 @@ function OrganizationUserSelect({
     {
       search: debouncedSearch,
       status: "active",
-      offset: 0,
+      offset: searchPage * 20,
       limit: 20,
     },
     {
@@ -2055,6 +2063,11 @@ function OrganizationUserSelect({
     }
   );
   const users = directory.data?.items ?? [];
+  useEffect(() => {
+    if (!directory.data) return;
+    const lastPage = Math.max(0, Math.ceil(directory.data.total / 20) - 1);
+    if (searchPage > lastPage) setSearchPage(lastPage);
+  }, [directory.data, searchPage]);
   const chosenLabel =
     value && selectedUser?.id === value
       ? selectedUser.label
@@ -2116,7 +2129,10 @@ function OrganizationUserSelect({
             placeholder="输入姓名、登录名或邮箱"
             className="aiflow-type-control"
             value={search}
-            onValueChange={setSearch}
+            onValueChange={value => {
+              setSearch(value);
+              setSearchPage(0);
+            }}
           />
           <CommandList>
             {clearLabel && value && (
@@ -2177,11 +2193,45 @@ function OrganizationUserSelect({
                     );
                   })}
                 </CommandGroup>
-                {(directory.data?.total ?? 0) > users.length && (
-                  <p className="aiflow-type-meta border-t px-3 py-2 leading-5 text-muted-foreground">
-                    共 {directory.data?.total} 个匹配账号，当前显示前 20
-                    个；请继续输入以缩小范围。
-                  </p>
+                {(directory.data?.total ?? 0) > 20 && (
+                  <div
+                    aria-label="人员搜索分页"
+                    className="grid gap-2 border-t px-3 py-2"
+                  >
+                    <p className="aiflow-type-meta leading-5 text-muted-foreground">
+                      显示第 {searchPage * 20 + 1}–
+                      {searchPage * 20 + users.length} 个，共{" "}
+                      {directory.data?.total}
+                      个匹配账号；请继续输入以缩小范围。
+                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="aiflow-type-control min-h-10"
+                        disabled={searchPage === 0 || loading}
+                        onClick={() =>
+                          setSearchPage(page => Math.max(0, page - 1))
+                        }
+                      >
+                        上一页
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="aiflow-type-control min-h-10"
+                        disabled={
+                          loading ||
+                          (searchPage + 1) * 20 >= (directory.data?.total ?? 0)
+                        }
+                        onClick={() => setSearchPage(page => page + 1)}
+                      >
+                        下一页
+                      </Button>
+                    </div>
+                  </div>
                 )}
               </>
             ) : (
