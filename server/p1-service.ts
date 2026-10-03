@@ -438,7 +438,6 @@ export async function claimWorkflowTask(user: User, taskId: string) {
   if (!task) throw new Error("人工任务不存在或无访问权限。 ");
   if (!(await canAccessTask(user, task, true)))
     throw new Error("无权领取该人工任务。 ");
-  await assertCurrentTaskOperation(user, task);
   if (task.assignedUserId && Number(task.assignedUserId) !== user.id)
     throw new Error("该人工任务已指定其他处理人。 ");
   if (task.approvalGroupId && task.signMode === "sequentialSignFor") {
@@ -448,6 +447,7 @@ export async function claimWorkflowTask(user: User, taskId: string) {
     );
     if (prior[0]) throw new Error("顺序会签尚未轮到当前审批人。 ");
   }
+  await assertCurrentTaskOperation(user, task);
   const [result] = await db().query<mysql.ResultSetHeader>(
     "UPDATE workflow_task SET status='claimed',claimedByUserId=?,claimedAt=NOW(),ownerVersion=ownerVersion+1 WHERE id=? AND status='pending' AND ownerVersion=?",
     [user.id, taskId, Number(task.ownerVersion ?? 0)]
