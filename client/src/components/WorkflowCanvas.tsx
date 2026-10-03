@@ -67,6 +67,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import { selectWorkflowEndpoint } from "./workflow-endpoint-selection";
 import { canConnectCanvasNodes } from "./workflow-canvas-connections";
+import { AggregateMetricEditor } from "./aggregate-metric-editor";
 import type { Definition } from "../../../server/workflow-service";
 import {
   canConnectFlowNodeTypes,
@@ -719,6 +720,7 @@ function ConfigFieldEditor({
   runtimePlaceholder = "请选择已启用的私有子流程",
   runtimeError,
   onRetryOptions,
+  aggregateMetrics = false,
   routeTargetLabels,
   onChange,
 }: {
@@ -730,6 +732,7 @@ function ConfigFieldEditor({
   runtimePlaceholder?: string;
   runtimeError?: string;
   onRetryOptions?: () => void;
+  aggregateMetrics?: boolean;
   routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
@@ -750,6 +753,18 @@ function ConfigFieldEditor({
   );
   const inputClass =
     "aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground min-[1024px]:h-9 min-[1024px]:min-h-0";
+  if (
+    aggregateMetrics &&
+    Array.isArray(effectiveValue) &&
+    effectiveValue.every(isConfigRecord)
+  )
+    return (
+      <AggregateMetricEditor
+        value={effectiveValue}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    );
   if (runtimeOptions) {
     const current = String(effectiveValue ?? "");
     const currentAvailable = runtimeOptions.some(
@@ -789,7 +804,7 @@ function ConfigFieldEditor({
             size="sm"
             onClick={onRetryOptions}
           >
-            重新加载服务端点
+            重新加载选项
           </Button>
         )}
       </div>
@@ -4567,6 +4582,10 @@ export default function WorkflowCanvas({
                                   : field
                             }
                             value={fieldValue}
+                            aggregateMetrics={
+                              selected.data.kind === "aggregate" &&
+                              field.key === "metrics"
+                            }
                             fallback={selectedDefaults[field.key]}
                             disabled={
                               inspectorDisabled ||
