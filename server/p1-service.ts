@@ -168,6 +168,24 @@ async function assertCurrentTaskOperation(
   }
 }
 
+export function taskActionState(userId: number, task: mysql.RowDataPacket) {
+  const waiting =
+    task.signMode === "sequentialSignFor" &&
+    (task.status === "pending" || task.status === "claimed") &&
+    Number(task.hasEarlierPendingSigner) === 1;
+  return {
+    canAct: isCurrentTaskOwner(userId, task) && !waiting,
+    blockedReason: waiting
+      ? "等待前序审批人完成审批，轮到你后即可办理。"
+      : null,
+    actionLabel: waiting ? "等待前序审批" : null,
+  };
+}
+
+const earlierPendingSignerSql = `EXISTS(SELECT 1 FROM workflow_task earlier
+  WHERE t.signMode='sequentialSignFor' AND earlier.approvalGroupId=t.approvalGroupId
+    AND earlier.approvalOrder<t.approvalOrder AND earlier.status IN ('pending','claimed'))`;
+
 function presentTask(row: mysql.RowDataPacket) {
   const status = String(row.status);
   const result = parseJson(row.resultJson);
@@ -305,6 +323,7 @@ export async function pageWorkflowTasks(
                 initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
                 DATE_FORMAT(t.createdAt,'%Y-%m-%d %H:%i:%s.%f') AS cursorCreatedAt,
                 g.totalApprovers,g.requiredApprovals,g.memberVersion,
+            ${earlierPendingSignerSql} AS hasEarlierPendingSigner,
                 (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
                 (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
                 (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
@@ -334,7 +353,7 @@ export async function pageWorkflowTasks(
     ...page,
     items: page.items.map(row => ({
       ...presentTask(row),
-      canAct: isCurrentTaskOwner(user.id, row),
+      ...taskActionState(user.id, row),
     })),
   }));
 }
@@ -373,6 +392,7 @@ export async function listWorkflowTasks(
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             g.totalApprovers,g.requiredApprovals,g.memberVersion,
+            ${earlierPendingSignerSql} AS hasEarlierPendingSigner,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
@@ -384,7 +404,11 @@ export async function listWorkflowTasks(
   );
   const accessible: mysql.RowDataPacket[] = [];
   for (const row of rows)
-    if (await canAccessTask(user, row)) accessible.push(presentTask(row));
+    if (await canAccessTask(user, row))
+      accessible.push({
+        ...presentTask(row),
+        ...taskActionState(user.id, row),
+      });
   return accessible;
 }
 
@@ -393,6 +417,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
     `SELECT t.*,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             responsible.name AS responsibleName,represented.name AS representedName,
             g.totalApprovers,g.requiredApprovals,g.memberVersion,
+            ${earlierPendingSignerSql} AS hasEarlierPendingSigner,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='rejected') AS rejectedApprovals
@@ -422,7 +447,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
   }
   return {
     ...presentTask(task),
-    canAct: isCurrentTaskOwner(user.id, task),
+    ...taskActionState(user.id, task),
     canViewRun: await hasWorkflowPermission(
       user,
       String(task.workflowId),

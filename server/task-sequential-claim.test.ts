@@ -7,7 +7,11 @@ vi.mock("./iam-service", () => ({
 }));
 vi.mock("./workflow-engine", () => ({ resumeWorkflowTask: vi.fn() }));
 vi.mock("./workflow-worker", () => ({ wakeWorkflowWorker: vi.fn() }));
-import { claimWorkflowTask } from "./p1-service";
+import {
+  claimWorkflowTask,
+  taskActionState,
+  getWorkflowTask,
+} from "./p1-service";
 beforeEach(() => vi.resetAllMocks());
 const task = {
   id: "next-task",
@@ -39,4 +43,41 @@ it("其他人员不能用顺序提示绕过任务领取权限", async () => {
     claimWorkflowTask({ id: 99, role: "admin" }, task.id)
   ).rejects.toThrow("无权领取");
   expect(mocks.query).toHaveBeenCalledTimes(2);
+});
+
+it("后续审批人等待期间不能办理，前序完成后恢复办理", () => {
+  expect(
+    taskActionState(12, { ...task, hasEarlierPendingSigner: 1 } as any)
+  ).toMatchObject({ canAct: false, actionLabel: "等待前序审批" });
+  expect(
+    taskActionState(12, { ...task, hasEarlierPendingSigner: 0 } as any)
+  ).toMatchObject({ canAct: true, blockedReason: null });
+  expect(
+    taskActionState(99, { ...task, hasEarlierPendingSigner: 0 } as any).canAct
+  ).toBe(false);
+  expect(
+    taskActionState(12, {
+      ...task,
+      signMode: "andSignFor",
+      hasEarlierPendingSigner: 1,
+    } as any).canAct
+  ).toBe(true);
+  expect(
+    taskActionState(12, {
+      ...task,
+      status: "completed",
+      hasEarlierPendingSigner: 1,
+    } as any)
+  ).toMatchObject({ canAct: false, blockedReason: null });
+});
+it("详情返回顺序等待原因并通过查询读取前序状态", async () => {
+  mocks.query
+    .mockResolvedValueOnce([[{ ...task, hasEarlierPendingSigner: 1 }]])
+    .mockResolvedValueOnce([[]]);
+  const detail = await getWorkflowTask({ id: 12, role: "user" }, task.id);
+  expect(detail).toMatchObject({ canAct: false, actionLabel: "等待前序审批" });
+  expect(detail?.blockedReason).toContain("前序审批人");
+  expect(mocks.query.mock.calls[0][0]).toContain(
+    "earlier.approvalOrder<t.approvalOrder"
+  );
 });

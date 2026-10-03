@@ -2645,10 +2645,10 @@ describe("流程设计器界面回归约束", () => {
 
   it("可查看但不归当前用户处理的待办只显示只读说明", () => {
     expect(p1ServiceSource).toContain(
-      "canAct: isCurrentTaskOwner(user.id, task)"
+      "...taskActionState(user.id, task)"
     );
     expect(p1ServiceSource).toContain(
-      "canAct: isCurrentTaskOwner(user.id, row)"
+      "...taskActionState(user.id, row)"
     );
     expect(processWorkbenchSource.match(/\{canManage && \(/g)).toHaveLength(2);
     expect(processWorkbenchSource).toContain(

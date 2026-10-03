@@ -205,6 +205,14 @@ try {
     }
     assert.equal(new Set(tasks.map(item => item.id)).size, 3);
     if (mode === "sequentialSignFor") {
+      assert.equal(tasks[0].canAct, true);
+      assert.equal(tasks[2].canAct, false);
+      assert.equal(tasks[2].actionLabel, "等待前序审批");
+      const waiting = await accounts[2].session.request("task.get", {
+        taskId: tasks[2].id,
+      });
+      assert.equal(waiting.canAct, false);
+      assert.match(waiting.blockedReason, /前序审批人/);
       await assert.rejects(
         accounts[2].session.request(
           "task.claim",
@@ -217,6 +225,17 @@ try {
     const required = mode === "orSignFor" || percent === 66 ? 2 : 3;
     for (let index = 0; index < required; index++) {
       const rejected = mode === "orSignFor" && index === 0;
+      if (mode === "sequentialSignFor") {
+        const current = await accounts[index].session.request("task.get", {
+          taskId: tasks[index].id,
+        });
+        assert.equal(
+          current.canAct,
+          true,
+          "Current sequential signer must become actionable"
+        );
+        assert.equal(current.blockedReason, null);
+      }
       await accounts[index].session.request(
         "task.execute",
         {

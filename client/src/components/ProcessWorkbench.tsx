@@ -1083,7 +1083,9 @@ function Board({
                     )}
                   </div>
                 </div>
-                {badge(readOnlyTask ? "仅可查看" : task.status)}
+                {badge(
+                  readOnlyTask ? task.actionLabel || "仅可查看" : task.status
+                )}
               </button>
             );
           })}
@@ -2651,7 +2653,8 @@ function TaskDrawer({
               task.canAct !== true && (
                 <div className="flex flex-col gap-3 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <p role="status" className="text-sm leading-6 text-amber-900">
-                    此任务仅供查看；处理操作由指定处理人完成。
+                    {task.blockedReason ||
+                      "此任务仅供查看；处理操作由指定处理人完成。"}
                   </p>
                   {task.canViewRun === true && task.runId && (
                     <Button
