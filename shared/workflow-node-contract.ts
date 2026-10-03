@@ -936,6 +936,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       commandCode: "COMMAND_CODE",
       assigneeMode: "receivers",
       assigneeRoleCode: "",
+      includeDescendants: true,
+      assigneeUnitIds: [],
       instruction: "请完成此项流程操作。",
       formSchemaVersion: 1,
       formSchema: { fields: [] },
@@ -1123,7 +1125,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "assigneeUnitIds",
         label: "处理部门 ID",
-        help: "指定部门成员或部门负责人方式使用。",
+        help: "部门负责人留空时，使用发起人的主部门。",
         kind: "json",
       },
       {
@@ -2281,13 +2283,20 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       )
         throw new Error("操作节点处理人方式无效。");
       assertString(config.instruction, "操作节点必须配置操作说明。");
-      if (config.assigneeMode === "user")
+      if (config.assigneeMode === "user") {
+        if (
+          config.assigneeUserId === undefined ||
+          config.assigneeUserId === null ||
+          config.assigneeUserId === ""
+        )
+          throw new Error("请选择指定处理人。");
         assertOptionalInteger(
           config.assigneeUserId,
           "操作节点指定处理人必须是有效的内部账号 ID。",
           1,
           Number.MAX_SAFE_INTEGER
         );
+      }
       if (config.assigneeMode === "role")
         assertString(
           config.assigneeRoleCode,
@@ -2309,9 +2318,12 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           String(config.assigneeMode)
         ) &&
         config.assigneeUnitIds !== undefined &&
-        !Array.isArray(config.assigneeUnitIds)
+        (!Array.isArray(config.assigneeUnitIds) ||
+          config.assigneeUnitIds.some(
+            unitId => typeof unitId !== "string" || !unitId.trim()
+          ))
       )
-        throw new Error("操作节点处理部门必须是 ID 数组。");
+        throw new Error("处理部门必须是非空部门 ID 的数组。");
       if (
         config.assigneeMode === "department" &&
         (!Array.isArray(config.assigneeUnitIds) ||

@@ -18,6 +18,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
+import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -2076,36 +2077,30 @@ function FieldHelp({ help }: { help: string }) {
 }
 
 type ConfigField = FlowNodeDefinition["fields"][number];
-type ConfigGroup = { label: string; description: string; keys: string[] };
+type ConfigGroup = { label: string; keys: string[] };
 
 const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   join: [
     {
       label: "输入数据",
-      description: "选择已连接的左右输入；左连接保留未匹配行。",
       keys: ["leftInputNodeId", "rightInputNodeId"],
     },
     {
       label: "关联条件",
-      description: "左右关联键按顺序对应，数量必须相同且至少配置一组。",
       keys: ["kind", "leftKeys", "rightKeys"],
     },
   ],
   http: [
     {
       label: "请求配置",
-      description: "配置服务端点和请求内容。",
       keys: ["endpointRef", "secretRef", "url", "method", "headers", "body"],
     },
     {
       label: "超时与重试",
-      description: "设置超时、重试次数和间隔。",
       keys: ["timeout", "retryMaxAttempts", "retryBaseDelayMs"],
     },
     {
       label: "写入与流量控制",
-      description:
-        "写请求需声明幂等或补偿策略；熔断与并发限制用于保护外部服务。",
       keys: [
         "writeSafety",
         "compensationNodeId",
@@ -2119,143 +2114,142 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   llm: [
     {
       label: "模型与提示词",
-      description: "选择模型并配置提示词。",
       keys: ["model", "systemPrompt", "prompt"],
     },
     {
       label: "输出与失败处理",
-      description: "控制输出长度、结构化格式、超时时间和失败分支。",
       keys: ["maxTokens", "outputSchema", "timeoutMs", "failureHandle"],
     },
     {
       label: "数据与成本控制",
-      description: "配置允许发送的数据范围、缓存、人工复核及调用预算。",
       keys: ["governance"],
     },
   ],
   state: [
     {
       label: "基础状态",
-      description: "配置状态代号、业务显示名称和类型。",
       keys: ["nodeDh", "jdmc", "stateType", "stateColor"],
     },
     {
       label: "人员与操作",
-      description: "配置角色与可执行操作。",
       keys: ["bdjs", "jdgycz", "ywcz"],
     },
     {
       label: "流程参与方显示",
-      description: "参与方看到的状态，可与办理人状态不同。",
       keys: ["flowStatus", "bdym"],
     },
   ],
   operate: [
     {
       label: "基础信息",
-      description: "代号标识节点，名称展示给办理人。",
       keys: ["nodeDh", "czmc", "lsWorkZone"],
     },
     {
       label: "权限控制",
-      description: "设置可见、办理角色及数据对接收人的影响。",
       keys: ["bddxcrjsrsx", "bdczcrjsrsx", "qxkz"],
     },
     {
       label: "绑定对象",
-      description: "指定操作需要关联的业务对象、获取范围和双方数据。",
       keys: ["bddx"],
     },
     {
       label: "绑定操作",
-      description: "配置办理动作、或签/会签方式、角色和通过比例。",
       keys: ["bdcz"],
     },
     {
       label: "属性设置",
-      description: "配置自动关联、部门操作权限和必须完成的子流程。",
       keys: ["sxsz"],
     },
     {
       label: "发送方设置",
-      description: "配置流程发送方的身份、固有操作和临时角色。",
       keys: ["fsfsz"],
     },
     {
       label: "接收方设置",
-      description: "配置流程接收方的固有操作和临时角色。",
       keys: ["jsfsz"],
     },
     {
       label: "自动执行",
-      description: "设置触发条件；旧版代码仅保存，不执行。",
       keys: ["zdzx"],
     },
     {
       label: "当前运行设置",
-      description: "将角色和组织关系解析为待办人员；保留兼容配置。",
       keys: [
         "assigneeMode",
         "assigneeRoleCode",
         "instruction",
         "assigneeUserId",
+        "assigneeFallback",
+        "managerLevel",
+        "assigneeUnitIds",
+        "includeDescendants",
+        "assigneeFormField",
       ],
+    },
+    {
+      label: "表单与时限",
+      keys: [
+        "formSchemaVersion",
+        "formSchema",
+        "dueAfterSeconds",
+        "reminderAfterSeconds",
+        "escalationAfterSeconds",
+      ],
+    },
+    {
+      label: "结果与分支",
+      keys: ["outcomeMode", "outcomes"],
     },
   ],
   router: [
     {
       label: "基础信息",
-      description: "标识路由节点，并决定是否允许多个分支同时流转。",
       keys: ["nodeDh", "lymc", "gbms"],
     },
     {
       label: "原版路由设置",
-      description: "兼容目标节点、权重、条件与代码配置。",
       keys: ["lysz"],
     },
     {
       label: "当前安全路由规则",
-      description: "依次匹配规则；未命中走默认分支。",
       keys: ["routes", "defaultRoute"],
     },
   ],
   subflow: [
     {
       label: "基础信息",
-      description: "选择兼容子流程并设置节点代号。",
       keys: ["zlcxz", "nodeDh"],
     },
     {
       label: "流转方式",
-      description:
-        "决定主流程是否等待、由发送方还是接收方发起，以及附加进入条件。",
       keys: ["sfgqzlc", "zlcfqf", "gdtj"],
     },
     {
       label: "入口映射",
-      description: "映射子流程入口数据。",
       keys: ["zlcrk"],
     },
     {
       label: "出口映射",
-      description: "设置子流程返回节点。",
       keys: ["zlcck"],
     },
     {
       label: "当前运行映射",
-      description: "选择已启用的私有子流程并传入数据。",
       keys: ["subflowId", "input"],
     },
   ],
 };
 
-function configFieldGroups(kind: NodeKind, fields: ConfigField[]) {
+function configFieldGroups(
+  kind: NodeKind,
+  fields: ConfigField[],
+  config: NodeConfig
+) {
+  if (kind === "operate") fields = operateParticipantFields(fields, config);
   const definitions = CONFIG_GROUPS[kind];
   if (!definitions)
     return [
       {
         label: "节点配置",
-        description: "按照字段说明填写该节点运行所需的信息。",
         fields,
       },
     ];
@@ -2273,7 +2267,6 @@ function configFieldGroups(kind: NodeKind, fields: ConfigField[]) {
         ...groups,
         {
           label: "其他兼容配置",
-          description: "保留已有流程中的扩展配置，不会在保存时丢失。",
           keys: [],
           fields: remaining,
         },
@@ -2739,7 +2732,11 @@ export default function WorkflowCanvas({
   const selectedConfigState = selectedConfigAssessment?.state;
   const selectedFieldGroups =
     selected && selectedDefinition
-      ? configFieldGroups(selected.data.kind, selectedDefinition.fields)
+      ? configFieldGroups(
+          selected.data.kind,
+          selectedDefinition.fields,
+          selectedConfig
+        )
       : [];
   const activeInspectorGroup =
     selectedFieldGroups.find(group => group.label === inspectorTab) ??
@@ -4520,9 +4517,6 @@ export default function WorkflowCanvas({
                       <h3 className="aiflow-type-section-title font-semibold text-foreground">
                         {activeInspectorGroup.label}
                       </h3>
-                      <p className="aiflow-type-body mt-1 text-muted-foreground">
-                        {activeInspectorGroup.description}
-                      </p>
                     </div>
                     <div className="space-y-4">
                       {activeInspectorGroup.fields.map(field => {
