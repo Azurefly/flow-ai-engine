@@ -12,6 +12,7 @@ IMAGE_NAME="flow-ai-engine:local"
 APP_SERVICE="app"
 MYSQL_SERVICE="mysql"
 HEALTH_TIMEOUT_SECONDS="${HEALTH_TIMEOUT_SECONDS:-180}"
+VERIFIED_BACKUP_FILE=""
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -129,6 +130,7 @@ create_database_backup() {
   backup_bytes="$(sudo -n stat -c '%s' "$backup_file")"
   printf 'MySQL backup verified: bytes=%s sha256=%s path=%s\n' \
     "$backup_bytes" "$backup_sha256" "$backup_file"
+  VERIFIED_BACKUP_FILE="$backup_file"
 }
 
 wait_for_app_health() {
@@ -189,6 +191,7 @@ MYSQL_BEFORE_ID="$(compose ps -q "$MYSQL_SERVICE")"
 [[ -n "$MYSQL_BEFORE_ID" ]] || die "MySQL service is not running; refusing an app-only deployment"
 MYSQL_BEFORE_STARTED="$(docker_sudo inspect --format '{{.State.StartedAt}}' "$MYSQL_BEFORE_ID")"
 create_database_backup "$MYSQL_BEFORE_ID"
+sudo -n bash "$SCRIPT_DIR/retain-backup.sh" "$BACKUP_ROOT" "$VERIFIED_BACKUP_FILE"
 APP_BEFORE_ID="$(compose ps -q "$APP_SERVICE" 2>/dev/null || true)"
 PREVIOUS_IMAGE_ID=""
 ROLLBACK_TAG=""
@@ -235,6 +238,4 @@ MYSQL_AFTER_STARTED="$(docker_sudo inspect --format '{{.State.StartedAt}}' "$MYS
 
 printf 'Deployment verified: service=%s imageId=%s release=%s mysqlContainerUnchanged=true\n' \
   "$APP_SERVICE" "$IMAGE_ID" "$RELEASE_TAG"
-if [[ -n "$ROLLBACK_TAG" ]]; then
-  printf 'Rollback image retained: %s\n' "$ROLLBACK_TAG"
-fi
+bash "$SCRIPT_DIR/retain-app-images.sh"

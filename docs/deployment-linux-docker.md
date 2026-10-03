@@ -30,20 +30,15 @@ docker compose ps
 
 ## 升级
 
-升级前先备份数据库：
+在远程 Linux 服务器的当前源码目录使用部署脚本，沿用现有环境配置：
 
 ```bash
-mkdir -p backups
-docker compose exec -T mysql sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers flow_ai_engine' | gzip > "backups/flow_ai_engine-before-upgrade.sql.gz"
+FLOW_COMPOSE_ENV_FILE=/opt/flow-ai-engine/source/.env bash scripts/deploy-app.sh
 ```
 
-确认备份文件非空后再更新源代码：
+脚本先创建私有数据库备份并校验 gzip 完整性，再更新应用；MySQL 容器和数据卷保持不变。应用健康或镜像身份校验失败时会恢复旧镜像。
 
-```bash
-docker compose build
-docker compose up -d
-docker compose ps
-```
+部署脚本生成的数据库备份只保留最新一份。新备份校验成功后清理旧的脚本备份；不自动删除无法确认归属的历史目录。应用更新成功后，清理未被任何容器引用的 `flow-ai-engine` 旧镜像，保留当前运行镜像。清理不会使用强制镜像删除或删除数据卷。
 
 `docker compose up -d` 不会删除命名卷。禁止使用 `docker compose down -v`，除非已经明确确认需要永久删除数据库。
 
