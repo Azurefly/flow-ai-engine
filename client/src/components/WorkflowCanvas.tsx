@@ -8,6 +8,7 @@ import {
   ReactFlow,
   useEdgesState,
   useNodesState,
+  useStore,
   type Connection,
   type Edge,
   type Node,
@@ -269,8 +270,14 @@ function sourceHandles(kind: NodeKind, config: NodeConfig) {
   return ["default"];
 }
 
-function FlowNodeCard({ data, selected }: NodeProps) {
+function FlowNodeCard({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as FlowNodeData;
+  const canvasEdges = useStore(state =>
+    nodeData.kind === "router" ? state.edges : null
+  );
+  const canvasNodes = useStore(state =>
+    nodeData.kind === "router" ? state.nodes : null
+  );
   const appearance = nodeAppearance[nodeData.kind];
   const configState = nodeConfigState(nodeData.kind, nodeData.config);
   const handles = sourceHandles(nodeData.kind, nodeData.config);
@@ -361,12 +368,25 @@ function FlowNodeCard({ data, selected }: NodeProps) {
                 route.handle ||
                 `规则 ${index + 1}`
             );
-            const routeTarget = String(
-              route.targetNodeId ||
+            const routeHandle = String(route.handle ?? route.code ?? "default");
+            const connectedTarget = canvasEdges?.find(
+              edge =>
+                edge.source === id &&
+                (edge.sourceHandle || "default") === routeHandle
+            )?.target;
+            const routeTargetId = String(
+              connectedTarget ||
+                route.targetNodeId ||
                 route.target ||
                 route.routerTargetId ||
-                "待连线"
+                ""
             );
+            const targetNode = canvasNodes?.find(
+              node => node.id === routeTargetId
+            );
+            const routeTarget = targetNode
+              ? String(targetNode.data.label || routeTargetId)
+              : routeTargetId || "待连线";
             return (
               <div
                 key={String(route.handle || route.routerRuleId || index)}
@@ -821,6 +841,7 @@ function ConfigFieldEditor({
   fallback,
   disabled,
   runtimeOptions,
+  routeTargetLabels,
   onChange,
 }: {
   field: FlowNodeDefinition["fields"][number];
@@ -828,6 +849,7 @@ function ConfigFieldEditor({
   fallback: unknown;
   disabled: boolean;
   runtimeOptions?: Array<{ value: string; label: string }>;
+  routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
   const effectiveValue = value ?? fallback;
@@ -932,6 +954,7 @@ function ConfigFieldEditor({
         field={field}
         value={effectiveValue}
         disabled={disabled}
+        routeTargetLabels={routeTargetLabels}
         onChange={onChange}
       />
     );
@@ -1640,11 +1663,13 @@ function StructuredValueEditor({
   field,
   value,
   disabled,
+  routeTargetLabels,
   onChange,
 }: {
   field: FlowNodeDefinition["fields"][number];
   value: unknown;
   disabled: boolean;
+  routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
   const isList = Array.isArray(value);
@@ -1716,6 +1741,7 @@ function StructuredValueEditor({
               fieldKey={field.key}
               item={item}
               disabled={disabled}
+              routeTargetLabels={routeTargetLabels}
               onChange={next =>
                 updateList(
                   list.map((current, itemIndex) =>
@@ -1765,12 +1791,14 @@ function StructuredListRow({
   fieldKey,
   item,
   disabled,
+  routeTargetLabels,
   onChange,
   onRemove,
 }: {
   fieldKey: string;
   item: unknown;
   disabled: boolean;
+  routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
   onRemove: () => void;
 }) {
@@ -1855,6 +1883,10 @@ function StructuredListRow({
   }
   if (fieldKey === "routes") {
     const route = item && typeof item === "object" ? (item as NodeConfig) : {};
+    const targetLabel =
+      routeTargetLabels?.[String(route.handle ?? route.code ?? "default")] ??
+      route.targetNodeId ??
+      route.target;
     const condition =
       route.condition && typeof route.condition === "object"
         ? (route.condition as NodeConfig)
@@ -1906,14 +1938,8 @@ function StructuredListRow({
         </div>
         <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
           目标节点
-          <span
-            className={`flex min-h-11 items-center rounded border border-border bg-muted px-2 ${(route.targetNodeId ?? route.target) ? "aiflow-type-control" : "aiflow-type-body"} text-foreground`}
-          >
-            {String(
-              route.targetNodeId ??
-                route.target ??
-                "请从此路径句柄连线到目标状态节点"
-            )}
+          <span className="aiflow-type-control flex min-h-11 items-center rounded border border-border bg-muted px-2 text-foreground">
+            {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}
           </span>
         </label>
         <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
@@ -2674,6 +2700,18 @@ export default function WorkflowCanvas({
   const nodeMap = useMemo(
     () => new Map(nodes.map(node => [node.id, node])),
     [nodes]
+  );
+  const selectedRouteTargetLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        edges
+          .filter(edge => edge.source === selectedId)
+          .map(edge => [
+            edge.sourceHandle || "default",
+            String(nodeMap.get(edge.target)?.data.label || edge.target),
+          ])
+      ),
+    [edges, nodeMap, selectedId]
   );
   const displayedEdges = useMemo(
     () =>
@@ -4327,6 +4365,7 @@ export default function WorkflowCanvas({
                             fallback={selectedDefaults[field.key]}
                             disabled={inspectorDisabled}
                             runtimeOptions={runtimeOptions}
+                            routeTargetLabels={selectedRouteTargetLabels}
                             onChange={value => {
                               if (field.key !== "subflowId")
                                 return updateConfigField(field.key, value);

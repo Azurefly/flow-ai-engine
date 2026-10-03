@@ -1478,7 +1478,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("路由规则名称和目标缺失时显示稳定回退文案，不渲染 undefined", () => {
     expect(canvasSource).toContain("`规则 ${index + 1}`");
-    expect(canvasSource).toContain('routerTargetId || "待连线"');
+    expect(canvasSource).toContain('routeTargetId || "待连线"');
     expect(canvasSource).not.toContain("String(route.label ?? route.handle)");
   });
 
