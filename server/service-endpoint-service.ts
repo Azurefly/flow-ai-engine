@@ -96,6 +96,11 @@ export async function listProjectServiceEndpoints(
   );
   return rows.map(row => ({
     ...row,
+    refCode: String(row.refCode),
+    name: String(row.name),
+    baseUrl: String(row.baseUrl),
+    targetEnvironment: String(row.targetEnvironment),
+    status: String(row.status),
     allowedHosts:
       typeof row.allowedHostsJson === "string"
         ? JSON.parse(row.allowedHostsJson)

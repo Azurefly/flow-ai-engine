@@ -2612,6 +2612,7 @@ function FlowDesigner({
         <WorkflowCanvas
           key={`${workflow.id}:${workflow.definitionVersion}`}
           workflowId={workflow.id}
+          projectId={workflow.projectId ?? undefined}
           flowType={workflow.flowType ?? "state"}
           definition={definition}
           readOnly={!canModifyDefinition}

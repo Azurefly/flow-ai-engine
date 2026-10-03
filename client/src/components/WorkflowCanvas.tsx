@@ -65,6 +65,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
+import { selectWorkflowEndpoint } from "./workflow-endpoint-selection";
 import type { Definition } from "../../../server/workflow-service";
 import {
   canConnectFlowNodeTypes,
@@ -759,6 +760,8 @@ function ConfigFieldEditor({
   disabled,
   runtimeOptions,
   runtimePlaceholder = "请选择已启用的私有子流程",
+  runtimeError,
+  onRetryOptions,
   routeTargetLabels,
   onChange,
 }: {
@@ -768,6 +771,8 @@ function ConfigFieldEditor({
   disabled: boolean;
   runtimeOptions?: Array<{ value: string; label: string }>;
   runtimePlaceholder?: string;
+  runtimeError?: string;
+  onRetryOptions?: () => void;
   routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
@@ -794,26 +799,43 @@ function ConfigFieldEditor({
       option => option.value === current
     );
     return (
-      <label className="grid gap-1.5">
-        {label}
-        <select
-          className={inputClass}
-          disabled={disabled}
-          value={current}
-          onChange={event => onChange(event.target.value)}
-        >
-          <option value="">{runtimePlaceholder}</option>
-          {current && !currentAvailable && (
-            <option value={current}>当前选择不可用 · {current}</option>
-          )}
-          {runtimeOptions.map(option => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+      <div className="grid gap-1.5">
+        <label className="grid gap-1.5">
+          {label}
+          <select
+            className={inputClass}
+            disabled={disabled}
+            value={current}
+            onChange={event => onChange(event.target.value)}
+          >
+            <option value="">{runtimePlaceholder}</option>
+            {current && !currentAvailable && (
+              <option value={current}>当前选择不可用 · {current}</option>
+            )}
+            {runtimeOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
         <FieldHelp help={field.help} />
-      </label>
+        {runtimeError && (
+          <p role="alert" className="aiflow-type-body text-red-600">
+            {runtimeError}
+          </p>
+        )}
+        {runtimeError && onRetryOptions && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onRetryOptions}
+          >
+            重新加载服务端点
+          </Button>
+        )}
+      </div>
     );
   }
   if (field.kind === "boolean")
@@ -2257,6 +2279,7 @@ function configFieldGroups(kind: NodeKind, fields: ConfigField[]) {
 
 export default function WorkflowCanvas({
   workflowId,
+  projectId,
   flowType = "state",
   definition,
   readOnly = false,
@@ -2272,6 +2295,7 @@ export default function WorkflowCanvas({
   showCanvasActions = true,
 }: {
   workflowId?: string;
+  projectId?: string;
   flowType?: FlowType;
   definition?: Definition | null;
   readOnly?: boolean;
@@ -2641,6 +2665,14 @@ export default function WorkflowCanvas({
       })()
     : null;
   const selectedConfig = (selected?.data.config ?? {}) as NodeConfig;
+  const selectedServiceNode = Boolean(
+    selected && ["http", "rest", "method"].includes(selected.data.kind)
+  );
+  const serviceEndpoints = trpc.project.serviceEndpoints.useQuery(
+    { projectId: projectId ?? "" },
+    { enabled: Boolean(projectId && selectedServiceNode) }
+  );
+  const endpointChoices = serviceEndpoints.data ?? [];
   useEffect(() => {
     participantPreview.reset();
   }, [selectedId]);
@@ -2648,7 +2680,23 @@ export default function WorkflowCanvas({
     ? createDefaultNodeConfig(selected.data.kind)
     : {};
   const selectedConfigAssessment = selected
-    ? assessNodeConfig(selected.data.kind, selectedConfig)
+    ? projectId &&
+      selectedServiceNode &&
+      !String(selectedConfig.endpointRef ?? "").trim()
+      ? { state: "partial" as const, error: "请选择当前业务的服务端点。" }
+      : projectId &&
+          selectedServiceNode &&
+          serviceEndpoints.isSuccess &&
+          !endpointChoices.some(
+            endpoint =>
+              endpoint.status === "active" &&
+              endpoint.refCode === selectedConfig.endpointRef
+          )
+        ? {
+            state: "partial" as const,
+            error: "当前服务端点不存在或已停用，请重新选择已启用端点。",
+          }
+        : assessNodeConfig(selected.data.kind, selectedConfig)
     : null;
   const selectedConfigState = selectedConfigAssessment?.state;
   const selectedFieldGroups =
@@ -4437,43 +4485,98 @@ export default function WorkflowCanvas({
                           selectedConfig
                         );
                         const runtimeOptions =
-                          field.key === "subflowId"
-                            ? subflows
-                                .filter(subflow => subflow.isEnabled)
-                                .map(subflow => ({
-                                  value: subflow.id,
-                                  label: subflow.name,
+                          field.key === "endpointRef" && projectId
+                            ? endpointChoices
+                                .filter(
+                                  endpoint => endpoint.status === "active"
+                                )
+                                .map(endpoint => ({
+                                  value: endpoint.refCode,
+                                  label: `${endpoint.name} · ${({ development: "开发", test: "测试", staging: "预发布", production: "生产" } as Record<string, string>)[endpoint.targetEnvironment] ?? endpoint.targetEnvironment}（${endpoint.refCode}）`,
                                 }))
-                            : field.key === "compensationNodeId"
-                              ? nodes
-                                  .filter(
-                                    node =>
-                                      node.id !== selected.id &&
-                                      canConnectFlowNodeTypes(
-                                        selected.data.kind,
-                                        node.data.kind
-                                      )
-                                  )
-                                  .map(node => ({
-                                    value: node.id,
-                                    label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                            : field.key === "subflowId"
+                              ? subflows
+                                  .filter(subflow => subflow.isEnabled)
+                                  .map(subflow => ({
+                                    value: subflow.id,
+                                    label: subflow.name,
                                   }))
-                              : undefined;
+                              : field.key === "compensationNodeId"
+                                ? nodes
+                                    .filter(
+                                      node =>
+                                        node.id !== selected.id &&
+                                        canConnectFlowNodeTypes(
+                                          selected.data.kind,
+                                          node.data.kind
+                                        )
+                                    )
+                                    .map(node => ({
+                                      value: node.id,
+                                      label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                                    }))
+                                : undefined;
                         return (
                           <ConfigFieldEditor
                             key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
-                            field={field}
+                            field={
+                              field.key === "endpointRef" && projectId
+                                ? {
+                                    ...field,
+                                    label: "项目服务端点",
+                                    required: true,
+                                    help: "选择当前业务的已启用端点；凭据引用会同步填写。请求地址需填写相对路径，例如 /orders。没有端点时，请先在业务项目的服务端点页面登记。",
+                                  }
+                                : field
+                            }
                             value={fieldValue}
                             fallback={selectedDefaults[field.key]}
-                            disabled={inspectorDisabled}
+                            disabled={
+                              inspectorDisabled ||
+                              (field.key === "endpointRef" &&
+                                Boolean(projectId) &&
+                                serviceEndpoints.isLoading)
+                            }
                             runtimeOptions={runtimeOptions}
                             runtimePlaceholder={
-                              field.key === "compensationNodeId"
-                                ? "请选择当前流程的补偿节点"
+                              field.key === "endpointRef" && projectId
+                                ? serviceEndpoints.isLoading
+                                  ? "正在加载服务端点…"
+                                  : "请选择当前业务的服务端点"
+                                : field.key === "compensationNodeId"
+                                  ? "请选择当前流程的补偿节点"
+                                  : undefined
+                            }
+                            runtimeError={
+                              field.key === "endpointRef" && projectId
+                                ? serviceEndpoints.error?.message
+                                : undefined
+                            }
+                            onRetryOptions={
+                              field.key === "endpointRef" && projectId
+                                ? () => void serviceEndpoints.refetch()
                                 : undefined
                             }
                             routeTargetLabels={selectedRouteTargetLabels}
                             onChange={value => {
+                              if (field.key === "endpointRef" && projectId) {
+                                try {
+                                  updateSelected({
+                                    config: selectWorkflowEndpoint(
+                                      selectedConfig,
+                                      String(value),
+                                      endpointChoices
+                                    ),
+                                  });
+                                } catch (error) {
+                                  toast.error(
+                                    error instanceof Error
+                                      ? error.message
+                                      : "服务端点选择失败。"
+                                  );
+                                }
+                                return;
+                              }
                               if (field.key !== "subflowId")
                                 return updateConfigField(field.key, value);
                               const selectedSubflow = subflows.find(
