@@ -224,13 +224,20 @@ describe("P2 项目数据资源与数据流", () => {
 
       const view = await readonly.data.resources({ projectId });
       expect(view.sources).toHaveLength(2);
-      const inlineView = view.sources.find((source: any) => source.id === sourceId);
+      const inlineView = view.sources.find(
+        (source: any) => source.id === sourceId
+      );
       expect(inlineView).toMatchObject({
         status: "draft",
         lastTestedAt: null,
       });
       expect(view.assets[0]).toMatchObject({ id: assetId, name: "订单样本" });
-      expect(view.sources.every((source: any) => !Object.prototype.hasOwnProperty.call(source, "credentialRef"))).toBe(true);
+      expect(
+        view.sources.every(
+          (source: any) =>
+            !Object.prototype.hasOwnProperty.call(source, "credentialRef")
+        )
+      ).toBe(true);
       await expect(
         readonly.data.createTag({ projectId, name: "越权标签" })
       ).rejects.toThrow("无权");
@@ -354,6 +361,87 @@ describe("P2 项目数据资源与数据流", () => {
       expect((sqlRun.output.terminals[0] as any).rows).toEqual([
         { username: adminName },
       ]);
+      const failedWorkflowId = (
+        await owner.project.createWorkflow({
+          projectId,
+          name: "SQL 失败记录与重试验收",
+          flowType: "data",
+          definition: {
+            ...definition,
+            nodes: definition.nodes.map(node =>
+              node.id === "source"
+                ? {
+                    ...node,
+                    type: "sql",
+                    config: {
+                      datasourceId: mysqlSourceId,
+                      statement: `SELECT missing_column_${suffix} FROM users`,
+                      parameters: {},
+                      maxRows: 1,
+                    },
+                  }
+                : node
+            ),
+          },
+        })
+      ).id;
+      await owner.project.auditWorkflow({
+        projectId,
+        workflowId: failedWorkflowId,
+        auditStatus: "approved",
+      });
+      await owner.workflow.publish({ id: failedWorkflowId });
+      const retrying = await owner.data.run({
+        projectId,
+        workflowId: failedWorkflowId,
+      });
+      expect(retrying.status).toBe("queued");
+      const retryRecords = await owner.data.runs({
+        projectId,
+        workflowId: failedWorkflowId,
+      });
+      expect(retryRecords[0]).toMatchObject({
+        id: retrying.runId,
+        status: "queued",
+      });
+      expect(retryRecords[0].error?.message).toContain(
+        `missing_column_${suffix}`
+      );
+      for (let retry = 0; retry < 2; retry++) {
+        await pool.query(
+          "UPDATE dataflow_run_job SET availableAt=NOW() WHERE runId=? AND status='queued'",
+          [retrying.runId]
+        );
+        await expect(runDataflowJobOnce(retrying.runId)).resolves.toBe(true);
+      }
+      const failedRecords = await owner.data.runs({
+        projectId,
+        workflowId: failedWorkflowId,
+      });
+      expect(failedRecords[0]).toMatchObject({
+        id: retrying.runId,
+        status: "failed",
+      });
+      expect(failedRecords[0].error?.message).toContain(
+        `missing_column_${suffix}`
+      );
+      const failedDetail = await owner.data.runDetail({
+        projectId,
+        runId: retrying.runId,
+      });
+      expect(failedDetail.status).toBe("failed");
+      expect(failedDetail.finishedAt).not.toBeNull();
+      expect(
+        failedDetail.nodeRuns.some(
+          node => node.nodeId === "source" && node.status === "failed"
+        )
+      ).toBe(true);
+      const [failedJobs] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT status,attempt FROM dataflow_run_job WHERE runId=?",
+        [retrying.runId]
+      );
+      expect(failedJobs[0]).toMatchObject({ status: "failed", attempt: 3 });
+      await expect(runDataflowJobOnce(retrying.runId)).resolves.toBe(false);
       const [jobRows] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status,attempt,leaseToken FROM dataflow_run_job WHERE runId=?",
         [run.runId]
