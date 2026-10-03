@@ -173,6 +173,7 @@ import {
   listDataflowSchedules,
   listDataflows,
   listDataResources,
+  listDataResourceOptions,
   pauseDataflowSchedule,
   runDataflow,
   testDataSource,
@@ -802,6 +803,11 @@ export const appRouter = router({
       })),
   }),
   data: router({
+    resourceOptions: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) =>
+        listDataResourceOptions(ctx.user, input.projectId)
+      ),
     resources: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => listDataResources(ctx.user, input.projectId)),

@@ -207,7 +207,7 @@ describe("P2 项目数据资源与数据流", () => {
         name: "关键数据",
         color: "#245FC8",
       });
-      await owner.data.createUdf({
+      const draftUdf = await owner.data.createUdf({
         projectId,
         name: "金额标准化",
         udfType: "javascript",
@@ -223,6 +223,41 @@ describe("P2 项目数据资源与数据流", () => {
       });
 
       const view = await readonly.data.resources({ projectId });
+      const choices = await readonly.data.resourceOptions({ projectId });
+      expect(choices.assets).toEqual([
+        { value: assetId, label: `订单样本（${assetId.slice(0, 8)}）` },
+      ]);
+      expect(choices.sources.map(option => option.value)).toEqual([
+        mysqlSourceId,
+      ]);
+      expect(choices.udfs).toEqual([]);
+      expect(Object.keys(choices.sources[0]).sort()).toEqual([
+        "label",
+        "value",
+      ]);
+      await pool.query(
+        "UPDATE data_udf SET status='approved' WHERE id=? AND projectId=?",
+        [draftUdf.id, projectId]
+      );
+      expect(
+        (await readonly.data.resourceOptions({ projectId })).udfs.map(
+          option => option.value
+        )
+      ).toEqual([draftUdf.id]);
+      await pool.query(
+        "UPDATE data_asset SET status='disabled' WHERE id=? AND projectId=?",
+        [assetId, projectId]
+      );
+      expect(
+        (await readonly.data.resourceOptions({ projectId })).assets
+      ).toEqual([]);
+      await pool.query(
+        "UPDATE data_asset SET status='active' WHERE id=? AND projectId=?",
+        [assetId, projectId]
+      );
+      await expect(
+        readonly.data.resourceOptions({ projectId: foreignProjectId })
+      ).rejects.toThrow();
       expect(view.sources).toHaveLength(2);
       const inlineView = view.sources.find(
         (source: any) => source.id === sourceId

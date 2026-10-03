@@ -137,6 +137,37 @@ function cleanSource(row: mysql.RowDataPacket) {
   };
 }
 
+export async function listDataResourceOptions(
+  user: DataflowUser,
+  projectId: string
+) {
+  await requireProjectAccess(user, projectId, "view");
+  const [assets, sources, udfs] = await Promise.all([
+    db().query<mysql.RowDataPacket[]>(
+      "SELECT id,name FROM data_asset WHERE projectId=? AND status='active' ORDER BY name,id",
+      [projectId]
+    ),
+    db().query<mysql.RowDataPacket[]>(
+      "SELECT id,name FROM data_source WHERE projectId=? AND status='verified' AND sourceType='jdbc' AND JSON_UNQUOTE(JSON_EXTRACT(connectionJson,'$.endpoint')) LIKE 'mysql://%' ORDER BY name,id",
+      [projectId]
+    ),
+    db().query<mysql.RowDataPacket[]>(
+      "SELECT id,name FROM data_udf WHERE projectId=? AND status='approved' ORDER BY name,id",
+      [projectId]
+    ),
+  ]);
+  const options = (rows: mysql.RowDataPacket[]) =>
+    rows.map(row => ({
+      value: String(row.id),
+      label: `${String(row.name)}（${String(row.id).slice(0, 8)}）`,
+    }));
+  return {
+    assets: options(assets[0]),
+    sources: options(sources[0]),
+    udfs: options(udfs[0]),
+  };
+}
+
 export async function listDataResources(user: DataflowUser, projectId: string) {
   await requireProjectAccess(user, projectId, "view");
   const [sources, assets, udfs, tags, plugins] = await Promise.all([
