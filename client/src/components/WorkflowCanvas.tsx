@@ -221,17 +221,25 @@ function NodeTypeGlyph({
   );
 }
 
-function nodeConfigState(kind: NodeKind, config: NodeConfig): ConfigState {
+function assessNodeConfig(
+  kind: NodeKind,
+  config: NodeConfig
+): { state: ConfigState; error?: string } {
   try {
     validateNodeConfig(kind, config);
     const defaultConfig = createDefaultNodeConfig(kind);
-    return Object.keys(config).some(
+    const changed = Object.keys(config).some(
       key => JSON.stringify(config[key]) !== JSON.stringify(defaultConfig[key])
-    )
-      ? "complete"
-      : "editing";
-  } catch {
-    return "partial";
+    );
+    return { state: changed ? "complete" : "editing" };
+  } catch (error) {
+    return {
+      state: "partial",
+      error:
+        error instanceof Error
+          ? error.message
+          : "节点配置无效，请检查配置字段。",
+    };
   }
 }
 
@@ -279,7 +287,8 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
     nodeData.kind === "router" ? state.nodes : null
   );
   const appearance = nodeAppearance[nodeData.kind];
-  const configState = nodeConfigState(nodeData.kind, nodeData.config);
+  const configAssessment = assessNodeConfig(nodeData.kind, nodeData.config);
+  const configState = configAssessment.state;
   const handles = sourceHandles(nodeData.kind, nodeData.config);
   const hasTarget = nodeData.kind !== "start";
   const routeItems =
@@ -327,7 +336,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           className={`h-2 w-2 shrink-0 rounded-full ${configState === "partial" ? "bg-red-500" : configState === "editing" ? "bg-blue-500" : "bg-emerald-500"}`}
           title={
             configState === "partial"
-              ? "未完全配置"
+              ? `未完全配置：${configAssessment.error}`
               : configState === "editing"
                 ? "配置中"
                 : "已配置"
@@ -2138,6 +2147,48 @@ type ConfigField = FlowNodeDefinition["fields"][number];
 type ConfigGroup = { label: string; description: string; keys: string[] };
 
 const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
+  http: [
+    {
+      label: "请求配置",
+      description: "选择项目服务端点，配置请求路径、方法、请求头与请求体。",
+      keys: ["endpointRef", "secretRef", "url", "method", "headers", "body"],
+    },
+    {
+      label: "超时与重试",
+      description: "设置请求等待时间及失败后的重试次数与间隔。",
+      keys: ["timeout", "retryMaxAttempts", "retryBaseDelayMs"],
+    },
+    {
+      label: "写入与流量控制",
+      description:
+        "写请求需声明幂等或补偿策略；熔断与并发限制用于保护外部服务。",
+      keys: [
+        "writeSafety",
+        "compensationNodeId",
+        "circuitFailureThreshold",
+        "circuitResetMs",
+        "concurrencyKey",
+        "concurrencyLimit",
+      ],
+    },
+  ],
+  llm: [
+    {
+      label: "模型与提示词",
+      description: "选择模型，并说明模型需要完成的任务与输入数据。",
+      keys: ["model", "systemPrompt", "prompt"],
+    },
+    {
+      label: "输出与失败处理",
+      description: "控制输出长度、结构化格式、超时时间和失败分支。",
+      keys: ["maxTokens", "outputSchema", "timeoutMs", "failureHandle"],
+    },
+    {
+      label: "数据与成本控制",
+      description: "配置允许发送的数据范围、缓存、人工复核及调用预算。",
+      keys: ["governance"],
+    },
+  ],
   state: [
     {
       label: "基础状态",
@@ -2686,9 +2737,10 @@ export default function WorkflowCanvas({
   const selectedDefaults = selected
     ? createDefaultNodeConfig(selected.data.kind)
     : {};
-  const selectedConfigState = selected
-    ? nodeConfigState(selected.data.kind, selectedConfig)
+  const selectedConfigAssessment = selected
+    ? assessNodeConfig(selected.data.kind, selectedConfig)
     : null;
+  const selectedConfigState = selectedConfigAssessment?.state;
   const selectedFieldGroups =
     selected && selectedDefinition
       ? configFieldGroups(selected.data.kind, selectedDefinition.fields)
@@ -4247,6 +4299,15 @@ export default function WorkflowCanvas({
                           ? "配置中"
                           : "已配置"}
                     </p>
+                    {selectedConfigAssessment?.error && (
+                      <p
+                        role="status"
+                        aria-live="polite"
+                        className="aiflow-type-control mt-1 leading-6 text-aiflow-danger"
+                      >
+                        {selectedConfigAssessment.error}
+                      </p>
+                    )}
                   </div>
                   {selected.data.kind === "operate" &&
                     readOperateOutcomeMode(selectedConfig) ===
