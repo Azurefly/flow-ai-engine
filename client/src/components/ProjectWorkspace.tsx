@@ -66,6 +66,15 @@ export type ProjectRecord = {
   rootDepartment?: string | null;
 };
 export type ProjectMemberRole = "owner" | "designer" | "operator" | "viewer";
+const projectRoleLabel = (role: string) =>
+  (
+    ({
+      owner: "所有者",
+      designer: "设计者",
+      operator: "运行者",
+      viewer: "查看者",
+    }) as Record<string, string>
+  )[role] ?? role;
 
 const flowTypeLabel = {
   state: "状态流程",
@@ -3237,9 +3246,18 @@ function ProjectMembers({
     | null
   >(null);
 
+  const refreshProjectAuthorization = () =>
+    Promise.all([
+      utils.project.members.invalidate({ projectId }),
+      utils.project.units.invalidate({ projectId }),
+      utils.project.access.invalidate({ projectId }),
+      utils.project.list.invalidate(),
+      utils.workflow.access.invalidate(),
+      utils.workflow.list.invalidate(),
+    ]);
   const grant = trpc.project.grantMember.useMutation({
-    onSuccess: () => {
-      void utils.project.members.invalidate({ projectId });
+    onSuccess: async () => {
+      await refreshProjectAuthorization();
       toast.success("可见人授权已保存。");
       setForm({ userId: "", role: "viewer", hours: "" });
       setMemberSearch("");
@@ -3248,8 +3266,8 @@ function ProjectMembers({
   });
 
   const revokeMember = trpc.project.revokeMember.useMutation({
-    onSuccess: () => {
-      void utils.project.members.invalidate({ projectId });
+    onSuccess: async () => {
+      await refreshProjectAuthorization();
       toast.success("可见人权限已移除。");
       setPermissionRevocation(null);
     },
@@ -3257,8 +3275,8 @@ function ProjectMembers({
   });
 
   const grantUnit = trpc.project.grantUnit.useMutation({
-    onSuccess: () => {
-      void utils.project.units.invalidate({ projectId });
+    onSuccess: async () => {
+      await refreshProjectAuthorization();
       toast.success("可见部门授权已保存。");
       setUnitForm({ unitId: "", role: "viewer" });
     },
@@ -3266,8 +3284,8 @@ function ProjectMembers({
   });
 
   const revokeUnit = trpc.project.revokeUnit.useMutation({
-    onSuccess: () => {
-      void utils.project.units.invalidate({ projectId });
+    onSuccess: async () => {
+      await refreshProjectAuthorization();
       toast.success("可见部门已移除。");
       setPermissionRevocation(null);
     },
@@ -3285,6 +3303,7 @@ function ProjectMembers({
         </h1>
         <p className="aiflow-type-body mt-1 text-muted-foreground">
           创建人拥有所有权；可按人员或部门授予查看、运行或设计角色。系统管理员始终拥有全局管理权限。
+          多项有效授权共同生效；移除直接授权不会移除部门继承的权限。
         </p>
       </div>
 
@@ -3413,7 +3432,7 @@ function ProjectMembers({
               </div>
               <div className="flex items-center gap-3">
                 <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-2 py-1 font-medium text-aiflow-special">
-                  {item.role}
+                  {projectRoleLabel(item.role)}
                 </span>
                 {canManage && (
                   <button
@@ -3451,7 +3470,7 @@ function ProjectMembers({
             <UsersRound size={16} className="text-aiflow-info" />
             <span>可见人列表（成员直接授权）</span>
             <span className="aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground">
-              {members.length} 位成员
+              {new Set(members.map(member => member.userId)).size} 位成员
             </span>
           </span>
           <span className="aiflow-type-body leading-5 font-normal text-muted-foreground">
@@ -3586,7 +3605,7 @@ function ProjectMembers({
               </div>
               <div className="flex items-center gap-3">
                 <span className="aiflow-type-meta rounded bg-accent px-2 py-1 font-medium text-aiflow-info">
-                  {member.role}
+                  {projectRoleLabel(member.role)}
                 </span>
                 {canManage && member.role !== "owner" && (
                   <button

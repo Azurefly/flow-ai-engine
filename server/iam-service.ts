@@ -247,8 +247,9 @@ export async function getWorkflowAccess(user: { id: number; role: "user" | "admi
   memberRoles.forEach(role => memberRolePermissions[role]?.forEach(permission => permissions.add(permission)));
   let projectRoles: ProjectMemberRole[] = [];
   if (workflow.projectId) {
-    const [projectMemberRows] = await db().query<mysql.RowDataPacket[]>("SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())", [workflow.projectId, user.id]);
-    projectRoles = projectMemberRows.map(row => row.role as ProjectMemberRole);
+    const { getProjectAccess } = await import("./project-service");
+    const projectAccess = await getProjectAccess(user, String(workflow.projectId));
+    projectRoles = projectAccess.roles;
     projectRoles.forEach(role => projectMemberWorkflowPermissions[role]?.forEach(permission => permissions.add(permission)));
   }
   for (const permission of Array.from(await assignedPermissions(user.id, workflowId))) {

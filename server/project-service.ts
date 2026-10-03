@@ -96,18 +96,18 @@ export async function getProjectAccess(user: ProjectUser, projectId: string) {
     "SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())",
     [projectId, user.id]
   );
-  let roles = members.map(member => member.role as ProjectMemberRole);
-  if (roles.length === 0) {
-    const [unitRoles] = await db().query<mysql.RowDataPacket[]>(
-      `SELECT pu.role FROM flow_project_unit pu
-         JOIN organization_membership om ON om.unitId=pu.unitId
-        WHERE pu.projectId=? AND om.userId=? LIMIT 1`,
-      [projectId, user.id]
-    );
-    if (unitRoles[0]) {
-      roles.push((unitRoles[0].role as ProjectMemberRole) || "viewer");
-    }
-  }
+  const [unitRoles] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT DISTINCT pu.role FROM flow_project_unit pu
+       JOIN organization_membership om ON om.unitId=pu.unitId
+       JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
+      WHERE pu.projectId=? AND om.userId=?`,
+    [projectId, user.id]
+  );
+  const roles = Array.from(
+    new Set(
+      [...members, ...unitRoles].map(member => member.role as ProjectMemberRole)
+    )
+  );
   const permissions = new Set<ProjectPermission>();
   roles.forEach(role =>
     rolePermissions[role]?.forEach(permission => permissions.add(permission))
@@ -164,6 +164,7 @@ export async function listProjects(user: ProjectUser) {
             OR EXISTS (
               SELECT 1 FROM flow_project_unit pu
               JOIN organization_membership om ON om.unitId=pu.unitId
+              JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
               WHERE pu.projectId=p.id AND om.userId=?
             )
           ) ORDER BY p.updatedAt DESC`,

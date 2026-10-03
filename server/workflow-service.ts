@@ -286,6 +286,7 @@ export async function listWorkflows(user: WorkflowUser) {
            OR EXISTS (
              SELECT 1 FROM flow_project_unit pu
              JOIN organization_membership om ON om.unitId=pu.unitId
+             JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
              WHERE pu.projectId=w.projectId AND om.userId=?
            )
          )
