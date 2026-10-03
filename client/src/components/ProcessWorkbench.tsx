@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { taskFormInputValue } from "@shared/task-form";
 import { canManageTask } from "@shared/task-assignment";
+import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
 import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
@@ -2426,7 +2427,7 @@ function taskFormFields(task: any): Array<{
     .filter((item: any) => item && typeof item === "object")
     .map((item: any) => ({
       key: String(item.key ?? "").trim(),
-      label: String(item.label ?? item.key ?? "").trim(),
+      label: String(item.label ?? "").trim() || String(item.key ?? "").trim(),
       type: String(item.type ?? "text").toLowerCase(),
       required: item.required === true,
       readOnly: item.readOnly === true,
@@ -2542,6 +2543,7 @@ function TaskDrawer({
   const canManage = canManageTask(task);
   const isHistoricalTask =
     task?.status === "completed" || task?.status === "cancelled";
+  const resultView = taskResultView(task?.payload?.config, task?.result);
   const taskHistoryNotice =
     task?.status === "completed"
       ? "此任务已完成，以下为历史处理记录。"
@@ -2972,9 +2974,43 @@ function TaskDrawer({
                 <p className="aiflow-type-body font-semibold text-muted-foreground">
                   处理结果
                 </p>
-                <pre className="aiflow-type-code mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-3 font-mono text-emerald-200">
-                  {JSON.stringify(task.result, null, 2)}
-                </pre>
+                <div className="mt-2 space-y-3 rounded-lg border border-border bg-muted/30 p-3">
+                  {resultView.outcome && (
+                    <p className="text-sm font-semibold">
+                      {resultView.outcome}
+                    </p>
+                  )}
+                  <dl className="space-y-3">
+                    {resultView.rows.map(row => (
+                      <div
+                        key={row.key}
+                        className="grid gap-1 border-b border-border/60 pb-2 last:border-0 last:pb-0"
+                      >
+                        <dt className="text-xs text-muted-foreground">
+                          {row.label}
+                        </dt>
+                        <dd className="whitespace-pre-wrap break-words text-sm text-foreground">
+                          {row.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {resultView.comment && (
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground">处理意见</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                        {resultView.comment}
+                      </p>
+                    </div>
+                  )}
+                  {!resultView.rows.length &&
+                    !resultView.outcome &&
+                    !resultView.comment && (
+                      <p className="text-sm text-muted-foreground">
+                        未记录处理结果。
+                      </p>
+                    )}
+                </div>
               </div>
             )}
           </div>
