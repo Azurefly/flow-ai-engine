@@ -1,9 +1,50 @@
-import type { NodeConfig } from "@shared/workflow-node-contract";
+import {
+  readOperateOutcomeMode,
+  readOperateOutcomes,
+  type NodeConfig,
+} from "@shared/workflow-node-contract";
 import { isConfigRecord } from "./workflow-config-editor";
 import { normalizeReferenceRouterRule } from "@shared/reference-router-config";
 
 type OutgoingEdge = { sourceHandle?: string | null; target: string };
 type RouterEdge = OutgoingEdge & { source: string };
+
+/** Keep operation connections attached to their result code when ports change. */
+export function updateOperateConnections<T extends RouterEdge>(
+  sourceId: string,
+  before: NodeConfig,
+  requested: NodeConfig,
+  edges: T[]
+): T[] {
+  const explicit = readOperateOutcomeMode(requested) === "explicit";
+  const next = explicit ? readOperateOutcomes(requested) : [];
+  const handles = new Set(next.map(outcome => outcome.sourceHandle));
+  const codes = new Set(next.map(outcome => outcome.code));
+  if (handles.size !== next.length || codes.size !== next.length)
+    throw new Error("操作结果代号和分支句柄不可重复。");
+  const previous =
+    readOperateOutcomeMode(before) === "explicit"
+      ? readOperateOutcomes(before)
+      : [];
+  const renamed = new Map(
+    previous.flatMap(outcome => {
+      const replacement = next.find(item => item.code === outcome.code);
+      return replacement
+        ? [[outcome.sourceHandle, replacement.sourceHandle] as const]
+        : [];
+    })
+  );
+  const allowed = explicit ? handles : new Set(["default"]);
+  return edges.flatMap(edge => {
+    if (edge.source !== sourceId) return [edge];
+    const oldHandle = edge.sourceHandle ?? "default";
+    const newHandle = renamed.get(oldHandle) ?? oldHandle;
+    if (!allowed.has(newHandle)) return [];
+    return [
+      newHandle === oldHandle ? edge : { ...edge, sourceHandle: newHandle },
+    ];
+  });
+}
 
 function routeHandle(route: NodeConfig) {
   return String(route.handle ?? route.code ?? "default").trim() || "default";

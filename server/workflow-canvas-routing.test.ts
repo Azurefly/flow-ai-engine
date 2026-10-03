@@ -2,8 +2,65 @@ import { describe, expect, it } from "vitest";
 import {
   syncRouterConfigTargets,
   updateRouterConnections,
+  updateOperateConnections,
 } from "../client/src/components/workflow-canvas-routing";
 import { normalizeReferenceRouterConfig } from "../shared/reference-router-config";
+
+describe("人工操作结果连线同步", () => {
+  const before = {
+    outcomeMode: "explicit",
+    outcomes: [
+      { code: "approve", label: "同意", sourceHandle: "approved" },
+      { code: "reject", label: "拒绝", sourceHandle: "rejected" },
+    ],
+  };
+  const edges = [
+    { source: "review", sourceHandle: "approved", target: "finish" },
+    { source: "review", sourceHandle: "rejected", target: "revise" },
+    { source: "other", sourceHandle: "approved", target: "finish" },
+  ];
+  it("按结果代号保留改名及重排后的分支目标，删除结果时清理对应连线", () => {
+    const changed = {
+      ...before,
+      outcomes: [
+        before.outcomes[1],
+        { ...before.outcomes[0], sourceHandle: "accepted" },
+      ],
+    };
+    expect(updateOperateConnections("review", before, changed, edges)).toEqual([
+      { ...edges[0], sourceHandle: "accepted" },
+      edges[1],
+      edges[2],
+    ]);
+    expect(
+      updateOperateConnections(
+        "review",
+        before,
+        { ...before, outcomes: [before.outcomes[1]] },
+        edges
+      )
+    ).toEqual([edges[1], edges[2]]);
+    expect(edges[0].sourceHandle).toBe("approved");
+  });
+  it("重复代号或句柄阻止更新，切换旧模式不保留失效的显式出口", () => {
+    expect(() =>
+      updateOperateConnections(
+        "review",
+        before,
+        { ...before, outcomes: [before.outcomes[0], before.outcomes[0]] },
+        edges
+      )
+    ).toThrow("不可重复");
+    expect(
+      updateOperateConnections(
+        "review",
+        before,
+        { outcomeMode: "legacy_cancel" },
+        edges
+      )
+    ).toEqual([edges[2]]);
+  });
+});
 
 describe("画布路由连线同步", () => {
   it("未显式填写句柄的原版规则沿用运行时句柄，断线后保持稳定", () => {
