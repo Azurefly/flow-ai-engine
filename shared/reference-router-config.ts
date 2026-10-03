@@ -88,7 +88,7 @@ function hasLegacyCode(value: unknown) {
   });
 }
 
-function normalizeRule(raw: unknown, index: number): NormalizedRouterRule {
+export function normalizeReferenceRouterRule(raw: unknown, index: number): NormalizedRouterRule {
   const wrapper = asRecord(raw);
   const route = Object.keys(asRecord(wrapper.route)).length ? asRecord(wrapper.route) : wrapper;
   const priorityValue = Number(route.routerRulePriority ?? route.priority ?? wrapper.routerRulePriority ?? wrapper.priority ?? 0);
@@ -125,7 +125,7 @@ export function normalizeReferenceRouterConfig(config: RouterJsonRecord) {
   const modernRules = asArray(config.routes);
   const source = modernRules.length ? modernRules : originalRules;
   const rules = source
-    .map(normalizeRule)
+    .map(normalizeReferenceRouterRule)
     .sort((left, right) => right.priority - left.priority || left.createdAt - right.createdAt);
   return {
     broadcast: config.gbms === true || config.gbms === "true" || config.broadcast === true || config.broadcast === "true",

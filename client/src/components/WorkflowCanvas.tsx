@@ -17,6 +17,7 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -51,7 +52,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMotionPreference } from "@/hooks/useMotionPreference";
-import { syncRouterConfigTargets } from "./workflow-canvas-routing";
+import {
+  syncRouterConfigTargets,
+  updateRouterConnections,
+} from "./workflow-canvas-routing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -251,20 +255,15 @@ function sourceHandles(kind: NodeKind, config: NodeConfig) {
   if (kind === "condition")
     return Array.from(new Set(readConditionHandles(config)));
   if (kind === "router") {
-    const configured = Array.isArray(config.routes)
-      ? config.routes
-          .map(route =>
-            route && typeof route === "object"
-              ? String((route as NodeConfig).handle ?? "")
-              : ""
-          )
-          .filter(Boolean)
-      : [];
+    const configured = normalizeReferenceRouterConfig(config).rules.map(
+      rule => rule.handle
+    );
     return Array.from(
       new Set(
-        ["default", String(config.defaultRoute ?? ""), ...configured].filter(
-          Boolean
-        )
+        [
+          String(config.defaultRoute ?? "default").trim() || "default",
+          ...configured,
+        ].filter(Boolean)
       )
     );
   }
@@ -300,11 +299,13 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
     updateNodeInternals(id);
   }, [id, handleSignature, updateNodeInternals]);
   const hasTarget = nodeData.kind !== "start";
-  const routeItems =
-    nodeData.kind === "router" && Array.isArray(nodeData.config.routes)
-      ? (nodeData.config.routes.filter(
-          item => item && typeof item === "object"
-        ) as NodeConfig[])
+  const routeItems: NodeConfig[] =
+    nodeData.kind === "router"
+      ? normalizeReferenceRouterConfig(nodeData.config).rules.map(rule => ({
+          handle: rule.handle,
+          label: rule.name,
+          targetNodeId: rule.targetNodeId,
+        }))
       : [];
   const llmGovernance =
     nodeData.kind === "llm" &&
@@ -3259,6 +3260,38 @@ export default function WorkflowCanvas({
   }, [contextMenu]);
   const updateSelected = (updates: Partial<FlowNodeData>) => {
     if (!selectedId || inspectorDisabled) return;
+    if (
+      selected?.data.kind === "router" &&
+      updates.config &&
+      (updates.config.routes !== selected.data.config.routes ||
+        updates.config.defaultRoute !== selected.data.config.defaultRoute)
+    ) {
+      try {
+        const next = updateRouterConnections(
+          selectedId,
+          selected.data.config,
+          updates.config,
+          edges
+        );
+        pushHistory();
+        setEdges(next.edges);
+        setNodes(current =>
+          current.map(node =>
+            node.id === selectedId
+              ? {
+                  ...node,
+                  data: { ...node.data, ...updates, config: next.config },
+                }
+              : node
+          )
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "路由分支更新失败。"
+        );
+      }
+      return;
+    }
     if (selected?.data.kind === "condition" && updates.config) {
       const before = readConditionHandles(selected.data.config);
       const after = readConditionHandles(updates.config);
