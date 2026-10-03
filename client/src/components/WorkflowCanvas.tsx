@@ -20,6 +20,7 @@ import "@xyflow/react/dist/style.css";
 import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
+import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -761,6 +762,21 @@ function ConfigFieldEditor({
   );
   const inputClass =
     "aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground min-[1024px]:h-9 min-[1024px]:min-h-0";
+  if (nodeKind === "operate" && field.key === "formSchema")
+    return (
+      <TaskFormSchemaEditor
+        value={effectiveValue}
+        disabled={disabled}
+        onChange={onChange}
+        advanced={
+          <NestedStructuredValueEditor
+            value={effectiveValue}
+            disabled={disabled}
+            onChange={onChange}
+          />
+        }
+      />
+    );
   if (
     aggregateMetrics &&
     Array.isArray(effectiveValue) &&

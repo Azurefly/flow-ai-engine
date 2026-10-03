@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Allow 9 KiB for participant picking, task validation and history views; keep chunk and gzip limits unchanged.
-const maxTotalBytes = 1_329 * 1024;
+// Allow the measured form builder growth; keep chunk and gzip limits unchanged.
+const maxTotalBytes = 1_337 * 1024;
 const maxTotalGzipBytes = 400 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
