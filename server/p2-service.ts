@@ -19,6 +19,7 @@ import {
 import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-source";
 import { probeSafeHttpEndpoint } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
+import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
 
 type JsonRecord = Record<string, unknown>;
 type ResourceKind = "source" | "asset" | "udf" | "tag" | "plugin";
@@ -1440,8 +1441,13 @@ async function runDataflowDefinition(
           operation: "derive",
         };
       } else if (String(node.type) === "join") {
-        const left = normalizeRows(inputs[0]?.rows ?? []);
-        const right = normalizeRows(inputs[1]?.rows ?? []);
+        const [leftParent, rightParent] = resolveDataflowJoinInputs(
+          config,
+          incoming.get(nodeId) ?? [],
+          true
+        );
+        const left = normalizeRows(outputs.get(leftParent)?.rows ?? []);
+        const right = normalizeRows(outputs.get(rightParent)?.rows ?? []);
         const leftKeys = Array.isArray(config.leftKeys)
           ? config.leftKeys.map(String)
           : [];

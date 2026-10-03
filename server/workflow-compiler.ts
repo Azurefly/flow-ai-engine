@@ -19,6 +19,7 @@ import {
   type HttpServiceTaskPlan,
 } from "@shared/service-task-contract";
 import { normalizeReferenceOperateConfig } from "@shared/reference-operate-config";
+import { resolveDataflowJoinInputs } from "@shared/dataflow-join-inputs";
 
 export type WorkflowNode = {
   id: string;
@@ -664,6 +665,22 @@ export function analyzeWorkflowDefinition(
 
     for (const node of validNodes) {
       const nodeOutgoing = outgoing.get(node.id) ?? [];
+      if (node.type === "join" && options.flowType === "data") {
+        try {
+          resolveDataflowJoinInputs(
+            node.config,
+            (incoming.get(node.id) ?? []).map(edge => edge.sourceNodeId)
+          );
+        } catch (error) {
+          diagnostics.push(
+            diagnostic(
+              "WF_DATA_JOIN_INPUT_INVALID",
+              error instanceof Error ? error.message : "关联输入配置无效。",
+              { kind: "node", nodeId: node.id, field: "config.leftInputNodeId" }
+            )
+          );
+        }
+      }
       if (
         node.type === "operate" &&
         readOperateOutcomeMode(node.config) === "explicit"

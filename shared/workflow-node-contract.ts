@@ -1802,6 +1802,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     flowTypes: ["data"],
     defaultConfig: {
       kind: "inner",
+      leftInputNodeId: "",
+      rightInputNodeId: "",
       leftKeys: [],
       rightKeys: [],
       collisionPolicy: "prefix",
@@ -1822,6 +1824,20 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "左键",
         help: "字段名数组。",
         kind: "json",
+        required: true,
+      },
+      {
+        key: "leftInputNodeId",
+        label: "左侧输入",
+        help: "先连接两个上游节点，再选择左侧数据集；左连接会保留此数据集的未匹配记录。",
+        kind: "text",
+        required: true,
+      },
+      {
+        key: "rightInputNodeId",
+        label: "右侧输入",
+        help: "选择另一个已连接的上游数据集；不会按连线 ID 或创建顺序决定左右侧。",
+        kind: "text",
         required: true,
       },
       {
@@ -2742,6 +2758,13 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         throw new Error("派生节点 fields 必须是数组。");
       break;
     case "join":
+      assertString(config.leftInputNodeId, "关联节点必须选择左侧输入。");
+      assertString(config.rightInputNodeId, "关联节点必须选择右侧输入。");
+      if (
+        String(config.leftInputNodeId).trim() ===
+        String(config.rightInputNodeId).trim()
+      )
+        throw new Error("关联节点左右输入不能选择同一个节点。");
       if (
         !Array.isArray(config.leftKeys) ||
         !Array.isArray(config.rightKeys) ||

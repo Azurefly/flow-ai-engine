@@ -66,6 +66,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import { selectWorkflowEndpoint } from "./workflow-endpoint-selection";
+import { canConnectCanvasNodes } from "./workflow-canvas-connections";
 import type { Definition } from "../../../server/workflow-service";
 import {
   canConnectFlowNodeTypes,
@@ -115,50 +116,6 @@ type CanvasContextMenu = {
   edgeId?: string;
 } | null;
 type HistorySnapshot = { nodes: CanvasNode[]; edges: Edge[] };
-
-function canConnectCanvasNodes(
-  source: CanvasNode,
-  target: CanvasNode,
-  edges: Edge[]
-) {
-  if (
-    source.id === target.id ||
-    source.data.kind === "end" ||
-    target.data.kind === "start"
-  )
-    return false;
-  if (!canConnectFlowNodeTypes(source.data.kind, target.data.kind))
-    return false;
-  const outgoing = edges.filter(edge => edge.source === source.id);
-  const isExplicitOperate =
-    source.data.kind === "operate" &&
-    readOperateOutcomeMode(source.data.config) === "explicit";
-  if (
-    (["start", "rest"].includes(source.data.kind) ||
-      (source.data.kind === "operate" && !isExplicitOperate)) &&
-    outgoing.length > 0
-  )
-    return false;
-  if (
-    target.data.kind === "end" &&
-    edges.some(edge => edge.target === target.id)
-  )
-    return false;
-  if (
-    outgoing.some(
-      edge =>
-        edge.target === target.id &&
-        (edge.sourceHandle || "default") === "default"
-    )
-  )
-    return false;
-  if (
-    target.data.kind === "end" &&
-    outgoing.some(edge => edge.target !== target.id)
-  )
-    return false;
-  return true;
-}
 
 const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   start: { icon: Play, color: "#10b981" },
@@ -2079,6 +2036,19 @@ type ConfigField = FlowNodeDefinition["fields"][number];
 type ConfigGroup = { label: string; description: string; keys: string[] };
 
 const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
+  join: [
+    {
+      label: "输入数据",
+      description:
+        "先连接两个上游数据节点，再按名称明确左右侧；左连接保留左侧未匹配记录。",
+      keys: ["leftInputNodeId", "rightInputNodeId"],
+    },
+    {
+      label: "关联条件",
+      description: "左右关联键按顺序对应，数量必须相同且至少配置一组。",
+      keys: ["kind", "leftKeys", "rightKeys"],
+    },
+  ],
   http: [
     {
       label: "请求配置",
@@ -2972,7 +2942,7 @@ export default function WorkflowCanvas({
           config: createDefaultNodeConfig(item.type),
         },
       };
-      if (!canConnectCanvasNodes(source, nextNode, edges)) {
+      if (!canConnectCanvasNodes(source, nextNode, edges, flowType)) {
         setContextMenu(null);
         return;
       }
@@ -3008,14 +2978,18 @@ export default function WorkflowCanvas({
       setSelectedEdgeId(null);
       setContextMenu(null);
     },
-    [edges, nodes, readOnly, setEdges, setNodes]
+    [edges, nodes, readOnly, setEdges, setNodes, flowType]
   );
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly || !connection.source || !connection.target) return;
       const source = nodes.find(node => node.id === connection.source);
       const target = nodes.find(node => node.id === connection.target);
-      if (!source || !target || !canConnectCanvasNodes(source, target, edges))
+      if (
+        !source ||
+        !target ||
+        !canConnectCanvasNodes(source, target, edges, flowType)
+      )
         return;
       pushHistory();
       const nextEdge = {
@@ -3043,7 +3017,7 @@ export default function WorkflowCanvas({
           syncRouterRouteTargets(current, nextEdges, connection.source)
         );
     },
-    [edges, nodes, pushHistory, readOnly, setEdges, setNodes]
+    [edges, nodes, pushHistory, readOnly, setEdges, setNodes, flowType]
   );
 
   const deleteSelectedEdge = useCallback(() => {
@@ -4485,37 +4459,53 @@ export default function WorkflowCanvas({
                           selectedConfig
                         );
                         const runtimeOptions =
-                          field.key === "endpointRef" && projectId
-                            ? endpointChoices
-                                .filter(
-                                  endpoint => endpoint.status === "active"
+                          selected.data.kind === "join" &&
+                          ["leftInputNodeId", "rightInputNodeId"].includes(
+                            field.key
+                          )
+                            ? nodes
+                                .filter(node =>
+                                  edges.some(
+                                    edge =>
+                                      edge.target === selected.id &&
+                                      edge.source === node.id
+                                  )
                                 )
-                                .map(endpoint => ({
-                                  value: endpoint.refCode,
-                                  label: `${endpoint.name} · ${({ development: "开发", test: "测试", staging: "预发布", production: "生产" } as Record<string, string>)[endpoint.targetEnvironment] ?? endpoint.targetEnvironment}（${endpoint.refCode}）`,
+                                .map(node => ({
+                                  value: node.id,
+                                  label: `${node.data.label}（${node.id.slice(0, 8)}）`,
                                 }))
-                            : field.key === "subflowId"
-                              ? subflows
-                                  .filter(subflow => subflow.isEnabled)
-                                  .map(subflow => ({
-                                    value: subflow.id,
-                                    label: subflow.name,
+                            : field.key === "endpointRef" && projectId
+                              ? endpointChoices
+                                  .filter(
+                                    endpoint => endpoint.status === "active"
+                                  )
+                                  .map(endpoint => ({
+                                    value: endpoint.refCode,
+                                    label: `${endpoint.name} · ${({ development: "开发", test: "测试", staging: "预发布", production: "生产" } as Record<string, string>)[endpoint.targetEnvironment] ?? endpoint.targetEnvironment}（${endpoint.refCode}）`,
                                   }))
-                              : field.key === "compensationNodeId"
-                                ? nodes
-                                    .filter(
-                                      node =>
-                                        node.id !== selected.id &&
-                                        canConnectFlowNodeTypes(
-                                          selected.data.kind,
-                                          node.data.kind
-                                        )
-                                    )
-                                    .map(node => ({
-                                      value: node.id,
-                                      label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                              : field.key === "subflowId"
+                                ? subflows
+                                    .filter(subflow => subflow.isEnabled)
+                                    .map(subflow => ({
+                                      value: subflow.id,
+                                      label: subflow.name,
                                     }))
-                                : undefined;
+                                : field.key === "compensationNodeId"
+                                  ? nodes
+                                      .filter(
+                                        node =>
+                                          node.id !== selected.id &&
+                                          canConnectFlowNodeTypes(
+                                            selected.data.kind,
+                                            node.data.kind
+                                          )
+                                      )
+                                      .map(node => ({
+                                        value: node.id,
+                                        label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                                      }))
+                                  : undefined;
                         return (
                           <ConfigFieldEditor
                             key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
@@ -4539,13 +4529,18 @@ export default function WorkflowCanvas({
                             }
                             runtimeOptions={runtimeOptions}
                             runtimePlaceholder={
-                              field.key === "endpointRef" && projectId
-                                ? serviceEndpoints.isLoading
-                                  ? "正在加载服务端点…"
-                                  : "请选择当前业务的服务端点"
-                                : field.key === "compensationNodeId"
-                                  ? "请选择当前流程的补偿节点"
-                                  : undefined
+                              selected.data.kind === "join" &&
+                              ["leftInputNodeId", "rightInputNodeId"].includes(
+                                field.key
+                              )
+                                ? "请选择已连接的上游数据节点"
+                                : field.key === "endpointRef" && projectId
+                                  ? serviceEndpoints.isLoading
+                                    ? "正在加载服务端点…"
+                                    : "请选择当前业务的服务端点"
+                                  : field.key === "compensationNodeId"
+                                    ? "请选择当前流程的补偿节点"
+                                    : undefined
                             }
                             runtimeError={
                               field.key === "endpointRef" && projectId

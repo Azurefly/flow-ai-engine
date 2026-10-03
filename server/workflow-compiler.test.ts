@@ -42,6 +42,51 @@ function state(id = "state") {
 }
 
 describe("WorkflowCompiler", () => {
+  it("rejects data joins whose explicit input bindings do not match the graph", () => {
+    const definition = base();
+    definition.nodes.splice(
+      1,
+      0,
+      ...["left", "right"].map(id => ({
+        id,
+        type: "source" as const,
+        name: id,
+        position: { x: 120, y: 0 },
+        config: { assetId: id },
+      })),
+      {
+        id: "join",
+        type: "join",
+        name: "关联",
+        position: { x: 240, y: 0 },
+        config: {
+          kind: "left",
+          leftKeys: ["id"],
+          rightKeys: ["id"],
+          leftInputNodeId: "left",
+          rightInputNodeId: "missing",
+        },
+      }
+    );
+    definition.edges = [
+      { id: "s-l", sourceNodeId: "start", targetNodeId: "left" },
+      { id: "s-r", sourceNodeId: "start", targetNodeId: "right" },
+      { id: "l-j", sourceNodeId: "left", targetNodeId: "join" },
+      { id: "r-j", sourceNodeId: "right", targetNodeId: "join" },
+      { id: "j-e", sourceNodeId: "join", targetNodeId: "end" },
+    ];
+    expect(
+      analyzeWorkflowDefinition(definition, {
+        flowType: "data",
+        executable: true,
+      }).diagnostics.map(item => item.code)
+    ).toContain("WF_DATA_JOIN_INPUT_INVALID");
+    definition.nodes.find(node => node.id === "join")!.config.rightInputNodeId =
+      "right";
+    expect(() =>
+      compileWorkflowDefinition(definition, { flowType: "data" })
+    ).not.toThrow();
+  });
   it("compiles configured condition handles and rejects stale branch connections", () => {
     const definition = base();
     definition.nodes.splice(1, 0, {

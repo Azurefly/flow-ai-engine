@@ -302,6 +302,81 @@ describe("P2 项目数据资源与数据流", () => {
         { orderId: "A-01", amount: 12 },
         { orderId: "A-02", amount: 34 },
       ]);
+      const lookupAssetId = (
+        await owner.data.createAsset({
+          projectId,
+          sourceId,
+          name: "订单关联样本",
+          assetType: "dataset",
+          schema: [
+            { name: "orderId", type: "string" },
+            { name: "customer", type: "string" },
+          ],
+          sample: [{ orderId: "A-01", customer: "张三" }],
+        })
+      ).id;
+      const joinWorkflowId = (
+        await owner.project.createWorkflow({
+          projectId,
+          name: "显式左右输入关联",
+          flowType: "data",
+          definition: {
+            ...definition,
+            nodes: [
+              definition.nodes[0],
+              definition.nodes[1],
+              {
+                id: "lookup",
+                type: "source",
+                name: "客户资料",
+                position: { x: 180, y: 200 },
+                config: { assetId: lookupAssetId },
+              },
+              {
+                id: "join",
+                type: "join",
+                name: "订单左关联",
+                position: { x: 360, y: 0 },
+                config: {
+                  kind: "left",
+                  leftKeys: ["orderId"],
+                  rightKeys: ["orderId"],
+                  leftInputNodeId: "source",
+                  rightInputNodeId: "lookup",
+                },
+              },
+              definition.nodes[3],
+            ],
+            edges: [
+              { id: "s-left", sourceNodeId: "start", targetNodeId: "source" },
+              { id: "s-right", sourceNodeId: "start", targetNodeId: "lookup" },
+              // 发布排序后右侧先进入，结果仍须以订单为主表。
+              { id: "a-right", sourceNodeId: "lookup", targetNodeId: "join" },
+              { id: "z-left", sourceNodeId: "source", targetNodeId: "join" },
+              { id: "join-end", sourceNodeId: "join", targetNodeId: "end" },
+            ],
+          },
+        })
+      ).id;
+      await owner.project.auditWorkflow({
+        projectId,
+        workflowId: joinWorkflowId,
+        auditStatus: "approved",
+      });
+      await owner.workflow.publish({ id: joinWorkflowId });
+      const joined = await owner.data.run({
+        projectId,
+        workflowId: joinWorkflowId,
+      });
+      expect(joined.status).toBe("success");
+      expect((joined.output.terminals[0] as any).rows).toEqual([
+        expect.objectContaining({
+          orderId: "A-01",
+          amount: 12,
+          customer: "张三",
+        }),
+        expect.objectContaining({ orderId: "A-02", amount: 34 }),
+      ]);
       const sqlWorkflowId = (
         await owner.project.createWorkflow({
           projectId,
