@@ -1,4 +1,5 @@
 import { parse } from "cookie";
+import { searchWorkflowParticipants } from "./workflow-participant-directory";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -1651,6 +1652,16 @@ export const appRouter = router({
           throw new Error("无权查看流程成员。");
         return listWorkflowMembers(input.workflowId);
       }),
+    participantDirectory: protectedProcedure
+      .input(
+        z.object({
+          workflowId: z.string().min(8).max(64),
+          kind: z.enum(["user", "department"]),
+          query: z.string().max(100),
+          selectedIds: z.array(z.string().min(1).max(64)).max(100),
+        })
+      )
+      .query(({ ctx, input }) => searchWorkflowParticipants(ctx.user, input)),
     memberCandidates: protectedProcedure
       .input(z.object({ workflowId: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {

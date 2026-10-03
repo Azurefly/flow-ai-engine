@@ -19,6 +19,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
+import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -4524,6 +4525,44 @@ export default function WorkflowCanvas({
                           field,
                           selectedConfig
                         );
+                        if (
+                          selected.data.kind === "operate" &&
+                          workflowId &&
+                          !readOnly &&
+                          ["assigneeUserId", "assigneeUnitIds"].includes(
+                            field.key
+                          )
+                        ) {
+                          const people = field.key === "assigneeUserId";
+                          const values = people
+                            ? fieldValue === undefined ||
+                              fieldValue === null ||
+                              fieldValue === ""
+                              ? []
+                              : [String(fieldValue)]
+                            : Array.isArray(fieldValue)
+                              ? fieldValue.map(String)
+                              : [];
+                          return (
+                            <WorkflowParticipantPicker
+                              key={`${workflowId}-${selected.id}-${field.key}`}
+                              workflowId={workflowId}
+                              kind={people ? "user" : "department"}
+                              value={values}
+                              disabled={inspectorDisabled}
+                              onChange={ids =>
+                                updateConfigField(
+                                  field.key,
+                                  people
+                                    ? ids.length
+                                      ? Number(ids[0])
+                                      : ""
+                                    : ids
+                                )
+                              }
+                            />
+                          );
+                        }
                         const runtimeOptions =
                           projectId && field.key === selectedResourceKey
                             ? (resourceChoices ?? [])
