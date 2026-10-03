@@ -17,7 +17,7 @@ import {
   type WorkflowExecutionPlan,
 } from "./workflow-compiler";
 import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-source";
-import { probeSafeHttpEndpoint } from "./workflow-engine";
+import { probeSafeHttpEndpoint, resolveTemplates } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
 import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
@@ -1544,6 +1544,22 @@ async function runDataflowDefinition(
         output = { rows, operation: "sort" };
       } else if (String(node.type) === "transform") {
         let rows = rowsFromInput(inputs);
+        const mappings =
+          config.mappings &&
+          typeof config.mappings === "object" &&
+          !Array.isArray(config.mappings)
+            ? (config.mappings as JsonRecord)
+            : {};
+        if (Object.keys(mappings).length)
+          rows = rows.map(
+            row =>
+              resolveTemplates(mappings, {
+                ...row,
+                input: row,
+                row,
+                nodes: Object.fromEntries(outputs),
+              }) as JsonRecord
+          );
         if (
           config.filterField &&
           Object.prototype.hasOwnProperty.call(config, "filterValue")

@@ -635,7 +635,13 @@ describe("P2 项目数据资源与数据流", () => {
                 type: "transform",
                 name: "转换不隐式截断",
                 position: { x: 540, y: 0 },
-                config: { columns: ["n"] },
+                config: {
+                  mappings: {
+                    renamed: "{{input.n}}",
+                    label: "序号 {{n}}",
+                    metadata: { original: "{{row.n}}", fixed: true },
+                  },
+                },
               },
               {
                 id: "aggregate",
@@ -646,7 +652,7 @@ describe("P2 项目数据资源与数据流", () => {
                   groupBy: [],
                   metrics: [
                     { name: "rows", operation: "count" },
-                    { name: "total", operation: "sum", field: "n" },
+                    { name: "total", operation: "sum", field: "renamed" },
                   ],
                 },
               },
@@ -721,6 +727,14 @@ describe("P2 项目数据资源与数据流", () => {
       )!;
       expect(sqlArtifact.rowCount).toBe(500);
       expect(sqlArtifact.sample).toHaveLength(20);
+      const mappedArtifact = batchLineage.artifacts.find(
+        artifact => artifact.nodeId === "transform"
+      )!;
+      expect(mappedArtifact.sample[0]).toEqual({
+        renamed: 500,
+        label: "序号 500",
+        metadata: { original: 500, fixed: true },
+      });
       const failedWorkflowId = (
         await owner.project.createWorkflow({
           projectId,

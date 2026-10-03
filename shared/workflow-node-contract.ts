@@ -1364,7 +1364,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "mappings",
         label: "字段映射",
-        help: templateHelp,
+        help: "数据流逐行生成新对象：{{input.字段}} 或 {{字段}} 引用当前行；其他流程使用输入、变量和节点输出。",
         kind: "json",
         required: true,
       },

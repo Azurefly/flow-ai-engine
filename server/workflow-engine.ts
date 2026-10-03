@@ -560,7 +560,7 @@ export function interpolate(value: unknown, context: JsonRecord): unknown {
   });
 }
 
-function resolveTemplates(value: unknown, context: JsonRecord): unknown {
+export function resolveTemplates(value: unknown, context: JsonRecord): unknown {
   if (Array.isArray(value))
     return value.map(item => resolveTemplates(item, context));
   if (value && typeof value === "object")

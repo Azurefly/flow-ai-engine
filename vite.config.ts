@@ -199,7 +199,7 @@ export default defineConfig(({ command }) => {
       outDir: path.resolve(import.meta.dirname, "dist/public"),
       emptyOutDir: true,
       minify: "terser",
-      terserOptions: { maxWorkers: 2, compress: { passes: 2 } },
+      terserOptions: { maxWorkers: 2, compress: { passes: 3 } },
     },
     server: {
       host: true,
