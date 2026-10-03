@@ -276,23 +276,26 @@ export async function listWorkflows(user: WorkflowUser) {
     user.role === "admin"
       ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL ORDER BY w.updatedAt DESC LIMIT 200"
       : `SELECT DISTINCT w.* FROM workflow w
+          LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
           LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
           LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
           LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
           LEFT JOIN permission p ON p.id=rp.permissionId
          WHERE w.archivedAt IS NULL AND (
-           w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.code='workflow:view'
+           w.ownerUserId=? OR fp.ownerUserId=? OR wm.id IS NOT NULL OR (fp.id IS NOT NULL AND pm.id IS NOT NULL) OR p.code='workflow:view'
            OR EXISTS (
              SELECT 1 FROM flow_project_unit pu
              JOIN organization_membership om ON om.unitId=pu.unitId
              JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
-             WHERE pu.projectId=w.projectId AND om.userId=?
+             WHERE pu.projectId=fp.id AND om.userId=?
            )
          )
          ORDER BY w.updatedAt DESC
          LIMIT 200`,
-    user.role === "admin" ? [] : [user.id, user.id, user.id, user.id, user.id]
+    user.role === "admin"
+      ? []
+      : [user.id, user.id, user.id, user.id, user.id, user.id]
   );
   return rows.map(hydrateWorkflow);
 }
@@ -305,16 +308,26 @@ export async function listArchivedWorkflows(
     user.role === "admin"
       ? "SELECT DISTINCT w.* FROM workflow w WHERE w.projectId=? AND w.archivedAt IS NOT NULL ORDER BY w.archivedAt DESC"
       : `SELECT DISTINCT w.* FROM workflow w
+          LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
           LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
           LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
           LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
           LEFT JOIN permission p ON p.id=rp.permissionId
-         WHERE w.projectId=? AND w.archivedAt IS NOT NULL AND (w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.code IN ('workflow:view','workflow:edit','workflow:publish','workflow:run','workflow:members:manage'))
+         WHERE w.projectId=? AND w.archivedAt IS NOT NULL AND (
+           w.ownerUserId=? OR fp.ownerUserId=? OR wm.id IS NOT NULL OR (fp.id IS NOT NULL AND pm.id IS NOT NULL)
+           OR p.code IN ('workflow:view','workflow:edit','workflow:publish','workflow:run','workflow:members:manage')
+           OR EXISTS (
+             SELECT 1 FROM flow_project_unit pu
+             JOIN organization_membership om ON om.unitId=pu.unitId
+             JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
+             WHERE pu.projectId=fp.id AND om.userId=?
+           )
+         )
          ORDER BY w.archivedAt DESC`,
     user.role === "admin"
       ? [projectId]
-      : [user.id, user.id, user.id, projectId, user.id]
+      : [user.id, user.id, user.id, projectId, user.id, user.id, user.id]
   );
   if (user.role === "admin")
     return rows.map(row => ({ ...hydrateWorkflow(row), canRestore: true }));
@@ -322,13 +335,22 @@ export async function listArchivedWorkflows(
   const workflowIds = rows.map(row => String(row.id));
   const [manageableRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT DISTINCT w.id FROM workflow w
+      LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
       LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.role='owner' AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
       LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.role='owner' AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
       LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
       LEFT JOIN role_permission rp ON rp.roleId=ra.roleId
       LEFT JOIN permission p ON p.id=rp.permissionId AND p.code='workflow:members:manage'
-     WHERE w.id IN (?) AND (w.ownerUserId=? OR wm.id IS NOT NULL OR pm.id IS NOT NULL OR p.id IS NOT NULL)`,
-    [user.id, user.id, user.id, workflowIds, user.id]
+     WHERE w.id IN (?) AND (
+       w.ownerUserId=? OR fp.ownerUserId=? OR wm.id IS NOT NULL OR (fp.id IS NOT NULL AND pm.id IS NOT NULL) OR p.id IS NOT NULL
+       OR EXISTS (
+         SELECT 1 FROM flow_project_unit pu
+         JOIN organization_membership om ON om.unitId=pu.unitId
+         JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
+         WHERE pu.projectId=fp.id AND pu.role='owner' AND om.userId=?
+       )
+     )`,
+    [user.id, user.id, user.id, workflowIds, user.id, user.id, user.id]
   );
   const manageableIds = new Set(manageableRows.map(row => String(row.id)));
   return rows.map(row => ({

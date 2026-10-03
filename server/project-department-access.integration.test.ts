@@ -4,7 +4,7 @@ import { afterAll, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import { getProjectAccess, listProjects } from "./project-service";
 import { getWorkflowAccess } from "./iam-service";
-import { listWorkflows } from "./workflow-service";
+import { listWorkflows, listArchivedWorkflows } from "./workflow-service";
 
 const run = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
@@ -122,6 +122,32 @@ run(
     expect(access.permissions.has("workflow:edit")).toBe(true);
     expect(access.permissions.has("workflow:members:manage")).toBe(false);
     await staff.workflow.update({ id: workflowId, name: "部门设计者可编辑" });
+    await owner.workflow.delete({ id: workflowId });
+    expect(
+      (await listArchivedWorkflows(employee, projectId)).find(
+        row => row.id === workflowId
+      )
+    ).toMatchObject({ canRestore: false });
+    await expect(staff.workflow.restore({ id: workflowId })).rejects.toThrow();
+    await owner.project.grantUnit({
+      projectId,
+      unitId: unitIds[2],
+      role: "owner",
+    });
+    expect(
+      (await listArchivedWorkflows(employee, projectId)).find(
+        row => row.id === workflowId
+      )
+    ).toMatchObject({ canRestore: true });
+    await staff.workflow.restore({ id: workflowId });
+    expect(
+      (await listWorkflows(employee)).some(row => row.id === workflowId)
+    ).toBe(true);
+    await owner.project.grantUnit({
+      projectId,
+      unitId: unitIds[2],
+      role: "designer",
+    });
     await owner.project.revokeMember({ projectId, userId: employee.id });
     expect(
       (await getWorkflowAccess(employee, workflowId)).permissions.has(
@@ -174,6 +200,39 @@ run(
         workflow => workflow.id === workflowId
       )
     ).toBe(false);
+    await owner.workflow.delete({ id: workflowId });
+    expect(await listArchivedWorkflows(employee, projectId)).toEqual([]);
+    await pool.query("UPDATE flow_project SET ownerUserId=? WHERE id=?", [
+      employee.id,
+      projectId,
+    ]);
+    expect(
+      (await listArchivedWorkflows(employee, projectId)).find(
+        row => row.id === workflowId
+      )
+    ).toMatchObject({ canRestore: true });
+    await staff.workflow.restore({ id: workflowId });
+    expect(
+      (await listWorkflows(employee)).some(row => row.id === workflowId)
+    ).toBe(true);
+    await owner.project.grantMember({
+      projectId,
+      userId: employee.id,
+      role: "viewer",
+    });
+    await pool.query("UPDATE flow_project SET status='archived' WHERE id=?", [
+      projectId,
+    ]);
+    expect(
+      (await getWorkflowAccess(employee, workflowId)).permissions.size
+    ).toBe(0);
+    expect(
+      (await listWorkflows(employee)).some(row => row.id === workflowId)
+    ).toBe(false);
+    await pool.query("UPDATE workflow SET archivedAt=NOW() WHERE id=?", [
+      workflowId,
+    ]);
+    expect(await listArchivedWorkflows(employee, projectId)).toEqual([]);
   },
   30_000
 );
