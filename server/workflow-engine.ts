@@ -1,3 +1,8 @@
+import {
+  assertTaskFormSchema,
+  validateFormSubmission,
+} from "../shared/task-form";
+export { validateFormSubmission } from "../shared/task-form";
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import http from "node:http";
@@ -177,90 +182,6 @@ export function assertJsonSchemaValue(
         `${path}[${index}]`
       )
     );
-}
-
-export function validateFormSubmission(
-  fields: unknown[],
-  submittedValue: unknown
-) {
-  const submitted = asRecord(submittedValue);
-  const result: JsonRecord = {};
-  for (const rawField of fields) {
-    const field = asRecord(rawField);
-    const key = String(field.key ?? "").trim();
-    if (!key) throw new Error("表单字段缺少 key。");
-    const hasSubmitted = Object.prototype.hasOwnProperty.call(submitted, key);
-    let value = hasSubmitted ? submitted[key] : field.defaultValue;
-    if (
-      field.readOnly === true &&
-      hasSubmitted &&
-      JSON.stringify(value) !== JSON.stringify(field.defaultValue)
-    )
-      throw new Error(`表单字段“${key}”为只读，不允许由调用方修改。`);
-    const empty = value === undefined || value === null || value === "";
-    if (field.required === true && empty)
-      throw new Error(`表单必填字段“${key}”缺失。`);
-    if (empty) continue;
-    const type = String(field.type ?? "text").toLowerCase();
-    if (
-      ["text", "string", "textarea", "email", "date", "select"].includes(
-        type
-      ) &&
-      typeof value !== "string"
-    )
-      throw new Error(`表单字段“${key}”必须是字符串。`);
-    if (type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value)))
-      throw new Error(`表单字段“${key}”不是有效邮箱。`);
-    if (type === "date" && Number.isNaN(Date.parse(String(value))))
-      throw new Error(`表单字段“${key}”不是有效日期。`);
-    if (
-      type === "number" &&
-      (typeof value !== "number" || !Number.isFinite(value))
-    )
-      throw new Error(`表单字段“${key}”必须是有限数值。`);
-    if (type === "boolean" && typeof value !== "boolean")
-      throw new Error(`表单字段“${key}”必须是布尔值。`);
-    if (type === "multiselect" && !Array.isArray(value))
-      throw new Error(`表单字段“${key}”必须是数组。`);
-    const options = Array.isArray(field.options)
-      ? field.options.map(option => {
-          const record = asRecord(option);
-          return Object.keys(record).length ? record.value : option;
-        })
-      : [];
-    if (options.length) {
-      const values = type === "multiselect" ? (value as unknown[]) : [value];
-      if (
-        values.some(
-          item =>
-            !options.some(
-              option => JSON.stringify(option) === JSON.stringify(item)
-            )
-        )
-      )
-        throw new Error(`表单字段“${key}”包含选项范围外的值。`);
-    }
-    if (
-      typeof value === "string" &&
-      Number.isFinite(Number(field.maxLength)) &&
-      value.length > Number(field.maxLength)
-    )
-      throw new Error(`表单字段“${key}”超过最大长度。`);
-    if (
-      typeof value === "number" &&
-      Number.isFinite(Number(field.min)) &&
-      value < Number(field.min)
-    )
-      throw new Error(`表单字段“${key}”低于最小值。`);
-    if (
-      typeof value === "number" &&
-      Number.isFinite(Number(field.max)) &&
-      value > Number(field.max)
-    )
-      throw new Error(`表单字段“${key}”超过最大值。`);
-    result[key] = value;
-  }
-  return result;
 }
 
 export function redactSensitiveValues(value: unknown): unknown {
@@ -3832,6 +3753,16 @@ export async function resumeWorkflowTask(input: {
     if (!["running", "waiting"].includes(String(task.runStatus)))
       throw new Error("所属流程实例不处于等待人工操作状态。 ");
     validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalizedResult);
+    const taskPayload = asRecord(readJson(task.payloadJson));
+    const taskSchema = asRecord(asRecord(taskPayload.config).formSchema);
+    assertTaskFormSchema(taskSchema);
+    if (Array.isArray(taskSchema.fields)) {
+      const submittedForm = validateFormSubmission(
+        taskSchema.fields,
+        normalizedResult
+      );
+      Object.assign(normalizedResult, submittedForm);
+    }
     if (
       task.approvalGroupId &&
       !["approved", "rejected", "abstained"].includes(

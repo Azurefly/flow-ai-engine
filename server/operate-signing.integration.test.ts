@@ -57,6 +57,30 @@ function signingDefinition(
           assigneeMode: "role",
           assigneeRoleCode: roleCode,
           instruction: "请完成多人审批",
+          formSchema: {
+            fields: [
+              {
+                key: "serial",
+                type: "text",
+                required: true,
+                defaultValue: "001",
+              },
+              { key: "amount", type: "number", defaultValue: 0 },
+              { key: "flag", type: "boolean", defaultValue: false },
+              {
+                key: "choices",
+                type: "multiselect",
+                options: ["a", "b"],
+                defaultValue: ["a"],
+              },
+              {
+                key: "fixed",
+                type: "text",
+                readOnly: true,
+                defaultValue: "immutable",
+              },
+            ],
+          },
           bdcz: {
             bdcz: [],
             bdczjs: ["acceptor"],
@@ -242,29 +266,74 @@ describe("原版操作节点或签和会签运行语义", () => {
         });
 
       const orWorkflowId = await createSigningWorkflow("orSignFor");
-      const orStarted: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
-        workflowId: orWorkflowId,
-        input: {},
-      }));
+      const orStarted: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(owner).workflow.run({
+          workflowId: orWorkflowId,
+          input: {},
+        })
+      );
       const orTodos: any[][] = await Promise.all(
         approvers.map(approver =>
           callerFor(approver).task.list({ view: "todo", projectId })
         )
       );
       expect(orTodos.map(items => items.length)).toEqual([1, 1, 1]);
-      const orRejected: any = await settleWorkflowCommand(pool, await callerFor(approvers[0]).task.execute({
-        taskId: orTodos[0][0].id,
-        result: { decision: "rejected", comment: "需要其他审批人复核" },
-      }));
+      for (const invalid of [
+        { serial: " " },
+        { serial: 1 },
+        { fixed: "changed" },
+        { choices: ["outside"] },
+      ]) {
+        await expect(
+          callerFor(approvers[0]).task.execute({
+            taskId: orTodos[0][0].id,
+            result: { decision: "approved", ...invalid },
+          })
+        ).rejects.toThrow(/必填|字符串|只读|选项/);
+      }
+      const [uncompleted] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT status,resultJson FROM workflow_task WHERE id=?",
+        [orTodos[0][0].id]
+      );
+      expect(uncompleted[0]).toMatchObject({
+        status: "claimed",
+        resultJson: null,
+      });
+      const orRejected: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(approvers[0]).task.execute({
+          taskId: orTodos[0][0].id,
+          result: { decision: "rejected", comment: "需要其他审批人复核" },
+        })
+      );
       expect(orRejected).toMatchObject({
         status: "waiting",
         approvalProgress: { approved: 0, rejected: 1, required: 1, total: 3 },
       });
-      const orResult: any = await settleWorkflowCommand(pool, await callerFor(approvers[1]).task.execute({
-        taskId: orTodos[1][0].id,
-        result: { decision: "approved" },
-      }));
+      const orResult: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(approvers[1]).task.execute({
+          taskId: orTodos[1][0].id,
+          result: { decision: "approved" },
+        })
+      );
       expect(orResult.status).toBe("success");
+      const [formResult] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT resultJson FROM workflow_task WHERE id=?",
+        [orTodos[0][0].id]
+      );
+      const form =
+        typeof formResult[0].resultJson === "string"
+          ? JSON.parse(formResult[0].resultJson)
+          : formResult[0].resultJson;
+      expect(form).toMatchObject({
+        serial: "001",
+        amount: 0,
+        flag: false,
+        choices: ["a"],
+        fixed: "immutable",
+      });
       const [orTasks] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status FROM workflow_task WHERE runId=? ORDER BY status",
         [orStarted.runId]
@@ -287,19 +356,25 @@ describe("原版操作节点或签和会签运行语义", () => {
       );
 
       const andWorkflowId = await createSigningWorkflow("andSignFor", 60);
-      const andStarted: any = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
-        workflowId: andWorkflowId,
-        input: {},
-      }));
+      const andStarted: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(owner).workflow.run({
+          workflowId: andWorkflowId,
+          input: {},
+        })
+      );
       const andTodos: any[][] = await Promise.all(
         approvers.map(approver =>
           callerFor(approver).task.list({ view: "todo", projectId })
         )
       );
-      const first: any = await settleWorkflowCommand(pool, await callerFor(approvers[0]).task.execute({
-        taskId: andTodos[0].find(item => item.runId === andStarted.runId).id,
-        result: { decision: "approved" },
-      }));
+      const first: any = await settleWorkflowCommand(
+        pool,
+        await callerFor(approvers[0]).task.execute({
+          taskId: andTodos[0].find(item => item.runId === andStarted.runId).id,
+          result: { decision: "approved" },
+        })
+      );
       expect(first).toMatchObject({
         status: "waiting",
         approvalProgress: { completed: 1, required: 2, total: 3 },
@@ -311,19 +386,33 @@ describe("原版操作节点或签和会签运行语义", () => {
         item => item.runId === andStarted.runId
       );
       const concurrentResults = await Promise.allSettled([
-        callerFor(approvers[1]).task.execute({
-          taskId: secondTask.id,
-          result: { decision: "approved", comment: "并发审批 A" },
-        }).then(command => settleWorkflowCommand(pool!, command)),
-        callerFor(approvers[2]).task.execute({
-          taskId: thirdTask.id,
-          result: { decision: "approved", comment: "并发审批 B" },
-        }).then(command => settleWorkflowCommand(pool!, command)),
+        callerFor(approvers[1])
+          .task.execute({
+            taskId: secondTask.id,
+            result: { decision: "approved", comment: "并发审批 A" },
+          })
+          .then(command => settleWorkflowCommand(pool!, command)),
+        callerFor(approvers[2])
+          .task.execute({
+            taskId: thirdTask.id,
+            result: { decision: "approved", comment: "并发审批 B" },
+          })
+          .then(command => settleWorkflowCommand(pool!, command)),
       ]);
-      expect(concurrentResults.filter(result => result.status === "fulfilled")).toHaveLength(1);
-      expect(concurrentResults.filter(result => result.status === "rejected")).toHaveLength(1);
-      const completedResult = concurrentResults.find(result => result.status === "fulfilled");
-      expect(completedResult?.status === "fulfilled" ? (completedResult.value as any).status : null).toBe("success");
+      expect(
+        concurrentResults.filter(result => result.status === "fulfilled")
+      ).toHaveLength(1);
+      expect(
+        concurrentResults.filter(result => result.status === "rejected")
+      ).toHaveLength(1);
+      const completedResult = concurrentResults.find(
+        result => result.status === "fulfilled"
+      );
+      expect(
+        completedResult?.status === "fulfilled"
+          ? (completedResult.value as any).status
+          : null
+      ).toBe("success");
       const [groups] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status,totalApprovers,requiredApprovals FROM workflow_task_group WHERE runId=?",
         [andStarted.runId]

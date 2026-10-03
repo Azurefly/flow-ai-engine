@@ -1,4 +1,6 @@
 import { Button } from "@/components/ui/button";
+import { taskFormInputValue } from "@shared/task-form";
+import { TaskFormField } from "./TaskFormField";
 import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
 import { trpc } from "@/lib/trpc";
@@ -2402,6 +2404,8 @@ function taskFormFields(task: any): Array<{
   type: string;
   required: boolean;
   defaultValue: string;
+  readOnly: boolean;
+  options: unknown[];
 }> {
   const fields = task?.payload?.config?.formSchema?.fields;
   if (!Array.isArray(fields)) return [];
@@ -2410,9 +2414,16 @@ function taskFormFields(task: any): Array<{
     .map((item: any) => ({
       key: String(item.key ?? "").trim(),
       label: String(item.label ?? item.key ?? "").trim(),
-      type: String(item.type ?? "text"),
+      type: String(item.type ?? "text").toLowerCase(),
       required: item.required === true,
-      defaultValue: String(item.defaultValue ?? ""),
+      readOnly: item.readOnly === true,
+      options: Array.isArray(item.options) ? item.options : [],
+      defaultValue: Array.isArray(item.defaultValue)
+        ? JSON.stringify(item.defaultValue)
+        : String(
+            item.defaultValue ??
+              (item.type === "boolean" && !item.readOnly ? false : "")
+          ),
     }))
     .filter((item: any) => item.key && item.label);
 }
@@ -2494,9 +2505,22 @@ function TaskDrawer({
       rows
         .filter(
           row =>
-            row.key.trim() && !["decision", "comment"].includes(row.key.trim())
+            row.key.trim() &&
+            !["decision", "comment", "outcome"].includes(row.key.trim()) &&
+            !(
+              row.value === "" &&
+              formFields.some(field => field.key === row.key)
+            )
         )
-        .map(row => [row.key, toValue(row.value)])
+        .map(row => {
+          const field = formFields.find(field => field.key === row.key);
+          return [
+            row.key,
+            field
+              ? taskFormInputValue(field.type, row.value)
+              : toValue(row.value),
+          ];
+        })
     ),
     decision,
     outcome: selectedOutcome?.code ?? decision,
@@ -2527,7 +2551,9 @@ function TaskDrawer({
       : "指定处理人办理说明";
   const missingRequiredFormField = formFields.some(field => {
     if (!field.required) return false;
-    return !resultRows.find(row => row.key === field.key)?.value.trim();
+    const value = resultRows.find(row => row.key === field.key)?.value ?? "";
+    const parsed = taskFormInputValue(field.type, value);
+    return !value.trim() || (Array.isArray(parsed) && !parsed.length);
   });
   const setFormFieldValue = (key: string, value: string) =>
     setResultRows(rows => {
@@ -2801,30 +2827,16 @@ function TaskDrawer({
                         >
                           {field.label}
                           {field.required ? "（必填）" : "（可选）"}
-                          {field.type === "textarea" ? (
-                            <textarea
-                              className="min-h-20 resize-y rounded border border-border px-3 py-2 text-sm font-normal"
-                              value={
-                                resultRows.find(row => row.key === field.key)
-                                  ?.value ?? ""
-                              }
-                              onChange={event =>
-                                setFormFieldValue(field.key, event.target.value)
-                              }
-                            />
-                          ) : (
-                            <input
-                              type={field.type === "number" ? "number" : "text"}
-                              className="h-9 rounded border border-border px-3 text-sm font-normal"
-                              value={
-                                resultRows.find(row => row.key === field.key)
-                                  ?.value ?? ""
-                              }
-                              onChange={event =>
-                                setFormFieldValue(field.key, event.target.value)
-                              }
-                            />
-                          )}
+                          <TaskFormField
+                            field={field}
+                            value={
+                              resultRows.find(row => row.key === field.key)
+                                ?.value ?? ""
+                            }
+                            onChange={value =>
+                              setFormFieldValue(field.key, value)
+                            }
+                          />
                         </label>
                       ))}
                     </div>

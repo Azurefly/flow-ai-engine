@@ -3,6 +3,7 @@ import { normalizeReferenceRouterConfig } from "./reference-router-config";
 import { readAggregateConfig } from "./dataflow-aggregate-config";
 import { validateDataflowFields } from "./dataflow-field-config";
 import { dataflowReadLimit } from "./dataflow-read-limit";
+import { assertTaskFormSchema } from "./task-form";
 
 export type FlowType = "state" | "control" | "data";
 
@@ -2347,6 +2348,8 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         [config.escalationAfterSeconds, "操作节点升级时间必须是非负秒数。"],
       ] as const)
         assertOptionalInteger(value, message, 0, Number.MAX_SAFE_INTEGER);
+      if (config.formSchema !== undefined)
+        assertTaskFormSchema(config.formSchema);
       if (config.formSchema !== undefined)
         assertObject(
           config.formSchema,
