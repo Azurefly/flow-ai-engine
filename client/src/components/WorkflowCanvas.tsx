@@ -2406,13 +2406,17 @@ export default function WorkflowCanvas({
     futureRef.current = [currentSnapshot, ...futureRef.current.slice(0, 29)];
     setNodes(previous.nodes);
     setEdges(previous.edges);
-    setSelectedId(null);
-    setSelectedEdgeId(null);
+    setSelectedId(current =>
+      previous.nodes.some(node => node.id === current) ? current : null
+    );
+    setSelectedEdgeId(current =>
+      previous.edges.some(edge => edge.id === current) ? current : null
+    );
     setHistoryState({
       canUndo: pastRef.current.length > 0,
       canRedo: true,
     });
-    toast.info("已撤销上一步操作 (⌘Z)");
+    toast.info("已撤销上一步操作");
   }, [readOnly, setEdges, setNodes]);
 
   const redo = useCallback(() => {
@@ -2426,13 +2430,17 @@ export default function WorkflowCanvas({
     pastRef.current = [...pastRef.current.slice(-29), currentSnapshot];
     setNodes(next.nodes);
     setEdges(next.edges);
-    setSelectedId(null);
-    setSelectedEdgeId(null);
+    setSelectedId(current =>
+      next.nodes.some(node => node.id === current) ? current : null
+    );
+    setSelectedEdgeId(current =>
+      next.edges.some(edge => edge.id === current) ? current : null
+    );
     setHistoryState({
       canUndo: true,
       canRedo: futureRef.current.length > 0,
     });
-    toast.info("已重做操作 (⌘Y)");
+    toast.info("已重做操作");
   }, [readOnly, setEdges, setNodes]);
 
   const onNodeDragStart = useCallback((_event: any, node: CanvasNode) => {
@@ -3696,6 +3704,7 @@ export default function WorkflowCanvas({
   return (
     <div
       data-aiflow-workflow-canvas=""
+      data-workflow-editor={compactReadOnlyPreview ? undefined : ""}
       className={
         !selectedId || !selected || inspectorMode === "compact"
           ? `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs`
@@ -3746,7 +3755,7 @@ export default function WorkflowCanvas({
                     />
                   </label>
                   <p className="aiflow-type-body mt-2 text-muted-foreground">
-                    可拖拽到画布，也可单击添加；当前流程类型已筛除不适用节点。
+                    拖拽或单击添加节点。
                   </p>
                   {visiblePalette.length ? (
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -4342,12 +4351,12 @@ export default function WorkflowCanvas({
           data-workflow-inspector=""
           className="border-t border-border bg-card lg:border-l lg:border-t-0"
         >
-          <div className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3">
+          <div
+            data-workflow-inspector-header=""
+            className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3"
+          >
             <div className={inspectorMode === "compact" ? "hidden" : ""}>
-              <p className="aiflow-type-meta font-bold tracking-[.2em] text-indigo-600">
-                CONFIGURATION
-              </p>
-              <h2 className="mt-1 text-sm font-semibold text-foreground">
+              <h2 className="text-sm font-semibold text-foreground">
                 配置信息
               </h2>
             </div>
@@ -4392,7 +4401,10 @@ export default function WorkflowCanvas({
           </div>
           {inspectorMode !== "compact" &&
             (selected && selectedDefinition ? (
-              <div className="max-h-[650px] overflow-y-auto">
+              <div
+                data-workflow-inspector-content=""
+                className="max-h-[650px] overflow-y-auto"
+              >
                 <div className="space-y-3 p-4">
                   <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
                     节点名称
@@ -4439,7 +4451,7 @@ export default function WorkflowCanvas({
                         <div>
                           <p className="font-semibold">参与人解析预览</p>
                           <p className="text-aiflow-info">
-                            以当前登录用户模拟发起人与当前操作人；运行时会再次解析并固化快照。
+                            以当前用户预览；实际运行时重新解析。
                           </p>
                         </div>
                         <Button
@@ -4588,15 +4600,15 @@ export default function WorkflowCanvas({
                                       selectedResourceKey === "datasourceId"
                                         ? "按名称选择已通过连接验证的 MySQL 数据源；请先在业务项目的数据源页面登记并测试连接。"
                                         : selectedResourceKey === "udfId"
-                                          ? "选择当前项目已审核的函数元数据；本节点仅记录函数引用并传递数据，不执行函数代码。"
-                                          : "按名称选择当前项目已启用的数据资源；请先在业务项目的数据资源页面登记资源。",
+                                          ? "选择已审核函数；仅记录引用并传递数据，不执行函数代码。"
+                                          : "选择已启用资源；在项目“数据资源”中登记。",
                                   }
                                 : field.key === "endpointRef" && projectId
                                   ? {
                                       ...field,
                                       label: "项目服务端点",
                                       required: true,
-                                      help: "选择当前业务的已启用端点；凭据引用会同步填写。请求地址需填写相对路径，例如 /orders。没有端点时，请先在业务项目的服务端点页面登记。",
+                                      help: "选择端点后同步凭据引用。填写相对路径，如 /orders；端点在项目“服务端点”中登记。",
                                     }
                                   : field
                             }

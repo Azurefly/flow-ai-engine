@@ -1,6 +1,42 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+/* Desktop editor uses one bounded workspace; only the inspector scrolls. */
+@media (min-width: 1024px) {
+  [data-workflow-editor] {
+    height: max(520px, calc(100dvh - 200px));
+    min-height: 0;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  [data-workflow-editor] > section {
+    min-height: 0;
+  }
+  [data-workflow-editor] [data-flow-canvas-toolbar] {
+    flex-shrink: 0;
+  }
+  [data-workflow-editor] [data-flow-canvas-toolbar] + div {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+  [data-workflow-editor] [data-workflow-inspector] {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+  [data-workflow-editor] [data-workflow-inspector-header] {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--card);
+  }
+  [data-workflow-editor] [data-workflow-inspector-content] {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
