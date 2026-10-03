@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_341 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_342 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 400 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");

@@ -1,18 +1,77 @@
 import { beforeEach, expect, it, vi } from "vitest";
+
 const mocks = vi.hoisted(() => ({ permission: vi.fn(), query: vi.fn() }));
 vi.mock("./iam-service", () => ({ hasWorkflowPermission: mocks.permission }));
 vi.mock("./db", () => ({ getSharedPool: () => ({ query: mocks.query }) }));
 import { searchWorkflowParticipants } from "./workflow-participant-directory";
+
 const user = { id: 7, role: "user" as const };
+const input = {
+  workflowId: "workflow-test",
+  kind: "role" as const,
+  query: " 审批 ",
+  selectedIds: ["reviewer", "reviewer"],
+};
+beforeEach(() => {
+  vi.resetAllMocks();
+  mocks.permission.mockResolvedValue(true);
+});
+
+it("角色按名称搜索，回显已选名称并保留运行需要的角色代号", async () => {
+  mocks.query
+    .mockResolvedValueOnce([[{ code: "reviewer", name: "审批人" }]])
+    .mockResolvedValueOnce([[{ code: "reviewer", name: "审批人" }]]);
+  expect(await searchWorkflowParticipants(user, input)).toEqual({
+    selected: [{ value: "reviewer", label: "审批人（reviewer）" }],
+    items: [{ value: "reviewer", label: "审批人（reviewer）" }],
+    hasMore: false,
+  });
+  expect(mocks.permission).toHaveBeenCalledWith(
+    user,
+    input.workflowId,
+    "workflow:edit"
+  );
+  expect(mocks.query.mock.calls[0][1]).toEqual(["reviewer"]);
+  expect(mocks.query.mock.calls[1][1]).toEqual(["审批", "审批"]);
+});
+
+it("没有流程编辑权限时不读取角色目录", async () => {
+  mocks.permission.mockResolvedValue(false);
+  await expect(searchWorkflowParticipants(user, input)).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  expect(mocks.query).not.toHaveBeenCalled();
+});
+
+it("空搜索不枚举目录，已删除角色不伪造回显", async () => {
+  mocks.query.mockResolvedValueOnce([[]]);
+  expect(
+    await searchWorkflowParticipants(user, { ...input, query: "" })
+  ).toEqual({ items: [], selected: [], hasMore: false });
+  expect(mocks.query).toHaveBeenCalledTimes(1);
+});
+
+it("搜索返回最多五十项并提示还有更多", async () => {
+  mocks.query.mockResolvedValueOnce([
+    Array.from({ length: 51 }, (_, i) => ({
+      code: `role_${i}`,
+      name: `角色${i}`,
+    })),
+  ]);
+  const result = await searchWorkflowParticipants(user, {
+    ...input,
+    selectedIds: [],
+  });
+  expect(result.items).toHaveLength(50);
+  expect(result.hasMore).toBe(true);
+});
+
 const base = {
   workflowId: "workflow-123",
   kind: "user" as const,
   query: "",
   selectedIds: [] as string[],
 };
-beforeEach(() => {
-  vi.resetAllMocks();
-});
 it("rejects viewers before querying the directory", async () => {
   mocks.permission.mockResolvedValue(false);
   await expect(searchWorkflowParticipants(user, base)).rejects.toMatchObject({

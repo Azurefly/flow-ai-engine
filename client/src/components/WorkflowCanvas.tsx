@@ -4572,35 +4572,43 @@ export default function WorkflowCanvas({
                           selected.data.kind === "operate" &&
                           workflowId &&
                           !readOnly &&
-                          ["assigneeUserId", "assigneeUnitIds"].includes(
-                            field.key
-                          )
+                          [
+                            "assigneeUserId",
+                            "assigneeUnitIds",
+                            "assigneeRoleCode",
+                          ].includes(field.key)
                         ) {
                           const people = field.key === "assigneeUserId";
-                          const values = people
-                            ? fieldValue === undefined ||
-                              fieldValue === null ||
-                              fieldValue === ""
-                              ? []
-                              : [String(fieldValue)]
-                            : Array.isArray(fieldValue)
-                              ? fieldValue.map(String)
-                              : [];
+                          const role = field.key === "assigneeRoleCode";
+                          const values =
+                            people || role
+                              ? fieldValue === undefined ||
+                                fieldValue === null ||
+                                fieldValue === ""
+                                ? []
+                                : [String(fieldValue)]
+                              : Array.isArray(fieldValue)
+                                ? fieldValue.map(String)
+                                : [];
                           return (
                             <WorkflowParticipantPicker
                               key={`${workflowId}-${selected.id}-${field.key}`}
                               workflowId={workflowId}
-                              kind={people ? "user" : "department"}
+                              kind={
+                                people ? "user" : role ? "role" : "department"
+                              }
                               value={values}
                               disabled={inspectorDisabled}
                               onChange={ids =>
                                 updateConfigField(
                                   field.key,
-                                  people
-                                    ? ids.length
-                                      ? Number(ids[0])
-                                      : ""
-                                    : ids
+                                  role
+                                    ? (ids[0] ?? "")
+                                    : people
+                                      ? ids.length
+                                        ? Number(ids[0])
+                                        : ""
+                                      : ids
                                 )
                               }
                             />

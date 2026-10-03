@@ -7,7 +7,7 @@ export async function searchWorkflowParticipants(
   user: { id: number; role: "user" | "admin" },
   input: {
     workflowId: string;
-    kind: "user" | "department";
+    kind: "user" | "department" | "role";
     query: string;
     selectedIds: string[];
   }
@@ -24,6 +24,30 @@ export async function searchWorkflowParticipants(
       message: "搜索词或已选项目数量超出限制。",
     });
   const query = input.query.trim().toLocaleLowerCase();
+  if (input.kind === "role") {
+    const pool = getSharedPool();
+    const [selected] = selectedIds.length
+      ? await pool.query<RowDataPacket[]>(
+          `SELECT code,name FROM iam_role WHERE code IN (${selectedIds.map(() => "?").join(",")})`,
+          selectedIds
+        )
+      : [[]];
+    const [matches] = query
+      ? await pool.query<RowDataPacket[]>(
+          "SELECT code,name FROM iam_role WHERE LOCATE(?,LOWER(name))>0 OR LOCATE(?,LOWER(code))>0 ORDER BY code LIMIT 51",
+          [query, query]
+        )
+      : [[]];
+    const option = (row: RowDataPacket) => ({
+      value: String(row.code),
+      label: `${row.name}（${row.code}）`,
+    });
+    return {
+      items: matches.slice(0, 50).map(option),
+      selected: selected.map(option),
+      hasMore: matches.length > 50,
+    };
+  }
   const people = input.kind === "user";
   const table = people ? "users" : "organization_unit";
   const code = people ? "username" : "code";

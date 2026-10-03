@@ -1656,7 +1656,7 @@ export const appRouter = router({
       .input(
         z.object({
           workflowId: z.string().min(8).max(64),
-          kind: z.enum(["user", "department"]),
+          kind: z.enum(["user", "department", "role"]),
           query: z.string().max(100),
           selectedIds: z.array(z.string().min(1).max(64)).max(100),
         })
