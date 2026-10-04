@@ -1,4 +1,6 @@
 import { orderOperateApprovers } from "../shared/operate-approval-editor";
+import { getRunApprovalProgress } from "./run-approval-progress";
+import type { RunApprovalGroup } from "../shared/run-approval-progress";
 import {
   assertTaskFormSchema,
   validateFormSubmission,
@@ -359,6 +361,7 @@ export type WorkflowRunDetail = {
   nodeRuns: mysql.RowDataPacket[];
   stateTransitions: mysql.RowDataPacket[];
   milestones: mysql.RowDataPacket[];
+  approvalGroups: RunApprovalGroup[];
   [key: string]: unknown;
 };
 export const WORKFLOW_RUN_STATUSES = [
@@ -4593,6 +4596,7 @@ export async function getWorkflowRun(
     nodeRuns: nodeRows,
     stateTransitions: transitionRows,
     milestones: milestoneRows,
+    approvalGroups: viewerUserId && nodeRows.some(node => node.nodeType === "operate") ? await getRunApprovalProgress(runId) : [],
   };
 }
 

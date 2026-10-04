@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Include measured read-only participant labels (1357.07 KiB); chunk and gzip limits remain unchanged.
-const maxTotalBytes = 1_358 * 1024;
+// Include measured approval progress UI (1358.20 KiB); chunk and gzip limits remain unchanged.
+const maxTotalBytes = 1_359 * 1024;
 const maxTotalGzipBytes = 400 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

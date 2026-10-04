@@ -1,4 +1,6 @@
 import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
+import { RunApprovalProgress } from "./RunApprovalProgress";
+import type { RunApprovalGroup } from "@shared/run-approval-progress";
 import { formatRunStatus, runStatusSummary } from "@shared/run-status-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -839,6 +841,17 @@ export default function RunCenter({
                       </span>
                     </summary>
                     <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
+                      {runDetail?.approvalGroups
+                        ?.filter(
+                          (group: RunApprovalGroup) =>
+                            group.nodeId === node.nodeId
+                        )
+                        .map((group: RunApprovalGroup) => (
+                          <RunApprovalProgress
+                            key={group.nodeId}
+                            group={group}
+                          />
+                        ))}
                       <RunPayloadDetails title="输入" value={node.inputJson} />
                       <RunPayloadDetails title="输出" value={node.outputJson} />
                       <RunPayloadDetails title="错误" value={node.errorJson} />

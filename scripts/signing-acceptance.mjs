@@ -258,6 +258,23 @@ try {
       tasks.push(items.find(item => item.workflowId === workflow.id));
     }
     assert.equal(new Set(tasks.map(item => item.id)).size, participants.length);
+    if (!transfer) {
+      const waitingRun = await admin.request("workflow.runDetail", {
+        runId: tasks[0].runId,
+      });
+      const group = waitingRun.approvalGroups.find(
+        group => group.nodeId === "approve"
+      );
+      assert.equal(group.total, participants.length);
+      assert.equal(group.required, preview.requiredApprovals);
+      assert.equal(group.approved, 0);
+      assert.equal(group.participants.length, participants.length);
+      assert.ok(
+        group.participants.every(
+          person => person.name && person.status === "pending"
+        )
+      );
+    }
     createdRuns.add(tasks[0].runId);
     if (transfer) {
       const source = tasks[0];
@@ -551,6 +568,11 @@ try {
       "run completion"
     );
     assert.equal(run.status, "success");
+    const completedGroup = run.approvalGroups.find(
+      group => group.nodeId === "approve"
+    );
+    assert.equal(completedGroup.approved, mode === "orSignFor" ? 1 : required);
+    assert.equal(completedGroup.rejected, mode === "orSignFor" ? 1 : 0);
     assert.equal(
       run.nodeRuns.filter(item => item.nodeId === "end").length,
       1,
