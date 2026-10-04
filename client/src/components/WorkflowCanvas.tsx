@@ -1,4 +1,6 @@
 import { OperateApprovalEditor } from "./OperateApprovalEditor";
+import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
+import { isDataflowFieldList } from "@shared/dataflow-field-list";
 import { OPERATE_CONFIG_GROUPS } from "@shared/operate-config-groups";
 import {
   addEdge,
@@ -1707,7 +1709,14 @@ function StructuredValueEditor({
         {field.required && <i className="mr-1 not-italic text-red-500">*</i>}
         {field.label}
       </legend>
-      {isSpecializedList ? (
+      {isDataflowFieldList(nodeKind, field.key) ? (
+        <DataflowFieldListEditor
+          value={value}
+          disabled={disabled}
+          label={field.label}
+          onChange={onChange}
+        />
+      ) : isSpecializedList ? (
         <div className="grid gap-2">
           {list.map((item, index) => (
             <StructuredListRow
