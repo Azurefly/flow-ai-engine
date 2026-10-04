@@ -2058,14 +2058,28 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   udf: {
     type: "udf",
     label: "UDF",
-    description: "引用已审核的项目函数元数据",
+    description: "执行已审核的项目内置数据处理函数",
     flowTypes: ["data"],
-    defaultConfig: { udfId: "" },
+    defaultConfig: { udfId: "", inputField: "", outputField: "" },
     fields: [
       {
         key: "udfId",
         label: "UDF",
-        help: "项目隔离且已审核的 UDF 标识。",
+        help: "选择已审核且绑定内置处理实现的项目函数。",
+        kind: "text",
+        required: true,
+      },
+      {
+        key: "inputField",
+        label: "输入字段",
+        help: "待处理的文本字段；null 保持为空。",
+        kind: "text",
+        required: true,
+      },
+      {
+        key: "outputField",
+        label: "输出字段",
+        help: "写入处理结果；与输入字段相同时替换原值。",
         kind: "text",
         required: true,
       },
@@ -2891,6 +2905,8 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       break;
     case "udf":
       assertString(config.udfId, "UDF 节点必须选择项目函数。");
+      assertString(config.inputField, "函数节点必须配置输入字段。");
+      assertString(config.outputField, "函数节点必须配置输出字段。");
       break;
     case "sink":
       if (String(config.writeMode ?? "audit_only") !== "audit_only")

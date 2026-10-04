@@ -1,5 +1,6 @@
 import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { checkDataflowQuality } from "./dataflow-quality";
+import { executeBuiltinDataFunction } from "./dataflow-builtin-function";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
@@ -1571,14 +1572,15 @@ async function runDataflowDefinition(
       } else if (String(node.type) === "udf") {
         const udfId = String(config.udfId ?? "");
         const [udfs] = await db().query<mysql.RowDataPacket[]>(
-          "SELECT name,udfType FROM data_udf WHERE id=? AND projectId=? AND status='approved' LIMIT 1",
+          "SELECT name,udfType,artifactRef FROM data_udf WHERE id=? AND projectId=? AND status='approved' LIMIT 1",
           [udfId, projectId]
         );
         if (!udfs[0]) throw new Error("UDF 不存在、未审核或不属于当前项目。 ");
+        if (udfs[0].udfType !== "javascript") throw new Error("此函数类型尚未配置执行器，不能执行数据转换。");
         output = {
-          rows: rowsFromInput(inputs),
+          rows: executeBuiltinDataFunction(rowsFromInput(inputs), String(udfs[0].artifactRef ?? ""), String(config.inputField ?? ""), String(config.outputField ?? "")),
           udf: { name: udfs[0].name, type: udfs[0].udfType },
-          execution: "metadata_safe",
+          execution: "builtin_transform",
         };
       } else if (String(node.type) === "quality_gate") {
         const rows = rowsFromInput(inputs);

@@ -1,3 +1,4 @@
+import { builtinDataFunctions } from "@shared/builtin-data-functions";
 import {
   dataflowResultColumns,
   dataflowResultPage,
@@ -92,6 +93,7 @@ export default function DataResourceCenter({
     udfType: "javascript" as "sql" | "javascript" | "python" | "jar",
     description: "",
     returnType: "unknown",
+    artifactRef: "builtin:trim",
   });
   const [tagName, setTagName] = useState("");
   const [pluginForm, setPluginForm] = useState({
@@ -130,6 +132,7 @@ export default function DataResourceCenter({
         udfType: "javascript",
         description: "",
         returnType: "unknown",
+        artifactRef: "builtin:trim",
       });
       invalidate();
       toast.success("UDF 元数据已登记，需审核后可被数据流引用。");
@@ -635,7 +638,7 @@ export default function DataResourceCenter({
         <section className="grid min-w-0 gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
             title="注册 UDF"
-            description="登记函数元数据；数据流仅允许引用已审核 UDF，运行时不执行任意上传代码。"
+            description="绑定内置实现并审核后可执行数据转换；其他类型目前仅登记元数据，尚不能执行。"
             onSubmit={() =>
               createUdf.mutateAsync({
                 projectId,
@@ -643,6 +646,10 @@ export default function DataResourceCenter({
                 udfType: udfForm.udfType,
                 description: udfForm.description || undefined,
                 returnType: udfForm.returnType || undefined,
+                artifactRef:
+                  udfForm.udfType === "javascript"
+                    ? udfForm.artifactRef
+                    : undefined,
               })
             }
             pending={createUdf.isPending}
@@ -674,6 +681,24 @@ export default function DataResourceCenter({
                 <option value="jar">JAR</option>
               </select>
             </ResourceField>
+            {udfForm.udfType === "javascript" && (
+              <ResourceField label="处理实现">
+                <select
+                  aria-label="函数处理实现"
+                  className="h-9 w-full rounded border border-border bg-card px-2 text-sm"
+                  value={udfForm.artifactRef}
+                  onChange={event =>
+                    setUdfForm({ ...udfForm, artifactRef: event.target.value })
+                  }
+                >
+                  {builtinDataFunctions.map(item => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </ResourceField>
+            )}
             <ResourceField label="函数说明">
               <Input
                 placeholder="说明函数用途和适用范围"
