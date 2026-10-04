@@ -87,7 +87,7 @@ try {
         "end",
         "end",
         "结束",
-        { resultTemplate: { route: "approved" } },
+        { resultTemplate: { route: "{{nodes.operate.result.outcome}}" } },
         900
       ),
     ];
@@ -141,19 +141,10 @@ try {
         edge("r-e", "rejected", "end"),
       ];
     } else {
-      nodes.push(
-        node(
-          "rejected-end",
-          "end",
-          "拒绝终点",
-          { resultTemplate: { route: "rejected" } },
-          900
-        )
-      );
       edges = [
         edge("s-o", "start", "operate"),
         edge("o-e", "operate", "end", "approved"),
-        edge("o-r", "operate", "rejected-end", "rejected"),
+        edge("o-r", "operate", "end", "rejected"),
       ];
     }
     const workflow = await admin.request(
