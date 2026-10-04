@@ -1,4 +1,5 @@
 import { readDataflowFieldNames } from "../shared/dataflow-field-list";
+import { checkDataflowQuality } from "./dataflow-quality";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
@@ -1586,26 +1587,9 @@ async function runDataflowDefinition(
           1,
           Math.max(0, Number(config.maxNullRate ?? 1))
         );
-        const totalCells = rows.reduce(
-          (sum, row) => sum + Object.keys(row).length,
-          0
-        );
-        const nullCells = rows.reduce(
-          (sum, row) =>
-            sum +
-            Object.values(row).filter(
-              value => value === null || value === undefined || value === ""
-            ).length,
-          0
-        );
-        const nullRate = totalCells ? nullCells / totalCells : 0;
-        if (rows.length < minRows || nullRate > maxNullRate)
-          throw new Error(
-            `质量门失败：行数 ${rows.length}/${minRows}，空值率 ${nullRate.toFixed(4)}/${maxNullRate}。`
-          );
         output = {
           rows,
-          quality: { passed: true, rowCount: rows.length, nullRate },
+          quality: checkDataflowQuality(rows, minRows, maxNullRate),
           operation: "quality_gate",
         };
       } else if (String(node.type) === "sink") {

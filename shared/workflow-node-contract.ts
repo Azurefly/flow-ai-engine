@@ -2015,7 +2015,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "maxNullRate",
         label: "最大空值率",
-        help: "0 至 1。",
+        help: "0 至 1。按全量数据的字段集合统计；缺失字段、null 和空字符串均计为空值。",
         kind: "number",
       },
     ],

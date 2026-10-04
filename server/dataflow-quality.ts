@@ -1,0 +1,24 @@
+export function checkDataflowQuality(
+  rows: Record<string, unknown>[],
+  minRows: number,
+  maxNullRate: number
+) {
+  const fields = new Set<string>();
+  rows.forEach(row => Object.keys(row).forEach(field => fields.add(field)));
+  if (rows.length && !fields.size)
+    throw new Error("质量门失败：数据行没有可用字段。");
+  const columns = Array.from(fields);
+  const totalCells = rows.length * columns.length;
+  let nullCells = 0;
+  for (const row of rows)
+    for (const field of columns) {
+      if (row[field] === null || row[field] === undefined || row[field] === "")
+        nullCells++;
+    }
+  const nullRate = totalCells ? nullCells / totalCells : 0;
+  if (rows.length < minRows || nullRate > maxNullRate)
+    throw new Error(
+      `质量门失败：行数 ${rows.length}/${minRows}，空值率 ${nullRate.toFixed(4)}/${maxNullRate}。`
+    );
+  return { passed: true, rowCount: rows.length, nullRate };
+}
