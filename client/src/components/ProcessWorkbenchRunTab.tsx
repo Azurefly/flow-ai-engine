@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { RunDetailContent } from "./WorkflowGovernanceRunDetail";
 import { AlertTriangle, Loader2, RotateCcw, X } from "lucide-react";
+import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 
 export function ProcessWorkbenchRunTab({
   runId,
@@ -14,7 +15,18 @@ export function ProcessWorkbenchRunTab({
   onClose: () => void;
   onReturn: () => void;
 }) {
-  const detail = trpc.workflow.runDetail.useQuery({ runId }, { retry: false });
+  const detail = trpc.workflow.runDetail.useQuery(
+    { runId },
+    {
+      retry: false,
+      refetchInterval: query =>
+        runDetailRefreshInterval(
+          query.state.data?.status,
+          Boolean(query.state.error)
+        ),
+      refetchIntervalInBackground: false,
+    }
+  );
   const run = detail.data as any;
   const workflowName =
     typeof run?.workflowName === "string" ? run.workflowName : "";
@@ -81,9 +93,31 @@ export function ProcessWorkbenchRunTab({
             实例编号：{runId}
           </p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>
-          返回工作台
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            disabled={detail.isFetching}
+            onClick={() => void detail.refetch()}
+          >
+            <RotateCcw
+              size={14}
+              className={detail.isFetching ? "animate-spin" : undefined}
+            />
+            刷新实例详情
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="min-h-11"
+            onClick={onClose}
+          >
+            返回工作台
+          </Button>
+        </div>
       </header>
       {detail.isLoading ? (
         <div

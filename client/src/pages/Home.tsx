@@ -1,4 +1,5 @@
 import { roleExpiryInput } from "@shared/role-expiry";
+import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -577,6 +578,12 @@ function FlowConsole({
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, {
     enabled: Boolean(selectedRunId && selectedWorkflow),
     retry: false,
+    refetchInterval: query =>
+      runDetailRefreshInterval(
+        query.state.data?.status,
+        Boolean(query.state.error)
+      ),
+    refetchIntervalInBackground: false,
   });
   const accessInput = useMemo(
     () => ({ id: selectedId ?? "00000000" }),

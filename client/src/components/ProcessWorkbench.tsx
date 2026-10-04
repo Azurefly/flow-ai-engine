@@ -289,6 +289,7 @@ export default function ProcessWorkbench() {
     }
   );
   const invalidate = (refreshAssignees = true) => {
+    void utils.workflow.runDetail.invalidate();
     void utils.task.dashboard.invalidate();
     void utils.task.list.invalidate();
     void utils.task.page.invalidate();

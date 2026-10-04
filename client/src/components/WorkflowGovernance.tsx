@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { normalizeWorkflowRunSearchQuery } from "@shared/workflow-run-search";
+import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import {
   GitCompareArrows,
   History,
@@ -119,6 +120,12 @@ export default function WorkflowGovernance({
     {
       enabled: Boolean(selectedRunId) && activeSection === "runs",
       retry: false,
+      refetchInterval: query =>
+        runDetailRefreshInterval(
+          query.state.data?.status,
+          Boolean(query.state.error)
+        ),
+      refetchIntervalInBackground: false,
     }
   );
   const versionItems = (versions.data ?? []) as any[];
