@@ -7,6 +7,7 @@ ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 COMPOSE_FILE="$ROOT/compose.yaml"
 COMPOSE_ENV_FILE="${FLOW_COMPOSE_ENV_FILE:-/opt/flow-ai-engine/source/.env}"
 SECRET_DIR="${FLOW_SECRET_DIR:-/opt/flow-ai-engine/secrets}"
+ASSET_CACHE_DIR="${FLOW_ASSET_CACHE_DIR:-/opt/flow-ai-engine/runtime-assets}"
 BACKUP_ROOT="${FLOW_BACKUP_ROOT:-$(dirname "$ROOT")/backups}"
 IMAGE_NAME="flow-ai-engine:local"
 APP_SERVICE="app"
@@ -65,6 +66,7 @@ compose() {
     BUILD_TIME="$BUILD_TIME" \
     IMAGE_ID="${IMAGE_ID:-not-injected}" \
     FLOW_SECRET_DIR="$SECRET_DIR" \
+    FLOW_ASSET_CACHE_DIR="$ASSET_CACHE_DIR" \
     docker compose \
       --project-directory "$ROOT" \
       --env-file "$COMPOSE_ENV_FILE" \
@@ -207,6 +209,12 @@ IMAGE_ID="$(docker_sudo image inspect --format '{{.Id}}' "$IMAGE_NAME")"
 [[ "$IMAGE_ID" =~ ^sha256:[a-f0-9]{64}$ ]] || die "Docker returned an invalid image ID"
 docker_sudo image tag "$IMAGE_ID" "$RELEASE_TAG"
 
+if [[ -n "$APP_BEFORE_ID" ]]; then
+  sudo -n bash "$SCRIPT_DIR/retain-static-assets.sh" "$APP_BEFORE_ID" "$ASSET_CACHE_DIR"
+else
+  [[ "$ASSET_CACHE_DIR" == /* && "${ASSET_CACHE_DIR##*/}" == runtime-assets ]] || die "Invalid asset cache directory"
+  sudo -n install -d -m 0755 -- "$ASSET_CACHE_DIR"
+fi
 compose up -d --no-deps --force-recreate "$APP_SERVICE"
 if ! wait_for_app_health; then
   printf 'New app image did not become healthy within %s seconds.\n' "$HEALTH_TIMEOUT_SECONDS" >&2

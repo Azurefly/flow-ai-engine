@@ -60,6 +60,7 @@ services:
       WORKFLOW_WORKER_ENABLED: ${WORKFLOW_WORKER_ENABLED:-true}
       DATA_CONNECTOR_ALLOWED_HOSTS: ${DATA_CONNECTOR_ALLOWED_HOSTS:-mysql}
       FLOW_SECRET_FILE_DIR: /run/flow-secrets
+      FLOW_RETAINED_ASSETS_DIR: /run/flow-assets
     depends_on:
       mysql:
         condition: service_healthy
@@ -67,6 +68,10 @@ services:
       - "${FLOW_HTTP_PORT:-1180}:3000"
     read_only: true
     volumes:
+      - type: bind
+        source: ${FLOW_ASSET_CACHE_DIR:-/opt/flow-ai-engine/runtime-assets}
+        target: /run/flow-assets
+        read_only: true
       - type: bind
         source: ${FLOW_SECRET_DIR:-/opt/flow-ai-engine/secrets}
         target: /run/flow-secrets
