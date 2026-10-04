@@ -1,3 +1,4 @@
+import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
@@ -1363,9 +1364,7 @@ async function runDataflowDefinition(
       else if (["source", "data_source", "table"].includes(String(node.type))) {
         const assetId = String(config.assetId ?? "");
         const asset = await readConnectorAsset(projectId, assetId, {
-          columns: Array.isArray(config.columns)
-            ? config.columns.map(String)
-            : undefined,
+          columns: readDataflowFieldNames(config.columns, "读取字段"),
           limit: dataflowReadLimit(config.limit, 200),
         });
         output = {
@@ -1401,9 +1400,7 @@ async function runDataflowDefinition(
         String(node.type) === "project"
       ) {
         let rows = rowsFromInput(inputs);
-        const columns = Array.isArray(config.columns)
-          ? config.columns.map(column => String(column))
-          : [];
+        const columns = readDataflowFieldNames(config.columns, "输出字段");
         const mappings = Array.isArray(config.fields) ? config.fields : [];
         if (mappings.length)
           rows = rows.map(row =>
@@ -1535,9 +1532,7 @@ async function runDataflowDefinition(
               String(row[String(config.filterField)]) ===
               String(config.filterValue)
           );
-        const columns = Array.isArray(config.columns)
-          ? config.columns.map(column => String(column))
-          : [];
+        const columns = readDataflowFieldNames(config.columns, "输出字段");
         if (columns.length)
           rows = rows.map(row =>
             Object.fromEntries(columns.map(column => [column, row[column]]))

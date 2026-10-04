@@ -78,7 +78,12 @@ const asset = await admin.request(
 );
 const specs = [
   ["start", "start", {}],
-  ["source", "source", { assetId: asset.id, limit: 100 }],
+  [
+    "source",
+    "source",
+    { assetId: asset.id, limit: 100, columns: [" key ", " amount "] },
+  ],
+  ["map", "map", { columns: [" key ", " amount "], limit: 100 }],
   ["dedup", "deduplicate", { keys: [" key "] }],
   [
     "summary",
@@ -105,13 +110,11 @@ const definition = {
     config,
     position: { x: index * 200, y: 0 },
   })),
-  edges: specs
-    .slice(1)
-    .map(([id], index) => ({
-      id: `edge-${index}`,
-      sourceNodeId: specs[index][0],
-      targetNodeId: id,
-    })),
+  edges: specs.slice(1).map(([id], index) => ({
+    id: `edge-${index}`,
+    sourceNodeId: specs[index][0],
+    targetNodeId: id,
+  })),
 };
 const workflow = await admin.request(
   "project.createWorkflow",
@@ -157,5 +160,135 @@ console.log(
     sourceRows: samples.length,
     deduplicatedRows: dedup.rowCount,
     summary: run.output.terminals[0].rows,
+  })
+);
+
+// Exercise ordered multi-input keys and left-join cardinality through the same public service.
+const leftAsset = await admin.request(
+  "data.createAsset",
+  {
+    projectId: project.id,
+    sourceId: source.id,
+    name: "左侧关联样本",
+    assetType: "dataset",
+    sample: [
+      { id: 1, amount: 10 },
+      { id: 2, amount: 20 },
+    ],
+  },
+  true
+);
+const rightAsset = await admin.request(
+  "data.createAsset",
+  {
+    projectId: project.id,
+    sourceId: source.id,
+    name: "右侧关联样本",
+    assetType: "dataset",
+    sample: [
+      { id: 1, label: "a" },
+      { id: 1, label: "b" },
+    ],
+  },
+  true
+);
+const joinNodes = [
+  ["start", "start", {}],
+  ["left", "source", { assetId: leftAsset.id, columns: [" id ", "amount"] }],
+  ["right", "source", { assetId: rightAsset.id }],
+  [
+    "join",
+    "join",
+    {
+      kind: "left",
+      leftInputNodeId: "left",
+      rightInputNodeId: "right",
+      leftKeys: [" id "],
+      rightKeys: [" id "],
+    },
+  ],
+  [
+    "summary",
+    "aggregate",
+    {
+      groupBy: [],
+      metrics: [
+        { name: "count", operation: "count" },
+        { name: "total", operation: "sum", field: "amount" },
+      ],
+    },
+  ],
+  ["end", "end", {}],
+];
+const pairs = [
+  ["start", "left"],
+  ["start", "right"],
+  ["left", "join"],
+  ["right", "join"],
+  ["join", "summary"],
+  ["summary", "end"],
+];
+const joinDefinition = {
+  ...definition,
+  nodes: joinNodes.map(([id, type, config], index) => ({
+    id,
+    type,
+    name: id,
+    config,
+    position: { x: index * 200, y: 0 },
+  })),
+  edges: pairs.map(([sourceNodeId, targetNodeId], index) => ({
+    id: `join-edge-${index}`,
+    sourceNodeId,
+    targetNodeId,
+  })),
+};
+const joinWorkflow = await admin.request(
+  "project.createWorkflow",
+  {
+    projectId: project.id,
+    name: `字段规范化双输入关联测试_${tag}`,
+    flowType: "data",
+    definition: joinDefinition,
+  },
+  true
+);
+await admin.request(
+  "project.auditWorkflow",
+  {
+    projectId: project.id,
+    workflowId: joinWorkflow.id,
+    auditStatus: "approved",
+  },
+  true
+);
+await admin.request("workflow.publish", { id: joinWorkflow.id }, true);
+const joinStarted = await admin.request(
+  "data.run",
+  { projectId: project.id, workflowId: joinWorkflow.id },
+  true
+);
+const joinRun = await waitFor(
+  () =>
+    admin.request("data.runDetail", {
+      projectId: project.id,
+      runId: joinStarted.runId,
+    }),
+  r => ["success", "failed"].includes(r.status),
+  "join finished"
+);
+assert.equal(joinRun.status, "success", JSON.stringify(joinRun.error));
+const joined = joinRun.nodeRuns.find(n => n.nodeId === "join");
+assert.equal(joined.rowCount, 3);
+assert.equal(joined.output.rows.find(r => r.id === 2).right_id, null);
+assert.deepEqual(joinRun.output.terminals[0].rows, [{ count: 3, total: 40 }]);
+console.log(
+  JSON.stringify({
+    projectId: project.id,
+    workflowId: joinWorkflow.id,
+    runId: joinRun.id,
+    status: joinRun.status,
+    joinedRows: joined.rowCount,
+    summary: joinRun.output.terminals[0].rows,
   })
 );

@@ -1,3 +1,4 @@
+import { readDataflowFieldNames } from "./dataflow-field-list";
 export type AggregateMetric = {
   name: string;
   operation: "count" | "sum" | "min" | "max" | "avg";
@@ -11,9 +12,7 @@ export function readAggregateConfig(config: Record<string, unknown>) {
     !config.metrics.length
   )
     throw new Error("聚合节点需配置分组字段数组和至少一个指标。");
-  const groupBy = config.groupBy.map(field => String(field).trim());
-  if (groupBy.some(field => !field) || new Set(groupBy).size !== groupBy.length)
-    throw new Error("聚合分组字段不能为空或重复。");
+  const groupBy = readDataflowFieldNames(config.groupBy, "聚合分组字段");
   const names = new Set(groupBy);
   const metrics = config.metrics.map(value => {
     if (!value || typeof value !== "object" || Array.isArray(value))

@@ -31,6 +31,15 @@ describe("数据读取行数", () => {
     }
     expect(() =>
       validateNodeConfig("source", { assetId: "asset", columns: [""] })
-    ).toThrow("字段名数组");
+    ).toThrow("空白项");
+    expect(() =>
+      validateNodeConfig("source", { assetId: "asset", columns: [1] })
+    ).toThrow("非文本");
+    expect(() =>
+      validateNodeConfig("source", {
+        assetId: "asset",
+        columns: ["id", " id "],
+      })
+    ).toThrow("重复");
   });
 });

@@ -17,6 +17,12 @@ const metrics = [
 ];
 
 describe("数据流真实行计算", () => {
+  it("聚合分组拒绝非字符串字段名，不能转换成不存在的字段后合并记录", () => {
+    for (const groupBy of [[1], [{}], [null], ["team", " team "]])
+      expect(() =>
+        aggregateDataflowRows([{ team: "a" }], { groupBy, metrics })
+      ).toThrow();
+  });
   it("业务键忽略对象字段顺序，保留首条完整记录且区分类型和数组顺序", () => {
     const first = { key: { a: 1, b: 2 }, version: "first" };
     expect(

@@ -2,6 +2,16 @@ import { describe, expect, it } from "vitest";
 import { joinDataflowRows } from "./dataflow-join-rows";
 const config = { kind: "left", leftKeys: ["id"], rightKeys: ["id"] };
 describe("数据关联结果", () => {
+  it("规范化关联字段名并拒绝空白、重复、异常类型与不等长键", () => {
+    expect(
+      joinDataflowRows([{ id: 1 }], [{ id: 1 }], {
+        ...config,
+        leftKeys: [" id "],
+      })
+    ).toEqual([{ id: 1, right_id: 1 }]);
+    for (const leftKeys of [[" "], [1], [{}], ["id", " id "], ["id", "other"]])
+      expect(() => joinDataflowRows([], [], { ...config, leftKeys })).toThrow();
+  });
   it("空值及缺失键不匹配，左连接补空字段，内连接丢弃未匹配行", () => {
     const left = [{ id: null }, {}, { id: 1 }];
     const right = [

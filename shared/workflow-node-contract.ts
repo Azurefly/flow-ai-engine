@@ -1,3 +1,4 @@
+import { readDataflowFieldNames } from "./dataflow-field-list";
 import { readDeduplicateKeys } from "./dataflow-deduplicate-config";
 import { normalizeReferenceOperateConfig } from "./reference-operate-config";
 import { normalizeReferenceRouterConfig } from "./reference-router-config";
@@ -2814,14 +2815,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
     case "source":
     case "table":
       dataflowReadLimit(config.limit, 200);
-      if (
-        config.columns !== undefined &&
-        (!Array.isArray(config.columns) ||
-          config.columns.some(
-            field => typeof field !== "string" || !field.trim()
-          ))
-      )
-        throw new Error("读取字段必须是非空字段名数组。");
+      readDataflowFieldNames(config.columns, "读取字段");
       assertString(config.assetId, "资源节点必须选择项目数据资源。");
       break;
     case "filter":
@@ -2830,6 +2824,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
     case "map":
       if (!Array.isArray(config.columns))
         throw new Error("字段映射节点 columns 必须是数组。");
+      readDataflowFieldNames(config.columns, "输出字段");
       assertOptionalNumber(
         config.limit,
         "字段映射节点行数限制必须为正数。",
@@ -2849,12 +2844,17 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         String(config.rightInputNodeId).trim()
       )
         throw new Error("关联节点左右输入不能选择同一个节点。");
-      if (
-        !Array.isArray(config.leftKeys) ||
-        !Array.isArray(config.rightKeys) ||
-        !config.leftKeys.length ||
-        config.leftKeys.length !== config.rightKeys.length
-      )
+      const leftKeys = readDataflowFieldNames(
+        config.leftKeys,
+        "关联左键",
+        true
+      );
+      const rightKeys = readDataflowFieldNames(
+        config.rightKeys,
+        "关联右键",
+        true
+      );
+      if (leftKeys.length !== rightKeys.length)
         throw new Error("关联节点左右键必须是等长非空数组。");
       break;
     case "union":

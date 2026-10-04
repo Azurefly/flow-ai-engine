@@ -23,3 +23,16 @@ export function fieldListIssue(value: unknown): string | null {
   if (new Set(names).size !== names.length) return "字段名称不能重复。";
   return null;
 }
+
+export function readDataflowFieldNames(
+  value: unknown,
+  label: string,
+  required = false
+): string[] {
+  const fields = value === undefined && !required ? [] : value;
+  const issue = fieldListIssue(fields);
+  if (issue) throw new Error(`${label}：${issue}`);
+  if (required && !(fields as string[]).length)
+    throw new Error(`${label}不能为空。`);
+  return (fields as string[]).map(field => field.trim());
+}

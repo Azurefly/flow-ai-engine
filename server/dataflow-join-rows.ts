@@ -1,3 +1,4 @@
+import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { maxDataflowDatasetRows } from "./dataflow-dataset-rows";
 
 type Row = Record<string, unknown>;
@@ -8,8 +9,10 @@ export function joinDataflowRows(
   config: Record<string, unknown>,
   limit = maxDataflowDatasetRows
 ) {
-  const leftKeys = (config.leftKeys as string[]) ?? [];
-  const rightKeys = (config.rightKeys as string[]) ?? [];
+  const leftKeys = readDataflowFieldNames(config.leftKeys, "关联左键", true);
+  const rightKeys = readDataflowFieldNames(config.rightKeys, "关联右键", true);
+  if (leftKeys.length !== rightKeys.length)
+    throw new Error("关联节点左右键必须是等长非空数组。");
   const prefix = String(config.rightPrefix ?? "right_");
   const leftFields = new Set(left.flatMap(row => Object.keys(row)));
   const rightFields = new Set(right.flatMap(row => Object.keys(row)));

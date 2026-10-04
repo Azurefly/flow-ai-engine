@@ -1,5 +1,21 @@
 import { expect, it } from "vitest";
-import { fieldListIssue, isDataflowFieldList } from "./dataflow-field-list";
+import {
+  fieldListIssue,
+  isDataflowFieldList,
+  readDataflowFieldNames,
+} from "./dataflow-field-list";
+it("执行读取与界面提示使用同一字段规则，去掉首尾空格且拒绝隐式类型转换", () => {
+  expect(readDataflowFieldNames([" id ", "amount"], "读取字段")).toEqual([
+    "id",
+    "amount",
+  ]);
+  expect(readDataflowFieldNames(undefined, "读取字段")).toEqual([]);
+  for (const value of [[" "], ["id", " id "], [1], [{}], null])
+    expect(() => readDataflowFieldNames(value, "读取字段")).toThrow("读取字段");
+  expect(() => readDataflowFieldNames([], "关联左键", true)).toThrow(
+    "不能为空"
+  );
+});
 it("只为数据字段名称列表提供文本编辑，不误替换结构化配置", () => {
   for (const [node, key] of [
     ["deduplicate", "keys"],
