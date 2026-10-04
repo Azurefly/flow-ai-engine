@@ -77,3 +77,15 @@ describe("数据关联结果", () => {
     ).toThrow("执行上限");
   });
 });
+
+it("对象关联键忽略嵌套属性顺序，但保持数组顺序与值类型", () => {
+  const left = [{ id: { a: 1, b: { x: 2, y: [1, "2"] } } }];
+  const right = [
+    { id: { b: { y: [1, "2"], x: 2 }, a: 1 }, label: "matched" },
+    { id: { a: 1, b: { x: 2, y: ["2", 1] } }, label: "wrong-order" },
+    { id: { a: 1, b: { x: 2, y: [1, 2] } }, label: "wrong-type" },
+  ];
+  expect(joinDataflowRows(left, right, { ...config, kind: "inner" })).toEqual([
+    { ...left[0], right_id: right[0].id, label: "matched" },
+  ]);
+});

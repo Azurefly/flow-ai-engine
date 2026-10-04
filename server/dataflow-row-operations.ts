@@ -1,17 +1,7 @@
+import { canonicalValue } from "./dataflow-key-value";
 import { readAggregateConfig } from "../shared/dataflow-aggregate-config";
 import { readDeduplicateKeys } from "../shared/dataflow-deduplicate-config";
 type Row = Record<string, unknown>;
-
-function canonicalValue(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(canonicalValue);
-  if (value && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, canonicalValue(item)])
-    );
-  return value;
-}
 
 export function distinctDataflowRows(rows: Row[]) {
   const seen = new Set<string>();

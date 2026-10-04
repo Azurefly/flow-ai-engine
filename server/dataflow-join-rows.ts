@@ -1,3 +1,4 @@
+import { canonicalValue } from "./dataflow-key-value";
 import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { maxDataflowDatasetRows } from "./dataflow-dataset-rows";
 
@@ -31,7 +32,7 @@ export function joinDataflowRows(
     const values = keys.map(field => row[field]);
     return values.some(value => value === null || value === undefined)
       ? undefined
-      : JSON.stringify(values);
+      : JSON.stringify(canonicalValue(values));
   };
   const index = new Map<string, Row[]>();
   for (const row of right) {

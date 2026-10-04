@@ -172,11 +172,11 @@ const leftAsset = await admin.request(
     name: "左侧关联样本",
     assetType: "dataset",
     schema: [
-      { name: "id", type: "number" },
+      { name: "id", type: "json" },
       { name: "amount", type: "number" },
     ],
     sample: [
-      { id: 1, amount: 10 },
+      { id: { a: 1, nested: { x: 2, y: [1, "2"] } }, amount: 10 },
       { id: 2, amount: 20 },
     ],
   },
@@ -190,12 +190,12 @@ const rightAsset = await admin.request(
     name: "右侧关联样本",
     assetType: "dataset",
     schema: [
-      { name: "id", type: "number" },
+      { name: "id", type: "json" },
       { name: "label", type: "string" },
     ],
     sample: [
-      { id: 1, label: "a" },
-      { id: 1, label: "b" },
+      { id: { nested: { y: [1, "2"], x: 2 }, a: 1 }, label: "a" },
+      { id: { a: 1, nested: { x: 2, y: [1, "2"] } }, label: "b" },
     ],
   },
   true
