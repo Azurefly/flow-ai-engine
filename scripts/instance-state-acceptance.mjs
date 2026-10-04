@@ -59,8 +59,13 @@ const edge = (id, sourceNodeId, targetNodeId, sourceHandle) => ({
   ...(sourceHandle ? { sourceHandle } : {}),
 });
 try {
-  for (const flowType of ["control", "state"]) {
-    const name = `状态分层测试_${flowType}_${tag}`;
+  for (const [flowType, outcome] of [
+    ["control", "approved"],
+    ["control", "rejected"],
+    ["state", "approved"],
+    ["state", "rejected"],
+  ]) {
+    const name = `状态分层测试_${flowType}_${outcome}_${tag}`;
     const nodes = [
       node("start", "start", "开始", { initialVariables: {} }, 0),
       node(
@@ -178,7 +183,7 @@ try {
       {
         workflowId: workflow.id,
         input: {},
-        idempotencyKey: `instance-state-${flowType}-${tag}`,
+        idempotencyKey: `instance-state-${flowType}-${outcome}-${tag}`,
       },
       true
     );
@@ -252,14 +257,61 @@ try {
       assert.equal(listed.stateCode, null);
       assert.equal(detail.stateTransitions.length, 0);
     }
-    const completed = await admin.request(
-      "task.execute",
-      {
-        taskId: task.id,
-        result: { decision: "approved", outcome: "approved" },
-      },
-      true
+    await assert.rejects(() =>
+      admin.request(
+        "task.execute",
+        {
+          taskId: task.id,
+          result: { decision: "invalid", outcome: "not_configured" },
+        },
+        true
+      )
     );
+    const unchanged = await admin.request("workflow.runDetail", {
+      runId: task.runId,
+    });
+    assert.equal(unchanged.currentStateName, expected);
+    assert.equal(unchanged.stateVersion, flowType === "state" ? 1 : 0);
+    if (outcome === "rejected")
+      await assert.rejects(
+        () =>
+          admin.request(
+            "task.execute",
+            {
+              taskId: task.id,
+              result: { decision: "rejected", outcome: "rejected" },
+            },
+            true
+          ),
+        /处理意见/
+      );
+    const complete = () =>
+      admin.request(
+        "task.execute",
+        {
+          taskId: task.id,
+          result: {
+            decision: outcome,
+            outcome,
+            comment: "隔离流程分支验收意见",
+          },
+        },
+        true
+      );
+    let completed;
+    if (outcome === "approved") {
+      const attempts = await Promise.allSettled([complete(), complete()]);
+      assert.equal(
+        attempts.filter(item => item.status === "fulfilled").length,
+        1,
+        "Concurrent completion must advance once"
+      );
+      assert.equal(
+        attempts.filter(item => item.status === "rejected").length,
+        1
+      );
+      completed = attempts.find(item => item.status === "fulfilled").value;
+    } else completed = await complete();
     assert.equal(completed.canViewRun, true);
     detail = await waitFor(
       () => admin.request("workflow.runDetail", { runId: task.runId }),
@@ -272,11 +324,43 @@ try {
       search: name,
     });
     listed = page.items.find(item => item.id === task.runId);
-    const finalExpected = flowType === "state" ? "业务已归档" : null;
+    const finalExpected =
+      flowType === "state"
+        ? outcome === "approved"
+          ? "业务已归档"
+          : "业务被拒绝"
+        : null;
     assert.equal(listed.stateName, finalExpected);
     assert.equal(detail.currentStateName, finalExpected);
     assert.equal(listed.participantStatusName, detail.participantStatusName);
     assert.equal(listed.displayStatus, "success");
+    assert.equal(listed.availableOperations.length, 0);
+    const output =
+      typeof detail.finalOutputJson === "string"
+        ? JSON.parse(detail.finalOutputJson)
+        : detail.finalOutputJson;
+    assert.equal(output.result.route, outcome);
+    assert(
+      !(
+        await admin.request("task.list", {
+          view: "todo",
+          projectId: project.id,
+        })
+      ).some(item => item.runId === task.runId)
+    );
+    if (flowType === "state") {
+      assert.equal(
+        detail.currentStateCode,
+        outcome === "approved" ? "DONE" : "REJECTED"
+      );
+      assert(
+        !detail.nodeRuns.some(
+          item =>
+            item.nodeId === (outcome === "approved" ? "rejected" : "done") &&
+            item.status === "success"
+        )
+      );
+    }
     assert.equal(detail.stateTransitions.length, flowType === "state" ? 2 : 0);
     assert.equal(detail.stateVersion, flowType === "state" ? 2 : 0);
     assert.equal(
@@ -297,13 +381,18 @@ try {
         "task.execute",
         {
           taskId: task.id,
-          result: { decision: "approved", outcome: "approved" },
+          result: {
+            decision: outcome,
+            outcome,
+            comment: "隔离流程分支验收意见",
+          },
         },
         true
       )
     );
     scenarios.push({
       flowType,
+      outcome,
       workflowId: workflow.id,
       runId: task.runId,
       listAndDetailAgree: true,
