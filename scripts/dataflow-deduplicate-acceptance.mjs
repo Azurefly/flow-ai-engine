@@ -171,6 +171,10 @@ const leftAsset = await admin.request(
     sourceId: source.id,
     name: "左侧关联样本",
     assetType: "dataset",
+    schema: [
+      { name: "id", type: "number" },
+      { name: "amount", type: "number" },
+    ],
     sample: [
       { id: 1, amount: 10 },
       { id: 2, amount: 20 },
@@ -185,6 +189,10 @@ const rightAsset = await admin.request(
     sourceId: source.id,
     name: "右侧关联样本",
     assetType: "dataset",
+    schema: [
+      { name: "id", type: "number" },
+      { name: "label", type: "string" },
+    ],
     sample: [
       { id: 1, label: "a" },
       { id: 1, label: "b" },
