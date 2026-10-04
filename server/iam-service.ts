@@ -1,3 +1,4 @@
+import { assertRoleExpiryRange } from "../shared/role-expiry";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { currentRequestId } from "./_core/http-security";
@@ -268,6 +269,7 @@ export async function recordAuthorizationAudit(input: { actorUserId?: number | n
 }
 
 export async function grantWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; grantedByUserId: number; expiresAt?: Date | null }) {
+  assertRoleExpiryRange(input.expiresAt);
   if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
   const [userRows] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE id=? AND status='active' LIMIT 1", [input.userId]);
   if (!userRows[0]) throw new Error("目标用户不存在或已停用。");
@@ -331,6 +333,7 @@ export async function listActiveUsersForWorkflowAssignment() {
 export async function assignRole(input: { userId: number; roleCode: string; scopeType: "system" | "workflow"; scopeId?: string | null; grantedByUserId: number; expiresAt?: Date | null; note?: string | null }) {
   if (input.scopeType === "system" && input.scopeId) throw new Error("系统角色不能绑定资源 ID。");
   if (input.scopeType === "workflow" && !input.scopeId) throw new Error("流程角色必须绑定流程 ID。");
+  assertRoleExpiryRange(input.expiresAt);
   if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
   await ensureIamCatalog();
   const [roleRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,scope FROM iam_role WHERE code=? LIMIT 1", [input.roleCode]);

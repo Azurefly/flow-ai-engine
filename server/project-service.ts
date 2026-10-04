@@ -1,3 +1,4 @@
+import { assertRoleExpiryRange } from "../shared/role-expiry";
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
@@ -584,6 +585,7 @@ export async function grantProjectMember(
   }
 ) {
   await requireProjectPermission(user, input.projectId, "project:manage");
+  assertRoleExpiryRange(input.expiresAt);
   if (input.expiresAt && input.expiresAt <= new Date())
     throw new Error("临时项目角色到期时间必须晚于当前时间。");
   const [accounts] = await db().query<mysql.RowDataPacket[]>(

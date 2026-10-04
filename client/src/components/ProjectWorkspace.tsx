@@ -1,3 +1,4 @@
+import { roleExpiryInput } from "@shared/role-expiry";
 import { PermissionListFeedback } from "./PermissionListFeedback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -3256,6 +3257,8 @@ function ProjectMembers({
     | null
   >(null);
 
+  const expiryError = roleExpiryInput(form.hours).error;
+
   const refreshProjectAuthorization = () =>
     Promise.all([
       utils.project.members.invalidate({ projectId }),
@@ -3520,15 +3523,18 @@ function ProjectMembers({
               className="grid gap-3 border-t border-border bg-muted p-4 lg:grid-cols-[minmax(220px,1fr)_160px_180px_auto]"
               onSubmit={event => {
                 event.preventDefault();
+                const expiry = roleExpiryInput(form.hours);
+                if (expiry.error) {
+                  toast.error(expiry.error);
+                  return;
+                }
                 const userId = Number(form.userId);
                 if (userId) {
                   grant.mutate({
                     projectId,
                     userId,
                     role: form.role,
-                    expiresAt: form.hours
-                      ? new Date(Date.now() + Number(form.hours) * 3600_000)
-                      : undefined,
+                    expiresAt: expiry.expiresAt,
                   });
                 }
               }}
@@ -3588,21 +3594,35 @@ function ProjectMembers({
                 <option value="designer">设计者</option>
                 <option value="owner">项目所有者</option>
               </select>
-              <Input
-                aria-label="有效期小时（可选）"
-                className="h-11 bg-card sm:h-9"
-                type="number"
-                min="1"
-                placeholder="有效期小时（可选）"
-                value={form.hours}
-                onChange={event =>
-                  setForm({ ...form, hours: event.target.value })
-                }
-              />
+              <div className="grid gap-1.5">
+                <Input
+                  aria-label="有效期小时（可选）"
+                  className="h-11 bg-card sm:h-9"
+                  type="number"
+                  min="1"
+                  step="1"
+                  aria-invalid={Boolean(expiryError)}
+                  aria-describedby="project-member-expiry-help"
+                  placeholder="有效期小时（可选）"
+                  value={form.hours}
+                  onChange={event =>
+                    setForm({ ...form, hours: event.target.value })
+                  }
+                />
+                <p
+                  id="project-member-expiry-help"
+                  className="text-sm text-muted-foreground"
+                  role={expiryError ? "alert" : undefined}
+                >
+                  {expiryError || "填写整数小时；留空表示长期有效。"}
+                </p>
+              </div>
               <Button
                 type="submit"
                 className="h-11 sm:h-9"
-                disabled={grant.isPending || !form.userId}
+                disabled={
+                  grant.isPending || !form.userId || Boolean(expiryError)
+                }
               >
                 <UsersRound size={15} />
                 添加可见人
