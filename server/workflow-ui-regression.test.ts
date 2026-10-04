@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_356 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_357 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 400 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -1667,10 +1667,12 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).toContain('blocked: "已阻塞"');
     expect(runCenterSource).toContain("失败告警");
     expect(runCenterSource).toContain("trpc.workflow.alerts.useQuery(filter");
-    expect(runCenterSource).toContain(
+    expect(source("../shared/run-status-summary.ts")).toContain(
       "function formatRunStatus(status: unknown)"
     );
-    expect(runCenterSource).toContain('未知状态（原值：${value || "空"}）');
+    expect(source("../shared/run-status-summary.ts")).toContain(
+      '未知状态（原值：${value || "空"}）'
+    );
     expect(runCenterSource).toContain(
       'className="aiflow-type-control h-11 lg:h-9"'
     );

@@ -1,3 +1,4 @@
+import { formatRunStatus, runStatusSummary } from "@shared/run-status-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
@@ -30,22 +31,6 @@ function decodeJson(value: unknown) {
   } catch {
     return value;
   }
-}
-
-const statusLabel: Record<string, string> = {
-  success: "成功",
-  failed: "失败",
-  running: "运行中",
-  waiting: "等待中",
-  blocked: "已阻塞",
-  queued: "排队中",
-  cancelled: "已取消",
-  terminated: "已终止",
-};
-
-function formatRunStatus(status: unknown) {
-  const value = String(status ?? "");
-  return statusLabel[value] ?? `未知状态（原值：${value || "空"}）`;
 }
 
 export default function RunCenter({
@@ -674,7 +659,7 @@ export default function RunCenter({
                   RUN {(selectedRunId ?? runDetail?.id ?? "").slice(0, 8)}
                 </p>
                 <h3 className="aiflow-type-section-title mt-1 font-semibold">
-                  {runDetail?.status === "success" ? "运行成功" : "运行详情"}
+                  运行详情
                 </h3>
               </div>
               <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
@@ -765,6 +750,23 @@ export default function RunCenter({
                   )}
               </div>
             </div>
+            {runDetail && (
+              <dl
+                aria-label="运行状态摘要"
+                className="mt-4 grid gap-3 rounded-lg bg-muted p-3 sm:grid-cols-3"
+              >
+                {runStatusSummary(runDetail).map(item => (
+                  <div key={item.label} className="min-w-0">
+                    <dt className="aiflow-type-meta text-muted-foreground">
+                      {item.label}
+                    </dt>
+                    <dd className="aiflow-type-body mt-1 break-words font-medium text-foreground">
+                      {item.value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
             {selectedRunLoading && !selectedRun ? (
               <div
                 role="status"
