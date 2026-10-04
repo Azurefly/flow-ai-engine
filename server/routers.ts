@@ -1017,6 +1017,7 @@ export const appRouter = router({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64).optional(),
           limit: z.number().int().min(1).max(200).optional(),
+          summaryOnly: z.boolean().optional(),
         })
       )
       .query(({ ctx, input }) => listDataflowRuns(ctx.user, input)),

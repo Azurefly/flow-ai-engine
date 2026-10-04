@@ -1,3 +1,4 @@
+import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StructuredResourceForm } from "@/components/StructuredResourceForm";
@@ -65,7 +66,7 @@ export default function DataResourceCenter({
   const hasActiveSchedule =
     schedules.data?.some(schedule => schedule.status === "active") ?? false;
   const runs = trpc.data.runs.useQuery(
-    { projectId, limit: 30 },
+    { projectId, limit: 30, summaryOnly: true },
     {
       enabled: tab === "flows",
       refetchInterval: query => {
@@ -930,6 +931,21 @@ function DataflowOperationList({
       .includes(keyword.trim().toLowerCase())
   );
   const expandedRun = runs.find(run => run.id === expandedRunId);
+  const detail = trpc.data.runDetail.useQuery(
+    {
+      projectId: String(expandedRun?.projectId ?? ""),
+      runId: expandedRunId ?? "",
+    },
+    {
+      enabled: Boolean(expandedRun),
+      refetchInterval: query =>
+        runDetailRefreshInterval(
+          query.state.data?.status,
+          query.state.status === "error"
+        ),
+      refetchIntervalInBackground: false,
+    }
+  );
   return (
     <section
       dataflow-run-list=""
@@ -1130,7 +1146,32 @@ function DataflowOperationList({
             <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center font-medium text-foreground">
               查看运行结果或报错信息
             </summary>
-            <DataflowRunOutput run={expandedRun} />
+            {detail.isError ? (
+              <div
+                role="alert"
+                className="mt-3 space-y-2 text-sm text-destructive"
+              >
+                <p>读取运行详情失败：{detail.error.message}</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={detail.isFetching}
+                  onClick={() => void detail.refetch()}
+                >
+                  重新读取详情
+                </Button>
+              </div>
+            ) : detail.isLoading ? (
+              <p role="status" className="mt-3 text-sm text-muted-foreground">
+                正在读取运行详情…
+              </p>
+            ) : detail.data ? (
+              <DataflowRunOutput key={expandedRun.id} run={detail.data} />
+            ) : (
+              <p role="status" className="mt-3 text-sm text-muted-foreground">
+                运行记录不存在或已无法访问。
+              </p>
+            )}
           </details>
         </div>
       )}

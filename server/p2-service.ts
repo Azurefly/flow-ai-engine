@@ -2056,7 +2056,12 @@ export async function runDataflow(
 
 export async function listDataflowRuns(
   user: DataflowUser,
-  input: { projectId: string; workflowId?: string; limit?: number }
+  input: {
+    projectId: string;
+    workflowId?: string;
+    limit?: number;
+    summaryOnly?: boolean;
+  }
 ) {
   await requireProjectAccess(user, input.projectId, "view");
   const clauses = ["r.projectId=?"];
@@ -2066,10 +2071,15 @@ export async function listDataflowRuns(
     params.push(input.workflowId);
   }
   params.push(Math.min(Math.max(input.limit ?? 60, 1), 200));
+  const projection = input.summaryOnly
+    ? "r.id,r.projectId,r.workflowId,r.status,r.triggerType,r.triggeredByUserId,r.durationMs,r.startedAt,r.finishedAt,r.createdAt,r.executionSource,r.definitionVersion"
+    : "r.*";
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT r.*,w.name AS workflowName,u.name AS triggerName FROM dataflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users u ON u.id=r.triggeredByUserId WHERE ${clauses.join(" AND ")} ORDER BY r.createdAt DESC LIMIT ?`,
+    `SELECT ${projection},w.name AS workflowName,u.name AS triggerName FROM dataflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users u ON u.id=r.triggeredByUserId WHERE ${clauses.join(" AND ")} ORDER BY r.createdAt DESC LIMIT ?`,
     params
   );
+  if (input.summaryOnly)
+    return rows.map(row => ({ ...row, status: String(row.status) }));
   return rows.map(row => ({
     ...row,
     input: parseJson(row.inputJson, {}),
