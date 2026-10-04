@@ -4556,11 +4556,16 @@ export function getRecordedStateName(
 }
 
 export async function getWorkflowRun(
-  runId: string
+  runId: string,
+  viewerUserId?: number
 ): Promise<WorkflowRunDetail | null> {
   const [runRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT r.*,w.name AS workflowName,initiator.name AS triggeredByName FROM workflow_run r LEFT JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId WHERE r.id=? LIMIT 1",
-    [runId]
+    `SELECT r.*,w.name AS workflowName,initiator.name AS triggeredByName,
+      ${viewerUserId ? "mine.stateName" : "NULL"} AS participantStatusName
+      FROM workflow_run r LEFT JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
+      ${viewerUserId ? `LEFT JOIN workflow_participant_state mine ON mine.id=(SELECT latest.id FROM workflow_participant_state latest WHERE latest.runId=r.id AND latest.userId=? ORDER BY latest.updatedAt DESC,latest.id DESC LIMIT 1)` : ""}
+      WHERE r.id=? LIMIT 1`,
+    viewerUserId ? [viewerUserId, runId] : [runId]
   );
   const run = runRows[0];
   if (!run) return null;
@@ -4579,10 +4584,10 @@ export async function getWorkflowRun(
   return {
     ...run,
     workflowId: String(run.workflowId),
-    currentStateName: getRecordedStateName(
-      run.currentStateCode,
-      transitionRows
-    ),
+    currentStateName:
+      run.flowType === "state"
+        ? getRecordedStateName(run.currentStateCode, transitionRows)
+        : null,
     nodeRuns: nodeRows,
     stateTransitions: transitionRows,
     milestones: milestoneRows,

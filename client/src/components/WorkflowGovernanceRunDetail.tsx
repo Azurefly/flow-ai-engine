@@ -120,7 +120,15 @@ export function RunDetailContent({ run }: { run: any }) {
   return (
     <div className="space-y-4 p-5">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Summary label="实例状态" value={statusLabel(run.status)} />
+        <Summary
+          label="实例状态"
+          value={statusLabel(run.status)}
+          secondary={
+            run.participantStatusName
+              ? `我的办理：${run.participantStatusName}`
+              : undefined
+          }
+        />
         <Summary
           label="发起人"
           value={
@@ -137,11 +145,15 @@ export function RunDetailContent({ run }: { run: any }) {
         <Summary
           label="当前业务状态"
           value={
-            run.currentStateName ||
-            run.currentStateCode ||
-            (run.flowType === "state" ? "尚未进入状态" : "不适用")
+            run.flowType === "state"
+              ? run.currentStateName || run.currentStateCode || "尚未进入状态"
+              : "不适用"
           }
-          secondary={run.currentStateName ? run.currentStateCode : undefined}
+          secondary={
+            run.flowType === "state" && run.currentStateName
+              ? run.currentStateCode
+              : undefined
+          }
         />
         <Summary label="状态版本" value={String(run.stateVersion ?? 0)} />
       </section>

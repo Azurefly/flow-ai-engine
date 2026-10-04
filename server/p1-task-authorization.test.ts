@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { businessStateLabelSql } from "./process-instance-state";
 import {
   isCurrentTaskOperation,
   isCurrentTaskOwner,
@@ -102,11 +103,11 @@ describe("人工操作授权边界", () => {
 describe("流程实例状态筛选", () => {
   it("同一筛选值可匹配运行状态或当前业务状态", () => {
     expect(processInstanceStatusFilter("failed")).toEqual({
-      clause: "(r.status=? OR ps.stateName=?)",
+      clause: `(r.status=? OR ${businessStateLabelSql}=?)`,
       params: ["failed", "failed"],
     });
     expect(processInstanceStatusFilter("  已授权  ")).toEqual({
-      clause: "(r.status=? OR ps.stateName=?)",
+      clause: `(r.status=? OR ${businessStateLabelSql}=?)`,
       params: ["已授权", "已授权"],
     });
   });

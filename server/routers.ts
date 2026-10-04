@@ -2065,7 +2065,7 @@ export const appRouter = router({
     runDetail: protectedProcedure
       .input(z.object({ runId: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
-        const run = await getWorkflowRun(input.runId);
+        const run = await getWorkflowRun(input.runId, ctx.user.id);
         if (
           !run ||
           !(await hasWorkflowPermission(

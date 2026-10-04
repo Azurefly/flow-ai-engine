@@ -1572,16 +1572,31 @@ function InstanceStatus({ run }: { run: any }) {
   const executionStatus = String(run.status || "unknown");
   const businessStatus =
     typeof run.stateName === "string" ? run.stateName.trim() : "";
+  const participantStatus =
+    typeof run.participantStatusName === "string"
+      ? run.participantStatusName.trim()
+      : "";
   return (
     <div
       role="group"
-      aria-label={businessStatus ? "运行状态和业务状态" : "运行状态"}
+      aria-label={
+        businessStatus
+          ? "运行状态和业务状态"
+          : participantStatus
+            ? "运行状态和我的办理状态"
+            : "运行状态"
+      }
       className="flex min-w-0 flex-wrap items-center gap-1"
     >
       {badge(executionStatus)}
       {businessStatus && (
         <span className="aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
           业务：{businessStatus}
+        </span>
+      )}
+      {participantStatus && participantStatus !== businessStatus && (
+        <span className="aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+          我的办理：{participantStatus}
         </span>
       )}
     </div>
@@ -1707,7 +1722,7 @@ function InstanceList({
           headers={[
             "流程实例",
             "发起人",
-            "运行状态 / 业务状态",
+            "实例与办理状态",
             "创建时间",
             "操作",
           ]}
@@ -2906,8 +2921,8 @@ function TaskDrawer({
                             if (
                               !event.currentTarget.contains(event.relatedTarget)
                             ) {
-                              setTouchedFormFields(
-                                previous => new Set(previous).add(field.key)
+                              setTouchedFormFields(previous =>
+                                new Set(previous).add(field.key)
                               );
                             }
                           }}

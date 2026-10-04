@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_350 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_352 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 400 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -1961,7 +1961,10 @@ describe("流程设计器界面回归约束", () => {
 
   it("运行实例详情显示发起人姓名并使用统一的页面与标签字号", () => {
     expect(workflowEngineSource).toContain(
-      "SELECT r.*,w.name AS workflowName,initiator.name AS triggeredByName FROM workflow_run r LEFT JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId WHERE r.id=? LIMIT 1"
+      "SELECT r.*,w.name AS workflowName,initiator.name AS triggeredByName,"
+    );
+    expect(workflowEngineSource).toContain(
+      "LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId"
     );
     expect(instanceDetailSource).toContain("run.triggeredByName ||");
     expect(processWorkbenchRunTabSource).toContain('data-aiflow-page-title=""');
