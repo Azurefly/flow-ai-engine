@@ -23,4 +23,17 @@ $id
   sudo -n docker image rm "$ref" >/dev/null
   removed=$((removed+1))
 done <<< "$images"
+# Older builds can lose every tag. Only the app's Compose labels identify them.
+dangling="$(sudo -n docker images --no-trunc --quiet --filter dangling=true --filter label=com.docker.compose.project=flow-ai-engine --filter label=com.docker.compose.service=app | sort -u)"
+while read -r id; do
+  [[ -n "$id" ]] || continue
+  [[ "$id" =~ ^sha256:[a-f0-9]{64}$ ]] || exit 1
+  case "
+$protected
+" in *"
+$id
+"*) preserved=$((preserved+1)); continue ;; esac
+  sudo -n docker image rm "$id" >/dev/null
+  removed=$((removed+1))
+done <<< "$dangling"
 printf 'Project image retention verified: removed=%s referenced=%s\n' "$removed" "$preserved"
