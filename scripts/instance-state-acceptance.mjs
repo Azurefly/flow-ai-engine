@@ -205,6 +205,11 @@ try {
       run => run.status === "waiting",
       "waiting run"
     );
+    const waitingMetrics = await admin.request("workflow.runMetrics", {
+      workflowId: workflow.id,
+    });
+    assert.equal(waitingMetrics.executingRuns, 0);
+    assert.equal(waitingMetrics.waitingRuns, 1);
     let page = await admin.request("task.instancePage", {
       view: "all",
       limit: 10,
@@ -334,6 +339,11 @@ try {
     assert.equal(detail.currentStateName, finalExpected);
     assert.equal(listed.participantStatusName, detail.participantStatusName);
     assert.equal(listed.displayStatus, "success");
+    const finishedMetrics = await admin.request("workflow.runMetrics", {
+      workflowId: workflow.id,
+    });
+    assert.equal(finishedMetrics.executingRuns, 0);
+    assert.equal(finishedMetrics.waitingRuns, 0);
     assert.equal(listed.availableOperations.length, 0);
     const output =
       typeof detail.finalOutputJson === "string"

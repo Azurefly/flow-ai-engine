@@ -4388,7 +4388,7 @@ export async function getWorkflowRunMetrics(
   filters: Omit<RunFilters, "limit"> = {}
 ) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT COUNT(*) AS totalRuns,COALESCE(SUM(r.status='success'),0) AS successfulRuns,COALESCE(SUM(r.status='failed'),0) AS failedRuns,COALESCE(ROUND(AVG(CASE WHEN r.status IN ('success','failed') THEN r.durationMs END)),0) AS averageDurationMs,COALESCE(MAX(r.durationMs),0) AS maxDurationMs
+    `SELECT COUNT(*) AS totalRuns,COALESCE(SUM(r.status IN ('queued','running')),0) AS executingRuns,COALESCE(SUM(r.status IN ('waiting','blocked')),0) AS waitingRuns,COALESCE(SUM(r.status='success'),0) AS successfulRuns,COALESCE(SUM(r.status='failed'),0) AS failedRuns,COALESCE(ROUND(AVG(CASE WHEN r.status IN ('success','failed') THEN r.durationMs END)),0) AS averageDurationMs,COALESCE(MAX(r.durationMs),0) AS maxDurationMs
        FROM workflow_run r LEFT JOIN users u ON u.id=r.triggeredByUserId WHERE r.workflowId=? AND (? IS NULL OR r.status=?) AND (? IS NULL OR r.createdAt>=?) AND (? IS NULL OR r.createdAt<=?) AND (? IS NULL OR r.triggeredByUserId=?) AND (? IS NULL OR LOCATE(?,COALESCE(u.name,''))>0 OR LOCATE(?,COALESCE(u.username,''))>0)`,
     [
       workflowId,
@@ -4410,6 +4410,8 @@ export async function getWorkflowRunMetrics(
   const failedRuns = Number(row.failedRuns ?? 0);
   return {
     totalRuns,
+    executingRuns: Number(row.executingRuns ?? 0),
+    waitingRuns: Number(row.waitingRuns ?? 0),
     successfulRuns: Number(row.successfulRuns ?? 0),
     failedRuns,
     averageDurationMs: Number(row.averageDurationMs ?? 0),

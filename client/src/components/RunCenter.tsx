@@ -1,3 +1,4 @@
+import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
 import { formatRunStatus, runStatusSummary } from "@shared/run-status-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,22 +147,33 @@ export default function RunCenter({
       ? historyNavigation.cursors
       : [undefined];
   const historyCursor = historyCursorStack.at(-1);
+  const metrics = trpc.workflow.runMetrics.useQuery(filter, {
+    enabled: Boolean(workflowId),
+    refetchInterval: query =>
+      runMonitorRefreshInterval({
+        enabled: autoRefreshEnabled,
+        ...query.state.data,
+        selectedStatus: runDetail?.status,
+        queryFailed: Boolean(query.state.error),
+      }),
+    refetchIntervalInBackground: false,
+  });
+  const refreshInterval = runMonitorRefreshInterval({
+    enabled: autoRefreshEnabled,
+    ...metrics.data,
+    selectedStatus: runDetail?.status,
+  });
   const runs = trpc.workflow.runHistoryPage.useQuery(
     { ...filter, cursor: historyCursor, pageSize: 10 },
     {
       enabled: Boolean(workflowId),
-      refetchInterval: autoRefreshEnabled ? 15_000 : false,
+      refetchInterval: query => (query.state.error ? false : refreshInterval),
       refetchIntervalInBackground: false,
     }
   );
-  const metrics = trpc.workflow.runMetrics.useQuery(filter, {
-    enabled: Boolean(workflowId),
-    refetchInterval: autoRefreshEnabled ? 15_000 : false,
-    refetchIntervalInBackground: false,
-  });
   const alerts = trpc.workflow.alerts.useQuery(filter, {
     enabled: Boolean(workflowId),
-    refetchInterval: autoRefreshEnabled ? 15_000 : false,
+    refetchInterval: query => (query.state.error ? false : refreshInterval),
     refetchIntervalInBackground: false,
   });
   const markRead = trpc.workflow.markAlertRead.useMutation({
@@ -283,7 +295,9 @@ export default function RunCenter({
         <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
           <div className="aiflow-type-meta text-muted-foreground">
             <p className="font-medium text-foreground">
-              {autoRefreshEnabled ? "自动刷新 · 每 15 秒" : "自动刷新已暂停"}
+              {refreshInterval
+                ? `自动刷新 · 每 ${refreshInterval / 1000} 秒`
+                : "自动刷新已暂停"}
             </p>
             <p aria-live="polite" className="mt-0.5">
               上次更新：{lastUpdatedLabel}

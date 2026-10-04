@@ -1642,7 +1642,7 @@ describe("流程设计器界面回归约束", () => {
     expect(runCenterSource).toContain("较新记录");
     expect(runCenterSource).toContain("按运行状态筛选");
     expect(runCenterSource).toContain(
-      "refetchInterval: autoRefreshEnabled ? 15_000 : false"
+      "query.state.error ? false : refreshInterval"
     );
     expect(runCenterSource).toContain("refetchIntervalInBackground: false");
     expect(runCenterSource).toContain("暂停自动刷新");
