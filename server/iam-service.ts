@@ -536,8 +536,9 @@ export async function getUserAuthorizationDetails(userId: number) {
   if (!user) throw new Error("未找到该内部账号。");
   const [directRoles] = await db().query<mysql.RowDataPacket[]>(
     `SELECT ra.id AS assignmentId,ra.scopeType,ra.scopeId,ra.effectiveFrom,ra.expiresAt,ra.note,
-            r.id AS roleId,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope
+            r.id AS roleId,r.code AS roleCode,r.name AS roleName,r.description AS roleDescription,r.scope,w.name AS scopeName
        FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
+       LEFT JOIN workflow w ON ra.scopeType='workflow' AND w.id=ra.scopeId
       WHERE ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW()
         AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
       ORDER BY r.scope,r.name,r.code,ra.scopeId`, [userId]
@@ -553,7 +554,7 @@ export async function getUserAuthorizationDetails(userId: number) {
         WHERE mu.depth<32
      )
      SELECT DISTINCT ou.id AS unitId,ou.name AS unitName,r.id AS roleId,r.code AS roleCode,
-            r.name AS roleName,r.description AS roleDescription,r.scope
+            r.name AS roleName,r.description AS roleDescription,r.scope,our.effectiveFrom,our.expiresAt
        FROM membership_units mu
        JOIN organization_unit_role our ON our.unitId=mu.unitId
          AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
@@ -582,9 +583,8 @@ export async function getUserAuthorizationDetails(userId: number) {
        ) effective_role
        JOIN role_permission rp ON rp.roleId=effective_role.roleId JOIN permission p ON p.id=rp.permissionId ORDER BY p.code`, [userId, userId]
   );
-  const effectivePermissions = user.role === "admin"
-    ? Array.from(new Map([...permissionRows, ...ALL_PERMISSIONS.map(code => ({ code, name: code, description: "管理员账号内置权限" }))].map(row => [String(row.code), row])).values())
-    : permissionRows;
+  const systemCodes = String(user.status) !== "active" ? new Set<PermissionCode>() : user.role === "admin" ? new Set<PermissionCode>(ALL_PERMISSIONS) : await assignedPermissions(userId);
+  const effectivePermissions = Array.from(systemCodes).map(code => permissionRows.find(row => row.code === code) ?? { code, name: permissionCatalog[code].name, description: permissionCatalog[code].description }).sort((a, b) => String(a.code).localeCompare(String(b.code)));
   return { user, directRoles, inheritedRoles, effectivePermissions };
 }
 

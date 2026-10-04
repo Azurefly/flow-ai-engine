@@ -1,3 +1,4 @@
+import { roleExpiryInput } from "@shared/role-expiry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -953,6 +954,7 @@ function FlowConsole({
   });
   const updateUserStatus = trpc.iam.updateUserStatus.useMutation({
     onSuccess: () => {
+      void utils.iam.userAuthorizationDetails.invalidate();
       void utils.iam.users.invalidate();
       void utils.iam.userDirectory.invalidate();
       void utils.iam.roleAssignableUsers.invalidate();
@@ -3551,11 +3553,15 @@ function IamCenter({
 
   const submitRoleAssignment = () => {
     if (!assignmentDialog?.userId || !assignmentDialog.roleCode) return;
-    const hours = assignmentHours ? Number(assignmentHours) : undefined;
+    const expiry = roleExpiryInput(assignmentHours);
+    if (expiry.error) {
+      toast.error(expiry.error);
+      return;
+    }
     assignSystemRole.mutate({
       userId: Number(assignmentDialog.userId),
       roleCode: assignmentDialog.roleCode,
-      expiresAt: hours ? new Date(Date.now() + hours * 3600_000) : undefined,
+      expiresAt: expiry.expiresAt,
       note: assignmentNote.trim() || undefined,
     });
   };
@@ -3858,7 +3864,11 @@ function IamCenter({
         description="在当前主从工作台中完成直接系统角色授权；组织继承角色仍在组织架构中维护。"
         submitLabel="确认绑定"
         pending={assignSystemRole.isPending}
-        submitDisabled={!assignmentDialog?.userId || !assignmentDialog.roleCode}
+        submitDisabled={
+          !assignmentDialog?.userId ||
+          !assignmentDialog.roleCode ||
+          Boolean(roleExpiryInput(assignmentHours).error)
+        }
         onSubmit={submitRoleAssignment}
       >
         {assignmentDialog?.mode === "user" ? (
@@ -4036,11 +4046,24 @@ function IamCenter({
             className="aiflow-type-control h-11 min-h-11 min-w-0 min-[1024px]:h-10 min-[1024px]:min-h-0"
             type="number"
             min={1}
+            step={1}
+            aria-invalid={Boolean(roleExpiryInput(assignmentHours).error)}
+            aria-describedby="role-expiry-description"
             placeholder="留空表示长期有效"
             value={assignmentHours}
             onChange={event => setAssignmentHours(event.target.value)}
           />
         </label>
+        <p
+          id="role-expiry-description"
+          role="status"
+          className={`text-sm ${roleExpiryInput(assignmentHours).error ? "text-aiflow-danger" : "text-muted-foreground"}`}
+        >
+          {roleExpiryInput(assignmentHours).error ||
+            (assignmentHours.trim()
+              ? "临时授权将在指定小时数后自动失效。"
+              : "长期授权持续有效，直到主动撤销。")}
+        </p>
         <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
           授权备注（可选）
           <Input
@@ -4833,7 +4856,11 @@ function UserAuthorizationPanel({
         <Button
           size="sm"
           className="aiflow-type-control h-11 shrink-0 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10"
-          disabled={!details.data || details.isLoading}
+          disabled={
+            !details.data ||
+            details.isLoading ||
+            details.data.user.status !== "active"
+          }
           onClick={onAssign}
         >
           <Plus size={13} />
@@ -4861,6 +4888,14 @@ function UserAuthorizationPanel({
                 {details.data.user.username}
               </p>
             </div>
+            {details.data.user.status !== "active" && (
+              <p
+                role="status"
+                className="rounded-lg bg-aiflow-warning-surface p-3 text-aiflow-warning"
+              >
+                账号已停用，当前不能登录、办理流程或接受新授权。已有角色保留，重新启用后按授权有效期计算。
+              </p>
+            )}
             <RoleDetailGroup
               title="直接角色"
               roles={details.data.directRoles}
@@ -4875,7 +4910,10 @@ function UserAuthorizationPanel({
             />
             <div>
               <p className="mb-2 font-semibold text-foreground">
-                最终有效权限（{details.data.effectivePermissions.length}）
+                系统级有效权限（{details.data.effectivePermissions.length}）
+              </p>
+              <p className="mb-2 text-muted-foreground">
+                仅列出系统范围内的有效权限。具体流程还需结合该业务的项目成员与流程成员授权。
               </p>
               <div className="grid gap-1.5 sm:grid-cols-2">
                 {details.data.effectivePermissions.map((permission: any) => (
@@ -5071,8 +5109,20 @@ function RoleDetailGroup({
             <p className="mt-1 break-words text-muted-foreground">
               {role.unitName
                 ? `来源组织：${role.unitName}`
-                : `作用域：${role.scopeType}${role.scopeId ? ` / ${role.scopeId}` : ""}`}
+                : role.scopeType === "system"
+                  ? "范围：系统全局"
+                  : `范围：指定流程 ${role.scopeName || role.scopeId || ""}`}
             </p>
+            <p className="mt-1 text-muted-foreground">
+              {role.expiresAt
+                ? `有效至 ${formatTime(role.expiresAt)}`
+                : "长期有效"}
+            </p>
+            {role.note && (
+              <p className="mt-1 break-words text-muted-foreground">
+                授权备注：{role.note}
+              </p>
+            )}
           </div>
         ))}
         {!roles.length && <p className="text-muted-foreground">无</p>}
@@ -5117,8 +5167,20 @@ function UserBindingGroup({
             <p className="mt-1 break-words text-muted-foreground">
               {account.unitName
                 ? `组织：${account.unitName}`
-                : `作用域：${account.scopeType}${account.scopeId ? ` / ${account.scopeId}` : ""}`}
+                : account.scopeType === "system"
+                  ? "范围：系统全局"
+                  : `范围：指定流程 ${account.scopeId || ""}`}
             </p>
+            <p className="mt-1 text-muted-foreground">
+              {account.expiresAt
+                ? `有效至 ${formatTime(account.expiresAt)}`
+                : "长期有效"}
+            </p>
+            {account.note && (
+              <p className="mt-1 break-words text-muted-foreground">
+                授权备注：{account.note}
+              </p>
+            )}
           </div>
         ))}
         {!users.length && <p className="text-muted-foreground">无</p>}
