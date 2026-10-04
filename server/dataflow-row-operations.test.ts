@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateDataflowRows,
   distinctDataflowRows,
+  deduplicateDataflowRows,
 } from "./dataflow-row-operations";
 import { validateNodeConfig } from "../shared/workflow-node-contract";
 
@@ -16,6 +17,40 @@ const metrics = [
 ];
 
 describe("数据流真实行计算", () => {
+  it("业务键忽略对象字段顺序，保留首条完整记录且区分类型和数组顺序", () => {
+    const first = { key: { a: 1, b: 2 }, version: "first" };
+    expect(
+      deduplicateDataflowRows(
+        [
+          first,
+          { key: { b: 2, a: 1 }, version: "second" },
+          { key: "1" },
+          { key: 1 },
+          { key: null },
+          { key: null },
+          { key: [1, 2] },
+          { key: [2, 1] },
+        ],
+        { keys: [" key "] }
+      )
+    ).toEqual([
+      first,
+      { key: "1" },
+      { key: 1 },
+      { key: null },
+      { key: [1, 2] },
+      { key: [2, 1] },
+    ]);
+  });
+  it("缺失业务键显式失败，不把缺失字段当空值合并", () => {
+    expect(() =>
+      deduplicateDataflowRows([{ key: null }, {}], { keys: ["key"] })
+    ).toThrow("第 2 行缺少业务键字段 key");
+  });
+  it("发布前拒绝空白、重复和非字符串业务键", () => {
+    for (const keys of [[], [""], [" "], ["key", " key "], [null], [1], [{}]])
+      expect(() => validateNodeConfig("deduplicate", { keys })).toThrow();
+  });
   it("ignores null values rather than inventing zero in numeric aggregates", () => {
     expect(
       aggregateDataflowRows(

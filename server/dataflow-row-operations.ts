@@ -1,4 +1,5 @@
 import { readAggregateConfig } from "../shared/dataflow-aggregate-config";
+import { readDeduplicateKeys } from "../shared/dataflow-deduplicate-config";
 type Row = Record<string, unknown>;
 
 function canonicalValue(value: unknown): unknown {
@@ -16,6 +17,25 @@ export function distinctDataflowRows(rows: Row[]) {
   const seen = new Set<string>();
   return rows.filter(row => {
     const key = JSON.stringify(canonicalValue(row));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function deduplicateDataflowRows(
+  rows: Row[],
+  config: Record<string, unknown>
+) {
+  const keys = readDeduplicateKeys(config);
+  const seen = new Set<string>();
+  return rows.filter((row, index) => {
+    const values = keys.map(field => {
+      if (!Object.prototype.hasOwnProperty.call(row, field))
+        throw new Error(`去重第 ${index + 1} 行缺少业务键字段 ${field}。`);
+      return row[field];
+    });
+    const key = JSON.stringify(canonicalValue(values));
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

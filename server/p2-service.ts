@@ -27,6 +27,7 @@ import { prepareReadOnlyDataflowSql } from "./dataflow-sql-binding";
 import {
   aggregateDataflowRows,
   distinctDataflowRows,
+  deduplicateDataflowRows,
 } from "./dataflow-row-operations";
 
 type JsonRecord = Record<string, unknown>;
@@ -1476,15 +1477,8 @@ async function runDataflowDefinition(
           operation: "aggregate",
         };
       } else if (String(node.type) === "deduplicate") {
-        const keys = Array.isArray(config.keys) ? config.keys.map(String) : [];
-        const seen = new Set<string>();
         output = {
-          rows: rowsFromInput(inputs).filter(row => {
-            const key = JSON.stringify(keys.map(field => row[field]));
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          }),
+          rows: deduplicateDataflowRows(rowsFromInput(inputs), config),
           operation: "deduplicate",
         };
       } else if (String(node.type) === "sort") {

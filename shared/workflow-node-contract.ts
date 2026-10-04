@@ -1,3 +1,4 @@
+import { readDeduplicateKeys } from "./dataflow-deduplicate-config";
 import { normalizeReferenceOperateConfig } from "./reference-operate-config";
 import { normalizeReferenceRouterConfig } from "./reference-router-config";
 import { readAggregateConfig } from "./dataflow-aggregate-config";
@@ -1991,7 +1992,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "keys",
         label: "去重键",
-        help: "字段名数组。",
+        help: "非空且不重复的字段名数组；保留首条记录。JSON 对象忽略属性顺序，空值可参与比较；缺少业务键字段时停止运行。",
         kind: "json",
         required: true,
       },
@@ -2867,8 +2868,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       validateDataflowFields(type, config.fields);
       break;
     case "deduplicate":
-      if (!Array.isArray(config.keys) || !config.keys.length)
-        throw new Error("去重节点必须配置业务键。");
+      readDeduplicateKeys(config);
       break;
     case "quality_gate":
       assertOptionalNumber(
