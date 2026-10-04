@@ -252,7 +252,7 @@ try {
       assert.equal(listed.stateCode, null);
       assert.equal(detail.stateTransitions.length, 0);
     }
-    await admin.request(
+    const completed = await admin.request(
       "task.execute",
       {
         taskId: task.id,
@@ -260,6 +260,7 @@ try {
       },
       true
     );
+    assert.equal(completed.canViewRun, true);
     detail = await waitFor(
       () => admin.request("workflow.runDetail", { runId: task.runId }),
       run => run.status === "success",

@@ -324,7 +324,7 @@ export default function ProcessWorkbench() {
               ? "审批已通过，后续节点已进入持久化续跑队列。"
               : "审批已通过，流程已由服务端继续执行。"
         );
-      setSelectedRunId(result.runId);
+      if (result.canViewRun === true) setSelectedRunId(result.runId);
     },
     onError: error => toast.error(error.message),
   });
@@ -341,7 +341,8 @@ export default function ProcessWorkbench() {
               ? "审批已通过，后续节点已进入持久化续跑队列。"
               : "审批已通过，流程已完成。"
         );
-      if (result.runId) setSelectedRunId(result.runId);
+      if (result.runId && result.canViewRun === true)
+        setSelectedRunId(result.runId);
       setSelectedTaskId(null);
     },
     onError: error => toast.error(error.message),
@@ -403,7 +404,9 @@ export default function ProcessWorkbench() {
       const failed = results.length - success;
       const completed = results.find(
         item =>
-          item.success && ["success", "cancelled"].includes(String(item.status))
+          item.success &&
+          item.canViewRun === true &&
+          ["success", "cancelled"].includes(String(item.status))
       );
       if (completed?.runId) setSelectedRunId(completed.runId);
       const message = `批量处理已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`;
@@ -1719,13 +1722,7 @@ function InstanceList({
       </div>
       <div className="hidden lg:block">
         <Table
-          headers={[
-            "流程实例",
-            "发起人",
-            "实例与办理状态",
-            "创建时间",
-            "操作",
-          ]}
+          headers={["流程实例", "发起人", "实例与办理状态", "创建时间", "操作"]}
           columnWidths={["32%", "15%", "24%", "18%", "11%"]}
         >
           {error ? (

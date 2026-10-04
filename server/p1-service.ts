@@ -551,7 +551,7 @@ export async function completeWorkflowTask(
       delegationId: task.delegationId ?? null,
     },
   });
-  return resumed;
+  return { ...resumed, canViewRun: task.canViewRun === true };
 }
 
 async function getEligibleAssignee(task: mysql.RowDataPacket, userId: number) {
@@ -1277,6 +1277,7 @@ export async function batchCompleteWorkflowTasks(
           success: true as const,
           runId: completed.runId,
           status: completed.status,
+          canViewRun: completed.canViewRun,
         };
       } catch (error) {
         return {
