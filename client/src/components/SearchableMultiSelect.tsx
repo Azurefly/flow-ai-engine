@@ -13,7 +13,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Check, ChevronsUpDown, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   searchSelectOptions,
   toggleSearchSelection,
@@ -100,7 +100,8 @@ export function SearchableMultiSelect({
     loading || error || awaitingSearch ? [] : results.options;
 
   const toggle = (optionValue: string) => {
-    onChange(toggleSearchSelection(value, optionValue, maxSelected));
+    if (!disabled)
+      onChange(toggleSearchSelection(value, optionValue, maxSelected));
   };
 
   return (
@@ -209,6 +210,7 @@ export function SearchableMultiSelect({
               <button
                 type="button"
                 aria-label={`移除${option.label}`}
+                disabled={disabled}
                 className="ml-1 inline-flex size-11 shrink-0 items-center justify-center rounded-r-md text-aiflow-info hover:bg-aiflow-info-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600"
                 onClick={() => toggle(option.value)}
               >
