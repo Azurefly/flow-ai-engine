@@ -1,3 +1,4 @@
+import { PermissionListFeedback } from "./PermissionListFeedback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1419,6 +1420,9 @@ export function ProjectWorkspace({
           <ProjectMembers
             projectId={project.id}
             members={(members.data ?? []) as any[]}
+            membersLoading={members.isPending}
+            membersError={members.isError}
+            onRetryMembers={() => void members.refetch()}
             canManage={canManage}
           />
         )}
@@ -3187,10 +3191,16 @@ function ProcessLaunchDialog({
 function ProjectMembers({
   projectId,
   members,
+  membersLoading,
+  membersError,
+  onRetryMembers,
   canManage,
 }: {
   projectId: string;
   members: any[];
+  membersLoading: boolean;
+  membersError: boolean;
+  onRetryMembers: () => void;
   canManage: boolean;
 }) {
   const utils = trpc.useUtils();
@@ -3314,7 +3324,11 @@ function ProjectMembers({
             <Building2 size={16} className="text-aiflow-info" />
             <span>可见部门列表（部门继承授权）</span>
             <span className="aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground">
-              {(projectUnits.data ?? []).length} 个部门
+              {projectUnits.isPending
+                ? "读取中"
+                : projectUnits.isError
+                  ? "读取失败"
+                  : `${(projectUnits.data ?? []).length} 个部门`}
             </span>
           </span>
           <span className="aiflow-type-body leading-5 font-normal text-muted-foreground">
@@ -3416,6 +3430,12 @@ function ProjectMembers({
           data-project-permission-list="department"
           className="divide-y divide-border"
         >
+          <PermissionListFeedback
+            name="部门授权"
+            loading={projectUnits.isPending}
+            error={projectUnits.isError}
+            onRetry={() => void projectUnits.refetch()}
+          />
           {(projectUnits.data ?? []).map((item: any) => (
             <div
               key={item.id}
@@ -3455,11 +3475,13 @@ function ProjectMembers({
               </div>
             </div>
           ))}
-          {!(projectUnits.data ?? []).length && (
-            <p className="aiflow-type-body p-6 text-center text-muted-foreground">
-              尚未绑定可见部门，外部部门员工无法继承访问。
-            </p>
-          )}
+          {!projectUnits.isPending &&
+            !projectUnits.isError &&
+            !(projectUnits.data ?? []).length && (
+              <p className="aiflow-type-body p-6 text-center text-muted-foreground">
+                尚未绑定可见部门，外部部门员工无法继承访问。
+              </p>
+            )}
         </div>
       </section>
 
@@ -3470,7 +3492,11 @@ function ProjectMembers({
             <UsersRound size={16} className="text-aiflow-info" />
             <span>可见人列表（成员直接授权）</span>
             <span className="aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground">
-              {new Set(members.map(member => member.userId)).size} 位成员
+              {membersLoading
+                ? "读取中"
+                : membersError
+                  ? "读取失败"
+                  : `${new Set(members.map(member => member.userId)).size} 位成员`}
             </span>
           </span>
           <span className="aiflow-type-body leading-5 font-normal text-muted-foreground">
@@ -3588,6 +3614,12 @@ function ProjectMembers({
           data-project-permission-list="member"
           className="divide-y divide-border"
         >
+          <PermissionListFeedback
+            name="成员授权"
+            loading={membersLoading}
+            error={membersError}
+            onRetry={onRetryMembers}
+          />
           {members.map(member => (
             <div
               key={member.id}
@@ -3628,7 +3660,7 @@ function ProjectMembers({
               </div>
             </div>
           ))}
-          {!members.length && (
+          {!membersLoading && !membersError && !members.length && (
             <p className="aiflow-type-body p-6 text-center text-muted-foreground">
               项目尚无单独可见人员。
             </p>

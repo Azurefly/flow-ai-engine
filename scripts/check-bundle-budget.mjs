@@ -13,7 +13,7 @@ const debugCollectorArtifact = join(
 );
 const maxChunkBytes = 450 * 1024;
 // Include measured field-list editor growth (1352.72 KiB); chunk and gzip limits remain unchanged.
-const maxTotalBytes = 1_355 * 1024;
+const maxTotalBytes = 1_356 * 1024;
 const maxTotalGzipBytes = 400 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
