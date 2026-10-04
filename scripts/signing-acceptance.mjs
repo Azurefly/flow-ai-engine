@@ -81,13 +81,20 @@ try {
     ["andSignFor", 100],
     ["andSignFor", 66],
     ["andSignFor", 1],
+    ["concurrentAndSign", 100],
+    ["concurrentAndSign", 66],
     ["sequentialSignFor", 100],
     ["handover", 100],
     ["delegation", 100],
     ["addRemove", 100],
   ]) {
     const transfer = mode === "handover" || mode === "delegation";
-    const signMode = transfer ? "" : mode === "addRemove" ? "andSignFor" : mode;
+    const concurrent = mode === "concurrentAndSign";
+    const signMode = transfer
+      ? ""
+      : mode === "addRemove" || concurrent
+        ? "andSignFor"
+        : mode;
     let participants = transfer
       ? [accounts[0]]
       : mode === "addRemove"
@@ -460,10 +467,38 @@ try {
         ? 2
         : mode === "addRemove"
           ? 2
-          : mode === "andSignFor"
+          : signMode === "andSignFor"
             ? Math.ceil((3 * percent) / 100)
             : 3;
-    for (let index = 0; index < required; index++) {
+    if (concurrent) {
+      const submissions = await Promise.allSettled(
+        [...participants, participants[0]].map((account, index) =>
+          account.session.request(
+            "task.execute",
+            {
+              taskId: tasks[index % participants.length].id,
+              result: {
+                decision: "approved",
+                outcome: "approved",
+                serial: "001",
+              },
+            },
+            true
+          )
+        )
+      );
+      assert.equal(
+        submissions.filter(item => item.status === "fulfilled").length,
+        required,
+        "Only the required distinct approvals may succeed"
+      );
+      assert.equal(
+        submissions.filter(item => item.status === "rejected").length,
+        participants.length + 1 - required,
+        "Duplicate and closed-group submissions must be rejected"
+      );
+    }
+    for (let index = 0; !concurrent && index < required; index++) {
       const rejected = mode === "orSignFor" && index === 0;
       if (mode === "sequentialSignFor") {
         const current = await participants[index].session.request("task.get", {
@@ -525,10 +560,26 @@ try {
     const remaining = await participants[last].session.request("task.get", {
       taskId: tasks[last].id,
     });
-    assert.equal(
-      remaining.status,
-      required < participants.length ? "cancelled" : "completed"
-    );
+    if (concurrent) {
+      const finalTasks = await Promise.all(
+        participants.map((account, index) =>
+          account.session.request("task.get", { taskId: tasks[index].id })
+        )
+      );
+      assert.equal(
+        finalTasks.filter(task => task.status === "completed").length,
+        required
+      );
+      assert.equal(
+        finalTasks.filter(task => task.status === "cancelled").length,
+        participants.length - required
+      );
+      assert.ok(finalTasks.every(task => !task.canAct));
+    } else
+      assert.equal(
+        remaining.status,
+        required < participants.length ? "cancelled" : "completed"
+      );
     console.log(
       JSON.stringify({
         scenario: label,
@@ -544,7 +595,7 @@ try {
 } finally {
   for (const runId of createdRuns) {
     const run = await admin.request("workflow.runDetail", { runId });
-    if (["queued", "running", "waiting"].includes(run.status)) {
+    if (["queued", "running", "waiting", "blocked"].includes(run.status)) {
       await admin.request("workflow.cancelRun", { runId }, true);
       console.log(
         JSON.stringify({ cleanup: "unfinished-test-run-cancelled", runId })
