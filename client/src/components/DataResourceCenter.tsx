@@ -1,3 +1,7 @@
+import {
+  dataflowResultColumns,
+  dataflowResultPage,
+} from "@shared/dataflow-result-preview";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1196,6 +1200,7 @@ function formatDataflowValue(value: unknown): string {
 }
 
 function DataflowRunOutput({ run }: { run: any }) {
+  const [resultPageIndex, setResultPageIndex] = useState(0);
   const [showRaw, setShowRaw] = useState(false);
   const rawResult = run.output ??
     run.error ?? { message: "当前运行未生成额外输出。" };
@@ -1207,8 +1212,12 @@ function DataflowRunOutput({ run }: { run: any }) {
     .reverse()
     .find((node: any) => Array.isArray(node?.output?.rows));
   const terminalRows = terminal?.rows ?? lastNode?.output?.rows ?? [];
-  const previewRows = terminalRows.slice(0, 3);
-  const columns = Object.keys(previewRows[0] ?? {}).slice(0, 6);
+  const preview = dataflowResultPage(terminalRows, resultPageIndex);
+  const previewRows = preview.rows;
+  const columns = useMemo(
+    () => dataflowResultColumns(terminalRows),
+    [terminalRows]
+  );
   const rowCount = terminal ? terminalRows.length : (lastNode?.rowCount ?? "—");
   const errorMessage =
     result && typeof result === "object" && "message" in result
@@ -1266,9 +1275,13 @@ function DataflowRunOutput({ run }: { run: any }) {
               最终结果预览
             </h3>
             <span className="aiflow-type-meta text-muted-foreground">
-              显示 {previewRows.length} / {terminalRows.length} 行
+              第 {preview.page + 1} / {preview.pageCount} 页 · 每页 10 行 · 共{" "}
+              {terminalRows.length} 行
             </span>
           </div>
+          <p className="mb-2 text-xs text-muted-foreground">
+            共 {columns.length} 个字段；可横向滚动查看全部字段。
+          </p>
           <div className="max-w-full overflow-x-auto">
             <table className="w-full min-w-[360px] text-left">
               <thead className="bg-muted text-sm text-muted-foreground">
@@ -1281,12 +1294,6 @@ function DataflowRunOutput({ run }: { run: any }) {
                       {column}
                     </th>
                   ))}
-                  {Object.keys(previewRows[0] ?? {}).length >
-                    columns.length && (
-                    <th className="aiflow-type-meta whitespace-nowrap px-2 py-1.5 font-medium">
-                      其余字段
-                    </th>
-                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1300,18 +1307,32 @@ function DataflowRunOutput({ run }: { run: any }) {
                         {formatDataflowValue(row[column])}
                       </td>
                     ))}
-                    {Object.keys(previewRows[0] ?? {}).length >
-                      columns.length && (
-                      <td className="aiflow-type-meta px-2 py-1.5 text-muted-foreground">
-                        +
-                        {Object.keys(previewRows[0] ?? {}).length -
-                          columns.length}
-                      </td>
-                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mt-3 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="结果上一页"
+              disabled={preview.page === 0}
+              onClick={() => setResultPageIndex(preview.page - 1)}
+            >
+              上一页
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="结果下一页"
+              disabled={preview.page + 1 >= preview.pageCount}
+              onClick={() => setResultPageIndex(preview.page + 1)}
+            >
+              下一页
+            </Button>
           </div>
         </section>
       ) : (
