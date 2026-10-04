@@ -130,7 +130,7 @@ export function normalizeReferenceOperateConfig(config: JsonRecord): NormalizedR
     bindRoles: strings(firstValue(attribute.bindRole, canvasBind.bdczjs)),
     signMode,
     signSelectorUserIds: ids(selector),
-    passPercent: normalizePercent(firstValue(andSign.passPercent, canvasBind.hqtgbfb)),
+    passPercent: normalizePercent(firstValue(andSign.passPercent, canvasBind.hqtgbfb === undefined || canvasBind.hqtgbfb === "" ? undefined : Number(canvasBind.hqtgbfb) / 100)),
     autoRelatedParty: strings(firstValue(attribute.autoRelatedParty, canvasAttribute.zdglxgfsz)),
     relatedUnitOperate: bool(firstValue(attribute.relatedUnitOperate, canvasAttribute.yrdbmsfkcz)),
     requiredSubflowIds: strings(firstValue(attribute.bindChildWorkModuleIdList, canvasAttribute.xzdzlcjywc)),

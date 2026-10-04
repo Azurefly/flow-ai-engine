@@ -1,3 +1,4 @@
+import { orderOperateApprovers } from "../shared/operate-approval-editor";
 import {
   assertTaskFormSchema,
   validateFormSubmission,
@@ -3038,8 +3039,10 @@ async function executeRunSegment(input: {
           reference.signMode !== "single" &&
           reference.signSelectorUserIds.length
         ) {
-          approverUserIds = approverUserIds.filter(userId =>
-            reference.signSelectorUserIds.includes(userId)
+          approverUserIds = orderOperateApprovers(
+            approverUserIds,
+            reference.signSelectorUserIds,
+            reference.signMode === "sequentialSignFor"
           );
           if (!approverUserIds.length)
             throw new Error("或签/会签指定方未命中当前操作候选人。");

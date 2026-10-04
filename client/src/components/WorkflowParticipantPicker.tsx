@@ -8,11 +8,17 @@ export function WorkflowParticipantPicker({
   value,
   disabled,
   onChange,
+  multiple = false,
+  ordered = false,
+  label: customLabel,
 }: {
   workflowId: string;
   kind: "user" | "department" | "role";
   value: string[];
   disabled?: boolean;
+  multiple?: boolean;
+  ordered?: boolean;
+  label?: string;
   onChange: (value: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -27,7 +33,8 @@ export function WorkflowParticipantPicker({
   );
   const people = kind === "user";
   const role = kind === "role";
-  const label = people ? "指定处理人" : role ? "处理角色" : "处理部门";
+  const label =
+    customLabel ?? (people ? "指定处理人" : role ? "处理角色" : "处理部门");
   const options = Array.from(
     new Map(
       [
@@ -67,9 +74,47 @@ export function WorkflowParticipantPicker({
         error={directory.isError}
         disabled={disabled}
         requireSearch
-        maxSelected={people || role ? 1 : 100}
+        maxSelected={multiple ? 100 : people || role ? 1 : 100}
         hasMore={directory.data?.hasMore}
       />
+      {ordered && value.length > 0 && (
+        <ol aria-label="审批顺序" className="space-y-2">
+          {value.map((id, index) => (
+            <li
+              key={id}
+              className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm"
+            >
+              <span className="text-muted-foreground">{index + 1}.</span>
+              <span className="min-w-0 flex-1 break-words">
+                {options.find(option => option.value === id)?.label ?? id}
+              </span>
+              {[-1, 1].map(direction => (
+                <button
+                  key={direction}
+                  type="button"
+                  className="min-h-9 px-2 text-xs text-primary disabled:opacity-40"
+                  aria-label={`${direction < 0 ? "上移" : "下移"}第${index + 1}位审批人`}
+                  disabled={
+                    disabled ||
+                    index + direction < 0 ||
+                    index + direction >= value.length
+                  }
+                  onClick={() => {
+                    const next = [...value];
+                    [next[index], next[index + direction]] = [
+                      next[index + direction],
+                      next[index],
+                    ];
+                    onChange(next);
+                  }}
+                >
+                  {direction < 0 ? "上移" : "下移"}
+                </button>
+              ))}
+            </li>
+          ))}
+        </ol>
+      )}
       {directory.isError && (
         <button
           type="button"

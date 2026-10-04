@@ -79,8 +79,13 @@ try {
     ["orSignFor", 100],
     ["andSignFor", 100],
     ["andSignFor", 66],
+    ["andSignFor", 1],
     ["sequentialSignFor", 100],
   ]) {
+    const participants =
+      mode === "sequentialSignFor"
+        ? [accounts[2], accounts[0], accounts[1]]
+        : accounts;
     const label = `${mode}_${percent}`;
     const definition = {
       schemaVersion: 1,
@@ -110,7 +115,7 @@ try {
               bdcz: [],
               bdczjs: ["acceptor"],
               hqhqsz: mode,
-              xzdfhq: accounts.map(item => item.id),
+              xzdfhq: participants.map(item => item.id),
               hqtgbfb: percent,
             },
             formSchema: {
@@ -191,7 +196,7 @@ try {
       true
     );
     const tasks = [];
-    for (const account of accounts) {
+    for (const account of participants) {
       const items = await waitFor(
         () =>
           account.session.request("task.list", {
@@ -206,15 +211,20 @@ try {
     assert.equal(new Set(tasks.map(item => item.id)).size, 3);
     if (mode === "sequentialSignFor") {
       assert.equal(tasks[0].canAct, true);
+      assert.deepEqual(
+        tasks.map(task => task.approvalOrder),
+        [0, 1, 2],
+        "Explicit signer order must override directory order"
+      );
       assert.equal(tasks[2].canAct, false);
       assert.equal(tasks[2].actionLabel, "等待前序审批");
-      const waiting = await accounts[2].session.request("task.get", {
+      const waiting = await participants[2].session.request("task.get", {
         taskId: tasks[2].id,
       });
       assert.equal(waiting.canAct, false);
       assert.match(waiting.blockedReason, /前序审批人/);
       await assert.rejects(
-        accounts[2].session.request(
+        participants[2].session.request(
           "task.claim",
           { taskId: tasks[2].id },
           true
@@ -222,11 +232,16 @@ try {
         /尚未轮到/
       );
     }
-    const required = mode === "orSignFor" || percent === 66 ? 2 : 3;
+    const required =
+      mode === "orSignFor"
+        ? 2
+        : mode === "andSignFor"
+          ? Math.ceil((3 * percent) / 100)
+          : 3;
     for (let index = 0; index < required; index++) {
       const rejected = mode === "orSignFor" && index === 0;
       if (mode === "sequentialSignFor") {
-        const current = await accounts[index].session.request("task.get", {
+        const current = await participants[index].session.request("task.get", {
           taskId: tasks[index].id,
         });
         assert.equal(
@@ -236,7 +251,7 @@ try {
         );
         assert.equal(current.blockedReason, null);
       }
-      await accounts[index].session.request(
+      await participants[index].session.request(
         "task.execute",
         {
           taskId: tasks[index].id,
@@ -261,7 +276,7 @@ try {
       }
     }
     await assert.rejects(
-      accounts[0].session.request(
+      participants[0].session.request(
         "task.execute",
         {
           taskId: tasks[0].id,
@@ -281,10 +296,10 @@ try {
       1,
       "Run must advance exactly once"
     );
-    const remaining = await accounts[2].session.request("task.get", {
+    const remaining = await participants[2].session.request("task.get", {
       taskId: tasks[2].id,
     });
-    assert.equal(remaining.status, required === 2 ? "cancelled" : "completed");
+    assert.equal(remaining.status, required < 3 ? "cancelled" : "completed");
     console.log(
       JSON.stringify({
         scenario: label,

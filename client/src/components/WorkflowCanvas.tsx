@@ -1,3 +1,4 @@
+import { OperateApprovalEditor } from "./OperateApprovalEditor";
 import { OPERATE_CONFIG_GROUPS } from "@shared/operate-config-groups";
 import {
   addEdge,
@@ -1561,6 +1562,11 @@ function OriginalObjectEditor({
     Object.entries(record).filter(([key]) => !knownKeys.has(key))
   );
   const visibleSpecs = specs.filter(spec => {
+    if (
+      fieldKey === "bdcz" &&
+      ["hqhqsz", "xzdfhq", "hqtgbfb"].includes(spec.key)
+    )
+      return false;
     if (spec.key === "hqtgbfb" && record["hqhqsz"] !== "andSignFor")
       return false;
     if (
@@ -4734,6 +4740,15 @@ export default function WorkflowCanvas({
                           />
                         );
                       })}
+                      {selected.data.kind === "operate" &&
+                        activeInspectorGroup.label === "处理人" && (
+                          <OperateApprovalEditor
+                            config={selectedConfig}
+                            workflowId={workflowId}
+                            disabled={inspectorDisabled}
+                            onChange={updateConfigFields}
+                          />
+                        )}
                     </div>
                   </section>
                 )}
