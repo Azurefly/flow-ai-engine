@@ -4549,7 +4549,6 @@ export default function WorkflowCanvas({
                         if (
                           selected.data.kind === "operate" &&
                           workflowId &&
-                          !readOnly &&
                           [
                             "assigneeUserId",
                             "assigneeUnitIds",
@@ -4577,6 +4576,7 @@ export default function WorkflowCanvas({
                               }
                               value={values}
                               disabled={inspectorDisabled}
+                              readOnly={readOnly}
                               onChange={ids =>
                                 updateConfigField(
                                   field.key,
@@ -4770,6 +4770,7 @@ export default function WorkflowCanvas({
                             config={selectedConfig}
                             workflowId={workflowId}
                             disabled={inspectorDisabled}
+                            readOnly={readOnly}
                             onChange={updateConfigFields}
                           />
                         )}

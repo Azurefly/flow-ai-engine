@@ -2,6 +2,7 @@ import { TRPCError } from "@trpc/server";
 import type { RowDataPacket } from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasWorkflowPermission } from "./iam-service";
+import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
 
 export async function searchWorkflowParticipants(
   user: { id: number; role: "user" | "admin" },
@@ -10,9 +11,16 @@ export async function searchWorkflowParticipants(
     kind: "user" | "department" | "role";
     query: string;
     selectedIds: string[];
+    readOnly?: boolean;
   }
 ) {
-  if (!(await hasWorkflowPermission(user, input.workflowId, "workflow:edit")))
+  if (
+    !(await hasWorkflowPermission(
+      user,
+      input.workflowId,
+      input.readOnly ? "workflow:view" : "workflow:edit"
+    ))
+  )
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "无权配置此流程的处理人。",
@@ -24,6 +32,46 @@ export async function searchWorkflowParticipants(
       message: "搜索词或已选项目数量超出限制。",
     });
   const query = input.query.trim().toLocaleLowerCase();
+  if (input.readOnly) {
+    if (query)
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "只读预览不支持搜索人员目录。",
+      });
+    const [rows] = await getSharedPool().query<RowDataPacket[]>(
+      "SELECT definitionJson FROM workflow WHERE id=?",
+      [input.workflowId]
+    );
+    const raw = rows[0]?.definitionJson;
+    const definition = typeof raw === "string" ? JSON.parse(raw) : raw;
+    const allowed = new Set<string>();
+    for (const node of definition?.nodes ?? []) {
+      if (node.type !== "operate") continue;
+      const config = node.config ?? {};
+      const values =
+        input.kind === "user"
+          ? [
+              config.assigneeUserId,
+              ...normalizeReferenceOperateConfig(config).signSelectorUserIds,
+            ]
+          : input.kind === "department"
+            ? Array.isArray(config.assigneeUnitIds)
+              ? config.assigneeUnitIds
+              : []
+            : [config.assigneeRoleCode];
+      values
+        .filter(
+          (value: unknown) =>
+            value !== undefined && value !== null && value !== ""
+        )
+        .forEach((value: unknown) => allowed.add(String(value)));
+    }
+    if (selectedIds.some(id => !allowed.has(id)))
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "只能查看此流程已配置的处理人。",
+      });
+  }
   if (input.kind === "role") {
     const pool = getSharedPool();
     const [selected] = selectedIds.length

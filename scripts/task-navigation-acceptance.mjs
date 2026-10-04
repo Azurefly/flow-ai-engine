@@ -169,6 +169,43 @@ try {
     true
   );
   await admin.request("workflow.publish", { id: workflow.id }, true);
+  const directoryInput = {
+    workflowId: workflow.id,
+    kind: "user",
+    query: "",
+    selectedIds: [String(user.id)],
+    readOnly: true,
+  };
+  const labels = await actor.request(
+    "workflow.participantDirectory",
+    directoryInput
+  );
+  assert.equal(
+    labels.selected[0].label,
+    `办理导航测试_${tag}（${login.username}）`
+  );
+  assert.deepEqual(labels.items, []);
+  await assert.rejects(
+    actor.request("workflow.participantDirectory", {
+      ...directoryInput,
+      query: "测试",
+    }),
+    /只读预览不支持搜索/
+  );
+  await assert.rejects(
+    actor.request("workflow.participantDirectory", {
+      ...directoryInput,
+      selectedIds: ["99999999"],
+    }),
+    /只能查看此流程已配置/
+  );
+  await assert.rejects(
+    actor.request("workflow.participantDirectory", {
+      ...directoryInput,
+      readOnly: false,
+    }),
+    /无权配置/
+  );
   const started = await admin.request(
     "workflow.run",
     { workflowId: workflow.id, input: {}, idempotencyKey: `navigation-${tag}` },
@@ -189,6 +226,10 @@ try {
     true
   );
   const detail = await actor.request("task.get", { taskId: task.id });
+  await assert.rejects(
+    actor.request("workflow.participantDirectory", directoryInput),
+    /无权配置/
+  );
   assert.equal(detail.canAct, true);
   assert.equal(detail.canViewRun, false);
   await assert.rejects(

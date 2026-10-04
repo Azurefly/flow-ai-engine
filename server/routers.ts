@@ -1669,6 +1669,7 @@ export const appRouter = router({
           kind: z.enum(["user", "department", "role"]),
           query: z.string().max(100),
           selectedIds: z.array(z.string().min(1).max(64)).max(100),
+          readOnly: z.boolean().optional(),
         })
       )
       .query(({ ctx, input }) => searchWorkflowParticipants(ctx.user, input)),

@@ -7,6 +7,7 @@ export function WorkflowParticipantPicker({
   kind,
   value,
   disabled,
+  readOnly = false,
   onChange,
   multiple = false,
   ordered = false,
@@ -16,6 +17,7 @@ export function WorkflowParticipantPicker({
   kind: "user" | "department" | "role";
   value: string[];
   disabled?: boolean;
+  readOnly?: boolean;
   multiple?: boolean;
   ordered?: boolean;
   label?: string;
@@ -28,8 +30,14 @@ export function WorkflowParticipantPicker({
     return () => clearTimeout(timer);
   }, [query]);
   const directory = trpc.workflow.participantDirectory.useQuery(
-    { workflowId, kind, query: search, selectedIds: value },
-    { staleTime: 30_000, enabled: !disabled }
+    {
+      workflowId,
+      kind,
+      query: readOnly ? "" : search,
+      selectedIds: value,
+      readOnly,
+    },
+    { staleTime: 30_000, enabled: !disabled || (readOnly && value.length > 0) }
   );
   const people = kind === "user";
   const role = kind === "role";

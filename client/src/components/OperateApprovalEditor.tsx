@@ -16,11 +16,13 @@ export function OperateApprovalEditor({
   config,
   workflowId,
   disabled,
+  readOnly = false,
   onChange,
 }: {
   config: NodeConfig;
   workflowId?: string;
   disabled: boolean;
+  readOnly?: boolean;
   onChange: (updates: NodeConfig) => void;
 }) {
   const current = normalizeReferenceOperateConfig(config);
@@ -105,6 +107,7 @@ export function OperateApprovalEditor({
           label="参与审批的人员"
           value={current.signSelectorUserIds.map(String)}
           disabled={disabled}
+          readOnly={readOnly}
           onChange={userIds =>
             onChange(updateOperateApproval(config, { userIds }))
           }
