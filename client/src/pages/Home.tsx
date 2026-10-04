@@ -538,6 +538,28 @@ function FlowConsole({
 
   const workflows = trpc.workflow.list.useQuery();
   const projects = trpc.project.list.useQuery();
+  const routeProjectId =
+    requestedRoute.route.section === "flows" &&
+    requestedRoute.route.view === "workspace"
+      ? requestedRoute.route.projectId
+      : null;
+  const routeProjectFromList = ((projects.data ?? []) as ProjectRecord[]).find(
+    item => item.id === routeProjectId
+  );
+  const routeProjectQuery = trpc.project.get.useQuery(
+    { projectId: routeProjectId ?? "00000000" },
+    {
+      enabled: Boolean(
+        routeProjectId && projects.isSuccess && !routeProjectFromList
+      ),
+      retry: false,
+    }
+  );
+  const routeProjectUnresolved = Boolean(
+    routeProjectId &&
+      !routeProjectFromList &&
+      (!routeProjectQuery.isSuccess || routeProjectQuery.isFetching)
+  );
   const workflowItems = (workflows.data ?? []) as any[];
   const routeWorkflowId =
     requestedRoute.route.section === "flows" &&
@@ -698,9 +720,10 @@ function FlowConsole({
       setSection("flows");
       setFlowView("workspace");
       if (!projects.isSuccess) return;
-      const project = ((projects.data ?? []) as ProjectRecord[]).find(
-        item => item.id === route.projectId
-      );
+      if (routeProjectUnresolved) return;
+      const project =
+        routeProjectFromList ??
+        (routeProjectQuery.data as ProjectRecord | null | undefined);
       if (!project) {
         replaceWith({ section: "flows", view: "center" });
         return;
@@ -739,6 +762,9 @@ function FlowConsole({
       );
     canonicalize();
   }, [
+    routeProjectUnresolved,
+    routeProjectFromList,
+    routeProjectQuery.data,
     projects.data,
     projects.isSuccess,
     requestedRoute,
@@ -786,7 +812,7 @@ function FlowConsole({
         (!selectedWorkflowFromList && selectedWorkflowQuery.isPending))) ||
       (requestedRoute.route.section === "flows" &&
         requestedRoute.route.view === "workspace" &&
-        !projects.isSuccess) ||
+        (!projects.isSuccess || routeProjectUnresolved)) ||
       (requestedRoute.route.section === "flows" &&
         (requestedRoute.route.view === "detail" ||
           requestedRoute.route.view === "editor") &&
@@ -1438,7 +1464,21 @@ function FlowConsole({
             >
               <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
                 <Loader2 className="animate-spin text-aiflow-info" size={16} />
-                正在恢复受权页面…
+                {routeProjectUnresolved && routeProjectQuery.isError ? (
+                  <>
+                    <span>目标业务读取失败，请重试。</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void routeProjectQuery.refetch()}
+                    >
+                      重试读取业务
+                    </Button>
+                  </>
+                ) : (
+                  "正在恢复受权页面…"
+                )}
               </div>
             </div>
           )}

@@ -43,6 +43,14 @@ const project = await admin.request(
   { code: `PREVIEW_${tag}`, name: `结果分页测试_${tag}` },
   true
 );
+assert.equal(
+  (await admin.request("project.get", { projectId: project.id })).id,
+  project.id
+);
+assert.equal(
+  await admin.request("project.get", { projectId: "missing-project-fixture" }),
+  null
+);
 const source = await admin.request(
   "data.createSource",
   {
@@ -91,13 +99,11 @@ const definition = {
     config,
     position: { x: index * 200, y: 0 },
   })),
-  edges: specs
-    .slice(1)
-    .map(([id], index) => ({
-      id: `edge-${index}`,
-      sourceNodeId: specs[index][0],
-      targetNodeId: id,
-    })),
+  edges: specs.slice(1).map(([id], index) => ({
+    id: `edge-${index}`,
+    sourceNodeId: specs[index][0],
+    targetNodeId: id,
+  })),
 };
 const workflow = await admin.request(
   "project.createWorkflow",

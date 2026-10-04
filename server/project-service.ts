@@ -173,6 +173,17 @@ export async function listProjects(user: ProjectUser) {
   return rows;
 }
 
+export async function getProject(user: ProjectUser, projectId: string) {
+  const access = await getProjectAccess(user, projectId);
+  if (!access.exists || !access.permissions.has("project:view")) return null;
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT p.*,owner.username AS ownerUsername,owner.name AS ownerName,d.code AS domainCode,d.name AS domainName,(SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount
+       FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId LEFT JOIN work_domain d ON d.id=p.domainId
+      WHERE p.id=? AND p.status='active' LIMIT 1`,
+    [projectId]
+  );
+  return rows[0] ?? null;
+}
 export async function createProject(
   user: ProjectUser,
   input: {

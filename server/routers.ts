@@ -87,6 +87,7 @@ import {
   deleteFolder,
   exportProjectWorkflows,
   getProjectAccess,
+  getProject,
   grantProjectMember,
   grantProjectUnit,
   listActiveUnits,
@@ -532,6 +533,9 @@ export const appRouter = router({
       .query(({ input }) => listAuthorizationAudit(input?.limit)),
   }),
   project: router({
+    get: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => getProject(ctx.user, input.projectId)),
     list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user)),
     access: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
