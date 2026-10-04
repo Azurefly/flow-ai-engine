@@ -162,7 +162,7 @@ export default function RunCenter({
       : [undefined];
   const historyCursor = historyCursorStack.at(-1);
   const runs = trpc.workflow.runHistoryPage.useQuery(
-    { ...filter, cursor: historyCursor, pageSize: 25 },
+    { ...filter, cursor: historyCursor, pageSize: 10 },
     {
       enabled: Boolean(workflowId),
       refetchInterval: autoRefreshEnabled ? 15_000 : false,

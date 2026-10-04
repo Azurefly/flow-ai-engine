@@ -131,7 +131,7 @@ export default function OrganizationManagementPage({
       includeDescendants,
       search: memberSearch,
       page: memberPage,
-      pageSize: 20,
+      pageSize: 10,
     },
     { enabled: Boolean(selectedId) && tab === "members", retry: false }
   );

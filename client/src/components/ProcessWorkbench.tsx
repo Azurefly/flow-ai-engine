@@ -11,6 +11,7 @@ import {
 } from "@shared/task-assignment";
 import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
+import { visibleTaskFormErrors } from "@shared/task-form-feedback";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
@@ -113,7 +114,7 @@ export default function ProcessWorkbench() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [pageCursorStack, setPageCursorStack] = useState<
     Array<string | undefined>
   >([undefined]);
@@ -1286,6 +1287,7 @@ function WorkbenchListFilters({
               onChange={event => onPageSize(Number(event.target.value))}
               className="h-11 rounded-md border border-border bg-card px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500 lg:h-9"
             >
+              <option value={10}>10 条</option>
               <option value={20}>20 条</option>
               <option value={50}>50 条</option>
               <option value={100}>100 条</option>
@@ -2527,6 +2529,9 @@ function TaskDrawer({
   const [resultRows, setResultRows] = useState<
     Array<{ key: string; value: string }>
   >([]);
+  const [touchedFormFields, setTouchedFormFields] = useState<Set<string>>(
+    new Set()
+  );
   const formFields = useMemo(
     () => taskFormFields(task),
     [task?.id, task?.formSchemaVersion, task?.payload]
@@ -2548,6 +2553,7 @@ function TaskDrawer({
       setOutcome(configuredOutcomes[0]?.code ?? "approved");
   }, [configuredOutcomes, outcome]);
   useEffect(() => {
+    setTouchedFormFields(new Set());
     setResultRows(
       formFields.map(field => ({ key: field.key, value: field.defaultValue }))
     );
@@ -2585,6 +2591,11 @@ function TaskDrawer({
   const formErrors = taskFormFieldErrors(
     submissionFields,
     createPayload(resultRows)
+  );
+  const visibleErrors = visibleTaskFormErrors(
+    formErrors,
+    touchedFormFields,
+    formFields
   );
   const setFormFieldValue = (key: string, value: string) =>
     setResultRows(rows => {
@@ -2891,13 +2902,22 @@ function TaskDrawer({
                       {formFields.map(field => (
                         <div
                           key={field.key}
+                          onBlur={event => {
+                            if (
+                              !event.currentTarget.contains(event.relatedTarget)
+                            ) {
+                              setTouchedFormFields(
+                                previous => new Set(previous).add(field.key)
+                              );
+                            }
+                          }}
                           className="grid gap-1 text-sm font-medium text-foreground"
                         >
                           {field.label}
                           {field.required ? "（必填）" : "（可选）"}
                           <TaskFormField
                             field={field}
-                            error={formErrors[field.key]}
+                            error={visibleErrors[field.key]}
                             value={
                               resultRows.find(row => row.key === field.key)
                                 ?.value ?? ""
@@ -2906,12 +2926,12 @@ function TaskDrawer({
                               setFormFieldValue(field.key, value)
                             }
                           />
-                          {formErrors[field.key] && (
+                          {visibleErrors[field.key] && (
                             <p
                               role="alert"
                               className="text-xs font-normal text-red-600"
                             >
-                              {formErrors[field.key]}
+                              {visibleErrors[field.key]}
                             </p>
                           )}
                         </div>
@@ -3007,6 +3027,14 @@ function TaskDrawer({
                     </button>
                   </div>
                 </details>
+                {Object.keys(formErrors).length > 0 && (
+                  <p
+                    role="status"
+                    className="aiflow-type-body mt-3 text-muted-foreground"
+                  >
+                    请完成必填字段并修正格式后提交。
+                  </p>
+                )}
                 <Button
                   className={`mt-3 min-h-11 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
                   disabled={

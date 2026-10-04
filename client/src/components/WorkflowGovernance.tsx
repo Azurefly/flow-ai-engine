@@ -111,7 +111,7 @@ export default function WorkflowGovernance({
       workflowId,
       searchQuery: runSearchQuery || undefined,
       cursor: runHistoryCursorStack.at(-1),
-      pageSize: 25,
+      pageSize: 10,
     },
     { enabled: activeSection === "runs", retry: false }
   );
@@ -311,7 +311,7 @@ export default function WorkflowGovernance({
                 运行记录
               </h2>
               <p className="aiflow-type-body mt-1 text-muted-foreground">
-                搜索覆盖当前流程全部运行记录 · 每页最多 25 条
+                搜索覆盖当前流程全部运行记录 · 每页最多 10 条
               </p>
             </div>
             <label className="relative block w-full sm:max-w-xs">

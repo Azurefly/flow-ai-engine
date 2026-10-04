@@ -79,7 +79,7 @@ export default function WorkflowTestRunModal({
   const [isRunning, setIsRunning] = useState(false);
   const [acknowledgedActualRun, setAcknowledgedActualRun] = useState(false);
   const [outputPage, setOutputPage] = useState(1);
-  const OUTPUT_PAGE_SIZE = 25;
+  const OUTPUT_PAGE_SIZE = 10;
 
   const canStartActualRun = canStartActualWorkflowRun({
     canRun,

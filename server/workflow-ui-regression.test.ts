@@ -1101,7 +1101,7 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationPageSource).toContain(
       "trpc.config.organizationMembersPage.useQuery"
     );
-    expect(organizationPageSource).toContain("pageSize: 20");
+    expect(organizationPageSource).toContain("pageSize: 10");
     expect(organizationPageSource).toContain('aria-label="成员分页"');
     expect(organizationPageSource).toContain("显示 {memberPageInfo.from}–");
     expect(organizationPageSource).not.toContain("members.filter(member => {");
@@ -1496,7 +1496,7 @@ describe("流程设计器界面回归约束", () => {
     expect(governanceSource).toContain("实例详情");
     expect(governanceSource).toContain("workflow.runHistoryPage.useQuery");
     expect(governanceSource).toContain(
-      "搜索覆盖当前流程全部运行记录 · 每页最多 25 条"
+      "搜索覆盖当前流程全部运行记录 · 每页最多 10 条"
     );
     expect(governanceSource).toContain("更早记录");
     expect(governanceSource).toContain("normalizeWorkflowRunSearchQuery");
