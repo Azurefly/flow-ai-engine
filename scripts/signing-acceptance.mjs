@@ -39,6 +39,7 @@ assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
 const accounts = [];
+const createdRuns = new Set();
 let unit;
 try {
   const project = await admin.request(
@@ -81,11 +82,19 @@ try {
     ["andSignFor", 66],
     ["andSignFor", 1],
     ["sequentialSignFor", 100],
+    ["handover", 100],
+    ["delegation", 100],
+    ["addRemove", 100],
   ]) {
-    const participants =
-      mode === "sequentialSignFor"
-        ? [accounts[2], accounts[0], accounts[1]]
-        : accounts;
+    const transfer = mode === "handover" || mode === "delegation";
+    const signMode = transfer ? "" : mode === "addRemove" ? "andSignFor" : mode;
+    let participants = transfer
+      ? [accounts[0]]
+      : mode === "addRemove"
+        ? [accounts[0], accounts[1]]
+        : mode === "sequentialSignFor"
+          ? [accounts[2], accounts[0], accounts[1]]
+          : accounts;
     const label = `${mode}_${percent}`;
     const definition = {
       schemaVersion: 1,
@@ -108,13 +117,14 @@ try {
             nodeDh: "SIGNTEST",
             czmc: "测试审批",
             instruction: "专用多人审批功能测试",
-            assigneeMode: "department",
+            assigneeMode: transfer ? "user" : "department",
+            ...(transfer ? { assigneeUserId: accounts[0].id } : {}),
             assigneeUnitIds: [unit.id],
             includeDescendants: false,
             bdcz: {
               bdcz: [],
               bdczjs: ["acceptor"],
-              hqhqsz: mode,
+              hqhqsz: signMode,
               xzdfhq: participants.map(item => item.id),
               hqtgbfb: percent,
             },
@@ -183,14 +193,16 @@ try {
       },
       true
     );
-    assert.equal(preview.totalApprovers, 3);
+    assert.equal(preview.totalApprovers, participants.length);
     assert.equal(
       preview.requiredApprovals,
-      mode === "orSignFor"
+      transfer
         ? 1
-        : mode === "andSignFor"
-          ? Math.ceil((3 * percent) / 100)
-          : 3
+        : signMode === "orSignFor"
+          ? 1
+          : signMode === "andSignFor"
+            ? Math.ceil((participants.length * percent) / 100)
+            : participants.length
     );
     assert.deepEqual(
       preview.users.map(user => user.id),
@@ -214,7 +226,7 @@ try {
       true
     );
     await admin.request("workflow.publish", { id: workflow.id }, true);
-    await admin.request(
+    const started = await admin.request(
       "workflow.run",
       {
         workflowId: workflow.id,
@@ -224,6 +236,7 @@ try {
       },
       true
     );
+    if (started.runId) createdRuns.add(started.runId);
     const tasks = [];
     for (const account of participants) {
       const items = await waitFor(
@@ -237,7 +250,188 @@ try {
       );
       tasks.push(items.find(item => item.workflowId === workflow.id));
     }
-    assert.equal(new Set(tasks.map(item => item.id)).size, 3);
+    assert.equal(new Set(tasks.map(item => item.id)).size, participants.length);
+    createdRuns.add(tasks[0].runId);
+    if (transfer) {
+      const source = tasks[0];
+      await assert.rejects(
+        accounts[1].session.request(
+          "task.execute",
+          {
+            taskId: source.id,
+            result: {
+              decision: "approved",
+              outcome: "approved",
+              serial: "001",
+            },
+          },
+          true
+        )
+      );
+      await assert.rejects(
+        accounts[0].session.request(
+          "task.handover",
+          { taskId: source.id, targetUserId: accounts[0].id },
+          true
+        ),
+        /当前任务处理人/
+      );
+      if (mode === "delegation")
+        await accounts[0].session.request(
+          "task.claim",
+          { taskId: source.id },
+          true
+        );
+      await accounts[0].session.request(
+        mode === "delegation" ? "task.delegate" : "task.handover",
+        { taskId: source.id, targetUserId: accounts[1].id },
+        true
+      );
+      const moved = await accounts[1].session.request("task.get", {
+        taskId: source.id,
+      });
+      assert.equal(moved.assignedUserId, accounts[1].id);
+      assert.equal(moved.responsibleUserId, accounts[1].id);
+      assert.equal(
+        moved.representedUserId,
+        mode === "delegation" ? accounts[0].id : null
+      );
+      assert.equal(moved.status, "pending");
+      assert.equal(moved.claimedByUserId, null);
+      assert.equal(moved.canAct, true);
+      await assert.rejects(
+        accounts[0].session.request(
+          "task.execute",
+          {
+            taskId: source.id,
+            result: {
+              decision: "approved",
+              outcome: "approved",
+              serial: "001",
+            },
+          },
+          true
+        )
+      );
+      const before = await admin.request("workflow.runDetail", {
+        runId: source.runId,
+      });
+      assert.equal(
+        before.status,
+        "waiting",
+        "Transfer must not advance the workflow"
+      );
+      await accounts[1].session.request(
+        "task.execute",
+        {
+          taskId: source.id,
+          result: { decision: "approved", outcome: "approved", serial: "001" },
+        },
+        true
+      );
+      const run = await waitFor(
+        () => admin.request("workflow.runDetail", { runId: source.runId }),
+        run => ["success", "failed"].includes(run.status),
+        "transfer completion"
+      );
+      assert.equal(run.status, "success");
+      assert.equal(
+        run.nodeRuns.filter(item => item.nodeId === "end").length,
+        1
+      );
+      console.log(
+        JSON.stringify({
+          scenario: mode,
+          workflowId: workflow.id,
+          runId: run.id,
+          status: run.status,
+          priorOwnerBlocked: true,
+          endExecutions: 1,
+        })
+      );
+      continue;
+    }
+    if (mode === "addRemove") {
+      let detail = await accounts[0].session.request("task.get", {
+        taskId: tasks[0].id,
+      });
+      const oldVersion = Number(detail.memberVersion);
+      const added = await accounts[0].session.request(
+        "task.addSigner",
+        {
+          taskId: tasks[0].id,
+          targetUserId: accounts[2].id,
+          memberVersion: oldVersion,
+        },
+        true
+      );
+      detail = await accounts[0].session.request("task.get", {
+        taskId: tasks[0].id,
+      });
+      assert.equal(detail.approvalProgress.total, 3);
+      assert.equal(detail.approvalProgress.required, 3);
+      await assert.rejects(
+        accounts[0].session.request(
+          "task.addSigner",
+          {
+            taskId: tasks[0].id,
+            targetUserId: accounts[2].id,
+            memberVersion: Number(detail.memberVersion),
+          },
+          true
+        ),
+        /已在/
+      );
+      await assert.rejects(
+        accounts[0].session.request(
+          "task.removeSigner",
+          {
+            taskId: tasks[0].id,
+            memberTaskId: tasks[1].id,
+            memberVersion: oldVersion,
+          },
+          true
+        ),
+        /已变化/
+      );
+      await accounts[0].session.request(
+        "task.removeSigner",
+        {
+          taskId: tasks[0].id,
+          memberTaskId: tasks[1].id,
+          memberVersion: Number(detail.memberVersion),
+        },
+        true
+      );
+      const removed = await accounts[1].session.request("task.get", {
+        taskId: tasks[1].id,
+      });
+      assert.equal(removed.status, "cancelled");
+      assert.equal(removed.canAct, false);
+      await assert.rejects(
+        accounts[1].session.request(
+          "task.execute",
+          {
+            taskId: tasks[1].id,
+            result: {
+              decision: "approved",
+              outcome: "approved",
+              serial: "001",
+            },
+          },
+          true
+        )
+      );
+      const finalGroup = await accounts[0].session.request("task.get", {
+        taskId: tasks[0].id,
+      });
+      assert.equal(finalGroup.approvalProgress.total, 2);
+      assert.equal(finalGroup.approvalProgress.required, 2);
+      tasks[1] = await accounts[2].session.request("task.get", {
+        taskId: added.taskId,
+      });
+      participants = [accounts[0], accounts[2]];
+    }
     if (mode === "sequentialSignFor") {
       assert.equal(tasks[0].canAct, true);
       assert.deepEqual(
@@ -264,9 +458,11 @@ try {
     const required =
       mode === "orSignFor"
         ? 2
-        : mode === "andSignFor"
-          ? Math.ceil((3 * percent) / 100)
-          : 3;
+        : mode === "addRemove"
+          ? 2
+          : mode === "andSignFor"
+            ? Math.ceil((3 * percent) / 100)
+            : 3;
     for (let index = 0; index < required; index++) {
       const rejected = mode === "orSignFor" && index === 0;
       if (mode === "sequentialSignFor") {
@@ -325,10 +521,14 @@ try {
       1,
       "Run must advance exactly once"
     );
-    const remaining = await participants[2].session.request("task.get", {
-      taskId: tasks[2].id,
+    const last = participants.length - 1;
+    const remaining = await participants[last].session.request("task.get", {
+      taskId: tasks[last].id,
     });
-    assert.equal(remaining.status, required < 3 ? "cancelled" : "completed");
+    assert.equal(
+      remaining.status,
+      required < participants.length ? "cancelled" : "completed"
+    );
     console.log(
       JSON.stringify({
         scenario: label,
@@ -342,6 +542,15 @@ try {
     );
   }
 } finally {
+  for (const runId of createdRuns) {
+    const run = await admin.request("workflow.runDetail", { runId });
+    if (["queued", "running", "waiting"].includes(run.status)) {
+      await admin.request("workflow.cancelRun", { runId }, true);
+      console.log(
+        JSON.stringify({ cleanup: "unfinished-test-run-cancelled", runId })
+      );
+    }
+  }
   for (const account of accounts)
     await admin.request(
       "iam.updateUserStatus",

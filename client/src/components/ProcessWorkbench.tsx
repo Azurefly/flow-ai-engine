@@ -5,7 +5,10 @@ import {
   taskFormRowValues,
   validateFormSubmission,
 } from "@shared/task-form";
-import { canManageTask } from "@shared/task-assignment";
+import {
+  canManageTask,
+  taskAssignmentTargetReason,
+} from "@shared/task-assignment";
 import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
@@ -2497,6 +2500,10 @@ function TaskDrawer({
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
   const [removeMemberTaskId, setRemoveMemberTaskId] = useState("");
+  const targetUnavailableReason = taskAssignmentTargetReason(
+    task,
+    targetUserId
+  );
   const configuredOutcomes = useMemo(
     () => taskOutcomeOptions(task),
     [task?.outcomeHandlesJson]
@@ -2735,10 +2742,15 @@ function TaskDrawer({
                     <SearchableMultiSelect
                       ariaLabel="选择移交处理人"
                       value={targetUserId ? [targetUserId] : []}
-                      options={assignees.map((item: any) => ({
-                        value: String(item.id),
-                        label: `${item.name || item.username}（${item.username}）`,
-                      }))}
+                      options={assignees
+                        .filter(
+                          (item: any) =>
+                            !taskAssignmentTargetReason(task, item.id)
+                        )
+                        .map((item: any) => ({
+                          value: String(item.id),
+                          label: `${item.name || item.username}（${item.username}）`,
+                        }))}
                       query={assigneeQuery}
                       onQueryChange={onAssigneeQueryChange}
                       onChange={ids => setTargetUserId(ids[0] ?? "")}
@@ -2766,7 +2778,7 @@ function TaskDrawer({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={busy || !targetUserId}
+                    disabled={busy || Boolean(targetUnavailableReason)}
                     onClick={() => onHandover(Number(targetUserId))}
                   >
                     <UserRoundPlus size={14} />
@@ -2776,13 +2788,18 @@ function TaskDrawer({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={busy || !targetUserId}
+                    disabled={busy || Boolean(targetUnavailableReason)}
                     onClick={() => onDelegate(Number(targetUserId))}
                   >
                     <UsersRound size={14} />
                     代理
                   </Button>
                 </div>
+                {targetUserId && targetUnavailableReason && (
+                  <p role="status" className="mt-2 text-sm text-amber-800">
+                    {targetUnavailableReason}
+                  </p>
+                )}
                 {task.approvalGroupId && (
                   <div className="mt-3 border-t border-aiflow-info-border pt-3">
                     <p className="aiflow-type-body font-semibold text-foreground">
@@ -2796,7 +2813,7 @@ function TaskDrawer({
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={busy || !targetUserId}
+                        disabled={busy || Boolean(targetUnavailableReason)}
                         onClick={() =>
                           onAddSigner(
                             Number(targetUserId),

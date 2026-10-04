@@ -447,6 +447,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
   }
   return {
     ...presentTask(task),
+    viewerUserId: user.id,
     ...taskActionState(user.id, task),
     canViewRun: await hasWorkflowPermission(
       user,
@@ -935,6 +936,14 @@ export function approvalRequirementAfterMemberChange(input: {
   return 1;
 }
 
+export function taskJsonColumnValue(value: unknown) {
+  return value === null || value === undefined
+    ? null
+    : typeof value === "string"
+      ? value
+      : JSON.stringify(value);
+}
+
 export async function addWorkflowTaskSigner(
   user: User,
   input: { taskId: string; targetUserId: number; memberVersion: number }
@@ -1009,13 +1018,13 @@ export async function addWorkflowTaskSigner(
         source.operationCode,
         source.pendingStatusName,
         source.instruction,
-        source.payloadJson,
+        taskJsonColumnValue(source.payloadJson),
         JSON.stringify(participantSnapshot),
-        source.outcomeHandlesJson,
+        taskJsonColumnValue(source.outcomeHandlesJson),
         input.targetUserId,
         source.formSchemaVersion,
         source.dueAt,
-        source.nextNodeIdsJson,
+        taskJsonColumnValue(source.nextNodeIdsJson),
         source.requestId,
       ]
     );
