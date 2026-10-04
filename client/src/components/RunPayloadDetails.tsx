@@ -105,14 +105,19 @@ function PayloadDisclosure({
 export function RunPayloadDetails({
   title,
   value,
+  nodeType,
 }: {
   title: string;
   value: unknown;
+  nodeType?: string;
 }) {
   if (value === null || value === undefined) return null;
-  const parts = splitRunPayload(value);
+  const parts = splitRunPayload(value, nodeType);
   const visibleGroups = [
-    { label: "业务输入", value: parts.businessInput },
+    {
+      label: title.includes("输出") ? "业务结果" : "业务输入",
+      value: parts.businessInput,
+    },
     { label: "流程变量", value: parts.flowVariables },
     { label: "节点结果", value: parts.nodeResults },
     { label: "其他业务字段", value: parts.additionalBusinessFields },

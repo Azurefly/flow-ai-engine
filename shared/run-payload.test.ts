@@ -2,6 +2,51 @@ import { describe, expect, it } from "vitest";
 import { hasRunPayloadValue, splitRunPayload } from "./run-payload";
 
 describe("run payload presentation groups", () => {
+  it("folds only top-level approval runtime fields and preserves form values", () => {
+    const form = {
+      serial: "001",
+      taskId: "business-reference",
+      approvalProgress: "business-value",
+    };
+    const payload = splitRunPayload(
+      {
+        result: form,
+        decision: "approved",
+        taskId: "internal-task",
+        approvalGroupId: "group",
+        completedByUserId: 7,
+        approvalProgress: { approved: 2 },
+      },
+      "operate"
+    );
+    expect(payload.businessInput).toEqual({
+      result: form,
+      decision: "approved",
+    });
+    expect(payload.runtimeMetadata).toEqual({
+      taskId: "internal-task",
+      approvalGroupId: "group",
+      completedByUserId: 7,
+      approvalProgress: { approved: 2 },
+    });
+  });
+  it("keeps matching ordinary business keys intact outside operate output", () => {
+    const data = { taskId: "business-id", responsibleUserId: 7 };
+    expect(splitRunPayload(data).businessInput).toEqual(data);
+    expect(splitRunPayload(data, "map").businessInput).toEqual(data);
+  });
+  it("preserves existing runtime fields alongside approval metadata", () => {
+    expect(
+      splitRunPayload(
+        {
+          runtime: { trace: "trace-1" },
+          taskId: "task-1",
+          result: { amount: 0 },
+        },
+        "operate"
+      ).runtimeMetadata
+    ).toEqual({ runtime: { trace: "trace-1" }, task: { taskId: "task-1" } });
+  });
   it("separates business fields from the engine runtime envelope", () => {
     const payload = splitRunPayload({
       config: { initialVariables: {} },

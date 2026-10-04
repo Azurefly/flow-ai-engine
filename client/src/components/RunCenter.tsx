@@ -853,7 +853,11 @@ export default function RunCenter({
                           />
                         ))}
                       <RunPayloadDetails title="输入" value={node.inputJson} />
-                      <RunPayloadDetails title="输出" value={node.outputJson} />
+                      <RunPayloadDetails
+                        title="输出"
+                        value={node.outputJson}
+                        nodeType={node.nodeType}
+                      />
                       <RunPayloadDetails title="错误" value={node.errorJson} />
                     </div>
                   </details>
