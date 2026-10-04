@@ -2644,12 +2644,8 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("可查看但不归当前用户处理的待办只显示只读说明", () => {
-    expect(p1ServiceSource).toContain(
-      "...taskActionState(user.id, task)"
-    );
-    expect(p1ServiceSource).toContain(
-      "...taskActionState(user.id, row)"
-    );
+    expect(p1ServiceSource).toContain("...taskActionState(user.id, task)");
+    expect(p1ServiceSource).toContain("...taskActionState(user.id, row)");
     expect(processWorkbenchSource.match(/\{canManage && \(/g)).toHaveLength(2);
     expect(processWorkbenchSource).toContain(
       "此任务仅供查看；处理操作由指定处理人完成。"
@@ -3153,4 +3149,13 @@ describe("流程设计器界面回归约束", () => {
       "setServiceEndpointEnvironment.useMutation"
     );
   });
+});
+
+it("参与人预览展示审批姓名、人数和门槛，配置变化后不显示旧结果", () => {
+  expect(canvasSource).toContain(
+    "participantPreview.variables?.config === selectedConfig"
+  );
+  expect(canvasSource).toMatch(/participantPreview\.data\.users\s*\.map/);
+  expect(canvasSource).toContain("participantPreview.data.requiredApprovals");
+  expect(canvasSource).not.toContain("候选用户 ID：");
 });

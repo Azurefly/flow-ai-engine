@@ -4452,27 +4452,42 @@ export default function WorkflowCanvas({
                             : "预览候选人"}
                         </Button>
                       </div>
-                      {participantPreview.data && (
-                        <div className="mt-2 rounded border border-aiflow-info-border bg-card/80 px-2 py-1.5">
-                          <p>
-                            方式：{participantPreview.data.mode}；候选用户 ID：
-                            {participantPreview.data.candidateUserIds.join(
-                              ", "
-                            )}
-                          </p>
-                          {participantPreview.data.fallbackApplied && (
-                            <p className="text-aiflow-warning">
-                              已使用兜底：
-                              {participantPreview.data.fallbackApplied}
+                      {participantPreview.data &&
+                        participantPreview.variables?.config ===
+                          selectedConfig && (
+                          <div className="mt-2 rounded border border-aiflow-info-border bg-card/80 px-2 py-1.5">
+                            <p>
+                              {participantPreview.data.signModeLabel}：
+                              {participantPreview.data.totalApprovers}{" "}
+                              人参与，需{" "}
+                              {participantPreview.data.requiredApprovals}{" "}
+                              人通过。
                             </p>
-                          )}
-                        </div>
-                      )}
-                      {participantPreview.error && (
-                        <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
-                          {participantPreview.error.message}
-                        </p>
-                      )}
+                            <p className="mt-1 break-words">
+                              {participantPreview.data.users
+                                .map(
+                                  (person, index) =>
+                                    `${index + 1}. ${person.name}（${person.username}）`
+                                )
+                                .join("；")}
+                              {participantPreview.data.hasMore &&
+                                "；仅显示前 100 人"}
+                            </p>
+                            {participantPreview.data.fallbackApplied && (
+                              <p className="text-aiflow-warning">
+                                已使用兜底：
+                                {participantPreview.data.fallbackApplied}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      {participantPreview.error &&
+                        participantPreview.variables?.config ===
+                          selectedConfig && (
+                          <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+                            {participantPreview.error.message}
+                          </p>
+                        )}
                     </div>
                   )}
                 </div>

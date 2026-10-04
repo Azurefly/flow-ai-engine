@@ -51,7 +51,7 @@ export function WorkflowParticipantPicker({
   return (
     <div className="space-y-1.5">
       <p className="text-sm font-medium">
-        {people || role ? "* " : ""}
+        {!multiple && (people || role) ? "* " : ""}
         {label}
       </p>
       <SearchableMultiSelect

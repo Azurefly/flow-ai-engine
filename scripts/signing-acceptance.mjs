@@ -175,6 +175,35 @@ try {
       },
       true
     );
+    const preview = await admin.request(
+      "workflow.previewParticipants",
+      {
+        workflowId: workflow.id,
+        config: definition.nodes.find(node => node.id === "approve").config,
+      },
+      true
+    );
+    assert.equal(preview.totalApprovers, 3);
+    assert.equal(
+      preview.requiredApprovals,
+      mode === "orSignFor"
+        ? 1
+        : mode === "andSignFor"
+          ? Math.ceil((3 * percent) / 100)
+          : 3
+    );
+    assert.deepEqual(
+      preview.users.map(user => user.id),
+      participants.map(account => account.id)
+    );
+    assert.ok(
+      preview.users.every(
+        user =>
+          typeof user.name === "string" &&
+          user.name &&
+          Object.keys(user).length === 3
+      )
+    );
     await admin.request(
       "project.auditWorkflow",
       {
@@ -308,6 +337,7 @@ try {
         status: run.status,
         endExecutions: 1,
         repeatedSubmissionRejected: true,
+        previewMatchesApprovalOrder: true,
       })
     );
   }

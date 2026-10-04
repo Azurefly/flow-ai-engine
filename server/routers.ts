@@ -1,3 +1,4 @@
+import { previewOperateApproval } from "./workflow-approval-preview";
 import { parse } from "cookie";
 import { searchWorkflowParticipants } from "./workflow-participant-directory";
 import { TRPCError } from "@trpc/server";
@@ -149,7 +150,6 @@ import {
   listOrganizationMembersPage,
   moveOrganizationMember,
   removeOrganizationMember,
-  resolveOperateAssignees,
   setPrimaryOrganizationMembership,
   unbindOrganizationRole,
   updateOrganizationUnit,
@@ -1506,7 +1506,7 @@ export const appRouter = router({
             message: "无权预览该流程的参与人。",
           });
         const initiatorUserId = input.initiatorUserId ?? ctx.user.id;
-        return resolveOperateAssignees({
+        return previewOperateApproval({
           workflowId: input.workflowId,
           config: input.config,
           context: {
