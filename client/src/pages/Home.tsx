@@ -1,3 +1,4 @@
+import { shouldResetRunRoute } from "@shared/run-route-guard";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import { Button } from "@/components/ui/button";
@@ -798,13 +799,25 @@ function FlowConsole({
       route.section === "runs" &&
       route.view === "monitor" &&
       route.runId &&
-      (runDetail.isError || (detail && detail.workflowId !== route.workflowId))
+      shouldResetRunRoute({
+        requestedRunId: route.runId,
+        queriedRunId: detailInput.runId,
+        workflowId: route.workflowId,
+        queryFailed: runDetail.isError,
+        detail,
+      })
     )
       navigateRoute(
         { section: "runs", view: "monitor", workflowId: route.workflowId },
         { replace: true }
       );
-  }, [navigateRoute, requestedRoute.route, runDetail.data, runDetail.isError]);
+  }, [
+    navigateRoute,
+    requestedRoute.route,
+    detailInput.runId,
+    runDetail.data,
+    runDetail.isError,
+  ]);
 
   const routeRestoring = Boolean(
     (routeWorkflowId &&
