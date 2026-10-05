@@ -1869,8 +1869,8 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain('label: "人员与操作"');
     expect(canvasSource).toContain('label: "流程参与方显示"');
     expect(canvasSource).toContain("operate: OPERATE_CONFIG_GROUPS");
-    expect(canvasSource).toContain('label: "原版路由设置"');
-    expect(canvasSource).toContain('label: "当前安全路由规则"');
+    expect(canvasSource).toContain('label: "兼容规则"');
+    expect(canvasSource).toContain('label: "分支规则"');
     expect(canvasSource).toContain("流程身份（逗号分隔）");
     expect(canvasSource).toContain("请从此路径句柄连线到目标状态节点");
     expect(canvasSource).toContain("默认路径");

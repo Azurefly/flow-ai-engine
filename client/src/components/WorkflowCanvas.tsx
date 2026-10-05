@@ -2243,11 +2243,11 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
       keys: ["nodeDh", "lymc", "gbms"],
     },
     {
-      label: "原版路由设置",
+      label: "兼容规则",
       keys: ["lysz"],
     },
     {
-      label: "当前安全路由规则",
+      label: "分支规则",
       keys: ["routes", "defaultRoute"],
     },
   ],
