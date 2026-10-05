@@ -952,7 +952,7 @@ export function analyzeWorkflowDefinition(
             diagnostics.push(
               diagnostic(
                 "WF_PARALLEL_JOIN_REQUIRED",
-                `并行路由“${node.name}”必须配置有效的 parallelJoinNodeId。`,
+                `请在并行路由“${node.name}”的基础信息中选择汇聚节点。`,
                 {
                   kind: "node",
                   nodeId: node.id,
@@ -968,7 +968,7 @@ export function analyzeWorkflowDefinition(
               diagnostics.push(
                 diagnostic(
                   "WF_PARALLEL_JOIN_MISMATCH",
-                  `汇聚节点“${joinNode.name}”必须用 parallelForNodeId 反向绑定并行路由 ${node.id}。`,
+                  `汇聚节点“${joinNode.name}”与并行路由“${node.name}”的绑定不一致，请在路由基础信息中重新选择汇聚节点。`,
                   {
                     kind: "node",
                     nodeId: joinNodeId,

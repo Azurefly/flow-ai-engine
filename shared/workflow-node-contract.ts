@@ -1245,6 +1245,12 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         kind: "json",
       },
       {
+        key: "parallelJoinNodeId",
+        label: "汇聚节点",
+        help: "全部并行分支必须到达此节点后再继续。选择后自动绑定；并行草稿仅供管理员测试，暂不可发布。",
+        kind: "text",
+      },
+      {
         key: "routes",
         label: "路由规则",
         help: "按优先级从高到低匹配，未命中时走默认分支。",

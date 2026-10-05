@@ -6,6 +6,7 @@ import { OperateApprovalEditor } from "./OperateApprovalEditor";
 import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
 import { isDataflowFieldList } from "@shared/dataflow-field-list";
 import { OPERATE_CONFIG_GROUPS } from "@shared/operate-config-groups";
+import { bindParallelJoin } from "@shared/workflow-parallel-binding";
 import {
   addEdge,
   Background,
@@ -2240,7 +2241,7 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   router: [
     {
       label: "基础信息",
-      keys: ["nodeDh", "lymc", "gbms"],
+      keys: ["nodeDh", "lymc", "gbms", "parallelJoinNodeId"],
     },
     {
       label: "兼容规则",
@@ -2281,6 +2282,12 @@ function configFieldGroups(
   config: NodeConfig
 ) {
   if (kind === "operate") fields = operateParticipantFields(fields, config);
+  if (
+    kind === "router" &&
+    !normalizeReferenceRouterConfig(config).broadcast &&
+    !config.parallelJoinNodeId
+  )
+    fields = fields.filter(field => field.key !== "parallelJoinNodeId");
   const definitions = CONFIG_GROUPS[kind];
   if (!definitions)
     return [
@@ -3532,8 +3539,31 @@ export default function WorkflowCanvas({
 
   const updateConfigFields = (updates: NodeConfig) =>
     updateSelected({ config: { ...selectedConfig, ...updates } });
-  const updateConfigField = (key: string, value: unknown) =>
+  const updateConfigField = (key: string, value: unknown) => {
+    if (key === "parallelJoinNodeId" && selected) {
+      try {
+        const changes = bindParallelJoin(
+          nodes.map(node => ({ id: node.id, config: node.data.config })),
+          selected.id,
+          String(value)
+        );
+        pushHistory();
+        setNodes(current =>
+          current.map(node =>
+            changes[node.id]
+              ? { ...node, data: { ...node.data, config: changes[node.id] } }
+              : node
+          )
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "汇聚节点绑定失败。"
+        );
+      }
+      return;
+    }
     updateConfigFields({ [key]: value });
+  };
 
   const showNodePath = useCallback(
     (nodeId: string) => {
@@ -4644,56 +4674,76 @@ export default function WorkflowCanvas({
                           );
                         }
                         const runtimeOptions =
-                          projectId && field.key === selectedResourceKey
-                            ? (resourceChoices ?? [])
-                            : selected.data.kind === "join" &&
-                                [
-                                  "leftInputNodeId",
-                                  "rightInputNodeId",
-                                ].includes(field.key)
-                              ? nodes
-                                  .filter(node =>
-                                    edges.some(
-                                      edge =>
-                                        edge.target === selected.id &&
-                                        edge.source === node.id
+                          field.key === "parallelJoinNodeId"
+                            ? nodes
+                                .filter(
+                                  node =>
+                                    node.id !== selected.id &&
+                                    node.data.kind !== "start" &&
+                                    node.data.kind !== "router" &&
+                                    edges.filter(
+                                      edge => edge.target === node.id
+                                    ).length >= 2
+                                )
+                                .map(node => ({
+                                  value: node.id,
+                                  label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}`,
+                                  disabled: Boolean(
+                                    node.data.config.parallelForNodeId &&
+                                      node.data.config.parallelForNodeId !==
+                                        selected.id
+                                  ),
+                                }))
+                            : projectId && field.key === selectedResourceKey
+                              ? (resourceChoices ?? [])
+                              : selected.data.kind === "join" &&
+                                  [
+                                    "leftInputNodeId",
+                                    "rightInputNodeId",
+                                  ].includes(field.key)
+                                ? nodes
+                                    .filter(node =>
+                                      edges.some(
+                                        edge =>
+                                          edge.target === selected.id &&
+                                          edge.source === node.id
+                                      )
                                     )
-                                  )
-                                  .map(node => ({
-                                    value: node.id,
-                                    label: `${node.data.label}（${node.id.slice(0, 8)}）`,
-                                  }))
-                              : field.key === "endpointRef" && projectId
-                                ? endpointChoices
-                                    .filter(
-                                      endpoint => endpoint.status === "active"
-                                    )
-                                    .map(endpoint => ({
-                                      value: endpoint.refCode,
-                                      label: `${endpoint.name} · ${({ development: "开发", test: "测试", staging: "预发布", production: "生产" } as Record<string, string>)[endpoint.targetEnvironment] ?? endpoint.targetEnvironment}（${endpoint.refCode}）`,
+                                    .map(node => ({
+                                      value: node.id,
+                                      label: `${node.data.label}（${node.id.slice(0, 8)}）`,
                                     }))
-                                : field.key === "subflowId"
-                                  ? subflows
-                                      .filter(subflow => subflow.isEnabled)
-                                      .map(subflow => ({
-                                        value: subflow.id,
-                                        label: subflow.name,
+                                : field.key === "endpointRef" && projectId
+                                  ? endpointChoices
+                                      .filter(
+                                        endpoint => endpoint.status === "active"
+                                      )
+                                      .map(endpoint => ({
+                                        value: endpoint.refCode,
+                                        label: `${endpoint.name} · ${({ development: "开发", test: "测试", staging: "预发布", production: "生产" } as Record<string, string>)[endpoint.targetEnvironment] ?? endpoint.targetEnvironment}（${endpoint.refCode}）`,
                                       }))
-                                  : field.key === "compensationNodeId"
-                                    ? nodes
-                                        .filter(
-                                          node =>
-                                            node.id !== selected.id &&
-                                            canConnectFlowNodeTypes(
-                                              selected.data.kind,
-                                              node.data.kind
-                                            )
-                                        )
-                                        .map(node => ({
-                                          value: node.id,
-                                          label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                                  : field.key === "subflowId"
+                                    ? subflows
+                                        .filter(subflow => subflow.isEnabled)
+                                        .map(subflow => ({
+                                          value: subflow.id,
+                                          label: subflow.name,
                                         }))
-                                    : undefined;
+                                    : field.key === "compensationNodeId"
+                                      ? nodes
+                                          .filter(
+                                            node =>
+                                              node.id !== selected.id &&
+                                              canConnectFlowNodeTypes(
+                                                selected.data.kind,
+                                                node.data.kind
+                                              )
+                                          )
+                                          .map(node => ({
+                                            value: node.id,
+                                            label: `${node.data.label} · ${FLOW_NODE_DEFINITIONS[node.data.kind].label}（${node.id.slice(0, 8)}）`,
+                                          }))
+                                      : undefined;
                         return (
                           <ConfigFieldEditor
                             key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
@@ -4752,27 +4802,29 @@ export default function WorkflowCanvas({
                             }
                             runtimeOptions={runtimeOptions}
                             runtimePlaceholder={
-                              projectId && field.key === selectedResourceKey
-                                ? resourceOptions.isLoading
-                                  ? "正在加载项目资源…"
-                                  : selectedResourceKey === "datasourceId"
-                                    ? "请选择已验证的 MySQL 数据源"
-                                    : selectedResourceKey === "udfId"
-                                      ? "请选择已审核的项目函数"
-                                      : "请选择项目数据资源"
-                                : selected.data.kind === "join" &&
-                                    [
-                                      "leftInputNodeId",
-                                      "rightInputNodeId",
-                                    ].includes(field.key)
-                                  ? "请选择已连接的上游数据节点"
-                                  : field.key === "endpointRef" && projectId
-                                    ? serviceEndpoints.isLoading
-                                      ? "正在加载服务端点…"
-                                      : "请选择当前业务的服务端点"
-                                    : field.key === "compensationNodeId"
-                                      ? "请选择当前流程的补偿节点"
-                                      : undefined
+                              field.key === "parallelJoinNodeId"
+                                ? "请选择有两条入线的汇聚节点"
+                                : projectId && field.key === selectedResourceKey
+                                  ? resourceOptions.isLoading
+                                    ? "正在加载项目资源…"
+                                    : selectedResourceKey === "datasourceId"
+                                      ? "请选择已验证的 MySQL 数据源"
+                                      : selectedResourceKey === "udfId"
+                                        ? "请选择已审核的项目函数"
+                                        : "请选择项目数据资源"
+                                  : selected.data.kind === "join" &&
+                                      [
+                                        "leftInputNodeId",
+                                        "rightInputNodeId",
+                                      ].includes(field.key)
+                                    ? "请选择已连接的上游数据节点"
+                                    : field.key === "endpointRef" && projectId
+                                      ? serviceEndpoints.isLoading
+                                        ? "正在加载服务端点…"
+                                        : "请选择当前业务的服务端点"
+                                      : field.key === "compensationNodeId"
+                                        ? "请选择当前流程的补偿节点"
+                                        : undefined
                             }
                             runtimeError={
                               projectId && field.key === selectedResourceKey

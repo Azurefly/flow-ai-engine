@@ -12,9 +12,9 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Measured function capability labels: 1363.12 KiB raw / 401.29 KiB gzip.
-const maxTotalBytes = 1_364 * 1024;
-const maxTotalGzipBytes = 402 * 1024;
+// Parallel join picker measured: 1365.42 KiB raw / 402.15 KiB gzip.
+const maxTotalBytes = 1_366 * 1024;
+const maxTotalGzipBytes = 403 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;
