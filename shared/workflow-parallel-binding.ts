@@ -1,5 +1,12 @@
 import type { NodeConfig } from "./workflow-node-contract";
 
+export function setRouterBroadcast(
+  config: NodeConfig,
+  enabled: boolean
+): NodeConfig {
+  return { ...config, gbms: enabled, broadcast: enabled };
+}
+
 /** Update both sides of a parallel binding without changing unrelated config. */
 export function bindParallelJoin(
   nodes: Array<{ id: string; config: NodeConfig }>,

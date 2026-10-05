@@ -1,7 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { bindParallelJoin } from "./workflow-parallel-binding";
+import {
+  bindParallelJoin,
+  setRouterBroadcast,
+} from "./workflow-parallel-binding";
+import { normalizeReferenceRouterConfig } from "./reference-router-config";
 
 describe("并行汇聚配置", () => {
+  it("兼容并行字段的开关保持一致，旧 broadcast 可关闭", () => {
+    const config = { broadcast: true, parallelJoinNodeId: "join" };
+    const disabled = setRouterBroadcast(config, false);
+    expect(normalizeReferenceRouterConfig(disabled).broadcast).toBe(false);
+    expect(disabled.parallelJoinNodeId).toBe("join");
+    expect(
+      normalizeReferenceRouterConfig(setRouterBroadcast(disabled, true))
+        .broadcast
+    ).toBe(true);
+  });
   const nodes = [
     { id: "router", config: { parallelJoinNodeId: "old", routes: ["keep"] } },
     { id: "old", config: { parallelForNodeId: "router", value: 1 } },

@@ -6,7 +6,10 @@ import { OperateApprovalEditor } from "./OperateApprovalEditor";
 import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
 import { isDataflowFieldList } from "@shared/dataflow-field-list";
 import { OPERATE_CONFIG_GROUPS } from "@shared/operate-config-groups";
-import { bindParallelJoin } from "@shared/workflow-parallel-binding";
+import {
+  bindParallelJoin,
+  setRouterBroadcast,
+} from "@shared/workflow-parallel-binding";
 import {
   addEdge,
   Background,
@@ -3540,6 +3543,12 @@ export default function WorkflowCanvas({
   const updateConfigFields = (updates: NodeConfig) =>
     updateSelected({ config: { ...selectedConfig, ...updates } });
   const updateConfigField = (key: string, value: unknown) => {
+    if (key === "gbms" && selected?.data.kind === "router") {
+      updateSelected({
+        config: setRouterBroadcast(selectedConfig, Boolean(value)),
+      });
+      return;
+    }
     if (key === "parallelJoinNodeId" && selected) {
       try {
         const changes = bindParallelJoin(
@@ -4623,10 +4632,12 @@ export default function WorkflowCanvas({
                     </div>
                     <div className="space-y-4">
                       {activeInspectorGroup.fields.map(field => {
-                        const fieldValue = configFieldValue(
-                          field,
-                          selectedConfig
-                        );
+                        const fieldValue =
+                          selected.data.kind === "router" &&
+                          field.key === "gbms"
+                            ? normalizeReferenceRouterConfig(selectedConfig)
+                                .broadcast
+                            : configFieldValue(field, selectedConfig);
                         if (
                           selected.data.kind === "operate" &&
                           workflowId &&
