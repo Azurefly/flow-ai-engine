@@ -408,10 +408,12 @@ export async function updateOrganizationUnit(
 ) {
   const connection = await db().getConnection();
   let acquired = false;
+  let reusable = false;
   try {
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT GET_LOCK('flow_ai_organization_tree_update', 5) AS acquired"
     );
+    reusable = true;
     acquired = Number(rows[0]?.acquired) === 1;
     if (!acquired) throw new Error("其他管理员正在调整组织层级，请稍后重试。");
     return await updateOrganizationUnitLocked(user, input, connection);
@@ -421,8 +423,11 @@ export async function updateOrganizationUnit(
         await connection.query(
           "SELECT RELEASE_LOCK('flow_ai_organization_tree_update')"
         );
+    } catch {
+      reusable = false;
     } finally {
-      connection.release();
+      if (reusable) connection.release();
+      else connection.destroy();
     }
   }
 }

@@ -1,16 +1,24 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ query: vi.fn(), audit: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  query: vi.fn(),
+  audit: vi.fn(),
+  acquire: vi.fn(),
+  unlock: vi.fn(),
+  release: vi.fn(),
+  destroy: vi.fn(),
+}));
 vi.mock("./db", () => ({
   getSharedPool: () => ({
     query: mocks.query,
     getConnection: async () => ({
       query: async (sql: string, params?: unknown[]) =>
         sql.includes("GET_LOCK")
-          ? [[{ acquired: 1 }], []]
+          ? mocks.acquire()
           : sql.includes("RELEASE_LOCK")
-            ? [[{ released: 1 }], []]
+            ? mocks.unlock()
             : mocks.query(sql, params),
-      release: () => {},
+      release: mocks.release,
+      destroy: mocks.destroy,
     }),
   }),
 }));
@@ -29,6 +37,8 @@ const duplicate = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.acquire.mockResolvedValue([[{ acquired: 1 }], []]);
+  mocks.unlock.mockResolvedValue([[{ released: 1 }], []]);
 });
 it("重复部门编码转换为可操作中文错误且不写成功审计", async () => {
   mocks.query.mockRejectedValueOnce(duplicate);
@@ -110,4 +120,43 @@ it("正常根部门路径仍可迁移保存", async () => {
     true
   );
   expect(mocks.audit).toHaveBeenCalledTimes(1);
+});
+
+it("锁等待超时不更新组织，连接正常归还且不释放他人的锁", async () => {
+  mocks.acquire.mockResolvedValueOnce([[{ acquired: 0 }], []]);
+  await expect(updateOrganizationUnit(user, { id: "moving" })).rejects.toThrow(
+    "稍后重试"
+  );
+  expect(mocks.query).not.toHaveBeenCalled();
+  expect(mocks.unlock).not.toHaveBeenCalled();
+  expect(mocks.release).toHaveBeenCalledTimes(1);
+  expect(mocks.destroy).not.toHaveBeenCalled();
+});
+it("加锁响应失败销毁连接，避免未知锁状态进入连接池", async () => {
+  mocks.acquire.mockRejectedValueOnce(new Error("connection interrupted"));
+  await expect(updateOrganizationUnit(user, { id: "moving" })).rejects.toThrow(
+    "connection interrupted"
+  );
+  expect(mocks.release).not.toHaveBeenCalled();
+  expect(mocks.destroy).toHaveBeenCalledTimes(1);
+});
+it("业务拒绝后仍释放锁并归还连接", async () => {
+  mocks.query.mockResolvedValueOnce([[{ id: "moving" }], []]);
+  await expect(
+    updateOrganizationUnit(user, { id: "moving", parentUnitId: "moving" })
+  ).rejects.toThrow("不能把自身");
+  expect(mocks.unlock).toHaveBeenCalledTimes(1);
+  expect(mocks.release).toHaveBeenCalledTimes(1);
+});
+it("更新成功但释放失败时销毁连接，保留成功结果而不诱导重复保存", async () => {
+  mocks.query
+    .mockResolvedValueOnce([[{ id: "moving", name: "部门" }], []])
+    .mockResolvedValueOnce([{}, []]);
+  mocks.unlock.mockRejectedValueOnce(new Error("unlock interrupted"));
+  await expect(updateOrganizationUnit(user, { id: "moving" })).resolves.toBe(
+    true
+  );
+  expect(mocks.audit).toHaveBeenCalledTimes(1);
+  expect(mocks.release).not.toHaveBeenCalled();
+  expect(mocks.destroy).toHaveBeenCalledTimes(1);
 });
