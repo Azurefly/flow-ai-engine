@@ -21,7 +21,15 @@ vi.mock("./organization-service", () => ({
     candidateUserIds: [config.assigneeUserId ?? 1],
   }),
 }));
-import { executeRunSegment, resumeWorkflowTask } from "./workflow-engine";
+import {
+  executeRunSegment,
+  resumeWorkflowTask,
+  signalWorkflowMessage,
+} from "./workflow-engine";
+import {
+  forkParallelState,
+  reachParallelJoin,
+} from "./workflow-parallel-state";
 import { restoreParallelCheckpoint } from "./workflow-parallel-checkpoint";
 beforeEach(() => {
   vi.resetAllMocks();
@@ -35,6 +43,85 @@ beforeEach(() => {
       return [[{ sequenceNo: sequence }]];
     return sql.startsWith("SELECT") ? [[]] : [{ affectedRows: 1 }];
   });
+});
+it("消息等待续跑使用最新汇聚状态和其他分支输出，避免旧快照覆盖", async () => {
+  const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
+  const arrived = reachParallelJoin(fork.state, "join", fork.tokens[1]);
+  const latest = {
+    vars: { b: { value: 9 } },
+    nodes: { b: { value: 9 } },
+    runtime: {
+      executionQueue: [],
+      parallelCheckpoint: { frames: arrived.state, queue: [] },
+    },
+  };
+  const stale = {
+    queue: [],
+    context: {
+      vars: {},
+      nodes: {},
+      runtime: {
+        parallelCheckpoint: { frames: fork.state, queue: [] },
+        parallelWaitContinuation: {
+          nextNodeIds: ["join"],
+          tokens: fork.tokens[0],
+        },
+      },
+    },
+    currentNodeId: null,
+    finalOutput: null,
+  };
+  const baseQuery = mocks.query.getMockImplementation()!;
+  mocks.query.mockImplementation(async (sql: string, params: any[]) => {
+    if (sql.trim().startsWith("SELECT id FROM workflow_wait_subscription"))
+      return [[{ id: "wait" }]];
+    if (sql.includes("SELECT s.*,r.status AS runStatus"))
+      return [
+        [
+          {
+            id: "wait",
+            runId: "run",
+            nodeId: "catch",
+            nodeRunId: "nr",
+            status: "active",
+            runStatus: "waiting",
+            waitType: "message",
+            checkpointJson: JSON.stringify(stale),
+            runContextJson: JSON.stringify(latest),
+          },
+        ],
+      ];
+    return baseQuery(sql, params);
+  });
+  await expect(
+    signalWorkflowMessage({
+      runId: "run",
+      messageName: "ready",
+      correlationKey: "one",
+      payload: { received: true },
+    })
+  ).resolves.toMatchObject({ status: "queued" });
+  const job = mocks.query.mock.calls.find(([sql]) =>
+    sql.includes("INSERT INTO workflow_run_job")
+  );
+  const checkpoint = JSON.parse(job![1][3]);
+  expect(checkpoint.context.vars.b).toEqual({ value: 9 });
+  expect(checkpoint.context.nodes.catch.payload).toEqual({ received: true });
+  expect(checkpoint.queue).toEqual(["join"]);
+  const result = await executeRunSegment({
+    runId: "run",
+    workflow: { id: "flow", ownerUserId: 1 } as any,
+    definition: {
+      nodes: [
+        node("join", "transform", { parallelForNodeId: "router" }),
+        node("end", "end"),
+      ],
+      edges: [edge("join", "end")],
+    } as any,
+    context: checkpoint.context,
+    queue: checkpoint.queue,
+  });
+  expect(result.status).toBe("success");
 });
 const node = (id: string, type = "transform", config: any = {}) => ({
   id,
@@ -169,6 +256,10 @@ it("两个并行人工任务同时生成，依次提交后仅汇聚一次", asyn
     ([, params]) => JSON.parse(params[16]).parallelTokens
   );
   expect(tokens[0]).not.toEqual(tokens[1]);
+  const nodeRunIds = tasks.map(
+    ([, params]) => JSON.parse(params[16]).nodeRunId
+  );
+  expect(new Set(nodeRunIds).size).toBe(2);
   context = initial.context;
   for (const [, params] of tasks) {
     selectedTask = {
@@ -203,6 +294,10 @@ it("两个并行人工任务同时生成，依次提交后仅汇聚一次", asyn
     });
     expect(segment.status).toBe(pending.size ? "waiting" : "success");
   }
+  const resumedNodeQueries = mocks.query.mock.calls.filter(([sql]) =>
+    sql.includes("SELECT id,startedAt FROM workflow_node_run")
+  );
+  expect(resumedNodeQueries.map(([, params]) => params[2])).toEqual(nodeRunIds);
   const executed = mocks.query.mock.calls
     .filter(([sql]) => sql.includes("INSERT INTO workflow_node_run"))
     .map(([, params]) => params[3]);

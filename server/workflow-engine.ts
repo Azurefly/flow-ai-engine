@@ -3265,6 +3265,7 @@ export async function executeRunSegment(input: {
               JSON.stringify({
                 config,
                 context: input.context,
+                nodeRunId,
                 ...(parallel ? { parallelTokens: activeTokens } : {}),
                 assignmentMode: assignment.mode,
                 reference,
@@ -4013,9 +4014,13 @@ export async function resumeWorkflowTask(input: {
     nodeOutputs[String(task.nodeId)] = taskOutput;
     context.vars = vars;
     context.nodes = nodeOutputs;
+    const taskNodeRunId =
+      typeof taskPayload.nodeRunId === "string"
+        ? taskPayload.nodeRunId.trim()
+        : "";
     const [nodeRuns] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting' ORDER BY createdAt DESC LIMIT 1 FOR UPDATE",
-      [task.runId, task.nodeId]
+      `SELECT id,startedAt FROM workflow_node_run WHERE runId=? AND nodeId=? AND status='waiting'${taskNodeRunId ? " AND id=?" : ""} ORDER BY createdAt DESC LIMIT 1 FOR UPDATE`,
+      [task.runId, task.nodeId, ...(taskNodeRunId ? [taskNodeRunId] : [])]
     );
     const waitingNodeRun = nodeRuns[0];
     if (!waitingNodeRun)
@@ -4300,6 +4305,7 @@ export async function reconcileWorkflowContinuations(limit = 20) {
        FROM workflow_task t
        JOIN workflow_run r ON r.id=t.runId AND r.status IN ('running','waiting')
        JOIN workflow_node_run nr ON nr.runId=t.runId AND nr.nodeId=t.nodeId AND nr.status='waiting'
+         AND (JSON_EXTRACT(t.payloadJson,'$.nodeRunId') IS NULL OR nr.id=JSON_UNQUOTE(JSON_EXTRACT(t.payloadJson,'$.nodeRunId')))
        LEFT JOIN workflow_task_group g ON g.id=t.approvalGroupId
       WHERE t.status='completed' AND t.completedAt<DATE_SUB(NOW(),INTERVAL 10 SECOND)
         AND (t.approvalGroupId IS NULL OR g.completedByTaskId=t.id)
