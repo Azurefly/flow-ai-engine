@@ -133,3 +133,68 @@ it("派生字段按运行时名称去空格并保留输入字段", () => {
     )
   ).toEqual(["text", "phone", "copied"]);
 });
+
+const joinNodes = [
+  { id: "left", kind: "source", config: { assetId: "leftAsset" } },
+  { id: "right", kind: "source", config: { assetId: "rightAsset" } },
+  {
+    id: "join",
+    kind: "join",
+    config: { leftInputNodeId: "left", rightInputNodeId: "right" },
+  },
+  { id: "udf", kind: "udf", config: {} },
+];
+const joinEdges = [
+  { source: "right", target: "join" },
+  { source: "left", target: "join" },
+  { source: "join", target: "udf" },
+];
+const joinAssets = [
+  { value: "leftAsset", fields: ["id", "text"] },
+  { value: "rightAsset", fields: ["id", "text", "phone"] },
+];
+it("关联按显式左右输入提供同名字段前缀，连线顺序不影响结果", () => {
+  expect(fields("udf", joinNodes, joinEdges, joinAssets)).toEqual([
+    "id",
+    "text",
+    "right_id",
+    "right_text",
+    "phone",
+  ]);
+  expect(
+    fields("udf", joinNodes, [...joinEdges].reverse(), joinAssets)
+  ).toEqual(["id", "text", "right_id", "right_text", "phone"]);
+});
+it("关联自定义前缀与输出冲突时不提供虚假建议", () => {
+  const custom = joinNodes.map(node =>
+    node.id === "join"
+      ? { ...node, config: { ...node.config, rightPrefix: "lookup_" } }
+      : node
+  );
+  expect(fields("udf", custom, joinEdges, joinAssets)).toEqual([
+    "id",
+    "text",
+    "lookup_id",
+    "lookup_text",
+    "phone",
+  ]);
+  expect(
+    fields("udf", joinNodes, joinEdges, [
+      { ...joinAssets[0], fields: ["id", "right_id"] },
+      joinAssets[1],
+    ])
+  ).toEqual([]);
+});
+it("关联缺少绑定或上游字段不可知时不猜测", () => {
+  expect(
+    fields(
+      "udf",
+      joinNodes.map(node =>
+        node.id === "join" ? { ...node, config: {} } : node
+      ),
+      joinEdges,
+      joinAssets
+    )
+  ).toEqual([]);
+  expect(fields("udf", joinNodes, joinEdges, [joinAssets[0]])).toEqual([]);
+});

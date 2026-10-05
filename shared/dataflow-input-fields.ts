@@ -21,6 +21,32 @@ export function dataflowInputFields(
             []);
     }
     const upstream = edges.filter(edge => edge.target === id);
+    if (node.kind === "join") {
+      const leftId = String(node.config.leftInputNodeId ?? "").trim();
+      const rightId = String(node.config.rightInputNodeId ?? "").trim();
+      if (
+        upstream.length !== 2 ||
+        !leftId ||
+        leftId === rightId ||
+        !upstream.some(edge => edge.source === leftId) ||
+        !upstream.some(edge => edge.source === rightId)
+      )
+        return [];
+      const left = read(leftId, next),
+        right = read(rightId, next);
+      if (!left.length || !right.length) return [];
+      const occupied = new Set(left);
+      const output = [...left];
+      for (const name of right) {
+        const target = left.includes(name)
+          ? `${String(node.config.rightPrefix ?? "right_")}${name}`
+          : name;
+        if (occupied.has(target)) return [];
+        occupied.add(target);
+        output.push(target);
+      }
+      return output;
+    }
     if (upstream.length !== 1) return [];
     const fields = read(upstream[0].source, next);
     if (!fields.length) return [];
