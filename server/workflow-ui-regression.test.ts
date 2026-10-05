@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_366 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_367 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 403 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -2888,6 +2888,20 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).not.toContain("text-[11px]");
     expect(styleSource).toContain("font-size: var(--aiflow-type-page-title);");
     expect(styleSource).toContain("font-size: var(--aiflow-type-section);");
+  });
+
+  it("协作成员区分到期、停用、未生效与撤销，并仅在弹窗内刷新", () => {
+    expect(iamServiceSource).toContain("wm.expiresAt<=NOW() THEN 'expired'");
+    expect(iamServiceSource).toContain("wm.effectiveFrom>NOW() THEN 'pending'");
+    expect(iamServiceSource).toContain("u.status<>'active' THEN 'disabled'");
+    expect(iamServiceSource).toContain("AS authorizationStatus");
+    expect(homeSource).toContain('member.authorizationStatus === "active"');
+    expect(homeSource).toContain('disabled: "账号已停用"');
+    expect(homeSource).toContain('expired: "已到期"');
+    expect(homeSource).toContain(
+      "refetchInterval: membersDialogOpen ? 30_000 : false"
+    );
+    expect(homeSource).toContain("成员状态刷新失败，当前显示可能已过期。");
   });
 
   it("设计器和成员授权弹窗不请求可选 LLM 模型目录", () => {

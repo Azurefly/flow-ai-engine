@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Parallel join picker measured: 1365.42 KiB raw / 402.15 KiB gzip.
-const maxTotalBytes = 1_366 * 1024;
+// Member status and live permission dialog measured: 1366.44 KiB raw / 402.41 KiB gzip.
+const maxTotalBytes = 1_367 * 1024;
 const maxTotalGzipBytes = 403 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

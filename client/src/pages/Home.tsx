@@ -2210,6 +2210,16 @@ function FlowDesigner({
   const [hours, setHours] = useState("");
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const liveMembers = trpc.workflow.members.useQuery(
+    { workflowId: workflow?.id ?? "00000000" },
+    {
+      enabled: Boolean(membersDialogOpen && workflow?.id),
+      refetchInterval: membersDialogOpen ? 30_000 : false,
+      refetchIntervalInBackground: false,
+      retry: false,
+    }
+  );
+  const displayedMembers = liveMembers.data ?? members;
   const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
   const utils = trpc.useUtils();
@@ -2725,10 +2735,10 @@ function FlowDesigner({
             </p>
             <div className="aiflow-type-body mt-3 min-w-0 rounded border border-aiflow-info-border bg-card/80 p-2">
               <p className="aiflow-type-section-title mb-1.5 font-semibold text-blue-900">
-                协作成员与有效期（{members.length}）
+                协作成员与有效期（{displayedMembers.length}）
               </p>
               <div className="mt-2 grid min-w-0 gap-1.5">
-                {members.map(member => (
+                {displayedMembers.map(member => (
                   <div
                     key={member.id}
                     className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border border-aiflow-info-border bg-card px-2 py-1.5"
@@ -2740,7 +2750,14 @@ function FlowDesigner({
                           `用户 ${member.userId}`}
                       </span>
                       <span className="aiflow-type-control ml-2 text-aiflow-info">
-                        {member.role}
+                        {(
+                          {
+                            owner: "所有者",
+                            editor: "编辑者",
+                            operator: "运行者",
+                            viewer: "查看者",
+                          } as Record<string, string>
+                        )[member.role] ?? member.role}
                       </span>
                       <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
                         生效：{formatTime(member.effectiveFrom)} · 到期：
@@ -2751,14 +2768,22 @@ function FlowDesigner({
                     </div>
                     <div className="flex items-center gap-1">
                       <span
-                        className={`aiflow-type-meta rounded px-1.5 py-0.5 ${member.revokedAt ? "bg-slate-200 text-muted-foreground" : "bg-aiflow-success-surface text-aiflow-success"}`}
+                        className={`aiflow-type-meta rounded px-1.5 py-0.5 ${member.authorizationStatus === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-slate-200 text-muted-foreground"}`}
                       >
-                        {member.revokedAt ? "已撤销" : "有效"}
+                        {(
+                          {
+                            active: "有效",
+                            revoked: "已撤销",
+                            disabled: "账号已停用",
+                            pending: "尚未生效",
+                            expired: "已到期",
+                          } as Record<string, string>
+                        )[member.authorizationStatus] ?? "状态待确认"}
                       </span>
                       {canManage && !member.revokedAt && (
                         <button
                           type="button"
-                          className="text-[10px] text-red-600 hover:underline"
+                          className="aiflow-type-control min-h-9 px-2 text-red-600 hover:underline"
                           onClick={() => onRevoke(member.userId, member.role)}
                         >
                           撤销
@@ -2767,10 +2792,22 @@ function FlowDesigner({
                     </div>
                   </div>
                 ))}
-                {!members.length && (
+                {!displayedMembers.length && (
                   <span className="text-blue-500">暂无可见协作成员。</span>
                 )}
               </div>
+              {liveMembers.isError && (
+                <p role="alert" className="aiflow-type-body mt-2 text-red-600">
+                  成员状态刷新失败，当前显示可能已过期。
+                  <button
+                    type="button"
+                    className="ml-2 underline"
+                    onClick={() => void liveMembers.refetch()}
+                  >
+                    重试
+                  </button>
+                </p>
+              )}
             </div>
             {canManage && (
               <form
@@ -2794,6 +2831,7 @@ function FlowDesigner({
                 <select
                   className="h-8 min-w-0 max-w-full rounded border border-border bg-card px-2"
                   value={candidateId}
+                  aria-label="待授权内部账号"
                   onChange={event => setCandidateId(event.target.value)}
                   required
                 >
@@ -2809,6 +2847,7 @@ function FlowDesigner({
                   <select
                     className="h-8 min-w-0 rounded border border-border bg-card px-2"
                     value={memberRole}
+                    aria-label="协作角色"
                     onChange={event =>
                       setMemberRole(event.target.value as typeof memberRole)
                     }
@@ -2823,6 +2862,7 @@ function FlowDesigner({
                     type="number"
                     min="1"
                     placeholder="有效期小时（可选）"
+                    aria-label="授权有效期（小时）"
                     value={hours}
                     onChange={event => setHours(event.target.value)}
                   />

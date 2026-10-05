@@ -317,7 +317,12 @@ export async function revokeWorkflowMember(input: { workflowId: string; userId: 
 export async function listWorkflowMembers(workflowId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT wm.id,wm.workflowId,wm.userId,wm.role,wm.effectiveFrom,wm.expiresAt,wm.revokedAt,wm.grantedByUserId,
-            u.username,u.name,u.email
+            u.username,u.name,u.email,u.status AS userStatus,
+            CASE WHEN wm.revokedAt IS NOT NULL THEN 'revoked'
+                 WHEN u.status<>'active' THEN 'disabled'
+                 WHEN wm.effectiveFrom>NOW() THEN 'pending'
+                 WHEN wm.expiresAt IS NOT NULL AND wm.expiresAt<=NOW() THEN 'expired'
+                 ELSE 'active' END AS authorizationStatus
        FROM workflow_member wm JOIN users u ON u.id=wm.userId
       WHERE wm.workflowId=? ORDER BY wm.role,wm.createdAt`,
     [workflowId]
