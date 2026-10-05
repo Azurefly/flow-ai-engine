@@ -117,10 +117,15 @@ export function RunPayloadDetails({
     {
       label: title.includes("输出") ? "业务结果" : "业务输入",
       value: parts.businessInput,
+      collapsed: false,
     },
-    { label: "流程变量", value: parts.flowVariables },
-    { label: "节点结果", value: parts.nodeResults },
-    { label: "其他业务字段", value: parts.additionalBusinessFields },
+    { label: "流程变量", value: parts.flowVariables, collapsed: true },
+    { label: "节点结果", value: parts.nodeResults, collapsed: true },
+    {
+      label: "其他业务字段",
+      value: parts.additionalBusinessFields,
+      collapsed: false,
+    },
   ].filter(group => hasRunPayloadValue(group.value));
 
   return (
@@ -129,14 +134,22 @@ export function RunPayloadDetails({
         {title}
       </h4>
       <div className="grid min-w-0 gap-2">
-        {visibleGroups.map(group => (
-          <div key={group.label} className="min-w-0">
-            <p className="aiflow-type-body mb-1 font-medium text-muted-foreground">
-              {group.label}
-            </p>
-            <PayloadFields value={group.value} />
-          </div>
-        ))}
+        {visibleGroups.map(group =>
+          group.collapsed ? (
+            <PayloadDisclosure
+              key={group.label}
+              label={group.label}
+              value={group.value}
+            />
+          ) : (
+            <div key={group.label} className="min-w-0">
+              <p className="aiflow-type-body mb-1 font-medium text-muted-foreground">
+                {group.label}
+              </p>
+              <PayloadFields value={group.value} />
+            </div>
+          )
+        )}
         {!visibleGroups.length && (
           <p className="aiflow-type-body rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground">
             此节点没有业务字段。

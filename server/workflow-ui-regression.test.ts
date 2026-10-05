@@ -2896,6 +2896,17 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).not.toContain("当前已发现 ${models.length} 个可用模型");
   });
 
+  it("节点上下文默认收起，业务输入输出优先展示且保留展开入口", () => {
+    expect(runPayloadDetailsSource).toContain(
+      '{ label: "流程变量", value: parts.flowVariables, collapsed: true }'
+    );
+    expect(runPayloadDetailsSource).toContain(
+      '{ label: "节点结果", value: parts.nodeResults, collapsed: true }'
+    );
+    expect(runPayloadDetailsSource).toContain("group.collapsed ?");
+    expect(runPayloadDetailsSource).not.toContain("<details open");
+  });
+
   it("运行节点详情对字段值、说明和展开控件使用统一字号语义", () => {
     expect(runPayloadDetailsSource).toContain(
       'className="aiflow-type-section-title mb-2 font-semibold text-foreground"'
