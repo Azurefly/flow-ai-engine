@@ -2,7 +2,11 @@ import { restoreParallelBarrier } from "./workflow-parallel-barrier";
 import type { ParallelState, BranchToken } from "./workflow-parallel-state";
 export type ParallelCheckpoint = {
   frames: ParallelState;
-  queue: { nodeId: string; tokens: BranchToken[] }[];
+  queue: {
+    nodeId: string;
+    tokens: BranchToken[];
+    releasedJoinFrameId?: string;
+  }[];
 };
 export function restoreParallelCheckpoint(
   value: unknown,
@@ -56,7 +60,21 @@ export function restoreParallelCheckpoint(
       seen.add(token.frameId);
       return { ...token };
     });
-    return { nodeId: entry.nodeId, tokens };
+    const releasedJoinFrameId = entry.releasedJoinFrameId;
+    if (
+      releasedJoinFrameId !== undefined &&
+      (typeof releasedJoinFrameId !== "string" ||
+        !Object.prototype.hasOwnProperty.call(frames, releasedJoinFrameId) ||
+        frames[releasedJoinFrameId].joinNodeId !== entry.nodeId ||
+        !frames[releasedJoinFrameId].barrier.released ||
+        tokens.some(token => token.frameId === releasedJoinFrameId))
+    )
+      return invalid();
+    return {
+      nodeId: entry.nodeId,
+      tokens,
+      ...(releasedJoinFrameId === undefined ? {} : { releasedJoinFrameId }),
+    };
   });
   return { frames, queue };
 }
