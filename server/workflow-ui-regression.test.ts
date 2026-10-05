@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_360 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_361 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 401 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -1035,6 +1035,11 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(organizationPageSource).toContain("createUser.useMutation");
     expect(organizationPageSource).toContain("新建内部用户");
+    for (const field of ["username", "name", "password", "email", "role"]) {
+      expect(organizationPageSource).toContain(
+        `value={newUserForm.${field}} disabled={Boolean(createdUserId)}`
+      );
+    }
     expect(organizationPageSource).toContain("包含子机构成员");
     expect(organizationPageSource).toContain("用户直接角色");
     expect(organizationPageSource).toContain("部门继承角色");

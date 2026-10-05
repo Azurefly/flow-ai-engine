@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Include measured executable function UI (1359.74 KiB raw / 400.15 KiB gzip).
-const maxTotalBytes = 1_360 * 1024;
+// Measured account retry UI: 1360.07 KiB raw / 400.28 KiB gzip.
+const maxTotalBytes = 1_361 * 1024;
 const maxTotalGzipBytes = 401 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

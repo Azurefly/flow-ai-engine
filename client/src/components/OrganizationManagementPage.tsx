@@ -1613,13 +1613,14 @@ export default function OrganizationManagementPage({
       >
         {createdUserId && (
           <div className="rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-sm text-aiflow-warning">
-            账号已经创建，本次提交只重试加入当前部门，不会重复创建账号。
+            账号已创建，信息不可修改；本次仅重试加入部门。
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field
             label="登录名"
             value={newUserForm.username}
+            disabled={Boolean(createdUserId)}
             onChange={value =>
               setNewUserForm({ ...newUserForm, username: value.toLowerCase() })
             }
@@ -1628,12 +1629,14 @@ export default function OrganizationManagementPage({
           <Field
             label="姓名"
             value={newUserForm.name}
+            disabled={Boolean(createdUserId)}
             onChange={value => setNewUserForm({ ...newUserForm, name: value })}
           />
           <Field
             label="初始密码"
             type="password"
             value={newUserForm.password}
+            disabled={Boolean(createdUserId)}
             onChange={value =>
               setNewUserForm({ ...newUserForm, password: value })
             }
@@ -1643,6 +1646,7 @@ export default function OrganizationManagementPage({
             label="邮箱（可选）"
             type="email"
             value={newUserForm.email}
+            disabled={Boolean(createdUserId)}
             onChange={value => setNewUserForm({ ...newUserForm, email: value })}
           />
           <label className="grid gap-1.5 text-sm font-medium text-foreground">
@@ -1650,6 +1654,7 @@ export default function OrganizationManagementPage({
             <select
               className="aiflow-type-control h-11 rounded-md border border-border bg-card px-3 min-[1024px]:h-10"
               value={newUserForm.role}
+              disabled={Boolean(createdUserId)}
               onChange={event =>
                 setNewUserForm({
                   ...newUserForm,
@@ -1944,12 +1949,14 @@ function Field({
   onChange,
   type = "text",
   placeholder,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   type?: string;
   placeholder?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
@@ -1957,6 +1964,7 @@ function Field({
       <Input
         className="aiflow-type-control h-11 min-[1024px]:h-10"
         type={type}
+        disabled={disabled}
         value={value}
         onChange={event => onChange(event.target.value)}
         placeholder={placeholder}
