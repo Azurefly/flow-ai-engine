@@ -1,6 +1,9 @@
 import { expect, it } from "vitest";
 import { forkParallelState } from "./workflow-parallel-state";
-import { restoreParallelCheckpoint } from "./workflow-parallel-checkpoint";
+import {
+  restoreParallelCheckpoint,
+  resumeParallelCheckpoint,
+} from "./workflow-parallel-checkpoint";
 const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
 const checkpoint = {
   frames: fork.state,
@@ -9,6 +12,22 @@ const checkpoint = {
     { nodeId: "branch", tokens: fork.tokens[1] },
   ],
 };
+it("人工任务续跑保留其他分支并恢复本分支身份", () => {
+  const pending = { frames: fork.state, queue: [checkpoint.queue[1]] };
+  const resumed = resumeParallelCheckpoint(
+    pending,
+    ["branch"],
+    ["join"],
+    fork.tokens[0]
+  );
+  expect(resumed.queue).toEqual([
+    checkpoint.queue[1],
+    { nodeId: "join", tokens: fork.tokens[0] },
+  ]);
+  expect(() =>
+    resumeParallelCheckpoint(pending, ["branch"], ["join"], undefined)
+  ).toThrow();
+});
 it("恢复同一节点不同分支身份，保持队列顺序", () => {
   const restored = restoreParallelCheckpoint(
     JSON.parse(JSON.stringify(checkpoint)),

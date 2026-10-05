@@ -1,3 +1,11 @@
+import {
+  restoreParallelCheckpoint,
+  resumeParallelCheckpoint,
+  type ParallelCheckpoint,
+} from "./workflow-parallel-checkpoint";
+import { forkParallelState, type BranchToken } from "./workflow-parallel-state";
+import { prepareParallelJoin } from "./workflow-parallel-join";
+import { resumeWorkflowQueue } from "./workflow-resume-queue";
 import { orderOperateApprovers } from "../shared/operate-approval-editor";
 import { getRunApprovalProgress } from "./run-approval-progress";
 import type { RunApprovalGroup } from "../shared/run-approval-progress";
@@ -1309,20 +1317,24 @@ export function selectRouterRoutes(
       }
     }
   } else {
-    // 保持无人员数据流和既有控制流定义的兼容行为。
-    const matched = normalized.rules.find(
+    const matches = normalized.rules.filter(
       rule => !rule.isDefault && routerRuleMatches(rule, context, ["default"])
     );
     const fallback = normalized.rules.find(rule => rule.isDefault) ?? {
       handle: String(interpolate(normalized.defaultRoute, context)),
       targetNodeId: "",
     };
-    const selected = matched ?? fallback;
-    assignments.set(`${selected.handle}\u0000${selected.targetNodeId}`, {
-      handle: selected.handle,
-      targetNodeId: selected.targetNodeId,
-      userIds: [],
-    });
+    const selected = matches.length
+      ? normalized.broadcast
+        ? matches
+        : matches.slice(0, 1)
+      : [fallback];
+    for (const rule of selected)
+      assignments.set(`${rule.handle}\u0000${rule.targetNodeId}`, {
+        handle: rule.handle,
+        targetNodeId: rule.targetNodeId,
+        userIds: [],
+      });
   }
 
   const selectedBranches = Array.from(assignments.values());
@@ -2008,6 +2020,11 @@ export async function executePreparedWorkflowRun(input: {
         : null,
   };
   const startNode = definition.nodes.find(node => node.type === "start");
+  if (runtime.parallelCheckpoint !== undefined)
+    runtime.parallelCheckpoint = restoreParallelCheckpoint(
+      runtime.parallelCheckpoint,
+      suppliedCheckpoint.queue
+    );
   const queue = suppliedCheckpoint.queue.length
     ? [...suppliedCheckpoint.queue]
     : startNode
@@ -2018,6 +2035,11 @@ export async function executePreparedWorkflowRun(input: {
     : Date.now();
   const persistCheckpoint = async (checkpoint: WorkflowCheckpoint) => {
     const nextRuntime = asRecord(checkpoint.context.runtime);
+    if (nextRuntime.parallelCheckpoint !== undefined)
+      nextRuntime.parallelCheckpoint = restoreParallelCheckpoint(
+        nextRuntime.parallelCheckpoint,
+        checkpoint.queue
+      );
     nextRuntime.executionQueue = checkpoint.queue;
     nextRuntime.executionCurrentNodeId = checkpoint.currentNodeId ?? null;
     nextRuntime.executionFinalOutput = checkpoint.finalOutput ?? null;
@@ -2889,15 +2911,58 @@ async function executeRunSegment(input: {
 }): Promise<RunSegmentResult> {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
+  const initialRuntime = asRecord(input.context.runtime);
+  let parallel: ParallelCheckpoint | undefined =
+    initialRuntime.parallelCheckpoint === undefined
+      ? undefined
+      : restoreParallelCheckpoint(
+          initialRuntime.parallelCheckpoint,
+          input.queue
+        );
+  let activeTokens: BranchToken[] = [];
+  const enqueue = (nodeId: string, tokens = activeTokens) => {
+    input.queue.push(nodeId);
+    if (parallel) {
+      parallel.queue.push({
+        nodeId,
+        tokens: tokens.map(token => ({ ...token })),
+      });
+      asRecord(input.context.runtime).parallelCheckpoint = parallel;
+    }
+  };
   let finalOutput: unknown = input.finalOutput ?? null;
   let reachedEnd = false;
   while (input.queue.length) {
     if (executed.size >= MAX_STEPS)
       throw new Error("流程执行超过最大节点步数，可能存在循环。");
     const nodeId = input.queue.shift()!;
-    if (executed.has(nodeId)) continue;
+    activeTokens = parallel?.queue[0]?.tokens ?? [];
+    const executionKey = JSON.stringify([
+      nodeId,
+      activeTokens,
+      parallel?.queue[0]?.releasedJoinFrameId,
+    ]);
+    if (executed.has(executionKey)) {
+      parallel?.queue.shift();
+      continue;
+    }
     const node = nodes.get(nodeId);
     if (!node) throw new Error(`流程引用了不存在的节点：${nodeId}`);
+    if (parallel && node.config.parallelForNodeId) {
+      const prepared = prepareParallelJoin(parallel);
+      parallel = prepared.checkpoint;
+      asRecord(input.context.runtime).parallelCheckpoint = parallel;
+      if (!prepared.ready) {
+        await input.checkpoint?.({
+          queue: [...input.queue],
+          context: input.context,
+          finalOutput,
+          currentNodeId: null,
+        });
+        continue;
+      }
+      activeTokens = parallel.queue[0].tokens;
+    }
     if (["wait", "message_catch"].includes(node.type)) {
       const [existingWaits] = await db().query<mysql.RowDataPacket[]>(
         "SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND status='active' LIMIT 1",
@@ -2906,17 +2971,19 @@ async function executeRunSegment(input: {
       if (existingWaits[0])
         return { status: "waiting", taskId: String(existingWaits[0].id) };
     }
-    executed.add(nodeId);
+    executed.add(executionKey);
     await input.checkpoint?.({
       queue: [nodeId, ...input.queue],
       context: input.context,
       finalOutput,
       currentNodeId: nodeId,
     });
+    parallel?.queue.shift();
     const currentParticipants = runtimeNodeParticipants(input.context, node.id);
     const executionRuntime = asRecord(input.context.runtime);
     executionRuntime.executionRunId = input.runId;
     executionRuntime.executionNodeId = node.id;
+    if (parallel) executionRuntime.parallelActiveTokens = activeTokens;
     input.context.runtime = executionRuntime;
     setCurrentNodeParticipants(
       input.context,
@@ -2948,7 +3015,7 @@ async function executeRunSegment(input: {
             nextNodeId,
             currentParticipants
           );
-          input.queue.push(nextNodeId);
+          enqueue(nextNodeId);
         }
         const persisted = await persistWorkflowWait({
           runId: input.runId,
@@ -3021,7 +3088,7 @@ async function executeRunSegment(input: {
                 edge.targetNodeId,
                 automaticParticipants
               );
-              input.queue.push(edge.targetNodeId);
+              enqueue(edge.targetNodeId);
             });
           await input.checkpoint?.({
             queue: [...input.queue],
@@ -3179,6 +3246,7 @@ async function executeRunSegment(input: {
               JSON.stringify({
                 config,
                 context: input.context,
+                ...(parallel ? { parallelTokens: activeTokens } : {}),
                 assignmentMode: assignment.mode,
                 reference,
               }),
@@ -3307,7 +3375,7 @@ async function executeRunSegment(input: {
           operationName,
         });
         await input.checkpoint?.({
-          queue: [],
+          queue: [...input.queue],
           context: input.context,
           finalOutput,
           currentNodeId: null,
@@ -3417,6 +3485,10 @@ async function executeRunSegment(input: {
         ? routed.routeTargets.map(asRecord)
         : [];
       if (node.type === "router" && routeTargets.length) {
+        const dispatches = new Map<
+          string,
+          { targetNodeId: string; userIds: number[] }
+        >();
         for (const branch of routeTargets) {
           const handle = String(branch.handle ?? routed.route ?? "default");
           const targetNodeId = String(branch.targetNodeId ?? "");
@@ -3428,20 +3500,54 @@ async function executeRunSegment(input: {
           const edges = input.definition.edges.filter(
             edge =>
               edge.sourceNodeId === node.id &&
-              ((targetNodeId && edge.targetNodeId === targetNodeId) ||
-                (!targetNodeId &&
-                  (edge.sourceHandle ?? "default") === handle) ||
-                (edge.sourceHandle ?? "default") === handle)
+              (targetNodeId
+                ? edge.targetNodeId === targetNodeId
+                : (edge.sourceHandle ?? "default") === handle)
           );
           for (const edge of edges) {
-            setRuntimeNodeParticipants(
-              input.context,
+            const key = JSON.stringify([
+              edge.sourceHandle ?? "default",
               edge.targetNodeId,
-              branchUsers
-            );
-            input.queue.push(edge.targetNodeId);
+            ]);
+            const previous = dispatches.get(key);
+            dispatches.set(key, {
+              targetNodeId: edge.targetNodeId,
+              userIds: Array.from(
+                new Set([...(previous?.userIds ?? []), ...branchUsers])
+              ),
+            });
           }
         }
+        const branches = Array.from(dispatches.entries());
+        let branchTokens: BranchToken[][] = branches.map(() => activeTokens);
+        if (normalizeReferenceRouterConfig(node.config).broadcast) {
+          const joinNodeId = String(node.config.parallelJoinNodeId ?? "");
+          if (!joinNodeId || !branches.length)
+            throw new Error("并行路由缺少有效汇聚或实际派发分支。");
+          parallel ??= {
+            frames: {},
+            queue: input.queue.map(nodeId => ({ nodeId, tokens: [] })),
+          };
+          const fork = forkParallelState(
+            parallel.frames,
+            nodeRunId,
+            node.id,
+            joinNodeId,
+            branches.map(([key]) => key),
+            activeTokens
+          );
+          parallel.frames = fork.state;
+          branchTokens = fork.tokens;
+          asRecord(input.context.runtime).parallelCheckpoint = parallel;
+        }
+        branches.forEach(([, branch], index) => {
+          setRuntimeNodeParticipants(
+            input.context,
+            branch.targetNodeId,
+            branch.userIds
+          );
+          enqueue(branch.targetNodeId, branchTokens[index]);
+        });
       } else {
         input.definition.edges
           .filter(
@@ -3456,7 +3562,7 @@ async function executeRunSegment(input: {
               edge.targetNodeId,
               currentParticipants
             );
-            input.queue.push(edge.targetNodeId);
+            enqueue(edge.targetNodeId);
           });
       }
       const completedRuntime = asRecord(input.context.runtime);
@@ -3915,6 +4021,22 @@ export async function resumeWorkflowTask(input: {
         );
       continuationNodeIds = [outcomeEdges[0]!.targetNodeId];
     }
+    if (asRecord(context.runtime).parallelCheckpoint !== undefined) {
+      const pending = resumeWorkflowQueue(
+        asRecord(context.runtime).executionQueue,
+        []
+      );
+      asRecord(context.runtime).parallelCheckpoint = resumeParallelCheckpoint(
+        asRecord(context.runtime).parallelCheckpoint,
+        pending,
+        continuationNodeIds,
+        taskPayload.parallelTokens
+      );
+    }
+    continuationNodeIds = resumeWorkflowQueue(
+      asRecord(context.runtime).executionQueue,
+      continuationNodeIds
+    );
     for (const nodeId of continuationNodeIds)
       setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
     const resumeRuntime = asRecord(context.runtime);
@@ -4250,6 +4372,23 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         }
         for (const nodeId of queue)
           setRuntimeNodeParticipants(context, nodeId, runtimeUserIds(context));
+        if (asRecord(context.runtime).parallelCheckpoint !== undefined) {
+          const pending = resumeWorkflowQueue(
+            asRecord(context.runtime).executionQueue,
+            []
+          );
+          asRecord(context.runtime).parallelCheckpoint =
+            resumeParallelCheckpoint(
+              asRecord(context.runtime).parallelCheckpoint,
+              pending,
+              queue,
+              asRecord(readJson(task.payloadJson)).parallelTokens
+            );
+        }
+        queue = resumeWorkflowQueue(
+          asRecord(context.runtime).executionQueue,
+          queue
+        );
         const resumeRuntime = asRecord(context.runtime);
         resumeRuntime.executionRunId = String(task.runId);
         resumeRuntime.executionQueue = queue;
@@ -4596,7 +4735,10 @@ export async function getWorkflowRun(
     nodeRuns: nodeRows,
     stateTransitions: transitionRows,
     milestones: milestoneRows,
-    approvalGroups: viewerUserId && nodeRows.some(node => node.nodeType === "operate") ? await getRunApprovalProgress(runId) : [],
+    approvalGroups:
+      viewerUserId && nodeRows.some(node => node.nodeType === "operate")
+        ? await getRunApprovalProgress(runId)
+        : [],
   };
 }
 

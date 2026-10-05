@@ -8,6 +8,21 @@ export type ParallelCheckpoint = {
     releasedJoinFrameId?: string;
   }[];
 };
+export function resumeParallelCheckpoint(
+  value: unknown,
+  pending: string[],
+  next: string[],
+  tokens: unknown
+) {
+  const checkpoint = restoreParallelCheckpoint(value, pending);
+  return restoreParallelCheckpoint(
+    {
+      frames: checkpoint.frames,
+      queue: [...checkpoint.queue, ...next.map(nodeId => ({ nodeId, tokens }))],
+    },
+    [...pending, ...next]
+  );
+}
 export function restoreParallelCheckpoint(
   value: unknown,
   nodeQueue: string[]
