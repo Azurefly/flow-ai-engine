@@ -3196,3 +3196,15 @@ it("组织保存失败在弹窗内保留错误并允许修改重试", () => {
     );
   }
 });
+
+it("路由连线与节点使用统一规则解析，出口提示展示业务名称", () => {
+  expect(canvasSource).toContain(
+    "normalizeReferenceRouterConfig(source.data.config).rules.map"
+  );
+  expect(canvasSource).not.toContain(
+    "source.data.config.routes as NodeConfig[]"
+  );
+  expect(canvasSource).toContain('default: "默认出口"');
+  expect(canvasSource).toContain("route.handle === id");
+  expect(canvasSource).not.toContain("title={id}");
+});

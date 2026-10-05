@@ -435,7 +435,21 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
               top: `${((index + 1) / (handles.length + 1)) * 100}%`,
               backgroundColor: handleColor,
             }}
-            title={id}
+            title={
+              ((nodeData.kind === "operate"
+                ? readOperateOutcomes(nodeData.config).find(
+                    outcome => outcome.sourceHandle === id
+                  )?.label
+                : routeItems.find(route => route.handle === id)
+                    ?.label) as string) ||
+              (
+                {
+                  default: "默认出口",
+                  compensation: "补偿出口",
+                } as Record<string, string>
+              )[id] ||
+              id
+            }
           />
         );
       })}
@@ -2800,9 +2814,10 @@ export default function WorkflowCanvas({
       edges.map(edge => {
         const source = nodeMap.get(edge.source);
         const routes =
-          source?.data.kind === "router" &&
-          Array.isArray(source.data.config.routes)
-            ? (source.data.config.routes as NodeConfig[])
+          source?.data.kind === "router"
+            ? normalizeReferenceRouterConfig(source.data.config).rules.map(
+                rule => ({ handle: rule.handle, label: rule.name })
+              )
             : [];
         const route = routes.find(
           item =>
