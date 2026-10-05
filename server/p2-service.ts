@@ -1,3 +1,4 @@
+import { builtinDataFunctionChoice } from "../shared/builtin-data-functions";
 import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { checkDataflowQuality } from "./dataflow-quality";
 import { executeBuiltinDataFunction } from "./dataflow-builtin-function";
@@ -152,7 +153,7 @@ export async function listDataResourceOptions(
       [projectId]
     ),
     db().query<mysql.RowDataPacket[]>(
-      "SELECT id,name FROM data_udf WHERE projectId=? AND status='approved' ORDER BY name,id",
+      "SELECT id,name,udfType,artifactRef FROM data_udf WHERE projectId=? AND status='approved' ORDER BY name,id",
       [projectId]
     ),
   ]);
@@ -164,7 +165,14 @@ export async function listDataResourceOptions(
   return {
     assets: options(assets[0]),
     sources: options(sources[0]),
-    udfs: options(udfs[0]),
+    udfs: udfs[0].map(row =>
+      builtinDataFunctionChoice({
+        id: String(row.id),
+        name: String(row.name),
+        udfType: String(row.udfType),
+        artifactRef: row.artifactRef,
+      })
+    ),
   };
 }
 
@@ -1576,9 +1584,15 @@ async function runDataflowDefinition(
           [udfId, projectId]
         );
         if (!udfs[0]) throw new Error("UDF 不存在、未审核或不属于当前项目。 ");
-        if (udfs[0].udfType !== "javascript") throw new Error("此函数类型尚未配置执行器，不能执行数据转换。");
+        if (udfs[0].udfType !== "javascript")
+          throw new Error("此函数类型尚未配置执行器，不能执行数据转换。");
         output = {
-          rows: executeBuiltinDataFunction(rowsFromInput(inputs), String(udfs[0].artifactRef ?? ""), String(config.inputField ?? ""), String(config.outputField ?? "")),
+          rows: executeBuiltinDataFunction(
+            rowsFromInput(inputs),
+            String(udfs[0].artifactRef ?? ""),
+            String(config.inputField ?? ""),
+            String(config.outputField ?? "")
+          ),
           udf: { name: udfs[0].name, type: udfs[0].udfType },
           execution: "builtin_transform",
         };

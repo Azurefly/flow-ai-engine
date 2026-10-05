@@ -91,6 +91,19 @@ for (const name of ["trim", "lower", "upper", "mask-phone", "metadata-only"]) {
   );
   functions.push(udf.id);
 }
+const choices = await admin.request("data.resourceOptions", {
+  projectId: project.id,
+});
+assert.equal(choices.udfs.length, 5);
+for (const [index, id] of functions.entries()) {
+  const option = choices.udfs.find(item => item.value === id);
+  assert(option);
+  assert.equal(option.disabled, index === 4);
+  assert.match(
+    option.label,
+    index === 4 ? /尚不可执行/ : /去除首尾空格|转为小写|转为大写|手机号脱敏/
+  );
+}
 for (const metadataOnly of [false, true]) {
   const transforms = metadataOnly
     ? [
@@ -147,13 +160,11 @@ for (const metadataOnly of [false, true]) {
       config,
       position: { x: index * 200, y: 0 },
     })),
-    edges: specs
-      .slice(1)
-      .map(([id], index) => ({
-        id: `edge-${index}`,
-        sourceNodeId: specs[index][0],
-        targetNodeId: id,
-      })),
+    edges: specs.slice(1).map(([id], index) => ({
+      id: `edge-${index}`,
+      sourceNodeId: specs[index][0],
+      targetNodeId: id,
+    })),
   };
   const workflow = await admin.request(
     "project.createWorkflow",

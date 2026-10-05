@@ -743,7 +743,7 @@ function ConfigFieldEditor({
   value: unknown;
   fallback: unknown;
   disabled: boolean;
-  runtimeOptions?: Array<{ value: string; label: string }>;
+  runtimeOptions?: Array<{ value: string; label: string; disabled?: boolean }>;
   runtimePlaceholder?: string;
   runtimeError?: string;
   onRetryOptions?: () => void;
@@ -834,7 +834,11 @@ function ConfigFieldEditor({
               <option value={current}>当前选择不可用 · {current}</option>
             )}
             {runtimeOptions.map(option => (
-              <option key={option.value} value={option.value}>
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={"disabled" in option && Boolean(option.disabled)}
+              >
                 {option.label}
               </option>
             ))}
@@ -2714,7 +2718,9 @@ export default function WorkflowCanvas({
             selectedResourceKey &&
             resourceOptions.isSuccess &&
             !resourceChoices?.some(
-              option => option.value === selectedConfig[selectedResourceKey]
+              option =>
+                option.value === selectedConfig[selectedResourceKey] &&
+                !("disabled" in option && option.disabled)
             )
           ? {
               state: "partial" as const,
@@ -4654,7 +4660,7 @@ export default function WorkflowCanvas({
                                       selectedResourceKey === "datasourceId"
                                         ? "按名称选择已通过连接验证的 MySQL 数据源；请先在业务项目的数据源页面登记并测试连接。"
                                         : selectedResourceKey === "udfId"
-                                          ? "选择已审核函数；仅记录引用并传递数据，不执行函数代码。"
+                                          ? "选择已审核且绑定内置处理实现的函数；标记“尚不可执行”的函数不能选用。"
                                           : "选择已启用资源；在项目“数据资源”中登记。",
                                   }
                                 : field.key === "endpointRef" && projectId

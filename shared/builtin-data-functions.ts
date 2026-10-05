@@ -4,3 +4,20 @@ export const builtinDataFunctions = [
   { value: "builtin:upper", label: "转为大写" },
   { value: "builtin:mask-phone", label: "手机号脱敏（保留前3后4位）" },
 ] as const;
+
+export function builtinDataFunctionChoice(udf: {
+  id: string;
+  name: string;
+  udfType: string;
+  artifactRef?: unknown;
+}) {
+  const implementation =
+    udf.udfType === "javascript"
+      ? builtinDataFunctions.find(item => item.value === udf.artifactRef)
+      : undefined;
+  return {
+    value: udf.id,
+    label: `${udf.name} · ${implementation?.label ?? "尚不可执行"}（${udf.id.slice(0, 8)}）`,
+    disabled: !implementation,
+  };
+}
