@@ -1,3 +1,4 @@
+import { visibleOrganizationIds } from "../../../shared/organization-tree-visibility";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,6 +116,7 @@ export default function OrganizationManagementPage({
   const [mobileDirectoryOpen, setMobileDirectoryOpen] = useState(false);
   const [tab, setTab] = useState<PageTab>("overview");
   const [query, setQuery] = useState("");
+  const [showDisabled, setShowDisabled] = useState(false);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const unitActionsRef = useRef<HTMLDetailsElement>(null);
   const selectedUnitActionsRef = useRef<HTMLDetailsElement>(null);
@@ -171,16 +173,21 @@ export default function OrganizationManagementPage({
 
   useEffect(() => {
     if (!units.length) {
-      setSelectedId(null);
+      if (selectedId) setSelectedId(null);
       return;
     }
+    const ids = visibleOrganizationIds(units, "", showDisabled);
+    const available = units.filter(unit => ids.has(unit.id));
     setExpanded(current =>
       current.size ? current : new Set(units.map(unit => unit.id))
     );
-    if (!selectedId || !units.some(unit => unit.id === selectedId))
-      setSelectedId(units[0].id);
-  }, [selectedId, units]);
-
+    if (!selectedId || !ids.has(selectedId))
+      setSelectedId(
+        available.find(unit => unit.status === "active")?.id ??
+          available[0]?.id ??
+          null
+      );
+  }, [selectedId, units, showDisabled]);
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       setMemberSearch(memberQuery.trim());
@@ -227,27 +234,10 @@ export default function OrganizationManagementPage({
     );
   }, [units]);
 
-  const visibleIds = useMemo(() => {
-    if (!query.trim()) return null;
-    const value = query.trim().toLowerCase();
-    const ids = new Set<string>();
-    for (const unit of units) {
-      if (
-        !`${unit.name} ${unit.code} ${unit.pathName || ""} ${unit.pathCode || ""} ${unit.standardCode || ""}`
-          .toLowerCase()
-          .includes(value)
-      )
-        continue;
-      ids.add(unit.id);
-      let parentId = unit.parentUnitId;
-      while (parentId) {
-        ids.add(parentId);
-        parentId = units.find(item => item.id === parentId)?.parentUnitId;
-      }
-    }
-    return ids;
-  }, [query, units]);
-
+  const visibleIds = useMemo(
+    () => visibleOrganizationIds(units, query, showDisabled),
+    [units, query, showDisabled]
+  );
   const createUnit = trpc.config.createOrganizationUnit.useMutation();
   const updateUnit = trpc.config.updateOrganizationUnit.useMutation();
   const assignMember = trpc.config.assignOrganizationMember.useMutation();
@@ -639,7 +629,9 @@ export default function OrganizationManagementPage({
   const renderTree = (parentId = "root", depth = 0): ReactNode =>
     (childrenByParent.get(parentId) ?? []).map(unit => {
       if (visibleIds && !visibleIds.has(unit.id)) return null;
-      const children = childrenByParent.get(unit.id) ?? [];
+      const children = (childrenByParent.get(unit.id) ?? []).filter(child =>
+        visibleIds.has(child.id)
+      );
       const isExpanded = expanded.has(unit.id) || Boolean(query.trim());
       const isDuplicateName = duplicateUnitNames.has(unit.name.trim());
       return (
@@ -812,6 +804,14 @@ export default function OrganizationManagementPage({
                 onChange={event => setQuery(event.target.value)}
               />
             </label>
+            <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showDisabled}
+                onChange={event => setShowDisabled(event.target.checked)}
+              />
+              显示停用部门
+            </label>
             <div className="mt-3 max-h-[520px] overflow-y-auto">
               {organization.isLoading ? (
                 <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
@@ -821,6 +821,14 @@ export default function OrganizationManagementPage({
               ) : (
                 renderTree()
               )}
+              {!organization.isLoading &&
+                units.length > 0 &&
+                !query.trim() &&
+                visibleIds.size === 0 && (
+                  <p className="p-6 text-sm text-muted-foreground">
+                    暂无启用部门，可勾选“显示停用部门”。
+                  </p>
+                )}
               {!organization.isLoading && !units.length && (
                 <div className="p-6 text-center text-sm text-muted-foreground">
                   尚未创建部门，请点击“新增根部门”。
