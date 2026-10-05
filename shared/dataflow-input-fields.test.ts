@@ -72,3 +72,64 @@ it("元数据字段去重并限制100项", () => {
     ).length
   ).toBe(100);
 });
+
+it("投影映射只显示输出字段，保留默认源字段名", () => {
+  expect(
+    fields(
+      "lower",
+      [
+        nodes[0],
+        {
+          ...nodes[1],
+          kind: "project",
+          config: {
+            fields: [
+              { source: "text", target: "renamed" },
+              { source: "phone" },
+            ],
+          },
+        },
+        nodes[2],
+      ],
+      edges,
+      assets
+    )
+  ).toEqual(["renamed", "phone"]);
+});
+it("map列选择不泄露已移除字段", () => {
+  expect(
+    fields(
+      "lower",
+      [
+        nodes[0],
+        { ...nodes[1], kind: "map", config: { columns: ["phone"] } },
+        nodes[2],
+      ],
+      edges,
+      assets
+    )
+  ).toEqual(["phone"]);
+});
+it("派生字段按运行时名称去空格并保留输入字段", () => {
+  expect(
+    fields(
+      "lower",
+      [
+        nodes[0],
+        {
+          ...nodes[1],
+          kind: "derive",
+          config: {
+            fields: [
+              { name: " copied ", expression: "{{text}}" },
+              { name: "unused", expression: "" },
+            ],
+          },
+        },
+        nodes[2],
+      ],
+      edges,
+      assets
+    )
+  ).toEqual(["text", "phone", "copied"]);
+});

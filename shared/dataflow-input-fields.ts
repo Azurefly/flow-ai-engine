@@ -24,6 +24,35 @@ export function dataflowInputFields(
     if (upstream.length !== 1) return [];
     const fields = read(upstream[0].source, next);
     if (!fields.length) return [];
+    if (["map", "project"].includes(node.kind)) {
+      const mappings = node.config.fields;
+      if (Array.isArray(mappings) && mappings.length)
+        return mappings.flatMap(item =>
+          item &&
+          typeof item === "object" &&
+          typeof (item.target ?? item.source) === "string"
+            ? [item.target ?? item.source]
+            : []
+        );
+      return Array.isArray(node.config.columns) && node.config.columns.length
+        ? node.config.columns.filter(
+            (name): name is string => typeof name === "string"
+          )
+        : fields;
+    }
+    if (node.kind === "derive") {
+      const added = Array.isArray(node.config.fields)
+        ? node.config.fields.flatMap(item =>
+            item &&
+            typeof item.name === "string" &&
+            item.name.trim() &&
+            String(item.expression ?? "").trim()
+              ? [item.name.trim()]
+              : []
+          )
+        : [];
+      return Array.from(new Set([...fields, ...added]));
+    }
     if (node.kind === "udf")
       return Array.from(
         new Set([

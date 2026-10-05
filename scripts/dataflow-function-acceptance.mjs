@@ -119,6 +119,22 @@ for (const metadataOnly of [false, true]) {
       ]
     : [
         [
+          "project",
+          "project",
+          {
+            fields: [
+              { source: "text", target: "text" },
+              { source: "phone", target: "phone" },
+              { source: "keep", target: "keep" },
+            ],
+          },
+        ],
+        [
+          "derive",
+          "derive",
+          { fields: [{ name: "copied", expression: "{{text}}" }] },
+        ],
+        [
           "trim",
           "udf",
           { udfId: functions[0], inputField: "text", outputField: "trimmed" },
@@ -206,12 +222,20 @@ for (const metadataOnly of [false, true]) {
     assert.deepEqual(run.output.terminals[0].rows, [
       {
         ...rows[0],
+        copied: rows[0].text,
         trimmed: "Alice",
         lowered: "alice",
         uppered: "ALICE",
         masked: "138****5678",
       },
-      { ...rows[1], trimmed: null, lowered: null, uppered: null, masked: null },
+      {
+        ...rows[1],
+        copied: null,
+        trimmed: null,
+        lowered: null,
+        uppered: null,
+        masked: null,
+      },
     ]);
   console.log(
     JSON.stringify({
