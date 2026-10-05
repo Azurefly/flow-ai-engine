@@ -2901,7 +2901,7 @@ async function persistMilestoneNode(input: {
   );
 }
 
-async function executeRunSegment(input: {
+export async function executeRunSegment(input: {
   runId: string;
   workflow: PersistedWorkflow;
   definition: Definition;
