@@ -224,6 +224,30 @@ async function run(
     .map(([, params]) => params[3]);
   return { result, executed, checkpoints, context };
 }
+it("执行器隔离分支读取，汇聚后保留全部分支输出", async () => {
+  const result = await run(
+    [
+      node("start", "start"),
+      router("router", "join", ["a", "b"]),
+      node("a", "transform", { mappings: { value: 10 } }),
+      node("b", "transform", { mappings: { seen: "{{vars.a.value}}" } }),
+      node("join", "transform", { parallelForNodeId: "router" }),
+      node("end", "end"),
+    ],
+    [
+      edge("start", "router"),
+      edge("router", "a", "a"),
+      edge("router", "b", "b"),
+      edge("a", "join"),
+      edge("b", "join"),
+      edge("join", "end"),
+    ]
+  );
+  expect(result.result.status).toBe("success");
+  expect((result.context.vars as any).a).toEqual({ value: 10 });
+  expect((result.context.vars as any).b.seen).not.toBe(10);
+  expect((result.context.vars as any).b.seen).not.toBe("10");
+});
 it("执行器执行两条广播分支并仅执行一次汇聚及结束", async () => {
   const result = await run(
     [
@@ -347,6 +371,8 @@ it("两个并行人工任务同时生成，依次提交后仅汇聚一次", asyn
     sql.includes("SELECT id,startedAt FROM workflow_node_run")
   );
   expect(resumedNodeQueries.map(([, params]) => params[2])).toEqual(nodeRunIds);
+  expect(context.vars.a.result.decision).toBe("approved");
+  expect(context.vars.b.result.decision).toBe("approved");
   const executed = mocks.query.mock.calls
     .filter(([sql]) => sql.includes("INSERT INTO workflow_node_run"))
     .map(([, params]) => params[3]);

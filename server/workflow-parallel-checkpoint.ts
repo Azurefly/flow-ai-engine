@@ -1,7 +1,12 @@
 import { restoreParallelBarrier } from "./workflow-parallel-barrier";
 import type { ParallelState, BranchToken } from "./workflow-parallel-state";
+import {
+  restoreParallelScopes,
+  type ParallelScopes,
+} from "./workflow-parallel-scope";
 export type ParallelCheckpoint = {
   frames: ParallelState;
+  scopes?: ParallelScopes;
   queue: {
     nodeId: string;
     tokens: BranchToken[];
@@ -19,7 +24,7 @@ export function resumeParallelCheckpoint(
   const checkpoint = restoreParallelCheckpoint(value, pending);
   return restoreParallelCheckpoint(
     {
-      frames: checkpoint.frames,
+      ...checkpoint,
       queue: [
         ...checkpoint.queue,
         ...next.map(nodeId => ({
@@ -111,5 +116,11 @@ export function restoreParallelCheckpoint(
       ...(releasedJoinFrameId === undefined ? {} : { releasedJoinFrameId }),
     };
   });
-  return { frames, queue };
+  return {
+    frames,
+    queue,
+    ...(raw.scopes === undefined
+      ? {}
+      : { scopes: restoreParallelScopes(raw.scopes, frames) }),
+  };
 }

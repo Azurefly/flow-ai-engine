@@ -17,6 +17,7 @@ export function prepareParallelJoin(checkpoint: ParallelCheckpoint) {
   return {
     ready,
     checkpoint: {
+      ...checkpoint,
       frames: arrival.state,
       queue: ready
         ? [

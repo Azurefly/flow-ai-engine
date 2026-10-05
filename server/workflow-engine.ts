@@ -5,6 +5,12 @@ import {
 } from "./workflow-parallel-checkpoint";
 import { forkParallelState, type BranchToken } from "./workflow-parallel-state";
 import { prepareParallelJoin } from "./workflow-parallel-join";
+import {
+  activateParallelScope,
+  saveParallelScope,
+  mergeParallelScope,
+  forkParallelScopes,
+} from "./workflow-parallel-scope";
 import { resumeWorkflowQueue } from "./workflow-resume-queue";
 import { orderOperateApprovers } from "../shared/operate-approval-editor";
 import { getRunApprovalProgress } from "./run-approval-progress";
@@ -2937,6 +2943,11 @@ export async function executeRunSegment(input: {
         );
   let activeTokens: BranchToken[] = [];
   let activeParticipantUserIds: number[] = [];
+  const persistCheckpoint = async (checkpoint: WorkflowCheckpoint) => {
+    saveParallelScope(parallel?.scopes, activeTokens, input.context);
+    if (parallel) asRecord(input.context.runtime).parallelCheckpoint = parallel;
+    await input.checkpoint?.(checkpoint);
+  };
   const enqueue = (
     nodeId: string,
     tokens = activeTokens,
@@ -2959,6 +2970,7 @@ export async function executeRunSegment(input: {
       throw new Error("流程执行超过最大节点步数，可能存在循环。");
     const nodeId = input.queue.shift()!;
     activeTokens = parallel?.queue[0]?.tokens ?? [];
+    activateParallelScope(parallel?.scopes, activeTokens, input.context);
     const executionKey = JSON.stringify([
       nodeId,
       activeTokens,
@@ -2975,7 +2987,7 @@ export async function executeRunSegment(input: {
       parallel = prepared.checkpoint;
       asRecord(input.context.runtime).parallelCheckpoint = parallel;
       if (!prepared.ready) {
-        await input.checkpoint?.({
+        await persistCheckpoint({
           queue: [...input.queue],
           context: input.context,
           finalOutput,
@@ -2984,6 +2996,12 @@ export async function executeRunSegment(input: {
         continue;
       }
       activeTokens = parallel.queue[0].tokens;
+      mergeParallelScope(
+        parallel.scopes,
+        parallel.queue[0].releasedJoinFrameId!,
+        input.context
+      );
+      saveParallelScope(parallel.scopes, activeTokens, input.context);
       parallel.queue[0].participantUserIds = runtimeNodeParticipants(
         input.context,
         node.id
@@ -2998,7 +3016,7 @@ export async function executeRunSegment(input: {
         return { status: "waiting", taskId: String(existingWaits[0].id) };
     }
     executed.add(executionKey);
-    await input.checkpoint?.({
+    await persistCheckpoint({
       queue: [nodeId, ...input.queue],
       context: input.context,
       finalOutput,
@@ -3065,7 +3083,7 @@ export async function executeRunSegment(input: {
           finalOutput,
         });
         if (parallel) {
-          await input.checkpoint?.({
+          await persistCheckpoint({
             queue: [...input.queue],
             context: input.context,
             finalOutput,
@@ -3073,7 +3091,7 @@ export async function executeRunSegment(input: {
           });
           continue;
         }
-        await input.checkpoint?.(persisted.checkpoint);
+        await persistCheckpoint(persisted.checkpoint);
         return { status: "waiting", taskId: persisted.waitId };
       }
       if (node.type === "operate") {
@@ -3137,7 +3155,7 @@ export async function executeRunSegment(input: {
               );
               enqueue(edge.targetNodeId, activeTokens, automaticParticipants);
             });
-          await input.checkpoint?.({
+          await persistCheckpoint({
             queue: [...input.queue],
             context: input.context,
             finalOutput,
@@ -3422,7 +3440,7 @@ export async function executeRunSegment(input: {
           candidateUserIds: approverUserIds,
           operationName,
         });
-        await input.checkpoint?.({
+        await persistCheckpoint({
           queue: [...input.queue],
           context: input.context,
           finalOutput,
@@ -3583,6 +3601,12 @@ export async function executeRunSegment(input: {
             activeTokens
           );
           parallel.frames = fork.state;
+          parallel.scopes = forkParallelScopes(
+            parallel.scopes ?? {},
+            nodeRunId,
+            branches.map(([key]) => key),
+            input.context
+          );
           branchTokens = fork.tokens;
           asRecord(input.context.runtime).parallelCheckpoint = parallel;
         }
@@ -3614,7 +3638,7 @@ export async function executeRunSegment(input: {
       const completedRuntime = asRecord(input.context.runtime);
       completedRuntime.executionNodeId = null;
       input.context.runtime = completedRuntime;
-      await input.checkpoint?.({
+      await persistCheckpoint({
         queue: [...input.queue],
         context: input.context,
         finalOutput,
@@ -3639,7 +3663,7 @@ export async function executeRunSegment(input: {
   }
   if (!reachedEnd)
     throw new Error("流程未到达结束节点，已阻止将不完整运行标记为成功。");
-  await input.checkpoint?.({
+  await persistCheckpoint({
     queue: [],
     context: input.context,
     finalOutput,
@@ -3993,6 +4017,13 @@ export async function resumeWorkflowTask(input: {
     }
     const context = asRecord(readJson(task.contextJson));
     const runtime = asRecord(context.runtime);
+    activateParallelScope(
+      (runtime.parallelCheckpoint as ParallelCheckpoint | undefined)?.scopes,
+      Array.isArray(taskPayload.parallelTokens)
+        ? (taskPayload.parallelTokens as BranchToken[])
+        : [],
+      context
+    );
     runtime.lastActorUserId = input.completedBy.id;
     runtime.responsibleUserId =
       Number(task.responsibleUserId) || input.completedBy.id;
@@ -4039,6 +4070,13 @@ export async function resumeWorkflowTask(input: {
     nodeOutputs[String(task.nodeId)] = taskOutput;
     context.vars = vars;
     context.nodes = nodeOutputs;
+    saveParallelScope(
+      (runtime.parallelCheckpoint as ParallelCheckpoint | undefined)?.scopes,
+      Array.isArray(taskPayload.parallelTokens)
+        ? (taskPayload.parallelTokens as BranchToken[])
+        : [],
+      context
+    );
     const taskNodeRunId =
       typeof taskPayload.nodeRunId === "string"
         ? taskPayload.nodeRunId.trim()
@@ -4199,6 +4237,13 @@ async function triggerWorkflowWaitSubscription(
         : asRecord(checkpoint.context);
     if (continuation.nextNodeIds !== undefined) {
       const runtime = asRecord(context.runtime);
+      activateParallelScope(
+        (runtime.parallelCheckpoint as ParallelCheckpoint | undefined)?.scopes,
+        Array.isArray(continuation.tokens)
+          ? (continuation.tokens as BranchToken[])
+          : [],
+        context
+      );
       const next = resumeWorkflowQueue(
         undefined,
         continuation.nextNodeIds as string[]
@@ -4229,6 +4274,13 @@ async function triggerWorkflowWaitSubscription(
     context.vars = vars;
     context.nodes = nodeOutputs;
     const runtime = asRecord(context.runtime);
+    saveParallelScope(
+      (runtime.parallelCheckpoint as ParallelCheckpoint | undefined)?.scopes,
+      Array.isArray(continuation.tokens)
+        ? (continuation.tokens as BranchToken[])
+        : [],
+      context
+    );
     runtime.executionQueue = checkpoint.queue;
     runtime.executionCurrentNodeId = null;
     context.runtime = runtime;
@@ -4423,6 +4475,16 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       };
       const context = asRecord(readJson(run.contextJson));
       const runtime = asRecord(context.runtime);
+      const taskScopeTokens = asRecord(
+        readJson(task.payloadJson)
+      ).parallelTokens;
+      activateParallelScope(
+        (runtime.parallelCheckpoint as ParallelCheckpoint | undefined)?.scopes,
+        Array.isArray(taskScopeTokens)
+          ? (taskScopeTokens as BranchToken[])
+          : [],
+        context
+      );
       runtime.lastActorUserId = taskOutput.completedByUserId;
       runtime.responsibleUserId =
         Number(task.responsibleUserId) || taskOutput.completedByUserId;
@@ -4435,6 +4497,13 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       nodeOutputs[String(task.nodeId)] = taskOutput;
       context.vars = vars;
       context.nodes = nodeOutputs;
+      saveParallelScope(
+        (runtime.parallelCheckpoint as ParallelCheckpoint | undefined)?.scopes,
+        Array.isArray(taskScopeTokens)
+          ? (taskScopeTokens as BranchToken[])
+          : [],
+        context
+      );
       await connection.query(
         "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=?",
         [
