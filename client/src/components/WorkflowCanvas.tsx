@@ -333,7 +333,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
             configState === "partial"
               ? `未完全配置：${configAssessment.error}`
               : configState === "editing"
-                ? "配置中"
+                ? "已配置（默认）"
                 : "已配置"
           }
         />
@@ -4089,7 +4089,7 @@ export default function WorkflowCanvas({
                 </span>
                 <span className="flex items-center gap-1">
                   <i className="h-2 w-2 rounded-full bg-blue-500" />
-                  配置中
+                  已配置（默认）
                 </span>
                 <span className="flex items-center gap-1">
                   <i className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -4451,7 +4451,7 @@ export default function WorkflowCanvas({
                       {selectedConfigState === "partial"
                         ? "未完全配置"
                         : selectedConfigState === "editing"
-                          ? "配置中"
+                          ? "已配置（默认）"
                           : "已配置"}
                     </p>
                     {selectedConfigAssessment?.error && (

@@ -2304,7 +2304,8 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("全屏展示");
     expect(canvasSource).toContain("取消高亮");
     expect(canvasSource).toContain("未完全配置");
-    expect(canvasSource).toContain("配置中");
+    expect(canvasSource).toContain("已配置（默认）");
+    expect(canvasSource).not.toContain('"配置中"');
     expect(canvasSource).toContain("已配置");
     expect(canvasSource).toContain("画布移动");
     expect(canvasSource).toContain("节点框选");
