@@ -360,24 +360,38 @@ export async function createOrganizationUnit(
   const unitLevel =
     input.unitLevel ??
     (parentLevel === null ? (input.parentUnitId ? 2 : 1) : parentLevel + 1);
-  await db().query(
-    "INSERT INTO organization_unit (id,code,name,parentUnitId,managerUserId,unitType,unitLevel,standardCode,areaCode,category,sortOrder,description,createdByUserId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-    [
-      id,
-      code,
-      input.name.trim(),
-      input.parentUnitId ?? null,
-      input.managerUserId ?? null,
-      cleanOptional(input.unitType) ?? null,
-      unitLevel,
-      cleanOptional(input.standardCode) ?? null,
-      cleanOptional(input.areaCode) ?? null,
-      cleanOptional(input.category) ?? null,
-      input.sortOrder ?? 0,
-      cleanOptional(input.description) ?? null,
-      user.id,
-    ]
-  );
+  try {
+    await db().query(
+      "INSERT INTO organization_unit (id,code,name,parentUnitId,managerUserId,unitType,unitLevel,standardCode,areaCode,category,sortOrder,description,createdByUserId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      [
+        id,
+        code,
+        input.name.trim(),
+        input.parentUnitId ?? null,
+        input.managerUserId ?? null,
+        cleanOptional(input.unitType) ?? null,
+        unitLevel,
+        cleanOptional(input.standardCode) ?? null,
+        cleanOptional(input.areaCode) ?? null,
+        cleanOptional(input.category) ?? null,
+        input.sortOrder ?? 0,
+        cleanOptional(input.description) ?? null,
+        user.id,
+      ]
+    );
+  } catch (error) {
+    const failure = asRecord(error);
+    if (
+      (failure.code === "ER_DUP_ENTRY" || failure.errno === 1062) &&
+      String(failure.message ?? failure.sqlMessage ?? "").includes(
+        "organization_unit_code_unique"
+      )
+    )
+      throw new Error(
+        "部门编码已存在，请使用其他编码；如需修改已有部门，请在部门列表中选择后编辑。"
+      );
+    throw error;
+  }
   await recordAuthorizationAudit({
     actorUserId: user.id,
     action: "user_updated",
