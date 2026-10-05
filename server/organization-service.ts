@@ -406,7 +406,33 @@ export async function updateOrganizationUnit(
   user: User,
   input: { id: string } & OrganizationUnitFields
 ) {
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
+  const connection = await db().getConnection();
+  let acquired = false;
+  try {
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT GET_LOCK('flow_ai_organization_tree_update', 5) AS acquired"
+    );
+    acquired = Number(rows[0]?.acquired) === 1;
+    if (!acquired) throw new Error("其他管理员正在调整组织层级，请稍后重试。");
+    return await updateOrganizationUnitLocked(user, input, connection);
+  } finally {
+    try {
+      if (acquired)
+        await connection.query(
+          "SELECT RELEASE_LOCK('flow_ai_organization_tree_update')"
+        );
+    } finally {
+      connection.release();
+    }
+  }
+}
+
+async function updateOrganizationUnitLocked(
+  user: User,
+  input: { id: string } & OrganizationUnitFields,
+  connection: mysql.PoolConnection
+) {
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
     "SELECT * FROM organization_unit WHERE id=? LIMIT 1",
     [input.id]
   );
@@ -415,7 +441,7 @@ export async function updateOrganizationUnit(
   if (input.parentUnitId === input.id)
     throw new Error("组织单元不能把自身设为上级。");
   if (input.parentUnitId) {
-    const [parents] = await db().query<mysql.RowDataPacket[]>(
+    const [parents] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM organization_unit WHERE id=? AND status='active' LIMIT 1",
       [input.parentUnitId]
     );
@@ -427,7 +453,7 @@ export async function updateOrganizationUnit(
       if (visited.has(cursor))
         throw new Error("上级部门的组织层级存在循环，请先修复层级后重试。");
       visited.add(cursor);
-      const ancestorResult = await db().query<mysql.RowDataPacket[]>(
+      const ancestorResult = await connection.query<mysql.RowDataPacket[]>(
         "SELECT parentUnitId FROM organization_unit WHERE id=? LIMIT 1",
         [cursor]
       );
@@ -443,7 +469,7 @@ export async function updateOrganizationUnit(
   }
   if (input.managerUserId)
     await assertActiveUser(input.managerUserId, "负责人");
-  await db().query(
+  await connection.query(
     "UPDATE organization_unit SET name=?,parentUnitId=?,managerUserId=?,unitType=?,unitLevel=?,standardCode=?,areaCode=?,category=?,sortOrder=?,description=?,status=?,updatedAt=NOW() WHERE id=?",
     [
       input.name?.trim() || unit.name,

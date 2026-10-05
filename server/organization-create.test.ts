@@ -1,6 +1,19 @@
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ query: vi.fn(), audit: vi.fn() }));
-vi.mock("./db", () => ({ getSharedPool: () => ({ query: mocks.query }) }));
+vi.mock("./db", () => ({
+  getSharedPool: () => ({
+    query: mocks.query,
+    getConnection: async () => ({
+      query: async (sql: string, params?: unknown[]) =>
+        sql.includes("GET_LOCK")
+          ? [[{ acquired: 1 }], []]
+          : sql.includes("RELEASE_LOCK")
+            ? [[{ released: 1 }], []]
+            : mocks.query(sql, params),
+      release: () => {},
+    }),
+  }),
+}));
 vi.mock("./iam-service", () => ({ recordAuthorizationAudit: mocks.audit }));
 import {
   createOrganizationUnit,
