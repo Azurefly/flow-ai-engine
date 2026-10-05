@@ -325,6 +325,7 @@ it("两个并行人工任务同时生成，依次提交后仅汇聚一次", asyn
     sql.includes("INSERT INTO workflow_task (")
   );
   expect(tasks).toHaveLength(2);
+  expect(tasks[0][1][11]).not.toBe(tasks[1][1][11]);
   const tokens = tasks.map(
     ([, params]) => JSON.parse(params[16]).parallelTokens
   );
@@ -342,6 +343,7 @@ it("两个并行人工任务同时生成，依次提交后仅汇聚一次", asyn
       nodeId: params[4],
       status: "claimed",
       claimedByUserId: params[6],
+      roleKey: params[11],
       payloadJson: params[16],
       nextNodeIdsJson: params[22],
     };

@@ -5,6 +5,7 @@ import {
 } from "./workflow-parallel-checkpoint";
 import { forkParallelState, type BranchToken } from "./workflow-parallel-state";
 import { prepareParallelJoin } from "./workflow-parallel-join";
+import { workflowTaskRoleKey } from "./workflow-task-role";
 import {
   activateParallelScope,
   saveParallelScope,
@@ -3252,10 +3253,13 @@ export async function executeRunSegment(input: {
         const dueAt = dueAfterSeconds
           ? new Date(Date.now() + dueAfterSeconds * 1000)
           : null;
-        const taskRoleKey =
+        const taskRoleKey = workflowTaskRoleKey(
           assignment.mode === "role"
             ? String(config.assigneeRoleCode || "default")
-            : "default";
+            : "default",
+          node.id,
+          activeTokens
+        );
         const approvalGroupId =
           reference.signMode === "single" ? null : randomUUID();
         if (approvalGroupId) {
@@ -3874,7 +3878,7 @@ async function completeTaskAndEvaluateApprovalGroup(
               ]
             );
         await connection.query(
-          "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=?",
+          "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId=? AND roleKey=?",
           [
             JSON.stringify([
               {
@@ -3885,6 +3889,7 @@ async function completeTaskAndEvaluateApprovalGroup(
             ]),
             task.runId,
             Number(next.assignedUserId),
+            String(task.roleKey || "default"),
           ]
         );
       }
@@ -4054,8 +4059,13 @@ export async function resumeWorkflowTask(input: {
       await connection.query(
         "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (" +
           placeholders +
-          ")",
-        [JSON.stringify([]), task.runId, ...gate.affectedUserIds]
+          ") AND roleKey=?",
+        [
+          JSON.stringify([]),
+          task.runId,
+          ...gate.affectedUserIds,
+          String(task.roleKey || "default"),
+        ]
       );
     }
     const taskOutput = {
@@ -4531,8 +4541,13 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       );
       if (task.approvalGroupId) {
         await connection.query(
-          "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (SELECT assignedUserId FROM workflow_task WHERE approvalGroupId=?)",
-          [JSON.stringify([]), task.runId, task.approvalGroupId]
+          "UPDATE workflow_participant_state SET availableOperationsJson=?,updatedAt=NOW() WHERE runId=? AND userId IN (SELECT assignedUserId FROM workflow_task WHERE approvalGroupId=?) AND roleKey=?",
+          [
+            JSON.stringify([]),
+            task.runId,
+            task.approvalGroupId,
+            String(task.roleKey || "default"),
+          ]
         );
       }
       const outcomeRouting = resolveOperateOutcomeRouting(
