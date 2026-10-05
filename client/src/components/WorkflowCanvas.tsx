@@ -323,8 +323,8 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           <span className="block break-words text-sm font-semibold leading-5 text-foreground">
             {nodeData.label}
           </span>
-          <span className="aiflow-type-meta mt-0.5 block truncate font-semibold uppercase tracking-[.14em] text-muted-foreground">
-            {nodeData.kind}
+          <span className="aiflow-type-meta mt-0.5 block break-words text-muted-foreground">
+            {FLOW_NODE_DEFINITIONS[nodeData.kind].label}
           </span>
         </div>
         <span

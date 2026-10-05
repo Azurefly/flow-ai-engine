@@ -3172,3 +3172,15 @@ it("参与人预览展示审批姓名、人数和门槛，配置变化后不显�
   expect(canvasSource).toContain("participantPreview.data.requiredApprovals");
   expect(canvasSource).not.toContain("候选用户 ID：");
 });
+
+it("画布节点类型使用业务名称，避免英文大写和过度字距", () => {
+  const card = canvasSource.slice(
+    canvasSource.indexOf("function FlowNodeCard"),
+    canvasSource.indexOf("const nodeTypes")
+  );
+  expect(card).toContain("{FLOW_NODE_DEFINITIONS[nodeData.kind].label}");
+  expect(card).not.toContain("uppercase tracking-[.14em]");
+  expect(card).toContain(
+    "aiflow-type-meta mt-0.5 block break-words text-muted-foreground"
+  );
+});
