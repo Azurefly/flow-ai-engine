@@ -21,3 +21,18 @@ export function builtinDataFunctionChoice(udf: {
     disabled: !implementation,
   };
 }
+
+export function dataFunctionTypeLabel(udfType: string, artifactRef?: unknown) {
+  if (
+    udfType === "javascript" &&
+    builtinDataFunctions.some(item => item.value === artifactRef)
+  )
+    return "内置文本处理";
+  const labels: Record<string, string> = {
+    javascript: "JavaScript",
+    sql: "SQL",
+    python: "Python",
+    jar: "JAR",
+  };
+  return `${labels[udfType] ?? udfType}（仅登记）`;
+}

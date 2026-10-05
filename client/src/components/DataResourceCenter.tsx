@@ -1,4 +1,7 @@
-import { builtinDataFunctions } from "@shared/builtin-data-functions";
+import {
+  builtinDataFunctions,
+  dataFunctionTypeLabel,
+} from "@shared/builtin-data-functions";
 import {
   dataflowResultColumns,
   dataflowResultPage,
@@ -135,7 +138,7 @@ export default function DataResourceCenter({
         artifactRef: "builtin:trim",
       });
       invalidate();
-      toast.success("UDF 元数据已登记，需审核后可被数据流引用。");
+      toast.success("函数已登记；需审核并绑定可执行实现。");
     },
     onError: error => toast.error(error.message),
   });
@@ -291,7 +294,7 @@ export default function DataResourceCenter({
       },
       {
         id: "udfs" as const,
-        label: "UDF",
+        label: "函数",
         icon: FileCode2,
         count: resources.isLoading
           ? null
@@ -637,7 +640,7 @@ export default function DataResourceCenter({
       {!selectedQueryLoading && !selectedQueryError && tab === "udfs" && (
         <section className="grid min-w-0 gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
           <ResourceForm
-            title="注册 UDF"
+            title="注册函数"
             description="绑定内置实现并审核后可执行数据转换；其他类型目前仅登记元数据，尚不能执行。"
             onSubmit={() =>
               createUdf.mutateAsync({
@@ -645,7 +648,10 @@ export default function DataResourceCenter({
                 name: udfForm.name,
                 udfType: udfForm.udfType,
                 description: udfForm.description || undefined,
-                returnType: udfForm.returnType || undefined,
+                returnType:
+                  udfForm.udfType === "javascript"
+                    ? "string"
+                    : udfForm.returnType || undefined,
                 artifactRef:
                   udfForm.udfType === "javascript"
                     ? udfForm.artifactRef
@@ -675,10 +681,10 @@ export default function DataResourceCenter({
                   })
                 }
               >
-                <option value="javascript">JavaScript</option>
-                <option value="sql">SQL</option>
-                <option value="python">Python</option>
-                <option value="jar">JAR</option>
+                <option value="javascript">内置文本处理</option>
+                <option value="sql">SQL（仅登记）</option>
+                <option value="python">Python（仅登记）</option>
+                <option value="jar">JAR（仅登记）</option>
               </select>
             </ResourceField>
             {udfForm.udfType === "javascript" && (
@@ -711,7 +717,12 @@ export default function DataResourceCenter({
             <ResourceField label="返回类型">
               <Input
                 placeholder="例如：string"
-                value={udfForm.returnType}
+                disabled={udfForm.udfType === "javascript"}
+                value={
+                  udfForm.udfType === "javascript"
+                    ? "string"
+                    : udfForm.returnType
+                }
                 onChange={event =>
                   setUdfForm({ ...udfForm, returnType: event.target.value })
                 }
@@ -720,7 +731,7 @@ export default function DataResourceCenter({
           </ResourceForm>
           <ResourceTable
             columns={["函数", "类型", "描述", "状态", "操作"]}
-            empty="尚未注册 UDF。"
+            empty="尚未注册函数。"
             mobileCards={(resources.data?.udfs ?? []).map((udf: any) => (
               <ResourceTableCard
                 key={udf.id}
@@ -728,14 +739,17 @@ export default function DataResourceCenter({
                 secondary={udf.returnType || "未声明返回类型"}
                 status={<State value={udf.status} />}
                 fields={[
-                  { label: "函数类型", value: udf.udfType },
+                  {
+                    label: "函数类型",
+                    value: dataFunctionTypeLabel(udf.udfType, udf.artifactRef),
+                  },
                   { label: "说明", value: udf.description || "—" },
                 ]}
                 actions={
                   <DeleteButton
-                    actionLabel="删除 UDF"
+                    actionLabel="删除函数"
                     resourceName={udf.name}
-                    visibleLabel="删除 UDF"
+                    visibleLabel="删除函数"
                     onDelete={() =>
                       removeUdf.mutateAsync({ projectId, udfId: udf.id })
                     }
@@ -751,7 +765,7 @@ export default function DataResourceCenter({
                   secondary={udf.returnType || "未声明返回类型"}
                 />
                 <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {udf.udfType}
+                  {dataFunctionTypeLabel(udf.udfType, udf.artifactRef)}
                 </td>
                 <td className="max-w-[300px] px-4 py-3">
                   <p
@@ -766,7 +780,7 @@ export default function DataResourceCenter({
                 </td>
                 <td className="px-4 py-3 text-right">
                   <DeleteButton
-                    actionLabel="删除 UDF"
+                    actionLabel="删除函数"
                     resourceName={udf.name}
                     onDelete={() =>
                       removeUdf.mutateAsync({ projectId, udfId: udf.id })
@@ -1783,7 +1797,7 @@ function DataflowWorkspace({
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground">
                 <span>资源引用</span>
                 <span className="aiflow-type-meta font-normal text-muted-foreground">
-                  数据资源 {assets.length} · UDF {udfs.length}
+                  数据资源 {assets.length} · 函数 {udfs.length}
                 </span>
               </summary>
               <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
@@ -1833,7 +1847,8 @@ function DataflowWorkspace({
                           key={udf.id}
                           className="aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground"
                         >
-                          {udf.name} · {udf.udfType}
+                          {udf.name} ·{" "}
+                          {dataFunctionTypeLabel(udf.udfType, udf.artifactRef)}
                         </li>
                       ))}
                     </ul>
@@ -1853,7 +1868,7 @@ function DataflowWorkspace({
                       className="aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0"
                       onClick={() => onOpenResourceTab("udfs")}
                     >
-                      查看 UDF 目录
+                      查看函数目录
                     </button>
                   </div>
                 </div>

@@ -2057,14 +2057,14 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   },
   udf: {
     type: "udf",
-    label: "UDF",
+    label: "函数",
     description: "执行已审核的项目内置数据处理函数",
     flowTypes: ["data"],
     defaultConfig: { udfId: "", inputField: "", outputField: "" },
     fields: [
       {
         key: "udfId",
-        label: "UDF",
+        label: "函数",
         help: "选择已审核且绑定内置处理实现的项目函数。",
         kind: "text",
         required: true,
@@ -2904,7 +2904,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       assertString(config.sql, "SQL 编辑节点必须配置 SQL 语句。");
       break;
     case "udf":
-      assertString(config.udfId, "UDF 节点必须选择项目函数。");
+      assertString(config.udfId, "函数节点必须选择项目函数。");
       assertString(config.inputField, "函数节点必须配置输入字段。");
       assertString(config.outputField, "函数节点必须配置输出字段。");
       break;

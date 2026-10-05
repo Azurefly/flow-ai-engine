@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Measured projection and derived field suggestions: 1362.31 KiB raw / 401.02 KiB gzip.
-const maxTotalBytes = 1_363 * 1024;
+// Measured function capability labels: 1363.12 KiB raw / 401.29 KiB gzip.
+const maxTotalBytes = 1_364 * 1024;
 const maxTotalGzipBytes = 402 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

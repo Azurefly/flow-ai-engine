@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { builtinDataFunctionChoice } from "./builtin-data-functions";
+import {
+  builtinDataFunctionChoice,
+  dataFunctionTypeLabel,
+} from "./builtin-data-functions";
 it("已绑定实现的函数显示处理能力并允许选择", () => {
   expect(
     builtinDataFunctionChoice({
@@ -31,4 +34,14 @@ it.each([
     label: "待实现 · 尚不可执行（abcdefgh）",
     disabled: true,
   });
+});
+
+it("函数类型明确区分内置执行与仅登记", () => {
+  expect(dataFunctionTypeLabel("javascript", "builtin:trim")).toBe(
+    "内置文本处理"
+  );
+  expect(dataFunctionTypeLabel("javascript")).toBe("JavaScript（仅登记）");
+  expect(dataFunctionTypeLabel("python", "builtin:trim")).toBe(
+    "Python（仅登记）"
+  );
 });
