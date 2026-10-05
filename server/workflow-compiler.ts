@@ -116,6 +116,8 @@ export type WorkflowCompileResult =
 export type WorkflowAnalysisOptions = {
   flowType: FlowType;
   executable?: boolean;
+  /** Internal admin-only draft test execution; publication never sets this. */
+  parallelRuntimeValidation?: boolean;
 };
 
 export class WorkflowCompileError extends Error {
@@ -927,7 +929,7 @@ export function analyzeWorkflowDefinition(
           node.config.broadcast === true ||
           node.config.broadcast === "true";
         if (broadcast) {
-          if (executable)
+          if (executable && !options.parallelRuntimeValidation)
             diagnostics.push(
               diagnostic(
                 "WF_RUNTIME_PARALLEL_UNSUPPORTED",
@@ -1245,7 +1247,7 @@ export function analyzeWorkflowDefinition(
 
 export function compileWorkflowDefinition(
   definition: unknown,
-  options: { flowType: FlowType }
+  options: { flowType: FlowType; parallelRuntimeValidation?: boolean }
 ) {
   const result = analyzeWorkflowDefinition(definition, {
     ...options,

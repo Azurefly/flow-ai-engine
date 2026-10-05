@@ -1814,6 +1814,18 @@ async function createFailureAlerts(
   );
 }
 
+export function canValidateParallelRuntime(
+  triggerType: string | undefined,
+  userRole: string,
+  executionSource: string
+) {
+  return (
+    triggerType === "test" &&
+    userRole === "admin" &&
+    executionSource === "draft"
+  );
+}
+
 export async function submitWorkflowRun(input: {
   workflowId: string;
   triggeredBy: WorkflowUser;
@@ -1857,6 +1869,11 @@ export async function submitWorkflowRun(input: {
         )
       : compileWorkflowDefinition(readJson(workflow.definitionJson), {
           flowType: workflow.flowType,
+          parallelRuntimeValidation: canValidateParallelRuntime(
+            input.triggerType,
+            input.triggeredBy.role,
+            executionSource
+          ),
         }).plan;
   const executableDefinition = executablePlan.definition;
   const requestedIdempotencyKey = input.idempotencyKey?.trim();

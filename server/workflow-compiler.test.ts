@@ -640,6 +640,27 @@ describe("WorkflowCompiler", () => {
       executable: true,
     });
     expect(parallelPublish.ok).toBe(false);
+    const validationFixture: WorkflowDefinition = JSON.parse(
+      JSON.stringify(parallel)
+    );
+    validationFixture.nodes = validationFixture.nodes.map(node =>
+      node.type === "state"
+        ? {
+            ...node,
+            type: "transform",
+            config: { ...node.config, mappings: {} },
+          }
+        : node.type === "router"
+          ? { ...node, config: { ...node.config, nodeDh: "R1", lymc: "分流" } }
+          : node
+    );
+    expect(
+      analyzeWorkflowDefinition(validationFixture, {
+        flowType: "control",
+        executable: true,
+        parallelRuntimeValidation: true,
+      })
+    ).toMatchObject({ ok: true });
     if (!parallelPublish.ok)
       expect(parallelPublish.diagnostics.map(item => item.code)).toContain(
         "WF_RUNTIME_PARALLEL_UNSUPPORTED"
