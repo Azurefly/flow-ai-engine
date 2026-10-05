@@ -12,6 +12,29 @@ const checkpoint = {
     { nodeId: "branch", tokens: fork.tokens[1] },
   ],
 };
+it("人员快照独立恢复，拒绝无效或重复人员身份", () => {
+  const value = {
+    frames: fork.state,
+    queue: [
+      { nodeId: "branch", tokens: fork.tokens[0], participantUserIds: [11] },
+    ],
+  };
+  const restored = restoreParallelCheckpoint(value, ["branch"]);
+  restored.queue[0].participantUserIds!.push(22);
+  expect(value.queue[0].participantUserIds).toEqual([11]);
+  for (const participantUserIds of [[0], [1.5], [11, 11], ["11"]])
+    expect(() =>
+      restoreParallelCheckpoint(
+        {
+          frames: fork.state,
+          queue: [
+            { nodeId: "branch", tokens: fork.tokens[0], participantUserIds },
+          ],
+        },
+        ["branch"]
+      )
+    ).toThrow();
+});
 it("人工任务续跑保留其他分支并恢复本分支身份", () => {
   const pending = { frames: fork.state, queue: [checkpoint.queue[1]] };
   const resumed = resumeParallelCheckpoint(

@@ -2523,6 +2523,21 @@ async function persistWorkflowWait(input: {
   return { waitId, checkpoint };
 }
 
+function taskBranchParticipants(
+  payload: JsonRecord,
+  completedUserIds: number[]
+) {
+  const values = asRecord(
+    asRecord(payload.context).runtime
+  ).currentNodeParticipantUserIds;
+  return Array.from(
+    new Set([
+      ...(Array.isArray(values) ? values.map(Number) : []),
+      ...completedUserIds,
+    ])
+  ).filter(id => Number.isInteger(id) && id > 0);
+}
+
 function runtimeUserIds(context: JsonRecord) {
   const runtime = asRecord(context.runtime);
   const values = Array.isArray(runtime.participantUserIds)
@@ -2921,12 +2936,18 @@ export async function executeRunSegment(input: {
           input.queue
         );
   let activeTokens: BranchToken[] = [];
-  const enqueue = (nodeId: string, tokens = activeTokens) => {
+  let activeParticipantUserIds: number[] = [];
+  const enqueue = (
+    nodeId: string,
+    tokens = activeTokens,
+    participantUserIds = activeParticipantUserIds
+  ) => {
     input.queue.push(nodeId);
     if (parallel) {
       parallel.queue.push({
         nodeId,
         tokens: tokens.map(token => ({ ...token })),
+        participantUserIds: [...participantUserIds],
       });
       asRecord(input.context.runtime).parallelCheckpoint = parallel;
     }
@@ -2963,6 +2984,10 @@ export async function executeRunSegment(input: {
         continue;
       }
       activeTokens = parallel.queue[0].tokens;
+      parallel.queue[0].participantUserIds = runtimeNodeParticipants(
+        input.context,
+        node.id
+      );
     }
     if (["wait", "message_catch"].includes(node.type)) {
       const [existingWaits] = await db().query<mysql.RowDataPacket[]>(
@@ -2979,8 +3004,10 @@ export async function executeRunSegment(input: {
       finalOutput,
       currentNodeId: nodeId,
     });
-    parallel?.queue.shift();
-    const currentParticipants = runtimeNodeParticipants(input.context, node.id);
+    const queuedParticipants = parallel?.queue.shift()?.participantUserIds;
+    const currentParticipants =
+      queuedParticipants ?? runtimeNodeParticipants(input.context, node.id);
+    activeParticipantUserIds = [...currentParticipants];
     const executionRuntime = asRecord(input.context.runtime);
     executionRuntime.executionRunId = input.runId;
     executionRuntime.executionNodeId = node.id;
@@ -2988,7 +3015,7 @@ export async function executeRunSegment(input: {
     input.context.runtime = executionRuntime;
     setCurrentNodeParticipants(
       input.context,
-      currentParticipants.length
+      queuedParticipants !== undefined || currentParticipants.length
         ? currentParticipants
         : runtimeUserIds(input.context)
     );
@@ -3025,6 +3052,7 @@ export async function executeRunSegment(input: {
           asRecord(waitContext.runtime).parallelWaitContinuation = {
             nextNodeIds,
             tokens: activeTokens,
+            participantUserIds: currentParticipants,
           };
         }
         const persisted = await persistWorkflowWait({
@@ -3107,7 +3135,7 @@ export async function executeRunSegment(input: {
                 edge.targetNodeId,
                 automaticParticipants
               );
-              enqueue(edge.targetNodeId);
+              enqueue(edge.targetNodeId, activeTokens, automaticParticipants);
             });
           await input.checkpoint?.({
             queue: [...input.queue],
@@ -3404,10 +3432,7 @@ export async function executeRunSegment(input: {
         return { status: "waiting", taskId: taskIds[0] };
       }
       if (node.type === "router") {
-        const routeParticipants = runtimeNodeParticipants(
-          input.context,
-          node.id
-        );
+        const routeParticipants = currentParticipants;
         const iamRoles = await resolveWorkflowUserRoleKeys(
           routeParticipants,
           input.workflow.id
@@ -3567,7 +3592,7 @@ export async function executeRunSegment(input: {
             branch.targetNodeId,
             branch.userIds
           );
-          enqueue(branch.targetNodeId, branchTokens[index]);
+          enqueue(branch.targetNodeId, branchTokens[index], branch.userIds);
         });
       } else {
         input.definition.edges
@@ -4084,7 +4109,8 @@ export async function resumeWorkflowTask(input: {
         asRecord(context.runtime).parallelCheckpoint,
         pending,
         continuationNodeIds,
-        taskPayload.parallelTokens
+        taskPayload.parallelTokens,
+        taskBranchParticipants(taskPayload, gate.affectedUserIds)
       );
     }
     continuationNodeIds = resumeWorkflowQueue(
@@ -4182,7 +4208,8 @@ async function triggerWorkflowWaitSubscription(
         runtime.parallelCheckpoint,
         pending,
         next,
-        continuation.tokens
+        continuation.tokens,
+        continuation.participantUserIds
       );
       checkpoint.queue = [...pending, ...next];
       context.runtime = runtime;
@@ -4466,7 +4493,10 @@ export async function reconcileWorkflowContinuations(limit = 20) {
               asRecord(context.runtime).parallelCheckpoint,
               pending,
               queue,
-              asRecord(readJson(task.payloadJson)).parallelTokens
+              asRecord(readJson(task.payloadJson)).parallelTokens,
+              taskBranchParticipants(asRecord(readJson(task.payloadJson)), [
+                taskOutput.completedByUserId,
+              ])
             );
         }
         queue = resumeWorkflowQueue(

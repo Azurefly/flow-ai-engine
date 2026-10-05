@@ -5,6 +5,7 @@ export type ParallelCheckpoint = {
   queue: {
     nodeId: string;
     tokens: BranchToken[];
+    participantUserIds?: number[];
     releasedJoinFrameId?: string;
   }[];
 };
@@ -12,13 +13,21 @@ export function resumeParallelCheckpoint(
   value: unknown,
   pending: string[],
   next: string[],
-  tokens: unknown
+  tokens: unknown,
+  participantUserIds?: unknown
 ) {
   const checkpoint = restoreParallelCheckpoint(value, pending);
   return restoreParallelCheckpoint(
     {
       frames: checkpoint.frames,
-      queue: [...checkpoint.queue, ...next.map(nodeId => ({ nodeId, tokens }))],
+      queue: [
+        ...checkpoint.queue,
+        ...next.map(nodeId => ({
+          nodeId,
+          tokens,
+          ...(participantUserIds === undefined ? {} : { participantUserIds }),
+        })),
+      ],
     },
     [...pending, ...next]
   );
@@ -77,6 +86,14 @@ export function restoreParallelCheckpoint(
     });
     const releasedJoinFrameId = entry.releasedJoinFrameId;
     if (
+      entry.participantUserIds !== undefined &&
+      (!Array.isArray(entry.participantUserIds) ||
+        entry.participantUserIds.some(id => !Number.isInteger(id) || id <= 0) ||
+        new Set(entry.participantUserIds).size !==
+          entry.participantUserIds.length)
+    )
+      return invalid();
+    if (
       releasedJoinFrameId !== undefined &&
       (typeof releasedJoinFrameId !== "string" ||
         !Object.prototype.hasOwnProperty.call(frames, releasedJoinFrameId) ||
@@ -88,6 +105,9 @@ export function restoreParallelCheckpoint(
     return {
       nodeId: entry.nodeId,
       tokens,
+      ...(entry.participantUserIds === undefined
+        ? {}
+        : { participantUserIds: [...entry.participantUserIds] }),
       ...(releasedJoinFrameId === undefined ? {} : { releasedJoinFrameId }),
     };
   });

@@ -44,6 +44,55 @@ beforeEach(() => {
     return sql.startsWith("SELECT") ? [[]] : [{ affectedRows: 1 }];
   });
 });
+it("同一节点来自两个分支时使用各自人员快照，汇聚后再合并", async () => {
+  const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
+  const context: any = {
+    vars: {},
+    nodes: {},
+    runtime: {
+      participantUserIds: [11, 22],
+      nodeParticipantUserIds: { shared: [11, 22] },
+      parallelCheckpoint: {
+        frames: fork.state,
+        queue: fork.tokens.map((tokens, i) => ({
+          nodeId: "shared",
+          tokens,
+          participantUserIds: [i === 0 ? 11 : 22],
+        })),
+      },
+    },
+  };
+  const result = await executeRunSegment({
+    runId: "run",
+    workflow: { id: "flow", ownerUserId: 1 } as any,
+    definition: {
+      nodes: [
+        node("shared"),
+        node("join", "transform", { parallelForNodeId: "router" }),
+        node("end", "end"),
+      ],
+      edges: [edge("shared", "join"), edge("join", "end")],
+    } as any,
+    context,
+    queue: ["shared", "shared"],
+  });
+  expect(result.status).toBe("success");
+  const runs = mocks.query.mock.calls.filter(([sql]) =>
+    sql.includes("INSERT INTO workflow_node_run")
+  );
+  expect(
+    runs
+      .filter(([, params]) => params[3] === "shared")
+      .map(
+        ([, params]) =>
+          JSON.parse(params[6]).context.runtime.currentNodeParticipantUserIds
+      )
+  ).toEqual([[11], [22]]);
+  const join = runs.find(([, params]) => params[3] === "join");
+  expect(
+    JSON.parse(join![1][6]).context.runtime.currentNodeParticipantUserIds
+  ).toEqual([11, 22]);
+});
 it("消息等待续跑使用最新汇聚状态和其他分支输出，避免旧快照覆盖", async () => {
   const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
   const arrived = reachParallelJoin(fork.state, "join", fork.tokens[1]);

@@ -21,7 +21,7 @@ export function prepareParallelJoin(checkpoint: ParallelCheckpoint) {
       queue: ready
         ? [
             {
-              nodeId: entry.nodeId,
+              ...entry,
               tokens: arrival.tokens,
               releasedJoinFrameId: frameId,
             },
