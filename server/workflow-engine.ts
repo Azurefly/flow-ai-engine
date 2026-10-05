@@ -3881,10 +3881,15 @@ export async function resumeWorkflowTask(input: {
     const task = rows[0] as PersistedWorkflow & mysql.RowDataPacket;
     if (!task) throw new Error("人工任务不存在。 ");
     const [lockedRuns] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT status FROM workflow_run WHERE id=? FOR UPDATE",
+      "SELECT status,contextJson,definitionSnapshotJson,startedAt FROM workflow_run WHERE id=? FOR UPDATE",
       [task.runId]
     );
     task.runStatus = lockedRuns[0]?.status;
+    if (lockedRuns[0]) {
+      task.contextJson = lockedRuns[0].contextJson;
+      task.definitionSnapshotJson = lockedRuns[0].definitionSnapshotJson;
+      task.startedAt = lockedRuns[0].startedAt;
+    }
     if (
       task.status !== "claimed" ||
       Number(task.claimedByUserId) !== input.completedBy.id
