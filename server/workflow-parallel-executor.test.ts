@@ -12,7 +12,16 @@ vi.mock("./db", () => ({
     }),
   }),
 }));
-import { executeRunSegment } from "./workflow-engine";
+vi.mock("./organization-service", () => ({
+  resolveAutoRelatedParticipantUserIds: async () => [],
+  resolveWorkflowUserRoleKeys: async () => new Map(),
+  resolveOperateAssignees: async ({ config }: any) => ({
+    mode: "user",
+    assignedUserId: config.assigneeUserId ?? 1,
+    candidateUserIds: [config.assigneeUserId ?? 1],
+  }),
+}));
+import { executeRunSegment, resumeWorkflowTask } from "./workflow-engine";
 import { restoreParallelCheckpoint } from "./workflow-parallel-checkpoint";
 beforeEach(() => {
   vi.resetAllMocks();
@@ -63,6 +72,7 @@ async function run(
     context,
     queue: ["start"],
     checkpoint: async checkpoint => {
+      (context.runtime as any).executionQueue = [...checkpoint.queue];
       const saved = JSON.parse(JSON.stringify(checkpoint));
       if (saved.context.runtime.parallelCheckpoint)
         restoreParallelCheckpoint(
@@ -99,6 +109,104 @@ it("执行器执行两条广播分支并仅执行一次汇聚及结束", async (
   );
   expect(result.result.status).toBe("success");
   expect(result.executed).toEqual(["start", "router", "a", "b", "join", "end"]);
+});
+it("两个并行人工任务同时生成，依次提交后仅汇聚一次", async () => {
+  const nodes = [
+    node("start", "start"),
+    router("router", "join", ["a", "b"]),
+    node("a", "operate", { assigneeUserId: 1 }),
+    node("b", "operate", { assigneeUserId: 2 }),
+    node("join", "transform", { parallelForNodeId: "router" }),
+    node("end", "end"),
+  ];
+  const edges = [
+    edge("start", "router"),
+    edge("router", "a", "a"),
+    edge("router", "b", "b"),
+    edge("a", "join"),
+    edge("b", "join"),
+    edge("join", "end"),
+  ];
+  const baseQuery = mocks.query.getMockImplementation()!;
+  const pending = new Set(["a", "b"]);
+  let context: any;
+  let selectedTask: any;
+  mocks.query.mockImplementation(async (sql: string, params: any[]) => {
+    if (sql.includes("FROM workflow_task t JOIN")) return [[selectedTask]];
+    if (sql.includes("FROM workflow_run WHERE id=? FOR UPDATE"))
+      return [
+        [
+          {
+            status: "waiting",
+            contextJson: JSON.stringify(context),
+            definitionSnapshotJson: JSON.stringify({ nodes, edges }),
+            startedAt: new Date(),
+          },
+        ],
+      ];
+    if (sql.includes("SELECT id,startedAt FROM workflow_node_run"))
+      return [[{ id: `nr-${selectedTask.nodeId}`, startedAt: new Date() }]];
+    if (sql.includes("UPDATE workflow_node_run SET status='success'"))
+      pending.delete(selectedTask.nodeId);
+    if (sql.includes("UNION ALL SELECT id FROM workflow_wait_subscription"))
+      return [
+        [
+          ...Array.from(pending)
+            .slice(0, 1)
+            .map(id => ({ id })),
+        ],
+      ];
+    return baseQuery(sql, params);
+  });
+  const initial = await run(nodes, edges);
+  expect(initial.result.status).toBe("waiting");
+  expect(initial.executed).toEqual(["start", "router", "a", "b"]);
+  const tasks = mocks.query.mock.calls.filter(([sql]) =>
+    sql.includes("INSERT INTO workflow_task (")
+  );
+  expect(tasks).toHaveLength(2);
+  const tokens = tasks.map(
+    ([, params]) => JSON.parse(params[16]).parallelTokens
+  );
+  expect(tokens[0]).not.toEqual(tokens[1]);
+  context = initial.context;
+  for (const [, params] of tasks) {
+    selectedTask = {
+      id: params[0],
+      workflowId: "flow",
+      runId: "run",
+      nodeId: params[4],
+      status: "claimed",
+      claimedByUserId: params[6],
+      payloadJson: params[16],
+      nextNodeIdsJson: params[22],
+    };
+    await resumeWorkflowTask({
+      taskId: selectedTask.id,
+      completedBy: { id: params[6], role: "admin" },
+      result: { decision: "approved" },
+    });
+    const job = mocks.query.mock.calls
+      .filter(([sql]) => sql.includes("INSERT INTO workflow_run_job"))
+      .slice(-1)[0];
+    const checkpoint = JSON.parse(job[1][3]);
+    context = checkpoint.context;
+    const segment = await executeRunSegment({
+      runId: "run",
+      workflow: { id: "flow", ownerUserId: 1 } as any,
+      definition: { nodes, edges } as any,
+      context,
+      queue: checkpoint.queue,
+      checkpoint: async next => {
+        context.runtime.executionQueue = [...next.queue];
+      },
+    });
+    expect(segment.status).toBe(pending.size ? "waiting" : "success");
+  }
+  const executed = mocks.query.mock.calls
+    .filter(([sql]) => sql.includes("INSERT INTO workflow_node_run"))
+    .map(([, params]) => params[3]);
+  expect(executed).toEqual(["start", "router", "a", "b", "join", "end"]);
 });
 it("汇聚释放后的检查点中断恢复不会漏执行汇聚或重跑分支", async () => {
   const nodes = [
