@@ -239,23 +239,28 @@ function stronglyConnectedComponents(
   return components;
 }
 
-function canReachTarget(
+function allPathsReachTarget(
   startNodeId: string,
   targetNodeId: string,
   outgoing: Map<string, WorkflowEdge[]>,
   blockedNodeId: string
 ) {
-  const visited = new Set<string>();
-  const queue = [startNodeId];
-  while (queue.length) {
-    const nodeId = queue.shift()!;
-    if (nodeId === targetNodeId) return true;
-    if (visited.has(nodeId) || nodeId === blockedNodeId) continue;
-    visited.add(nodeId);
-    for (const edge of outgoing.get(nodeId) ?? [])
-      queue.push(edge.targetNodeId);
+  // Only add nodes whose every successor already reaches the join. Dead ends,
+  // bypasses and cycles before the join never enter this set.
+  const guaranteed = new Set([targetNodeId]);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const [nodeId, edges] of Array.from(outgoing.entries())) {
+      if (nodeId === blockedNodeId || guaranteed.has(nodeId) || !edges.length)
+        continue;
+      if (edges.every(edge => guaranteed.has(edge.targetNodeId))) {
+        guaranteed.add(nodeId);
+        changed = true;
+      }
+    }
   }
-  return false;
+  return guaranteed.has(startNodeId);
 }
 
 export function analyzeWorkflowDefinition(
@@ -979,7 +984,7 @@ export function analyzeWorkflowDefinition(
               );
             for (const edge of nodeOutgoing) {
               if (
-                !canReachTarget(
+                !allPathsReachTarget(
                   edge.targetNodeId,
                   joinNodeId,
                   outgoing,
@@ -989,7 +994,7 @@ export function analyzeWorkflowDefinition(
                 diagnostics.push(
                   diagnostic(
                     "WF_PARALLEL_BRANCH_MISSES_JOIN",
-                    `并行分支 ${edge.id} 无法到达汇聚节点“${joinNode.name}”。`,
+                    `并行分支 ${edge.id} 必须让所有出口到达汇聚节点“${joinNode.name}”，不能绕过汇聚、进入死路或在汇聚前循环。`,
                     { kind: "edge", edgeId: edge.id }
                   )
                 );

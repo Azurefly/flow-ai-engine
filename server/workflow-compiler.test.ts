@@ -42,6 +42,67 @@ function state(id = "state") {
 }
 
 describe("WorkflowCompiler", () => {
+  it.each(["bypass", "cycle", "dead-end"])(
+    "并行分支存在%s时即使有汇聚路径也拒绝定义",
+    kind => {
+      const definition = base();
+      definition.nodes.splice(
+        1,
+        0,
+        {
+          ...state("router"),
+          type: "router",
+          config: {
+            routes: [{ handle: "a" }, { handle: "b" }],
+            defaultRoute: "b",
+            broadcast: true,
+            parallelJoinNodeId: "join",
+          },
+        },
+        state("a"),
+        state("b"),
+        {
+          ...state("join"),
+          config: { nodeDh: "join", jdmc: "join", parallelForNodeId: "router" },
+        },
+        ...(kind === "dead-end" ? [state("dead")] : [])
+      );
+      definition.edges = [
+        { id: "s-r", sourceNodeId: "start", targetNodeId: "router" },
+        {
+          id: "r-a",
+          sourceNodeId: "router",
+          targetNodeId: "a",
+          sourceHandle: "a",
+        },
+        {
+          id: "r-b",
+          sourceNodeId: "router",
+          targetNodeId: "b",
+          sourceHandle: "b",
+        },
+        { id: "a-j", sourceNodeId: "a", targetNodeId: "join" },
+        { id: "b-j", sourceNodeId: "b", targetNodeId: "join" },
+        { id: "j-e", sourceNodeId: "join", targetNodeId: "end" },
+        {
+          id: "escape",
+          sourceNodeId: "a",
+          targetNodeId:
+            kind === "bypass" ? "end" : kind === "cycle" ? "a" : "dead",
+        },
+      ];
+      const result = analyzeWorkflowDefinition(definition, {
+        flowType: "state",
+        executable: true,
+      });
+      expect(result.ok).toBe(false);
+      expect(
+        result.diagnostics
+          .filter(item => item.code === "WF_PARALLEL_BRANCH_MISSES_JOIN")
+          .map(item => item.location)
+      ).toContainEqual({ kind: "edge", edgeId: "r-a" });
+    }
+  );
   it("rejects data joins whose explicit input bindings do not match the graph", () => {
     const definition = base();
     definition.nodes.splice(
