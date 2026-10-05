@@ -205,6 +205,66 @@ try {
       run => run.status === "waiting",
       "waiting run"
     );
+    const pauses = await Promise.all([
+      admin.request("workflow.pauseRun", { runId: task.runId }, true),
+      admin.request("workflow.pauseRun", { runId: task.runId }, true),
+    ]);
+    assert.equal(
+      pauses.filter(item => item.changed).length,
+      1,
+      "Concurrent pause changes status once"
+    );
+    const paused = await admin.request("workflow.runDetail", {
+      runId: task.runId,
+    });
+    assert.equal(paused.status, "blocked");
+    const pausedTask = await admin.request("task.get", { taskId: task.id });
+    assert.equal(pausedTask.canAct, false);
+    assert.match(pausedTask.blockedReason, /暂停/);
+    assert.equal(paused.currentStateName, detail.currentStateName);
+    assert.equal(paused.stateVersion, detail.stateVersion);
+    assert.equal(paused.nodeRuns.length, detail.nodeRuns.length);
+    await assert.rejects(() =>
+      admin.request(
+        "task.execute",
+        {
+          taskId: task.id,
+          result: { decision: outcome, outcome, comment: "暂停期间不得办理" },
+        },
+        true
+      )
+    );
+    const resumes = await Promise.all([
+      admin.request("workflow.resumeRun", { runId: task.runId }, true),
+      admin.request("workflow.resumeRun", { runId: task.runId }, true),
+    ]);
+    assert.equal(
+      resumes.filter(item => item.changed).length,
+      1,
+      "Concurrent resume changes status once"
+    );
+    const resumed = await admin.request("workflow.runDetail", {
+      runId: task.runId,
+    });
+    assert.equal(resumed.status, "waiting");
+    assert.equal(
+      (await admin.request("task.get", { taskId: task.id })).canAct,
+      true
+    );
+    assert.equal(resumed.currentStateName, detail.currentStateName);
+    assert.equal(resumed.stateVersion, detail.stateVersion);
+    assert.equal(resumed.nodeRuns.length, detail.nodeRuns.length);
+    const remainingTasks = await admin.request("task.list", {
+      view: "todo",
+      projectId: project.id,
+    });
+    assert.deepEqual(
+      remainingTasks
+        .filter(item => item.runId === task.runId)
+        .map(item => item.id),
+      [task.id],
+      "Resume preserves the original task without duplication"
+    );
     const waitingMetrics = await admin.request("workflow.runMetrics", {
       workflowId: workflow.id,
     });
@@ -406,6 +466,7 @@ try {
       workflowId: workflow.id,
       runId: task.runId,
       listAndDetailAgree: true,
+      concurrentPauseResume: true,
       businessState: finalExpected,
       participantStatus: detail.participantStatusName,
       stateVersion: detail.stateVersion,

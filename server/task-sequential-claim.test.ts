@@ -18,6 +18,7 @@ const task = {
   workflowId: "test-flow",
   nodeId: "approval",
   status: "pending",
+  runStatus: "waiting",
   assignedUserId: 12,
   approvalGroupId: "group",
   signMode: "sequentialSignFor",
@@ -80,4 +81,33 @@ it("详情返回顺序等待原因并通过查询读取前序状态", async () =
   expect(mocks.query.mock.calls[0][0]).toContain(
     "earlier.approvalOrder<t.approvalOrder"
   );
+});
+
+it.each(["blocked", "queued", "success", "failed", "cancelled", "terminated"])(
+  "实例 %s 不返回可办理状态",
+  runStatus => {
+    expect(
+      taskActionState(12, {
+        ...task,
+        runStatus,
+        hasEarlierPendingSigner: 0,
+      } as any).canAct
+    ).toBe(false);
+  }
+);
+it("暂停实例有明确原因，恢复后原任务恢复办理", () => {
+  expect(
+    taskActionState(12, { ...task, runStatus: "blocked" } as any)
+  ).toMatchObject({
+    canAct: false,
+    actionLabel: "流程已暂停",
+    blockedReason: "流程已暂停，恢复后才能办理。",
+  });
+  expect(
+    taskActionState(12, {
+      ...task,
+      runStatus: "waiting",
+      hasEarlierPendingSigner: 0,
+    } as any).canAct
+  ).toBe(true);
 });

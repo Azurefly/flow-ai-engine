@@ -175,6 +175,16 @@ async function assertCurrentTaskOperation(
 }
 
 export function taskActionState(userId: number, task: mysql.RowDataPacket) {
+  if (!["running", "waiting"].includes(String(task.runStatus))) {
+    const paused = task.runStatus === "blocked";
+    return {
+      canAct: false,
+      blockedReason: paused
+        ? "流程已暂停，恢复后才能办理。"
+        : "流程当前不可办理，请刷新状态。",
+      actionLabel: paused ? "流程已暂停" : "当前不可办理",
+    };
+  }
   const waiting =
     task.signMode === "sequentialSignFor" &&
     (task.status === "pending" || task.status === "claimed") &&
