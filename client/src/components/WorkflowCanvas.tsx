@@ -1,4 +1,7 @@
-import { dataflowInputFields } from "../../../shared/dataflow-input-fields";
+import {
+  dataflowInputFields,
+  usesDataflowInputFieldSuggestions,
+} from "../../../shared/dataflow-input-fields";
 import { OperateApprovalEditor } from "./OperateApprovalEditor";
 import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
 import { isDataflowFieldList } from "@shared/dataflow-field-list";
@@ -4711,8 +4714,10 @@ export default function WorkflowCanvas({
                                 serviceEndpoints.isLoading)
                             }
                             fieldSuggestions={
-                              selected.data.kind === "udf" &&
-                              field.key === "inputField"
+                              usesDataflowInputFieldSuggestions(
+                                selected.data.kind,
+                                field.key
+                              )
                                 ? dataflowInputFields(
                                     selected.id,
                                     nodes.map(node => ({

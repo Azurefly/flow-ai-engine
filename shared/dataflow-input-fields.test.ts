@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 import {
   dataflowInputFields as fields,
   dataflowSchemaFields,
+  usesDataflowInputFieldSuggestions,
 } from "./dataflow-input-fields";
 const nodes = [
   { id: "source", kind: "source", config: { assetId: "asset" } },
@@ -197,4 +198,16 @@ it("关联缺少绑定或上游字段不可知时不猜测", () => {
     )
   ).toEqual([]);
   expect(fields("udf", joinNodes, joinEdges, [joinAssets[0]])).toEqual([]);
+});
+
+it("仅上游输入字段提供建议，不把输入字段误用于输出或常量", () => {
+  expect(usesDataflowInputFieldSuggestions("filter", "filterField")).toBe(true);
+  expect(usesDataflowInputFieldSuggestions("udf", "inputField")).toBe(true);
+  expect(usesDataflowInputFieldSuggestions("filter", "filterValue")).toBe(
+    false
+  );
+  expect(usesDataflowInputFieldSuggestions("udf", "outputField")).toBe(false);
+  expect(usesDataflowInputFieldSuggestions("operate", "inputField")).toBe(
+    false
+  );
 });

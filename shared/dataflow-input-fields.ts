@@ -1,3 +1,9 @@
+export function usesDataflowInputFieldSuggestions(kind: string, key: string) {
+  return (
+    (kind === "udf" && key === "inputField") ||
+    (kind === "filter" && key === "filterField")
+  );
+}
 type Node = { id: string; kind: string; config: Record<string, unknown> };
 export function dataflowInputFields(
   nodeId: string,

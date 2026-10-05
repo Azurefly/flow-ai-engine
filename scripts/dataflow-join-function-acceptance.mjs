@@ -197,6 +197,80 @@ assert.deepEqual(run.output.terminals[0].rows, [
     normalized: null,
   },
 ]);
+const filtered = await admin.request(
+  "project.createWorkflow",
+  {
+    projectId: project.id,
+    name: `关联后筛选_${tag}`,
+    flowType: "data",
+    definition: {
+      schemaVersion: 1,
+      viewport: { x: 0, y: 0, zoom: 1 },
+      settings: {},
+      nodes: [
+        ...specs,
+        [
+          "filter",
+          "filter",
+          { filterField: "normalized", filterValue: "RIGHT" },
+        ],
+      ].map(([id, type, config], i) => ({
+        id,
+        type,
+        config,
+        name: id,
+        position: { x: i * 180, y: 0 },
+      })),
+      edges: [
+        ...links.filter(([id]) => id !== "upper-end"),
+        ["upper-filter", "upper", "filter"],
+        ["filter-end", "filter", "end"],
+      ].map(([id, sourceNodeId, targetNodeId]) => ({
+        id,
+        sourceNodeId,
+        targetNodeId,
+      })),
+    },
+  },
+  true
+);
+await admin.request(
+  "project.auditWorkflow",
+  { projectId: project.id, workflowId: filtered.id, auditStatus: "approved" },
+  true
+);
+await admin.request("workflow.publish", { id: filtered.id }, true);
+const filteredStarted = await admin.request(
+  "data.run",
+  { projectId: project.id, workflowId: filtered.id },
+  true
+);
+const filteredRun = await waitFor(
+  () =>
+    admin.request("data.runDetail", {
+      projectId: project.id,
+      runId: filteredStarted.runId ?? filteredStarted.id,
+    }),
+  value => ["success", "failed"].includes(value.status),
+  "filtered join run"
+);
+assert.equal(filteredRun.status, "success");
+assert.deepEqual(filteredRun.output.terminals[0].rows, [
+  {
+    id: 1,
+    text: "left",
+    lookup_id: 1,
+    lookup_text: "right",
+    normalized: "RIGHT",
+  },
+]);
+console.log(
+  JSON.stringify({
+    filterWorkflowId: filtered.id,
+    filterRunId: filteredRun.id,
+    filterStatus: filteredRun.status,
+  })
+);
 console.log(
   JSON.stringify({
     projectId: project.id,
