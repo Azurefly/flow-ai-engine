@@ -2025,11 +2025,12 @@ export async function executePreparedWorkflowRun(input: {
       runtime.parallelCheckpoint,
       suppliedCheckpoint.queue
     );
-  const queue = suppliedCheckpoint.queue.length
-    ? [...suppliedCheckpoint.queue]
-    : startNode
-      ? [startNode.id]
-      : [];
+  const queue =
+    suppliedCheckpoint.queue.length || runtime.parallelCheckpoint !== undefined
+      ? [...suppliedCheckpoint.queue]
+      : startNode
+        ? [startNode.id]
+        : [];
   const runStartedAt = run.startedAt
     ? new Date(run.startedAt).getTime()
     : Date.now();
@@ -3015,17 +3016,35 @@ async function executeRunSegment(input: {
             nextNodeId,
             currentParticipants
           );
-          enqueue(nextNodeId);
+          if (!parallel) enqueue(nextNodeId);
+        }
+        const waitContext = parallel
+          ? (JSON.parse(JSON.stringify(input.context)) as JsonRecord)
+          : input.context;
+        if (parallel) {
+          asRecord(waitContext.runtime).parallelWaitContinuation = {
+            nextNodeIds,
+            tokens: activeTokens,
+          };
         }
         const persisted = await persistWorkflowWait({
           runId: input.runId,
           workflowId: input.workflow.id,
           node,
           nodeRunId,
-          context: input.context,
+          context: waitContext,
           queue: [...input.queue],
           finalOutput,
         });
+        if (parallel) {
+          await input.checkpoint?.({
+            queue: [...input.queue],
+            context: input.context,
+            finalOutput,
+            currentNodeId: null,
+          });
+          continue;
+        }
         await input.checkpoint?.(persisted.checkpoint);
         return { status: "waiting", taskId: persisted.waitId };
       }
@@ -3380,6 +3399,7 @@ async function executeRunSegment(input: {
           finalOutput,
           currentNodeId: null,
         });
+        if (parallel) continue;
         return { status: "waiting", taskId: taskIds[0] };
       }
       if (node.type === "router") {
@@ -3581,6 +3601,14 @@ async function executeRunSegment(input: {
       await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details);
       throw error;
     }
+  }
+  if (parallel) {
+    const [pending] = await db().query<mysql.RowDataPacket[]>(
+      `SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed')
+       UNION ALL SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active' LIMIT 1`,
+      [input.runId, input.runId]
+    );
+    if (pending[0]) return { status: "waiting", taskId: String(pending[0].id) };
   }
   if (!reachedEnd)
     throw new Error("流程未到达结束节点，已阻止将不完整运行标记为成功。");
@@ -4096,7 +4124,7 @@ async function triggerWorkflowWaitSubscription(
   try {
     await connection.beginTransaction();
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT s.*,r.status AS runStatus
+      `SELECT s.*,r.status AS runStatus,r.contextJson AS runContextJson
          FROM workflow_wait_subscription s
          JOIN workflow_run r ON r.id=s.runId
         WHERE s.id=? FOR UPDATE`,
@@ -4110,7 +4138,29 @@ async function triggerWorkflowWaitSubscription(
     if (wait.runStatus !== "waiting")
       throw new Error("等待订阅所属流程当前不在等待状态。");
     const checkpoint = readJson(wait.checkpointJson) as WorkflowCheckpoint;
-    const context = asRecord(checkpoint.context);
+    const continuation = asRecord(
+      asRecord(asRecord(checkpoint.context).runtime).parallelWaitContinuation
+    );
+    const context =
+      continuation.nextNodeIds !== undefined
+        ? asRecord(readJson(wait.runContextJson))
+        : asRecord(checkpoint.context);
+    if (continuation.nextNodeIds !== undefined) {
+      const runtime = asRecord(context.runtime);
+      const next = resumeWorkflowQueue(
+        undefined,
+        continuation.nextNodeIds as string[]
+      );
+      const pending = resumeWorkflowQueue(runtime.executionQueue, []);
+      runtime.parallelCheckpoint = resumeParallelCheckpoint(
+        runtime.parallelCheckpoint,
+        pending,
+        next,
+        continuation.tokens
+      );
+      checkpoint.queue = [...pending, ...next];
+      context.runtime = runtime;
+    }
     const output = {
       waitId,
       waitType: String(wait.waitType),

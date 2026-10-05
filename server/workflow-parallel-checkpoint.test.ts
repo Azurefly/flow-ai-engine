@@ -28,6 +28,25 @@ it("人工任务续跑保留其他分支并恢复本分支身份", () => {
     resumeParallelCheckpoint(pending, ["branch"], ["join"], undefined)
   ).toThrow();
 });
+it("两个等待分支依次恢复不会覆盖先前已入队的分支", () => {
+  const first = resumeParallelCheckpoint(
+    { frames: fork.state, queue: [] },
+    [],
+    ["join"],
+    fork.tokens[0]
+  );
+  const second = resumeParallelCheckpoint(
+    JSON.parse(JSON.stringify(first)),
+    ["join"],
+    ["join"],
+    fork.tokens[1]
+  );
+  expect(second.queue).toEqual([
+    { nodeId: "join", tokens: fork.tokens[0] },
+    { nodeId: "join", tokens: fork.tokens[1] },
+  ]);
+  expect(first.queue).toHaveLength(1);
+});
 it("恢复同一节点不同分支身份，保持队列顺序", () => {
   const restored = restoreParallelCheckpoint(
     JSON.parse(JSON.stringify(checkpoint)),
