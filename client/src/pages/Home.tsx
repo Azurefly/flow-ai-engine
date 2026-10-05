@@ -2672,7 +2672,7 @@ function FlowDesigner({
       )}
       <ErrorBoundary>
         <WorkflowCanvas
-          key={`${workflow.id}:${workflow.definitionVersion}`}
+          key={workflow.id}
           workflowId={workflow.id}
           projectId={workflow.projectId ?? undefined}
           flowType={workflow.flowType ?? "state"}

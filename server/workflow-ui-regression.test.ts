@@ -317,7 +317,8 @@ describe("流程设计器界面回归约束", () => {
       "flex min-h-[calc(100vh-56px)] flex-col md:flex-row"
     );
     expect(homeSource).toContain('flowListOpen ? "w-full md:w-72"');
-    expect(homeSource).toContain(
+    expect(homeSource).toContain("key={workflow.id}");
+    expect(homeSource).not.toContain(
       "key={`${workflow.id}:${workflow.definitionVersion}`}"
     );
     expect(homeSource).not.toContain(
