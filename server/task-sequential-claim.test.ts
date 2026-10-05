@@ -95,6 +95,18 @@ it.each(["blocked", "queued", "success", "failed", "cancelled", "terminated"])(
     ).toBe(false);
   }
 );
+it("并行分支任务在排队中仍可办理", () => {
+  expect(
+    taskActionState(12, {
+      ...task,
+      runStatus: "queued",
+      hasEarlierPendingSigner: 0,
+      payloadJson: JSON.stringify({
+        parallelTokens: [{ frameId: "f", branchId: "a" }],
+      }),
+    } as any).canAct
+  ).toBe(true);
+});
 it("暂停实例有明确原因，恢复后原任务恢复办理", () => {
   expect(
     taskActionState(12, { ...task, runStatus: "blocked" } as any)

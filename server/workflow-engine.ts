@@ -3605,8 +3605,9 @@ async function executeRunSegment(input: {
   if (parallel) {
     const [pending] = await db().query<mysql.RowDataPacket[]>(
       `SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed')
-       UNION ALL SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active' LIMIT 1`,
-      [input.runId, input.runId]
+       UNION ALL SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active'
+       UNION ALL SELECT id FROM workflow_node_run WHERE runId=? AND status='waiting' LIMIT 1`,
+      [input.runId, input.runId, input.runId]
     );
     if (pending[0]) return { status: "waiting", taskId: String(pending[0].id) };
   }
@@ -3895,10 +3896,15 @@ export async function resumeWorkflowTask(input: {
       Number(task.claimedByUserId) !== input.completedBy.id
     )
       throw new Error("仅领取该任务的处理人可以完成操作。 ");
-    if (!["running", "waiting"].includes(String(task.runStatus)))
+    const taskPayload = asRecord(readJson(task.payloadJson));
+    const parallelTask = Array.isArray(taskPayload.parallelTokens);
+    if (
+      !(
+        parallelTask ? ["running", "waiting", "queued"] : ["running", "waiting"]
+      ).includes(String(task.runStatus))
+    )
       throw new Error("所属流程实例不处于等待人工操作状态。 ");
     validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalizedResult);
-    const taskPayload = asRecord(readJson(task.payloadJson));
     const taskSchema = asRecord(asRecord(taskPayload.config).formSchema);
     assertTaskFormSchema(taskSchema);
     if (Array.isArray(taskSchema.fields)) {
@@ -3947,6 +3953,16 @@ export async function resumeWorkflowTask(input: {
           required: gate.requiredApprovals,
           total: gate.totalApprovers,
         },
+      };
+    }
+    if (parallelTask && task.runStatus !== "waiting") {
+      // The completed decision is durable. The continuation reconciler joins it
+      // after the current worker has checkpointed and released the run lease.
+      await connection.commit();
+      return {
+        runId: String(task.runId),
+        status: "queued" as const,
+        continuationPending: true,
       };
     }
     const context = asRecord(readJson(task.contextJson));
@@ -4296,11 +4312,18 @@ export async function reconcileWorkflowContinuations(limit = 20) {
     try {
       await connection.beginTransaction();
       const [lockedRuns] = await connection.query<mysql.RowDataPacket[]>(
-        "SELECT id,contextJson,startedAt FROM workflow_run WHERE id=? AND status IN ('running','waiting') FOR UPDATE",
+        "SELECT id,status,contextJson,startedAt FROM workflow_run WHERE id=? AND status IN ('running','waiting') FOR UPDATE",
         [task.runId]
       );
       const run = lockedRuns[0];
       if (!run) {
+        await connection.rollback();
+        continue;
+      }
+      if (
+        Array.isArray(asRecord(readJson(task.payloadJson)).parallelTokens) &&
+        run.status !== "waiting"
+      ) {
         await connection.rollback();
         continue;
       }

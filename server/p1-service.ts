@@ -135,6 +135,16 @@ async function canAccessTask(
   return hasWorkflowPermission(user, String(task.workflowId), "workflow:view");
 }
 
+function isTaskRunActionable(task: mysql.RowDataPacket) {
+  const payload = parseJson(task.payloadJson) as {
+    parallelTokens?: unknown;
+  } | null;
+  return (
+    ["running", "waiting"].includes(String(task.runStatus)) ||
+    (task.runStatus === "queued" && Array.isArray(payload?.parallelTokens))
+  );
+}
+
 async function assertCurrentTaskOperation(
   user: User,
   task: mysql.RowDataPacket
@@ -146,7 +156,7 @@ async function assertCurrentTaskOperation(
   if (String(actorRows[0]?.status ?? "") !== "active") {
     throw new Error("当前账号已停用，不能执行人工操作。 ");
   }
-  if (!["running", "waiting"].includes(String(task.runStatus)))
+  if (!isTaskRunActionable(task))
     throw new Error("流程实例当前不在可操作状态。 ");
   if (!["pending", "claimed"].includes(String(task.status)))
     throw new Error("当前人工操作已结束或被取消。 ");
@@ -175,7 +185,7 @@ async function assertCurrentTaskOperation(
 }
 
 export function taskActionState(userId: number, task: mysql.RowDataPacket) {
-  if (!["running", "waiting"].includes(String(task.runStatus))) {
+  if (!isTaskRunActionable(task)) {
     const paused = task.runStatus === "blocked";
     return {
       canAct: false,
@@ -789,7 +799,7 @@ export async function handoverWorkflowTask(
     throw new Error(`人工任务不存在或无${actionLabel}权限。 `);
   if (
     !["pending", "claimed"].includes(String(task.status)) ||
-    !["running", "waiting"].includes(String(task.runStatus))
+    !isTaskRunActionable(task)
   )
     throw new Error(`仅可${actionLabel}正在等待处理的人工任务。 `);
   if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id)
