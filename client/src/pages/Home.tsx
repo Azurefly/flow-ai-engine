@@ -2,6 +2,7 @@ import { shouldResetRunRoute } from "@shared/run-route-guard";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import { Button } from "@/components/ui/button";
+import { SearchableMultiSelect } from "@/components/SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectRecord } from "@/components/ProjectWorkspace";
@@ -618,17 +619,6 @@ function FlowConsole({
   const members = trpc.workflow.members.useQuery(
     useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]),
     { enabled: Boolean(editorActive && selectedId), retry: false }
-  );
-  const memberCandidates = trpc.workflow.memberCandidates.useQuery(
-    useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]),
-    {
-      enabled: Boolean(
-        editorActive &&
-          selectedId &&
-          access.data?.permissions?.has("workflow:members:manage")
-      ),
-      retry: false,
-    }
   );
   const templates = trpc.workflow.templates.useQuery(undefined, {
     enabled: editorActive,
@@ -1721,7 +1711,6 @@ function FlowConsole({
               hasUnpublishedChanges={isDraftDirty}
               canManage={canManageMembers}
               members={(members.data ?? []) as any[]}
-              candidates={(memberCandidates.data ?? []) as any[]}
               savePending={saveFlow.isPending}
               publishPending={publishFlow.isPending}
               compilePending={compileFlow.isPending}
@@ -1869,9 +1858,9 @@ function FlowConsole({
                 updateSubflow.mutate({ id: subflow.id, isEnabled })
               }
               onDeleteSubflow={id => deleteSubflow.mutate({ id })}
-              onGrant={(userId, role, hours) => {
+              onGrant={async (userId, role, hours) => {
                 if (selectedId)
-                  grantMember.mutate({
+                  await grantMember.mutateAsync({
                     workflowId: selectedId,
                     userId,
                     role,
@@ -2104,7 +2093,6 @@ function FlowDesigner({
   hasUnpublishedChanges,
   canManage,
   members,
-  candidates,
   savePending,
   publishPending,
   compilePending,
@@ -2146,7 +2134,6 @@ function FlowDesigner({
   hasUnpublishedChanges: boolean;
   canManage: boolean;
   members: any[];
-  candidates: any[];
   savePending: boolean;
   publishPending: boolean;
   compilePending: boolean;
@@ -2179,13 +2166,23 @@ function FlowDesigner({
     userId: number,
     role: "owner" | "editor" | "operator" | "viewer",
     hours?: number
-  ) => void;
+  ) => Promise<void>;
   onRevoke: (
     userId: number,
     role: "owner" | "editor" | "operator" | "viewer"
   ) => void;
 }) {
   const [candidateId, setCandidateId] = useState("");
+  const [candidateQuery, setCandidateQuery] = useState("");
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const [grantPending, setGrantPending] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setCandidateSearch(candidateQuery.trim().slice(0, 100)),
+      250
+    );
+    return () => clearTimeout(timer);
+  }, [candidateQuery]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const field = titleRef.current;
@@ -2210,6 +2207,19 @@ function FlowDesigner({
   const [hours, setHours] = useState("");
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
+  const candidateDirectory = trpc.workflow.memberCandidates.useQuery(
+    {
+      workflowId: workflow?.id ?? "00000000",
+      query: candidateSearch,
+      selectedIds: candidateId ? [Number(candidateId)] : [],
+    },
+    {
+      enabled: Boolean(membersDialogOpen && canManage && workflow?.id),
+      retry: false,
+      refetchInterval: membersDialogOpen ? 30_000 : false,
+      refetchIntervalInBackground: false,
+    }
+  );
   const liveMembers = trpc.workflow.members.useQuery(
     { workflowId: workflow?.id ?? "00000000" },
     {
@@ -2812,42 +2822,83 @@ function FlowDesigner({
             {canManage && (
               <form
                 className="aiflow-type-body mt-3 grid min-w-0 gap-2 rounded border border-dashed border-blue-300 bg-card p-2"
-                onSubmit={event => {
+                onSubmit={async event => {
                   event.preventDefault();
                   const userId = Number(candidateId);
-                  if (!userId) return;
-                  onGrant(
-                    userId,
-                    memberRole,
-                    hours ? Number(hours) : undefined
-                  );
-                  setCandidateId("");
-                  setHours("");
+                  if (!userId || grantPending) return;
+                  const validity = roleExpiryInput(hours);
+                  if (validity.error) {
+                    toast.error(validity.error);
+                    return;
+                  }
+                  setGrantPending(true);
+                  try {
+                    await onGrant(
+                      userId,
+                      memberRole,
+                      hours ? Number(hours) : undefined
+                    );
+                    setCandidateId("");
+                    setHours("");
+                  } catch {
+                    // The mutation reports its error; retain the user's form values.
+                    void candidateDirectory.refetch();
+                  } finally {
+                    setGrantPending(false);
+                  }
                 }}
               >
                 <p className="aiflow-type-section-title font-semibold text-blue-900">
                   授予流程成员
                 </p>
-                <select
-                  className="h-8 min-w-0 max-w-full rounded border border-border bg-card px-2"
-                  value={candidateId}
-                  aria-label="待授权内部账号"
-                  onChange={event => setCandidateId(event.target.value)}
-                  required
-                >
-                  <option value="">选择内部账号</option>
-                  {candidates.map(candidate => (
-                    <option key={candidate.id} value={candidate.id}>
-                      {candidate.name || candidate.username}（
-                      {candidate.username}）
-                    </option>
-                  ))}
-                </select>
+                <SearchableMultiSelect
+                  ariaLabel="待授权内部账号"
+                  value={candidateId ? [candidateId] : []}
+                  options={(candidateDirectory.data ?? []).map(candidate => ({
+                    value: String(candidate.id),
+                    label: `${candidate.name || candidate.username}（${candidate.username}）`,
+                  }))}
+                  query={candidateQuery}
+                  onQueryChange={value =>
+                    setCandidateQuery(value.slice(0, 100))
+                  }
+                  onChange={ids => setCandidateId(ids[0] ?? "")}
+                  placeholder="请选择待授权账号"
+                  searchPlaceholder="搜索姓名或账号"
+                  emptyMessage="没有可用账号。"
+                  requireSearch
+                  maxSelected={1}
+                  loading={
+                    candidateDirectory.isFetching ||
+                    candidateQuery.trim() !== candidateSearch
+                  }
+                  error={candidateDirectory.isError}
+                  disabled={grantPending}
+                />
+                {candidateDirectory.isError && (
+                  <button
+                    type="button"
+                    className="aiflow-type-control text-aiflow-info underline"
+                    onClick={() => void candidateDirectory.refetch()}
+                  >
+                    重新搜索
+                  </button>
+                )}
+                {candidateId &&
+                  candidateDirectory.isSuccess &&
+                  !candidateDirectory.data.some(
+                    row => String(row.id) === candidateId
+                  ) && (
+                    <p role="alert" className="aiflow-type-body text-red-600">
+                      所选账号已停用或不可用，请重新选择。
+                    </p>
+                  )}
                 <div className="grid min-w-0 gap-2 sm:grid-cols-2">
                   <select
                     className="h-8 min-w-0 rounded border border-border bg-card px-2"
                     value={memberRole}
                     aria-label="协作角色"
+                    disabled={grantPending}
                     onChange={event =>
                       setMemberRole(event.target.value as typeof memberRole)
                     }
@@ -2863,6 +2914,7 @@ function FlowDesigner({
                     min="1"
                     placeholder="有效期小时（可选）"
                     aria-label="授权有效期（小时）"
+                    disabled={grantPending}
                     value={hours}
                     onChange={event => setHours(event.target.value)}
                   />
@@ -2870,8 +2922,15 @@ function FlowDesigner({
                 <Button
                   className="h-8 bg-blue-600 text-xs hover:bg-blue-500"
                   type="submit"
+                  disabled={
+                    grantPending ||
+                    candidateDirectory.isFetching ||
+                    !candidateDirectory.data?.some(
+                      row => String(row.id) === candidateId
+                    )
+                  }
                 >
-                  授予成员
+                  {grantPending ? "正在授权…" : "授予成员"}
                 </Button>
               </form>
             )}

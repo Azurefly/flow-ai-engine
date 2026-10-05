@@ -1674,7 +1674,7 @@ export const appRouter = router({
       )
       .query(({ ctx, input }) => searchWorkflowParticipants(ctx.user, input)),
     memberCandidates: protectedProcedure
-      .input(z.object({ workflowId: z.string().min(8).max(64) }))
+      .input(z.object({ workflowId: z.string().min(8).max(64), query: z.string().trim().max(100).optional(), selectedIds: z.array(z.number().int().positive()).max(1).default([]) }))
       .query(async ({ ctx, input }) => {
         if (
           !(await hasWorkflowPermission(
@@ -1684,7 +1684,7 @@ export const appRouter = router({
           ))
         )
           throw new Error("无权管理流程成员。");
-        return listActiveUsersForWorkflowAssignment();
+        return listActiveUsersForWorkflowAssignment(input.query === undefined ? undefined : {query: input.query,selectedIds: input.selectedIds});
       }),
     grantMember: protectedProcedure
       .input(

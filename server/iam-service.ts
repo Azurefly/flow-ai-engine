@@ -330,7 +330,18 @@ export async function listWorkflowMembers(workflowId: string) {
   return rows;
 }
 
-export async function listActiveUsersForWorkflowAssignment() {
+export async function listActiveUsersForWorkflowAssignment(input?: { query: string; selectedIds: number[] }) {
+  if (input) {
+    const query = input.query.trim().toLocaleLowerCase();
+    const ids = Array.from(new Set(input.selectedIds));
+    const [selected] = ids.length ? await db().query<mysql.RowDataPacket[]>(
+      `SELECT id,username,name,email FROM users WHERE status='active' AND id IN (${ids.map(() => "?").join(",")})`, ids
+    ) : [[]];
+    const [matches] = query ? await db().query<mysql.RowDataPacket[]>(
+      "SELECT id,username,name,email FROM users WHERE status='active' AND (LOCATE(?,LOWER(COALESCE(name,'')))>0 OR LOCATE(?,LOWER(username))>0) ORDER BY COALESCE(name,username),id LIMIT 51", [query,query]
+    ) : [[]];
+    return Array.from(new Map([...selected,...matches].map(row => [Number(row.id),row])).values());
+  }
   const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT id,username,name,email FROM users WHERE status='active' ORDER BY COALESCE(name,username),id LIMIT 200");
   return rows;
 }

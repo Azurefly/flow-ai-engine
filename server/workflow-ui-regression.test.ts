@@ -2903,6 +2903,15 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(homeSource).toContain("成员状态刷新失败，当前显示可能已过期。");
   });
+  it("协作授权按名称搜索人员且提交失败保留表单", () => {
+    expect(homeSource).toContain('ariaLabel="待授权内部账号"');
+    expect(homeSource).toContain("query: candidateSearch");
+    expect(homeSource).toContain("await grantMember.mutateAsync");
+    expect(homeSource).toContain("await onGrant(");
+    expect(homeSource).toContain("正在授权…");
+    expect(homeSource).toContain("所选账号已停用或不可用，请重新选择。");
+    expect(homeSource).not.toContain("candidates={");
+  });
 
   it("设计器和成员授权弹窗不请求可选 LLM 模型目录", () => {
     expect(homeSource).not.toContain("workflow.runtimeModels.useQuery");
