@@ -421,8 +421,12 @@ export async function updateOrganizationUnit(
     );
     if (!parents[0]) throw new Error("上级组织单元不存在或已停用。");
     let cursor: string | null = input.parentUnitId;
+    const visited = new Set<string>();
     for (let depth = 0; cursor && depth < 32; depth += 1) {
       if (cursor === input.id) throw new Error("组织单元层级不能形成循环。");
+      if (visited.has(cursor))
+        throw new Error("上级部门的组织层级存在循环，请先修复层级后重试。");
+      visited.add(cursor);
       const ancestorResult = await db().query<mysql.RowDataPacket[]>(
         "SELECT parentUnitId FROM organization_unit WHERE id=? LIMIT 1",
         [cursor]
@@ -432,6 +436,10 @@ export async function updateOrganizationUnit(
         ? String(ancestorRows[0].parentUnitId)
         : null;
     }
+    if (cursor)
+      throw new Error(
+        "上级部门层级超过32层，无法完成循环检查，请调整层级后重试。"
+      );
   }
   if (input.managerUserId)
     await assertActiveUser(input.managerUserId, "负责人");
