@@ -11,6 +11,7 @@ import WorkflowGovernance, {
 type WorkflowDetailRecord = {
   id: string;
   name: string;
+  projectId?: string | null;
   flowType?: "state" | "control" | "data" | null;
   status?: string | null;
   auditStatus?: string | null;
@@ -221,6 +222,7 @@ export function WorkflowDetailPage({
                   </div>
                   <WorkflowCanvas
                     workflowId={workflow.id}
+                    projectId={workflow.projectId ?? undefined}
                     flowType={workflow.flowType ?? "state"}
                     definition={definition}
                     readOnly

@@ -1607,6 +1607,9 @@ describe("流程设计器界面回归约束", () => {
       "只读预览；流程定义不会在此页面修改。"
     );
     expect(processDetailPageSource).toContain("readOnly");
+    expect(processDetailPageSource).toContain(
+      "projectId={workflow.projectId ?? undefined}"
+    );
     const overviewStart = governanceSource.indexOf(
       'activeSection === "overview" && ('
     );
