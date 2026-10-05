@@ -121,6 +121,9 @@ export default function OrganizationManagementPage({
   const unitActionsRef = useRef<HTMLDetailsElement>(null);
   const selectedUnitActionsRef = useRef<HTMLDetailsElement>(null);
   const [unitDialog, setUnitDialog] = useState<UnitDialogMode>(null);
+  const [unitError, setUnitError] = useState("");
+  const [memberError, setMemberError] = useState("");
+  const [roleError, setRoleError] = useState("");
   const [unitForm, setUnitForm] = useState(emptyUnitForm);
   const [memberOpen, setMemberOpen] = useState(false);
   const [memberQuery, setMemberQuery] = useState("");
@@ -296,7 +299,17 @@ export default function OrganizationManagementPage({
     if (unitActionsRef.current) unitActionsRef.current.open = false;
   };
 
+  useEffect(() => {
+    setUnitError("");
+  }, [unitDialog]);
+  useEffect(() => {
+    setMemberError("");
+  }, [memberOpen]);
+  useEffect(() => {
+    setRoleError("");
+  }, [roleOpen]);
   const submitUnit = async () => {
+    setUnitError("");
     try {
       let createdId: string | undefined;
       const common = {
@@ -335,11 +348,14 @@ export default function OrganizationManagementPage({
         unitDialog === "edit" ? "部门信息已保存。" : "部门已创建。 "
       );
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "部门保存失败。");
+      const message = error instanceof Error ? error.message : "部门保存失败。";
+      setUnitError(message);
+      toast.error(message);
     }
   };
 
   const submitMember = async () => {
+    setMemberError("");
     if (!selected) return;
     if (!memberForm.userId) {
       toast.error("请先搜索并选择一个内部账号。");
@@ -357,11 +373,14 @@ export default function OrganizationManagementPage({
       setMemberForm({ userId: "", title: "", isPrimary: true });
       toast.success("成员与岗位关系已保存。 ");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "成员保存失败。");
+      const message = error instanceof Error ? error.message : "成员保存失败。";
+      setMemberError(message);
+      toast.error(message);
     }
   };
 
   const submitRole = async () => {
+    setRoleError("");
     if (!selected) return;
     try {
       await bindRole.mutateAsync({
@@ -377,7 +396,10 @@ export default function OrganizationManagementPage({
       setRoleExpiresAt("");
       toast.success("部门权限组已绑定，成员权限即时生效。 ");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "权限组绑定失败。");
+      const message =
+        error instanceof Error ? error.message : "权限组绑定失败。";
+      setRoleError(message);
+      toast.error(message);
     }
   };
 
@@ -1425,6 +1447,7 @@ export default function OrganizationManagementPage({
         description="维护部门名称、上级与负责人。保存后生效，取消保留原有信息。"
         submitLabel={unitDialog === "edit" ? "保存部门" : "确认创建"}
         pending={pending}
+        errorMessage={unitError}
         onSubmit={submitUnit}
         className="max-w-3xl"
       >
@@ -1572,6 +1595,7 @@ export default function OrganizationManagementPage({
         description="选择已有账号，设置岗位与主部门。需要创建账号时，请使用成员页的“新建内部用户”。"
         submitLabel="保存成员"
         pending={assignMember.isPending}
+        errorMessage={memberError}
         onSubmit={submitMember}
       >
         <div className="aiflow-type-control grid gap-1.5 font-medium text-foreground">
@@ -1893,6 +1917,7 @@ export default function OrganizationManagementPage({
         description="成员按部门范围和有效期继承所选系统角色；系统管理员角色不能通过部门分配。"
         submitLabel="确认绑定"
         pending={bindRole.isPending}
+        errorMessage={roleError}
         onSubmit={submitRole}
       >
         <label className="grid gap-1.5 text-sm font-medium text-foreground">

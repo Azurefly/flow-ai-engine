@@ -3185,3 +3185,14 @@ it("画布节点类型使用业务名称，避免英文大写和过度字距", (
     "aiflow-type-meta mt-0.5 block break-words text-muted-foreground"
   );
 });
+
+it("组织保存失败在弹窗内保留错误并允许修改重试", () => {
+  expect(creationDialogSource).toContain('role="alert"');
+  expect(creationDialogSource).toContain("已保留填写内容，请检查后重新提交。");
+  for (const kind of ["unit", "member", "role"]) {
+    expect(organizationPageSource).toContain(`errorMessage={${kind}Error}`);
+    expect(organizationPageSource).toContain(
+      `set${kind[0].toUpperCase()}${kind.slice(1)}Error(message)`
+    );
+  }
+});

@@ -18,6 +18,7 @@ export function CreationDialog({
   submitLabel = "确认创建",
   pending,
   submitDisabled = false,
+  errorMessage,
   onSubmit,
   children,
   className = "max-w-xl",
@@ -29,6 +30,7 @@ export function CreationDialog({
   submitLabel?: string;
   pending: boolean;
   submitDisabled?: boolean;
+  errorMessage?: string;
   onSubmit: () => void | Promise<unknown>;
   children: ReactNode;
   className?: string;
@@ -73,6 +75,15 @@ export function CreationDialog({
             </DialogClose>
           </DialogHeader>
           <div className="mt-4 min-h-0 flex-auto overflow-y-auto overscroll-contain pr-1">
+            {errorMessage && (
+              <div
+                role="alert"
+                className="aiflow-type-body mb-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-3 text-aiflow-danger"
+              >
+                <p className="break-words">{errorMessage}</p>
+                <p className="mt-1">已保留填写内容，请检查后重新提交。</p>
+              </div>
+            )}
             <div className="grid min-w-0 gap-3">{children}</div>
           </div>
           <div className="mt-5 flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end">
