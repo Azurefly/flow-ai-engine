@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 
@@ -80,7 +80,7 @@ export function WorkflowParticipantPicker({
         emptyMessage="没有可用项目。"
         loading={directory.isFetching || query.trim() !== search}
         error={directory.isError}
-        disabled={disabled}
+        disabled={disabled || readOnly}
         requireSearch
         maxSelected={multiple ? 100 : people || role ? 1 : 100}
         hasMore={directory.data?.hasMore}
@@ -104,6 +104,7 @@ export function WorkflowParticipantPicker({
                   aria-label={`${direction < 0 ? "上移" : "下移"}第${index + 1}位审批人`}
                   disabled={
                     disabled ||
+                    readOnly ||
                     index + direction < 0 ||
                     index + direction >= value.length
                   }
@@ -134,15 +135,19 @@ export function WorkflowParticipantPicker({
       )}
       {missing.length > 0 && (
         <p role="status" className="text-xs text-amber-700">
-          已选项目已停用或不存在，请重新选择：{missing.join("、")}
+          已选项目已停用或不存在
+          {readOnly ? "，请联系流程管理员" : "，请重新选择"}：
+          {missing.join("、")}
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        {people
-          ? "按姓名或账号搜索启用的人员。"
-          : role
-            ? "选择角色后，由该角色在本流程中有办理资格的人员处理。"
-            : "按名称选择启用的部门；部门负责人模式留空时使用发起人的主部门。"}
+        {readOnly
+          ? "仅查看已配置人员；修改请联系流程管理员。"
+          : people
+            ? "按姓名或账号搜索启用的人员。"
+            : role
+              ? "选择角色后，由该角色在本流程中有办理资格的人员处理。"
+              : "按名称选择启用的部门；部门负责人模式留空时使用发起人的主部门。"}
       </p>
     </div>
   );
