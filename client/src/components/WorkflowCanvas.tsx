@@ -2706,7 +2706,12 @@ export default function WorkflowCanvas({
       : undefined;
   const resourceOptions = trpc.data.resourceOptions.useQuery(
     { projectId: projectId ?? "" },
-    { enabled: Boolean(projectId && selectedResourceKey), staleTime: 30_000 }
+    {
+      enabled: Boolean(
+        projectId && (selectedResourceKey || selected?.data.kind === "filter")
+      ),
+      staleTime: 30_000,
+    }
   );
   const resourceChoices =
     selectedResourceKey === "assetId"
