@@ -1,3 +1,4 @@
+import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
 import { builtinDataFunctionChoice } from "../shared/builtin-data-functions";
 import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { checkDataflowQuality } from "./dataflow-quality";
@@ -145,7 +146,7 @@ export async function listDataResourceOptions(
   await requireProjectAccess(user, projectId, "view");
   const [assets, sources, udfs] = await Promise.all([
     db().query<mysql.RowDataPacket[]>(
-      "SELECT id,name FROM data_asset WHERE projectId=? AND status='active' ORDER BY name,id",
+      "SELECT id,name,schemaJson FROM data_asset WHERE projectId=? AND status='active' ORDER BY name,id",
       [projectId]
     ),
     db().query<mysql.RowDataPacket[]>(
@@ -163,7 +164,10 @@ export async function listDataResourceOptions(
       label: `${String(row.name)}（${String(row.id).slice(0, 8)}）`,
     }));
   return {
-    assets: options(assets[0]),
+    assets: assets[0].map(row => ({
+      ...options([row])[0],
+      fields: dataflowSchemaFields(parseJson(row.schemaJson, [])),
+    })),
     sources: options(sources[0]),
     udfs: udfs[0].map(row =>
       builtinDataFunctionChoice({

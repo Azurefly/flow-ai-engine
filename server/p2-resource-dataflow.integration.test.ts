@@ -225,7 +225,11 @@ describe("P2 项目数据资源与数据流", () => {
       const view = await readonly.data.resources({ projectId });
       const choices = await readonly.data.resourceOptions({ projectId });
       expect(choices.assets).toEqual([
-        { value: assetId, label: `订单样本（${assetId.slice(0, 8)}）` },
+        {
+          value: assetId,
+          label: `订单样本（${assetId.slice(0, 8)}）`,
+          fields: ["orderId", "amount"],
+        },
       ]);
       expect(choices.sources.map(option => option.value)).toEqual([
         mysqlSourceId,

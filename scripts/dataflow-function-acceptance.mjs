@@ -95,6 +95,10 @@ const choices = await admin.request("data.resourceOptions", {
   projectId: project.id,
 });
 assert.equal(choices.udfs.length, 5);
+assert.deepEqual(choices.assets.find(item => item.value === asset.id)?.fields, [
+  "text",
+  "phone",
+]);
 for (const [index, id] of functions.entries()) {
   const option = choices.udfs.find(item => item.value === id);
   assert(option);

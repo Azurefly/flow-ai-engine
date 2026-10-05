@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Measured account retry UI: 1360.07 KiB raw / 400.28 KiB gzip.
-const maxTotalBytes = 1_361 * 1024;
+// Measured upstream field suggestions: 1361.72 KiB raw / 400.88 KiB gzip.
+const maxTotalBytes = 1_362 * 1024;
 const maxTotalGzipBytes = 401 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

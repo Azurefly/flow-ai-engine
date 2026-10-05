@@ -1,3 +1,4 @@
+import { dataflowInputFields } from "../../../shared/dataflow-input-fields";
 import { OperateApprovalEditor } from "./OperateApprovalEditor";
 import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
 import { isDataflowFieldList } from "@shared/dataflow-field-list";
@@ -27,7 +28,14 @@ import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
 import { automaticCanvasFit } from "./workflow-canvas-viewport";
 import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
 import { WorkflowOutcomeEditor } from "./WorkflowOutcomeEditor";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useId,
+} from "react";
 import { toast } from "sonner";
 import {
   Braces,
@@ -730,6 +738,7 @@ function ConfigFieldEditor({
   fallback,
   disabled,
   runtimeOptions,
+  fieldSuggestions,
   runtimePlaceholder = "请选择已启用的私有子流程",
   runtimeError,
   onRetryOptions,
@@ -744,6 +753,7 @@ function ConfigFieldEditor({
   fallback: unknown;
   disabled: boolean;
   runtimeOptions?: Array<{ value: string; label: string; disabled?: boolean }>;
+  fieldSuggestions?: string[];
   runtimePlaceholder?: string;
   runtimeError?: string;
   onRetryOptions?: () => void;
@@ -760,6 +770,7 @@ function ConfigFieldEditor({
     effectiveValue != null && typeof effectiveValue !== "object"
       ? String(effectiveValue)
       : "";
+  const suggestionId = useId();
   const [draft, setDraft] = useState(scalarValue);
   useEffect(() => setDraft(scalarValue), [scalarValue]);
   const label = (
@@ -968,6 +979,10 @@ function ConfigFieldEditor({
     <label className="grid gap-1.5">
       {label}
       <input
+        placeholder={
+          fieldSuggestions?.length ? "选择上游字段或手动填写" : undefined
+        }
+        list={fieldSuggestions?.length ? suggestionId : undefined}
         className={inputClass}
         value={draft}
         onChange={event => {
@@ -976,6 +991,13 @@ function ConfigFieldEditor({
         }}
         disabled={disabled}
       />
+      {fieldSuggestions?.length ? (
+        <datalist id={suggestionId}>
+          {fieldSuggestions.map(name => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      ) : null}
       <FieldHelp help={field.help} />
     </label>
   );
@@ -4687,6 +4709,21 @@ export default function WorkflowCanvas({
                               (field.key === "endpointRef" &&
                                 Boolean(projectId) &&
                                 serviceEndpoints.isLoading)
+                            }
+                            fieldSuggestions={
+                              selected.data.kind === "udf" &&
+                              field.key === "inputField"
+                                ? dataflowInputFields(
+                                    selected.id,
+                                    nodes.map(node => ({
+                                      id: node.id,
+                                      kind: node.data.kind,
+                                      config: node.data.config,
+                                    })),
+                                    edges,
+                                    resourceOptions.data?.assets ?? []
+                                  )
+                                : undefined
                             }
                             runtimeOptions={runtimeOptions}
                             runtimePlaceholder={
