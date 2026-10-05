@@ -152,9 +152,11 @@ try {
     { userId, status: "disabled" },
     true
   );
-  await admin.request(
-    "workflow.revokeMember",
-    { workflowId: workflow.id, userId, role: "viewer" },
-    true
-  );
+  const remaining = await member();
+  if (remaining && !remaining.revokedAt)
+    await admin.request(
+      "workflow.revokeMember",
+      { workflowId: workflow.id, userId, role: "viewer" },
+      true
+    );
 }
