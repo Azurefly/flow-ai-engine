@@ -2891,9 +2891,13 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       readDeduplicateKeys(config);
       break;
     case "quality_gate":
-      assertOptionalNumber(
+      if (config.minRows === null || config.minRows === "")
+        throw new Error("质量门最少行数必须为 0 至 1000000 的整数。");
+      if (config.maxNullRate === null || config.maxNullRate === "")
+        throw new Error("质量门空值率必须在 0 至 1 之间。");
+      assertOptionalInteger(
         config.minRows,
-        "质量门最少行数必须为非负数。",
+        "质量门最少行数必须为 0 至 1000000 的整数。",
         0,
         1_000_000
       );
