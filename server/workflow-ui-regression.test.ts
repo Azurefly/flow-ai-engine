@@ -3353,9 +3353,20 @@ it("本次运行输入展示服务端快照，不使用下一次编辑草稿", (
 });
 
 it("数据流程运行默认展示最终结果并支持多个结果集", () => {
-  expect(runModalSource).toContain('dataflowTerminalResults(currentRun?.output)');
-  expect(runModalSource).toContain('dataResults[selectedTerminal]?.rows ?? null');
-  expect(runModalSource).toContain('dataflowResultColumns(outputRows)');
-  expect(runModalSource).toContain('选择最终结果集');
-  expect(runModalSource).toContain('setSelectedTerminal(0)');
+  expect(runModalSource).toContain(
+    "dataflowTerminalResults(currentRun?.output)"
+  );
+  expect(runModalSource).toContain(
+    "dataResults[selectedTerminal]?.rows ?? null"
+  );
+  expect(runModalSource).toContain("dataflowResultColumns(outputRows)");
+  expect(runModalSource).toContain("选择最终结果集");
+  expect(runModalSource).toContain("setSelectedTerminal(0)");
+});
+it("运行弹窗按流程隔离，不显示其他流程或旧运行结果", () => {
+  expect(homeSource).toContain("<WorkflowTestRunModal key={workflow.id}");
+  expect(runModalSource).toContain(
+    "if (!data || data.id !== activeRunId) return null"
+  );
+  expect(runModalSource).toContain("setActiveRunId(null); setIsRunning(true);");
 });

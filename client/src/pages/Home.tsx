@@ -2734,6 +2734,7 @@ function FlowDesigner({
       </ErrorBoundary>
 
       <WorkflowTestRunModal
+        key={workflow.id}
         open={runDialogOpen}
         onOpenChange={setRunDialogOpen}
         workflow={workflow}

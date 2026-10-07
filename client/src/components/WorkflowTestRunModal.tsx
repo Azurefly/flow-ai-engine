@@ -193,7 +193,7 @@ export default function WorkflowTestRunModal({
     if (!activeRunId) return null;
     if (isDataflow) {
       const data = dataflowRunQuery.data;
-      if (!data) return null;
+      if (!data || data.id !== activeRunId) return null;
       return {
         id: data.id,
         status: data.status,
@@ -209,7 +209,7 @@ export default function WorkflowTestRunModal({
       };
     } else {
       const data = workflowRunQuery.data;
-      if (!data) return null;
+      if (!data || data.id !== activeRunId) return null;
       return {
         id: data.id,
         status: data.status,
@@ -294,6 +294,7 @@ export default function WorkflowTestRunModal({
 
   const handleStartRun = async () => {
     if (!workflow?.id || !canStartActualRun) return;
+    setActiveRunId(null);
     setIsRunning(true);
     setAcknowledgedActualRun(false);
     setRunError(null);
