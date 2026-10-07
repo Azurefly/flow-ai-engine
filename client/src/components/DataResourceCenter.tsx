@@ -1244,10 +1244,15 @@ function DataflowRunOutput({ run }: { run: any }) {
   const rawResult = run.output ??
     run.error ?? { message: "当前运行未生成额外输出。" };
   const result = parseDataflowResult(rawResult) as any;
-  const nodes = Array.isArray(result?.nodes) ? result.nodes : [];
+  const nodes =
+    Array.isArray(run.nodeRuns) && run.nodeRuns.length > 0
+      ? run.nodeRuns
+      : Array.isArray(result?.nodes)
+        ? result.nodes
+        : [];
   const terminals = Array.isArray(result?.terminals) ? result.terminals : [];
   const terminal = terminals.find((item: any) => Array.isArray(item?.rows));
-  const lastNode = [...nodes]
+  const lastNode = [...(Array.isArray(result?.nodes) ? result.nodes : [])]
     .reverse()
     .find((node: any) => Array.isArray(node?.output?.rows));
   const terminalRows = terminal?.rows ?? lastNode?.output?.rows ?? [];
@@ -1385,7 +1390,10 @@ function DataflowRunOutput({ run }: { run: any }) {
       )}
 
       {nodes.length > 0 && (
-        <details className="min-w-0 rounded border border-border bg-card px-3">
+        <details
+          open={run.status === "failed"}
+          className="min-w-0 rounded border border-border bg-card px-3"
+        >
           <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center font-medium text-foreground">
             节点执行摘要（{nodes.length}）
           </summary>
@@ -1401,6 +1409,9 @@ function DataflowRunOutput({ run }: { run: any }) {
                   </th>
                   <th className="aiflow-type-meta px-2 py-1.5 text-right font-medium">
                     输出行数
+                  </th>
+                  <th className="aiflow-type-meta px-2 py-1.5 font-medium">
+                    状态与错误
                   </th>
                 </tr>
               </thead>
@@ -1418,6 +1429,14 @@ function DataflowRunOutput({ run }: { run: any }) {
                     </td>
                     <td className="aiflow-type-meta px-2 py-1.5 text-right tabular-nums text-foreground">
                       {node.rowCount ?? "—"}
+                    </td>
+                    <td className="aiflow-type-meta px-2 py-1.5">
+                      <State value={node.status ?? "success"} />
+                      {node.error && (
+                        <p className="mt-1 max-w-sm whitespace-pre-wrap break-words text-destructive">
+                          {String(node.error.message ?? "节点执行失败")}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}

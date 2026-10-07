@@ -172,6 +172,24 @@ for (const { minRows, maxNullRate, expectedStatus, errorPattern } of [
     "quality test finished"
   );
   assert.equal(run.status, expectedStatus);
+  const qualityNode = run.nodeRuns.find(node => node.nodeId === "quality");
+  assert(qualityNode, "Quality node must have a persisted execution record");
+  assert.equal(
+    qualityNode.status,
+    expectedStatus === "failed" ? "failed" : "success"
+  );
+  assert.equal(
+    run.nodeRuns.find(node => node.nodeId === "source").status,
+    "success"
+  );
+  if (expectedStatus === "failed") {
+    assert.match(qualityNode.error.message, errorPattern);
+    assert.equal(
+      run.nodeRuns.some(node => node.nodeId === "end"),
+      false,
+      "Failed quality gate must block downstream execution"
+    );
+  }
   if (run.status === "success")
     assert.deepEqual(run.output.terminals[0].rows, rows);
   else assert.match(JSON.stringify(run), errorPattern);

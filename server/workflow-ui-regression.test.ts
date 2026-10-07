@@ -3246,19 +3246,38 @@ it("路由连线与节点使用统一规则解析，出口提示展示业务名�
 
 it("设计器导航明确展示真实流程类型并使用共享类型契约", () => {
   expect(homeSource).toContain('getFlowProfile(workflow.flowType ?? "state")');
-  expect(homeSource).toContain('aria-label={`当前流程类型：${flowProfile.label}`}');
-  expect(homeSource).toContain('title={flowProfile.description}');
-  expect(homeSource).toContain('{flowProfile.label}');
-  expect(homeSource).not.toContain('              业务流程');
+  expect(homeSource).toContain(
+    "aria-label={`当前流程类型：${flowProfile.label}`}"
+  );
+  expect(homeSource).toContain("title={flowProfile.description}");
+  expect(homeSource).toContain("{flowProfile.label}");
+  expect(homeSource).not.toContain("              业务流程");
 });
 it("数据流程监控使用独立运行接口并保留深链接和真实错误", () => {
   expect(homeSource).toContain('selectedWorkflow.flowType !== "data"');
-  expect(homeSource).toContain('if (!selectedWorkflow || selectedWorkflow.flowType === "data") return;');
-  expect(homeSource).toContain('selectedWorkflow?.flowType === "data" ? DataflowRunMonitor : RunCenter');
-  expect(dataResourceSource).toContain('export function DataflowRunMonitor');
+  expect(homeSource).toContain(
+    'if (!selectedWorkflow || selectedWorkflow.flowType === "data") return;'
+  );
+  expect(homeSource).toContain(
+    'selectedWorkflow?.flowType === "data" ? DataflowRunMonitor : RunCenter'
+  );
+  expect(dataResourceSource).toContain("export function DataflowRunMonitor");
   expect(dataResourceSource).toContain('aria-label="数据流程运行监控"');
   expect(dataResourceSource).toContain('aria-label="数据流程运行详情"');
-  expect(dataResourceSource).toContain('detail.data?.workflowId === workflowId');
+  expect(dataResourceSource).toContain(
+    "detail.data?.workflowId === workflowId"
+  );
   expect(dataResourceSource).toContain('runId: selectedRunId ?? "00000000"');
-  expect(dataResourceSource).toContain('limit: 10');
+  expect(dataResourceSource).toContain("limit: 10");
+});
+it("数据流失败摘要优先使用持久化节点记录并展示节点错误", () => {
+  expect(dataResourceSource).toContain(
+    "Array.isArray(run.nodeRuns) && run.nodeRuns.length > 0"
+  );
+  expect(dataResourceSource).toContain('open={run.status === "failed"}');
+  expect(dataResourceSource).toContain("状态与错误");
+  expect(dataResourceSource).toContain('node.error.message ?? "节点执行失败"');
+  expect(dataResourceSource).toContain(
+    "...(Array.isArray(result?.nodes) ? result.nodes : [])"
+  );
 });
