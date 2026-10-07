@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_378 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_379 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 407 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3390,4 +3390,11 @@ it("运行监控同样支持全部最终结果集选择", () => {
   expect(dataResourceSource).toContain(
     "const terminal = dataResults[selectedTerminal]"
   );
+});
+
+it("单结果预览也显示运行中保存的输出名称", () => {
+  expect(runModalSource).toContain("dataResults.length === 1");
+  expect(runModalSource).toContain("{dataResults[0].name}");
+  expect(dataResourceSource).toContain("terminal && dataResults.length === 1");
+  expect(dataResourceSource).toContain("{terminal.name}");
 });

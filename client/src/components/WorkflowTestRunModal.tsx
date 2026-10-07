@@ -881,6 +881,11 @@ export default function WorkflowTestRunModal({
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold text-foreground">
                             输出内容
+                            {isDataflow && dataResults.length === 1 && (
+                              <span className="ml-2 font-normal text-muted-foreground">
+                                {dataResults[0].name}
+                              </span>
+                            )}
                           </span>
                           {outputRows && (
                             <span className="text-xs text-muted-foreground">

@@ -1339,6 +1339,11 @@ function DataflowRunOutput({ run }: { run: any }) {
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h3 className="aiflow-type-body font-semibold text-foreground">
               最终结果预览
+              {terminal && dataResults.length === 1 && (
+                <span className="ml-2 font-normal text-muted-foreground">
+                  {terminal.name}
+                </span>
+              )}
             </h3>
             <span className="aiflow-type-meta text-muted-foreground">
               第 {preview.page + 1} / {preview.pageCount} 页 · 每页 10 行 · 共{" "}
