@@ -140,6 +140,22 @@ for (const { minRows, maxNullRate, expectedStatus, errorPattern } of [
     { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" },
     true
   );
+  if (maxNullRate < 0 || maxNullRate > 1 || minRows < 0) {
+    await assert.rejects(
+      () => admin.request("workflow.publish", { id: workflow.id }, true),
+      minRows < 0 ? /最少行数/ : /空值率/
+    );
+    console.log(
+      JSON.stringify({
+        projectId: project.id,
+        workflowId: workflow.id,
+        minRows,
+        maxNullRate,
+        status: "publish-rejected",
+      })
+    );
+    continue;
+  }
   await admin.request("workflow.publish", { id: workflow.id }, true);
   const started = await admin.request(
     "data.run",
