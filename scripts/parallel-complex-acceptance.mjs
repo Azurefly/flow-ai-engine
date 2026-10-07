@@ -72,7 +72,9 @@ const router = (id, join, targets) =>
     })),
   });
 const decode = value => (typeof value === "string" ? JSON.parse(value) : value);
-for (const scenario of ["nested-timer", "shared-node"]) {
+for (const { scenario, flowType } of ["control", "state"].flatMap(flowType =>
+  ["nested-timer", "shared-node"].map(scenario => ({ scenario, flowType }))
+)) {
   const nested = scenario === "nested-timer";
   const nodes = nested
     ? [
@@ -137,6 +139,26 @@ for (const scenario of ["nested-timer", "shared-node"]) {
         edge("c", "outerJoin"),
         edge("outerJoin", "end"),
       ];
+  if (flowType === "state") {
+    nodes.push(
+      node("pending", "state", {
+        stateCode: "PENDING",
+        displayName: "并行处理前",
+        stateType: "business",
+      })
+    );
+    nodes.push(
+      node("done", "state", {
+        stateCode: "DONE",
+        displayName: "并行处理完成",
+        stateType: "business",
+      })
+    );
+    edges.find(e => e.sourceNodeId === "start").targetNodeId = "pending";
+    edges.push(edge("pending", "outer"));
+    edges.find(e => e.sourceNodeId === "outerJoin").targetNodeId = "done";
+    edges.push(edge("done", "end"));
+  }
   const levels = new Map([["start", 0]]);
   for (let pass = 0; pass < nodes.length; pass++)
     for (const link of edges)
@@ -159,8 +181,8 @@ for (const scenario of ["nested-timer", "shared-node"]) {
     "project.createWorkflow",
     {
       projectId: project.id,
-      name: `复杂并行_${scenario}_${tag}`,
-      flowType: "control",
+      name: `复杂并行_${flowType}_${scenario}_${tag}`,
+      flowType,
       definition: {
         schemaVersion: 1,
         viewport: { x: 0, y: 0, zoom: 1 },
@@ -176,7 +198,7 @@ for (const scenario of ["nested-timer", "shared-node"]) {
     {
       workflowId: fixture.id,
       triggerType: "test",
-      idempotencyKey: `complex-${scenario}-${tag}`,
+      idempotencyKey: `complex-${flowType}-${scenario}-${tag}`,
     },
     true
   );
@@ -188,6 +210,26 @@ for (const scenario of ["nested-timer", "shared-node"]) {
       scenario
     );
     assert.equal(result.status, "success", JSON.stringify(result.errorJson));
+    if (flowType === "state") {
+      assert.equal(result.currentStateCode, "DONE");
+      assert.equal(
+        result.stateVersion,
+        2,
+        "Only the two state transitions may increment state version"
+      );
+      assert.equal(
+        result.nodeRuns.filter(
+          n => n.nodeId === "pending" && n.status === "success"
+        ).length,
+        1
+      );
+      assert.equal(
+        result.nodeRuns.filter(
+          n => n.nodeId === "done" && n.status === "success"
+        ).length,
+        1
+      );
+    }
     const executed = result.nodeRuns.filter(n => n.status === "success");
     const outputs = id =>
       executed.filter(n => n.nodeId === id).map(n => decode(n.outputJson));
@@ -228,6 +270,7 @@ for (const scenario of ["nested-timer", "shared-node"]) {
         workflowId: fixture.id,
         runId: started.runId,
         scenario,
+        flowType,
         status: result.status,
         outerJoinCount: 1,
       })
@@ -240,6 +283,7 @@ for (const scenario of ["nested-timer", "shared-node"]) {
           workflowId: fixture.id,
           runId: started.runId,
           scenario,
+          flowType,
           status: "acceptance-failed",
         })
       );
