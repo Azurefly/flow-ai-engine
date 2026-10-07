@@ -84,7 +84,7 @@ try {
       (_, i) => ({
         username: `dir_${tag}_${offset + i}`,
         name: `AAA_目录边界_${tag}_${offset + i}`,
-        password: randomBytes(24).toString("base64url"),
+        password: `Test9_${randomBytes(24).toString("base64url")}`,
         role: "user",
       })
     );
@@ -93,7 +93,7 @@ try {
     assert.equal(
       result.failed,
       0,
-      "Isolated directory fixtures must be created"
+      `Isolated directory fixtures must be created: ${result.results.filter(r => !r.success).map(r => r.error).join("; ")}`
     );
     console.log(
       JSON.stringify({ scenario: "directory-setup", created: userIds.length })
@@ -101,7 +101,7 @@ try {
   }
   const login = {
     username: `dir_target_${tag}`,
-    password: randomBytes(24).toString("base64url"),
+    password: `Test9_${randomBytes(24).toString("base64url")}`,
   };
   const created = await admin.request(
     "iam.createUser",
