@@ -39,12 +39,39 @@ const password = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
 assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 
-const tag = randomBytes(4).toString("hex");
-const project = await admin.request(
-  "project.create",
-  { code: `MSGPAR_${tag}`.toUpperCase(), name: `并行消息验证_${tag}` },
-  true
-);
+const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
+assert(["normal", "prepare", "resume"].includes(restartStage));
+let restartFixture = null;
+let restoredWorkflow = null;
+if (restartStage === "resume") {
+  const workflowId = process.env.FLOW_PARALLEL_MESSAGE_WORKFLOW_ID;
+  const runId = process.env.FLOW_PARALLEL_MESSAGE_RUN_ID;
+  assert(
+    workflowId && runId,
+    "Resume requires the exact workflow and run IDs emitted before restart"
+  );
+  restoredWorkflow = await admin.request("workflow.get", { id: workflowId });
+  const match = /^并行消息_state_([a-f0-9]{8})$/.exec(restoredWorkflow.name);
+  assert(match, "Resume is restricted to the isolated message fixture");
+  assert.equal(restoredWorkflow.flowType, "state");
+  const existingRun = await admin.request("workflow.runDetail", { runId });
+  assert.equal(existingRun.workflowId, workflowId);
+  restartFixture = {
+    tag: match[1],
+    projectId: restoredWorkflow.projectId,
+    workflowId,
+    runId,
+    flowType: "state",
+  };
+}
+const tag = restartFixture?.tag ?? randomBytes(4).toString("hex");
+const project = restartFixture
+  ? { id: restartFixture.projectId }
+  : await admin.request(
+      "project.create",
+      { code: `MSGPAR_${tag}`.toUpperCase(), name: `并行消息验证_${tag}` },
+      true
+    );
 const node = (id, type, config = {}, x = 0, y = 0) => ({
   id,
   type,
@@ -58,7 +85,9 @@ const edge = (sourceNodeId, targetNodeId, sourceHandle) => ({
   targetNodeId,
   ...(sourceHandle ? { sourceHandle } : {}),
 });
-for (const flowType of ["control", "state"]) {
+for (const flowType of restartStage === "normal"
+  ? ["control", "state"]
+  : ["state"]) {
   const nodes = [
     node("start", "start"),
     node(
@@ -162,34 +191,42 @@ for (const flowType of ["control", "state"]) {
     edges.find(e => e.sourceNodeId === "join").targetNodeId = "done";
     edges.push(edge("done", "end"));
   }
-  const workflow = await admin.request(
-    "project.createWorkflow",
-    {
-      projectId: project.id,
-      name: `并行消息_${flowType}_${tag}`,
-      flowType,
-      definition: {
-        schemaVersion: 1,
-        viewport: { x: 0, y: 0, zoom: 1 },
-        settings: {},
-        nodes,
-        edges,
-      },
-    },
-    true
-  );
-  const started = await admin.request(
-    "workflow.run",
-    {
-      workflowId: workflow.id,
-      triggerType: "test",
-      idempotencyKey: `msg-${flowType}-${tag}`,
-    },
-    true
-  );
+  const workflow = restartFixture
+    ? restoredWorkflow
+    : await admin.request(
+        "project.createWorkflow",
+        {
+          projectId: project.id,
+          name: `并行消息_${flowType}_${tag}`,
+          flowType,
+          definition: {
+            schemaVersion: 1,
+            viewport: { x: 0, y: 0, zoom: 1 },
+            settings: {},
+            nodes,
+            edges,
+          },
+        },
+        true
+      );
+  if (restartFixture) {
+    assert.equal(workflow.projectId, restartFixture.projectId);
+    assert.equal(workflow.name, `并行消息_state_${tag}`);
+  }
+  const started = restartFixture
+    ? { runId: restartFixture.runId }
+    : await admin.request(
+        "workflow.run",
+        {
+          workflowId: workflow.id,
+          triggerType: "test",
+          idempotencyKey: `msg-${flowType}-${tag}`,
+        },
+        true
+      );
   let completed = false;
   try {
-    await waitFor(
+    const waiting = await waitFor(
       () => admin.request("workflow.runDetail", { runId: started.runId }),
       run =>
         run.status === "waiting" &&
@@ -198,6 +235,24 @@ for (const flowType of ["control", "state"]) {
         ).length === 2,
       "two message subscriptions"
     );
+    if (restartStage !== "normal") {
+      assert.equal(waiting.currentStateCode, "PENDING");
+      assert.equal(waiting.stateVersion, 1);
+    }
+    if (restartStage === "prepare") {
+      completed = true;
+      console.log(
+        JSON.stringify({
+          stage: "restart-prepared",
+          workflowId: workflow.id,
+          runId: started.runId,
+          waitingMessages: 2,
+          currentStateCode: "PENDING",
+          stateVersion: 1,
+        })
+      );
+      continue;
+    }
     const signal = key =>
       admin.request(
         "task.signalMessage",
@@ -236,6 +291,8 @@ for (const flowType of ["control", "state"]) {
             ? JSON.parse(n.outputJson)
             : n.outputJson
         );
+    for (const nodeId of ["start", "router", "ma", "mb"])
+      assert.equal(output(nodeId).length, 1, `${nodeId} must execute once`);
     assert.deepEqual(output("a"), [{ value: "A" }]);
     assert.deepEqual(output("b"), [{ value: "B" }]);
     assert.deepEqual(output("join"), [{ a: "A", b: "B" }]);
@@ -252,6 +309,7 @@ for (const flowType of ["control", "state"]) {
         runId: started.runId,
         flowType,
         concurrentMessages: 2,
+        restartResumeStage: restartStage === "resume",
         duplicateDenied: true,
         branchIsolation: true,
         joinCount: 1,
