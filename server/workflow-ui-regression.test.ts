@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_367 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 403 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_371 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 405 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3250,4 +3250,15 @@ it("设计器导航明确展示真实流程类型并使用共享类型契约", (
   expect(homeSource).toContain('title={flowProfile.description}');
   expect(homeSource).toContain('{flowProfile.label}');
   expect(homeSource).not.toContain('              业务流程');
+});
+it("数据流程监控使用独立运行接口并保留深链接和真实错误", () => {
+  expect(homeSource).toContain('selectedWorkflow.flowType !== "data"');
+  expect(homeSource).toContain('if (!selectedWorkflow || selectedWorkflow.flowType === "data") return;');
+  expect(homeSource).toContain('selectedWorkflow?.flowType === "data" ? DataflowRunMonitor : RunCenter');
+  expect(dataResourceSource).toContain('export function DataflowRunMonitor');
+  expect(dataResourceSource).toContain('aria-label="数据流程运行监控"');
+  expect(dataResourceSource).toContain('aria-label="数据流程运行详情"');
+  expect(dataResourceSource).toContain('detail.data?.workflowId === workflowId');
+  expect(dataResourceSource).toContain('runId: selectedRunId ?? "00000000"');
+  expect(dataResourceSource).toContain('limit: 10');
 });

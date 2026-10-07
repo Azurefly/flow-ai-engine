@@ -47,6 +47,7 @@ export default function RunCenter({
   onClearSelection,
   onRetrySelection,
 }: {
+  projectId?: string | null;
   workflowId: string | null;
   workflowName?: string | null;
   selectedRunId: string | null;

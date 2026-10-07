@@ -2335,3 +2335,129 @@ function DeleteButton({
     </>
   );
 }
+
+export function DataflowRunMonitor({
+  projectId,
+  workflowId,
+  workflowName,
+  selectedRunId,
+  onSelect,
+  onClearSelection,
+}: {
+  projectId?: string | null;
+  workflowId: string | null;
+  workflowName?: string | null;
+  selectedRunId: string | null;
+  selectedRun?: any;
+  selectedRunLoading?: boolean;
+  selectedRunError?: boolean;
+  onSelect: (id: string) => void;
+  onClearSelection: () => void;
+  onRetrySelection?: () => void;
+}) {
+  const runs = trpc.data.runs.useQuery(
+    {
+      projectId: projectId ?? "00000000",
+      workflowId: workflowId ?? "00000000",
+      limit: 10,
+      summaryOnly: true,
+    },
+    {
+      enabled: Boolean(projectId && workflowId),
+      retry: false,
+      refetchInterval: 30000,
+      refetchIntervalInBackground: false,
+    }
+  );
+  const detail = trpc.data.runDetail.useQuery(
+    { projectId: projectId ?? "00000000", runId: selectedRunId ?? "00000000" },
+    {
+      enabled: Boolean(projectId && selectedRunId),
+      retry: false,
+      refetchInterval: query =>
+        runDetailRefreshInterval(
+          query.state.data?.status,
+          Boolean(query.state.error)
+        ),
+      refetchIntervalInBackground: false,
+    }
+  );
+  const matchingDetail =
+    detail.data?.workflowId === workflowId ? detail.data : null;
+  return (
+    <section className="space-y-4 p-4 sm:p-5" aria-label="数据流程运行监控">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="aiflow-type-page-title font-semibold">
+            数据流程运行监控
+          </h1>
+          <p className="aiflow-type-body mt-1 text-muted-foreground">
+            {workflowName} · 最近 10 条运行 · 每 30 秒刷新
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          disabled={runs.isFetching || detail.isFetching}
+          onClick={() => {
+            void runs.refetch();
+            if (selectedRunId) void detail.refetch();
+          }}
+        >
+          刷新运行记录
+        </Button>
+      </div>
+      {runs.isError ? (
+        <p role="alert" className="text-destructive">
+          读取运行记录失败：{runs.error.message}
+        </p>
+      ) : runs.isLoading ? (
+        <p role="status">正在读取运行记录…</p>
+      ) : (
+        <div className="grid gap-2" role="list" aria-label="数据流程运行记录">
+          {(runs.data ?? []).map((run: any) => (
+            <Button
+              key={run.id}
+              variant={run.id === selectedRunId ? "secondary" : "outline"}
+              className="h-auto min-h-11 justify-between gap-3 whitespace-normal text-left"
+              onClick={() => onSelect(run.id)}
+            >
+              <span className="break-all">
+                {run.id} · {formatDataflowTime(run.startedAt ?? run.createdAt)}
+              </span>
+              <State value={run.status} />
+            </Button>
+          ))}
+          {runs.data?.length === 0 && (
+            <p role="status">当前流程尚无数据运行记录。</p>
+          )}
+        </div>
+      )}
+      {selectedRunId && (
+        <section
+          className="rounded-lg border border-border bg-card p-4"
+          aria-label="数据流程运行详情"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="aiflow-type-section-title font-semibold break-all">
+              运行详情 · {selectedRunId}
+            </h2>
+            <Button variant="ghost" onClick={onClearSelection}>
+              关闭运行详情
+            </Button>
+          </div>
+          {detail.isError ? (
+            <p role="alert" className="mt-3 text-destructive">
+              读取运行详情失败：{detail.error.message}
+            </p>
+          ) : detail.isLoading ? (
+            <p role="status">正在读取运行详情…</p>
+          ) : matchingDetail ? (
+            <DataflowRunOutput key={selectedRunId} run={matchingDetail} />
+          ) : (
+            <p role="alert">运行记录不属于当前流程或已无法访问。</p>
+          )}
+        </section>
+      )}
+    </section>
+  );
+}

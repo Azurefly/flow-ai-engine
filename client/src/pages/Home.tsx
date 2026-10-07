@@ -112,6 +112,11 @@ const WorkflowDetailPage = lazy(() =>
   }))
 );
 const RunCenter = lazy(() => import("@/components/RunCenter"));
+const DataflowRunMonitor = lazy(() =>
+  import("@/components/DataResourceCenter").then(module => ({
+    default: module.DataflowRunMonitor,
+  }))
+);
 const ProcessWorkbench = lazy(() => import("@/components/ProcessWorkbench"));
 const BusinessCenter = lazy(() =>
   import("@/components/ProjectWorkspace").then(module => ({
@@ -601,7 +606,9 @@ function FlowConsole({
     [selectedRunId]
   );
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, {
-    enabled: Boolean(selectedRunId && selectedWorkflow),
+    enabled: Boolean(
+      selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data"
+    ),
     retry: false,
     refetchInterval: query =>
       runDetailRefreshInterval(
@@ -610,6 +617,8 @@ function FlowConsole({
       ),
     refetchIntervalInBackground: false,
   });
+  const RuntimeMonitor =
+    selectedWorkflow?.flowType === "data" ? DataflowRunMonitor : RunCenter;
   const accessInput = useMemo(
     () => ({ id: selectedId ?? "00000000" }),
     [selectedId]
@@ -785,6 +794,7 @@ function FlowConsole({
 
   useEffect(() => {
     const route = requestedRoute.route;
+    if (!selectedWorkflow || selectedWorkflow.flowType === "data") return;
     const detail = runDetail.data as any;
     if (
       route.section === "runs" &&
@@ -805,6 +815,7 @@ function FlowConsole({
   }, [
     navigateRoute,
     requestedRoute.route,
+    selectedWorkflow?.flowType,
     detailInput.runId,
     runDetail.data,
     runDetail.isError,
@@ -1915,7 +1926,8 @@ function FlowConsole({
               {runView === "workbench" ? (
                 <ProcessWorkbench />
               ) : (
-                <RunCenter
+                <RuntimeMonitor
+                  projectId={selectedWorkflow?.projectId}
                   workflowId={selectedId}
                   workflowName={selectedWorkflow?.name}
                   selectedRunId={selectedRunId}

@@ -12,9 +12,9 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Member status and live permission dialog measured: 1366.44 KiB raw / 402.41 KiB gzip.
-const maxTotalBytes = 1_367 * 1024;
-const maxTotalGzipBytes = 403 * 1024;
+// Runtime-specific dataflow monitor measured: 1370.44 KiB raw / 404.06 KiB gzip.
+const maxTotalBytes = 1_371 * 1024;
+const maxTotalGzipBytes = 405 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;
