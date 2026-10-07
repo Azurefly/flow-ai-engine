@@ -1,3 +1,4 @@
+import { resolveMessageCorrelationKey } from "./workflow-message-key";
 import { waitSubscriptionResumeAction } from "./workflow-message-resume";
 import {
   restoreParallelCheckpoint,
@@ -2509,7 +2510,9 @@ async function persistWorkflowWait(input: {
   const messageName =
     waitType === "message" ? String(config.messageName ?? "").trim() : null;
   const correlationKey =
-    waitType === "message" ? String(config.correlationKey ?? "").trim() : null;
+    waitType === "message"
+      ? resolveMessageCorrelationKey(config.correlationKey)
+      : null;
   if (waitType === "message" && (!messageName || !correlationKey))
     throw new Error("消息等待节点未解析到有效消息名称和相关键。");
   const checkpoint: WorkflowCheckpoint = {

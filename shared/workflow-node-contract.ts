@@ -1329,14 +1329,14 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "messageName",
         label: "消息名称",
-        help: "稳定业务事件名称，仅允许字母、数字、点、横线和下划线。",
+        help: "例如 order.paid；仅允许字母、数字、点、横线和下划线，消息发送时名称须一致。",
         kind: "text",
         required: true,
       },
       {
         key: "correlationKey",
         label: "相关键",
-        help: "支持安全模板；消息触发时必须与运行实例中的固化值完全一致。",
+        help: "例如 {{input.businessKey}} 解析为订单编号；结果须为 1 至 255 个字符的文本或安全整数。发送消息时使用解析后的值；并行等待使用不同相关键。",
         kind: "template",
         required: true,
       },
