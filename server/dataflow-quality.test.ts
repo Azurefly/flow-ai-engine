@@ -30,3 +30,30 @@ it("空数据集仍受最少行数约束", () => {
     nullRate: 0,
   });
 });
+
+it.each([
+  NaN,
+  Infinity,
+  -1,
+  1.5,
+  Number.MAX_SAFE_INTEGER + 1,
+  "abc",
+  "",
+  false,
+  {},
+  null,
+])("拒绝无效最少行数 %s", value => {
+  expect(() => checkDataflowQuality([{ a: 1 }], value, 1)).toThrow("最少行数");
+});
+it.each([NaN, Infinity, -0.1, 1.1, "abc", "", false, {}, null])(
+  "拒绝无效空值率 %s",
+  value => {
+    expect(() => checkDataflowQuality([{ a: 1 }], 0, value)).toThrow(
+      "最大空值率"
+    );
+  }
+);
+it("兼容明确的数字字符串并保留边界值", () => {
+  expect(checkDataflowQuality([{ a: null }], "1", "1").passed).toBe(true);
+  expect(checkDataflowQuality([{ a: 0 }], "0", "0").nullRate).toBe(0);
+});

@@ -1,8 +1,19 @@
 export function checkDataflowQuality(
   rows: Record<string, unknown>[],
-  minRows: number,
-  maxNullRate: number
+  minRowsInput: unknown,
+  maxNullRateInput: unknown
 ) {
+  const readNumber = (value: unknown) =>
+    typeof value === "number" ||
+    (typeof value === "string" && value.trim() !== "")
+      ? Number(value)
+      : NaN;
+  const minRows = readNumber(minRowsInput);
+  const maxNullRate = readNumber(maxNullRateInput);
+  if (!Number.isSafeInteger(minRows) || minRows < 0)
+    throw new Error("质量门配置无效：最少行数必须为非负安全整数。");
+  if (!Number.isFinite(maxNullRate) || maxNullRate < 0 || maxNullRate > 1)
+    throw new Error("质量门配置无效：最大空值率必须为 0 至 1 的有限数值。");
   const fields = new Set<string>();
   rows.forEach(row => Object.keys(row).forEach(field => fields.add(field)));
   if (rows.length && !fields.size)

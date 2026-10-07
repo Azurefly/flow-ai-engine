@@ -69,11 +69,43 @@ const asset = await admin.request(
   },
   true
 );
-for (const maxNullRate of [0.25, 0.5]) {
+for (const { minRows, maxNullRate, expectedStatus, errorPattern } of [
+  {
+    minRows: 1,
+    maxNullRate: 0.25,
+    expectedStatus: "failed",
+    errorPattern: /空值率 0.5000/,
+  },
+  { minRows: 1, maxNullRate: 0.5, expectedStatus: "success" },
+  {
+    minRows: 1,
+    maxNullRate: 1.1,
+    expectedStatus: "failed",
+    errorPattern: /最大空值率/,
+  },
+  {
+    minRows: 1,
+    maxNullRate: -0.1,
+    expectedStatus: "failed",
+    errorPattern: /最大空值率/,
+  },
+  {
+    minRows: 1.5,
+    maxNullRate: 1,
+    expectedStatus: "failed",
+    errorPattern: /最少行数/,
+  },
+  {
+    minRows: -1,
+    maxNullRate: 1,
+    expectedStatus: "failed",
+    errorPattern: /最少行数/,
+  },
+]) {
   const specs = [
     ["start", "start", {}],
     ["source", "source", { assetId: asset.id, limit: 100 }],
-    ["quality", "quality_gate", { minRows: 1, maxNullRate }],
+    ["quality", "quality_gate", { minRows, maxNullRate }],
     ["end", "end", {}],
   ];
   const definition = {
@@ -87,13 +119,11 @@ for (const maxNullRate of [0.25, 0.5]) {
       config,
       position: { x: index * 200, y: 0 },
     })),
-    edges: specs
-      .slice(1)
-      .map(([id], index) => ({
-        id: `edge-${index}`,
-        sourceNodeId: specs[index][0],
-        targetNodeId: id,
-      })),
+    edges: specs.slice(1).map(([id], index) => ({
+      id: `edge-${index}`,
+      sourceNodeId: specs[index][0],
+      targetNodeId: id,
+    })),
   };
   const workflow = await admin.request(
     "project.createWorkflow",
@@ -125,15 +155,16 @@ for (const maxNullRate of [0.25, 0.5]) {
     r => ["success", "failed"].includes(r.status),
     "quality test finished"
   );
-  assert.equal(run.status, maxNullRate < 0.5 ? "failed" : "success");
+  assert.equal(run.status, expectedStatus);
   if (run.status === "success")
     assert.deepEqual(run.output.terminals[0].rows, rows);
-  else assert.match(JSON.stringify(run), /空值率 0.5000/);
+  else assert.match(JSON.stringify(run), errorPattern);
   console.log(
     JSON.stringify({
       projectId: project.id,
       workflowId: workflow.id,
       runId: run.id,
+      minRows,
       maxNullRate,
       status: run.status,
     })

@@ -2015,13 +2015,13 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "minRows",
         label: "最少行数",
-        help: "不足则失败并隔离本次输出。",
+        help: "填写非负整数；不足则失败并隔离本次输出。",
         kind: "number",
       },
       {
         key: "maxNullRate",
         label: "最大空值率",
-        help: "0 至 1。按全量数据的字段集合统计；缺失字段、null 和空字符串均计为空值。",
+        help: "填写 0 至 1 的数值，例如 0.05 表示允许 5% 空值。按全量数据的字段集合统计；缺失字段、null 和空字符串均计为空值。",
         kind: "number",
       },
     ],

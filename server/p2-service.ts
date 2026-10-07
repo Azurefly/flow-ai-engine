@@ -1602,14 +1602,14 @@ async function runDataflowDefinition(
         };
       } else if (String(node.type) === "quality_gate") {
         const rows = rowsFromInput(inputs);
-        const minRows = Math.max(0, Math.trunc(Number(config.minRows ?? 1)));
-        const maxNullRate = Math.min(
-          1,
-          Math.max(0, Number(config.maxNullRate ?? 1))
-        );
+
         output = {
           rows,
-          quality: checkDataflowQuality(rows, minRows, maxNullRate),
+          quality: checkDataflowQuality(
+            rows,
+            config.minRows === undefined ? 1 : config.minRows,
+            config.maxNullRate === undefined ? 1 : config.maxNullRate
+          ),
           operation: "quality_gate",
         };
       } else if (String(node.type) === "sink") {
