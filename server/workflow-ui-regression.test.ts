@@ -219,7 +219,7 @@ describe("流程设计器界面回归约束", () => {
     expect(runModalSource).toContain(
       "min-h-0 flex-1 overflow-y-auto overscroll-contain"
     );
-    expect(runModalSource).toContain("grid-cols-[minmax(0,1fr)_2rem]");
+    expect(runModalSource).toContain("grid-cols-[minmax(0,1fr)_7rem_2.75rem]");
     expect(runModalSource).not.toContain("min-h-[380px]");
     expect(runModalSource).toContain("运行已排队，等待执行器");
     expect(runModalSource).toContain("本页展示本次运行结果与节点轨迹");
@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_374 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 405 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_376 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 406 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3332,4 +3332,13 @@ it("成员权限详情查询实时来源，说明停用状态并支持刷新和�
     "roles={roleMember?.inheritedRoles"
   );
   expect(organizationManagementSource).toContain("role.unitCode");
+});
+
+it("运行输入编辑保留新增草稿行，支持类型和校验错误", () => {
+  expect(runModalSource).toContain("runInput === emittedInput.current");
+  expect(runModalSource).toContain("emittedInput.current = parsed.input");
+  expect(runModalSource).toContain("inputErrors.length === 0");
+  expect(runModalSource).toContain("输入字段 ${index + 1} 类型");
+  expect(runModalSource).toContain("业务编号请选择文本以保留前导零");
+  expect(runModalSource).toContain("readRunInputRows(rows)");
 });

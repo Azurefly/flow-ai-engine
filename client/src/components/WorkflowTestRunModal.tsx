@@ -1,4 +1,10 @@
-import { useState, useMemo, useEffect } from "react";
+import {
+  readRunInputRows,
+  runInputRowsFromValue,
+  type RunInputRow,
+  type RunInputKind,
+} from "@shared/run-input-editor";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -80,61 +86,45 @@ export default function WorkflowTestRunModal({
   const [acknowledgedActualRun, setAcknowledgedActualRun] = useState(false);
   const [outputPage, setOutputPage] = useState(1);
   const OUTPUT_PAGE_SIZE = 10;
+  const [inputErrors, setInputErrors] = useState<string[]>([]);
 
-  const canStartActualRun = canStartActualWorkflowRun({
-    canRun,
-    isRunning,
-    acknowledged: acknowledgedActualRun,
-  });
+  const canStartActualRun =
+    canStartActualWorkflowRun({
+      canRun,
+      isRunning,
+      acknowledged: acknowledgedActualRun,
+    }) && inputErrors.length === 0;
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) setAcknowledgedActualRun(false);
     onOpenChange(nextOpen);
   };
 
-  // Field rows for input editor
-  const [inputRows, setInputRows] = useState<
-    Array<{ key: string; value: string }>
-  >([]);
-
+  const [inputRows, setInputRows] = useState<RunInputRow[]>([]);
+  const emittedInput = useRef<Record<string, unknown> | null>(null);
+  const inputSession = useRef<string | null>(null);
   useEffect(() => {
-    const entries = Object.entries(runInput || {});
-    setInputRows(
-      entries.map(([key, value]) => ({
-        key,
-        value:
-          typeof value === "object"
-            ? JSON.stringify(value)
-            : String(value ?? ""),
-      }))
-    );
-  }, [open, runInput]);
-
-  const updateInputRows = (rows: Array<{ key: string; value: string }>) => {
-    setInputRows(rows);
-    const result: Record<string, unknown> = {};
-    for (const row of rows) {
-      if (!row.key.trim()) continue;
-      const raw = row.value.trim();
-      if (raw === "true") result[row.key] = true;
-      else if (raw === "false") result[row.key] = false;
-      else if (raw === "null") result[row.key] = null;
-      else if (raw !== "" && !isNaN(Number(raw))) result[row.key] = Number(raw);
-      else {
-        try {
-          if (raw.startsWith("{") || raw.startsWith("[")) {
-            result[row.key] = JSON.parse(raw);
-          } else {
-            result[row.key] = raw;
-          }
-        } catch {
-          result[row.key] = raw;
-        }
-      }
+    if (!open) {
+      inputSession.current = null;
+      return;
     }
-    onChangeRunInput(result);
+    const session = String(workflow?.id ?? "");
+    if (inputSession.current === session && runInput === emittedInput.current)
+      return;
+    inputSession.current = session;
+    const rows = runInputRowsFromValue(runInput || {});
+    setInputRows(rows);
+    setInputErrors(readRunInputRows(rows).errors);
+  }, [open, runInput, workflow?.id]);
+  const updateInputRows = (rows: RunInputRow[]) => {
+    setInputRows(rows);
+    const parsed = readRunInputRows(rows);
+    setInputErrors(parsed.errors);
+    if (parsed.errors.length === 0) {
+      emittedInput.current = parsed.input;
+      onChangeRunInput(parsed.input);
+    }
   };
-
   const utils = trpc.useUtils();
 
   // Mutations
@@ -383,10 +373,10 @@ export default function WorkflowTestRunModal({
                   </span>
                   <span className="aiflow-type-meta rounded border border-border/60 bg-muted px-2 py-0.5 font-medium text-foreground">
                     {isStateflow
-                      ? "状态机 Profile · 事务流转"
+                      ? "业务状态与人工办理"
                       : isDataflow
-                        ? "数据流 Profile · 算子管线"
-                        : "控制流 Profile · DAG 执行"}
+                        ? "数据处理与结果输出"
+                        : "系统动作与条件分支"}
                   </span>
                   {workflow?.status === "published" ? (
                     <span className="aiflow-type-meta rounded border border-aiflow-success-border/60 bg-aiflow-success-surface px-2 py-0.5 font-medium text-aiflow-success">
@@ -564,7 +554,8 @@ export default function WorkflowTestRunModal({
                       配置运行输入
                     </h3>
                     <p className="aiflow-type-body mt-0.5 text-muted-foreground">
-                      定义将传入首个节点或用于替换变量的输入参数，数值与布尔会自动识别类型。
+                      业务编号请选择文本以保留前导零；可明确选择数值、布尔或
+                      JSON。自动识别会保留带前导零或超出安全整数范围的编号。
                     </p>
                   </div>
                   <Button
@@ -591,12 +582,12 @@ export default function WorkflowTestRunModal({
                   {inputRows.map((row, index) => (
                     <div
                       key={index}
-                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_2rem] items-center gap-2 sm:grid-cols-[minmax(130px,0.4fr)_minmax(0,1fr)_2rem]"
+                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_7rem_2.75rem] items-center gap-2 sm:grid-cols-[minmax(100px,0.35fr)_7rem_minmax(0,1fr)_2.75rem]"
                     >
                       <Input
                         placeholder="字段名 (key)"
                         aria-label={`输入字段 ${index + 1} 名称`}
-                        className="aiflow-type-control h-11 min-h-11 min-w-0 font-mono min-[1024px]:h-9 min-[1024px]:min-h-0"
+                        className="aiflow-type-control col-span-2 h-11 min-h-11 min-w-0 sm:col-span-1 font-mono min-[1024px]:h-9 min-[1024px]:min-h-0"
                         value={row.key}
                         onChange={e =>
                           updateInputRows(
@@ -606,10 +597,33 @@ export default function WorkflowTestRunModal({
                           )
                         }
                       />
+                      <select
+                        aria-label={`输入字段 ${index + 1} 类型`}
+                        value={row.kind ?? "auto"}
+                        className="aiflow-type-control col-start-2 row-start-2 h-11 min-w-0 rounded-md border border-border bg-background px-2 sm:col-start-auto sm:row-start-auto min-[1024px]:h-9"
+                        onChange={event =>
+                          updateInputRows(
+                            inputRows.map((item, i) =>
+                              i === index
+                                ? {
+                                    ...item,
+                                    kind: event.target.value as RunInputKind,
+                                  }
+                                : item
+                            )
+                          )
+                        }
+                      >
+                        <option value="auto">自动识别</option>
+                        <option value="text">文本</option>
+                        <option value="number">数值</option>
+                        <option value="boolean">布尔</option>
+                        <option value="json">JSON</option>
+                      </select>
                       <Input
                         placeholder="字段值 (value，支持文本/数字/JSON)"
                         aria-label={`输入字段 ${index + 1} 的值`}
-                        className="aiflow-type-control col-span-2 h-11 min-h-11 min-w-0 sm:col-span-1 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                        className="aiflow-type-control col-start-1 row-start-2 h-11 min-h-11 min-w-0 sm:col-start-auto sm:row-start-auto min-[1024px]:h-9 min-[1024px]:min-h-0"
                         value={row.value}
                         onChange={e =>
                           updateInputRows(
@@ -622,7 +636,7 @@ export default function WorkflowTestRunModal({
                       <button
                         type="button"
                         aria-label={`删除输入字段 ${row.key || index + 1}`}
-                        className="aiflow-type-control flex h-11 min-h-11 w-11 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-red-50 hover:text-red-600 min-[1024px]:h-9 min-[1024px]:min-h-0 min-[1024px]:w-9"
+                        className="aiflow-type-control col-start-3 row-start-1 flex h-11 min-h-11 w-11 items-center justify-center rounded text-muted-foreground sm:col-start-4 transition-colors hover:bg-red-50 hover:text-red-600 min-[1024px]:h-9 min-[1024px]:min-h-0 min-[1024px]:w-9"
                         onClick={() =>
                           updateInputRows(
                             inputRows.filter((_, i) => i !== index)
@@ -635,6 +649,16 @@ export default function WorkflowTestRunModal({
                   ))}
                 </div>
 
+                {inputErrors.length > 0 && (
+                  <div
+                    role="alert"
+                    className="mt-3 rounded-md border border-aiflow-danger-border bg-aiflow-danger-surface p-3 text-sm text-aiflow-danger"
+                  >
+                    {inputErrors.map((error, i) => (
+                      <p key={i}>{error}</p>
+                    ))}
+                  </div>
+                )}
                 <div
                   role="note"
                   className="aiflow-type-body mt-5 flex items-start gap-2 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface p-3 leading-5 text-amber-900"

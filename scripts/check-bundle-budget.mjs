@@ -12,9 +12,9 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Live permission sources measured: 1373.15 KiB raw / 404.69 KiB gzip.
-const maxTotalBytes = 1_374 * 1024;
-const maxTotalGzipBytes = 405 * 1024;
+// Typed run input editor measured: 1375.75 KiB raw / 405.67 KiB gzip.
+const maxTotalBytes = 1_376 * 1024;
+const maxTotalGzipBytes = 406 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;
