@@ -650,7 +650,19 @@ export function analyzeWorkflowDefinition(
       );
 
     const canReachEnd = new Set<string>();
-    const reverseQueue = [endId];
+    const reverseQueue =
+      options.flowType === "data"
+        ? [
+            endId,
+            ...validNodes
+              .filter(
+                node =>
+                  ["output", "sink"].includes(node.type) &&
+                  !(outgoing.get(node.id) ?? []).length
+              )
+              .map(node => node.id),
+          ]
+        : [endId];
     while (reverseQueue.length) {
       const nodeId = reverseQueue.shift()!;
       if (canReachEnd.has(nodeId)) continue;
