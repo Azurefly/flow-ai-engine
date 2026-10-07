@@ -77,3 +77,40 @@ it("控制流程不把数据输出当作结束节点", () => {
       result.diagnostics.some(d => d.code === "WF_NODE_CANNOT_REACH_END")
     ).toBe(true);
 });
+
+it.each(["output", "sink"])(
+  "数据流程仅以 %s 终点结束也可编译",
+  terminalType => {
+    const value = fixture(terminalType);
+    value.nodes = value.nodes.filter(n => !["left", "end"].includes(n.id));
+    value.edges = value.edges.filter(
+      e =>
+        !["left", "end"].includes(e.sourceNodeId) &&
+        !["left", "end"].includes(e.targetNodeId)
+    );
+    expect(
+      compileWorkflowDefinition(value, { flowType: "data" }).plan
+        .terminalNodeIds
+    ).toEqual(["output"]);
+  }
+);
+it("数据执行计划包含全部明确终点", () => {
+  expect(
+    compileWorkflowDefinition(fixture("output"), { flowType: "data" }).plan
+      .terminalNodeIds
+  ).toEqual(["end", "output"]);
+});
+it("控制流程仍要求结束节点", () => {
+  const value = fixture("output");
+  value.nodes = value.nodes.filter(n => n.id !== "end");
+  value.edges = value.edges.filter(e => e.targetNodeId !== "end");
+  const result = analyzeWorkflowDefinition(value, {
+    flowType: "control",
+    executable: true,
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok)
+    expect(
+      result.diagnostics.some(d => d.code === "WF_START_END_CARDINALITY")
+    ).toBe(true);
+});

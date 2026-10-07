@@ -387,11 +387,20 @@ export function analyzeWorkflowDefinition(
 
   const starts = value.nodes.filter(node => node?.type === "start");
   const ends = value.nodes.filter(node => node?.type === "end");
-  if (starts.length !== 1 || ends.length !== 1)
+  if (
+    starts.length !== 1 ||
+    (options.flowType === "data"
+      ? !value.nodes.some(node =>
+          ["end", "output", "sink"].includes(node?.type)
+        )
+      : ends.length !== 1)
+  )
     diagnostics.push(
       diagnostic(
         "WF_START_END_CARDINALITY",
-        "流程必须且仅能包含一个开始节点和一个结束节点。"
+        options.flowType === "data"
+          ? "数据流程必须包含一个开始节点和至少一个结束、输出或审计输出终点。"
+          : "流程必须且仅能包含一个开始节点和一个结束节点。"
       )
     );
 
@@ -501,9 +510,25 @@ export function analyzeWorkflowDefinition(
     incoming.get(edge.targetNodeId)?.push(edge);
   }
 
-  if (executable && starts.length === 1 && ends.length === 1) {
+  const dataTerminals = validNodes.filter(
+    node =>
+      ["end", "output", "sink"].includes(node.type) &&
+      !(outgoing.get(node.id) ?? []).length
+  );
+  if (executable && options.flowType === "data" && !dataTerminals.length)
+    diagnostics.push(
+      diagnostic(
+        "WF_DATA_TERMINAL_REQUIRED",
+        "数据流程至少需要一个合法输出终点。"
+      )
+    );
+  if (
+    executable &&
+    starts.length === 1 &&
+    (options.flowType === "data" ? dataTerminals.length > 0 : ends.length === 1)
+  ) {
     const startId = starts[0]!.id;
-    const endId = ends[0]!.id;
+    const endId = ends[0]?.id ?? dataTerminals[0]!.id;
     if ((incoming.get(startId) ?? []).length)
       diagnostics.push(
         diagnostic("WF_START_HAS_INCOMING", "开始节点不允许存在入边。", {
@@ -511,13 +536,14 @@ export function analyzeWorkflowDefinition(
           nodeId: startId,
         })
       );
-    if ((outgoing.get(endId) ?? []).length)
-      diagnostics.push(
-        diagnostic("WF_END_HAS_OUTGOING", "结束节点不允许存在出边。", {
-          kind: "node",
-          nodeId: endId,
-        })
-      );
+    for (const end of ends)
+      if ((outgoing.get(end.id) ?? []).length)
+        diagnostics.push(
+          diagnostic("WF_END_HAS_OUTGOING", "结束节点不允许存在出边。", {
+            kind: "node",
+            nodeId: end.id,
+          })
+        );
     if (!(outgoing.get(startId) ?? []).length)
       diagnostics.push(
         diagnostic("WF_START_NO_OUTGOING", "开始节点必须连接后继节点。", {
@@ -652,16 +678,7 @@ export function analyzeWorkflowDefinition(
     const canReachEnd = new Set<string>();
     const reverseQueue =
       options.flowType === "data"
-        ? [
-            endId,
-            ...validNodes
-              .filter(
-                node =>
-                  ["output", "sink"].includes(node.type) &&
-                  !(outgoing.get(node.id) ?? []).length
-              )
-              .map(node => node.id),
-          ]
+        ? dataTerminals.map(node => node.id)
         : [endId];
     while (reverseQueue.length) {
       const nodeId = reverseQueue.shift()!;
@@ -1203,7 +1220,12 @@ export function analyzeWorkflowDefinition(
     definition: normalized,
     entryNodeId: normalized.nodes.find(node => node.type === "start")!.id,
     terminalNodeIds: normalized.nodes
-      .filter(node => node.type === "end")
+      .filter(node =>
+        options.flowType === "data"
+          ? ["end", "output", "sink"].includes(node.type) &&
+            !(normalizedOutgoing.get(node.id) ?? []).length
+          : node.type === "end"
+      )
       .map(node => node.id)
       .sort(),
     outgoing: Object.fromEntries(
