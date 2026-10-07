@@ -1,3 +1,4 @@
+import { waitSubscriptionResumeAction } from "./workflow-message-resume";
 import {
   restoreParallelCheckpoint,
   resumeParallelCheckpoint,
@@ -4235,7 +4236,8 @@ export async function resumeWorkflowTask(input: {
 
 async function triggerWorkflowWaitSubscription(
   waitId: string,
-  payload: JsonRecord
+  payload: JsonRecord,
+  resumeAcceptedMessage = false
 ) {
   const connection = await db().getConnection();
   try {
@@ -4252,12 +4254,35 @@ async function triggerWorkflowWaitSubscription(
       await connection.rollback();
       return false;
     }
-    if (wait.runStatus !== "waiting")
-      throw new Error("等待订阅所属流程当前不在等待状态。");
     const checkpoint = readJson(wait.checkpointJson) as WorkflowCheckpoint;
     const continuation = asRecord(
       asRecord(asRecord(checkpoint.context).runtime).parallelWaitContinuation
     );
+    const action = waitSubscriptionResumeAction({
+      runStatus: String(wait.runStatus),
+      waitType: String(wait.waitType),
+      parallel: continuation.nextNodeIds !== undefined,
+      hasAcceptedMessage:
+        wait.triggerPayloadJson !== null &&
+        wait.triggerPayloadJson !== undefined,
+      resumeAcceptedMessage,
+    });
+    if (action === "duplicate" || action === "skip") {
+      await connection.rollback();
+      return false;
+    }
+    if (action === "reject")
+      throw new Error("等待订阅所属流程当前不在等待状态。");
+    if (action === "defer") {
+      await connection.query(
+        "UPDATE workflow_wait_subscription SET triggerPayloadJson=? WHERE id=? AND status='active' AND triggerPayloadJson IS NULL",
+        [JSON.stringify(payload), waitId]
+      );
+      await connection.commit();
+      return true;
+    }
+    if (resumeAcceptedMessage)
+      payload = asRecord(readJson(wait.triggerPayloadJson));
     const context =
       continuation.nextNodeIds !== undefined
         ? asRecord(readJson(wait.runContextJson))
@@ -4353,18 +4378,22 @@ async function triggerWorkflowWaitSubscription(
 export async function reconcileDueWorkflowWaits(limit = 50) {
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 200);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT s.id FROM workflow_wait_subscription s
+    `SELECT s.id,s.waitType,s.triggerPayloadJson FROM workflow_wait_subscription s
        JOIN workflow_run r ON r.id=s.runId AND r.status='waiting'
-      WHERE s.status='active' AND s.waitType='timer' AND s.resumeAt<=NOW()
-      ORDER BY s.resumeAt,s.id LIMIT ?`,
+      WHERE s.status='active' AND ((s.waitType='timer' AND s.resumeAt<=NOW()) OR (s.waitType='message' AND s.triggerPayloadJson IS NOT NULL))
+      ORDER BY COALESCE(s.resumeAt,s.createdAt),s.id LIMIT ?`,
     [safeLimit]
   );
   let triggered = 0;
   for (const row of rows)
     if (
-      await triggerWorkflowWaitSubscription(String(row.id), {
-        reason: "timer_elapsed",
-      })
+      await triggerWorkflowWaitSubscription(
+        String(row.id),
+        row.waitType === "message"
+          ? asRecord(readJson(row.triggerPayloadJson))
+          : { reason: "timer_elapsed" },
+        row.waitType === "message"
+      )
     )
       triggered += 1;
   return triggered;
