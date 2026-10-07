@@ -513,6 +513,17 @@ async function updateOrganizationUnitLocked(
   return true;
 }
 
+// Serialize every membership mutation for a user before locking individual departments or memberships.
+async function lockOrganizationMember(
+  connection: mysql.Connection,
+  userId: number
+) {
+  const [users] = await connection.query<mysql.RowDataPacket[]>(
+    "SELECT id FROM users WHERE id=? LIMIT 1 FOR UPDATE",
+    [userId]
+  );
+  if (!users[0]) throw new Error("组织成员账号不存在。");
+}
 export async function assignOrganizationMember(
   user: User,
   input: { unitId: string; userId: number; title?: string; isPrimary?: boolean }
@@ -526,6 +537,7 @@ export async function assignOrganizationMember(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await lockOrganizationMember(connection, input.userId);
     if (input.isPrimary)
       await connection.query(
         "UPDATE organization_membership SET isPrimary=0,updatedAt=NOW() WHERE userId=?",
@@ -566,11 +578,22 @@ export async function removeOrganizationMember(
   user: User,
   input: { unitId: string; userId: number }
 ) {
-  const [result] = await db().query<mysql.ResultSetHeader>(
-    "DELETE FROM organization_membership WHERE unitId=? AND userId=?",
-    [input.unitId, input.userId]
-  );
-  if (!result.affectedRows) throw new Error("组织成员关系不存在。");
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    await lockOrganizationMember(connection, input.userId);
+    const [result] = await connection.query<mysql.ResultSetHeader>(
+      "DELETE FROM organization_membership WHERE unitId=? AND userId=?",
+      [input.unitId, input.userId]
+    );
+    if (!result.affectedRows) throw new Error("组织成员关系不存在。");
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   await recordAuthorizationAudit({
     actorUserId: user.id,
     targetUserId: input.userId,
@@ -589,6 +612,7 @@ export async function setPrimaryOrganizationMembership(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await lockOrganizationMember(connection, input.userId);
     const [memberships] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT om.id FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active' WHERE om.unitId=? AND om.userId=? LIMIT 1 FOR UPDATE",
       [input.unitId, input.userId]
@@ -636,6 +660,7 @@ export async function moveOrganizationMember(
   let makePrimary = false;
   try {
     await connection.beginTransaction();
+    await lockOrganizationMember(connection, input.userId);
     const [targets] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM organization_unit WHERE id=? AND status='active' LIMIT 1 FOR UPDATE",
       [input.toUnitId]
