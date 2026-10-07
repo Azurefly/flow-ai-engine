@@ -440,7 +440,7 @@ export default function OrganizationManagementPage({
       {
         onSuccess: () => {
           void refresh();
-          toast.success("主机构已更新，将用于直属上级解析。");
+          toast.success("主部门已更新，将用于直属上级解析。");
         },
         onError: error => toast.error(error.message),
       }
@@ -541,13 +541,13 @@ export default function OrganizationManagementPage({
             {!member.isPrimary && (
               <button
                 type="button"
-                aria-label={`设为主机构：${memberIdentity}`}
+                aria-label={`设为主部门：${memberIdentity}`}
                 className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10"
                 disabled={setPrimaryMembership.isPending}
                 onClick={() => setMemberAsPrimary(member)}
               >
                 <Star size={13} />
-                设为主机构
+                设为主部门
               </button>
             )}
             <button
@@ -1180,6 +1180,9 @@ export default function OrganizationManagementPage({
                               </h3>
                               <p className="aiflow-type-meta mt-0.5 break-all text-muted-foreground">
                                 {member.username}
+                                <OrganizationAccountStatus
+                                  status={member.userStatus}
+                                />
                               </p>
                             </div>
                             <span className="aiflow-type-meta shrink-0 rounded bg-aiflow-info-surface px-2 py-1 text-aiflow-info">
@@ -1241,6 +1244,9 @@ export default function OrganizationManagementPage({
                             >
                               <td className="max-w-[220px] break-words px-4 py-3 font-medium text-foreground">
                                 {member.name || member.username}
+                                <OrganizationAccountStatus
+                                  status={member.userStatus}
+                                />
                               </td>
                               <td className="aiflow-type-meta max-w-[220px] break-all px-4 py-3 text-muted-foreground">
                                 {member.username}
@@ -1715,7 +1721,7 @@ export default function OrganizationManagementPage({
               })
             }
           />
-          设为新用户的主机构（驱动直属上级解析）
+          设为新用户的主部门（驱动直属上级解析）
         </label>
       </CreationDialog>
       <CreationDialog
@@ -1765,7 +1771,7 @@ export default function OrganizationManagementPage({
               setMoveForm({ ...moveForm, makePrimary: event.target.checked })
             }
           />
-          将目标部门设为该成员的主机构
+          将目标部门设为该成员的主部门
         </label>
       </CreationDialog>
       <Dialog
@@ -2284,5 +2290,21 @@ function OrganizationUserSelect({
         </Command>
       </PopoverContent>
     </Popover>
+  );
+}
+
+function OrganizationAccountStatus({ status }: { status: unknown }) {
+  const label =
+    status === "active"
+      ? "账号启用"
+      : status === "disabled"
+        ? "账号停用"
+        : "账号状态未确认";
+  return (
+    <span
+      className={`aiflow-type-meta ml-2 inline-flex whitespace-nowrap rounded px-1.5 py-0.5 font-normal ${status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
+    >
+      {label}
+    </span>
   );
 }

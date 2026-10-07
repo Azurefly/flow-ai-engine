@@ -162,6 +162,23 @@ try {
   assert.equal(remaining.length, 1);
   assert.equal(remaining[0].unitId, units[1].id);
   assert.equal(Boolean(remaining[0].isPrimary), true);
+  await admin.request(
+    "iam.updateUserStatus",
+    { userId, status: "disabled" },
+    true
+  );
+  const memberPage = await admin.request("config.organizationMembersPage", {
+    unitId: units[1].id,
+    page: 1,
+    pageSize: 10,
+    search: `primary_${tag}`,
+  });
+  assert.equal(memberPage.items.length, 1);
+  assert.equal(
+    memberPage.items[0].userStatus,
+    "disabled",
+    "Department member view must identify disabled accounts"
+  );
   console.log(
     JSON.stringify({
       userId,
@@ -171,6 +188,7 @@ try {
       concurrentAssign: true,
       concurrentMove: true,
       concurrentRemove: true,
+      disabledAccountStatus: true,
       primaryCount: 1,
     })
   );

@@ -30,7 +30,7 @@ const warehouseSource = source(
 const systemConfigSource = source(
   "../client/src/components/SystemConfigShell.tsx"
 );
-const organizationPageSource = source(
+const organizationManagementSource = source(
   "../client/src/components/OrganizationManagementPage.tsx"
 );
 const dialogSource = source("../client/src/components/ui/dialog.tsx");
@@ -73,7 +73,7 @@ const viteConfigSource = source("../vite.config.ts");
 const tableHeaderClasses = [
   projectWorkspaceSource,
   dataResourceSource,
-  organizationPageSource,
+  organizationManagementSource,
   systemConfigSource,
   governanceSource,
   processWorkbenchSource,
@@ -380,7 +380,7 @@ describe("流程设计器界面回归约束", () => {
       "createFolder.mutate({ projectId: activeProjectId"
     );
     expect(dataResourceSource).toContain("<CreationDialog");
-    expect(organizationPageSource).toContain("<CreationDialog");
+    expect(organizationManagementSource).toContain("<CreationDialog");
   });
 
   it("业务与流程列表按视口切换布局并保持主次信息层级", () => {
@@ -975,81 +975,85 @@ describe("流程设计器界面回归约束", () => {
       "组织、账号、角色和权限统一从一个入口管理"
     );
     expect(systemConfigSource).toContain("打开身份与权限中心");
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'data-aiflow-organization-page=""'
     );
-    expect(organizationPageSource).toContain("新增根部门");
-    expect(organizationPageSource).toContain("新增同级");
-    expect(organizationPageSource).toContain("新增子部门");
-    expect(organizationPageSource).toContain("新增部门");
-    expect(organizationPageSource).toContain('aria-label="更多部门操作"');
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain("新增根部门");
+    expect(organizationManagementSource).toContain("新增同级");
+    expect(organizationManagementSource).toContain("新增子部门");
+    expect(organizationManagementSource).toContain("新增部门");
+    expect(organizationManagementSource).toContain('aria-label="更多部门操作"');
+    expect(organizationManagementSource).toContain(
       "aria-label={`查看成员权限来源：${memberIdentity}`}"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "aria-label={`更多成员操作：${memberIdentity}`}"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "aria-label={`从当前部门移除成员：${memberIdentity}`}"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10"'
     );
-    expect(organizationPageSource).not.toContain(
+    expect(organizationManagementSource).not.toContain(
       "text-left text-xs text-foreground"
     );
-    expect(organizationPageSource).toContain("停用部门");
-    expect(organizationPageSource).toContain("删除部门…");
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain("停用部门");
+    expect(organizationManagementSource).toContain("删除部门…");
+    expect(organizationManagementSource).toContain(
       'selected && !mobileDirectoryOpen ? "hidden lg:block" : ""'
     );
-    expect(organizationPageSource).toContain("setMobileDirectoryOpen(true)");
-    expect(organizationPageSource).toContain("部门路径");
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
+      "setMobileDirectoryOpen(true)"
+    );
+    expect(organizationManagementSource).toContain("部门路径");
+    expect(organizationManagementSource).toContain(
       'className="mt-4 grid grid-cols-1 gap-2 min-[448px]:grid-cols-2 xl:grid-cols-3"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-body mt-1 break-words font-medium text-foreground"'
     );
-    expect(organizationPageSource).toContain("renderMemberActions(member)");
-    expect(organizationPageSource).toContain("部门概览");
-    expect(organizationPageSource).toContain("成员与岗位");
-    expect(organizationPageSource).toContain("权限组");
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
+      "renderMemberActions(member)"
+    );
+    expect(organizationManagementSource).toContain("部门概览");
+    expect(organizationManagementSource).toContain("成员与岗位");
+    expect(organizationManagementSource).toContain("权限组");
+    expect(organizationManagementSource).toContain(
       "createOrganizationUnit.useMutation"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "assignOrganizationMember.useMutation"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "bindOrganizationRole.useMutation"
     );
-    expect(organizationPageSource).toContain("取消保留原有信息");
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain("取消保留原有信息");
+    expect(organizationManagementSource).toContain(
       "moveOrganizationMember.useMutation"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "setPrimaryOrganizationMembership.useMutation"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "deleteOrganizationUnit.useMutation"
     );
-    expect(organizationPageSource).toContain("createUser.useMutation");
-    expect(organizationPageSource).toContain("新建内部用户");
+    expect(organizationManagementSource).toContain("createUser.useMutation");
+    expect(organizationManagementSource).toContain("新建内部用户");
     for (const field of ["username", "name", "password", "email", "role"]) {
-      expect(organizationPageSource).toContain(
+      expect(organizationManagementSource).toContain(
         `value={newUserForm.${field}} disabled={Boolean(createdUserId)}`
       );
     }
-    expect(organizationPageSource).toContain("包含子机构成员");
-    expect(organizationPageSource).toContain("用户直接角色");
-    expect(organizationPageSource).toContain("部门继承角色");
-    expect(organizationPageSource).toContain("没有匹配的机构");
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain("包含子机构成员");
+    expect(organizationManagementSource).toContain("用户直接角色");
+    expect(organizationManagementSource).toContain("部门继承角色");
+    expect(organizationManagementSource).toContain("没有匹配的机构");
+    expect(organizationManagementSource).toContain(
       'className="mt-1 break-all font-mono'
     );
-    expect(organizationPageSource).toContain("max-w-[220px] break-words");
-    expect(organizationPageSource).toContain("max-w-full break-all");
+    expect(organizationManagementSource).toContain("max-w-[220px] break-words");
+    expect(organizationManagementSource).toContain("max-w-full break-all");
   });
 
   it("组织与权限同级入口使用相同卡片、标题字号和按钮层级", () => {
@@ -1077,40 +1081,44 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("组织成员和权限信息按统一字号角色显示", () => {
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-page-title mt-1 font-semibold text-foreground"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-body mt-1 break-words text-muted-foreground"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-card-title break-words font-semibold text-foreground"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-body mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-body break-words leading-5 text-muted-foreground"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-meta mt-0.5 break-all text-muted-foreground"'
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       'className="aiflow-type-body mt-1 text-muted-foreground"'
     );
   });
 
   it("组织成员使用服务端筛选和可见总数的稳定分页", () => {
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "trpc.config.organizationDirectory.useQuery"
     );
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
       "trpc.config.organizationMembersPage.useQuery"
     );
-    expect(organizationPageSource).toContain("pageSize: 10");
-    expect(organizationPageSource).toContain('aria-label="成员分页"');
-    expect(organizationPageSource).toContain("显示 {memberPageInfo.from}–");
-    expect(organizationPageSource).not.toContain("members.filter(member => {");
+    expect(organizationManagementSource).toContain("pageSize: 10");
+    expect(organizationManagementSource).toContain('aria-label="成员分页"');
+    expect(organizationManagementSource).toContain(
+      "显示 {memberPageInfo.from}–"
+    );
+    expect(organizationManagementSource).not.toContain(
+      "members.filter(member => {"
+    );
     expect(routerSource).toContain(
       "organizationMembersPage: iamManageProcedure"
     );
@@ -1118,17 +1126,23 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("组织账号选择按需搜索有效用户，避免加载完整账号目录", () => {
-    const organizationUserSelectorSource = organizationPageSource.slice(
-      organizationPageSource.indexOf("function OrganizationUserSelect(")
+    const organizationUserSelectorSource = organizationManagementSource.slice(
+      organizationManagementSource.indexOf("function OrganizationUserSelect(")
     );
-    expect(organizationPageSource).toContain("trpc.iam.userDirectory.useQuery");
-    expect(organizationPageSource).toContain('status: "active"');
-    expect(organizationPageSource).toContain("limit: 20");
-    expect(organizationPageSource).toContain("enabled && open");
-    expect(organizationPageSource).toContain("输入姓名、登录名或邮箱开始搜索");
-    expect(organizationPageSource).toContain("请继续输入以缩小范围");
-    expect(organizationPageSource).not.toContain("trpc.iam.users.useQuery");
-    expect(organizationPageSource).not.toContain("activeUsers.map");
+    expect(organizationManagementSource).toContain(
+      "trpc.iam.userDirectory.useQuery"
+    );
+    expect(organizationManagementSource).toContain('status: "active"');
+    expect(organizationManagementSource).toContain("limit: 20");
+    expect(organizationManagementSource).toContain("enabled && open");
+    expect(organizationManagementSource).toContain(
+      "输入姓名、登录名或邮箱开始搜索"
+    );
+    expect(organizationManagementSource).toContain("请继续输入以缩小范围");
+    expect(organizationManagementSource).not.toContain(
+      "trpc.iam.users.useQuery"
+    );
+    expect(organizationManagementSource).not.toContain("activeUsers.map");
     expect(organizationUserSelectorSource).toContain("aiflow-type-control");
     expect(organizationUserSelectorSource).toContain("aiflow-type-body");
     expect(organizationUserSelectorSource).toContain("aiflow-type-meta");
@@ -1137,7 +1151,7 @@ describe("流程设计器界面回归约束", () => {
       "aiflow-type-control placeholder:text-muted-foreground"
     );
     expect(commandSource).toContain("aiflow-type-body data-[selected=true]");
-    expect(organizationPageSource).not.toContain("assignedUserIds");
+    expect(organizationManagementSource).not.toContain("assignedUserIds");
     expect(organizationServiceSource).toContain(
       "unassignedActiveUserCount: Number("
     );
@@ -1356,9 +1370,9 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("组织选择和成员列表使用完整名称路径与编码路径", () => {
-    expect(organizationPageSource).toContain("unit.displayPath");
-    expect(organizationPageSource).toContain("member.unitDisplayPath");
-    expect(organizationPageSource).toContain('label="完整组织路径"');
+    expect(organizationManagementSource).toContain("unit.displayPath");
+    expect(organizationManagementSource).toContain("member.unitDisplayPath");
+    expect(organizationManagementSource).toContain('label="完整组织路径"');
   });
 
   it("保留顶层与子页面哈希路由同步、异步权限恢复和安全回退", () => {
@@ -3044,7 +3058,9 @@ describe("流程设计器界面回归约束", () => {
   it("各级页签在窄屏换行而不把关键入口推到横向滚动区", () => {
     expect(homeSource).toContain("grid min-h-12 min-w-0 grid-cols-2");
     expect(homeSource).toContain("grid min-w-0 grid-cols-3 gap-1");
-    expect(organizationPageSource).toContain("grid min-w-0 grid-cols-3 gap-1");
+    expect(organizationManagementSource).toContain(
+      "grid min-w-0 grid-cols-3 gap-1"
+    );
     expect(processWorkbenchRunTabSource).toContain(
       "grid min-w-0 grid-cols-2 gap-1"
     );
@@ -3225,8 +3241,10 @@ it("组织保存失败在弹窗内保留错误并允许修改重试", () => {
   expect(creationDialogSource).toContain('role="alert"');
   expect(creationDialogSource).toContain("已保留填写内容，请检查后重新提交。");
   for (const kind of ["unit", "member", "role"]) {
-    expect(organizationPageSource).toContain(`errorMessage={${kind}Error}`);
-    expect(organizationPageSource).toContain(
+    expect(organizationManagementSource).toContain(
+      `errorMessage={${kind}Error}`
+    );
+    expect(organizationManagementSource).toContain(
       `set${kind[0].toUpperCase()}${kind.slice(1)}Error(message)`
     );
   }
@@ -3280,4 +3298,19 @@ it("数据流失败摘要优先使用持久化节点记录并展示节点错误"
   expect(dataResourceSource).toContain(
     "...(Array.isArray(result?.nodes) ? result.nodes : [])"
   );
+});
+
+it("组织成员卡片与表格区分停用账号并统一主部门名称", () => {
+  expect(organizationManagementSource).toContain(
+    "function OrganizationAccountStatus"
+  );
+  expect(
+    organizationManagementSource.match(
+      /<OrganizationAccountStatus status={member.userStatus}/g
+    )
+  ).toHaveLength(2);
+  expect(organizationManagementSource).toContain("账号启用");
+  expect(organizationManagementSource).toContain("账号停用");
+  expect(organizationManagementSource).toContain("账号状态未确认");
+  expect(organizationManagementSource).not.toContain("主机构");
 });
