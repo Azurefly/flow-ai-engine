@@ -3243,3 +3243,11 @@ it("路由连线与节点使用统一规则解析，出口提示展示业务名�
   expect(canvasSource).toContain("route.handle === id");
   expect(canvasSource).not.toContain("title={id}");
 });
+
+it("设计器导航明确展示真实流程类型并使用共享类型契约", () => {
+  expect(homeSource).toContain('getFlowProfile(workflow.flowType ?? "state")');
+  expect(homeSource).toContain('aria-label={`当前流程类型：${flowProfile.label}`}');
+  expect(homeSource).toContain('title={flowProfile.description}');
+  expect(homeSource).toContain('{flowProfile.label}');
+  expect(homeSource).not.toContain('              业务流程');
+});

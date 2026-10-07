@@ -1,3 +1,4 @@
+import { getFlowProfile } from "@shared/flow-profile-contract";
 import { shouldResetRunRoute } from "@shared/run-route-guard";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
@@ -2276,6 +2277,7 @@ function FlowDesigner({
         </div>
       </div>
     );
+  const flowProfile = getFlowProfile(workflow.flowType ?? "state");
   const publishVersionAllowed = canPublishWorkflowVersion(
     workflow.status,
     hasUnpublishedChanges
@@ -2304,9 +2306,19 @@ function FlowDesigner({
               {backLabel}
             </button>
             <span className="text-slate-300">/</span>
-            <span className="inline-flex items-center gap-1 text-muted-foreground">
-              <FolderKanban size={13} />
-              业务流程
+            <span
+              className="inline-flex items-center gap-1 text-muted-foreground"
+              aria-label={`当前流程类型：${flowProfile.label}`}
+              title={flowProfile.description}
+            >
+              {flowProfile.type === "data" ? (
+                <Table2 size={13} aria-hidden="true" />
+              ) : flowProfile.type === "state" ? (
+                <Activity size={13} aria-hidden="true" />
+              ) : (
+                <FolderKanban size={13} aria-hidden="true" />
+              )}
+              {flowProfile.label}
               <ChevronRight size={13} />
               设计器
             </span>
