@@ -283,7 +283,7 @@ for (const flowType of ["normal", "cancel", "terminate"].includes(restartStage)
       );
       const cancelled = await admin.request(
         controlMethod,
-        { runId: started.runId },
+        { runId: started.runId, reason: "隔离验收主动停止" },
         true
       );
       assert.equal(cancelled.status, targetStatus);
@@ -293,7 +293,7 @@ for (const flowType of ["normal", "cancel", "terminate"].includes(restartStage)
       });
       const repeated = await admin.request(
         controlMethod,
-        { runId: started.runId },
+        { runId: started.runId, reason: "隔离验收主动停止" },
         true
       );
       assert.equal(repeated.changed, false);
@@ -335,7 +335,7 @@ for (const flowType of ["normal", "cancel", "terminate"].includes(restartStage)
           flowType,
           firstBranchCompleted: true,
           lateMessagesDenied: 2,
-          cancelIdempotent: true,
+          controlIdempotent: true,
           noJoinOrEnd: true,
           status: targetStatus,
         })
