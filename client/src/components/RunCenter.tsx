@@ -1,3 +1,4 @@
+import { formatRunDuration } from "@shared/run-duration";
 import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
 import { RunApprovalProgress } from "./RunApprovalProgress";
 import type { RunApprovalGroup } from "@shared/run-approval-progress";
@@ -536,8 +537,8 @@ export default function RunCenter({
                         "请查看运行节点日志。"}
                     </p>
                     <p className="aiflow-type-meta mt-1 text-muted-foreground">
-                      {formatTime(alert.createdAt)} · {alert.durationMs ?? "—"}{" "}
-                      ms
+                      {formatTime(alert.createdAt)} ·{" "}
+                      {formatRunDuration(alert.durationMs)}
                     </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
@@ -608,7 +609,7 @@ export default function RunCenter({
                     {formatTime(run.createdAt)}
                   </span>
                   <span className="aiflow-type-meta font-mono tabular-nums">
-                    {run.durationMs ?? "—"} ms
+                    {formatRunDuration(run.durationMs)}
                   </span>
                   <span className="aiflow-type-body min-w-0 break-words">
                     {run.triggeredByName ||
@@ -681,7 +682,7 @@ export default function RunCenter({
               </div>
               <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
                 <span className="aiflow-type-meta text-muted-foreground">
-                  {runDetail?.durationMs ?? "—"} ms
+                  {formatRunDuration(runDetail?.durationMs)}
                 </span>
                 <Button
                   type="button"
@@ -838,7 +839,7 @@ export default function RunCenter({
                         </code>
                       </span>
                       <span className="aiflow-type-meta shrink-0 text-muted-foreground">
-                        {node.durationMs ?? "—"} ms
+                        {formatRunDuration(node.durationMs)}
                       </span>
                     </summary>
                     <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">

@@ -3398,3 +3398,15 @@ it("单结果预览也显示运行中保存的输出名称", () => {
   expect(dataResourceSource).toContain("terminal && dataResults.length === 1");
   expect(dataResourceSource).toContain("{terminal.name}");
 });
+
+it("控制结束保存原因和耗时，监控缺失耗时不拼接单位", () => {
+  expect(source("./workflow-engine.ts")).toContain(
+    "status=?,endReason=?,errorJson=?,finishedAt=NOW(),durationMs=IF(startedAt IS NULL,NULL,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000))"
+  );
+  expect(source("../client/src/components/RunCenter.tsx")).toContain(
+    "formatRunDuration(run.durationMs)"
+  );
+  expect(source("../client/src/components/RunCenter.tsx")).not.toContain(
+    '{node.durationMs ?? "—"} ms'
+  );
+});

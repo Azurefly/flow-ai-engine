@@ -2225,8 +2225,9 @@ export async function controlWorkflowRun(input: {
       return { runId: input.runId, status: currentStatus, changed: false };
     }
     await connection.query(
-      "UPDATE workflow_run SET status=?,errorJson=?,finishedAt=NOW(),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+      "UPDATE workflow_run SET status=?,endReason=?,errorJson=?,finishedAt=NOW(),durationMs=IF(startedAt IS NULL,NULL,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000)),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
       [
+        targetStatus,
         targetStatus,
         input.reason
           ? JSON.stringify({
