@@ -1,4 +1,8 @@
 import {
+  dataflowTerminalResults,
+  dataflowResultColumns,
+} from "@shared/dataflow-result-preview";
+import {
   readRunInputRows,
   runInputRowsFromValue,
   type RunInputRow,
@@ -86,6 +90,7 @@ export default function WorkflowTestRunModal({
   const [acknowledgedActualRun, setAcknowledgedActualRun] = useState(false);
   const [outputPage, setOutputPage] = useState(1);
   const OUTPUT_PAGE_SIZE = 10;
+  const [selectedTerminal, setSelectedTerminal] = useState(0);
   const [inputErrors, setInputErrors] = useState<string[]>([]);
 
   const canStartActualRun =
@@ -246,26 +251,34 @@ export default function WorkflowTestRunModal({
     }
   }, [activeRunId, isDataflow, dataflowRunQuery.data, workflowRunQuery.data]);
 
+  const dataResults = useMemo(
+    () => (isDataflow ? dataflowTerminalResults(currentRun?.output) : []),
+    [isDataflow, currentRun?.output]
+  );
   // Derive tabular rows from output if available
   const outputRows = useMemo(() => {
     if (!currentRun?.output) return null;
+    if (isDataflow) return dataResults[selectedTerminal]?.rows ?? null;
     const out = currentRun.output;
     if (Array.isArray(out)) return out;
     if (Array.isArray(out.rows)) return out.rows;
     if (Array.isArray(out.data)) return out.data;
     if (Array.isArray(out.result)) return out.result;
     return null;
-  }, [currentRun?.output]);
+  }, [currentRun?.output, isDataflow, dataResults, selectedTerminal]);
 
   const outputColumns = useMemo(() => {
     if (!outputRows || !outputRows.length) return [];
+    if (isDataflow) return dataflowResultColumns(outputRows);
     const first = outputRows[0];
     if (typeof first !== "object" || first === null) return ["value"];
     return Object.keys(first);
-  }, [outputRows]);
+  }, [outputRows, isDataflow]);
 
   useEffect(() => {
     setOutputPage(1);
+    setSelectedTerminal(0);
+    setResultDisplayMode("table");
   }, [activeRunId, open]);
 
   const totalOutputRows = outputRows?.length ?? 0;
@@ -841,6 +854,27 @@ export default function WorkflowTestRunModal({
                   {/* Output Display */}
                   {!isRunning && currentRun?.output && (
                     <div>
+                      {dataResults.length > 1 && (
+                        <label className="aiflow-type-control mb-3 flex flex-wrap items-center gap-2">
+                          结果集
+                          <select
+                            aria-label="选择最终结果集"
+                            className="h-11 max-w-full rounded-md border border-border bg-background px-3 min-[1024px]:h-9"
+                            value={selectedTerminal}
+                            onChange={event => {
+                              setSelectedTerminal(Number(event.target.value));
+                              setOutputPage(1);
+                              setResultDisplayMode("table");
+                            }}
+                          >
+                            {dataResults.map((result, index) => (
+                              <option key={index} value={index}>
+                                {result.name} · {result.rows.length} 行
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
                       {/* Top Bar for Result Format Toggle */}
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">

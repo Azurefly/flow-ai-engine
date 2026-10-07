@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import {
   dataflowResultColumns,
+  dataflowTerminalResults,
   dataflowResultPage,
 } from "./dataflow-result-preview";
 it("包含后续行字段并保持稳定顺序，不限制前六个字段", () => {
@@ -32,4 +33,31 @@ it("每页十行，分页不丢行并在数据缩短后约束页码", () => {
     offset: 0,
     rows: [],
   });
+});
+
+it("保留全部最终结果集及空结果，不展示中间节点输出", () => {
+  expect(
+    dataflowTerminalResults({
+      nodes: [{ output: { rows: [{ debug: true }] } }],
+      terminals: [
+        { outputName: "订单", rows: [{ id: 1 }] },
+        { rows: [] },
+        { outputName: "总额", rows: [{ total: 100 }] },
+      ],
+    })
+  ).toEqual([
+    { name: "订单", rows: [{ id: 1 }] },
+    { name: "结果 2", rows: [] },
+    { name: "总额", rows: [{ total: 100 }] },
+  ]);
+});
+it("忽略无最终数据的元信息并兼容原始值行", () => {
+  expect(
+    dataflowTerminalResults({
+      terminals: [null, {}, { rows: [0, false, null] }],
+    })
+  ).toEqual([
+    { name: "结果 3", rows: [{ value: 0 }, { value: false }, { value: null }] },
+  ]);
+  expect(dataflowTerminalResults({ nodes: [] })).toEqual([]);
 });

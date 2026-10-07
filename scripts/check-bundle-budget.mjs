@@ -12,9 +12,9 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Typed run input editor measured: 1375.75 KiB raw / 405.67 KiB gzip.
-const maxTotalBytes = 1_376 * 1024;
-const maxTotalGzipBytes = 406 * 1024;
+// Final dataflow result tables measured: 1376.97 KiB raw / 406.22 KiB gzip before terminal labels.
+const maxTotalBytes = 1_378 * 1024;
+const maxTotalGzipBytes = 407 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

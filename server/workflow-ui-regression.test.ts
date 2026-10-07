@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_376 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 406 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_378 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 407 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3350,4 +3350,12 @@ it("本次运行输入展示服务端快照，不使用下一次编辑草稿", (
     "JSON.stringify(currentRun?.input ?? {}, null, 2)"
   );
   expect(runModalSource).not.toContain("JSON.stringify(runInput, null, 2)");
+});
+
+it("数据流程运行默认展示最终结果并支持多个结果集", () => {
+  expect(runModalSource).toContain('dataflowTerminalResults(currentRun?.output)');
+  expect(runModalSource).toContain('dataResults[selectedTerminal]?.rows ?? null');
+  expect(runModalSource).toContain('dataflowResultColumns(outputRows)');
+  expect(runModalSource).toContain('选择最终结果集');
+  expect(runModalSource).toContain('setSelectedTerminal(0)');
 });

@@ -1747,7 +1747,16 @@ async function runDataflowDefinition(
     throw new Error("数据流存在循环依赖或不可达节点。 ");
   const terminal = nodes
     .filter((node: any) => !(outgoing.get(String(node.id)) ?? []).length)
-    .map((node: any) => outputs.get(String(node.id)))
+    .map((node: any) => {
+      const output = outputs.get(String(node.id));
+      return output
+        ? {
+            ...output,
+            nodeId: String(node.id),
+            nodeName: String(node.name || node.id),
+          }
+        : null;
+    })
     .filter(Boolean);
   const terminalArtifacts = nodes
     .filter((node: any) => !(outgoing.get(String(node.id)) ?? []).length)
