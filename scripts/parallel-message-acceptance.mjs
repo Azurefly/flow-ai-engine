@@ -40,7 +40,7 @@ assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 
 const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
-assert(["normal", "prepare", "resume"].includes(restartStage));
+assert(["normal", "prepare", "resume", "cancel"].includes(restartStage));
 let restartFixture = null;
 let restoredWorkflow = null;
 if (restartStage === "resume") {
@@ -85,7 +85,7 @@ const edge = (sourceNodeId, targetNodeId, sourceHandle) => ({
   targetNodeId,
   ...(sourceHandle ? { sourceHandle } : {}),
 });
-for (const flowType of restartStage === "normal"
+for (const flowType of ["normal", "cancel"].includes(restartStage)
   ? ["control", "state"]
   : ["state"]) {
   const nodes = [
@@ -235,7 +235,7 @@ for (const flowType of restartStage === "normal"
         ).length === 2,
       "two message subscriptions"
     );
-    if (restartStage !== "normal") {
+    if (["prepare", "resume"].includes(restartStage)) {
       assert.equal(waiting.currentStateCode, "PENDING");
       assert.equal(waiting.stateVersion, 1);
     }
@@ -264,6 +264,65 @@ for (const flowType of restartStage === "normal"
         },
         true
       );
+    if (restartStage === "cancel") {
+      await signal("a");
+      const beforeCancel = await waitFor(
+        () => admin.request("workflow.runDetail", { runId: started.runId }),
+        run =>
+          run.status === "waiting" &&
+          run.nodeRuns.some(n => n.nodeId === "a" && n.status === "success"),
+        "first branch completed while second waits"
+      );
+      const cancelled = await admin.request(
+        "workflow.cancelRun",
+        { runId: started.runId },
+        true
+      );
+      assert.equal(cancelled.status, "cancelled");
+      assert.equal(cancelled.changed, true);
+      const repeated = await admin.request(
+        "workflow.cancelRun",
+        { runId: started.runId },
+        true
+      );
+      assert.equal(repeated.changed, false);
+      const late = await Promise.allSettled([signal("b"), signal("b")]);
+      assert.equal(late.filter(item => item.status === "fulfilled").length, 0);
+      assert(
+        late.every(
+          item =>
+            item.status === "rejected" &&
+            /订阅|等待|取消/.test(item.reason.message)
+        )
+      );
+      const afterCancel = await admin.request("workflow.runDetail", {
+        runId: started.runId,
+      });
+      assert.equal(afterCancel.status, "cancelled");
+      assert.equal(afterCancel.nodeRuns.length, beforeCancel.nodeRuns.length);
+      assert.equal(
+        afterCancel.nodeRuns.some(n =>
+          ["join", "done", "end"].includes(n.nodeId)
+        ),
+        false
+      );
+      assert.equal(afterCancel.stateVersion, beforeCancel.stateVersion);
+      assert.equal(afterCancel.currentStateCode, beforeCancel.currentStateCode);
+      completed = true;
+      console.log(
+        JSON.stringify({
+          workflowId: workflow.id,
+          runId: started.runId,
+          flowType,
+          firstBranchCompleted: true,
+          lateMessagesDenied: 2,
+          cancelIdempotent: true,
+          noJoinOrEnd: true,
+          status: "cancelled",
+        })
+      );
+      continue;
+    }
     const responses = await Promise.allSettled([signal("a"), signal("b")]);
     assert.equal(
       responses.filter(r => r.status === "fulfilled").length,
