@@ -197,6 +197,7 @@ export default function WorkflowTestRunModal({
         durationMs: data.durationMs,
         startedAt: data.startedAt,
         finishedAt: data.finishedAt,
+        input: data.input ?? {},
         output: data.output,
         error: data.error,
         nodeRuns: data.nodeRuns || [],
@@ -212,6 +213,10 @@ export default function WorkflowTestRunModal({
         durationMs: data.durationMs,
         startedAt: data.startedAt,
         finishedAt: data.finishedAt,
+        input:
+          typeof data.inputJson === "string"
+            ? JSON.parse(data.inputJson)
+            : (data.inputJson ?? {}),
         output: data.finalOutputJson
           ? typeof data.finalOutputJson === "string"
             ? JSON.parse(data.finalOutputJson)
@@ -1315,9 +1320,9 @@ export default function WorkflowTestRunModal({
                     </Button>
                   </div>
 
-                  {Object.keys(runInput || {}).length > 0 ? (
+                  {Object.keys(currentRun?.input || {}).length > 0 ? (
                     <pre className="aiflow-type-code max-h-[350px] overflow-auto rounded-lg bg-slate-950 p-4 font-mono text-blue-300">
-                      {JSON.stringify(runInput, null, 2)}
+                      {JSON.stringify(currentRun?.input ?? {}, null, 2)}
                     </pre>
                   ) : (
                     <div className="aiflow-type-body py-8 text-center text-muted-foreground">

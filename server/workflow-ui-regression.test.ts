@@ -3342,3 +3342,12 @@ it("运行输入编辑保留新增草稿行，支持类型和校验错误", () =
   expect(runModalSource).toContain("业务编号请选择文本以保留前导零");
   expect(runModalSource).toContain("readRunInputRows(rows)");
 });
+
+it("本次运行输入展示服务端快照，不使用下一次编辑草稿", () => {
+  expect(runModalSource).toContain("input: data.input ?? {}");
+  expect(runModalSource).toContain('typeof data.inputJson === "string"');
+  expect(runModalSource).toContain(
+    "JSON.stringify(currentRun?.input ?? {}, null, 2)"
+  );
+  expect(runModalSource).not.toContain("JSON.stringify(runInput, null, 2)");
+});
