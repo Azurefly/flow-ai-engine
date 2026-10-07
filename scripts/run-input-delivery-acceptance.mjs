@@ -45,21 +45,46 @@ assert(
   workflowId && runPrefix,
   "Provide the workflow ID and run prefix observed in the browser"
 );
-assert.match(runPrefix, /^[a-f0-9]{8}$/);
+assert.match(runPrefix, /^[A-Za-z0-9_-]{8}$/);
 const workflow = await admin.request("workflow.get", { id: workflowId });
-assert.match(workflow.name, /^消息业务编号_[a-f0-9]{8}$/);
+const isDataflow = workflow.flowType === "data";
+assert.match(
+  workflow.name,
+  isDataflow ? /^去重聚合质量门测试_[a-f0-9]{8}$/ : /^消息业务编号_[a-f0-9]{8}$/
+);
 const definition =
   typeof workflow.definition === "string"
     ? JSON.parse(workflow.definition)
     : workflow.definition;
-assert.deepEqual(definition.nodes.map(n => n.type).sort(), [
-  "end",
-  "message_catch",
-  "start",
-]);
-const matches = (
-  await admin.request("workflow.runs", { workflowId, limit: 10 })
-).filter(run => run.id.startsWith(runPrefix));
+if (isDataflow)
+  assert(
+    definition.nodes.every(n =>
+      [
+        "start",
+        "source",
+        "map",
+        "deduplicate",
+        "aggregate",
+        "quality_gate",
+        "end",
+      ].includes(n.type)
+    )
+  );
+else
+  assert.deepEqual(definition.nodes.map(n => n.type).sort(), [
+    "end",
+    "message_catch",
+    "start",
+  ]);
+const history = isDataflow
+  ? await admin.request("data.runs", {
+      projectId: workflow.projectId,
+      workflowId,
+      limit: 10,
+      summaryOnly: true,
+    })
+  : await admin.request("workflow.runs", { workflowId, limit: 10 });
+const matches = history.filter(run => run.id.startsWith(runPrefix));
 assert.equal(
   matches.length,
   1,
@@ -68,36 +93,48 @@ assert.equal(
 const runId = matches[0].id;
 let completed = false;
 try {
-  const read = () => admin.request("workflow.runDetail", { runId });
+  const read = () =>
+    isDataflow
+      ? admin.request("data.runDetail", {
+          projectId: workflow.projectId,
+          runId,
+        })
+      : admin.request("workflow.runDetail", { runId });
   let run = await waitFor(
     read,
-    value => value.status === "waiting",
-    "browser-created wait"
+    value =>
+      isDataflow
+        ? ["success", "failed"].includes(value.status)
+        : value.status === "waiting",
+    "browser-created run"
   );
-  const input =
-    typeof run.inputJson === "string"
-      ? JSON.parse(run.inputJson)
-      : run.inputJson;
+  const snapshot = isDataflow ? run.input : run.inputJson;
+  const input = typeof snapshot === "string" ? JSON.parse(snapshot) : snapshot;
   assert.deepEqual(input, {
     businessKey: "00123",
     amount: 10,
     config: { enabled: true },
   });
-  await admin.request(
-    "task.signalMessage",
-    {
-      runId,
-      messageName: "order.paid",
-      correlationKey: "00123",
-      payload: { accepted: true },
-    },
-    true
-  );
-  run = await waitFor(
-    read,
-    value => ["success", "failed"].includes(value.status),
-    "browser-created completion"
-  );
+  if (!isDataflow) {
+    await admin.request(
+      "task.signalMessage",
+      {
+        runId,
+        messageName: "order.paid",
+        correlationKey: "00123",
+        payload: { accepted: true },
+      },
+      true
+    );
+    run = await waitFor(
+      read,
+      value => ["success", "failed"].includes(value.status),
+      "browser-created completion"
+    );
+  } else {
+    assert.equal(run.executionSource, "published_plan");
+    assert.deepEqual(run.output.terminals[0].rows, [{ count: 4, total: 100 }]);
+  }
   assert.equal(run.status, "success");
   assert.equal(
     run.nodeRuns.filter(n => n.nodeId === "end" && n.status === "success")
@@ -109,6 +146,7 @@ try {
     JSON.stringify({
       workflowId,
       runId,
+      flowType: workflow.flowType,
       browserCreated: true,
       textLeadingZerosPreserved: true,
       numericTypePreserved: true,
@@ -117,6 +155,6 @@ try {
     })
   );
 } finally {
-  if (!completed)
+  if (!completed && !isDataflow)
     await admin.request("workflow.cancelRun", { runId }, true).catch(() => {});
 }
