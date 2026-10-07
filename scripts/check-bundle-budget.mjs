@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Quality preflight and node failure summary measured: 1371.13 KiB raw / 404.24 KiB gzip.
-const maxTotalBytes = 1_372 * 1024;
+// Live permission sources measured: 1373.15 KiB raw / 404.69 KiB gzip.
+const maxTotalBytes = 1_374 * 1024;
 const maxTotalGzipBytes = 405 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

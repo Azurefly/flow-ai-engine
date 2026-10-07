@@ -158,6 +158,16 @@ export default function OrganizationManagementPage({
     makePrimary: false,
   });
   const [roleMember, setRoleMember] = useState<any | null>(null);
+  const roleMemberDetails = trpc.iam.userAuthorizationDetails.useQuery(
+    { userId: Number(roleMember?.userId ?? 0) },
+    {
+      enabled: Boolean(roleMember),
+      retry: false,
+      refetchInterval: 30000,
+      refetchIntervalInBackground: false,
+    }
+  );
+  const liveRoleAccount = roleMemberDetails.data?.user as any;
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [organizationConfirmation, setOrganizationConfirmation] =
     useState<OrganizationConfirmation | null>(null);
@@ -1787,24 +1797,74 @@ export default function OrganizationManagementPage({
               直接授权与部门继承分栏展示；部门解绑后继承权限立即失效，不会变成直接授权。
             </DialogDescription>
           </DialogHeader>
-          <div className="grid max-h-[60vh] gap-4 overflow-y-auto sm:grid-cols-2">
-            <RoleSourceList
-              title="用户直接角色"
-              empty="当前没有有效的系统级直接角色。"
-              roles={roleMember?.directRoles ?? []}
-              source={role =>
-                role.expiresAt
-                  ? `有效至 ${new Date(role.expiresAt).toLocaleString("zh-CN", { hour12: false })}`
-                  : "系统级直接授权"
-              }
-            />
-            <RoleSourceList
-              title="部门继承角色"
-              empty="当前没有从所属部门继承角色。"
-              roles={roleMember?.inheritedRoles ?? []}
-              source={role => `继承自 ${role.unitName || "未命名部门"}`}
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="aiflow-type-body text-muted-foreground">
+              {roleMember?.username} · 系统级角色 · 每 30 秒更新
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={roleMemberDetails.isFetching}
+              onClick={() => void roleMemberDetails.refetch()}
+            >
+              刷新权限来源
+            </Button>
           </div>
+          {roleMemberDetails.isError ? (
+            <div role="alert" className="text-sm text-destructive">
+              <p>读取权限来源失败：{roleMemberDetails.error.message}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void roleMemberDetails.refetch()}
+              >
+                重新读取权限
+              </Button>
+            </div>
+          ) : roleMemberDetails.isLoading ? (
+            <p role="status">正在读取最新权限来源…</p>
+          ) : roleMemberDetails.data ? (
+            <>
+              {liveRoleAccount?.status === "disabled" && (
+                <p
+                  role="alert"
+                  className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground"
+                >
+                  账号已停用：下方保留角色配置来源，该账号不能登录或执行操作。
+                </p>
+              )}
+              {liveRoleAccount?.status === "active" &&
+                liveRoleAccount?.role === "admin" && (
+                  <p className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+                    系统管理员账号拥有全部系统权限，下方展示额外配置的角色来源。
+                  </p>
+                )}
+              <div className="grid max-h-[60vh] gap-4 overflow-y-auto sm:grid-cols-2">
+                <RoleSourceList
+                  title="用户直接角色"
+                  empty="当前没有有效期内的系统级直接角色。"
+                  roles={(roleMemberDetails.data.directRoles ?? []).filter(
+                    role => role.scopeType === "system"
+                  )}
+                  source={role =>
+                    role.expiresAt
+                      ? `有效至 ${new Date(role.expiresAt).toLocaleString("zh-CN", { hour12: false })}`
+                      : "系统级直接授权 · 长期"
+                  }
+                />
+                <RoleSourceList
+                  title="部门继承角色"
+                  empty="当前没有从所属部门继承角色。"
+                  roles={roleMemberDetails.data.inheritedRoles ?? []}
+                  source={role =>
+                    `继承自 ${role.unitName || "未命名部门"}${role.unitCode ? `（${role.unitCode}）` : ""} · ${role.expiresAt ? `有效至 ${new Date(role.expiresAt).toLocaleString("zh-CN", { hour12: false })}` : "长期"}`
+                  }
+                />
+              </div>
+            </>
+          ) : (
+            <p role="status">未找到该账号的权限来源。</p>
+          )}
           <DialogFooter>
             <Button type="button" onClick={() => setRoleMember(null)}>
               关闭

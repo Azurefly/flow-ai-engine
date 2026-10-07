@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_372 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_374 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 405 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3313,4 +3313,23 @@ it("组织成员卡片与表格区分停用账号并统一主部门名称", () =
   expect(organizationManagementSource).toContain("账号停用");
   expect(organizationManagementSource).toContain("账号状态未确认");
   expect(organizationManagementSource).not.toContain("主机构");
+});
+
+it("成员权限详情查询实时来源，说明停用状态并支持刷新和重试", () => {
+  expect(organizationManagementSource).toContain(
+    "trpc.iam.userAuthorizationDetails.useQuery"
+  );
+  expect(organizationManagementSource).toContain(
+    "enabled: Boolean(roleMember)"
+  );
+  expect(organizationManagementSource).toContain("刷新权限来源");
+  expect(organizationManagementSource).toContain("重新读取权限");
+  expect(organizationManagementSource).toContain("账号已停用：");
+  expect(organizationManagementSource).not.toContain(
+    "roles={roleMember?.directRoles"
+  );
+  expect(organizationManagementSource).not.toContain(
+    "roles={roleMember?.inheritedRoles"
+  );
+  expect(organizationManagementSource).toContain("role.unitCode");
 });

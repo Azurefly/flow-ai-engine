@@ -572,7 +572,7 @@ export async function getUserAuthorizationDetails(userId: number) {
          FROM membership_units mu JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
         WHERE mu.depth<32
      )
-     SELECT DISTINCT ou.id AS unitId,ou.name AS unitName,r.id AS roleId,r.code AS roleCode,
+     SELECT DISTINCT ou.id AS unitId,ou.name AS unitName,ou.code AS unitCode,r.id AS roleId,r.code AS roleCode,
             r.name AS roleName,r.description AS roleDescription,r.scope,our.effectiveFrom,our.expiresAt
        FROM membership_units mu
        JOIN organization_unit_role our ON our.unitId=mu.unitId
