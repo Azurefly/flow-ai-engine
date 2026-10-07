@@ -3370,3 +3370,10 @@ it("运行弹窗按流程隔离，不显示其他流程或旧运行结果", () =
   );
   expect(runModalSource).toContain("setActiveRunId(null); setIsRunning(true);");
 });
+
+it("设计器权限未加载时明确等待，读取失败可重试", () => {
+  expect(homeSource).toContain("selectedId && !access.data ?");
+  expect(homeSource).toContain("正在读取流程权限…");
+  expect(homeSource).toContain("读取流程权限失败：");
+  expect(homeSource).toContain("重新读取流程权限");
+});

@@ -1711,182 +1711,211 @@ function FlowConsole({
               onOpen={() => selectedId && openFlowEditor(selectedId, "detail")}
             />
           )}
-          {section === "flows" && !routeRestoring && flowView === "editor" && (
-            <FlowDesigner
-              workflow={selectedWorkflow}
-              definition={draftDefinition}
-              name={draftName}
-              setName={setDraftName}
-              canEdit={canEdit}
-              canPublish={canPublish}
-              canRun={canRun}
-              hasUnpublishedChanges={isDraftDirty}
-              canManage={canManageMembers}
-              members={(members.data ?? []) as any[]}
-              savePending={saveFlow.isPending}
-              publishPending={publishFlow.isPending}
-              compilePending={compileFlow.isPending}
-              compileDiagnostics={compileDiagnostics}
-              compileCheck={compileCheck}
-              runPending={runFlow.isPending}
-              runInput={runInput}
-              setRunInput={setRunInput}
-              templates={(templates.data ?? []) as any[]}
-              subflows={(subflows.data ?? []) as any[]}
-              onDefinitionChange={setDraftDefinition}
-              backLabel={flowEditorReturnLabel}
-              onBackToDesignCenter={returnFromFlowEditor}
-              onSave={saveCurrent}
-              onSaveDraftBeforeRun={saveDraftBeforeRun}
-              onValidate={() => {
-                if (!selectedId || !draftDefinition) return;
-                setCompileDiagnostics([]);
-                setCompileCheck({ status: "checking" });
-                compileFlow.mutate(
-                  { id: selectedId, definition: draftDefinition },
-                  {
-                    onSuccess: result => {
-                      setCompileDiagnostics(
-                        result.ok ? [] : result.diagnostics
-                      );
-                      setCompileCheck({
-                        status: result.ok ? "passed" : "failed",
-                        checkedAt: Date.now(),
-                        message: result.ok
-                          ? undefined
-                          : `预检发现 ${result.diagnostics.length} 项问题。`,
-                      });
-                    },
-                    onError: error =>
-                      setCompileCheck({
-                        status: "failed",
-                        checkedAt: Date.now(),
-                        message: `预检请求失败：${error.message}`,
-                      }),
-                  }
-                );
-              }}
-              onPublish={() => {
-                if (!selectedId || !draftDefinition) return;
-                if (
-                  !canPublishWorkflowVersion(
-                    selectedWorkflow?.status,
-                    isDraftDirty
-                  )
-                ) {
-                  toast.info(
-                    "当前已发布版本没有未发布修改；编辑流程后才能发布新版本。"
-                  );
-                  return;
-                }
-                setCompileDiagnostics([]);
-                setCompileCheck({ status: "checking" });
-                compileFlow.mutate(
-                  { id: selectedId, definition: draftDefinition },
-                  {
-                    onSuccess: result => {
-                      if (!result.ok) {
-                        setCompileDiagnostics(result.diagnostics);
+          {section === "flows" &&
+            !routeRestoring &&
+            flowView === "editor" &&
+            (selectedId && !access.data ? (
+              <div
+                className="m-4 rounded-lg border border-border bg-card p-5"
+                role={access.isError ? "alert" : "status"}
+                aria-live="polite"
+              >
+                <p className="aiflow-type-body text-muted-foreground">
+                  {access.isError
+                    ? `读取流程权限失败：${access.error.message}`
+                    : "正在读取流程权限…"}
+                </p>
+                {access.isError && (
+                  <Button
+                    className="mt-3"
+                    variant="outline"
+                    disabled={access.isFetching}
+                    onClick={() => void access.refetch()}
+                  >
+                    重新读取流程权限
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <FlowDesigner
+                workflow={selectedWorkflow}
+                definition={draftDefinition}
+                name={draftName}
+                setName={setDraftName}
+                canEdit={canEdit}
+                canPublish={canPublish}
+                canRun={canRun}
+                hasUnpublishedChanges={isDraftDirty}
+                canManage={canManageMembers}
+                members={(members.data ?? []) as any[]}
+                savePending={saveFlow.isPending}
+                publishPending={publishFlow.isPending}
+                compilePending={compileFlow.isPending}
+                compileDiagnostics={compileDiagnostics}
+                compileCheck={compileCheck}
+                runPending={runFlow.isPending}
+                runInput={runInput}
+                setRunInput={setRunInput}
+                templates={(templates.data ?? []) as any[]}
+                subflows={(subflows.data ?? []) as any[]}
+                onDefinitionChange={setDraftDefinition}
+                backLabel={flowEditorReturnLabel}
+                onBackToDesignCenter={returnFromFlowEditor}
+                onSave={saveCurrent}
+                onSaveDraftBeforeRun={saveDraftBeforeRun}
+                onValidate={() => {
+                  if (!selectedId || !draftDefinition) return;
+                  setCompileDiagnostics([]);
+                  setCompileCheck({ status: "checking" });
+                  compileFlow.mutate(
+                    { id: selectedId, definition: draftDefinition },
+                    {
+                      onSuccess: result => {
+                        setCompileDiagnostics(
+                          result.ok ? [] : result.diagnostics
+                        );
+                        setCompileCheck({
+                          status: result.ok ? "passed" : "failed",
+                          checkedAt: Date.now(),
+                          message: result.ok
+                            ? undefined
+                            : `预检发现 ${result.diagnostics.length} 项问题。`,
+                        });
+                      },
+                      onError: error =>
                         setCompileCheck({
                           status: "failed",
                           checkedAt: Date.now(),
-                          message: `编译发现 ${result.diagnostics.length} 项问题。`,
-                        });
-                        toast.error(
-                          `编译未通过：${result.diagnostics.length} 项错误`
-                        );
-                        return;
-                      }
-                      setCompileDiagnostics([]);
-                      setCompileCheck({
-                        status: "passed",
-                        checkedAt: Date.now(),
-                      });
-                      publishFlow.mutate(
-                        {
-                          id: selectedId,
-                          name: draftName.trim() || "未命名流程",
-                          definition: draftDefinition,
-                        },
-                        {
-                          onSuccess: () => {
-                            persistedDraftSnapshot.current = {
-                              workflowId: selectedId,
-                              name: draftName.trim() || "未命名流程",
-                              definitionJson: JSON.stringify(draftDefinition),
-                            };
-                          },
-                        }
-                      );
-                    },
-                    onError: error => {
-                      setCompileCheck({
-                        status: "failed",
-                        checkedAt: Date.now(),
-                        message: `预检请求失败：${error.message}`,
-                      });
-                      toast.error(error.message);
-                    },
+                          message: `预检请求失败：${error.message}`,
+                        }),
+                    }
+                  );
+                }}
+                onPublish={() => {
+                  if (!selectedId || !draftDefinition) return;
+                  if (
+                    !canPublishWorkflowVersion(
+                      selectedWorkflow?.status,
+                      isDraftDirty
+                    )
+                  ) {
+                    toast.info(
+                      "当前已发布版本没有未发布修改；编辑流程后才能发布新版本。"
+                    );
+                    return;
                   }
-                );
-              }}
-              onRun={startRun}
-              onExport={exportCurrent}
-              onImport={() => importRef.current?.click()}
-              onDuplicate={() => {
-                if (selectedId)
-                  duplicateFlow.mutate({
-                    id: selectedId,
-                    name: `${draftName} · 副本`,
-                  });
-              }}
-              onDelete={() => {
-                if (
-                  selectedId &&
-                  window.confirm(
-                    `确认归档“${draftName}”吗？版本、运行、任务、成员授权和审计记录均会保留，之后可在流程仓库恢复。`
+                  setCompileDiagnostics([]);
+                  setCompileCheck({ status: "checking" });
+                  compileFlow.mutate(
+                    { id: selectedId, definition: draftDefinition },
+                    {
+                      onSuccess: result => {
+                        if (!result.ok) {
+                          setCompileDiagnostics(result.diagnostics);
+                          setCompileCheck({
+                            status: "failed",
+                            checkedAt: Date.now(),
+                            message: `编译发现 ${result.diagnostics.length} 项问题。`,
+                          });
+                          toast.error(
+                            `编译未通过：${result.diagnostics.length} 项错误`
+                          );
+                          return;
+                        }
+                        setCompileDiagnostics([]);
+                        setCompileCheck({
+                          status: "passed",
+                          checkedAt: Date.now(),
+                        });
+                        publishFlow.mutate(
+                          {
+                            id: selectedId,
+                            name: draftName.trim() || "未命名流程",
+                            definition: draftDefinition,
+                          },
+                          {
+                            onSuccess: () => {
+                              persistedDraftSnapshot.current = {
+                                workflowId: selectedId,
+                                name: draftName.trim() || "未命名流程",
+                                definitionJson: JSON.stringify(draftDefinition),
+                              };
+                            },
+                          }
+                        );
+                      },
+                      onError: error => {
+                        setCompileCheck({
+                          status: "failed",
+                          checkedAt: Date.now(),
+                          message: `预检请求失败：${error.message}`,
+                        });
+                        toast.error(error.message);
+                      },
+                    }
+                  );
+                }}
+                onRun={startRun}
+                onExport={exportCurrent}
+                onImport={() => importRef.current?.click()}
+                onDuplicate={() => {
+                  if (selectedId)
+                    duplicateFlow.mutate({
+                      id: selectedId,
+                      name: `${draftName} · 副本`,
+                    });
+                }}
+                onDelete={() => {
+                  if (
+                    selectedId &&
+                    window.confirm(
+                      `确认归档“${draftName}”吗？版本、运行、任务、成员授权和审计记录均会保留，之后可在流程仓库恢复。`
+                    )
                   )
-                )
-                  deleteFlow.mutate({ id: selectedId });
-              }}
-              onSaveAsSubflow={async () => {
-                if (!draftDefinition || createSubflow.isPending) return false;
-                try {
-                  await createSubflow.mutateAsync({
-                    name: `${draftName || "未命名流程"} · 子流程`,
-                    definition: draftDefinition,
-                  });
-                  return true;
-                } catch {
-                  return false;
+                    deleteFlow.mutate({ id: selectedId });
+                }}
+                onSaveAsSubflow={async () => {
+                  if (!draftDefinition || createSubflow.isPending) return false;
+                  try {
+                    await createSubflow.mutateAsync({
+                      name: `${draftName || "未命名流程"} · 子流程`,
+                      definition: draftDefinition,
+                    });
+                    return true;
+                  } catch {
+                    return false;
+                  }
+                }}
+                onCreateTemplate={input => createTemplate.mutate(input)}
+                onUpdateTemplate={(template, updates) =>
+                  updateTemplate.mutate({ id: template.id, ...updates })
                 }
-              }}
-              onCreateTemplate={input => createTemplate.mutate(input)}
-              onUpdateTemplate={(template, updates) =>
-                updateTemplate.mutate({ id: template.id, ...updates })
-              }
-              onDeleteTemplate={id => deleteTemplate.mutate({ id })}
-              onToggleSubflow={(subflow, isEnabled) =>
-                updateSubflow.mutate({ id: subflow.id, isEnabled })
-              }
-              onDeleteSubflow={id => deleteSubflow.mutate({ id })}
-              onGrant={async (userId, role, hours) => {
-                if (selectedId)
-                  await grantMember.mutateAsync({
-                    workflowId: selectedId,
-                    userId,
-                    role,
-                    expiresAt: hours
-                      ? new Date(Date.now() + hours * 60 * 60 * 1000)
-                      : undefined,
-                  });
-              }}
-              onRevoke={(userId, role) => {
-                if (selectedId)
-                  revokeMember.mutate({ workflowId: selectedId, userId, role });
-              }}
-            />
-          )}
+                onDeleteTemplate={id => deleteTemplate.mutate({ id })}
+                onToggleSubflow={(subflow, isEnabled) =>
+                  updateSubflow.mutate({ id: subflow.id, isEnabled })
+                }
+                onDeleteSubflow={id => deleteSubflow.mutate({ id })}
+                onGrant={async (userId, role, hours) => {
+                  if (selectedId)
+                    await grantMember.mutateAsync({
+                      workflowId: selectedId,
+                      userId,
+                      role,
+                      expiresAt: hours
+                        ? new Date(Date.now() + hours * 60 * 60 * 1000)
+                        : undefined,
+                    });
+                }}
+                onRevoke={(userId, role) => {
+                  if (selectedId)
+                    revokeMember.mutate({
+                      workflowId: selectedId,
+                      userId,
+                      role,
+                    });
+                }}
+              />
+            ))}
           {section === "runs" && !routeRestoring && (
             <div>
               <div
