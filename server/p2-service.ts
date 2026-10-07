@@ -1625,7 +1625,15 @@ async function runDataflowDefinition(
           idempotencyKey,
         };
       } else if (["end", "output"].includes(String(node.type)))
-        output = { rows: rowsFromInput(inputs), stage: "output" };
+        output = {
+          rows: rowsFromInput(inputs),
+          stage: "output",
+          ...(String(node.type) === "output"
+            ? { outputName: String(config.outputName ?? "result").trim() }
+            : inputs.length === 1 && typeof inputs[0]?.outputName === "string"
+              ? { outputName: inputs[0].outputName }
+              : {}),
+        };
       else throw new Error(`数据流节点类型 ${String(node.type)} 尚未启用。`);
       const outputRows = normalizeRows(output.rows);
       const schema = inferDatasetSchema(output);

@@ -61,3 +61,18 @@ it("忽略无最终数据的元信息并兼容原始值行", () => {
   ]);
   expect(dataflowTerminalResults({ nodes: [] })).toEqual([]);
 });
+
+it("优先显示明确配置的输出名称，并保留节点名称作为回退", () => {
+  expect(
+    dataflowTerminalResults({
+      terminals: [
+        {
+          outputName: "金额明细",
+          nodeName: "金额结果",
+          rows: [{ amount: 10 }],
+        },
+        { nodeName: "业务键结果", rows: [] },
+      ],
+    }).map(result => result.name)
+  ).toEqual(["金额明细", "业务键结果"]);
+});

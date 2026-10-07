@@ -60,7 +60,7 @@ if (stage === "prepare") {
     ["left", "map", "业务键投影", { columns: ["key"], limit: 100 }],
     ["right", "map", "金额投影", { columns: ["amount"], limit: 100 }],
     ["end", "end", "业务键结果", {}],
-    ["output", "output", "金额结果", {}],
+    ["output", "output", "金额结果", { outputName: "金额明细" }],
   ];
   const workflow = await admin.request(
     "project.createWorkflow",
@@ -77,7 +77,10 @@ if (stage === "prepare") {
           type,
           name,
           config,
-          position: { x: Math.min(i, 3) * 240, y: (i % 2) * 160 },
+          position: {
+            x: (i === 0 ? 0 : i === 1 ? 1 : i < 4 ? 2 : 3) * 240,
+            y: i === 3 || i === 5 ? 180 : 0,
+          },
         })),
         edges: [
           ["start", "source"],

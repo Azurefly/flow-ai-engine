@@ -3377,3 +3377,17 @@ it("设计器权限未加载时明确等待，读取失败可重试", () => {
   expect(homeSource).toContain("读取流程权限失败：");
   expect(homeSource).toContain("重新读取流程权限");
 });
+
+it("数据输出执行器保留实际配置的结果名称", () => {
+  expect(source("./p2-service.ts")).toContain(
+    'outputName: String(config.outputName ?? "result").trim()'
+  );
+});
+
+it("运行监控同样支持全部最终结果集选择", () => {
+  expect(dataResourceSource).toContain("dataflowTerminalResults(result)");
+  expect(dataResourceSource).toContain("选择运行监控结果集");
+  expect(dataResourceSource).toContain(
+    "const terminal = dataResults[selectedTerminal]"
+  );
+});

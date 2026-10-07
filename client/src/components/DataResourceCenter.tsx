@@ -4,6 +4,7 @@ import {
 } from "@shared/builtin-data-functions";
 import {
   dataflowResultColumns,
+  dataflowTerminalResults,
   dataflowResultPage,
 } from "@shared/dataflow-result-preview";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
@@ -1240,6 +1241,7 @@ function formatDataflowValue(value: unknown): string {
 
 function DataflowRunOutput({ run }: { run: any }) {
   const [resultPageIndex, setResultPageIndex] = useState(0);
+  const [selectedTerminal, setSelectedTerminal] = useState(0);
   const [showRaw, setShowRaw] = useState(false);
   const rawResult = run.output ??
     run.error ?? { message: "当前运行未生成额外输出。" };
@@ -1250,8 +1252,8 @@ function DataflowRunOutput({ run }: { run: any }) {
       : Array.isArray(result?.nodes)
         ? result.nodes
         : [];
-  const terminals = Array.isArray(result?.terminals) ? result.terminals : [];
-  const terminal = terminals.find((item: any) => Array.isArray(item?.rows));
+  const dataResults = dataflowTerminalResults(result);
+  const terminal = dataResults[selectedTerminal];
   const lastNode = [...(Array.isArray(result?.nodes) ? result.nodes : [])]
     .reverse()
     .find((node: any) => Array.isArray(node?.output?.rows));
@@ -1282,6 +1284,26 @@ function DataflowRunOutput({ run }: { run: any }) {
 
   return (
     <div dataflow-output-summary="" className="mt-3 space-y-3">
+      {dataResults.length > 1 && (
+        <label className="aiflow-type-control flex flex-wrap items-center gap-2">
+          结果集
+          <select
+            aria-label="选择运行监控结果集"
+            className="h-11 max-w-full rounded-md border border-border bg-background px-3 min-[1024px]:h-9"
+            value={selectedTerminal}
+            onChange={event => {
+              setSelectedTerminal(Number(event.target.value));
+              setResultPageIndex(0);
+            }}
+          >
+            {dataResults.map((item, index) => (
+              <option key={index} value={index}>
+                {item.name} · {item.rows.length} 行
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="rounded-md border border-border bg-muted px-3 py-2">
           <p className="aiflow-type-meta text-muted-foreground">执行节点</p>
