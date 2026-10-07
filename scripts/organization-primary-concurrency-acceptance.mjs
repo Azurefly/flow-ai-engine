@@ -62,12 +62,33 @@ try {
       true
     );
     units.push(unit);
-    await admin.request(
-      "config.assignOrganizationMember",
-      { unitId: unit.id, userId, isPrimary: false },
-      true
-    );
   }
+  const assertConcurrentSuccess = async requests => {
+    const results = await Promise.allSettled(requests);
+    assert.equal(
+      results.filter(r => r.status === "fulfilled").length,
+      requests.length,
+      JSON.stringify(
+        results.filter(r => r.status === "rejected").map(r => r.reason.message)
+      )
+    );
+  };
+  const readOwn = async () =>
+    (await admin.request("config.organization", {})).members.filter(
+      m => Number(m.userId) === userId
+    );
+  await assertConcurrentSuccess(
+    units.map((unit, i) =>
+      admin.request(
+        "config.assignOrganizationMember",
+        { unitId: unit.id, userId, isPrimary: true, title: `测试岗位${i}` },
+        true
+      )
+    )
+  );
+  const assigned = await readOwn();
+  assert.equal(assigned.length, 2);
+  assert.equal(assigned.filter(m => m.isPrimary).length, 1);
   for (let attempt = 0; attempt < 5; attempt++) {
     const results = await Promise.allSettled(
       units.map(unit =>
@@ -94,12 +115,62 @@ try {
       "Concurrent primary changes must leave exactly one primary membership"
     );
   }
+  const target = await admin.request(
+    "config.createOrganizationUnit",
+    { code: `PRIMARY_${tag}_C`.toUpperCase(), name: `迁移目标_${tag}` },
+    true
+  );
+  units.push(target);
+  await assertConcurrentSuccess([
+    admin.request(
+      "config.moveOrganizationMember",
+      {
+        fromUnitId: units[0].id,
+        toUnitId: target.id,
+        userId,
+        makePrimary: true,
+      },
+      true
+    ),
+    admin.request(
+      "config.setPrimaryOrganizationMembership",
+      { unitId: units[1].id, userId },
+      true
+    ),
+  ]);
+  const moved = await readOwn();
+  assert.equal(moved.length, 2);
+  assert.equal(
+    moved.some(m => m.unitId === units[0].id),
+    false
+  );
+  assert.equal(moved.find(m => m.unitId === target.id).title, "测试岗位0");
+  assert.equal(moved.filter(m => m.isPrimary).length, 1);
+  await assertConcurrentSuccess([
+    admin.request(
+      "config.removeOrganizationMember",
+      { unitId: target.id, userId },
+      true
+    ),
+    admin.request(
+      "config.setPrimaryOrganizationMembership",
+      { unitId: units[1].id, userId },
+      true
+    ),
+  ]);
+  const remaining = await readOwn();
+  assert.equal(remaining.length, 1);
+  assert.equal(remaining[0].unitId, units[1].id);
+  assert.equal(Boolean(remaining[0].isPrimary), true);
   console.log(
     JSON.stringify({
       userId,
       units: units.map(u => u.id),
       concurrentRounds: 5,
-      requestsSucceeded: 10,
+      requestsSucceeded: 16,
+      concurrentAssign: true,
+      concurrentMove: true,
+      concurrentRemove: true,
       primaryCount: 1,
     })
   );
