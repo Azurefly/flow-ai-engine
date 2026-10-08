@@ -1403,7 +1403,19 @@ async function executeInlineDefinition(
       .filter(
         edge =>
           edge.sourceNodeId === node.id &&
-          (!result.route || (edge.sourceHandle ?? "default") === result.route)
+          (node.type === "router" &&
+          Array.isArray(result.routeTargets) &&
+          result.routeTargets.length
+            ? result.routeTargets.some(target => {
+                const branch = asRecord(target);
+                const targetNodeId = String(branch.targetNodeId ?? "");
+                return targetNodeId
+                  ? edge.targetNodeId === targetNodeId
+                  : (edge.sourceHandle ?? "default") ===
+                      String(branch.handle ?? result.route ?? "default");
+              })
+            : !result.route ||
+              (edge.sourceHandle ?? "default") === result.route)
       )
       .forEach(edge => queue.push(edge.targetNodeId));
   }
