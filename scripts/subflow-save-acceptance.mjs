@@ -103,9 +103,14 @@ if (stage === "prepare") {
     typeof subflow.definition === "string"
       ? JSON.parse(subflow.definition)
       : subflow.definition;
+  assert.deepEqual(child.nodes.map(n => n.type).sort(), [
+    "end",
+    "start",
+    "transform",
+  ]);
   assert.deepEqual(
-    child.nodes.map(n => n.type),
-    ["start", "transform", "end"]
+    child.edges.map(e => `${e.sourceNodeId}->${e.targetNodeId}`).sort(),
+    ["map->end", "start->map"]
   );
   assert.deepEqual(child.nodes.find(n => n.id === "map").config.mappings, {
     echo: "{{input.businessKey}}",
@@ -151,7 +156,12 @@ if (stage === "prepare") {
           { subflowId: subflow.id, input: "{{input}}" },
           260
         ),
-        node("end", "end", { resultTemplate: "{{vars.child.result}}" }, 520),
+        node(
+          "end",
+          "end",
+          { resultTemplate: "{{vars.child.result.result}}" },
+          520
+        ),
       ]),
     },
     true
@@ -176,7 +186,11 @@ if (stage === "prepare") {
       await new Promise(resolve => setTimeout(resolve, 500));
     }
     assert.equal(run.status, "success", JSON.stringify(run.errorJson));
-    assert.deepEqual(run.outputJson, { echo: "00123" });
+    const output =
+      typeof run.finalOutputJson === "string"
+        ? JSON.parse(run.finalOutputJson)
+        : run.finalOutputJson;
+    assert.deepEqual(output, { result: { echo: "00123" } });
     assert.deepEqual(
       run.nodeRuns.map(n => n.nodeType),
       ["start", "subflow", "end"]
@@ -190,7 +204,7 @@ if (stage === "prepare") {
         parentWorkflowId: parent.id,
         runId: started.runId,
         status: run.status,
-        output: run.outputJson,
+        output,
         browserSaveAndRuntimeVerified: true,
       })
     );
