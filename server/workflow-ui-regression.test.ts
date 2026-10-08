@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_382 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 408 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_383 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 409 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3439,4 +3439,19 @@ it("节点明细展示中文类型并保留节点标识，内部渲染类型不�
   expect(monitor).toContain("node.nodeName || node.nodeId");
   expect(monitor).toContain("nodeType={node.nodeType}");
   expect(dataResourceSource).toContain("workflowNodeTypeLabel(node.nodeType)");
+});
+
+it("节点与模板命名使用站内弹窗，等待服务端结果并保留失败输入", () => {
+  const canvas = source("../client/src/components/WorkflowCanvas.tsx");
+  const dialog = source("../client/src/components/CanvasNameDialog.tsx");
+  const home = source("../client/src/pages/Home.tsx");
+  expect(canvas).not.toContain("window.prompt");
+  expect(canvas).toContain("CanvasNameDialog");
+  expect(dialog).toContain("await onSave(trimmed)");
+  expect(dialog).toContain("maxLength={160}");
+  expect(dialog).toContain('role="alert"');
+  expect(home).toContain("createTemplate.mutateAsync(input)");
+  expect(home).toContain(
+    "updateTemplate.mutateAsync({ id: template.id, ...updates })"
+  );
 });

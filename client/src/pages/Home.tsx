@@ -1886,9 +1886,9 @@ function FlowConsole({
                     return false;
                   }
                 }}
-                onCreateTemplate={input => createTemplate.mutate(input)}
+                onCreateTemplate={input => createTemplate.mutateAsync(input)}
                 onUpdateTemplate={(template, updates) =>
-                  updateTemplate.mutate({ id: template.id, ...updates })
+                  updateTemplate.mutateAsync({ id: template.id, ...updates })
                 }
                 onDeleteTemplate={id => deleteTemplate.mutate({ id })}
                 onToggleSubflow={(subflow, isEnabled) =>
@@ -2199,8 +2199,8 @@ function FlowDesigner({
   onDuplicate: () => void;
   onDelete: () => void;
   onSaveAsSubflow: () => Promise<boolean>;
-  onCreateTemplate: (input: any) => void;
-  onUpdateTemplate: (template: any, updates: any) => void;
+  onCreateTemplate: (input: any) => Promise<unknown>;
+  onUpdateTemplate: (template: any, updates: any) => Promise<unknown>;
   onDeleteTemplate: (id: string) => void;
   onToggleSubflow: (subflow: any, isEnabled: boolean) => void;
   onDeleteSubflow: (id: string) => void;

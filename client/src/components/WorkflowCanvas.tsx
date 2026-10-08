@@ -1,3 +1,4 @@
+import { CanvasNameDialog } from "./CanvasNameDialog";
 import {
   dataflowInputFields,
   usesDataflowInputFieldSuggestions,
@@ -2346,16 +2347,24 @@ export default function WorkflowCanvas({
   onDefinitionChange?: (definition: Definition) => void;
   templates?: ReuseTemplate[];
   subflows?: ReuseSubflow[];
-  onSaveTemplate?: (template: Omit<ReuseTemplate, "id">) => void;
+  onSaveTemplate?: (
+    template: Omit<ReuseTemplate, "id">
+  ) => void | Promise<unknown>;
   onUpdateTemplate?: (
     template: ReuseTemplate,
     updates: { name?: string; config?: NodeConfig }
-  ) => void;
+  ) => void | Promise<unknown>;
   onDeleteTemplate?: (id: string) => void;
   onToggleSubflow?: (subflow: ReuseSubflow, isEnabled: boolean) => void;
   onDeleteSubflow?: (id: string) => void;
   showCanvasActions?: boolean;
 }) {
+  const [nameDialog, setNameDialog] = useState<{
+    title: string;
+    initialName: string;
+    onSave: (name: string) => void | Promise<unknown>;
+  } | null>(null);
+  useEffect(() => setNameDialog(null), [workflowId, readOnly]);
   const initial = definition ?? defaultDefinition();
   const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(
     toFlowNodes(initial)
@@ -4219,24 +4228,21 @@ export default function WorkflowCanvas({
                             type="button"
                             className="block w-full px-3 py-2 text-left hover:bg-muted"
                             onClick={() => {
-                              const name = window.prompt(
-                                "修改节点名称",
-                                String(targetNode.data.label)
-                              );
-                              if (name?.trim())
-                                setNodes(current =>
-                                  current.map(item =>
-                                    item.id === targetNode.id
-                                      ? {
-                                          ...item,
-                                          data: {
-                                            ...item.data,
-                                            label: name.trim(),
-                                          },
-                                        }
-                                      : item
-                                  )
-                                );
+                              setNameDialog({
+                                title: "修改节点名称",
+                                initialName: String(targetNode.data.label),
+                                onSave: name =>
+                                  setNodes(current =>
+                                    current.map(item =>
+                                      item.id === targetNode.id
+                                        ? {
+                                            ...item,
+                                            data: { ...item.data, label: name },
+                                          }
+                                        : item
+                                    )
+                                  ),
+                              });
                               closeContextMenu();
                             }}
                           >
@@ -4917,17 +4923,19 @@ export default function WorkflowCanvas({
                       className="w-full rounded-lg"
                       disabled={inspectorDisabled}
                       onClick={() => {
-                        const name = window.prompt(
-                          "节点模板名称",
-                          String(selected.data.label ?? "未命名模板")
-                        );
-                        if (name?.trim())
-                          onSaveTemplate?.({
-                            name: name.trim(),
-                            nodeType: selected.data
-                              .kind as ReuseTemplate["nodeType"],
-                            config: selectedConfig,
-                          });
+                        setNameDialog({
+                          title: "保存为节点模板",
+                          initialName: String(
+                            selected.data.label ?? "未命名模板"
+                          ),
+                          onSave: name =>
+                            onSaveTemplate?.({
+                              name,
+                              nodeType: selected.data
+                                .kind as ReuseTemplate["nodeType"],
+                              config: structuredClone(selectedConfig),
+                            }),
+                        });
                       }}
                     >
                       <Save size={13} />
@@ -4971,9 +4979,14 @@ export default function WorkflowCanvas({
                         type="button"
                         className="text-indigo-700 hover:underline"
                         onClick={() => {
-                          const name = window.prompt("模板名称", template.name);
-                          if (name?.trim() && name !== template.name)
-                            onUpdateTemplate?.(template, { name: name.trim() });
+                          setNameDialog({
+                            title: "修改模板名称",
+                            initialName: template.name,
+                            onSave: name =>
+                              name === template.name
+                                ? undefined
+                                : onUpdateTemplate?.(template, { name }),
+                          });
                         }}
                       >
                         改名
@@ -5037,6 +5050,9 @@ export default function WorkflowCanvas({
             </div>
           )}
         </aside>
+      )}
+      {nameDialog && (
+        <CanvasNameDialog {...nameDialog} onClose={() => setNameDialog(null)} />
       )}
     </div>
   );
