@@ -1,3 +1,4 @@
+import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import {
   builtinDataFunctions,
   dataFunctionTypeLabel,
@@ -1452,7 +1453,7 @@ function DataflowRunOutput({ run }: { run: any }) {
                       {node.nodeId ?? `节点 ${index + 1}`}
                     </td>
                     <td className="aiflow-type-meta px-2 py-1.5 text-muted-foreground">
-                      {node.nodeType ?? "—"}
+                      {workflowNodeTypeLabel(node.nodeType)}
                     </td>
                     <td className="aiflow-type-meta px-2 py-1.5 text-right tabular-nums text-foreground">
                       {node.rowCount ?? "—"}

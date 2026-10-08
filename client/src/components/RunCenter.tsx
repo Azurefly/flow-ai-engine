@@ -1,3 +1,4 @@
+import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import {
   Dialog,
   DialogContent,
@@ -862,10 +863,13 @@ export default function RunCenter({
                           className={`h-2 w-2 rounded-full ${node.status === "success" ? "bg-emerald-500" : node.status === "failed" ? "bg-red-500" : "bg-slate-400"}`}
                         />
                         <span className="min-w-0 break-words">
-                          {node.nodeName}
+                          {node.nodeName || node.nodeId}
+                        </span>
+                        <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-muted-foreground">
+                          {workflowNodeTypeLabel(node.nodeType)}
                         </span>
                         <code className="aiflow-type-code min-w-0 max-w-full break-words text-muted-foreground [overflow-wrap:anywhere]">
-                          {node.nodeType}
+                          {node.nodeId}
                         </code>
                       </span>
                       <span className="aiflow-type-meta shrink-0 text-muted-foreground">

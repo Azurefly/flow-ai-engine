@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_381 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_382 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 408 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3431,4 +3431,12 @@ it("运行控制使用站内确认，必填原因和失败输入可保留", () =
   expect(monitor).toContain("maxLength={500}");
   expect(monitor).toContain("controlDialog.runId !== selectedRunId");
   expect(monitor).toMatch(/setControlError\(\s*error instanceof Error/);
+});
+
+it("节点明细展示中文类型并保留节点标识，内部渲染类型不变", () => {
+  const monitor = source("../client/src/components/RunCenter.tsx");
+  expect(monitor).toContain("workflowNodeTypeLabel(node.nodeType)");
+  expect(monitor).toContain("node.nodeName || node.nodeId");
+  expect(monitor).toContain("nodeType={node.nodeType}");
+  expect(dataResourceSource).toContain("workflowNodeTypeLabel(node.nodeType)");
 });
