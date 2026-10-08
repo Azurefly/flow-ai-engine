@@ -1,3 +1,7 @@
+import {
+  isTemplateNodeType,
+  type TemplateNodeType,
+} from "../shared/workflow-template";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
@@ -118,14 +122,6 @@ type VersionSource =
   | "published"
   | "unpublished"
   | "rolled_back";
-type TemplateNodeType = Exclude<Node["type"], "start" | "end" | "subflow">;
-
-const templateNodeTypes = new Set<TemplateNodeType>([
-  "llm",
-  "http",
-  "transform",
-  "condition",
-]);
 
 function parseJson(value: unknown) {
   if (typeof value !== "string") return value;
@@ -855,7 +851,7 @@ export async function createNodeTemplate(
     config: unknown;
   }
 ) {
-  if (!templateNodeTypes.has(input.nodeType))
+  if (!isTemplateNodeType(input.nodeType))
     throw new Error("该节点类型不能保存为模板。");
   const config = assertJsonObject(
     input.config,

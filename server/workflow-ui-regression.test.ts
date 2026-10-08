@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_383 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_384 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 409 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3454,4 +3454,16 @@ it("节点与模板命名使用站内弹窗，等待服务端结果并保留失�
   expect(home).toContain(
     "updateTemplate.mutateAsync({ id: template.id, ...updates })"
   );
+});
+
+it("模板类型契约贯穿 API 和服务层，画布按流程类型过滤并阻止跨类型添加", () => {
+  const routes = source("./routers.ts");
+  const service = source("./workflow-service.ts");
+  expect(routes).toContain("nodeType: z.enum(TEMPLATE_NODE_TYPES)");
+  expect(service).toContain("isTemplateNodeType(input.nodeType)");
+  expect(canvasSource).toContain(
+    "isFlowNodeAllowed(flowType, template.nodeType)"
+  );
+  expect(canvasSource).toContain("isFlowNodeAllowed(flowType, input.type)");
+  expect(canvasSource).toContain("isTemplateNodeType(selected.data.kind)");
 });

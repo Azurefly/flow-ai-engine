@@ -1,3 +1,4 @@
+import { TEMPLATE_NODE_TYPES } from "../shared/workflow-template";
 import { previewOperateApproval } from "./workflow-approval-preview";
 import { parse } from "cookie";
 import { searchWorkflowParticipants } from "./workflow-participant-directory";
@@ -1744,7 +1745,7 @@ export const appRouter = router({
         z.object({
           name: z.string().trim().min(1).max(160),
           description: z.string().trim().max(500).optional(),
-          nodeType: z.enum(["llm", "http", "transform", "condition"]),
+          nodeType: z.enum(TEMPLATE_NODE_TYPES),
           config: z.record(z.string(), z.unknown()),
         })
       )

@@ -1,3 +1,7 @@
+import {
+  isTemplateNodeType,
+  type TemplateNodeType,
+} from "@shared/workflow-template";
 import { CanvasNameDialog } from "./CanvasNameDialog";
 import {
   dataflowInputFields,
@@ -132,7 +136,7 @@ type CanvasNode = Node<FlowNodeData, "workflowNode">;
 type ReuseTemplate = {
   id: string;
   name: string;
-  nodeType: Exclude<NodeKind, "start" | "end" | "subflow">;
+  nodeType: TemplateNodeType;
   config: NodeConfig;
 };
 type ReuseSubflow = { id: string; name: string; isEnabled: boolean };
@@ -2938,6 +2942,10 @@ export default function WorkflowCanvas({
 
   const addNode = (item: (typeof palette)[number]) => {
     if (readOnly) return;
+    if (!isFlowNodeAllowed(flowType, item.type)) {
+      toast.error("当前流程类型不支持此节点，请切换到适用的流程。");
+      return;
+    }
     pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
     setNodes(current =>
@@ -2963,6 +2971,10 @@ export default function WorkflowCanvas({
     config: NodeConfig;
   }) => {
     if (readOnly) return;
+    if (!isFlowNodeAllowed(flowType, input.type)) {
+      toast.error("当前流程类型不支持此节点，请切换到适用的流程。");
+      return;
+    }
     pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
     setNodes(current =>
@@ -2980,6 +2992,9 @@ export default function WorkflowCanvas({
         },
       })
     );
+    setSelectedId(`${input.type}-${suffix}`);
+    setSelectedEdgeId(null);
+    setInspectorMode("normal");
   };
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
@@ -3779,8 +3794,9 @@ export default function WorkflowCanvas({
   const normalizedReuseSearch = reuseSearch.trim().toLowerCase();
   const visibleTemplates = templates.filter(
     template =>
-      !normalizedReuseSearch ||
-      template.name.toLowerCase().includes(normalizedReuseSearch)
+      isFlowNodeAllowed(flowType, template.nodeType) &&
+      (!normalizedReuseSearch ||
+        template.name.toLowerCase().includes(normalizedReuseSearch))
   );
   const visibleSubflows = enabledSubflows.filter(
     subflow =>
@@ -4914,7 +4930,7 @@ export default function WorkflowCanvas({
                     </div>
                   </section>
                 )}
-                {!readOnly && (
+                {!readOnly && isTemplateNodeType(selected.data.kind) && (
                   <div className="p-4 pt-0">
                     <Button
                       type="button"
@@ -4994,6 +5010,14 @@ export default function WorkflowCanvas({
                       <button
                         type="button"
                         className="text-indigo-700 hover:underline"
+                        disabled={
+                          !isFlowNodeAllowed(flowType, template.nodeType)
+                        }
+                        title={
+                          !isFlowNodeAllowed(flowType, template.nodeType)
+                            ? "当前流程类型不支持此模板"
+                            : undefined
+                        }
                         onClick={() =>
                           addReusableNode({
                             type: template.nodeType,
