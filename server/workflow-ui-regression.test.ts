@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_387 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_388 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 410 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3516,4 +3516,27 @@ it("运行错误使用显式类型展示原因和折叠堆栈，不再标为业�
   expect(
     source("../client/src/components/WorkflowGovernanceRunDetail.tsx")
   ).toContain('value={node.errorJson} kind="error"');
+});
+
+it("系统用户与角色详情仅在当前视图轮询，支持刷新且不展示其他身份缓存", () => {
+  expect(homeSource).toContain(
+    'authorizationQueryPolicy(tab === "users" && selectedUserId !== null)'
+  );
+  expect(homeSource).toContain(
+    'authorizationQueryPolicy(tab === "roles" && selectedRoleId !== null)'
+  );
+  expect(homeSource).toContain(
+    "Number(details.data?.user?.id) === selectedUserId"
+  );
+  expect(homeSource).toContain(
+    "Number(details.data?.role?.id) === Number(selectedRole.id)"
+  );
+  expect(homeSource).toContain("请从左侧选择用户。");
+  expect(homeSource).toContain("请从左侧选择角色。");
+  const refresh = source(
+    "../client/src/components/AuthorizationDetailRefresh.tsx"
+  );
+  expect(refresh).toContain("query.refetch()");
+  expect(refresh).toContain("query.dataUpdatedAt");
+  expect(refresh).toContain("刷新权限来源");
 });

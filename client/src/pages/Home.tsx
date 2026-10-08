@@ -1,3 +1,5 @@
+import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
+import { AuthorizationDetailRefresh } from "@/components/AuthorizationDetailRefresh";
 import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
 import { shouldResetRunRoute } from "@shared/run-route-guard";
@@ -3500,7 +3502,7 @@ function IamCenter({
       offset: userPage * userPageSize,
       limit: userPageSize,
     },
-    { retry: false }
+    { enabled: tab === "users", retry: false }
   );
   const roleAssignmentUsers = trpc.iam.roleAssignableUsers.useQuery(
     {
@@ -3509,10 +3511,9 @@ function IamCenter({
       offset: roleCandidatePage * userPageSize,
       limit: userPageSize,
     },
-    {
-      enabled: assignmentDialog?.mode === "role" && selectedRoleId !== null,
-      retry: false,
-    }
+    authorizationQueryPolicy(
+      assignmentDialog?.mode === "role" && selectedRoleId !== null
+    )
   );
   const roleCandidateTotal = roleAssignmentUsers.data?.total ?? 0;
   const roleCandidatePageCount = Math.max(
@@ -3525,11 +3526,11 @@ function IamCenter({
   const utils = trpc.useUtils();
   const userDetails = trpc.iam.userAuthorizationDetails.useQuery(
     { userId: selectedUserId ?? 1 },
-    { enabled: selectedUserId !== null, retry: false }
+    authorizationQueryPolicy(tab === "users" && selectedUserId !== null)
   );
   const roleDetails = trpc.iam.roleAuthorizationDetails.useQuery(
     { roleId: selectedRoleId ?? 1 },
-    { enabled: selectedRoleId !== null, retry: false }
+    authorizationQueryPolicy(tab === "roles" && selectedRoleId !== null)
   );
   const roleCandidateUsers = roleAssignmentUsers.data?.items ?? [];
   const assignSystemRole = trpc.iam.assignSystemRole.useMutation({
@@ -3652,10 +3653,7 @@ function IamCenter({
     userPage,
     userPageCount,
   ]);
-  useEffect(() => {
-    if (selectedRoleId === null && roles[0])
-      setSelectedRoleId(Number(roles[0].id));
-  }, [roles, selectedRoleId]);
+
   useEffect(() => {
     if (
       assignmentDialog?.mode === "role" &&
@@ -3670,6 +3668,10 @@ function IamCenter({
     roleCandidatePageCount,
   ]);
   useEffect(() => {
+    if (!filteredRoles.length) {
+      if (selectedRoleId !== null) setSelectedRoleId(null);
+      return;
+    }
     if (
       filteredRoles.length &&
       !filteredRoles.some(role => Number(role.id) === selectedRoleId)
@@ -4504,6 +4506,7 @@ function IamCenter({
           </section>
           <section className="sticky top-4 hidden min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card min-[1024px]:block">
             <UserAuthorizationPanel
+              selectedUserId={selectedUserId}
               details={userDetails}
               onAssign={openUserAssignment}
               onRevoke={setPendingRevokeRoleId}
@@ -4523,6 +4526,7 @@ function IamCenter({
               </DialogHeader>
               <div className="max-h-[70vh] overflow-y-auto pr-1">
                 <UserAuthorizationPanel
+                  selectedUserId={selectedUserId}
                   details={userDetails}
                   onAssign={openUserAssignment}
                   onRevoke={setPendingRevokeRoleId}
@@ -5033,17 +5037,23 @@ function IamCenter({
 
 function UserAuthorizationPanel({
   details,
+  selectedUserId,
   onAssign,
   onRevoke,
   revoking,
   embedded = false,
 }: {
   details: any;
+  selectedUserId: number | null;
   onAssign: () => void;
   onRevoke: (assignmentId: string) => void;
   revoking: boolean;
   embedded?: boolean;
 }) {
+  const data =
+    selectedUserId && Number(details.data?.user?.id) === selectedUserId
+      ? details.data
+      : null;
   return (
     <>
       <div
@@ -5058,39 +5068,44 @@ function UserAuthorizationPanel({
         <Button
           size="sm"
           className="aiflow-type-control h-11 shrink-0 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10"
-          disabled={
-            !details.data ||
-            details.isLoading ||
-            details.data.user.status !== "active"
-          }
+          disabled={!data || details.isLoading || data.user.status !== "active"}
           onClick={onAssign}
         >
           <Plus size={13} />
           绑定角色
         </Button>
       </div>
+      <AuthorizationDetailRefresh
+        query={details}
+        label="刷新用户权限详情"
+        disabled={!selectedUserId}
+        embedded={embedded}
+      />
       <div
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
-        {details.isLoading && (
+        {!selectedUserId && (
+          <p className="text-muted-foreground">请从左侧选择用户。</p>
+        )}
+        {selectedUserId && details.isLoading && (
           <p className="text-muted-foreground">正在读取角色与权限…</p>
         )}
-        {details.error && (
+        {selectedUserId && details.error && (
           <p className="break-words text-aiflow-danger">
             {details.error.message}
           </p>
         )}
-        {details.data && (
+        {data && (
           <div className="space-y-4">
             <div>
               <p className="aiflow-type-body break-words font-semibold text-foreground">
-                {details.data.user.name || details.data.user.username}
+                {data.user.name || data.user.username}
               </p>
               <p className="break-all font-mono text-muted-foreground">
-                {details.data.user.username}
+                {data.user.username}
               </p>
             </div>
-            {details.data.user.status !== "active" && (
+            {data.user.status !== "active" && (
               <p
                 role="status"
                 className="rounded-lg bg-aiflow-warning-surface p-3 text-aiflow-warning"
@@ -5100,25 +5115,25 @@ function UserAuthorizationPanel({
             )}
             <RoleDetailGroup
               title="直接角色"
-              roles={details.data.directRoles}
+              roles={data.directRoles}
               source="直接授权"
               onRevoke={onRevoke}
               revoking={revoking}
             />
             <RoleDetailGroup
               title="组织继承角色"
-              roles={details.data.inheritedRoles}
+              roles={data.inheritedRoles}
               source="组织继承"
             />
             <div>
               <p className="mb-2 font-semibold text-foreground">
-                系统级有效权限（{details.data.effectivePermissions.length}）
+                系统级有效权限（{data.effectivePermissions.length}）
               </p>
               <p className="mb-2 text-muted-foreground">
                 仅列出系统范围内的有效权限。具体流程还需结合该业务的项目成员与流程成员授权。
               </p>
               <div className="grid gap-1.5 sm:grid-cols-2">
-                {details.data.effectivePermissions.map((permission: any) => (
+                {data.effectivePermissions.map((permission: any) => (
                   <div
                     key={permission.code}
                     className="min-w-0 rounded-md bg-muted p-2"
@@ -5131,7 +5146,7 @@ function UserAuthorizationPanel({
                     </p>
                   </div>
                 ))}
-                {!details.data.effectivePermissions.length && (
+                {!data.effectivePermissions.length && (
                   <p className="text-muted-foreground">无</p>
                 )}
               </div>
@@ -5154,6 +5169,11 @@ function RoleAuthorizationPanel({
   onAssign: () => void;
   embedded?: boolean;
 }) {
+  const data =
+    selectedRole?.id &&
+    Number(details.data?.role?.id) === Number(selectedRole.id)
+      ? details.data
+      : null;
   const assignable = selectedRole?.scope === "system";
   return (
     <>
@@ -5173,35 +5193,44 @@ function RoleAuthorizationPanel({
         <Button
           size="sm"
           className="aiflow-type-control h-11 min-h-11 shrink-0 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10 min-[1024px]:min-h-10"
-          disabled={!details.data || details.isLoading || !assignable}
+          disabled={!data || details.isLoading || !assignable}
           onClick={onAssign}
         >
           <Plus size={13} />
           {assignable ? "绑定用户" : "流程内绑定"}
         </Button>
       </div>
+      <AuthorizationDetailRefresh
+        query={details}
+        label="刷新角色权限详情"
+        disabled={!selectedRole?.id}
+        embedded={embedded}
+      />
       <div
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
-        {details.isLoading && (
+        {!selectedRole?.id && (
+          <p className="text-muted-foreground">请从左侧选择角色。</p>
+        )}
+        {selectedRole?.id && details.isLoading && (
           <p className="text-muted-foreground">正在读取角色绑定…</p>
         )}
-        {details.error && (
+        {selectedRole?.id && details.error && (
           <p className="break-words text-aiflow-danger">
             {details.error.message}
           </p>
         )}
-        {details.data && (
+        {data && (
           <div className="space-y-5">
             <div>
               <p className="aiflow-type-section-title break-words font-semibold text-foreground">
-                {details.data.role.name}
+                {data.role.name}
               </p>
               <p className="mt-1 break-all font-mono text-aiflow-info">
-                {details.data.role.code}
+                {data.role.code}
               </p>
               <p className="mt-1 break-words leading-5 text-muted-foreground">
-                {details.data.role.description || "未填写角色说明"}
+                {data.role.description || "未填写角色说明"}
               </p>
               {!assignable && (
                 <p className="mt-2 rounded-md bg-aiflow-warning-surface px-3 py-2 leading-5 text-aiflow-warning">
@@ -5211,10 +5240,10 @@ function RoleAuthorizationPanel({
             </div>
             <div>
               <p className="mb-2 font-semibold text-foreground">
-                权限清单（{details.data.permissions.length}）
+                权限清单（{data.permissions.length}）
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
-                {details.data.permissions.map((permission: any) => (
+                {data.permissions.map((permission: any) => (
                   <div
                     key={permission.code}
                     className="min-w-0 rounded-md border border-border bg-muted p-2"
@@ -5231,19 +5260,19 @@ function RoleAuthorizationPanel({
             </div>
             <UserBindingGroup
               title="直接绑定用户"
-              users={details.data.directUsers}
+              users={data.directUsers}
               source="直接授权"
             />
             <UserBindingGroup
               title="组织继承用户"
-              users={details.data.inheritedUsers}
+              users={data.inheritedUsers}
               source="组织继承"
             />
-            {details.data.organizationUnits.length > 0 && (
+            {data.organizationUnits.length > 0 && (
               <div>
                 <p className="mb-2 font-semibold text-foreground">绑定组织</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {details.data.organizationUnits.map((unit: any) => (
+                  {data.organizationUnits.map((unit: any) => (
                     <span
                       key={unit.id}
                       className="max-w-full break-words rounded-full bg-aiflow-special-surface px-2.5 py-1 text-aiflow-special"
