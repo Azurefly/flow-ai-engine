@@ -41,6 +41,8 @@ await admin.request("auth.login", { username, password }, true);
 
 const source = await admin.request("workflow.get", { id: "wEjEcT-FUPIDrEUx" });
 assert.match(source.name, /^并行消息_state_[a-f0-9]{8}$/);
+const humanBranch = process.env.FLOW_READY_BRANCH === "human";
+const actor = humanBranch ? await admin.request("auth.me", null) : null;
 let captured = false;
 for (let attempt = 0; attempt < 12 && !captured; attempt++) {
   const tag = randomBytes(4).toString("hex");
@@ -63,6 +65,36 @@ for (let attempt = 0; attempt < 12 && !captured; attempt++) {
   );
   for (const node of definition.nodes.filter(n => n.type === "message_catch"))
     node.config.correlationKey = `${tag}-${node.id === "ma" ? "a" : "b"}`;
+  if (humanBranch) {
+    const taskNode = definition.nodes.find(n => n.id === "mb");
+    taskNode.type = "operate";
+    taskNode.config = {
+      nodeDh: "HUMAN_B",
+      czmc: "人工确认",
+      instruction: "隔离并行恢复验收",
+      assigneeMode: "user",
+      assigneeUserId: actor.id,
+      outcomeMode: "explicit",
+      outcomes: [
+        { code: "approved", label: "同意", sourceHandle: "approved" },
+        { code: "rejected", label: "拒绝", sourceHandle: "rejected" },
+      ],
+      formSchema: { fields: [] },
+    };
+    definition.nodes.find(n => n.id === "b").config = {
+      mappings: { value: "B", otherSeen: "{{vars.ma.payload.value}}" },
+    };
+    definition.edges = definition.edges.filter(
+      edge => edge.sourceNodeId !== "mb"
+    );
+    for (const outcome of ["approved", "rejected"])
+      definition.edges.push({
+        id: `mb-b-${outcome}`,
+        sourceNodeId: "mb",
+        targetNodeId: "b",
+        sourceHandle: outcome,
+      });
+  }
   const workflow = await admin.request(
     "project.createWorkflow",
     {
@@ -106,7 +138,15 @@ for (let attempt = 0; attempt < 12 && !captured; attempt++) {
       );
     const race = await Promise.allSettled([
       signal("a"),
-      admin.request("workflow.pauseRun", { runId: started.runId }, true),
+      (async () => {
+        if (humanBranch)
+          await new Promise(resolve => setTimeout(resolve, (attempt % 6) * 5));
+        return admin.request(
+          "workflow.pauseRun",
+          { runId: started.runId },
+          true
+        );
+      })(),
     ]);
     const paused = await read();
     const context =
@@ -119,7 +159,17 @@ for (let attempt = 0; attempt < 12 && !captured; attempt++) {
       paused.status !== "blocked" ||
       !queue.includes("a")
     ) {
-      console.log(JSON.stringify({ attempt, readyQueueCaptured: false }));
+      console.log(
+        JSON.stringify({
+          attempt,
+          readyQueueCaptured: false,
+          status: paused.status,
+          queue,
+          errors: race
+            .filter(r => r.status === "rejected")
+            .map(r => r.reason.message),
+        })
+      );
       continue;
     }
     captured = true;
@@ -152,13 +202,44 @@ for (let attempt = 0; attempt < 12 && !captured; attempt++) {
       aDone.nodeRuns.some(n => n.nodeId === "b" && n.status === "success"),
       false
     );
-    await signal("b");
+    if (humanBranch) {
+      const ownTasks = (
+        await admin.request("task.list", {
+          view: "todo",
+          projectId: source.projectId,
+        })
+      ).filter(task => task.runId === started.runId && task.nodeId === "mb");
+      assert.equal(ownTasks.length, 1);
+      await admin.request(
+        "task.execute",
+        {
+          taskId: ownTasks[0].id,
+          result: {
+            decision: "approved",
+            outcome: "approved",
+            comment: "隔离人工分支恢复验收",
+          },
+        },
+        true
+      );
+    } else await signal("b");
     const result = await waitFor(
       read,
       run => ["success", "failed"].includes(run.status),
       "parallel ready completion"
     );
     assert.equal(result.status, "success");
+    const output = id =>
+      result.nodeRuns
+        .filter(n => n.nodeId === id && n.status === "success")
+        .map(n =>
+          typeof n.outputJson === "string"
+            ? JSON.parse(n.outputJson)
+            : n.outputJson
+        );
+    assert.deepEqual(output("a"), [{ value: "A" }]);
+    assert.deepEqual(output("b"), [{ value: "B" }]);
+    assert.deepEqual(output("join"), [{ a: "A", b: "B" }]);
     assert.equal(
       result.nodeRuns.filter(n => n.nodeId === "join" && n.status === "success")
         .length,
@@ -170,7 +251,8 @@ for (let attempt = 0; attempt < 12 && !captured; attempt++) {
       JSON.stringify({
         workflowId: workflow.id,
         runId: started.runId,
-        readyBranchBeforeOtherMessage: true,
+        readyBranchBeforeOtherMessage: !humanBranch,
+        readyBranchBeforeHumanDecision: humanBranch,
         joinCount: 1,
         status: "success",
       })
