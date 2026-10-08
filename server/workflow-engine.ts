@@ -1375,6 +1375,7 @@ async function executeInlineDefinition(
   const queue = [startNode.id];
   const executed = new Set<string>();
   let finalOutput: unknown = null;
+  let reachedEnd = false;
   while (queue.length) {
     if (executed.size >= MAX_STEPS)
       throw new Error("子流程执行超过最大节点步数。");
@@ -1398,7 +1399,10 @@ async function executeInlineDefinition(
     context.vars = vars;
     context.nodes = nodeOutputs;
     if (node.type === "start") Object.assign(vars, asRecord(result.output));
-    if (node.type === "end") finalOutput = result.output;
+    if (node.type === "end") {
+      finalOutput = result.output;
+      reachedEnd = true;
+    }
     definition.edges
       .filter(
         edge =>
@@ -1419,6 +1423,8 @@ async function executeInlineDefinition(
       )
       .forEach(edge => queue.push(edge.targetNodeId));
   }
+  if (!reachedEnd)
+    throw new Error("子流程未到达结束节点，请检查路由目标与连线配置。");
   return { output: finalOutput, context };
 }
 

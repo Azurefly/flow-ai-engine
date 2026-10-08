@@ -29,6 +29,8 @@ assert(
 );
 await request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
+const missingTarget = process.env.FLOW_SUBROUTE_MODE === "missing-target";
+const expectLegacy = process.env.FLOW_SUBROUTE_EXPECT === "legacy";
 const node = (id, type, config = {}) => ({
   id,
   type,
@@ -63,7 +65,7 @@ const child = await request(
             {
               handle: "legacy",
               priority: 50,
-              targetNodeId: "correct",
+              targetNodeId: missingTarget ? "missing" : "correct",
               condition: {
                 left: "{{input.amount}}",
                 operator: "greaterThan",
@@ -73,7 +75,7 @@ const child = await request(
             {
               handle: "chosen",
               priority: 100,
-              targetNodeId: "correct",
+              targetNodeId: missingTarget ? "missing" : "correct",
               condition: {
                 left: "{{input.amount}}",
                 operator: "greaterThan",
@@ -121,10 +123,12 @@ const parent = await request(
   },
   true
 );
-for (const [amount, expected] of [
-  [10, "correct"],
-  [0, "wrong"],
-]) {
+for (const [amount, expected] of missingTarget
+  ? [[10, "failed"]]
+  : [
+      [10, "correct"],
+      [0, "wrong"],
+    ]) {
   const started = await request(
     "workflow.run",
     {
@@ -148,16 +152,25 @@ for (const [amount, expected] of [
       }
       await new Promise(resolve => setTimeout(resolve, 500));
     }
-    assert.equal(run.status, "success", JSON.stringify(run.errorJson));
+    assert.equal(
+      run.status,
+      missingTarget && !expectLegacy ? "failed" : "success",
+      JSON.stringify(run.errorJson)
+    );
     const output =
       typeof run.finalOutputJson === "string"
         ? JSON.parse(run.finalOutputJson)
         : run.finalOutputJson;
-    assert.equal(output.result[expected]?.marker, expected);
-    assert.equal(
-      output.result[expected === "correct" ? "wrong" : "correct"],
-      undefined
-    );
+    if (missingTarget) {
+      if (expectLegacy) assert.deepEqual(output, {});
+      else assert.match(JSON.stringify(run.errorJson), /子流程未到达结束节点/);
+    } else {
+      assert.equal(output.result[expected]?.marker, expected);
+      assert.equal(
+        output.result[expected === "correct" ? "wrong" : "correct"],
+        undefined
+      );
+    }
     console.log(
       JSON.stringify({
         workflowId: parent.id,
