@@ -166,7 +166,7 @@ for (const [amount, expected] of [
         amount,
         output,
         status: run.status,
-        monitorUrl: `${base}/#/runs/monitor/${parent.id}?runId=${started.runId}`,
+        monitorUrl: `${base}/#/runs/monitor/${parent.id}/${started.runId}`,
       })
     );
   } finally {
