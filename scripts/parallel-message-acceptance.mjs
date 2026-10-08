@@ -41,7 +41,9 @@ await admin.request("auth.login", { username, password }, true);
 
 const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
 assert(
-  ["normal", "prepare", "resume", "cancel", "terminate"].includes(restartStage)
+  ["normal", "prepare", "resume", "cancel", "terminate", "pause"].includes(
+    restartStage
+  )
 );
 let restartFixture = null;
 let restoredWorkflow = null;
@@ -87,7 +89,9 @@ const edge = (sourceNodeId, targetNodeId, sourceHandle) => ({
   targetNodeId,
   ...(sourceHandle ? { sourceHandle } : {}),
 });
-for (const flowType of ["normal", "cancel", "terminate"].includes(restartStage)
+for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
+  restartStage
+)
   ? ["control", "state"]
   : ["state"]) {
   const nodes = [
@@ -266,6 +270,40 @@ for (const flowType of ["normal", "cancel", "terminate"].includes(restartStage)
         },
         true
       );
+    if (restartStage === "pause") {
+      const pauses = await Promise.all([
+        admin.request("workflow.pauseRun", { runId: started.runId }, true),
+        admin.request("workflow.pauseRun", { runId: started.runId }, true),
+      ]);
+      assert.equal(pauses.filter(result => result.changed).length, 1);
+      const paused = await admin.request("workflow.runDetail", {
+        runId: started.runId,
+      });
+      assert.equal(paused.status, "blocked");
+      assert.equal(paused.nodeRuns.length, waiting.nodeRuns.length);
+      assert.equal(paused.stateVersion, waiting.stateVersion);
+      await assert.rejects(() => signal("a"), /等待状态|暂停/);
+      const resumed = await admin.request(
+        "workflow.resumeRun",
+        { runId: started.runId },
+        true
+      );
+      assert.equal(resumed.changed, true);
+      const repeated = await admin.request(
+        "workflow.resumeRun",
+        { runId: started.runId },
+        true
+      );
+      assert.equal(repeated.changed, false);
+      const restored = await waitFor(
+        () => admin.request("workflow.runDetail", { runId: started.runId }),
+        run => run.status === "waiting",
+        "restored parallel subscriptions"
+      );
+      assert.equal(restored.nodeRuns.length, waiting.nodeRuns.length);
+      assert.equal(restored.stateVersion, waiting.stateVersion);
+      assert.equal(restored.currentStateCode, waiting.currentStateCode);
+    }
     if (["cancel", "terminate"].includes(restartStage)) {
       const controlMethod =
         restartStage === "terminate"
@@ -388,6 +426,7 @@ for (const flowType of ["normal", "cancel", "terminate"].includes(restartStage)
         flowType,
         concurrentMessages: 2,
         restartResumeStage: restartStage === "resume",
+        pauseResumeVerified: restartStage === "pause",
         duplicateDenied: true,
         branchIsolation: true,
         joinCount: 1,
