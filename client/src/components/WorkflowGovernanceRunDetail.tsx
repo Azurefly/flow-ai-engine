@@ -298,13 +298,22 @@ export function RunDetailContent({ run }: { run: any }) {
                   />
                 </summary>
                 <div className="grid min-w-0 gap-4 border-t border-border bg-muted/60 p-3">
-                  <RunPayloadDetails title="节点输入" value={node.inputJson} />
+                  <RunPayloadDetails
+                    title="节点输入"
+                    value={node.inputJson}
+                    kind="input"
+                  />
                   <RunPayloadDetails
                     title="节点输出"
                     value={node.outputJson}
+                    kind="output"
                     nodeType={node.nodeType}
                   />
-                  <RunPayloadDetails title="节点错误" value={node.errorJson} />
+                  <RunPayloadDetails
+                    title="节点错误"
+                    value={node.errorJson}
+                    kind="error"
+                  />
                   <details className="overflow-hidden rounded-md border border-border bg-card">
                     <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
                       节点技术信息（内部标识与时间）

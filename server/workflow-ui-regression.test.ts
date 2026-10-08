@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_386 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_387 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 410 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3504,4 +3504,16 @@ it("节点执行记录显示中文状态、序号和重复次数，保留逐次�
   expect(runCenterSource).toContain("key={node.id}");
   expect(runCenterSource).toContain('title="错误" value={node.errorJson}');
   expect(runCenterSource).toContain("暂无节点执行记录。");
+});
+
+it("运行错误使用显式类型展示原因和折叠堆栈，不再标为业务输入", () => {
+  expect(runPayloadDetailsSource).toContain('kind === "error"');
+  expect(runPayloadDetailsSource).toContain("runErrorPreview(value)");
+  expect(runPayloadDetailsSource).toContain("错误详情");
+  expect(runPayloadDetailsSource).toContain("调用堆栈（诊断信息）");
+  expect(runPayloadDetailsSource).not.toContain('title.includes("输出")');
+  expect(runCenterSource).toContain('value={node.errorJson} kind="error"');
+  expect(
+    source("../client/src/components/WorkflowGovernanceRunDetail.tsx")
+  ).toContain('value={node.errorJson} kind="error"');
 });

@@ -1,3 +1,4 @@
+import { runErrorPreview } from "@shared/run-error-preview";
 import { hasRunPayloadValue, splitRunPayload } from "@shared/run-payload";
 
 type FieldRow = { field: string; value: string; fullValue?: string };
@@ -106,16 +107,49 @@ export function RunPayloadDetails({
   title,
   value,
   nodeType,
+  kind = "input",
 }: {
   title: string;
   value: unknown;
   nodeType?: string;
+  kind?: "input" | "output" | "error";
 }) {
   if (value === null || value === undefined) return null;
+  if (kind === "error") {
+    const error = runErrorPreview(value);
+    return (
+      <section data-run-payload-details className="min-w-0">
+        <h4 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+          {title}
+        </h4>
+        <div className="grid min-w-0 gap-2">
+          {error.message && (
+            <PayloadFields value={{ 错误原因: error.message }} />
+          )}
+          {hasRunPayloadValue(error.details) && (
+            <div className="min-w-0">
+              <p className="aiflow-type-body mb-1 font-medium text-muted-foreground">
+                错误详情
+              </p>
+              <PayloadFields value={error.details} />
+            </div>
+          )}
+          {!error.message &&
+            !hasRunPayloadValue(error.details) &&
+            !error.stack && (
+              <p className="aiflow-type-body text-muted-foreground">
+                未提供错误详情。
+              </p>
+            )}
+          <PayloadDisclosure label="调用堆栈（诊断信息）" value={error.stack} />
+        </div>
+      </section>
+    );
+  }
   const parts = splitRunPayload(value, nodeType);
   const visibleGroups = [
     {
-      label: title.includes("输出") ? "业务结果" : "业务输入",
+      label: kind === "output" ? "业务结果" : "业务输入",
       value: parts.businessInput,
       collapsed: false,
     },

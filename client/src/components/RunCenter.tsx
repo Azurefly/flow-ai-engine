@@ -934,15 +934,18 @@ export default function RunCenter({
                         <RunPayloadDetails
                           title="输入"
                           value={node.inputJson}
+                          kind="input"
                         />
                         <RunPayloadDetails
                           title="输出"
                           value={node.outputJson}
+                          kind="output"
                           nodeType={node.nodeType}
                         />
                         <RunPayloadDetails
                           title="错误"
                           value={node.errorJson}
+                          kind="error"
                         />
                       </div>
                     </details>
