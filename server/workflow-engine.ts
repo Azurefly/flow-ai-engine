@@ -2335,7 +2335,7 @@ export async function resumeWorkflowRun(runId: string) {
       "SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed') ORDER BY createdAt,id LIMIT 1",
       [runId]
     );
-    if (pendingTasks[0]) {
+    if (pendingTasks[0] && !queue.length) {
       await connection.query(
         "UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'",
         [runId]
@@ -2352,7 +2352,7 @@ export async function resumeWorkflowRun(runId: string) {
       "SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active' ORDER BY createdAt,id LIMIT 1",
       [runId]
     );
-    if (activeWaits[0]) {
+    if (activeWaits[0] && !queue.length) {
       await connection.query(
         "UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'",
         [runId]
