@@ -4625,20 +4625,20 @@ function IamCenter({
                   >
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <p
-                        className="aiflow-type-meta min-w-0 break-words font-mono font-semibold text-aiflow-info [overflow-wrap:anywhere]"
-                        title={role.code}
+                        className="aiflow-type-body min-w-0 break-words font-semibold text-foreground [overflow-wrap:anywhere]"
+                        title={role.name}
                       >
-                        {role.code}
+                        {role.name}
                       </p>
                       <span className="aiflow-type-meta shrink-0 rounded-full bg-card px-1.5 py-0.5 text-muted-foreground">
-                        {role.scope}
+                        {role.scope === "system" ? "系统角色" : role.scope === "workflow" ? "流程角色" : role.scope}
                       </span>
                     </div>
                     <p
-                      className="aiflow-type-body mt-0.5 break-words font-medium text-foreground [overflow-wrap:anywhere]"
-                      title={role.name}
+                      className="aiflow-type-meta mt-0.5 break-words font-mono text-muted-foreground [overflow-wrap:anywhere]"
+                      title={role.code}
                     >
-                      {role.name}
+                      {role.code}
                     </p>
                   </button>
                   <Button
@@ -5197,7 +5197,7 @@ function RoleAuthorizationPanel({
           onClick={onAssign}
         >
           <Plus size={13} />
-          {assignable ? "绑定用户" : "流程内绑定"}
+          {selectedRole?.scope === "workflow" ? "流程内绑定" : "绑定用户"}
         </Button>
       </div>
       <AuthorizationDetailRefresh

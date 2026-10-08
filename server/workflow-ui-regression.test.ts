@@ -1234,7 +1234,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("查看权限与角色");
     expect(homeSource).toContain("新增单个账号");
     expect(homeSource).toContain(
-      "aiflow-type-meta min-w-0 break-words font-mono font-semibold text-aiflow-info"
+      "aiflow-type-body min-w-0 break-words font-semibold text-foreground"
     );
     expect(homeSource).toContain(
       "aiflow-type-meta shrink-0 rounded-full bg-card px-1.5 py-0.5 text-muted-foreground"
@@ -1257,7 +1257,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-label="搜索用户"');
     expect(homeSource).toContain('aria-label="搜索角色"');
     expect(homeSource).toContain(
-      "aiflow-type-body mt-0.5 break-words font-medium text-foreground [overflow-wrap:anywhere]"
+      "aiflow-type-meta mt-0.5 break-words font-mono text-muted-foreground [overflow-wrap:anywhere]"
     );
     expect(homeSource).toContain(
       "filteredUsers.some(account => Number(account.id) === selectedUserId)"
