@@ -3410,3 +3410,12 @@ it("控制结束保存原因和耗时，监控缺失耗时不拼接单位", () =
     '{node.durationMs ?? "—"} ms'
   );
 });
+
+it("运行控制成功后同步刷新统计，并显示活动数量", () => {
+  const monitor = source("../client/src/components/RunCenter.tsx");
+  expect(
+    monitor.match(/utils.workflow.runMetrics.invalidate\({ workflowId }\)/g)
+  ).toHaveLength(4);
+  expect(monitor).toContain("执行中：");
+  expect(monitor).toContain("等待/暂停：");
+});

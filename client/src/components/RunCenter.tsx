@@ -188,6 +188,7 @@ export default function RunCenter({
       void utils.workflow.runs.invalidate();
       void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
+      if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
     onError: error => window.alert(error.message),
   });
@@ -196,6 +197,7 @@ export default function RunCenter({
       void utils.workflow.runs.invalidate();
       void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
+      if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
     onError: error => window.alert(error.message),
   });
@@ -204,6 +206,7 @@ export default function RunCenter({
       void utils.workflow.runs.invalidate();
       void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
+      if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
     onError: error => window.alert(error.message),
   });
@@ -212,6 +215,7 @@ export default function RunCenter({
       void utils.workflow.runs.invalidate();
       void utils.workflow.runHistoryPage.invalidate();
       void utils.workflow.runDetail.invalidate();
+      if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
     onError: error => window.alert(error.message),
   });
@@ -485,6 +489,10 @@ export default function RunCenter({
         <summary className="aiflow-type-control min-h-7 cursor-pointer font-medium text-foreground">
           更多指标
         </summary>
+        <p className="mt-2 text-muted-foreground">
+          执行中：{metricsUnavailable ? "—" : metrics.data.executingRuns} ·
+          等待/暂停：{metricsUnavailable ? "—" : metrics.data.waitingRuns}
+        </p>
         <p className="mt-2 text-muted-foreground">
           平均耗时仅统计有耗时记录的成功、失败运行；取消和终止不计入。当前样本：
           {metricsUnavailable ? "—" : metrics.data.durationSamples} 条。
