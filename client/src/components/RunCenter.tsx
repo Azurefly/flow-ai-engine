@@ -1,3 +1,12 @@
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 import { formatRunDuration } from "@shared/run-duration";
 import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
 import { RunApprovalProgress } from "./RunApprovalProgress";
@@ -60,6 +69,17 @@ export default function RunCenter({
   onRetrySelection: () => void;
 }) {
   const utils = trpc.useUtils();
+  const [controlDialog, setControlDialog] = useState<{
+    action: "pause" | "cancel" | "terminate";
+    runId: string;
+  } | null>(null);
+  const [controlReason, setControlReason] = useState("");
+  const [controlError, setControlError] = useState("");
+  useEffect(() => {
+    setControlDialog(null);
+    setControlReason("");
+    setControlError("");
+  }, [workflowId, selectedRunId]);
   const [status, setStatus] = useState<
     | ""
     | "queued"
@@ -190,7 +210,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const terminateRun = trpc.workflow.terminateRun.useMutation({
     onSuccess: () => {
@@ -199,7 +219,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const pauseRun = trpc.workflow.pauseRun.useMutation({
     onSuccess: () => {
@@ -208,7 +228,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const resumeRun = trpc.workflow.resumeRun.useMutation({
     onSuccess: () => {
@@ -217,7 +237,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => window.alert(error.message),
+    onError: error => toast.error(error.message),
   });
   const workflowAlerts = (alerts.data ?? []) as any[];
   const workflowRuns = runs.data?.items ?? [];
@@ -721,12 +741,12 @@ export default function RunCenter({
                       onClick={() => {
                         if (runDetail.status === "blocked") {
                           resumeRun.mutate({ runId: runDetail.id });
-                        } else if (
-                          window.confirm(
-                            "确定暂停这次流程运行吗？系统只会在已持久化 Checkpoint 边界暂停。"
-                          )
-                        ) {
-                          pauseRun.mutate({ runId: runDetail.id });
+                        } else {
+                          setControlError("");
+                          setControlDialog({
+                            action: "pause",
+                            runId: runDetail.id,
+                          });
                         }
                       }}
                     >
@@ -744,12 +764,11 @@ export default function RunCenter({
                       className="aiflow-type-control h-11 text-aiflow-warning lg:h-9"
                       disabled={controlPending}
                       onClick={() => {
-                        if (
-                          window.confirm(
-                            "确定取消这次流程运行吗？取消后将终止排队、节点租约和未完成人工任务。"
-                          )
-                        )
-                          cancelRun.mutate({ runId: runDetail.id });
+                        setControlError("");
+                        setControlDialog({
+                          action: "cancel",
+                          runId: runDetail.id,
+                        });
                       }}
                     >
                       取消运行
@@ -766,15 +785,12 @@ export default function RunCenter({
                       className="aiflow-type-control h-11 text-red-700 lg:h-9"
                       disabled={controlPending}
                       onClick={() => {
-                        const reason = window.prompt(
-                          "请输入终止原因（必填）",
-                          "人工终止"
-                        );
-                        if (reason?.trim())
-                          terminateRun.mutate({
-                            runId: runDetail.id,
-                            reason: reason.trim(),
-                          });
+                        setControlError("");
+                        setControlReason("");
+                        setControlDialog({
+                          action: "terminate",
+                          runId: runDetail.id,
+                        });
                       }}
                     >
                       终止运行
@@ -883,6 +899,99 @@ export default function RunCenter({
           </section>
         )}
       </div>
+      <Dialog
+        open={Boolean(controlDialog)}
+        onOpenChange={open => {
+          if (!open && !controlPending) setControlDialog(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {controlDialog?.action === "pause"
+                ? "确认暂停运行"
+                : controlDialog?.action === "terminate"
+                  ? "确认终止运行"
+                  : "确认取消运行"}
+            </DialogTitle>
+            <DialogDescription>
+              {controlDialog?.action === "pause"
+                ? "将在安全节点边界暂停，恢复后继续推进实例。"
+                : "停止后不再继续推进该实例；已执行动作不会撤销，历史记录会保留。"}
+            </DialogDescription>
+          </DialogHeader>
+          <p className="break-all text-sm text-muted-foreground">
+            运行编号：{controlDialog?.runId}
+          </p>
+          {controlDialog?.action === "terminate" && (
+            <label className="grid gap-2 text-sm">
+              终止原因（必填）
+              <textarea
+                aria-label="终止原因"
+                rows={3}
+                maxLength={500}
+                className="rounded-md border border-border bg-background p-3"
+                value={controlReason}
+                disabled={controlPending}
+                onChange={event => setControlReason(event.target.value)}
+              />
+            </label>
+          )}
+          {controlError && (
+            <p role="alert" className="text-sm text-destructive">
+              {controlError}
+            </p>
+          )}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={controlPending}
+              onClick={() => setControlDialog(null)}
+            >
+              返回
+            </Button>
+            <Button
+              disabled={
+                controlPending ||
+                !controlDialog ||
+                controlDialog.runId !== selectedRunId ||
+                (controlDialog.action === "terminate" && !controlReason.trim())
+              }
+              onClick={async () => {
+                if (!controlDialog || controlDialog.runId !== selectedRunId)
+                  return;
+                setControlError("");
+                try {
+                  const input = { runId: controlDialog.runId };
+                  if (controlDialog.action === "pause")
+                    await pauseRun.mutateAsync(input);
+                  else if (controlDialog.action === "terminate")
+                    await terminateRun.mutateAsync({
+                      ...input,
+                      reason: controlReason.trim(),
+                    });
+                  else await cancelRun.mutateAsync(input);
+                  setControlDialog(null);
+                } catch (error) {
+                  setControlError(
+                    error instanceof Error
+                      ? error.message
+                      : "操作失败，请重试。"
+                  );
+                }
+              }}
+            >
+              {controlPending
+                ? "正在提交…"
+                : controlDialog?.action === "pause"
+                  ? "确认暂停"
+                  : controlDialog?.action === "terminate"
+                    ? "确认终止"
+                    : "确认取消"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

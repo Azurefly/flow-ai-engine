@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_379 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 407 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_381 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 408 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3418,4 +3418,17 @@ it("运行控制成功后同步刷新统计，并显示活动数量", () => {
   ).toHaveLength(4);
   expect(monitor).toContain("执行中：");
   expect(monitor).toContain("等待/暂停：");
+});
+
+it("运行控制使用站内确认，必填原因和失败输入可保留", () => {
+  const monitor = source("../client/src/components/RunCenter.tsx");
+  expect(monitor).not.toContain("window.confirm");
+  expect(monitor).not.toContain("window.prompt");
+  expect(monitor).not.toContain("window.alert");
+  expect(monitor).toContain("确认取消运行");
+  expect(monitor).toContain("确认终止运行");
+  expect(monitor).toContain('aria-label="终止原因"');
+  expect(monitor).toContain("maxLength={500}");
+  expect(monitor).toContain("controlDialog.runId !== selectedRunId");
+  expect(monitor).toMatch(/setControlError\(\s*error instanceof Error/);
 });
