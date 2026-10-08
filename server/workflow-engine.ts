@@ -1365,7 +1365,8 @@ export function selectRouterRoute(config: JsonRecord, context: JsonRecord) {
 
 async function executeInlineDefinition(
   definition: Definition,
-  input: JsonRecord
+  input: JsonRecord,
+  projectId?: string
 ) {
   const context: JsonRecord = { input, vars: {}, nodes: {} };
   const nodes = new Map(definition.nodes.map(node => [node.id, node]));
@@ -1383,7 +1384,13 @@ async function executeInlineDefinition(
     if (!node) throw new Error(`子流程引用了不存在的节点：${nodeId}`);
     if (node.type === "subflow") throw new Error("子流程不允许嵌套调用。");
     executed.add(nodeId);
-    const result = await executeNode(node, context, false);
+    const result = await executeNode(
+      node,
+      context,
+      false,
+      undefined,
+      projectId
+    );
     const vars = asRecord(context.vars);
     const nodeOutputs = asRecord(context.nodes);
     vars[node.id] = result.output;
@@ -1403,10 +1410,11 @@ async function executeInlineDefinition(
   return { output: finalOutput, context };
 }
 
-async function executeSubflowNode(
+export async function executeSubflowNode(
   config: JsonRecord,
   context: JsonRecord,
-  ownerUserId: number
+  ownerUserId: number,
+  projectId?: string
 ) {
   const snapshot = config.resolvedSubflowDefinition;
   const { resolvedSubflowDefinition: _snapshot, ...runtimeConfig } = config;
@@ -1433,7 +1441,7 @@ async function executeSubflowNode(
   }
   if (!definition?.nodes?.length) throw new Error("引用的子流程定义为空。");
   const input = asRecord(resolved.input ?? context.input);
-  const result = await executeInlineDefinition(definition, input);
+  const result = await executeInlineDefinition(definition, input, projectId);
   return {
     subflowId,
     subflowName,
@@ -1593,7 +1601,12 @@ async function executeNode(
       if (!allowSubflow) throw new Error("子流程不允许嵌套调用。");
       if (!subflowOwnerUserId) throw new Error("子流程缺少流程所有者上下文。");
       return {
-        output: await executeSubflowNode(config, context, subflowOwnerUserId),
+        output: await executeSubflowNode(
+          config,
+          context,
+          subflowOwnerUserId,
+          projectId
+        ),
       };
     }
     case "end":
