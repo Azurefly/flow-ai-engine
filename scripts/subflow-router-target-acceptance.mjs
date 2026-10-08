@@ -100,6 +100,19 @@ const child = await request(
     ),
   },
   true
+).catch(error => {
+  if (missingTarget && process.env.FLOW_SUBROUTE_EXPECT === "configuration") {
+    assert.match(error.message, /目标节点 missing 不存在/);
+    console.log(
+      JSON.stringify({ configurationRejected: true, message: error.message })
+    );
+    process.exit(0);
+  }
+  throw error;
+});
+assert(
+  !(missingTarget && process.env.FLOW_SUBROUTE_EXPECT === "configuration"),
+  "Invalid target was unexpectedly accepted"
 );
 const project = await request(
   "project.create",

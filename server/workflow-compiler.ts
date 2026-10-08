@@ -18,6 +18,7 @@ import {
   compileHttpServiceTask,
   type HttpServiceTaskPlan,
 } from "@shared/service-task-contract";
+import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { normalizeReferenceOperateConfig } from "@shared/reference-operate-config";
 import { resolveDataflowJoinInputs } from "@shared/dataflow-join-inputs";
 
@@ -923,6 +924,28 @@ export function analyzeWorkflowDefinition(
               { kind: "node", nodeId: node.id, field: "config.routes" }
             )
           );
+        for (const rule of normalizeReferenceRouterConfig(node.config).rules) {
+          if (!rule.targetNodeId) continue;
+          if (!nodesById.has(rule.targetNodeId)) {
+            diagnostics.push(
+              diagnostic(
+                "WF_ROUTER_TARGET_MISSING",
+                `路由节点“${node.name}”的分支 ${rule.name} 指定的目标节点 ${rule.targetNodeId} 不存在，请重新选择目标。`,
+                { kind: "node", nodeId: node.id, field: "config.routes" }
+              )
+            );
+          } else if (
+            !nodeOutgoing.some(edge => edge.targetNodeId === rule.targetNodeId)
+          ) {
+            diagnostics.push(
+              diagnostic(
+                "WF_ROUTER_TARGET_UNCONNECTED",
+                `路由节点“${node.name}”的分支 ${rule.name} 指定的目标节点“${nodesById.get(rule.targetNodeId)!.name}”未与当前路由直接连线。`,
+                { kind: "node", nodeId: node.id, field: "config.routes" }
+              )
+            );
+          }
+        }
         configuredHandles.forEach(handle => {
           if (
             !nodeOutgoing.some(
