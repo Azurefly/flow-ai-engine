@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_384 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 409 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_386 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 410 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3491,4 +3491,17 @@ it("子流程保存传递来源类型，更新保留已保存类型，旧记录�
   expect(service).toContain('input.flowType ?? "state"');
   expect(service).toContain("readSubflowFlowType(savedDefinition)");
   expect(service).toContain("withSubflowFlowType(");
+});
+
+it("节点执行记录显示中文状态、序号和重复次数，保留逐次详情", () => {
+  expect(runCenterSource).toContain(
+    "nodeExecutionEntries<any>(runDetail?.nodeRuns ?? [])"
+  );
+  expect(runCenterSource).toContain("{orderLabel}");
+  expect(runCenterSource).toContain("{statusLabel}");
+  expect(runCenterSource).toContain("totalOccurrences > 1");
+  expect(runCenterSource).toContain("第 {occurrence} 次执行记录");
+  expect(runCenterSource).toContain("key={node.id}");
+  expect(runCenterSource).toContain('title="错误" value={node.errorJson}');
+  expect(runCenterSource).toContain("暂无节点执行记录。");
 });

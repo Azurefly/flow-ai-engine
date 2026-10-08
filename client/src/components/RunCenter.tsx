@@ -1,3 +1,4 @@
+import { nodeExecutionEntries } from "@shared/node-execution-entries";
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import {
   Dialog,
@@ -21,6 +22,7 @@ import {
   AlertTriangle,
   BarChart3,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   Filter,
   Loader2,
@@ -106,6 +108,10 @@ export default function RunCenter({
   const previousSelectedRunId = useRef<string | null>(selectedRunId);
   const runDetail =
     selectedRunId && selectedRun?.id !== selectedRunId ? null : selectedRun;
+  const nodeEntries = useMemo(
+    () => nodeExecutionEntries<any>(runDetail?.nodeRuns ?? []),
+    [runDetail?.nodeRuns]
+  );
   const hasSelectedRun = Boolean(selectedRunId || runDetail);
   useEffect(() => {
     const activeRunId = selectedRunId ?? selectedRun?.id ?? null;
@@ -852,52 +858,96 @@ export default function RunCenter({
               </div>
             ) : (
               <div className="mt-5 grid gap-3">
-                {runDetail?.nodeRuns?.map((node: any) => (
-                  <details
-                    key={node.id}
-                    className="min-w-0 rounded border border-border bg-muted p-3"
-                  >
-                    <summary className="aiflow-type-body flex min-w-0 cursor-pointer list-none items-center justify-between gap-3">
-                      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                        <span
-                          className={`h-2 w-2 rounded-full ${node.status === "success" ? "bg-emerald-500" : node.status === "failed" ? "bg-red-500" : "bg-slate-400"}`}
+                <div>
+                  <h3 className="aiflow-type-control font-semibold">
+                    节点执行记录 · {nodeEntries.length} 条
+                  </h3>
+                  <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                    同一节点的多次执行分别记录，展开可查看每次输入、输出和错误。
+                  </p>
+                </div>
+                {!nodeEntries.length && (
+                  <p className="aiflow-type-body text-muted-foreground">
+                    暂无节点执行记录。
+                  </p>
+                )}
+                {nodeEntries.map(
+                  ({
+                    node,
+                    statusLabel,
+                    orderLabel,
+                    occurrence,
+                    totalOccurrences,
+                  }) => (
+                    <details
+                      key={node.id}
+                      className="group min-w-0 rounded border border-border bg-muted p-3"
+                    >
+                      <summary className="aiflow-type-body flex min-w-0 cursor-pointer list-none items-center justify-between gap-3">
+                        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                          <span className="aiflow-type-meta shrink-0 tabular-nums text-muted-foreground">
+                            {orderLabel}
+                          </span>
+                          <span className="min-w-0 break-words">
+                            {node.nodeName || node.nodeId}
+                          </span>
+                          <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-muted-foreground">
+                            {workflowNodeTypeLabel(node.nodeType)}
+                          </span>
+                          <span
+                            className={`aiflow-type-meta rounded px-2 py-0.5 font-medium ${node.status === "failed" ? "bg-destructive/10 text-destructive" : node.status === "success" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-card text-muted-foreground"}`}
+                          >
+                            {statusLabel}
+                          </span>
+                          {totalOccurrences > 1 && (
+                            <span className="aiflow-type-meta text-muted-foreground">
+                              第 {occurrence} 次执行记录
+                            </span>
+                          )}
+                          {node.nodeName && node.nodeName !== node.nodeId && (
+                            <code className="aiflow-type-code min-w-0 max-w-full break-words text-muted-foreground [overflow-wrap:anywhere]">
+                              {node.nodeId}
+                            </code>
+                          )}
+                        </span>
+                        <span className="aiflow-type-meta shrink-0 text-muted-foreground">
+                          {formatRunDuration(node.durationMs)}
+                        </span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          size={14}
+                          className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
                         />
-                        <span className="min-w-0 break-words">
-                          {node.nodeName || node.nodeId}
-                        </span>
-                        <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-muted-foreground">
-                          {workflowNodeTypeLabel(node.nodeType)}
-                        </span>
-                        <code className="aiflow-type-code min-w-0 max-w-full break-words text-muted-foreground [overflow-wrap:anywhere]">
-                          {node.nodeId}
-                        </code>
-                      </span>
-                      <span className="aiflow-type-meta shrink-0 text-muted-foreground">
-                        {formatRunDuration(node.durationMs)}
-                      </span>
-                    </summary>
-                    <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
-                      {runDetail?.approvalGroups
-                        ?.filter(
-                          (group: RunApprovalGroup) =>
-                            group.nodeId === node.nodeId
-                        )
-                        .map((group: RunApprovalGroup) => (
-                          <RunApprovalProgress
-                            key={group.nodeId}
-                            group={group}
-                          />
-                        ))}
-                      <RunPayloadDetails title="输入" value={node.inputJson} />
-                      <RunPayloadDetails
-                        title="输出"
-                        value={node.outputJson}
-                        nodeType={node.nodeType}
-                      />
-                      <RunPayloadDetails title="错误" value={node.errorJson} />
-                    </div>
-                  </details>
-                ))}
+                      </summary>
+                      <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
+                        {runDetail?.approvalGroups
+                          ?.filter(
+                            (group: RunApprovalGroup) =>
+                              group.nodeId === node.nodeId
+                          )
+                          .map((group: RunApprovalGroup) => (
+                            <RunApprovalProgress
+                              key={group.nodeId}
+                              group={group}
+                            />
+                          ))}
+                        <RunPayloadDetails
+                          title="输入"
+                          value={node.inputJson}
+                        />
+                        <RunPayloadDetails
+                          title="输出"
+                          value={node.outputJson}
+                          nodeType={node.nodeType}
+                        />
+                        <RunPayloadDetails
+                          title="错误"
+                          value={node.errorJson}
+                        />
+                      </div>
+                    </details>
+                  )
+                )}
               </div>
             )}
           </section>
