@@ -1,3 +1,4 @@
+import { availableWorkflowReuseResources } from "@shared/workflow-reuse-resources";
 import {
   isTemplateNodeType,
   type TemplateNodeType,
@@ -3790,20 +3791,23 @@ export default function WorkflowCanvas({
       item.label.toLowerCase().includes(normalizedNodeSearch) ||
       item.description.toLowerCase().includes(normalizedNodeSearch)
   );
-  const enabledSubflows = subflows.filter(subflow => subflow.isEnabled);
+  const {
+    availableTemplates,
+    availableSubflows: enabledSubflows,
+    count: reuseCount,
+  } = availableWorkflowReuseResources(flowType, templates, subflows);
   const normalizedReuseSearch = reuseSearch.trim().toLowerCase();
-  const visibleTemplates = templates.filter(
+  const visibleTemplates = availableTemplates.filter(
     template =>
-      isFlowNodeAllowed(flowType, template.nodeType) &&
-      (!normalizedReuseSearch ||
-        template.name.toLowerCase().includes(normalizedReuseSearch))
+      !normalizedReuseSearch ||
+      template.name.toLowerCase().includes(normalizedReuseSearch)
   );
   const visibleSubflows = enabledSubflows.filter(
     subflow =>
       !normalizedReuseSearch ||
       subflow.name.toLowerCase().includes(normalizedReuseSearch)
   );
-  const reuseCount = templates.length + enabledSubflows.length;
+
   const canvasMinHeight = compactReadOnlyPreview ? "min-h-0" : "min-h-[650px]";
 
   return (

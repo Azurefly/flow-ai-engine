@@ -3467,3 +3467,16 @@ it("模板类型契约贯穿 API 和服务层，画布按流程类型过滤并�
   expect(canvasSource).toContain("isFlowNodeAllowed(flowType, input.type)");
   expect(canvasSource).toContain("isTemplateNodeType(selected.data.kind)");
 });
+
+it("复用资源按当前类型计数，数据流程无另存子流程入口，保存等待结果", () => {
+  expect(canvasSource).toContain(
+    "availableWorkflowReuseResources(flowType, templates, subflows)"
+  );
+  expect(canvasSource).not.toContain(
+    "templates.length + enabledSubflows.length"
+  );
+  expect(homeSource).toContain('allowedNodeTypes.includes("subflow")');
+  expect(homeSource).toContain("setSubflowDialogOpen(true)");
+  expect(homeSource).toContain("await onSaveAsSubflow(subflowName)");
+  expect(homeSource).toContain("name: subflowName");
+});

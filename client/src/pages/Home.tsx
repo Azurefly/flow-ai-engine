@@ -1,3 +1,4 @@
+import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
 import { shouldResetRunRoute } from "@shared/run-route-guard";
 import { roleExpiryInput } from "@shared/role-expiry";
@@ -1874,17 +1875,13 @@ function FlowConsole({
                   )
                     deleteFlow.mutate({ id: selectedId });
                 }}
-                onSaveAsSubflow={async () => {
+                onSaveAsSubflow={async subflowName => {
                   if (!draftDefinition || createSubflow.isPending) return false;
-                  try {
-                    await createSubflow.mutateAsync({
-                      name: `${draftName || "未命名流程"} · 子流程`,
-                      definition: draftDefinition,
-                    });
-                    return true;
-                  } catch {
-                    return false;
-                  }
+                  await createSubflow.mutateAsync({
+                    name: subflowName,
+                    definition: draftDefinition,
+                  });
+                  return true;
                 }}
                 onCreateTemplate={input => createTemplate.mutateAsync(input)}
                 onUpdateTemplate={(template, updates) =>
@@ -2198,7 +2195,7 @@ function FlowDesigner({
   onImport: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
-  onSaveAsSubflow: () => Promise<boolean>;
+  onSaveAsSubflow: (name: string) => Promise<boolean>;
   onCreateTemplate: (input: any) => Promise<unknown>;
   onUpdateTemplate: (template: any, updates: any) => Promise<unknown>;
   onDeleteTemplate: (id: string) => void;
@@ -2274,6 +2271,7 @@ function FlowDesigner({
   const displayedMembers = liveMembers.data ?? members;
   const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
+  useEffect(() => setSubflowDialogOpen(false), [workflow.id]);
   const utils = trpc.useUtils();
   const unpublishFlow = trpc.workflow.unpublish.useMutation({
     onSuccess: () => {
@@ -2561,18 +2559,21 @@ function FlowDesigner({
                   <span>创建副本</span>
                 </DropdownMenuItem>
               )}
-              {canEdit && (
-                <DropdownMenuItem
-                  className="aiflow-type-control"
-                  onClick={onSaveAsSubflow}
-                >
-                  <FolderTree
-                    size={13}
-                    className="mr-2 text-muted-foreground"
-                  />
-                  <span>另存为私有子流程</span>
-                </DropdownMenuItem>
-              )}
+              {canEdit &&
+                getFlowProfile(
+                  workflow.flowType ?? "state"
+                ).allowedNodeTypes.includes("subflow") && (
+                  <DropdownMenuItem
+                    className="aiflow-type-control"
+                    onClick={() => setSubflowDialogOpen(true)}
+                  >
+                    <FolderTree
+                      size={13}
+                      className="mr-2 text-muted-foreground"
+                    />
+                    <span>另存为私有子流程</span>
+                  </DropdownMenuItem>
+                )}
               {workflow.status === "published" && canPublish && (
                 <>
                   <DropdownMenuSeparator />
@@ -3034,35 +3035,17 @@ function FlowDesigner({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={subflowDialogOpen} onOpenChange={setSubflowDialogOpen}>
-        <DialogContent className="max-w-md sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>保存当前定义为子流程</DialogTitle>
-            <DialogDescription>
-              将当前画布定义保存为专属私有子流程，可在其他流程中复用。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-2 flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setSubflowDialogOpen(false)}
-            >
-              取消
-            </Button>
-            <Button
-              type="button"
-              className="bg-violet-600 hover:bg-violet-500 text-white"
-              onClick={() => {
-                onSaveAsSubflow();
-                setSubflowDialogOpen(false);
-              }}
-            >
-              确认保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {subflowDialogOpen && (
+        <CanvasNameDialog
+          title="保存当前定义为子流程"
+          initialName={`${name || "未命名流程"} · 子流程`.slice(0, 160)}
+          onClose={() => setSubflowDialogOpen(false)}
+          onSave={async subflowName => {
+            if (!(await onSaveAsSubflow(subflowName)))
+              throw new Error("当前定义尚未就绪，请稍后重试。");
+          }}
+        />
+      )}
     </div>
   );
 }
