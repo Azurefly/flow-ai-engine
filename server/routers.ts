@@ -1779,6 +1779,7 @@ export const appRouter = router({
         z.object({
           name: z.string().trim().min(1).max(160),
           description: z.string().trim().max(500).optional(),
+          flowType: z.enum(["state", "control"]).default("state"),
           definition: z.unknown(),
         })
       )

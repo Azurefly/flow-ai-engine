@@ -110,6 +110,33 @@ if (stage === "prepare") {
   assert.deepEqual(child.nodes.find(n => n.id === "map").config.mappings, {
     echo: "{{input.businessKey}}",
   });
+  assert.equal(child.settings.subflowFlowType, "control");
+  await request(
+    "workflow.updateSubflow",
+    {
+      id: subflow.id,
+      definition: {
+        ...child,
+        settings: { ...child.settings, subflowFlowType: "state" },
+      },
+    },
+    true
+  );
+  const updated = (await request("workflow.subflows")).find(
+    s => s.id === subflow.id
+  );
+  assert.equal(
+    updated.definition.settings.subflowFlowType,
+    "control",
+    "Definition editing must preserve saved flow type"
+  );
+  await assert.rejects(
+    request(
+      "workflow.createSubflow",
+      { name: `数据子流程拒绝_${tag}`, flowType: "data", definition: child },
+      true
+    )
+  );
   const parent = await request(
     "project.createWorkflow",
     {

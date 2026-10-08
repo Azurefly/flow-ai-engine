@@ -1,4 +1,9 @@
 import {
+  readSubflowFlowType,
+  withSubflowFlowType,
+  type SubflowFlowType,
+} from "../shared/subflow-profile";
+import {
   isTemplateNodeType,
   type TemplateNodeType,
 } from "../shared/workflow-template";
@@ -934,12 +939,21 @@ export async function listSubflows(user: WorkflowUser) {
 
 export async function createSubflow(
   user: WorkflowUser,
-  input: { name: string; description?: string; definition: unknown }
+  input: {
+    name: string;
+    description?: string;
+    definition: unknown;
+    flowType?: SubflowFlowType;
+  }
 ) {
-  const definition = validate(input.definition, {
-    flowType: "state",
-    executable: true,
-  });
+  const flowType = input.flowType ?? "state";
+  const definition = withSubflowFlowType(
+    validate(input.definition, {
+      flowType,
+      executable: true,
+    }),
+    flowType
+  );
   if (definition.nodes.some(node => node.type === "subflow"))
     throw new Error("子流程暂不支持嵌套子流程调用。");
   const subflowId = id();
@@ -979,13 +993,15 @@ export async function updateSubflow(
   );
   const subflow = rows[0];
   if (!subflow) return false;
+  const savedDefinition = parseJson(subflow.definitionJson) as Definition;
+  const flowType = readSubflowFlowType(savedDefinition);
   const definition =
     input.definition === undefined
-      ? (parseJson(subflow.definitionJson) as Definition)
-      : validate(input.definition, {
-          flowType: "state",
-          executable: true,
-        });
+      ? savedDefinition
+      : withSubflowFlowType(
+          validate(input.definition, { flowType, executable: true }),
+          flowType
+        );
   if (definition.nodes.some(node => node.type === "subflow"))
     throw new Error("子流程暂不支持嵌套子流程调用。");
   await db().query(

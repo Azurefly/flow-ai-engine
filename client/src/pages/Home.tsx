@@ -1877,8 +1877,14 @@ function FlowConsole({
                 }}
                 onSaveAsSubflow={async subflowName => {
                   if (!draftDefinition || createSubflow.isPending) return false;
+                  const subflowFlowType = selectedWorkflow?.flowType ?? "state";
+                  if (subflowFlowType === "data")
+                    throw new Error(
+                      "数据流程请保存节点模板；当前不支持另存为子流程。"
+                    );
                   await createSubflow.mutateAsync({
                     name: subflowName,
+                    flowType: subflowFlowType,
                     definition: draftDefinition,
                   });
                   return true;

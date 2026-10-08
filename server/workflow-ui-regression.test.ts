@@ -3480,3 +3480,15 @@ it("复用资源按当前类型计数，数据流程无另存子流程入口，�
   expect(homeSource).toContain("await onSaveAsSubflow(subflowName)");
   expect(homeSource).toContain("name: subflowName");
 });
+
+it("子流程保存传递来源类型，更新保留已保存类型，旧记录默认状态", () => {
+  const service = source("./workflow-service.ts");
+  const routes = source("./routers.ts");
+  expect(homeSource).toContain("flowType: subflowFlowType");
+  expect(routes).toContain(
+    'flowType: z.enum(["state", "control"]).default("state")'
+  );
+  expect(service).toContain('input.flowType ?? "state"');
+  expect(service).toContain("readSubflowFlowType(savedDefinition)");
+  expect(service).toContain("withSubflowFlowType(");
+});
