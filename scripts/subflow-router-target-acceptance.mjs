@@ -166,7 +166,7 @@ for (const [amount, expected] of [
         amount,
         output,
         status: run.status,
-        monitorUrl: `${base}/#/runs/workflow/${parent.id}/monitor`,
+        monitorUrl: `${base}/#/runs/monitor/${parent.id}?runId=${started.runId}`,
       })
     );
   } finally {
