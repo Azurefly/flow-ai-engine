@@ -92,15 +92,27 @@ if (stage === "prepare") {
   if (stage !== "cleanup")
     assert(role && role.description === "隔离临时刷新验收");
   if (stage === "arm") {
-    for (const assignment of detail.directRoles.filter(
-      r => r.roleCode === roleCode
-    ))
-      await request(
-        "iam.revokeRoleAssignment",
-        { assignmentId: assignment.assignmentId },
-        true
+    const expirySeconds = Number(process.env.FLOW_AUTH_EXPIRY_SECONDS ?? "8");
+    assert(
+      Number.isSafeInteger(expirySeconds) &&
+        expirySeconds >= 5 &&
+        expirySeconds <= 120
+    );
+    const previousIds = new Set(
+      detail.directRoles
+        .filter(r => r.roleCode === roleCode)
+        .map(r => r.assignmentId)
+    );
+    if (process.env.FLOW_TEST_PREVIOUS_ASSIGNMENT_ID) {
+      assert.match(
+        process.env.FLOW_TEST_PREVIOUS_ASSIGNMENT_ID,
+        /^[a-f0-9-]{36}$/
       );
-    const expiresAt = new Date(Date.now() + 8_000);
+      previousIds.add(process.env.FLOW_TEST_PREVIOUS_ASSIGNMENT_ID);
+    }
+    for (const assignmentId of previousIds)
+      await request("iam.revokeRoleAssignment", { assignmentId }, true);
+    const expiresAt = new Date(Date.now() + expirySeconds * 1000);
     await request(
       "iam.assignSystemRole",
       { userId, roleCode, expiresAt, note: "隔离临时刷新验收" },
@@ -159,7 +171,7 @@ if (stage === "prepare") {
       assert.match(process.env.FLOW_TEST_ASSIGNMENT_ID, /^[a-f0-9-]{36}$/);
       assignmentIds.add(process.env.FLOW_TEST_ASSIGNMENT_ID);
     }
-    for (const assignmentId of assignmentIds)
+    for (const assignmentId of role ? assignmentIds : [])
       await request("iam.revokeRoleAssignment", { assignmentId }, true);
     await request("iam.updateUserStatus", { userId, status: "disabled" }, true);
     if (role) await request("iam.deleteCustomRole", { code: roleCode }, true);
