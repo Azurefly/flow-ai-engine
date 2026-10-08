@@ -470,9 +470,11 @@ export default function RunCenter({
           tone={failedMetricTone}
         />
         <MetricCard
-          label="平均耗时"
+          label="成功/失败平均耗时"
           value={
-            metricsUnavailable ? "—" : `${metrics.data.averageDurationMs} ms`
+            metricsUnavailable
+              ? "—"
+              : formatRunDuration(metrics.data.averageDurationMs)
           }
           icon={Clock3}
           tone="slate"
@@ -483,6 +485,10 @@ export default function RunCenter({
         <summary className="aiflow-type-control min-h-7 cursor-pointer font-medium text-foreground">
           更多指标
         </summary>
+        <p className="mt-2 text-muted-foreground">
+          平均耗时仅统计有耗时记录的成功、失败运行；取消和终止不计入。当前样本：
+          {metricsUnavailable ? "—" : metrics.data.durationSamples} 条。
+        </p>
         <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 border-t border-border pt-2">
           <span>
             成功：{metricsUnavailable ? "—" : metrics.data.successfulRuns}
