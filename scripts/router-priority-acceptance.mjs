@@ -33,7 +33,10 @@ const node = (id, type, config = {}) => ({
   id,
   type,
   name: id,
-  position: { x: 0, y: 0 },
+  position: {
+    x: { start: 0, router: 260, a: 520, b: 520, end: 780 }[id] ?? 0,
+    y: id === "b" ? 320 : 160,
+  },
   config,
 });
 const edge = (from, to, handle = "default") => ({
