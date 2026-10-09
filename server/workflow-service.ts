@@ -284,8 +284,10 @@ async function resolveSubflowReferences(
 }
 
 export async function listWorkflows(user: WorkflowUser) {
+  const canViewAll =
+    user.role === "admin" || (await hasSystemPermission(user, "workflow:view"));
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    user.role === "admin"
+    canViewAll
       ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL ORDER BY w.updatedAt DESC LIMIT 200"
       : `SELECT DISTINCT w.* FROM workflow w
           LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
@@ -305,7 +307,7 @@ export async function listWorkflows(user: WorkflowUser) {
          )
          ORDER BY w.updatedAt DESC
          LIMIT 200`,
-    user.role === "admin"
+    canViewAll
       ? []
       : [user.id, user.id, user.id, user.id, user.id, user.id]
   );
