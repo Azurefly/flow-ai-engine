@@ -77,3 +77,31 @@ it("任务更新失败时回滚运行失败，避免部分收敛", async () => {
   expect(mocks.rollback).toHaveBeenCalledTimes(1);
   expect(mocks.release).toHaveBeenCalledTimes(1);
 });
+
+it("运行已换租约或已终止时不改任务和待办", async () => {
+  mocks.query.mockResolvedValueOnce([[{ id: "own-job" }]])
+    .mockResolvedValueOnce([[{ id: "own-run", startedAt: null }]])
+    .mockResolvedValueOnce([{ affectedRows: 0 }]);
+  expect(await markWorkflowRunFailed("own-run", new Error("expired"), "old-token", "own-job")).toBe(false);
+  expect(mocks.query).toHaveBeenCalledTimes(3);
+  expect(mocks.commit).not.toHaveBeenCalled();
+  expect(mocks.rollback).toHaveBeenCalledTimes(1);
+  expect(mocks.release).toHaveBeenCalledTimes(1);
+});
+
+it("通知写入失败时回滚任务、运行和待办的全部变更", async () => {
+  mocks.query.mockImplementation(async (sql: string) => {
+    if (sql.startsWith("SELECT id FROM workflow_run_job")) return [[{ id: "own-job" }]];
+    if (sql.startsWith("SELECT r.id")) return [[{
+      id: "own-run", workflowId: "own-flow", name: "测试流程",
+      ownerUserId: 1, triggeredByUserId: 1, startedAt: null,
+    }]];
+    if (sql.includes("INSERT INTO workflow_outbox_event")) throw new Error("outbox write failed");
+    return [{ affectedRows: 1 }];
+  });
+  await expect(markWorkflowRunFailed("own-run", new Error("expired"), "old-token", "own-job")).rejects.toThrow("outbox write failed");
+  expect(mocks.query.mock.calls.some(call => String(call[0]).includes("UPDATE workflow_run_job"))).toBe(true);
+  expect(mocks.commit).not.toHaveBeenCalled();
+  expect(mocks.rollback).toHaveBeenCalledTimes(1);
+  expect(mocks.release).toHaveBeenCalledTimes(1);
+});
