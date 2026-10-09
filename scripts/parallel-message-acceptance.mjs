@@ -40,6 +40,7 @@ assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 
 const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
+const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
 assert(
   ["normal", "prepare", "resume", "cancel", "terminate", "pause"].includes(
     restartStage
@@ -219,13 +220,17 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
     assert.equal(workflow.projectId, restartFixture.projectId);
     assert.equal(workflow.name, `并行消息_state_${tag}`);
   }
+  if (publishedMode && !restartFixture) {
+    await admin.request("project.auditWorkflow", { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" }, true);
+    await admin.request("workflow.publish", { id: workflow.id }, true);
+  }
   const started = restartFixture
     ? { runId: restartFixture.runId }
     : await admin.request(
         "workflow.run",
         {
           workflowId: workflow.id,
-          triggerType: "test",
+          triggerType: publishedMode ? "manual" : "test",
           idempotencyKey: `msg-${flowType}-${tag}`,
         },
         true
@@ -399,6 +404,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
       "parallel message run"
     );
     assert.equal(result.status, "success", JSON.stringify(result.errorJson));
+    if (publishedMode) assert.equal(result.executionSource, "published_plan");
     const output = id =>
       result.nodeRuns
         .filter(n => n.nodeId === id && n.status === "success")
@@ -425,6 +431,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
         runId: started.runId,
         flowType,
         concurrentMessages: 2,
+        publishedMode,
         restartResumeStage: restartStage === "resume",
         pauseResumeVerified: restartStage === "pause",
         duplicateDenied: true,

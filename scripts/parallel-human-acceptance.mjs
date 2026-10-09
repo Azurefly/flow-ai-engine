@@ -38,12 +38,23 @@ const password = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
 assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
+const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
+const runner = publishedMode ? new Session() : admin;
+let userId;
+let grantedWorkflowId;
+try {
+if (publishedMode) {
+  const memberPassword = `Test9_${randomBytes(24).toString("base64url")}`;
+  const created = await admin.request("iam.createUser", { username: `human_parallel_${tag}`, name: `正式并行办理_${tag}`, password: memberPassword, role: "user" }, true);
+  userId = created.userId;
+  await runner.request("auth.login", { username: `human_parallel_${tag}`, password: memberPassword }, true);
+}
 const project = await admin.request(
   "project.create",
   { code: `PARTEST_${tag}`.toUpperCase(), name: `并行运行验证_${tag}` },
   true
 );
-const actor = await admin.request("auth.me", null);
+const actor = await runner.request("auth.me", null);
 const node = (id, type, config = {}, x = 0, y = 0) => ({
   id,
   type,
@@ -129,11 +140,18 @@ const fixture = await admin.request(
   },
   true
 );
-const started = await admin.request(
+if (publishedMode) {
+  await admin.request("project.auditWorkflow", { projectId: project.id, workflowId: fixture.id, auditStatus: "approved" }, true);
+  await admin.request("workflow.publish", { id: fixture.id }, true);
+  await assert.rejects(() => runner.request("workflow.run", { workflowId: fixture.id }, true), /无权运行/);
+  await admin.request("workflow.grantMember", { workflowId: fixture.id, userId, role: "operator" }, true);
+  grantedWorkflowId = fixture.id;
+}
+const started = await runner.request(
   "workflow.run",
   {
     workflowId: fixture.id,
-    triggerType: "test",
+    triggerType: publishedMode ? "manual" : "test",
     idempotencyKey: `human-${tag}`,
   },
   true
@@ -141,17 +159,17 @@ const started = await admin.request(
 let succeeded = false;
 try {
   await waitFor(
-    () => admin.request("workflow.runDetail", { runId: started.runId }),
+    () => runner.request("workflow.runDetail", { runId: started.runId }),
     run => run.status === "waiting",
     "both human tasks"
   );
   const tasks = (
-    await admin.request("task.list", { view: "todo", projectId: project.id })
+    await runner.request("task.list", { view: "todo", projectId: project.id })
   ).filter(task => task.runId === started.runId);
   assert.equal(tasks.length, 2, "Both parallel tasks must be visible");
   const attempts = await Promise.allSettled(
     tasks.map(task =>
-      admin.request(
+      runner.request(
         "task.execute",
         {
           taskId: task.id,
@@ -183,11 +201,12 @@ try {
     "Both decisions must be accepted"
   );
   const result = await waitFor(
-    () => admin.request("workflow.runDetail", { runId: started.runId }),
+    () => runner.request("workflow.runDetail", { runId: started.runId }),
     run => ["success", "failed"].includes(run.status),
     "parallel human join"
   );
   assert.equal(result.status, "success", JSON.stringify(result.errorJson));
+  if (publishedMode) assert.equal(result.executionSource, "published_plan");
   assert.equal(
     result.nodeRuns.filter(
       nodeRun => nodeRun.nodeId === "join" && nodeRun.status === "success"
@@ -206,9 +225,16 @@ try {
       runId: started.runId,
       status: "success",
       concurrentHumanTasks: 2,
+      publishedMode,
+      normalUserHandled: publishedMode,
     })
   );
 } finally {
   if (!succeeded)
     await admin.request("workflow.cancelRun", { runId: started.runId }, true);
+}
+} finally {
+  if (grantedWorkflowId) await admin.request("workflow.revokeMember", { workflowId: grantedWorkflowId, userId, role: "operator" }, true);
+  if (userId) await admin.request("iam.updateUserStatus", { userId, status: "disabled" }, true);
+  if (publishedMode) console.log(JSON.stringify({ ownGrantRevoked: true, ownAccountDisabled: true }));
 }
