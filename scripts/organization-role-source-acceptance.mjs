@@ -43,18 +43,32 @@ const tag = randomBytes(4).toString("hex");
 let userId;
 let unit;
 let roleId;
+const verifyList = process.env.FLOW_ORG_LIST === "1";
+const roleCode = `custom_org_view_${tag}`;
+const member = new Session();
+let targetFlow;
+let customRoleCreated = false;
 try {
+  const memberPassword = `Test9_${randomBytes(24).toString("base64url")}`;
   const created = await admin.request(
     "iam.createUser",
     {
       username: `role_live_${tag}`,
       name: `权限来源测试_${tag}`,
-      password: `Test9_${randomBytes(24).toString("base64url")}`,
+      password: memberPassword,
       role: "user",
     },
     true
   );
   userId = created.userId;
+  if (verifyList) {
+    await member.request("auth.login", { username: `role_live_${tag}`, password: memberPassword }, true);
+    const project = await admin.request("project.create", { code: `ORGLIST_${tag}`, name: `组织列表隔离_${tag}` }, true);
+    targetFlow = await admin.request("project.createWorkflow", { projectId: project.id, name: `组织查看隔离_${tag}`, flowType: "control" }, true);
+    assert(!(await member.request("workflow.list", {})).some(flow => flow.id === targetFlow.id));
+    await admin.request("iam.createCustomRole", { code: roleCode, name: `组织查看角色_${tag}`, scope: "system", permissions: ["workflow:view"] }, true);
+    customRoleCreated = true;
+  }
   unit = await admin.request(
     "config.createOrganizationUnit",
     { code: `ROLELIVE_${tag}`.toUpperCase(), name: `权限来源部门_${tag}` },
@@ -66,7 +80,7 @@ try {
     true
   );
   const role = (await admin.request("iam.roles", { scope: "system" })).find(
-    r => r.code === "workflow_creator"
+    r => r.code === (verifyList ? roleCode : "workflow_creator")
   );
   assert(role);
   roleId = Number(role.id);
@@ -78,7 +92,7 @@ try {
       unitId: unit.id,
       roleId,
       includeDescendants: false,
-      expiresAt: new Date(Date.now() + 5000),
+      expiresAt: new Date(Date.now() + (verifyList ? 8000 : 5000)),
     },
     true
   );
@@ -89,16 +103,22 @@ try {
     `ROLELIVE_${tag}`.toUpperCase()
   );
   assert(current.inheritedRoles[0].expiresAt instanceof Date);
-  assert(current.effectivePermissions.some(p => p.code === "workflow:create"));
+  const permissionCode = verifyList ? "workflow:view" : "workflow:create";
+  assert(current.effectivePermissions.some(p => p.code === permissionCode));
+  if (verifyList) {
+    assert((await member.request("workflow.list", {})).some(flow => flow.id === targetFlow.id));
+    assert.equal((await member.request("workflow.get", { id: targetFlow.id })).id, targetFlow.id);
+  }
   current = await waitFor(
     details,
     value => value.inheritedRoles.length === 0,
     "inherited role expiry"
   );
   assert.equal(
-    current.effectivePermissions.some(p => p.code === "workflow:create"),
+    current.effectivePermissions.some(p => p.code === permissionCode),
     false
   );
+  if (verifyList) assert(!(await member.request("workflow.list", {})).some(flow => flow.id === targetFlow.id));
   await admin.request(
     "config.bindOrganizationRole",
     { unitId: unit.id, roleId, includeDescendants: false, expiresAt: null },
@@ -111,6 +131,7 @@ try {
     true
   );
   assert.equal((await details()).inheritedRoles.length, 0);
+  if (verifyList) assert(!(await member.request("workflow.list", {})).some(flow => flow.id === targetFlow.id));
   await admin.request(
     "config.bindOrganizationRole",
     { unitId: unit.id, roleId, includeDescendants: false, expiresAt: null },
@@ -137,6 +158,7 @@ try {
       unbindRemoved: true,
       unitCodeIncluded: true,
       disabledHasNoEffectivePermissions: true,
+      inheritedWorkflowListVerified: verifyList,
     })
   );
 } finally {
@@ -177,6 +199,7 @@ try {
       { id: unit.id, status: "disabled" },
       true
     );
+  if (customRoleCreated) await admin.request("iam.deleteCustomRole", { code: roleCode }, true);
   console.log(
     JSON.stringify({
       cleanup:
