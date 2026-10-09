@@ -38,6 +38,17 @@ const password = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
 assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
+const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
+const member = new Session();
+let userId;
+const grantedFlows = [];
+try {
+if (publishedMode) {
+  const memberPassword = `Test9_${randomBytes(24).toString("base64url")}`;
+  const created = await admin.request("iam.createUser", { username: `parallel_live_${tag}`, name: `正式并行验收_${tag}`, password: memberPassword, role: "user" }, true);
+  userId = created.userId;
+  await member.request("auth.login", { username: `parallel_live_${tag}`, password: memberPassword }, true);
+}
 const project = await admin.request(
   "project.create",
   { code: `PARTEST_${tag}`.toUpperCase(), name: `并行运行验证_${tag}` },
@@ -193,11 +204,19 @@ for (const { scenario, flowType } of ["control", "state"].flatMap(flowType =>
     },
     true
   );
-  const started = await admin.request(
+  if (publishedMode) {
+    await admin.request("project.auditWorkflow", { projectId: project.id, workflowId: fixture.id, auditStatus: "approved" }, true);
+    await admin.request("workflow.publish", { id: fixture.id }, true);
+    await assert.rejects(() => member.request("workflow.run", { workflowId: fixture.id }, true), /无权运行/);
+    await admin.request("workflow.grantMember", { workflowId: fixture.id, userId, role: "operator" }, true);
+    grantedFlows.push(fixture.id);
+  }
+  const runner = publishedMode ? member : admin;
+  const started = await runner.request(
     "workflow.run",
     {
       workflowId: fixture.id,
-      triggerType: "test",
+      triggerType: publishedMode ? "manual" : "test",
       idempotencyKey: `complex-${flowType}-${scenario}-${tag}`,
     },
     true
@@ -205,11 +224,15 @@ for (const { scenario, flowType } of ["control", "state"].flatMap(flowType =>
   let succeeded = false;
   try {
     const result = await waitFor(
-      () => admin.request("workflow.runDetail", { runId: started.runId }),
+      () => runner.request("workflow.runDetail", { runId: started.runId }),
       r => ["success", "failed"].includes(r.status),
       scenario
     );
     assert.equal(result.status, "success", JSON.stringify(result.errorJson));
+    if (publishedMode) {
+      assert.equal(result.executionSource, "published_plan");
+      assert.equal(Number(result.triggeredByUserId), Number(userId));
+    }
     if (flowType === "state") {
       assert.equal(result.currentStateCode, "DONE");
       assert.equal(
@@ -273,6 +296,8 @@ for (const { scenario, flowType } of ["control", "state"].flatMap(flowType =>
         flowType,
         status: result.status,
         outerJoinCount: 1,
+        publishedMode,
+        normalUserRunVerified: publishedMode,
       })
     );
   } finally {
@@ -292,4 +317,9 @@ for (const { scenario, flowType } of ["control", "state"].flatMap(flowType =>
         .catch(() => {});
     }
   }
+}
+} finally {
+  for (const workflowId of grantedFlows) await admin.request("workflow.revokeMember", { workflowId, userId, role: "operator" }, true);
+  if (userId) await admin.request("iam.updateUserStatus", { userId, status: "disabled" }, true);
+  if (publishedMode) console.log(JSON.stringify({ ownGrantsRevoked: true, ownAccountDisabled: true }));
 }
