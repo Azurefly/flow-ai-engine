@@ -589,7 +589,7 @@ describe("WorkflowCompiler", () => {
     expect(valid.ok).toBe(true);
   });
 
-  it("keeps parallel and loop definitions editable but blocks publication until runtime semantics exist", () => {
+  it("同步子流程限制并行，主流程支持可靠并行，循环仍需运行时支持", () => {
     const parallel = base();
     parallel.nodes = [
       parallel.nodes[0]!,
@@ -638,6 +638,7 @@ describe("WorkflowCompiler", () => {
     const parallelPublish = analyzeWorkflowDefinition(parallel, {
       flowType: "state",
       executable: true,
+      parallelRuntimeValidation: false,
     });
     expect(parallelPublish.ok).toBe(false);
     const validationFixture: WorkflowDefinition = JSON.parse(
@@ -658,7 +659,6 @@ describe("WorkflowCompiler", () => {
       analyzeWorkflowDefinition(validationFixture, {
         flowType: "control",
         executable: true,
-        parallelRuntimeValidation: true,
       })
     ).toMatchObject({ ok: true });
     if (!parallelPublish.ok)

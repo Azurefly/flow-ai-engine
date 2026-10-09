@@ -230,7 +230,7 @@ async function resolveSubflowReferences(
     const mappedDefinition = parseJson(mapped.definitionJson) as Definition;
     if (executable) {
       try {
-        validate(mappedDefinition, { flowType, executable: true });
+        validate(mappedDefinition, { flowType, executable: true, parallelRuntimeValidation: false });
       } catch (error) {
         if (error instanceof WorkflowCompileError) {
           throw new WorkflowCompileError(

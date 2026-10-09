@@ -117,7 +117,7 @@ export type WorkflowCompileResult =
 export type WorkflowAnalysisOptions = {
   flowType: FlowType;
   executable?: boolean;
-  /** Internal admin-only draft test execution; publication never sets this. */
+  /** Set false for the synchronous inline subflow executor without durable branch tokens. */
   parallelRuntimeValidation?: boolean;
 };
 
@@ -981,11 +981,11 @@ export function analyzeWorkflowDefinition(
           node.config.broadcast === true ||
           node.config.broadcast === "true";
         if (broadcast) {
-          if (executable && !options.parallelRuntimeValidation)
+          if (executable && options.parallelRuntimeValidation === false)
             diagnostics.push(
               diagnostic(
                 "WF_RUNTIME_PARALLEL_UNSUPPORTED",
-                `并行路由“${node.name}”尚未启用可靠的分支令牌与汇聚状态，当前版本禁止发布。`,
+                `同步子流程中的并行路由“${node.name}”尚不支持持久化分支与汇合，请在主流程中配置并行。`,
                 { kind: "node", nodeId: node.id }
               )
             );
