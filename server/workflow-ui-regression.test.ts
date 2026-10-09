@@ -3541,3 +3541,18 @@ it("系统用户与角色详情仅在当前视图轮询，支持刷新且不展�
   expect(refresh).toContain("query.dataUpdatedAt");
   expect(refresh).toContain("刷新权限来源");
 });
+
+it("路由默认展示实际分支规则，并解释兼容规则执行优先级", () => {
+  const groups = canvasSource.slice(
+    canvasSource.indexOf("router: ["),
+    canvasSource.indexOf("subflow: [")
+  );
+  expect(groups.indexOf('label: "分支规则"')).toBeLessThan(
+    groups.indexOf('label: "基础信息"')
+  );
+  expect(groups.indexOf('label: "基础信息"')).toBeLessThan(
+    groups.indexOf('label: "兼容规则"')
+  );
+  expect(canvasSource).toContain("修改它们不会覆盖已配置的分支规则");
+  expect(canvasSource).toContain("未配置分支规则时会读取原版兼容规则");
+});

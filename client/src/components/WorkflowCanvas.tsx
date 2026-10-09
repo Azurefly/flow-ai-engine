@@ -2249,16 +2249,16 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   operate: OPERATE_CONFIG_GROUPS,
   router: [
     {
+      label: "分支规则",
+      keys: ["routes", "defaultRoute"],
+    },
+    {
       label: "基础信息",
       keys: ["nodeDh", "lymc", "gbms", "parallelJoinNodeId"],
     },
     {
       label: "兼容规则",
       keys: ["lysz"],
-    },
-    {
-      label: "分支规则",
-      keys: ["routes", "defaultRoute"],
     },
   ],
   subflow: [
@@ -4637,6 +4637,15 @@ export default function WorkflowCanvas({
                       <h3 className="aiflow-type-section-title font-semibold text-foreground">
                         {activeInspectorGroup.label}
                       </h3>
+                      {selected.data.kind === "router" &&
+                        activeInspectorGroup.label === "兼容规则" && (
+                          <p className="aiflow-type-body mt-2 text-muted-foreground">
+                            {Array.isArray(selected.data.config.routes) &&
+                            selected.data.config.routes.length
+                              ? "当前运行优先使用“分支规则”页签中的规则。此处保留原版迁移字段，修改它们不会覆盖已配置的分支规则。"
+                              : "未配置分支规则时会读取原版兼容规则。新增或维护路由请优先使用“分支规则”页签。"}
+                          </p>
+                        )}
                       {selected.data.kind === "operate" &&
                         activeInspectorGroup.label === "高级配置" && (
                           <p className="mt-2 text-xs text-muted-foreground">
