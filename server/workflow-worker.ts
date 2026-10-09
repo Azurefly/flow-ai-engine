@@ -344,6 +344,27 @@ async function completeJob(job: ClaimedJob, result: unknown) {
  * Closes the narrow crash window where workflow_run reached a terminal state
  * but the owning durable job did not get its terminal update.
  */
+export async function reconcileExhaustedWorkflowJobs() {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT j.id,j.runId,j.leaseToken FROM workflow_run_job j JOIN workflow_run r ON r.id=j.runId
+      WHERE j.status='leased' AND j.leaseExpiresAt<NOW() AND j.attempt>=j.maxAttempts
+        AND r.status IN ('queued','running','waiting') AND r.executionLockToken=j.leaseToken
+      ORDER BY j.leaseExpiresAt,j.id LIMIT 50`
+  );
+  let recovered = 0;
+  for (const row of rows) {
+    if (
+      await markWorkflowRunFailed(
+        String(row.runId),
+        new Error("工作流任务租约已到期且重试次数耗尽，运行已停止。"),
+        String(row.leaseToken),
+        String(row.id)
+      )
+    )
+      recovered += 1;
+  }
+  return recovered;
+}
 export async function reconcileTerminalWorkflowJobs() {
   const [result] = await db().query<mysql.ResultSetHeader>(
     `UPDATE workflow_run_job j
@@ -453,6 +474,7 @@ export async function runWorkflowWorkerOnce() {
     const waitsTriggered = await reconcileDueWorkflowWaits();
     const taskSchedulesFired = await reconcileDueWorkflowTaskSchedules();
     await reconcileWorkflowContinuations();
+    const exhaustedJobsReconciled = await reconcileExhaustedWorkflowJobs();
     const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
     const dataflowProcessed = await runDataflowJobOnce();
     const dataSourceTestProcessed = await runDataSourceTestJobOnce();
@@ -464,7 +486,8 @@ export async function runWorkflowWorkerOnce() {
         taskSchedulesFired > 0 ||
         dataflowProcessed ||
         dataSourceTestProcessed ||
-        terminalJobsReconciled > 0
+        terminalJobsReconciled > 0 ||
+        exhaustedJobsReconciled > 0
       );
     lastWorkflowJobClaimed = true;
     await processJob(job);

@@ -2160,7 +2160,8 @@ export async function executePreparedWorkflowRun(input: {
 export async function markWorkflowRunFailed(
   runId: string,
   error: unknown,
-  leaseToken?: string
+  leaseToken?: string,
+  exhaustedJobId?: string
 ) {
   const details = {
     message: error instanceof Error ? error.message : String(error),
@@ -2168,6 +2169,18 @@ export async function markWorkflowRunFailed(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    if (exhaustedJobId) {
+      if (!leaseToken) throw new Error("耗尽任务收敛必须提供执行租约。");
+      const [expiredRows] = await connection.query<mysql.RowDataPacket[]>(
+        `SELECT id FROM workflow_run_job WHERE id=? AND runId=? AND status='leased'
+          AND leaseToken=? AND leaseExpiresAt<NOW() AND attempt>=maxAttempts FOR UPDATE`,
+        [exhaustedJobId, runId, leaseToken]
+      );
+      if (!expiredRows[0]) {
+        await connection.rollback();
+        return false;
+      }
+    }
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT r.id,r.workflowId,r.ownerUserId,r.triggeredByUserId,r.startedAt,w.name
          FROM workflow_run r JOIN workflow w ON w.id=r.workflowId WHERE r.id=? LIMIT 1 FOR UPDATE`,
@@ -2183,7 +2196,9 @@ export async function markWorkflowRunFailed(
       run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0,
       runId,
     ];
-    const leaseClause = leaseToken ? " AND executionLockToken=?" : "";
+    const leaseClause =
+      (leaseToken ? " AND executionLockToken=?" : "") +
+      (exhaustedJobId ? " AND status IN ('queued','running','waiting')" : "");
     if (leaseToken) params.push(leaseToken);
     const [failed] = await connection.query<mysql.ResultSetHeader>(
       `UPDATE workflow_run SET status='failed',endReason='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
@@ -2192,6 +2207,12 @@ export async function markWorkflowRunFailed(
     if (!failed.affectedRows) {
       await connection.rollback();
       return false;
+    }
+    if (exhaustedJobId) {
+      await connection.query(
+        "UPDATE workflow_run_job SET status='failed',lastErrorJson=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND status='leased' AND leaseToken=?",
+        [JSON.stringify(details), exhaustedJobId, leaseToken]
+      );
     }
     await connection.query(
       "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
