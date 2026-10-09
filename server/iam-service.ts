@@ -271,8 +271,8 @@ export async function hasWorkflowPermission(user: { id: number; role: "user" | "
   return access.exists && access.permissions.has(permission);
 }
 
-export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked" | "role_created" | "role_updated" | "role_deleted"; resourceType?: string; resourceId?: string; details?: Record<string, unknown>; requestId?: string | null }) {
-  await db().query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson,requestId) VALUES (?,?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null, input.requestId ?? currentRequestId() ?? null]);
+export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked" | "role_created" | "role_updated" | "role_deleted"; resourceType?: string; resourceId?: string; details?: Record<string, unknown>; requestId?: string | null }, connection?: mysql.PoolConnection) {
+  await (connection ?? db()).query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson,requestId) VALUES (?,?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null, input.requestId ?? currentRequestId() ?? null]);
 }
 
 export async function grantWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; grantedByUserId: number; expiresAt?: Date | null }) {
@@ -428,15 +428,9 @@ export async function createCustomRole(input: { code: string; name: string; desc
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query("SELECT id FROM users WHERE id=? FOR UPDATE", [input.actorUserId]);
     const [result] = await connection.query<mysql.ResultSetHeader>("INSERT INTO iam_role (code,name,description,scope,isSystem) VALUES (?,?,?,?,0)", [code, input.name.trim(), input.description?.trim() || null, input.scope]);
     await replaceRolePermissions(connection, result.insertId, permissions);
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
   await recordAuthorizationAudit({
     actorUserId: input.actorUserId,
     action: "role_created",
@@ -447,7 +441,15 @@ export async function createCustomRole(input: { code: string; name: string; desc
       scope: input.scope,
       permissions,
     },
-  });
+  }, connection);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
 }
 
 export async function updateCustomRole(input: { code: string; name?: string; description?: string | null; permissions?: PermissionCode[]; actorUserId: number }) {
@@ -456,12 +458,20 @@ export async function updateCustomRole(input: { code: string; name?: string; des
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query("SELECT id FROM users WHERE id=? FOR UPDATE", [input.actorUserId]);
     const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,scope,isSystem,name,description FROM iam_role WHERE code=? FOR UPDATE", [code]);
     const role = rows[0];
     if (!role || role.isSystem) throw new Error("找不到可编辑的自定义角色。");
     const permissions = input.permissions ? validateRolePermissions(role.scope, input.permissions) : undefined;
     await connection.query("UPDATE iam_role SET name=?,description=? WHERE id=?", [input.name?.trim() || role.name, input.description === undefined ? role.description : input.description?.trim() || null, role.id]);
     if (permissions) await replaceRolePermissions(connection, role.id, permissions);
+  await recordAuthorizationAudit({
+    actorUserId: input.actorUserId,
+    action: "role_updated",
+    resourceType: "iam_role",
+    resourceId: code,
+    details: { operation: "custom_role_updated" },
+  }, connection);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -469,13 +479,7 @@ export async function updateCustomRole(input: { code: string; name?: string; des
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({
-    actorUserId: input.actorUserId,
-    action: "role_updated",
-    resourceType: "iam_role",
-    resourceId: code,
-    details: { operation: "custom_role_updated" },
-  });
+
 }
 
 export async function deleteCustomRole(input: { code: string; actorUserId: number }) {
@@ -483,6 +487,7 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await connection.query("SELECT id FROM users WHERE id=? FOR UPDATE", [input.actorUserId]);
     const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,isSystem FROM iam_role WHERE code=? FOR UPDATE", [code]);
     const role = rows[0];
     if (!role || role.isSystem) throw new Error("找不到可删除的自定义角色。");
@@ -494,6 +499,13 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
     await connection.query("DELETE FROM role_assignment WHERE roleId=?", [role.id]);
     await connection.query("DELETE FROM role_permission WHERE roleId=?", [role.id]);
     await connection.query("DELETE FROM iam_role WHERE id=?", [role.id]);
+  await recordAuthorizationAudit({
+    actorUserId: input.actorUserId,
+    action: "role_deleted",
+    resourceType: "iam_role",
+    resourceId: code,
+    details: { operation: "custom_role_deleted" },
+  }, connection);
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -501,13 +513,7 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({
-    actorUserId: input.actorUserId,
-    action: "role_deleted",
-    resourceType: "iam_role",
-    resourceId: code,
-    details: { operation: "custom_role_deleted" },
-  });
+
 }
 
 export async function revokeRoleAssignment(input: { assignmentId: string; revokedByUserId: number }) {

@@ -196,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-11).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-12).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -208,8 +208,9 @@ describe("database migration integrity", () => {
       "0032_run_execution_source",
       "0033_service_endpoint_environment",
       "0034_project_unit_collation",
+      "0035_custom_role_audit_actions",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(34);
+    expect(journal.entries.at(-1)?.idx).toBe(35);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain(
@@ -409,4 +410,28 @@ describe("database migration integrity", () => {
       )
     );
   });
+});
+
+it("角色审计迁移追加新操作并保留所有历史枚举值", () => {
+  const sql = readFileSync(
+    new URL("../drizzle/0035_custom_role_audit_actions.sql", import.meta.url),
+    "utf8"
+  );
+  for (const action of [
+    "login_success",
+    "login_failed",
+    "logout",
+    "user_created",
+    "user_updated",
+    "user_disabled",
+    "role_assigned",
+    "role_revoked",
+    "temporary_role_assigned",
+    "temporary_role_revoked",
+    "role_created",
+    "role_updated",
+    "role_deleted",
+  ])
+    expect(sql).toContain(`'${action}'`);
+  expect(sql).not.toMatch(/DROP\s|DELETE\s|TRUNCATE\s/i);
 });

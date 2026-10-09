@@ -1,0 +1,1 @@
+ALTER TABLE `authorization_audit_log` MODIFY COLUMN `action` enum('login_success','login_failed','logout','user_created','user_updated','user_disabled','role_assigned','role_revoked','temporary_role_assigned','temporary_role_revoked','role_created','role_updated','role_deleted') NOT NULL;

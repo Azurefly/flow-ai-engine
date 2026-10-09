@@ -41,8 +41,9 @@ await admin(
   },
   true
 );
-const stage = process.env.FLOW_ROLE_STAGE ?? "prepare";
-assert(["prepare", "verify", "cleanup"].includes(stage));
+let stage = process.env.FLOW_ROLE_STAGE ?? "prepare";
+const apiOnly = stage === "api";
+assert(["prepare", "verify", "cleanup", "api"].includes(stage));
 const manifestPath = tag => `/tmp/flow-custom-role-ui-${tag}.json`;
 const definition = {
   schemaVersion: 1,
@@ -66,7 +67,7 @@ const definition = {
   ],
   edges: [{ id: "start-end", sourceNodeId: "start", targetNodeId: "end" }],
 };
-if (stage === "prepare") {
+if (stage === "prepare" || apiOnly) {
   const tag = randomBytes(4).toString("hex");
   const password = `Test9_${randomBytes(24).toString("hex")}`;
   const username = `roleui_${tag}`;
@@ -129,7 +130,41 @@ if (stage === "prepare") {
       editorUrl: `${base}/#/flows/workflow/${meta.workflowId}/editor`,
     })
   );
-} else {
+  if (apiOnly) {
+    await admin(
+      "iam.createCustomRole",
+      {
+        code: meta.roleCode,
+        name: meta.roleName,
+        description: meta.description,
+        scope: "workflow",
+        permissions: ["workflow:view"],
+      },
+      true
+    );
+    await admin(
+      "iam.updateCustomRole",
+      {
+        code: meta.roleCode,
+        name: `${meta.roleName}_已调整`,
+        permissions: ["workflow:view"],
+      },
+      true
+    );
+    await admin(
+      "workflow.assignCustomRole",
+      {
+        workflowId: meta.workflowId,
+        userId: meta.userId,
+        roleCode: meta.roleCode,
+      },
+      true
+    );
+    process.env.FLOW_ROLE_TAG = tag;
+    stage = "verify";
+  }
+}
+if (stage !== "prepare") {
   const tag = process.env.FLOW_ROLE_TAG;
   assert(
     /^[a-f0-9]{8}$/.test(tag ?? ""),
@@ -139,7 +174,9 @@ if (stage === "prepare") {
   assert.equal(meta.tag, tag);
   assert.equal(meta.username, `roleui_${tag}`);
   assert.equal(meta.roleCode, `custom_ui_${tag}`);
-  const account = await admin("iam.userAuthorizationDetails", { userId: meta.userId });
+  const account = await admin("iam.userAuthorizationDetails", {
+    userId: meta.userId,
+  });
   assert.equal(account.user.username, meta.username);
   assert.equal(account.user.name, `角色闭环账号_${tag}`);
   const source = await admin("workflow.get", { id: meta.workflowId });
@@ -328,7 +365,8 @@ if (stage === "prepare") {
         stage,
         userId: meta.userId,
         workflowId: meta.workflowId,
-        browserCreateEditAndBindVerified: true,
+        browserCreateEditAndBindVerified: !apiOnly,
+        apiOnlyLifecycleVerified: apiOnly,
         workflowScopeIsolated: true,
         unauthorizedManagerDenied: true,
         crossWorkflowRevokeDenied: true,

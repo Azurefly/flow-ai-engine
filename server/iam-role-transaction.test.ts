@@ -14,12 +14,19 @@ vi.mock("./db", () => ({
     query: mocks.audit,
   }),
 }));
-import { assignRole, deleteCustomRole, ensureIamCatalog } from "./iam-service";
+import {
+  assignRole,
+  createCustomRole,
+  deleteCustomRole,
+  ensureIamCatalog,
+} from "./iam-service";
+let failAudit = false;
 let disabled = false,
   duplicate = false,
   organization = false,
   isSystem = false,
   failInsert = false;
+failAudit = false;
 const connection = {
   query: mocks.query,
   beginTransaction: mocks.begin,
@@ -44,6 +51,9 @@ beforeAll(async () => {
       return [duplicate ? [{ id: "existing" }] : []];
     if (sql.includes("SELECT id FROM organization_unit_role"))
       return [organization ? [{ id: "organization" }] : []];
+    if (sql.startsWith("INSERT INTO authorization_audit_log") && failAudit)
+      throw new Error("audit failed");
+    if (sql.startsWith("INSERT INTO iam_role")) return [{ insertId: 31 }];
     if (sql.startsWith("INSERT INTO role_assignment") && failInsert)
       throw new Error("write failed");
     return [[]];
@@ -58,6 +68,7 @@ beforeEach(() => {
   organization = false;
   isSystem = false;
   failInsert = false;
+  failAudit = false;
 });
 const input = {
   userId: 2,
@@ -142,5 +153,27 @@ it("无有效绑定时先清理历史引用再删除自定义角色", async () =
     "DELETE FROM iam_role WHERE id=?",
   ]);
   expect(mocks.commit).toHaveBeenCalledTimes(1);
-  expect(mocks.audit).toHaveBeenCalledTimes(1);
+  const auditIndex = mocks.query.mock.calls.findIndex(([sql]) =>
+    sql.startsWith("INSERT INTO authorization_audit_log")
+  );
+  expect(auditIndex).toBeGreaterThan(-1);
+  expect(mocks.query.mock.invocationCallOrder[auditIndex]).toBeLessThan(
+    mocks.commit.mock.invocationCallOrder[0]
+  );
+});
+
+it("角色创建的审计写入失败时一起回滚，不返回部分成功", async () => {
+  failAudit = true;
+  await expect(
+    createCustomRole({
+      code: "custom_tx_test",
+      name: "测试角色",
+      scope: "workflow",
+      permissions: ["workflow:view"],
+      actorUserId: 17,
+    })
+  ).rejects.toThrow("audit failed");
+  expect(mocks.commit).not.toHaveBeenCalled();
+  expect(mocks.rollback).toHaveBeenCalledTimes(1);
+  expect(mocks.release).toHaveBeenCalledTimes(1);
 });
