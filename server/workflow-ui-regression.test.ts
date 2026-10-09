@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_389 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 411 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_406 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 417 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3562,4 +3562,21 @@ it("路由分支可直接配置优先级并同步默认与兼容字段", () => {
   expect(canvasSource).toContain("routerRulePriority: priority");
   expect(canvasSource).toContain("isDefault: priority === -1");
   expect(nodeContractSource).toContain("路由规则优先级必须是有限数值");
+});
+
+it("自定义角色维护和流程绑定按需加载，内置角色保持保护", () => {
+  expect(homeSource).toContain('import("@/components/CustomRoleDialog")');
+  expect(homeSource).toContain(
+    'import("@/components/WorkflowRoleBindingsDialog")'
+  );
+  expect(homeSource).toContain("新增角色");
+  expect(homeSource).toContain("编辑角色");
+  expect(homeSource).toContain("删除角色");
+  expect(homeSource).toContain("!Boolean(Number(selectedRole.isSystem))");
+  expect(homeSource).toContain("管理自定义流程角色");
+  const roleDialog = source("../client/src/components/CustomRoleDialog.tsx");
+  expect(roleDialog).toContain("请输入完整角色编码确认删除");
+  expect(roleDialog).toContain("内置角色不可修改或删除");
+  expect(roleDialog).toContain('mode === "edit"');
+  expect(roleDialog).toContain("当前范围不适用");
 });

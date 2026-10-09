@@ -1,3 +1,4 @@
+import { normalizeRoleAuditEvent } from "../shared/role-audit-event";
 import { assertRoleExpiryRange } from "../shared/role-expiry";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
@@ -94,6 +95,12 @@ const permissionCatalog: Record<PermissionCode, { name: string; description: str
   },
 };
 
+export function listPermissionCatalog() {
+  return ALL_PERMISSIONS.map(code => ({
+    code, ...permissionCatalog[code],
+    workflowAllowed: code !== "workflow:create" && WORKFLOW_PERMISSIONS.includes(code as WorkflowPermission),
+  }));
+}
 const memberRolePermissions: Record<WorkflowMemberRole, readonly WorkflowPermission[]> = {
   owner: WORKFLOW_PERMISSIONS,
   editor: ["workflow:view", "workflow:edit"],
@@ -264,7 +271,7 @@ export async function hasWorkflowPermission(user: { id: number; role: "user" | "
   return access.exists && access.permissions.has(permission);
 }
 
-export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked"; resourceType?: string; resourceId?: string; details?: Record<string, unknown>; requestId?: string | null }) {
+export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked" | "role_created" | "role_updated" | "role_deleted"; resourceType?: string; resourceId?: string; details?: Record<string, unknown>; requestId?: string | null }) {
   await db().query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson,requestId) VALUES (?,?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null, input.requestId ?? currentRequestId() ?? null]);
 }
 
@@ -352,27 +359,32 @@ export async function assignRole(input: { userId: number; roleCode: string; scop
   assertRoleExpiryRange(input.expiresAt);
   if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
   await ensureIamCatalog();
-  const [roleRows] = await db().query<mysql.RowDataPacket[]>("SELECT id,scope FROM iam_role WHERE code=? LIMIT 1", [input.roleCode]);
-  const role = roleRows[0];
-  if (!role || role.scope !== input.scopeType) throw new Error("角色不存在或授权范围不匹配。");
-  const [userRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT status FROM users WHERE id=? LIMIT 1",
-    [input.userId]
-  );
-  if (userRows[0]?.status !== "active") throw new Error("只能为启用中的用户绑定角色。");
-  const [existingRows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT id FROM role_assignment
-      WHERE userId=? AND roleId=? AND scopeType=? AND scopeId <=> ?
-        AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())
-      LIMIT 1`,
-    [input.userId, role.id, input.scopeType, input.scopeId ?? null]
-  );
-  if (existingRows[0]) throw new Error("用户已拥有该作用域下的有效直接角色，请勿重复绑定。");
-  await db().query(
-    `INSERT INTO role_assignment (id,userId,roleId,scopeType,scopeId,effectiveFrom,expiresAt,revokedAt,grantedByUserId,note)
-     VALUES (?,?,?,?,?,NOW(),?,NULL,?,?)`,
-    [randomUUID(), input.userId, role.id, input.scopeType, input.scopeId ?? null, input.expiresAt ?? null, input.grantedByUserId, input.note ?? null]
-  );
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [userRows] = await connection.query<mysql.RowDataPacket[]>("SELECT status FROM users WHERE id=? FOR UPDATE", [input.userId]);
+    if (userRows[0]?.status !== "active") throw new Error("只能为启用中的用户绑定角色。");
+    const [roleRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,scope FROM iam_role WHERE code=? LIMIT 1 FOR UPDATE", [input.roleCode]);
+    const role = roleRows[0];
+    if (!role || role.scope !== input.scopeType) throw new Error("角色不存在或授权范围不匹配。");
+    const [existingRows] = await connection.query<mysql.RowDataPacket[]>(
+      `SELECT id FROM role_assignment WHERE userId=? AND roleId=? AND scopeType=? AND scopeId <=> ?
+        AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW()) LIMIT 1 FOR UPDATE`,
+      [input.userId, role.id, input.scopeType, input.scopeId ?? null]
+    );
+    if (existingRows[0]) throw new Error("用户已拥有该作用域下的有效直接角色，请勿重复绑定。");
+    await connection.query(
+      `INSERT INTO role_assignment (id,userId,roleId,scopeType,scopeId,effectiveFrom,expiresAt,revokedAt,grantedByUserId,note)
+       VALUES (?,?,?,?,?,NOW(),?,NULL,?,?)`,
+      [randomUUID(), input.userId, role.id, input.scopeType, input.scopeId ?? null, input.expiresAt ?? null, input.grantedByUserId, input.note ?? null]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
   await recordAuthorizationAudit({
     actorUserId: input.grantedByUserId,
     targetUserId: input.userId,
@@ -396,8 +408,8 @@ export function validateRolePermissions(scope: "system" | "workflow", permission
   const uniquePermissions = Array.from(new Set(permissions));
   if (!uniquePermissions.length) throw new Error("角色至少需要一项权限。");
   if (uniquePermissions.some(permission => !ALL_PERMISSIONS.includes(permission))) throw new Error("包含未登记的权限编码。");
-  if (scope === "workflow" && uniquePermissions.some(permission => !WORKFLOW_PERMISSIONS.includes(permission as WorkflowPermission))) {
-    throw new Error("流程角色不能包含系统级权限。");
+  if (scope === "workflow" && uniquePermissions.some(permission => permission === "workflow:create" || !WORKFLOW_PERMISSIONS.includes(permission as WorkflowPermission))) {
+    throw new Error("流程角色不能包含系统级权限，包括创建流程权限；请使用系统角色。");
   }
   return uniquePermissions;
 }
@@ -427,7 +439,7 @@ export async function createCustomRole(input: { code: string; name: string; desc
   }
   await recordAuthorizationAudit({
     actorUserId: input.actorUserId,
-    action: "user_updated",
+    action: "role_created",
     resourceType: "iam_role",
     resourceId: code,
     details: {
@@ -459,7 +471,7 @@ export async function updateCustomRole(input: { code: string; name?: string; des
   }
   await recordAuthorizationAudit({
     actorUserId: input.actorUserId,
-    action: "user_updated",
+    action: "role_updated",
     resourceType: "iam_role",
     resourceId: code,
     details: { operation: "custom_role_updated" },
@@ -474,8 +486,11 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
     const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,isSystem FROM iam_role WHERE code=? FOR UPDATE", [code]);
     const role = rows[0];
     if (!role || role.isSystem) throw new Error("找不到可删除的自定义角色。");
-    const [assignmentRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM role_assignment WHERE roleId=? AND revokedAt IS NULL LIMIT 1", [role.id]);
+    const [assignmentRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM role_assignment WHERE roleId=? AND revokedAt IS NULL AND (expiresAt IS NULL OR expiresAt>NOW()) LIMIT 1", [role.id]);
     if (assignmentRows[0]) throw new Error("该角色仍有有效授权，请先撤销所有授权。");
+    const [organizationRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM organization_unit_role WHERE roleId=? AND (expiresAt IS NULL OR expiresAt>NOW()) LIMIT 1", [role.id]);
+    if (organizationRows[0]) throw new Error("该角色仍有组织绑定，请先在组织权限中解除绑定。");
+    await connection.query("DELETE FROM organization_unit_role WHERE roleId=?", [role.id]);
     await connection.query("DELETE FROM role_assignment WHERE roleId=?", [role.id]);
     await connection.query("DELETE FROM role_permission WHERE roleId=?", [role.id]);
     await connection.query("DELETE FROM iam_role WHERE id=?", [role.id]);
@@ -488,7 +503,7 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
   }
   await recordAuthorizationAudit({
     actorUserId: input.actorUserId,
-    action: "user_updated",
+    action: "role_deleted",
     resourceType: "iam_role",
     resourceId: code,
     details: { operation: "custom_role_deleted" },
@@ -685,5 +700,5 @@ export async function listAuthorizationAudit(limit = 100) {
       ORDER BY a.createdAt DESC LIMIT ?`,
     [Math.min(Math.max(limit, 1), 200)]
   );
-  return rows;
+  return rows.map(row => normalizeRoleAuditEvent(row));
 }

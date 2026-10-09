@@ -97,6 +97,7 @@ import {
 import {
   ChangeEvent,
   lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -105,6 +106,10 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+const WorkflowRoleBindingsDialog = lazy(
+  () => import("@/components/WorkflowRoleBindingsDialog")
+);
+const CustomRoleDialog = lazy(() => import("@/components/CustomRoleDialog"));
 const WorkflowCanvas = lazy(() => import("@/components/WorkflowCanvas"));
 const WorkflowGovernance = lazy(
   () => import("@/components/WorkflowGovernance")
@@ -2253,6 +2258,7 @@ function FlowDesigner({
   >("viewer");
   const [hours, setHours] = useState("");
   const [runDialogOpen, setRunDialogOpen] = useState(false);
+  const [customBindingsOpen, setCustomBindingsOpen] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const candidateDirectory = trpc.workflow.memberCandidates.useQuery(
     {
@@ -2788,10 +2794,33 @@ function FlowDesigner({
         }
       />
 
+      {customBindingsOpen && (
+        <ErrorBoundary>
+          <Suspense fallback={<p role="status">正在加载流程角色绑定…</p>}>
+            <WorkflowRoleBindingsDialog
+              key={workflow.id}
+              workflowId={workflow.id}
+              workflowName={workflow.name}
+              onClose={() => setCustomBindingsOpen(false)}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
         <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>流程权限与协作成员</DialogTitle>
+            {canManage && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setMembersDialogOpen(false);
+                  setCustomBindingsOpen(true);
+                }}
+              >
+                管理自定义流程角色
+              </Button>
+            )}
             <DialogDescription>
               管理流程有效协作人员、到期时间与角色授权。
             </DialogDescription>
@@ -3377,6 +3406,9 @@ const authorizationAuditActions: Record<
   user_created: { label: "创建账号", category: "account" },
   user_updated: { label: "更新账号或成员关系", category: "account" },
   user_disabled: { label: "停用账号", category: "account" },
+  role_created: { label: "创建自定义角色", category: "roles" },
+  role_updated: { label: "修改自定义角色", category: "roles" },
+  role_deleted: { label: "删除自定义角色", category: "roles" },
   role_assigned: { label: "授予角色", category: "roles" },
   role_revoked: { label: "撤销角色", category: "roles" },
   temporary_role_assigned: { label: "授予临时角色", category: "roles" },
@@ -3456,6 +3488,10 @@ function IamCenter({
     failed: number;
   }>;
 }) {
+  const [roleEditor, setRoleEditor] = useState<{
+    mode: "create" | "edit" | "delete";
+    role?: any;
+  } | null>(null);
   const userPageSize = 10;
   const rolePageSize = 10;
   const auditPageSize = 10;
@@ -3772,6 +3808,32 @@ function IamCenter({
 
   return (
     <div className="space-y-5 p-4 lg:p-6 [&_input]:h-11 [&_select]:h-11 [&_button]:min-h-11 min-[1024px]:[&_input]:h-10 min-[1024px]:[&_select]:h-10 min-[1024px]:[&_button]:min-h-10">
+      {roleEditor && (
+        <ErrorBoundary>
+          <Suspense fallback={<p role="status">正在加载角色编辑器…</p>}>
+            <CustomRoleDialog
+              mode={roleEditor.mode}
+              role={roleEditor.role}
+              onClose={() => setRoleEditor(null)}
+              onSaved={async code => {
+                await Promise.all([
+                  utils.iam.invalidate(),
+                  utils.workflow.customRoles.invalidate(),
+                  utils.workflow.customRoleAssignments.invalidate(),
+                  utils.workflow.access.invalidate(),
+                ]);
+                setRoleSearch(code ?? "");
+                setRolePage(0);
+                toast.success(
+                  roleEditor.mode === "delete"
+                    ? "自定义角色已删除。"
+                    : "自定义角色已保存。"
+                );
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold tracking-[.18em] text-aiflow-info">
@@ -4589,6 +4651,13 @@ function IamCenter({
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold">角色列表</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setRoleEditor({ mode: "create" })}
+                >
+                  新增角色
+                </Button>
                 <span className="text-xs text-muted-foreground">
                   {filteredRoles.length} / {roles.length}
                 </span>
@@ -4631,7 +4700,11 @@ function IamCenter({
                         {role.name}
                       </p>
                       <span className="aiflow-type-meta shrink-0 rounded-full bg-card px-1.5 py-0.5 text-muted-foreground">
-                        {role.scope === "system" ? "系统角色" : role.scope === "workflow" ? "流程角色" : role.scope}
+                        {role.scope === "system"
+                          ? "系统角色"
+                          : role.scope === "workflow"
+                            ? "流程角色"
+                            : role.scope}
                       </span>
                     </div>
                     <p
@@ -4709,6 +4782,10 @@ function IamCenter({
               details={roleDetails}
               selectedRole={selectedRole}
               onAssign={openRoleAssignment}
+              onManage={(mode, role) => {
+                setMobileRoleDetailsOpen(false);
+                setRoleEditor({ mode, role });
+              }}
             />
           </section>
           <Dialog
@@ -4727,6 +4804,10 @@ function IamCenter({
                   details={roleDetails}
                   selectedRole={selectedRole}
                   onAssign={openRoleAssignment}
+                  onManage={(mode, role) => {
+                    setMobileRoleDetailsOpen(false);
+                    setRoleEditor({ mode, role });
+                  }}
                   embedded
                 />
               </div>
@@ -5162,11 +5243,13 @@ function RoleAuthorizationPanel({
   details,
   selectedRole,
   onAssign,
+  onManage,
   embedded = false,
 }: {
   details: any;
   selectedRole: any;
   onAssign: () => void;
+  onManage: (mode: "edit" | "delete", role: any) => void;
   embedded?: boolean;
 }) {
   const data =
@@ -5188,6 +5271,40 @@ function RoleAuthorizationPanel({
             <p className="aiflow-type-body mt-0.5 text-muted-foreground">
               查看此角色的权限与绑定用户。
             </p>
+          </div>
+        )}
+        {selectedRole && !Boolean(Number(selectedRole.isSystem)) && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!data || details.isFetching}
+              onClick={() =>
+                onManage("edit", {
+                  ...data.role,
+                  permissions: data.permissions.map(
+                    (permission: any) => permission.code
+                  ),
+                })
+              }
+            >
+              编辑角色
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!data || details.isFetching}
+              onClick={() =>
+                onManage("delete", {
+                  ...data.role,
+                  permissions: data.permissions.map(
+                    (permission: any) => permission.code
+                  ),
+                })
+              }
+            >
+              删除角色
+            </Button>
           </div>
         )}
         <Button

@@ -1,3 +1,4 @@
+import {listWorkflowCustomRoles,listWorkflowRoleAssignments,assignWorkflowCustomRole,revokeWorkflowCustomRole} from "./workflow-role-service";
 import { TEMPLATE_NODE_TYPES } from "../shared/workflow-template";
 import { previewOperateApproval } from "./workflow-approval-preview";
 import { parse } from "cookie";
@@ -36,6 +37,7 @@ import {
   listActiveUsersForWorkflowAssignment,
   listAuthorizationAudit,
   listRoles,
+  listPermissionCatalog,
   listWorkflowMembers,
   recordAuthorizationAudit,
   revokeRoleAssignment,
@@ -428,6 +430,7 @@ export const appRouter = router({
         });
         return { success: true };
       }),
+    permissionCatalog: iamManageProcedure.query(() => listPermissionCatalog()),
     roles: iamManageProcedure
       .input(
         z
@@ -681,6 +684,18 @@ export const appRouter = router({
     members: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => listProjectMembers(ctx.user, input.projectId)),
+    customRoles: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64)}))
+      .query(({ctx,input})=>listWorkflowCustomRoles(ctx.user,input.workflowId)),
+    customRoleAssignments: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64),page:z.number().int().min(0).max(1000000).default(0),query:z.string().max(100).optional()}))
+      .query(({ctx,input})=>listWorkflowRoleAssignments(ctx.user,input)),
+    assignCustomRole: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64),userId:z.number().int().positive(),roleCode:z.string().min(10).max(68),expiresAt:z.date().nullable().optional()}))
+      .mutation(({ctx,input})=>assignWorkflowCustomRole(ctx.user,input)),
+    revokeCustomRole: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64),assignmentId:z.string().uuid()}))
+      .mutation(({ctx,input})=>revokeWorkflowCustomRole(ctx.user,input)),
     grantMember: protectedProcedure
       .input(
         z.object({
@@ -1687,6 +1702,18 @@ export const appRouter = router({
           throw new Error("无权管理流程成员。");
         return listActiveUsersForWorkflowAssignment(input.query === undefined ? undefined : {query: input.query,selectedIds: input.selectedIds});
       }),
+    customRoles: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64)}))
+      .query(({ctx,input})=>listWorkflowCustomRoles(ctx.user,input.workflowId)),
+    customRoleAssignments: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64),page:z.number().int().min(0).max(1000000).default(0),query:z.string().max(100).optional()}))
+      .query(({ctx,input})=>listWorkflowRoleAssignments(ctx.user,input)),
+    assignCustomRole: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64),userId:z.number().int().positive(),roleCode:z.string().min(10).max(68),expiresAt:z.date().nullable().optional()}))
+      .mutation(({ctx,input})=>assignWorkflowCustomRole(ctx.user,input)),
+    revokeCustomRole: protectedProcedure
+      .input(z.object({workflowId:z.string().min(8).max(64),assignmentId:z.string().uuid()}))
+      .mutation(({ctx,input})=>revokeWorkflowCustomRole(ctx.user,input)),
     grantMember: protectedProcedure
       .input(
         z.object({
