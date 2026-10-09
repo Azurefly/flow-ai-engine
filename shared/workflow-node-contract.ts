@@ -2507,6 +2507,14 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         const item = route as NodeConfig;
         // 原始样例使用 code/target；新版面板使用 handle/condition。两种结构均可导入，且不改写原始 JSON。
         assertString(item.handle ?? item.code, "路由规则必须配置分支句柄。");
+        const priority = item.routerRulePriority ?? item.priority;
+        if (
+          priority !== undefined &&
+          priority !== null &&
+          ((typeof priority !== "number" && typeof priority !== "string") ||
+            !Number.isFinite(Number(priority)))
+        )
+          throw new Error("路由规则优先级必须是有限数值，-1 表示默认规则。");
         const condition = item.condition;
         if (condition !== undefined) {
           assertObject(condition, "路由规则的条件必须是对象。");

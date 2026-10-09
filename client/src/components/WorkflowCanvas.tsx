@@ -1986,6 +1986,29 @@ function StructuredListRow({
           </label>
         </div>
         <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
+          优先级（-1 为默认规则）
+          <input
+            type="number"
+            step="any"
+            className={inputClass}
+            value={String(route.routerRulePriority ?? route.priority ?? 0)}
+            disabled={disabled}
+            onChange={event => {
+              const priority =
+                event.target.value === "" ? "" : Number(event.target.value);
+              onChange({
+                ...route,
+                priority,
+                routerRulePriority: priority,
+                isDefault: priority === -1,
+              });
+            }}
+          />
+          <span className="aiflow-type-meta">
+            值越大越先匹配；同值按创建顺序。留空按 0 处理。
+          </span>
+        </label>
+        <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
           目标节点
           <span className="aiflow-type-control flex min-h-11 items-center rounded border border-border bg-muted px-2 text-foreground">
             {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}

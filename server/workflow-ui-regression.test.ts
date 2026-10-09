@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_388 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 410 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_389 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 411 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3555,4 +3555,11 @@ it("路由默认展示实际分支规则，并解释兼容规则执行优先级"
   );
   expect(canvasSource).toContain("修改它们不会覆盖已配置的分支规则");
   expect(canvasSource).toContain("未配置分支规则时会读取原版兼容规则");
+});
+
+it("路由分支可直接配置优先级并同步默认与兼容字段", () => {
+  expect(canvasSource).toContain("优先级（-1 为默认规则）");
+  expect(canvasSource).toContain("routerRulePriority: priority");
+  expect(canvasSource).toContain("isDefault: priority === -1");
+  expect(nodeContractSource).toContain("路由规则优先级必须是有限数值");
 });
