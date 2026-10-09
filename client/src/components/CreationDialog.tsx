@@ -51,6 +51,7 @@ export function CreationDialog({
           data-aiflow-creation-dialog
           onSubmit={event => {
             event.preventDefault();
+            if (pending || submitDisabled) return;
             void onSubmit();
           }}
         >

@@ -3600,4 +3600,8 @@ it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
   expect(organization).toContain("roles.isSuccess && !roles.isFetching");
   expect(organization).toContain("submitDisabled={!validBindingRole}");
   expect(organization).toContain("if (!validBindingRole)");
+  expect(organization).toContain('htmlFor="organization-binding-role"');
+  expect(organization).toContain("权限组加载失败");
+  expect(organization).toContain("binding.unitId === selectedId");
+  expect(source("../client/src/components/CreationDialog.tsx")).toContain("if (pending || submitDisabled) return;");
 });

@@ -159,7 +159,8 @@ export default function OrganizationManagementPage({
   const selectedBindingRole = eligibleRoles.find(role => String(role.id) === roleId);
   const selectedRolePermissions = readRolePermissionCodes(selectedBindingRole?.permissions);
   const validBindingRole = Boolean(
-    roles.isSuccess && !roles.isFetching && selectedBindingRole && selectedRolePermissions.length
+    roles.isSuccess && !roles.isFetching && selectedBindingRole && selectedRolePermissions.length &&
+    !roleBindings.some(binding => binding.unitId === selectedId && Number(binding.roleId) === Number(roleId))
   );
   const [movingMember, setMovingMember] = useState<any | null>(null);
   const [moveForm, setMoveForm] = useState({
@@ -2001,12 +2002,14 @@ export default function OrganizationManagementPage({
         errorMessage={roleError}
         onSubmit={submitRole}
       >
-        <label className="grid gap-1.5 text-sm font-medium text-foreground">
-          权限组
+        <div className="grid gap-1.5 text-sm font-medium text-foreground">
+          <label htmlFor="organization-binding-role">权限组</label>
           <Button type="button" variant="outline" size="sm" disabled={roles.isFetching || bindRole.isPending} onClick={() => void roles.refetch()}>
             刷新权限组
           </Button>
           <select
+            id="organization-binding-role"
+            disabled={roles.isFetching || bindRole.isPending}
             className="aiflow-type-control h-11 rounded-md border border-border bg-card px-3 min-[1024px]:h-10"
             value={roleId}
             onChange={event => setRoleId(event.target.value)}
@@ -2026,7 +2029,8 @@ export default function OrganizationManagementPage({
                 </option>
               ))}
           </select>
-        </label>
+        </div>
+        {roles.isError && <p role="alert" className="text-sm text-destructive">权限组加载失败，请点击“刷新权限组”重试。</p>}
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm" aria-live="polite">
           <p className="font-medium">绑定后的权限</p>
           <p className="mt-1 text-muted-foreground">部门范围决定哪些成员继承角色；系统角色中的流程权限作用于全部流程，不限于本部门创建的流程。</p>
@@ -2041,6 +2045,7 @@ export default function OrganizationManagementPage({
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <input
             type="checkbox"
+            disabled={bindRole.isPending}
             checked={roleIncludesDescendants}
             onChange={event => setRoleIncludesDescendants(event.target.checked)}
           />
@@ -2050,6 +2055,7 @@ export default function OrganizationManagementPage({
           到期时间（可选）
           <Input
             type="datetime-local"
+            disabled={bindRole.isPending}
             value={roleExpiresAt}
             onChange={event => setRoleExpiresAt(event.target.value)}
           />
