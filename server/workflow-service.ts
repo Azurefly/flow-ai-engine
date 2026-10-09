@@ -1,3 +1,4 @@
+import { locateSubflowDiagnostics } from "./subflow-diagnostics";
 import {
   readSubflowFlowType,
   withSubflowFlowType,
@@ -23,6 +24,7 @@ import {
   compileWorkflowDefinition,
   validateWorkflowDefinition,
   type WorkflowCompileResult,
+  WorkflowCompileError,
   type WorkflowCompileDiagnostic,
   type WorkflowDefinition,
   type WorkflowAnalysisOptions,
@@ -227,7 +229,16 @@ async function resolveSubflowReferences(
       throw new Error("流程只能发布已启用的私有子流程引用。");
     const mappedDefinition = parseJson(mapped.definitionJson) as Definition;
     if (executable) {
-      validate(mappedDefinition, { flowType, executable: true });
+      try {
+        validate(mappedDefinition, { flowType, executable: true });
+      } catch (error) {
+        if (error instanceof WorkflowCompileError) {
+          throw new WorkflowCompileError(
+            locateSubflowDiagnostics(error.diagnostics, node, String(mapped.name))
+          );
+        }
+        throw error;
+      }
       const unsupported = mappedDefinition.nodes.find(item =>
         [
           "operate",
