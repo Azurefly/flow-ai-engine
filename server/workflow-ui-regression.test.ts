@@ -1879,7 +1879,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("修改名称");
     expect(canvasSource).toContain("nodes.filter(node => node.selected");
   });
-  it("按原版语义分组操作、路由与子流程配置并解释当前运行字段", () => {
+  it("操作与路由保留语义分组，子流程优先展示实际调用配置", () => {
     expect(canvasSource).toContain("CONFIG_GROUPS");
     expect(canvasSource).toContain('label: "人员与操作"');
     expect(canvasSource).toContain('label: "流程参与方显示"');
@@ -1889,10 +1889,11 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("流程身份（逗号分隔）");
     expect(canvasSource).toContain("请从此路径句柄连线到目标状态节点");
     expect(canvasSource).toContain("默认路径");
-    expect(canvasSource).toContain('label: "流转方式"');
-    expect(canvasSource).toContain('label: "入口映射"');
-    expect(canvasSource).toContain('label: "出口映射"');
-    expect(canvasSource).toContain('label: "当前运行映射"');
+    expect(canvasSource).toContain('label: "调用配置"');
+    expect(canvasSource).toContain('label: "迁移兼容"');
+    expect(canvasSource).toContain(
+      'keys: ["subflowId", "input", "executionMode"]'
+    );
   });
 
   it("新增治理、运行分析与复用资产面板在窄屏保持可访问结构", () => {

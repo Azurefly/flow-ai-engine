@@ -2263,24 +2263,12 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
   ],
   subflow: [
     {
-      label: "基础信息",
-      keys: ["zlcxz", "nodeDh"],
+      label: "调用配置",
+      keys: ["subflowId", "input", "executionMode"],
     },
     {
-      label: "流转方式",
-      keys: ["sfgqzlc", "zlcfqf", "gdtj"],
-    },
-    {
-      label: "入口映射",
-      keys: ["zlcrk"],
-    },
-    {
-      label: "出口映射",
-      keys: ["zlcck"],
-    },
-    {
-      label: "当前运行映射",
-      keys: ["subflowId", "input"],
+      label: "迁移兼容",
+      keys: ["zlcxz", "nodeDh", "sfgqzlc", "zlcfqf", "gdtj", "zlcrk", "zlcck"],
     },
   ],
 };
