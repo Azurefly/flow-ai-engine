@@ -72,6 +72,13 @@ export default function WorkflowRoleBindingsDialog({
   const validUser = Boolean(
     userIds[0] && users.data?.some(item => String(item.id) === userIds[0])
   );
+  const validRole = Boolean(
+    roles.isSuccess &&
+      !roles.isFetching &&
+      roles.data.some(
+        role => role.code === roleCode && role.permissionLabels.length > 0
+      )
+  );
   async function refresh() {
     await Promise.all([
       utils.workflow.customRoleAssignments.invalidate({ workflowId }),
@@ -83,7 +90,7 @@ export default function WorkflowRoleBindingsDialog({
   }
   async function assign() {
     setError("");
-    if (!validUser || !roles.data?.some(role => role.code === roleCode)) {
+    if (busy || !validUser || !validRole) {
       setError("请选择有效账号和自定义流程角色。");
       return;
     }
@@ -141,7 +148,16 @@ export default function WorkflowRoleBindingsDialog({
         </DialogHeader>
         <section className="space-y-3 rounded-lg border border-border p-4">
           <div className="space-y-2">
-            <Label htmlFor="workflow-custom-role">流程角色</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="workflow-custom-role">流程角色</Label>
+              <Button
+                variant="outline"
+                disabled={busy || roles.isFetching}
+                onClick={() => void roles.refetch()}
+              >
+                刷新角色
+              </Button>
+            </div>
             <select
               id="workflow-custom-role"
               className="aiflow-type-control min-h-11 w-full rounded-md border border-border bg-background px-3"
@@ -151,7 +167,11 @@ export default function WorkflowRoleBindingsDialog({
             >
               <option value="">请选择自定义流程角色</option>
               {roles.data?.map(role => (
-                <option key={role.code} value={role.code}>
+                <option
+                  key={role.code}
+                  value={role.code}
+                  disabled={!role.permissionLabels.length}
+                >
                   {role.name}（{role.code}）
                 </option>
               ))}
@@ -217,7 +237,7 @@ export default function WorkflowRoleBindingsDialog({
             disabled={
               busy ||
               !validUser ||
-              !roleCode ||
+              !validRole ||
               roles.isLoading ||
               roles.isError
             }

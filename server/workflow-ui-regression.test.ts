@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_406 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_407 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 417 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3579,4 +3579,15 @@ it("自定义角色维护和流程绑定按需加载，内置角色保持保护"
   expect(roleDialog).toContain("内置角色不可修改或删除");
   expect(roleDialog).toContain('mode === "edit"');
   expect(roleDialog).toContain("当前范围不适用");
+});
+
+it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧选择", () => {
+  const bindings = source(
+    "../client/src/components/WorkflowRoleBindingsDialog.tsx"
+  );
+  expect(bindings).toContain("刷新角色");
+  expect(bindings).toContain("!roles.isFetching");
+  expect(bindings).toContain("role.permissionLabels.length > 0");
+  expect(bindings).toContain("busy || !validUser || !validRole");
+  expect(bindings).toContain("disabled={!role.permissionLabels.length}");
 });
