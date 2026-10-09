@@ -1381,7 +1381,10 @@ export default function OrganizationManagementPage({
                       <Button
                         type="button"
                         className="h-11 min-[1024px]:h-10"
-                        onClick={() => setRoleOpen(true)}
+                        onClick={() => {
+                          void roles.refetch();
+                          setRoleOpen(true);
+                        }}
                       >
                         <KeyRound size={15} />
                         绑定权限组
@@ -2033,7 +2036,7 @@ export default function OrganizationManagementPage({
         {roles.isError && <p role="alert" className="text-sm text-destructive">权限组加载失败，请点击“刷新权限组”重试。</p>}
         <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm" aria-live="polite">
           <p className="font-medium">绑定后的权限</p>
-          <p className="mt-1 text-muted-foreground">部门范围决定哪些成员继承角色；系统角色中的流程权限作用于全部流程，不限于本部门创建的流程。</p>
+          <p className="mt-1 text-muted-foreground">部门范围决定继承成员；流程权限覆盖全部流程，不限于本部门创建的流程。</p>
           {selectedBindingRole ? (
             <ul className="mt-2 grid gap-1">
               {selectedRolePermissions.map(code => <li key={code}>{permissionCatalog.data?.find(item => item.code === code)?.name ?? code}</li>)}

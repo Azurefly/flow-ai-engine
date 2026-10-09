@@ -3597,6 +3597,7 @@ it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
   expect(organization).toContain("绑定后的权限");
   expect(organization).toContain("不限于本部门创建的流程");
   expect(organization).toContain("刷新权限组");
+  expect(organization).toContain("void roles.refetch();");
   expect(organization).toContain("roles.isSuccess && !roles.isFetching");
   expect(organization).toContain("submitDisabled={!validBindingRole}");
   expect(organization).toContain("if (!validBindingRole)");
