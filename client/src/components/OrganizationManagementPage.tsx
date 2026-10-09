@@ -1,4 +1,5 @@
 import { visibleOrganizationIds } from "../../../shared/organization-tree-visibility";
+import { readRolePermissionCodes } from "@shared/role-permission-codes";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,6 +152,15 @@ export default function OrganizationManagementPage({
   const [roleId, setRoleId] = useState("");
   const [roleIncludesDescendants, setRoleIncludesDescendants] = useState(true);
   const [roleExpiresAt, setRoleExpiresAt] = useState("");
+  const permissionCatalog = trpc.iam.permissionCatalog.useQuery(undefined, {
+    enabled: roleOpen,
+    retry: false,
+  });
+  const selectedBindingRole = eligibleRoles.find(role => String(role.id) === roleId);
+  const selectedRolePermissions = readRolePermissionCodes(selectedBindingRole?.permissions);
+  const validBindingRole = Boolean(
+    roles.isSuccess && !roles.isFetching && selectedBindingRole && selectedRolePermissions.length
+  );
   const [movingMember, setMovingMember] = useState<any | null>(null);
   const [moveForm, setMoveForm] = useState({
     toUnitId: "",
@@ -391,7 +401,11 @@ export default function OrganizationManagementPage({
 
   const submitRole = async () => {
     setRoleError("");
-    if (!selected) return;
+    if (!selected || bindRole.isPending) return;
+    if (!validBindingRole) {
+      setRoleError("请选择已加载且包含有效权限的权限组。");
+      return;
+    }
     try {
       await bindRole.mutateAsync({
         unitId: selected.id,
@@ -1983,11 +1997,15 @@ export default function OrganizationManagementPage({
         description="成员按部门范围和有效期继承所选系统角色；系统管理员角色不能通过部门分配。"
         submitLabel="确认绑定"
         pending={bindRole.isPending}
+        submitDisabled={!validBindingRole}
         errorMessage={roleError}
         onSubmit={submitRole}
       >
         <label className="grid gap-1.5 text-sm font-medium text-foreground">
           权限组
+          <Button type="button" variant="outline" size="sm" disabled={roles.isFetching || bindRole.isPending} onClick={() => void roles.refetch()}>
+            刷新权限组
+          </Button>
           <select
             className="aiflow-type-control h-11 rounded-md border border-border bg-card px-3 min-[1024px]:h-10"
             value={roleId}
@@ -2003,12 +2021,23 @@ export default function OrganizationManagementPage({
                   )
               )
               .map((role: any) => (
-                <option key={role.id} value={role.id}>
+                <option key={role.id} value={role.id} disabled={!readRolePermissionCodes(role.permissions).length}>
                   {role.name}（{role.code}）
                 </option>
               ))}
           </select>
         </label>
+        <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm" aria-live="polite">
+          <p className="font-medium">绑定后的权限</p>
+          <p className="mt-1 text-muted-foreground">部门范围决定哪些成员继承角色；系统角色中的流程权限作用于全部流程，不限于本部门创建的流程。</p>
+          {selectedBindingRole ? (
+            <ul className="mt-2 grid gap-1">
+              {selectedRolePermissions.map(code => <li key={code}>{permissionCatalog.data?.find(item => item.code === code)?.name ?? code}</li>)}
+              {!selectedRolePermissions.length && <li>此权限组没有可用权限，请选择其他权限组。</li>}
+            </ul>
+          ) : <p className="mt-2 text-muted-foreground">选择权限组后显示具体权限。</p>}
+          <p className="mt-2 text-muted-foreground">{roleIncludesDescendants ? "本部门及其启用的子部门成员继承。" : "仅本部门成员继承。"}到期时间留空表示长期有效。</p>
+        </div>
         <label className="flex items-center gap-2 text-sm font-medium text-foreground">
           <input
             type="checkbox"

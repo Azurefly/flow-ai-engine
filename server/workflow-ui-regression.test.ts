@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_407 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 417 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_408 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 418 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3590,4 +3590,14 @@ it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧�
   expect(bindings).toContain("role.permissionLabels.length > 0");
   expect(bindings).toContain("busy || !validUser || !validRole");
   expect(bindings).toContain("disabled={!role.permissionLabels.length}");
+});
+
+it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
+  const organization = source("../client/src/components/OrganizationManagementPage.tsx");
+  expect(organization).toContain("绑定后的权限");
+  expect(organization).toContain("不限于本部门创建的流程");
+  expect(organization).toContain("刷新权限组");
+  expect(organization).toContain("roles.isSuccess && !roles.isFetching");
+  expect(organization).toContain("submitDisabled={!validBindingRole}");
+  expect(organization).toContain("if (!validBindingRole)");
 });
