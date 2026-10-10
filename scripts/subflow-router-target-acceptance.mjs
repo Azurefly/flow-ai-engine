@@ -31,6 +31,8 @@ await request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
 const missingTarget = process.env.FLOW_SUBROUTE_MODE === "missing-target";
 const expectLegacy = process.env.FLOW_SUBROUTE_EXPECT === "legacy";
+const diagnosticType = process.env.FLOW_SUBROUTE_DIAGNOSTIC;
+assert(!diagnosticType || ["wait", "message_catch"].includes(diagnosticType));
 const node = (id, type, config = {}) => ({
   id,
   type,
@@ -56,7 +58,10 @@ const child = await request(
   {
     name: `子流程目标路由验证_${tag}`,
     flowType: "control",
-    definition: definition(
+    definition: diagnosticType ? definition(
+      [node("start", "start"), node("waiting", diagnosticType, diagnosticType === "wait" ? { durationSeconds: 3 } : { messageName: "child.diagnostic", correlationKey: tag }), node("end", "end")],
+      [edge("start", "waiting"), edge("waiting", "end")]
+    ) : definition(
       [
         node("start", "start"),
         node("router", "router", {
@@ -136,6 +141,18 @@ const parent = await request(
   },
   true
 );
+if (diagnosticType) {
+  const precheck = await request("workflow.compile", { id: parent.id }, true);
+  assert.equal(precheck.ok, false);
+  const diagnostic = precheck.diagnostics.find(item => item.code === "WF_SUBFLOW_SYNC_NODE_UNSUPPORTED");
+  assert(diagnostic);
+  assert.equal(diagnostic.location.nodeId, "child");
+  assert.equal(diagnostic.location.field, "config.subflowId");
+  assert(diagnostic.message.includes(diagnosticType));
+  await assert.rejects(() => request("workflow.publish", { id: parent.id }, true), /同步子流程不支持/);
+  console.log(JSON.stringify({ workflowId: parent.id, childId: child.id, diagnosticType, precheckLocatedCaller: true, publicationRejected: true }));
+  process.exit(0);
+}
 for (const [amount, expected] of missingTarget
   ? [[10, "failed"]]
   : [
