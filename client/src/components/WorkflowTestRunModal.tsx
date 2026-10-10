@@ -80,8 +80,10 @@ export default function WorkflowTestRunModal({
     { enabled: Boolean(open && isDataflow && workflow?.projectId), retry: false }
   );
   const requiredDataPermission = workflow?.status === "published" ? "project:workflow:run" : "project:workflow:edit";
-  const canExecute = canRun && (!isDataflow || (!dataProjectAccess.isError && !dataProjectAccess.isFetching && Boolean(dataProjectAccess.data?.permissions.has(requiredDataPermission))));
-  const executionPermissionHint = !canRun
+  const canExecute = isDataflow
+    ? !dataProjectAccess.isError && !dataProjectAccess.isFetching && Boolean(dataProjectAccess.data?.permissions.has(requiredDataPermission))
+    : canRun;
+  const executionPermissionHint = !isDataflow && !canRun
     ? "当前账号没有运行权限"
     : isDataflow && !canExecute
       ? dataProjectAccess.isError ? "项目权限加载失败，请重试" : dataProjectAccess.isFetching ? "正在确认项目权限" : workflow?.status === "published" ? "当前账号没有项目流程运行权限" : "草稿测试需要项目流程编辑权限，请联系项目管理员"

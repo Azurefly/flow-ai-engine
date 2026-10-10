@@ -2581,7 +2581,7 @@ function FlowDesigner({
               <DropdownMenuItem
                 className="aiflow-type-control"
                 onClick={() => setRunDialogOpen(true)}
-                disabled={!canRun}
+                disabled={workflow.flowType !== "data" && !canRun}
                 title={
                   workflow.flowType === "state"
                     ? "会推进流程状态或创建待办；提交前可查看运行影响。"

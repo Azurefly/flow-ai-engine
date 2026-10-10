@@ -336,7 +336,7 @@ describe("流程设计器界面回归约束", () => {
     expect(menuStart).toBeGreaterThanOrEqual(0);
     expect(menuEnd).toBeGreaterThan(menuStart);
     expect(operationMenu).toContain("onClick={() => setRunDialogOpen(true)}");
-    expect(operationMenu).toContain("disabled={!canRun}");
+    expect(operationMenu).toContain('disabled={workflow.flowType !== "data" && !canRun}');
     expect(operationMenu).toContain("运行控制流程");
     expect(operationMenu).toContain("仅执行预检");
     expect(operationMenu).toContain('className="aiflow-type-control"');
@@ -3767,5 +3767,8 @@ it("数据流程测试弹窗按项目权限禁用执行并显示原因", () => {
   expect(modal).toContain("{executionPermissionHint}</p>");
   expect(modal).toContain("open && isDataflow && workflow?.projectId");
   expect(modal).toContain("!dataProjectAccess.isError && !dataProjectAccess.isFetching");
+  expect(modal).toContain("const canExecute = isDataflow ?");
+  expect(modal).toContain("!isDataflow && !canRun");
+  expect(homeSource).toContain('disabled={workflow.flowType !== "data" && !canRun}');
   expect(modal).toContain("dataProjectAccess.refetch()");
 });
