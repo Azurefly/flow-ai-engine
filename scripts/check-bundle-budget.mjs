@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Final dataflow result tables measured: 1376.97 KiB raw / 406.22 KiB gzip before terminal labels.
-const maxTotalBytes = 1_411 * 1024;
+// Unsaved workflow navigation protection: 1411.30 KiB raw / 418.31 KiB gzip.
+const maxTotalBytes = 1_412 * 1024;
 const maxTotalGzipBytes = 419 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
