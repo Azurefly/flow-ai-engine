@@ -10,6 +10,9 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("折叠的流程侧栏隐藏可访问语义并禁用内部键盘焦点", () => {
+    expect(homeSource).toContain('data-aiflow-workflow-library="" aria-hidden={!flowListOpen} inert={!flowListOpen}');
+  });
   it("无权限或不存在的流程不挂载依赖流程对象的设计器", () => {
     expect(homeSource).toContain('flowView === "editor" && selectedWorkflow && draftDefinition && (selectedId && !access.data');
   });

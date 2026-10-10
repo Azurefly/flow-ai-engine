@@ -1478,6 +1478,8 @@ function FlowConsole({
           <aside
             id="aiflow-workflow-library"
             data-aiflow-workflow-library=""
+            aria-hidden={!flowListOpen}
+            inert={!flowListOpen}
             className={`${flowListOpen ? "w-full md:w-72" : "h-0 w-full overflow-hidden md:h-auto md:w-0"} shrink-0 border-b border-border bg-card transition-[width,height] duration-200 md:border-b-0 md:border-r`}
           >
             <div className="border-b border-border p-4">
