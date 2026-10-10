@@ -1,5 +1,6 @@
 import { visibleOrganizationIds } from "../../../shared/organization-tree-visibility";
 import { readRolePermissionCodes } from "@shared/role-permission-codes";
+import { roleExpiryDateInput } from "@shared/role-expiry";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -152,6 +153,7 @@ export default function OrganizationManagementPage({
   const [roleId, setRoleId] = useState("");
   const [roleIncludesDescendants, setRoleIncludesDescendants] = useState(true);
   const [roleExpiresAt, setRoleExpiresAt] = useState("");
+  const roleExpiryError = roleExpiryDateInput(roleExpiresAt).error;
   const permissionCatalog = trpc.iam.permissionCatalog.useQuery(undefined, {
     enabled: roleOpen,
     retry: false,
@@ -409,12 +411,17 @@ export default function OrganizationManagementPage({
       setRoleError("请选择已加载且包含有效权限的权限组。");
       return;
     }
+    const expiry = roleExpiryDateInput(roleExpiresAt);
+    if (expiry.error) {
+      setRoleError(expiry.error);
+      return;
+    }
     try {
       await bindRole.mutateAsync({
         unitId: selected.id,
         roleId: Number(roleId),
         includeDescendants: roleIncludesDescendants,
-        expiresAt: roleExpiresAt ? new Date(roleExpiresAt) : null,
+        expiresAt: expiry.expiresAt ?? null,
       });
       await refresh();
       setRoleOpen(false);
@@ -2003,7 +2010,7 @@ export default function OrganizationManagementPage({
         description="成员按部门范围和有效期继承所选系统角色；系统管理员角色不能通过部门分配。"
         submitLabel="确认绑定"
         pending={bindRole.isPending}
-        submitDisabled={!validBindingRole}
+        submitDisabled={!validBindingRole || Boolean(roleExpiryError)}
         errorMessage={roleError}
         onSubmit={submitRole}
       >
@@ -2060,11 +2067,14 @@ export default function OrganizationManagementPage({
           到期时间（可选）
           <Input
             type="datetime-local"
+            aria-invalid={Boolean(roleExpiryError)}
+            aria-describedby={roleExpiryError ? "organization-role-expiry-error" : undefined}
             disabled={bindRole.isPending}
             value={roleExpiresAt}
             onChange={event => setRoleExpiresAt(event.target.value)}
           />
         </label>
+        {roleExpiryError && <p id="organization-role-expiry-error" role="alert" className="text-sm text-destructive">{roleExpiryError}</p>}
       </CreationDialog>
     </div>
   );

@@ -1,4 +1,12 @@
 export const maxRoleExpiryTime = Date.parse("2038-01-19T03:14:07Z");
+export function roleExpiryDateInput(value: string, now = Date.now()): { expiresAt?: Date; error?: string } {
+  if (!value.trim()) return {};
+  const expiresAt = new Date(value);
+  if (!Number.isFinite(expiresAt.getTime())) return { error: "请选择有效的到期时间。" };
+  if (expiresAt.getTime() <= now) return { error: "到期时间必须晚于当前时间；留空表示长期有效。" };
+  if (expiresAt.getTime() > maxRoleExpiryTime) return { error: "到期时间超出支持范围，请选择较早的日期。" };
+  return { expiresAt };
+}
 export function assertRoleExpiryRange(expiresAt?: Date | null) {
   if (
     expiresAt &&

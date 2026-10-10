@@ -3,7 +3,18 @@ import {
   roleExpiryInput,
   assertRoleExpiryRange,
   maxRoleExpiryTime,
+  roleExpiryDateInput,
 } from "../shared/role-expiry";
+it("部门授权日期拒绝无效、已到期和超范围输入，留空保持长期有效", () => {
+  const now = Date.parse("2026-10-10T00:00:00Z");
+  expect(roleExpiryDateInput(" ", now)).toEqual({});
+  for (const value of ["invalid", "2026-10-09T00:00:00Z", "2026-10-10T00:00:00Z", "2038-01-19T03:14:08Z"]) {
+    expect(roleExpiryDateInput(value, now).error).toBeTruthy();
+    expect(roleExpiryDateInput(value, now).expiresAt).toBeUndefined();
+  }
+  expect(roleExpiryDateInput("2038-01-19T03:14:07Z", now).expiresAt?.getTime()).toBe(maxRoleExpiryTime);
+  expect(roleExpiryDateInput("2026-10-11T00:00:00Z", now).expiresAt?.getTime()).toBe(Date.parse("2026-10-11T00:00:00Z"));
+});
 it("留空长期有效，合法小时数明确生成到期时间", () => {
   expect(roleExpiryInput(" ")).toEqual({});
   expect(roleExpiryInput("1", 0).expiresAt?.getTime()).toBe(3_600_000);

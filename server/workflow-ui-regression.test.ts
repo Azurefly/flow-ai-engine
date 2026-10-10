@@ -387,8 +387,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_413 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 419 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_414 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 420 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3690,7 +3690,9 @@ it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
   expect(organization).toContain("刷新权限组");
   expect(organization).toContain("void roles.refetch();");
   expect(organization).toContain("roles.isSuccess && !roles.isFetching");
-  expect(organization).toContain("submitDisabled={!validBindingRole}");
+  expect(organization).toContain("submitDisabled={!validBindingRole || Boolean(roleExpiryError)}");
+  expect(organization).toContain("const expiry = roleExpiryDateInput(roleExpiresAt)");
+  expect(organization).toContain('id="organization-role-expiry-error" role="alert"');
   expect(organization).toContain("if (!validBindingRole)");
   expect(organization).toContain('htmlFor="organization-binding-role"');
   expect(organization).toContain("权限组加载失败");
