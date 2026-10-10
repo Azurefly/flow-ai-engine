@@ -387,7 +387,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_414 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_415 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 420 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3733,4 +3733,12 @@ it("基础流程成员有效期即时反馈并阻止无效授权", () => {
   expect(homeSource).toContain('id="workflow-member-expiry-error" role="alert"');
   expect(homeSource).toContain("Boolean(memberExpiryError) ||");
   expect(homeSource).toContain("const validity = roleExpiryInput(hours)");
+});
+it("目录简介使用页面表单，保留错误输入并刷新提交的项目", () => {
+  const warehouse = source("../client/src/components/WorkflowWarehouse.tsx");
+  expect(warehouse).not.toContain("window.prompt");
+  expect(warehouse).toContain('submitLabel="保存简介"');
+  expect(warehouse).toContain("setFolderDescriptionError(error.message)");
+  expect(warehouse).toContain("projectId: submitted.projectId");
+  expect(warehouse).toContain("maxLength={2000}");
 });

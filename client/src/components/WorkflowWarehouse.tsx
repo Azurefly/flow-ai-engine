@@ -8,6 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { CreationDialog } from "@/components/CreationDialog";
 import {
   Command,
   CommandEmpty,
@@ -129,6 +131,9 @@ export default function WorkflowWarehouse({
   const [checkedIds, setCheckedIds] = useState<string[]>([]);
   const [folderDialog, setFolderDialog] = useState<FolderDialog>(null);
   const [folderDialogName, setFolderDialogName] = useState("");
+  const [editingFolder, setEditingFolder] = useState<{ projectId: string; folder: Folder } | null>(null);
+  const [folderDescription, setFolderDescription] = useState("");
+  const [folderDescriptionError, setFolderDescriptionError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null);
   const [keyword, setKeyword] = useState("");
   const [projectSelectorOpen, setProjectSelectorOpen] = useState(false);
@@ -247,11 +252,15 @@ export default function WorkflowWarehouse({
     onError: error => toast.error(error.message),
   });
   const updateFolder = trpc.project.updateFolder.useMutation({
-    onSuccess: () => {
-      invalidate();
+    onSuccess: (_result, submitted) => {
+      void utils.project.warehouse.invalidate({ projectId: submitted.projectId });
+      setEditingFolder(null);
       toast.success("目录说明已更新。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => {
+      setFolderDescriptionError(error.message);
+      toast.error(error.message);
+    },
   });
   const deleteFolder = trpc.project.deleteFolder.useMutation({
     onSuccess: () => {
@@ -836,16 +845,10 @@ export default function WorkflowWarehouse({
                         type="button"
                         className="aiflow-type-control min-h-11 text-aiflow-info hover:underline min-[1024px]:min-h-9"
                         onClick={() => {
-                          const description = window.prompt(
-                            "目录说明",
-                            selectedFolder?.description ?? ""
-                          );
-                          if (description !== null && selectedFolder)
-                            updateFolder.mutate({
-                              projectId: activeProjectId,
-                              folderId: selectedFolder.id,
-                              description,
-                            });
+                          if (!selectedFolder) return;
+                          setEditingFolder({ projectId: activeProjectId, folder: selectedFolder });
+                          setFolderDescription(selectedFolder.description ?? "");
+                          setFolderDescriptionError("");
                         }}
                       >
                         编辑简介
@@ -1130,6 +1133,27 @@ export default function WorkflowWarehouse({
             />
           </>
         )}
+        <CreationDialog
+          open={Boolean(editingFolder)}
+          onOpenChange={open => { if (!open && !updateFolder.isPending) setEditingFolder(null); }}
+          title={`编辑“${editingFolder?.folder.name ?? "目录"}”简介`}
+          description="说明此目录存放的流程用途，方便团队查找；留空可清除简介。"
+          submitLabel="保存简介"
+          pending={updateFolder.isPending}
+          submitDisabled={folderDescription.trim() === (editingFolder?.folder.description ?? "").trim()}
+          errorMessage={folderDescriptionError}
+          onSubmit={() => {
+            if (!editingFolder || updateFolder.isPending) return;
+            setFolderDescriptionError("");
+            updateFolder.mutate({ projectId: editingFolder.projectId, folderId: editingFolder.folder.id, description: folderDescription });
+          }}
+        >
+          <label className="grid gap-2 text-sm">
+            目录简介
+            <Textarea value={folderDescription} onChange={event => setFolderDescription(event.target.value)} maxLength={2000} disabled={updateFolder.isPending} rows={5} />
+          </label>
+          <p className="text-sm text-muted-foreground">{folderDescription.length}/2000</p>
+        </CreationDialog>
         <Dialog
           open={Boolean(folderDialog)}
           onOpenChange={open => {
