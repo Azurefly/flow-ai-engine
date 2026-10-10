@@ -48,6 +48,7 @@ import {
   type ConsoleRoute,
   type ConsoleSection,
 } from "../../../shared/console-route";
+import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-navigation";
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
 import {
   canPublishWorkflowVersion,
@@ -461,6 +462,7 @@ function FlowConsole({
   const [aiPreview, setAiPreview] = useState<any>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
+  const unsavedWorkflowId = useRef<string | null>(null);
   const detailActive = section === "flows" && flowView === "detail";
   const identityActive =
     section === "system" && systemView === "identity" && user.role === "admin";
@@ -469,6 +471,15 @@ function FlowConsole({
       route: ConsoleRoute,
       options?: { replace?: boolean; editorReturn?: FlowEditorReturn }
     ) => {
+      if (!options?.replace && shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, route)) {
+        if (!window.confirm("当前流程有未保存的修改。离开将丢弃这些修改，确定离开吗？")) return false;
+        const persisted = persistedDraftSnapshot.current;
+        if (persisted) {
+          setDraftName(persisted.name);
+          setDraftDefinition(JSON.parse(persisted.definitionJson) as Definition);
+        }
+        unsavedWorkflowId.current = null;
+      }
       setRequestedRoute({
         route,
         ...(options?.editorReturn
@@ -482,6 +493,7 @@ function FlowConsole({
           formatConsoleRoute(route)
         );
       if (typeof window !== "undefined") window.scrollTo(0, 0);
+      return true;
     },
     []
   );
@@ -504,11 +516,11 @@ function FlowConsole({
 
   const openFlowEditor = useCallback(
     (workflowId: string, returnTo: FlowEditorReturn) => {
-      setSelectedWorkflowId(workflowId);
-      navigateRoute(
+      const navigated = navigateRoute(
         { section: "flows", view: "editor", workflowId },
         { editorReturn: returnTo }
       );
+      if (navigated) setSelectedWorkflowId(workflowId);
     },
     [navigateRoute]
   );
@@ -1078,6 +1090,7 @@ function FlowConsole({
         );
       })()
   );
+  unsavedWorkflowId.current = editorActive && isDraftDirty ? persistedDraftSnapshot.current?.workflowId ?? null : null;
   useEffect(() => {
     if (!editorActive || !isDraftDirty) return;
     const warnBeforeUnload = (event: BeforeUnloadEvent) => {
