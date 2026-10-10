@@ -10,6 +10,12 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("编译和发布回调隔离已切换流程或已修改定义", () => {
+    const validation = homeSource.split("onValidate={() => {")[1]?.split("onRun={startRun}")[0];
+    expect(validation?.match(/matchesLiveDraft\(selectedId, draftDefinition\)/g)).toHaveLength(4);
+    expect(validation).toContain("liveDraft.current.name !== draftName");
+    expect(validation).toContain("if (liveDraft.current.workflowId !== selectedId) return;");
+  });
   it("折叠的流程侧栏隐藏可访问语义并禁用内部键盘焦点", () => {
     expect(homeSource).toContain('data-aiflow-workflow-library="" aria-hidden={!flowListOpen} inert={!flowListOpen}');
   });

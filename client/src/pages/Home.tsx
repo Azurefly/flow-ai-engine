@@ -426,6 +426,8 @@ function FlowConsole({
   );
   const [draftName, setDraftName] = useState("");
   const liveDraft = useRef<{ workflowId: string | null; name: string; definition: Definition | null }>({ workflowId: null, name: "", definition: null });
+  const matchesLiveDraft = useCallback((id: string, definition: Definition) =>
+    liveDraft.current.workflowId === id && matchesWorkflowDefinitionSnapshot(JSON.stringify(definition), liveDraft.current.definition), []);
   const persistedDraftSnapshot = useRef<{
     workflowId: string;
     name: string;
@@ -1870,6 +1872,7 @@ function FlowConsole({
                     { id: selectedId, definition: draftDefinition },
                     {
                       onSuccess: result => {
+                        if (!matchesLiveDraft(selectedId, draftDefinition)) return;
                         setCompileDiagnostics(
                           result.ok ? [] : result.diagnostics
                         );
@@ -1881,12 +1884,14 @@ function FlowConsole({
                             : `预检发现 ${result.diagnostics.length} 项问题。`,
                         });
                       },
-                      onError: error =>
+                      onError: error => {
+                        if (!matchesLiveDraft(selectedId, draftDefinition)) return;
                         setCompileCheck({
                           status: "failed",
                           checkedAt: Date.now(),
                           message: `预检请求失败：${error.message}`,
-                        }),
+                        });
+                      },
                     }
                   );
                 }}
@@ -1909,6 +1914,10 @@ function FlowConsole({
                     { id: selectedId, definition: draftDefinition },
                     {
                       onSuccess: result => {
+                        if (!matchesLiveDraft(selectedId, draftDefinition) || liveDraft.current.name !== draftName) {
+                          toast.info("流程已变化，请对当前内容重新检查并发布。");
+                          return;
+                        }
                         if (!result.ok) {
                           setCompileDiagnostics(result.diagnostics);
                           setCompileCheck({
@@ -1934,6 +1943,7 @@ function FlowConsole({
                           },
                           {
                             onSuccess: () => {
+                              if (liveDraft.current.workflowId !== selectedId) return;
                               persistedDraftSnapshot.current = {
                                 workflowId: selectedId,
                                 name: draftName.trim() || "未命名流程",
@@ -1944,6 +1954,7 @@ function FlowConsole({
                         );
                       },
                       onError: error => {
+                        if (!matchesLiveDraft(selectedId, draftDefinition)) return;
                         setCompileCheck({
                           status: "failed",
                           checkedAt: Date.now(),
