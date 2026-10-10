@@ -2345,6 +2345,7 @@ function FlowDesigner({
     "owner" | "editor" | "operator" | "viewer"
   >("viewer");
   const [hours, setHours] = useState("");
+  const memberExpiryError = roleExpiryInput(hours).error;
   const [runDialogOpen, setRunDialogOpen] = useState(false);
   const [customBindingsOpen, setCustomBindingsOpen] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
@@ -3096,16 +3097,24 @@ function FlowDesigner({
                     min="1"
                     placeholder="有效期小时（可选）"
                     aria-label="授权有效期（小时）"
+                    aria-invalid={Boolean(memberExpiryError)}
+                    aria-describedby={memberExpiryError ? "workflow-member-expiry-error" : undefined}
                     disabled={grantPending}
                     value={hours}
                     onChange={event => setHours(event.target.value)}
                   />
                 </div>
+                {memberExpiryError && (
+                  <p id="workflow-member-expiry-error" role="alert" className="text-sm text-destructive">
+                    {memberExpiryError}
+                  </p>
+                )}
                 <Button
                   className="h-8 bg-blue-600 text-xs hover:bg-blue-500"
                   type="submit"
                   disabled={
                     grantPending ||
+                    Boolean(memberExpiryError) ||
                     candidateDirectory.isFetching ||
                     !candidateDirectory.data?.some(
                       row => String(row.id) === candidateId

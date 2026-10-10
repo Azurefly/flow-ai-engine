@@ -3725,3 +3725,10 @@ it("分页外的流程保存发布后刷新详情缓存", () => {
     expect(homeSource.slice(start, start + 300)).toContain("utils.workflow.get.invalidate()");
   }
 });
+it("基础流程成员有效期即时反馈并阻止无效授权", () => {
+  expect(homeSource).toContain("const memberExpiryError = roleExpiryInput(hours).error");
+  expect(homeSource).toContain("aria-invalid={Boolean(memberExpiryError)}");
+  expect(homeSource).toContain('id="workflow-member-expiry-error" role="alert"');
+  expect(homeSource).toContain("Boolean(memberExpiryError) ||");
+  expect(homeSource).toContain("const validity = roleExpiryInput(hours)");
+});
