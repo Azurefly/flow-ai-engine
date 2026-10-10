@@ -73,13 +73,13 @@ try {
   grantedFlow = flows[0].id;
   const allowed = await member.request("workflow.page", { projectId: project.id });
   assert.deepEqual(allowed.items.map(flow => flow.id), [flows[0].id]);
-  await assert.rejects(member.request("project.workflows", { projectId: project.id, keyword: `PAGE_${tag.toUpperCase()}_A` }), /无.*权限|没有.*权限/);
+  await assert.rejects(member.request("project.workflows", { projectId: project.id, keyword: `PAGE_${tag.toUpperCase()}_A` }), /project\.workflows: 项目不存在或当前账号无权执行此操作/);
   assert.equal((await member.request("workflow.page", { search: `分页字面_${tag}_B` })).items.length, 0);
   assert.equal((await member.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_B` })).items.length, 0);
   assert.deepEqual((await member.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_A` })).items.map(flow => flow.id), [flows[0].id]);
   const literal = await admin.request("workflow.page", { search: `分页字面_${tag}_A` });
   assert.deepEqual(literal.items.map(flow => flow.id), [flows[0].id]);
-  console.log(JSON.stringify({ firstPageCount: 10, secondPageCount: 10, noOverlap: true, recordsBeyond200: later.items.length, oldFlowSearchVerified: true, projectPagingVerified: true, literalSearchVerified: true, businessCodeSearchVerified: true, resourceScopeVerified: true, browserPagingVerified: false }));
+  console.log(JSON.stringify({ firstPageCount: 10, secondPageCount: 10, noOverlap: true, recordsBeyond200: later.items.length, oldFlowSearchVerified: true, projectPagingVerified: true, literalSearchVerified: true, businessCodeSearchVerified: true, projectCodeSearchVerified: true, projectScopeDenied: true, resourceScopeVerified: true, browserPagingVerified: false }));
 } finally {
   if (grantedFlow) await admin.request("workflow.revokeMember", { workflowId: grantedFlow, userId, role: "viewer" }, true);
   if (userId) await admin.request("iam.updateUserStatus", { userId, status: "disabled" }, true);
