@@ -3666,6 +3666,11 @@ function IamCenter({
         utils.iam.roleAuthorizationDetails.invalidate(),
         utils.iam.roleAssignableUsers.invalidate(),
         utils.iam.authorizationAudit.invalidate(),
+        utils.workflow.page.invalidate(),
+        utils.workflow.get.invalidate(),
+        utils.workflow.access.invalidate(),
+        utils.project.list.invalidate(),
+        utils.project.access.invalidate(),
       ]);
       setAssignmentDialog(null);
       setAssignmentHours("");
@@ -3681,6 +3686,11 @@ function IamCenter({
         utils.iam.roleAuthorizationDetails.invalidate(),
         utils.iam.roleAssignableUsers.invalidate(),
         utils.iam.authorizationAudit.invalidate(),
+        utils.workflow.page.invalidate(),
+        utils.workflow.get.invalidate(),
+        utils.workflow.access.invalidate(),
+        utils.project.list.invalidate(),
+        utils.project.access.invalidate(),
       ]);
       setPendingRevokeRoleId(null);
       toast.success("直接角色授权已撤销。");
@@ -3911,6 +3921,10 @@ function IamCenter({
                   utils.workflow.customRoles.invalidate(),
                   utils.workflow.customRoleAssignments.invalidate(),
                   utils.workflow.access.invalidate(),
+                  utils.workflow.page.invalidate(),
+                  utils.workflow.get.invalidate(),
+                  utils.project.list.invalidate(),
+                  utils.project.access.invalidate(),
                 ]);
                 setRoleSearch(code ?? "");
                 setRolePage(0);

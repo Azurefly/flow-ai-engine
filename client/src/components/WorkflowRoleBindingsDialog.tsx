@@ -85,6 +85,8 @@ export default function WorkflowRoleBindingsDialog({
       utils.workflow.customRoleAssignments.invalidate({ workflowId }),
       utils.workflow.members.invalidate({ workflowId }),
       utils.workflow.access.invalidate({ id: workflowId }),
+      utils.workflow.page.invalidate(),
+      utils.workflow.get.invalidate({ id: workflowId }),
       utils.iam.userAuthorizationDetails.invalidate(),
       utils.iam.roleAuthorizationDetails.invalidate(),
     ]);

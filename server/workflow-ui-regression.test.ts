@@ -10,6 +10,16 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("直接系统角色授予撤销和角色定义修改刷新资源权限与列表", () => {
+    for (const marker of ["const assignSystemRole =", "const revokeRole =", "onSaved={async code => {"]) {
+      const callback = homeSource.split(marker)[1]?.split("toast.success")[0];
+      for (const query of ["workflow.page", "workflow.get", "workflow.access", "project.list", "project.access"])
+        expect(callback).toContain(`utils.${query}.invalidate()`);
+    }
+    const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");
+    expect(bindings).toContain("utils.workflow.page.invalidate()");
+    expect(bindings).toContain("utils.workflow.get.invalidate({ id: workflowId })");
+  });
   it("自定义流程角色有效期即时校验并阻止无效提交", () => {
     const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");
     expect(bindings).toContain("const expiryError = roleExpiryInput(hours).error");
