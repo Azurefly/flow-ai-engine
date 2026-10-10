@@ -3627,3 +3627,10 @@ it("侧栏流程按服务端十条分页搜索，独立于编辑器路由恢复"
   expect(homeSource).not.toContain("if (!workflows.isSuccess) return;");
   expect(homeSource).not.toContain("trpc.workflow.list.useQuery()");
 });
+it("分页外的流程保存发布后刷新详情缓存", () => {
+  for (const mutation of ["create", "update", "publish", "duplicate", "delete"]) {
+    const start = homeSource.indexOf(`trpc.workflow.${mutation}.useMutation`);
+    expect(start).toBeGreaterThan(-1);
+    expect(homeSource.slice(start, start + 300)).toContain("utils.workflow.get.invalidate()");
+  }
+});

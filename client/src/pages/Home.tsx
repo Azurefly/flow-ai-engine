@@ -858,6 +858,7 @@ function FlowConsole({
   const createFlow = trpc.workflow.create.useMutation({
     onSuccess: (workflow: any) => {
       void utils.workflow.page.invalidate();
+      void utils.workflow.get.invalidate();
       setCreateFlowOpen(false);
       if (workflow?.id)
         openFlowEditor(workflow.id, selectedProject ? "workspace" : "center");
@@ -869,6 +870,7 @@ function FlowConsole({
   const saveFlow = trpc.workflow.update.useMutation({
     onSuccess: (workflow: any) => {
       void utils.workflow.page.invalidate();
+      void utils.workflow.get.invalidate();
       if (workflow) {
         const definition = decodeJson(workflow.definition) as Definition;
         setDraftDefinition(definition);
@@ -886,6 +888,7 @@ function FlowConsole({
   const publishFlow = trpc.workflow.publish.useMutation({
     onSuccess: () => {
       void utils.workflow.page.invalidate();
+      void utils.workflow.get.invalidate();
       toast.success("流程已发布。");
     },
     onError: error => toast.error(error.message),
@@ -904,6 +907,7 @@ function FlowConsole({
   const duplicateFlow = trpc.workflow.duplicate.useMutation({
     onSuccess: (workflow: any) => {
       void utils.workflow.page.invalidate();
+      void utils.workflow.get.invalidate();
       if (workflow?.id) openFlowEditor(workflow.id, flowEditorReturn);
       toast.success("已创建流程副本。");
     },
@@ -912,6 +916,7 @@ function FlowConsole({
   const deleteFlow = trpc.workflow.delete.useMutation({
     onSuccess: () => {
       void utils.workflow.page.invalidate();
+      void utils.workflow.get.invalidate();
       void utils.project.list.invalidate();
       setSelectedWorkflowId(null);
       setDraftDefinition(null);
