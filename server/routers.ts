@@ -77,6 +77,7 @@ import {
   listSubflows,
   listWorkflowVersions,
   listWorkflows,
+  listWorkflowPage,
   restoreWorkflow,
   rollbackWorkflowVersion,
   updateNodeTemplate,
@@ -1476,6 +1477,12 @@ export const appRouter = router({
   }),
   workflow: router({
     list: protectedProcedure.query(({ ctx }) => listWorkflows(ctx.user)),
+    page: protectedProcedure.input(z.object({
+      cursor: z.number().int().min(0).max(1000000).optional(),
+      limit: z.number().int().min(1).max(50).default(10),
+      search: z.string().trim().max(100).optional(),
+      projectId: z.string().min(8).max(64).optional(),
+    })).query(({ ctx, input }) => listWorkflowPage(ctx.user, input)),
     archived: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) =>

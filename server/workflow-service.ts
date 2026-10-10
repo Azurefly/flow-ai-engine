@@ -269,12 +269,13 @@ async function resolveSubflowReferences(
   return { ...definition, nodes };
 }
 
-export async function listWorkflows(user: WorkflowUser) {
+export async function listWorkflows(user: WorkflowUser, options?: {
+  limit: number; offset: number; search?: string; projectId?: string;
+}) {
   const canViewAll =
     user.role === "admin" || (await hasSystemPermission(user, "workflow:view"));
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    canViewAll
-      ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL ORDER BY w.updatedAt DESC LIMIT 200"
+  let query = canViewAll
+      ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL"
       : `SELECT DISTINCT w.* FROM workflow w
           LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
@@ -290,14 +291,31 @@ export async function listWorkflows(user: WorkflowUser) {
              JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
              WHERE pu.projectId=fp.id AND om.userId=?
            )
-         )
-         ORDER BY w.updatedAt DESC
-         LIMIT 200`,
-    canViewAll
-      ? []
-      : [user.id, user.id, user.id, user.id, user.id, user.id]
-  );
+         )`;
+  const params: unknown[] = canViewAll ? [] : [user.id, user.id, user.id, user.id, user.id, user.id];
+  if (options?.projectId) {
+    query += " AND w.projectId=?";
+    params.push(options.projectId);
+  }
+  if (options?.search?.trim()) {
+    query += " AND (w.name LIKE ? ESCAPE '!' OR w.description LIKE ? ESCAPE '!' OR w.id LIKE ? ESCAPE '!')";
+    const search = `%${options.search.trim().replace(/[!%_]/g, "!$&")}%`;
+    params.push(search, search, search);
+  }
+  const limit = options ? Math.min(201, Math.max(1, Math.trunc(options.limit))) : 200;
+  const offset = options ? Math.max(0, Math.trunc(options.offset)) : 0;
+  const [rows] = await db().query<mysql.RowDataPacket[]>(`${query} ORDER BY w.updatedAt DESC,w.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
   return rows.map(hydrateWorkflow);
+}
+
+export async function listWorkflowPage(user: WorkflowUser, input: {
+  cursor?: number; limit?: number; search?: string; projectId?: string;
+}) {
+  const limit = Math.min(50, Math.max(1, Math.trunc(input.limit ?? 10)));
+  const offset = Math.max(0, Math.trunc(input.cursor ?? 0));
+  const rows = await listWorkflows(user, { limit: limit + 1, offset, search: input.search, projectId: input.projectId });
+  const hasMore = rows.length > limit;
+  return { items: rows.slice(0, limit), hasMore, nextCursor: hasMore ? offset + limit : undefined };
 }
 
 export async function listArchivedWorkflows(
