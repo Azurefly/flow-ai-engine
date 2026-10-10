@@ -10,6 +10,12 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("未保存的编辑草稿在浏览器关闭或刷新时提示并释放监听", () => {
+    expect(homeSource).toContain("if (!editorActive || !isDraftDirty) return;");
+    expect(homeSource).toContain('window.addEventListener("beforeunload", warnBeforeUnload)');
+    expect(homeSource).toContain('window.removeEventListener("beforeunload", warnBeforeUnload)');
+    expect(homeSource).toContain('event.returnValue = ""');
+  });
   it("分页导致详情暂时卸载后不重新初始化同一流程的未保存草稿", () => {
     expect(homeSource).toContain("if (selectedWorkflow && persistedDraftSnapshot.current?.workflowId !== selectedWorkflow.id)");
   });
