@@ -57,7 +57,9 @@ try {
   await member.request("auth.login", { username: `page_live_${tag}`, password: memberPassword }, true);
   const project = await admin.request("project.create", { code: `PAGE_${tag}`, name: `分页验证_${tag}` }, true);
   const flows = [];
-  for (const suffix of ["A", "B"]) flows.push(await admin.request("project.createWorkflow", { projectId: project.id, name: `分页字面_${tag}_${suffix}`, flowType: "control" }, true));
+  for (const suffix of ["A", "B"]) flows.push(await admin.request("project.createWorkflow", { projectId: project.id, processCode: `PAGE_${tag.toUpperCase()}_${suffix}`, name: `分页字面_${tag}_${suffix}`, flowType: "control" }, true));
+  const codeSearch = await admin.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_A` });
+  assert.deepEqual(codeSearch.items.map(flow => flow.id), [flows[0].id]);
   const projectPage = await admin.request("workflow.page", { projectId: project.id, limit: 1 });
   const projectNext = await admin.request("workflow.page", { projectId: project.id, limit: 1, cursor: projectPage.nextCursor });
   assert.equal(projectPage.items.length, 1);
@@ -70,9 +72,11 @@ try {
   const allowed = await member.request("workflow.page", { projectId: project.id });
   assert.deepEqual(allowed.items.map(flow => flow.id), [flows[0].id]);
   assert.equal((await member.request("workflow.page", { search: `分页字面_${tag}_B` })).items.length, 0);
+  assert.equal((await member.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_B` })).items.length, 0);
+  assert.deepEqual((await member.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_A` })).items.map(flow => flow.id), [flows[0].id]);
   const literal = await admin.request("workflow.page", { search: `分页字面_${tag}_A` });
   assert.deepEqual(literal.items.map(flow => flow.id), [flows[0].id]);
-  console.log(JSON.stringify({ firstPageCount: 10, secondPageCount: 10, noOverlap: true, recordsBeyond200: later.items.length, oldFlowSearchVerified: true, projectPagingVerified: true, literalSearchVerified: true, resourceScopeVerified: true, browserPagingVerified: false }));
+  console.log(JSON.stringify({ firstPageCount: 10, secondPageCount: 10, noOverlap: true, recordsBeyond200: later.items.length, oldFlowSearchVerified: true, projectPagingVerified: true, literalSearchVerified: true, businessCodeSearchVerified: true, resourceScopeVerified: true, browserPagingVerified: false }));
 } finally {
   if (grantedFlow) await admin.request("workflow.revokeMember", { workflowId: grantedFlow, userId, role: "viewer" }, true);
   if (userId) await admin.request("iam.updateUserStatus", { userId, status: "disabled" }, true);

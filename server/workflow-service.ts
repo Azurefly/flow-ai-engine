@@ -298,9 +298,9 @@ export async function listWorkflows(user: WorkflowUser, options?: {
     params.push(options.projectId);
   }
   if (options?.search?.trim()) {
-    query += " AND (w.name LIKE ? ESCAPE '!' OR w.description LIKE ? ESCAPE '!' OR w.id LIKE ? ESCAPE '!')";
+    query += " AND (w.name LIKE ? ESCAPE '!' OR w.description LIKE ? ESCAPE '!' OR w.id LIKE ? ESCAPE '!' OR w.processCode LIKE ? ESCAPE '!')";
     const search = `%${options.search.trim().replace(/[!%_]/g, "!$&")}%`;
-    params.push(search, search, search);
+    params.push(search, search, search, search);
   }
   const limit = options ? Math.min(201, Math.max(1, Math.trunc(options.limit))) : 200;
   const offset = options ? Math.max(0, Math.trunc(options.offset)) : 0;

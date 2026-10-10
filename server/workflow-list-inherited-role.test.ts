@@ -45,5 +45,14 @@ it("普通账号搜索与项目筛选继续受资源范围约束，通配符按�
   expect(page.hasMore).toBe(false);
   expect(page.nextCursor).toBeUndefined();
   expect(mocks.query.mock.calls[0][0]).toContain("ra.scopeId=w.id");
-  expect(mocks.query.mock.calls[0][1]).toEqual([7, 7, 7, 7, 7, 7, "own-project", "%a!_!%%", "%a!_!%%", "%a!_!%%", 11, 0]);
+  expect(mocks.query.mock.calls[0][0]).toContain("w.processCode LIKE ? ESCAPE '!'");
+  expect(mocks.query.mock.calls[0][1]).toEqual([7, 7, 7, 7, 7, 7, "own-project", "%a!_!%%", "%a!_!%%", "%a!_!%%", "%a!_!%%", 11, 0]);
+});
+
+it("业务代号搜索采用参数绑定并转义SQL通配符", async () => {
+  await listWorkflowPage({ id: 7, role: "admin" }, { search: "  ORDER_!%  " });
+  const [sql, params] = mocks.query.mock.calls[0];
+  expect(sql).not.toContain("ORDER_");
+  expect(sql).toContain("w.processCode LIKE ? ESCAPE '!'");
+  expect(params).toEqual(Array(4).fill("%ORDER!_!!!%%").concat([11, 0]));
 });
