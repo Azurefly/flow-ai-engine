@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Expiry feedback and warehouse description dialog: 1414.68 KiB raw / 419.45 KiB gzip.
-const maxTotalBytes = 1_415 * 1024;
+// Expiry feedback, warehouse editing and unpublish confirmation: 1415.57 KiB raw / 419.65 KiB gzip.
+const maxTotalBytes = 1_416 * 1024;
 const maxTotalGzipBytes = 420 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

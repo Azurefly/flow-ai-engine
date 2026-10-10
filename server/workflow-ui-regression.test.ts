@@ -387,7 +387,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_415 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_416 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 420 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3741,4 +3741,14 @@ it("目录简介使用页面表单，保留错误输入并刷新提交的项目"
   expect(warehouse).toContain("setFolderDescriptionError(error.message)");
   expect(warehouse).toContain("projectId: submitted.projectId");
   expect(warehouse).toContain("maxLength={2000}");
+});
+it("取消发布使用页面确认并校验当前目标，失败保留错误", () => {
+  const start = homeSource.indexOf("const unpublishFlow =");
+  const end = homeSource.indexOf("const handleKeyDown", start);
+  expect(homeSource.slice(start, end)).not.toContain("window.confirm");
+  expect(homeSource.slice(start, end)).toContain("id: submitted.id");
+  expect(homeSource).toContain("setUnpublishError(error.message)");
+  expect(homeSource).toContain("unpublishTarget.id !== workflow.id");
+  expect(homeSource).toContain("正在取消发布…");
+  expect(homeSource).toContain("保持发布</Button>");
 });

@@ -2374,23 +2374,25 @@ function FlowDesigner({
   const displayedMembers = liveMembers.data ?? members;
   const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
+  const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; name: string } | null>(null);
+  const [unpublishError, setUnpublishError] = useState("");
+  useEffect(() => { setUnpublishTarget(null); setUnpublishError(""); }, [workflow.id]);
   useEffect(() => setSubflowDialogOpen(false), [workflow.id]);
   const utils = trpc.useUtils();
   const unpublishFlow = trpc.workflow.unpublish.useMutation({
-    onSuccess: () => {
+    onSuccess: (_result, submitted) => {
       void utils.workflow.page.invalidate();
-      void utils.workflow.get.invalidate({ id: workflow.id });
+      void utils.workflow.get.invalidate({ id: submitted.id });
+      setUnpublishTarget(null);
+      setUnpublishError("");
       toast.success("流程已取消发布；历史版本与运行审计已保留。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => { setUnpublishError(error.message); toast.error(error.message); },
   });
   const onUnpublish = () => {
-    if (
-      window.confirm(
-        "确定取消发布当前流程吗？流程将无法继续发起，但历史版本和运行记录会保留。"
-      )
-    )
-      unpublishFlow.mutate({ id: workflow.id });
+    if (!canPublish || workflow.status !== "published" || unpublishFlow.isPending) return;
+    setUnpublishError("");
+    setUnpublishTarget({ id: workflow.id, name: workflow.name });
   };
 
   useEffect(() => {
@@ -3171,6 +3173,23 @@ function FlowDesigner({
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(unpublishTarget)} onOpenChange={open => { if (!open && !unpublishFlow.isPending) setUnpublishTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>取消发布“{unpublishTarget?.name}”</DialogTitle>
+            <DialogDescription>取消发布后无法发起新的运行，历史版本和运行记录会保留。确认后可继续编辑草稿。</DialogDescription>
+          </DialogHeader>
+          {unpublishError && <p role="alert" className="text-sm text-destructive">{unpublishError}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" autoFocus disabled={unpublishFlow.isPending} onClick={() => setUnpublishTarget(null)}>保持发布</Button>
+            <Button variant="destructive" disabled={!canPublish || unpublishFlow.isPending || unpublishTarget?.id !== workflow.id || workflow.status !== "published"} onClick={() => {
+              if (!unpublishTarget || !canPublish || unpublishFlow.isPending || unpublishTarget.id !== workflow.id || workflow.status !== "published") return;
+              setUnpublishError("");
+              unpublishFlow.mutate({ id: unpublishTarget.id });
+            }}>{unpublishFlow.isPending ? "正在取消发布…" : "确认取消发布"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       {subflowDialogOpen && (
         <CanvasNameDialog
           title="保存当前定义为子流程"
