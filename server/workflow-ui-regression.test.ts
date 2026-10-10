@@ -387,7 +387,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_416 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_417 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 420 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3758,4 +3758,14 @@ it("数据流正式运行拒绝草稿，显式测试要求编辑权限", () => {
   expect(service).toContain('input.triggerType === "schedule" || input.mode === "test" ? "edit" : "run"');
   expect(source("../client/src/components/WorkflowTestRunModal.tsx")).toContain('mode: workflow.status === "published" ? "formal" : "test"');
   expect(source("./routers.ts")).toContain('mode: z.enum(["formal", "test"]).optional()');
+});
+it("数据流程测试弹窗按项目权限禁用执行并显示原因", () => {
+  const modal = source("../client/src/components/WorkflowTestRunModal.tsx");
+  expect(modal).toContain("trpc.project.access.useQuery");
+  expect(modal).toContain('workflow?.status === "published" ? "project:workflow:run" : "project:workflow:edit"');
+  expect(modal).toContain("canRun: canExecute");
+  expect(modal).toContain("{executionPermissionHint}</p>");
+  expect(modal).toContain("open && isDataflow && workflow?.projectId");
+  expect(modal).toContain("!dataProjectAccess.isError && !dataProjectAccess.isFetching");
+  expect(modal).toContain("dataProjectAccess.refetch()");
 });

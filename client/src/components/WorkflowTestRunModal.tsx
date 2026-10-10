@@ -75,6 +75,17 @@ export default function WorkflowTestRunModal({
 }: WorkflowTestRunModalProps) {
   const isDataflow = workflow?.flowType === "data";
   const isStateflow = workflow?.flowType === "state";
+  const dataProjectAccess = trpc.project.access.useQuery(
+    { projectId: workflow?.projectId ?? "00000000" },
+    { enabled: Boolean(open && isDataflow && workflow?.projectId), retry: false }
+  );
+  const requiredDataPermission = workflow?.status === "published" ? "project:workflow:run" : "project:workflow:edit";
+  const canExecute = canRun && (!isDataflow || (!dataProjectAccess.isError && !dataProjectAccess.isFetching && Boolean(dataProjectAccess.data?.permissions.has(requiredDataPermission))));
+  const executionPermissionHint = !canRun
+    ? "当前账号没有运行权限"
+    : isDataflow && !canExecute
+      ? dataProjectAccess.isError ? "项目权限加载失败，请重试" : dataProjectAccess.isFetching ? "正在确认项目权限" : workflow?.status === "published" ? "当前账号没有项目流程运行权限" : "草稿测试需要项目流程编辑权限，请联系项目管理员"
+      : undefined;
   const [activeTab, setActiveTab] = useState<"result" | "steps" | "input">(
     "result"
   );
@@ -95,7 +106,7 @@ export default function WorkflowTestRunModal({
 
   const canStartActualRun =
     canStartActualWorkflowRun({
-      canRun,
+      canRun: canExecute,
       isRunning,
       acknowledged: acknowledgedActualRun,
     }) && inputErrors.length === 0;
@@ -417,6 +428,8 @@ export default function WorkflowTestRunModal({
                       ? "运行前会先保存当前画布；只有保存成功才会启动运行。"
                       : `本次会按服务端已保存的草稿定义 v${workflow?.definitionVersion ?? 1} 运行。`}{" "}
                 </DialogDescription>
+                {executionPermissionHint && <p role="status" className="mt-2 text-sm text-muted-foreground">{executionPermissionHint}</p>}
+                {isDataflow && dataProjectAccess.isError && <Button type="button" variant="outline" size="sm" className="mt-2" disabled={dataProjectAccess.isFetching} onClick={() => void dataProjectAccess.refetch()}>重新加载项目权限</Button>}
               </div>
             </div>
 
@@ -532,8 +545,8 @@ export default function WorkflowTestRunModal({
                   className="aiflow-type-control h-11 min-h-11 w-full justify-center bg-blue-600 text-white hover:bg-blue-700 sm:w-auto min-[1024px]:h-9 min-[1024px]:min-h-0"
                   disabled={!canStartActualRun}
                   title={
-                    !canRun
-                      ? "当前账号没有运行权限"
+                    !canExecute
+                      ? executionPermissionHint
                       : !acknowledgedActualRun
                         ? "请先确认本次会执行真实流程"
                         : undefined
@@ -703,8 +716,8 @@ export default function WorkflowTestRunModal({
                     size="sm"
                     disabled={!canStartActualRun}
                     title={
-                      !canRun
-                        ? "当前账号没有运行权限"
+                      !canExecute
+                        ? executionPermissionHint
                         : !acknowledgedActualRun
                           ? "请先确认本次会执行真实流程"
                           : undefined
