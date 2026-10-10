@@ -12,9 +12,9 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Dataflow project permission feedback: 1416.34 KiB raw / 419.94 KiB gzip.
-const maxTotalBytes = 1_417 * 1024;
-const maxTotalGzipBytes = 420 * 1024;
+// Client update monitoring and draft protection: 1418.25 KiB raw / 420.65 KiB gzip.
+const maxTotalBytes = 1_419 * 1024;
+const maxTotalGzipBytes = 421 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

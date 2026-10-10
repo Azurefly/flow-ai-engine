@@ -1,5 +1,6 @@
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
+import { useClientVersionUpdate } from "@/hooks/useClientVersionUpdate";
 import { AuthorizationDetailRefresh } from "@/components/AuthorizationDetailRefresh";
 import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
@@ -1093,6 +1094,7 @@ function FlowConsole({
   });
 
   const canEdit = Boolean(access.data?.permissions?.has("workflow:edit"));
+  const clientUpdateAvailable = useClientVersionUpdate(Boolean(user.id));
   const canPublish = Boolean(access.data?.permissions?.has("workflow:publish"));
   const canRun = Boolean(access.data?.permissions?.has("workflow:run"));
   const canManageMembers = Boolean(
@@ -1263,6 +1265,15 @@ function FlowConsole({
       <a className="aiflow-skip-link" href="#aiflow-console-panel">
         跳到主要工作区
       </a>
+      {clientUpdateAvailable && (
+        <aside role="status" className="fixed bottom-4 left-4 right-4 z-40 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-aiflow-info-border bg-card p-4 text-sm shadow-lg sm:left-auto sm:max-w-lg">
+          <div>
+            <p className="font-semibold">工作台已有新版本</p>
+            <p className="mt-1 text-muted-foreground">{isDraftDirty ? "当前流程有未保存修改，请先保存或丢弃修改再刷新。" : "请先提交正在填写的表单，再刷新以使用最新功能。"}</p>
+          </div>
+          <Button variant="outline" disabled={isDraftDirty} onClick={() => window.location.reload()}>刷新工作台</Button>
+        </aside>
+      )}
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur-sm text-foreground shadow-2xs">
         <div className="flex h-12 items-center">
           <button
