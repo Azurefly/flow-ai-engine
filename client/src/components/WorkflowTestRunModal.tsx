@@ -313,6 +313,7 @@ export default function WorkflowTestRunModal({
             const res = await runDataflowMutation.mutateAsync({
               projectId: workflow.projectId,
               workflowId: workflow.id,
+              mode: workflow.status === "published" ? "formal" : "test",
               data: runInput,
             });
             setActiveRunId(res.runId);

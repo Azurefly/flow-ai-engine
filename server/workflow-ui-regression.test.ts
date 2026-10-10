@@ -3752,3 +3752,10 @@ it("取消发布使用页面确认并校验当前目标，失败保留错误", (
   expect(homeSource).toContain("正在取消发布…");
   expect(homeSource).toContain("保持发布</Button>");
 });
+it("数据流正式运行拒绝草稿，显式测试要求编辑权限", () => {
+  const service = source("./p2-service.ts");
+  expect(service).toContain('input.mode !== "test" && workflow.status !== "published"');
+  expect(service).toContain('input.triggerType === "schedule" || input.mode === "test" ? "edit" : "run"');
+  expect(source("../client/src/components/WorkflowTestRunModal.tsx")).toContain('mode: workflow.status === "published" ? "formal" : "test"');
+  expect(source("./routers.ts")).toContain('mode: z.enum(["formal", "test"]).optional()');
+});

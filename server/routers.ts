@@ -1028,6 +1028,7 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          mode: z.enum(["formal", "test"]).optional(),
           data: z.record(z.string(), z.unknown()).optional(),
         })
       )

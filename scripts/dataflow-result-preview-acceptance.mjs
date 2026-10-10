@@ -137,6 +137,23 @@ const run = await waitFor(
 );
 assert.equal(run.status, "success", JSON.stringify(run.error));
 assert.deepEqual(run.output.terminals[0].rows, samples);
+const verifyUnpublish = process.env.FLOW_DATA_UNPUBLISH === "1";
+if (verifyUnpublish) {
+  const versions = await admin.request("workflow.versions", { workflowId: workflow.id });
+  assert(versions.length > 0);
+  await admin.request("workflow.unpublish", { id: workflow.id }, true);
+  await assert.rejects(() => admin.request("data.run", { projectId: project.id, workflowId: workflow.id }, true), /未发布/);
+  const after = await admin.request("workflow.versions", { workflowId: workflow.id });
+  for (const version of versions) assert(after.some(item => item.id === version.id));
+  const retained = await admin.request("data.runDetail", { projectId: project.id, runId: started.runId });
+  assert.equal(retained.status, "success");
+  assert.deepEqual(retained.output.terminals[0].rows, samples);
+  const draftTest = await admin.request("data.run", { projectId: project.id, workflowId: workflow.id, mode: "test" }, true);
+  const draftResult = await admin.request("data.runDetail", { projectId: project.id, runId: draftTest.runId });
+  assert.equal(draftResult.status, "success");
+  assert.equal(draftResult.executionSource, "draft");
+  assert.deepEqual(draftResult.output.terminals[0].rows, samples);
+}
 console.log(
   JSON.stringify({
     projectId: project.id,
@@ -145,5 +162,7 @@ console.log(
     rows: samples.length,
     lateFieldRow: 15,
     fields: 8,
+    unpublishLifecycleVerified: verifyUnpublish,
+    explicitDraftTestVerified: verifyUnpublish,
   })
 );

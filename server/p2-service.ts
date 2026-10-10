@@ -1977,13 +1977,14 @@ export async function runDataflow(
     workflowId: string;
     data?: JsonRecord;
     triggerType?: "manual" | "schedule";
+    mode?: "formal" | "test";
     scheduleBucket?: string;
   }
 ) {
   await requireProjectAccess(
     user,
     input.projectId,
-    input.triggerType === "schedule" ? "edit" : "run"
+    input.triggerType === "schedule" || input.mode === "test" ? "edit" : "run"
   );
   const runId = id();
   let definition: any;
@@ -2000,6 +2001,8 @@ export async function runDataflow(
     if (!workflow) throw new Error("数据流不存在、已归档或不属于当前项目。 ");
     if (input.triggerType === "schedule" && workflow.status !== "published")
       throw new Error("定时调度的流程必须处于已发布状态。 ");
+    if (input.mode !== "test" && workflow.status !== "published")
+      throw new Error("数据流程尚未发布，无法正式运行；请先发布，或由编辑者使用草稿测试。");
     const publishedPlan = parseJson(workflow.publishedExecutionPlanJson, null);
     const executionSource = resolveWorkflowExecutionSource({
       workflowStatus: String(workflow.status),
