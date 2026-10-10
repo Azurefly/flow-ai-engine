@@ -307,8 +307,9 @@ export async function listProjectWorkflows(
     params.push(filters.status);
   }
   if (filters?.keyword?.trim()) {
-    clauses.push("(w.name LIKE ? OR w.description LIKE ?)");
-    params.push(`%${filters.keyword.trim()}%`, `%${filters.keyword.trim()}%`);
+    clauses.push("(w.name LIKE ? ESCAPE '!' OR w.description LIKE ? ESCAPE '!' OR w.processCode LIKE ? ESCAPE '!' OR w.id LIKE ? ESCAPE '!')");
+    const keyword = `%${filters.keyword.trim().replace(/[!%_]/g, "!$&")}%`;
+    params.push(keyword, keyword, keyword, keyword);
   }
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT w.*,u.username AS creatorUsername,u.name AS creatorName,(SELECT COUNT(*) FROM workflow_run wr WHERE wr.workflowId=w.id) AS runCount

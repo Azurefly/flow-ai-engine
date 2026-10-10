@@ -60,6 +60,8 @@ try {
   for (const suffix of ["A", "B"]) flows.push(await admin.request("project.createWorkflow", { projectId: project.id, processCode: `PAGE_${tag.toUpperCase()}_${suffix}`, name: `分页字面_${tag}_${suffix}`, flowType: "control" }, true));
   const codeSearch = await admin.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_A` });
   assert.deepEqual(codeSearch.items.map(flow => flow.id), [flows[0].id]);
+  const projectCodeSearch = await admin.request("project.workflows", { projectId: project.id, keyword: `PAGE_${tag.toUpperCase()}_A` });
+  assert.deepEqual(projectCodeSearch.map(flow => flow.id), [flows[0].id]);
   const projectPage = await admin.request("workflow.page", { projectId: project.id, limit: 1 });
   const projectNext = await admin.request("workflow.page", { projectId: project.id, limit: 1, cursor: projectPage.nextCursor });
   assert.equal(projectPage.items.length, 1);
@@ -71,6 +73,7 @@ try {
   grantedFlow = flows[0].id;
   const allowed = await member.request("workflow.page", { projectId: project.id });
   assert.deepEqual(allowed.items.map(flow => flow.id), [flows[0].id]);
+  await assert.rejects(member.request("project.workflows", { projectId: project.id, keyword: `PAGE_${tag.toUpperCase()}_A` }), /无.*权限|没有.*权限/);
   assert.equal((await member.request("workflow.page", { search: `分页字面_${tag}_B` })).items.length, 0);
   assert.equal((await member.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_B` })).items.length, 0);
   assert.deepEqual((await member.request("workflow.page", { search: `PAGE_${tag.toUpperCase()}_A` })).items.map(flow => flow.id), [flows[0].id]);
