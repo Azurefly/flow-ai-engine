@@ -52,6 +52,7 @@ import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-naviga
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
 import {
   canPublishWorkflowVersion,
+  isWorkflowDraftDirty,
   matchesWorkflowDefinitionSnapshot,
 } from "../../../shared/workflow-publish";
 import type { Definition } from "../../../server/workflow-service";
@@ -1097,22 +1098,7 @@ function FlowConsole({
   const canManageMembers = Boolean(
     access.data?.permissions?.has("workflow:members:manage")
   );
-  const isDraftDirty = Boolean(
-    selectedWorkflow &&
-      draftDefinition &&
-      (() => {
-        const persisted = persistedDraftSnapshot.current;
-        return (
-          !persisted ||
-          persisted.workflowId !== selectedWorkflow.id ||
-          persisted.name !== draftName ||
-          !matchesWorkflowDefinitionSnapshot(
-            persisted.definitionJson,
-            draftDefinition
-          )
-        );
-      })()
-  );
+  const isDraftDirty = isWorkflowDraftDirty(effectiveWorkflowId, persistedDraftSnapshot.current, draftName, draftDefinition);
   unsavedWorkflowId.current = editorActive && isDraftDirty ? persistedDraftSnapshot.current?.workflowId ?? null : null;
   useEffect(() => {
     if (!editorActive || !isDraftDirty) return;

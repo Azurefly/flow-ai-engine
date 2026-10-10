@@ -6,6 +6,16 @@ export function canPublishWorkflowVersion(
   return status !== "published" || hasUnpublishedChanges;
 }
 
+export function isWorkflowDraftDirty(
+  workflowId: string | null,
+  persisted: { workflowId: string; name: string; definitionJson: string } | null,
+  name: string,
+  definition: unknown
+) {
+  return Boolean(workflowId && definition && persisted?.workflowId === workflowId &&
+    (persisted.name !== name || !matchesWorkflowDefinitionSnapshot(persisted.definitionJson, definition)));
+}
+
 function sortJsonObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
   if (value && typeof value === "object") {
