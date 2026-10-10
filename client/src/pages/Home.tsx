@@ -1,4 +1,5 @@
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
+import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
 import { AuthorizationDetailRefresh } from "@/components/AuthorizationDetailRefresh";
 import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
@@ -206,6 +207,7 @@ function formatTime(value: unknown) {
 export default function Home() {
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery();
+  const accountQueriesReady = useAccountQueryIsolation(me.data?.id ?? null);
   const general = trpc.config.publicGeneral.useQuery();
   const [credentials, setCredentials] = useState({
     username: "",
@@ -213,6 +215,7 @@ export default function Home() {
   });
   const login = trpc.auth.login.useMutation({
     onSuccess: user => {
+      setCredentials({ username: "", password: "" });
       if (user) utils.auth.me.setData(undefined, user);
       void utils.auth.me.invalidate();
       toast.success("登录成功，正在进入流程中心。");
@@ -232,7 +235,7 @@ export default function Home() {
     watermarkEnabled: false,
     watermarkText: "",
   };
-  if (me.isLoading)
+  if (me.isLoading || !accountQueriesReady)
     return (
       <main className="grid min-h-screen place-items-center bg-card text-muted-foreground">
         <div className="flex items-center gap-3 border border-border bg-card px-4 py-3 text-sm shadow-sm">
@@ -254,6 +257,7 @@ export default function Home() {
     );
   return (
     <FlowConsole
+      key={me.data.id}
       user={me.data}
       general={publicGeneral}
       onLogout={() => logout.mutate()}

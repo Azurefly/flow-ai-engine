@@ -3613,3 +3613,8 @@ it("编译诊断支持定位连线并跳过无位置问题", () => {
   expect(canvasSource).toContain("if (detail?.edgeId)");
   expect(canvasSource).toContain("node.id === edge.source || node.id === edge.target");
 });
+it("账号缓存隔离完成后才渲染工作台并重置页面选择", () => {
+  expect(homeSource).toContain("useAccountQueryIsolation(me.data?.id ?? null)");
+  expect(homeSource).toContain("me.isLoading || !accountQueriesReady");
+  expect(homeSource).toContain("key={me.data.id}");
+});
