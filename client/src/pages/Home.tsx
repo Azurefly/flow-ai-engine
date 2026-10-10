@@ -463,6 +463,14 @@ function FlowConsole({
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
   const unsavedWorkflowId = useRef<string | null>(null);
+  const discardUnsavedDraft = useCallback(() => {
+    const persisted = persistedDraftSnapshot.current;
+    if (persisted) {
+      setDraftName(persisted.name);
+      setDraftDefinition(JSON.parse(persisted.definitionJson) as Definition);
+    }
+    unsavedWorkflowId.current = null;
+  }, []);
   const detailActive = section === "flows" && flowView === "detail";
   const identityActive =
     section === "system" && systemView === "identity" && user.role === "admin";
@@ -473,12 +481,7 @@ function FlowConsole({
     ) => {
       if (!options?.replace && shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, route)) {
         if (!window.confirm("当前流程有未保存的修改。离开将丢弃这些修改，确定离开吗？")) return false;
-        const persisted = persistedDraftSnapshot.current;
-        if (persisted) {
-          setDraftName(persisted.name);
-          setDraftDefinition(JSON.parse(persisted.definitionJson) as Definition);
-        }
-        unsavedWorkflowId.current = null;
+        discardUnsavedDraft();
       }
       setRequestedRoute({
         route,
@@ -495,7 +498,7 @@ function FlowConsole({
       if (typeof window !== "undefined") window.scrollTo(0, 0);
       return true;
     },
-    []
+    [discardUnsavedDraft]
   );
   const navigateSection = useCallback(
     (next: ConsoleSection) => {
@@ -559,14 +562,28 @@ function FlowConsole({
           : "返回业务中心";
 
   useEffect(() => {
-    const restoreConsoleRoute = () => setRequestedRoute(readConsoleRoute());
+    const restoreConsoleRoute = () => {
+      const next = readConsoleRoute();
+      if (shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)) {
+        if (!window.confirm("当前流程有未保存的修改。离开将丢弃这些修改，确定离开吗？")) {
+          window.history.pushState(
+            { aiflowEditorReturn: requestedRoute.editorReturn ?? null },
+            "",
+            formatConsoleRoute(requestedRoute.route)
+          );
+          return;
+        }
+        discardUnsavedDraft();
+      }
+      setRequestedRoute(next);
+    };
     window.addEventListener("popstate", restoreConsoleRoute);
     window.addEventListener("hashchange", restoreConsoleRoute);
     return () => {
       window.removeEventListener("popstate", restoreConsoleRoute);
       window.removeEventListener("hashchange", restoreConsoleRoute);
     };
-  }, []);
+  }, [discardUnsavedDraft, requestedRoute]);
 
   const [flowSearch, setFlowSearch] = useState("");
   const [flowSearchValue, setFlowSearchValue] = useState("");

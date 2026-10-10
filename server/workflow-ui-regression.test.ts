@@ -10,6 +10,14 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("浏览器历史和哈希切换取消离开时恢复当前编辑路由", () => {
+    const restore = homeSource.split("const restoreConsoleRoute = () => {")[1]?.split('window.addEventListener("popstate"')[0];
+    expect(restore).toContain("shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)");
+    expect(restore).toContain("window.history.pushState(");
+    expect(restore).toContain("formatConsoleRoute(requestedRoute.route)");
+    expect(restore).toContain("discardUnsavedDraft()");
+    expect(restore).toContain("setRequestedRoute(next)");
+  });
   it("未保存的编辑草稿在浏览器关闭或刷新时提示并释放监听", () => {
     expect(homeSource).toContain("if (!editorActive || !isDraftDirty) return;");
     expect(homeSource).toContain('window.addEventListener("beforeunload", warnBeforeUnload)');
