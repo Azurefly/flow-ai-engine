@@ -1,4 +1,4 @@
-// Public-service regression only; no database writes, token printing, or production task changes.
+// Isolated public-service regression; no direct SQL, token printing, or existing account changes.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 const base = "http://124.223.198.84:1180";
@@ -139,20 +139,113 @@ assert.equal(run.status, "success", JSON.stringify(run.error));
 assert.deepEqual(run.output.terminals[0].rows, samples);
 const verifyUnpublish = process.env.FLOW_DATA_UNPUBLISH === "1";
 if (verifyUnpublish) {
-  const versions = await admin.request("workflow.versions", { workflowId: workflow.id });
-  assert(versions.length > 0);
-  await admin.request("workflow.unpublish", { id: workflow.id }, true);
-  await assert.rejects(() => admin.request("data.run", { projectId: project.id, workflowId: workflow.id }, true), /未发布/);
-  const after = await admin.request("workflow.versions", { workflowId: workflow.id });
-  for (const version of versions) assert(after.some(item => item.id === version.id));
-  const retained = await admin.request("data.runDetail", { projectId: project.id, runId: started.runId });
-  assert.equal(retained.status, "success");
-  assert.deepEqual(retained.output.terminals[0].rows, samples);
-  const draftTest = await admin.request("data.run", { projectId: project.id, workflowId: workflow.id, mode: "test" }, true);
-  const draftResult = await admin.request("data.runDetail", { projectId: project.id, runId: draftTest.runId });
-  assert.equal(draftResult.status, "success");
-  assert.equal(draftResult.executionSource, "draft");
-  assert.deepEqual(draftResult.output.terminals[0].rows, samples);
+  const login = {
+    username: `data_operator_${tag}`,
+    password: randomBytes(24).toString("base64url"),
+  };
+  const { userId } = await admin.request(
+    "iam.createUser",
+    { ...login, name: `数据运行权限验证_${tag}`, role: "user" },
+    true
+  );
+  try {
+    await admin.request(
+      "project.grantMember",
+      { projectId: project.id, userId, role: "operator" },
+      true
+    );
+    const operator = new Session();
+    await operator.request("auth.login", login, true);
+    const operatorRun = await operator.request(
+      "data.run",
+      { projectId: project.id, workflowId: workflow.id },
+      true
+    );
+    const operatorResult = await operator.request("data.runDetail", {
+      projectId: project.id,
+      runId: operatorRun.runId,
+    });
+    assert.equal(operatorResult.status, "success");
+    assert.equal(operatorResult.executionSource, "published_plan");
+    await assert.rejects(
+      () =>
+        operator.request(
+          "data.run",
+          { projectId: project.id, workflowId: workflow.id, mode: "test" },
+          true
+        ),
+      /无权执行此数据资源操作/
+    );
+    const versions = await admin.request("workflow.versions", {
+      workflowId: workflow.id,
+    });
+    assert(versions.length > 0);
+    await admin.request("workflow.unpublish", { id: workflow.id }, true);
+    await assert.rejects(
+      () =>
+        admin.request(
+          "data.run",
+          { projectId: project.id, workflowId: workflow.id },
+          true
+        ),
+      /未发布/
+    );
+    await assert.rejects(
+      () =>
+        operator.request(
+          "data.run",
+          { projectId: project.id, workflowId: workflow.id },
+          true
+        ),
+      /未发布/
+    );
+    await assert.rejects(
+      () =>
+        operator.request(
+          "data.run",
+          { projectId: project.id, workflowId: workflow.id, mode: "test" },
+          true
+        ),
+      /无权执行此数据资源操作/
+    );
+    const after = await admin.request("workflow.versions", {
+      workflowId: workflow.id,
+    });
+    for (const version of versions)
+      assert(after.some(item => item.id === version.id));
+    const retained = await admin.request("data.runDetail", {
+      projectId: project.id,
+      runId: started.runId,
+    });
+    assert.equal(retained.status, "success");
+    assert.deepEqual(retained.output.terminals[0].rows, samples);
+    const draftTest = await admin.request(
+      "data.run",
+      { projectId: project.id, workflowId: workflow.id, mode: "test" },
+      true
+    );
+    const draftResult = await admin.request("data.runDetail", {
+      projectId: project.id,
+      runId: draftTest.runId,
+    });
+    assert.equal(draftResult.status, "success");
+    assert.equal(draftResult.executionSource, "draft");
+    assert.deepEqual(draftResult.output.terminals[0].rows, samples);
+  } finally {
+    try {
+      await admin.request(
+        "project.revokeMember",
+        { projectId: project.id, userId },
+        true
+      );
+    } finally {
+      await admin.request(
+        "iam.updateUserStatus",
+        { userId, status: "disabled" },
+        true
+      );
+    }
+  }
 }
 console.log(
   JSON.stringify({
@@ -164,5 +257,8 @@ console.log(
     fields: 8,
     unpublishLifecycleVerified: verifyUnpublish,
     explicitDraftTestVerified: verifyUnpublish,
+    operatorPublishedRunVerified: verifyUnpublish,
+    operatorDraftTestDenied: verifyUnpublish,
+    ownOperatorGrantRemovedAndAccountDisabled: verifyUnpublish,
   })
 );
