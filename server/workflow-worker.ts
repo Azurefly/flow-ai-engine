@@ -341,8 +341,7 @@ async function completeJob(job: ClaimedJob, result: unknown) {
 }
 
 /**
- * Closes the narrow crash window where workflow_run reached a terminal state
- * but the owning durable job did not get its terminal update.
+ * Fails expired final attempts atomically without blocking unrelated jobs.
  */
 export async function reconcileExhaustedWorkflowJobs() {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
@@ -353,6 +352,7 @@ export async function reconcileExhaustedWorkflowJobs() {
   );
   let recovered = 0;
   for (const row of rows) {
+    try {
     if (
       await markWorkflowRunFailed(
         String(row.runId),
@@ -362,6 +362,9 @@ export async function reconcileExhaustedWorkflowJobs() {
       )
     )
       recovered += 1;
+    } catch (error) {
+      state.lastError = `耗尽任务 ${String(row.id)} 收敛失败：${error instanceof Error ? error.message : String(error)}`;
+    }
   }
   return recovered;
 }

@@ -46,3 +46,12 @@ it("没有到期耗尽任务时不修改运行", async () => {
   expect(await reconcileExhaustedWorkflowJobs()).toBe(0);
   expect(mocks.fail).not.toHaveBeenCalled();
 });
+it("单个任务事务失败不阻塞其他到期任务，下次仍可重试", async () => {
+  mocks.query.mockResolvedValue([[{ id: "job-a", runId: "run-a", leaseToken: "token-a" }, { id: "job-b", runId: "run-b", leaseToken: "token-b" }]]);
+  mocks.fail.mockRejectedValueOnce(new Error("temporary write failure")).mockResolvedValueOnce(true);
+  expect(await reconcileExhaustedWorkflowJobs()).toBe(1);
+  expect(mocks.fail).toHaveBeenCalledTimes(2);
+  expect(mocks.fail.mock.calls[1][0]).toBe("run-b");
+  mocks.fail.mockResolvedValue(true);
+  expect(await reconcileExhaustedWorkflowJobs()).toBe(2);
+});
