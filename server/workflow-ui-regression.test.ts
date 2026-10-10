@@ -10,6 +10,9 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("无权限或不存在的流程不挂载依赖流程对象的设计器", () => {
+    expect(homeSource).toContain('flowView === "editor" && selectedWorkflow && draftDefinition && (selectedId && !access.data');
+  });
   it("保存响应只同步当前流程且不覆盖提交之后的修改", () => {
     const save = homeSource.split("const saveFlow = trpc.workflow.update.useMutation({")[1]?.split("const publishFlow")[0];
     expect(save).toContain("liveDraft.current.workflowId === submitted.id");

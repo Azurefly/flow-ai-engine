@@ -1793,6 +1793,7 @@ function FlowConsole({
           {section === "flows" &&
             !routeRestoring &&
             flowView === "editor" &&
+            selectedWorkflow && draftDefinition &&
             (selectedId && !access.data ? (
               <div
                 className="m-4 rounded-lg border border-border bg-card p-5"
