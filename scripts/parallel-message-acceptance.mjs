@@ -42,10 +42,11 @@ await admin.request("auth.login", { username, password }, true);
 const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
 const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
 assert(
-  ["normal", "prepare", "resume", "cancel", "terminate", "pause"].includes(
+  ["normal", "prepare", "resume", "cancel", "terminate", "pause", "unpublish"].includes(
     restartStage
   )
 );
+if (restartStage === "unpublish") assert(publishedMode, "Unpublish lifecycle requires formal published execution");
 let restartFixture = null;
 let restoredWorkflow = null;
 if (restartStage === "resume") {
@@ -92,7 +93,7 @@ const edge = (sourceNodeId, targetNodeId, sourceHandle) => ({
   targetNodeId,
   ...(sourceHandle ? { sourceHandle } : {}),
 });
-for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
+for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].includes(
   restartStage
 )
   ? ["control", "state"]
@@ -271,6 +272,21 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
       );
       continue;
     }
+    if (restartStage === "unpublish") {
+      assert.equal(waiting.executionSource, "published_plan");
+      const versionsBefore = await admin.request("workflow.versions", { workflowId: workflow.id });
+      assert(versionsBefore.length > 0);
+      const unpublished = await admin.request("workflow.unpublish", { id: workflow.id }, true);
+      assert.equal(unpublished.status, "draft");
+      await assert.rejects(() => admin.request("workflow.run", {
+        workflowId: workflow.id,
+        triggerType: "manual",
+        idempotencyKey: `unpublished-${flowType}-${tag}`,
+      }, true), /尚未发布/);
+      const versionsAfter = await admin.request("workflow.versions", { workflowId: workflow.id });
+      for (const version of versionsBefore) assert(versionsAfter.some(item => item.id === version.id), "Historical version must remain");
+      assert.equal((await admin.request("workflow.runDetail", { runId: started.runId })).status, "waiting");
+    }
     const signal = key =>
       admin.request(
         "task.signalMessage",
@@ -432,6 +448,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
       assert.equal(result.stateVersion, 2);
     }
     completed = true;
+    if (restartStage === "unpublish") assert.equal(result.executionSource, "published_plan");
     console.log(
       JSON.stringify({
         workflowId: workflow.id,
@@ -441,6 +458,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
         publishedMode,
         restartResumeStage: restartStage === "resume",
         pauseResumeVerified: restartStage === "pause",
+        unpublishLifecycleVerified: restartStage === "unpublish",
         duplicateDenied: true,
         branchIsolation: true,
         joinCount: 1,
