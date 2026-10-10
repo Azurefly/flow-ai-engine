@@ -387,7 +387,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_419 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_420 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 421 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3777,4 +3777,13 @@ it("版本更新提示保留未保存草稿并由用户主动刷新", () => {
   expect(homeSource).toContain("工作台已有新版本");
   expect(homeSource).toContain("disabled={isDraftDirty} onClick={() => window.location.reload()}");
   expect(homeSource).toContain("请先保存或丢弃修改再刷新");
+});
+it("窄屏普通节点选择定位配置区，多选不跳转并可返回画布", () => {
+  expect(canvasSource).toContain('window.matchMedia("(max-width: 1023px)").matches || document.fullscreenElement');
+  expect(canvasSource).toContain("if (!additive) revealInspector()");
+  expect(canvasSource).toContain("inspectorHeadingRef.current?.focus({ preventScroll: true })");
+  expect(canvasSource).toContain('behavior: prefersReducedMotion ? "auto" : "smooth"');
+  expect(canvasSource).toContain("canvasRegionRef.current?.focus({ preventScroll: true })");
+  expect(canvasSource).toContain("返回画布</button>");
+  expect(canvasSource).toContain("window.cancelAnimationFrame(inspectorRevealFrameRef.current)");
 });

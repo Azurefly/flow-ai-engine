@@ -2404,6 +2404,8 @@ export default function WorkflowCanvas({
   const lastInitialFitKeyRef = useRef<string | null>(null);
   const participantPreview = trpc.workflow.previewParticipants.useMutation();
   const canvasRegionRef = useRef<HTMLDivElement>(null);
+  const inspectorHeadingRef = useRef<HTMLHeadingElement>(null);
+  const inspectorRevealFrameRef = useRef<number | null>(null);
   const flowViewportRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<Definition>(initial);
   const appliedDefinitionRef = useRef("");
@@ -2419,6 +2421,18 @@ export default function WorkflowCanvas({
   );
 
   const { prefersReducedMotion } = useMotionPreference();
+  const revealInspector = useCallback(() => {
+    if (!window.matchMedia("(max-width: 1023px)").matches || document.fullscreenElement) return;
+    if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
+    inspectorRevealFrameRef.current = window.requestAnimationFrame(() => {
+      inspectorRevealFrameRef.current = null;
+      inspectorHeadingRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
+      inspectorHeadingRef.current?.focus({ preventScroll: true });
+    });
+  }, [prefersReducedMotion]);
+  useEffect(() => () => {
+    if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
+  }, []);
   const isLayoutAnimatingRef = useRef(false);
   const layoutRafRef = useRef<number | null>(null);
 
@@ -3317,8 +3331,9 @@ export default function WorkflowCanvas({
       setSelectedEdgeId(null);
       setContextMenu(null);
       setInspectorMode(current => (current === "compact" ? "normal" : current));
+      if (!additive) revealInspector();
     },
-    [setNodes]
+    [revealInspector, setNodes]
   );
 
   const handleCanvasDrop = useCallback(
@@ -3847,6 +3862,8 @@ export default function WorkflowCanvas({
     >
       <section
         ref={canvasRegionRef}
+        tabIndex={-1}
+        style={{ scrollMarginTop: "4rem" }}
         className={
           fullscreen
             ? "relative min-w-0 bg-muted flex h-screen flex-col overflow-hidden"
@@ -4485,11 +4502,15 @@ export default function WorkflowCanvas({
             className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3"
           >
             <div className={inspectorMode === "compact" ? "hidden" : ""}>
-              <h2 className="text-sm font-semibold text-foreground">
+              <h2 ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
                 配置信息
               </h2>
             </div>
             <div className="ml-auto flex items-center gap-1">
+              <button type="button" className="mr-1 min-h-11 rounded px-2 text-sm text-aiflow-info hover:bg-muted lg:hidden" onClick={() => {
+                canvasRegionRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
+                canvasRegionRef.current?.focus({ preventScroll: true });
+              }}>返回画布</button>
               <button
                 type="button"
                 className={`rounded p-1.5 text-muted-foreground hover:bg-muted ${inspectorLocked ? "text-indigo-600" : ""}`}
