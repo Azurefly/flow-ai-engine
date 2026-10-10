@@ -247,6 +247,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
       "two message subscriptions"
     );
     if (["prepare", "resume"].includes(restartStage)) {
+      if (publishedMode) assert.equal(waiting.executionSource, "published_plan");
       assert.equal(waiting.currentStateCode, "PENDING");
       assert.equal(waiting.stateVersion, 1);
     }
@@ -258,6 +259,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
           workflowId: workflow.id,
           runId: started.runId,
           waitingMessages: 2,
+          publishedMode,
           currentStateCode: "PENDING",
           stateVersion: 1,
         })
