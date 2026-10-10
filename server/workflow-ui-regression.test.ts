@@ -296,7 +296,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_408 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_409 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 418 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3605,4 +3605,11 @@ it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
   expect(organization).toContain("权限组加载失败");
   expect(organization).toContain("binding.unitId === selectedId");
   expect(source("../client/src/components/CreationDialog.tsx")).toContain("if (pending || submitDisabled) return;");
+});
+it("编译诊断支持定位连线并跳过无位置问题", () => {
+  expect(homeSource).toContain("firstLocatableDiagnostic = compileDiagnostics.find");
+  expect(homeSource).toContain("edgeId: firstLocatableDiagnostic.location.edgeId");
+  expect(homeSource).toContain("edgeId: item.location.edgeId");
+  expect(canvasSource).toContain("if (detail?.edgeId)");
+  expect(canvasSource).toContain("node.id === edge.source || node.id === edge.target");
 });

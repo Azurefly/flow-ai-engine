@@ -2709,11 +2709,23 @@ export default function WorkflowCanvas({
 
   useEffect(() => {
     const focus = (event: Event) => {
-      const nodeId = (event as CustomEvent<{ nodeId?: string }>).detail?.nodeId;
+      const detail = (event as CustomEvent<{ nodeId?: string; edgeId?: string }>).detail;
+      if (detail?.edgeId) {
+        const edge = latestEdgesRef.current.find(item => item.id === detail.edgeId);
+        if (!edge) return;
+        setSelectedId(null);
+        setSelectedEdgeId(edge.id);
+        setInspectorMode("normal");
+        canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        reactFlow?.fitView({ nodes: latestNodesRef.current.filter(node => node.id === edge.source || node.id === edge.target), padding: 0.6, duration: 180 });
+        return;
+      }
+      const nodeId = detail?.nodeId;
       if (!nodeId) return;
       const node = latestNodesRef.current.find(item => item.id === nodeId);
       if (!node) return;
       setSelectedId(node.id);
+      setSelectedEdgeId(null);
       setInspectorMode("normal");
       canvasRegionRef.current?.scrollIntoView({
         behavior: "smooth",

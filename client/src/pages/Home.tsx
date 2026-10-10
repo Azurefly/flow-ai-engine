@@ -2331,6 +2331,7 @@ function FlowDesigner({
       </div>
     );
   const flowProfile = getFlowProfile(workflow.flowType ?? "state");
+  const firstLocatableDiagnostic = compileDiagnostics.find(item => item.location.nodeId || item.location.edgeId);
   const publishVersionAllowed = canPublishWorkflowVersion(
     workflow.status,
     hasUnpublishedChanges
@@ -2708,7 +2709,7 @@ function FlowDesigner({
                       : compileCheck.message || "编译服务未能完成本次检查。"}
               </p>
             </div>
-            {compileDiagnostics.length > 0 && (
+            {firstLocatableDiagnostic && (
               <button
                 type="button"
                 className="text-xs text-red-700 underline"
@@ -2716,7 +2717,8 @@ function FlowDesigner({
                   window.dispatchEvent(
                     new CustomEvent("flow:focus-node", {
                       detail: {
-                        nodeId: compileDiagnostics[0]?.location.nodeId,
+                        nodeId: firstLocatableDiagnostic.location.nodeId,
+                        edgeId: firstLocatableDiagnostic.location.edgeId,
                       },
                     })
                   )
@@ -2742,7 +2744,7 @@ function FlowDesigner({
                       onClick={() =>
                         window.dispatchEvent(
                           new CustomEvent("flow:focus-node", {
-                            detail: { nodeId: item.location.nodeId },
+                            detail: { nodeId: item.location.nodeId, edgeId: item.location.edgeId },
                           })
                         )
                       }
