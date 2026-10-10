@@ -1,4 +1,4 @@
-import { locateSubflowDiagnostics } from "./subflow-diagnostics";
+import { diagnoseSynchronousSubflowNodes, locateSubflowDiagnostics } from "./subflow-diagnostics";
 import {
   readSubflowFlowType,
   withSubflowFlowType,
@@ -239,24 +239,10 @@ async function resolveSubflowReferences(
         }
         throw error;
       }
-      const unsupported = mappedDefinition.nodes.find(item =>
-        [
-          "operate",
-          "sql",
-          "source",
-          "table",
-          "filter",
-          "map",
-          "edit_sql",
-          "udf",
-          "sink",
-          "output",
-          "subflow",
-        ].includes(item.type)
-      );
-      if (unsupported)
-        throw new Error(
-          `子流程“${String(mapped.name)}”包含当前同步子流程运行时不支持的节点：${unsupported.name}（${unsupported.type}）。`
+      const unsupported = diagnoseSynchronousSubflowNodes(mappedDefinition.nodes);
+      if (unsupported.length)
+        throw new WorkflowCompileError(
+          locateSubflowDiagnostics(unsupported, node, String(mapped.name))
         );
     }
     return {
