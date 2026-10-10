@@ -10,6 +10,9 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("分页导致详情暂时卸载后不重新初始化同一流程的未保存草稿", () => {
+    expect(homeSource).toContain("if (selectedWorkflow && persistedDraftSnapshot.current?.workflowId !== selectedWorkflow.id)");
+  });
   it("组织和项目变更刷新流程分页与详情", () => {
     for (const path of [
       "../client/src/components/OrganizationManagementPage.tsx",

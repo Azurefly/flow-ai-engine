@@ -799,7 +799,7 @@ function FlowConsole({
   ]);
 
   useEffect(() => {
-    if (selectedWorkflow) {
+    if (selectedWorkflow && persistedDraftSnapshot.current?.workflowId !== selectedWorkflow.id) {
       const definition = decodeJson(selectedWorkflow.definition) as Definition;
       setDraftName(selectedWorkflow.name);
       setDraftDefinition(definition);
