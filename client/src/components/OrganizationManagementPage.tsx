@@ -283,6 +283,8 @@ export default function OrganizationManagementPage({
       utils.workflow.access.invalidate(),
       utils.project.access.invalidate(),
       utils.workflow.list.invalidate(),
+      utils.workflow.page.invalidate(),
+      utils.workflow.get.invalidate(),
       utils.project.list.invalidate(),
     ]);
   };

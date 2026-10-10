@@ -178,6 +178,8 @@ export default function WorkflowGovernance({
   const rollback = trpc.workflow.rollbackVersion.useMutation({
     onSuccess: () => {
       void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
+      void utils.workflow.get.invalidate({ id: workflowId });
       void utils.workflow.versions.invalidate({ workflowId });
       void utils.workflow.versionDiff.invalidate();
       toast.success("已恢复目标版本，并生成新的可审计快照。");
@@ -203,6 +205,7 @@ export default function WorkflowGovernance({
       }
       void utils.workflow.get.invalidate({ id: workflowId });
       void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       setEditingInfo(false);
       toast.success("流程基本信息已更新，并已写入项目审计。");
     },

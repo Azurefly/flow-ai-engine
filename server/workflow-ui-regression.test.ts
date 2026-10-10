@@ -8,6 +8,35 @@ import {
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+
+describe("分页流程缓存联动", () => {
+  it("组织和项目变更刷新流程分页与详情", () => {
+    for (const path of [
+      "../client/src/components/OrganizationManagementPage.tsx",
+      "../client/src/components/ProjectWorkspace.tsx",
+    ]) {
+      const content = source(path);
+      const invalidations = content.matchAll(/utils\.workflow\.list\.invalidate\(\)([\s\S]{0,160})/g);
+      let count = 0;
+      for (const match of invalidations) {
+        count++;
+        expect(match[1]).toContain("utils.workflow.page.invalidate()");
+        expect(match[1]).toContain("utils.workflow.get.invalidate()");
+      }
+      expect(count).toBeGreaterThan(0);
+    }
+  });
+
+  it("回滚和基本信息修改同步刷新分页列表", () => {
+    const content = source("../client/src/components/WorkflowGovernance.tsx");
+    expect(content.match(/utils\.workflow\.page\.invalidate\(\)/g)).toHaveLength(2);
+    for (const mutation of ["rollbackVersion", "updateWorkflowInfo"]) {
+      const callback = content.split(`${mutation}.useMutation({`)[1]?.split("onError:")[0];
+      expect(callback).toContain("utils.workflow.page.invalidate()");
+      expect(callback).toContain("utils.workflow.get.invalidate({ id: workflowId })");
+    }
+  });
+});
 const runModalSource = source(
   "../client/src/components/WorkflowTestRunModal.tsx"
 );

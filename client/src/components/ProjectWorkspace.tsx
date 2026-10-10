@@ -2088,6 +2088,8 @@ function ProcessCenter({
   const refreshWorkflows = () => {
     void utils.project.workflows.invalidate({ projectId: project.id });
     void utils.workflow.list.invalidate();
+    void utils.workflow.page.invalidate();
+    void utils.workflow.get.invalidate();
   };
   const publish = trpc.workflow.publish.useMutation({
     onSuccess: () => {
@@ -3267,6 +3269,8 @@ function ProjectMembers({
       utils.project.list.invalidate(),
       utils.workflow.access.invalidate(),
       utils.workflow.list.invalidate(),
+      utils.workflow.page.invalidate(),
+      utils.workflow.get.invalidate(),
     ]);
   const grant = trpc.project.grantMember.useMutation({
     onSuccess: async () => {
