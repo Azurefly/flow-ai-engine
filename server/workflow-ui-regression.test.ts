@@ -10,6 +10,9 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("预检期间修改名称也重置检查状态", () => {
+    expect(homeSource).toContain('setCompileCheck({ status: "idle" }); }, [draftDefinition, draftName, selectedId])');
+  });
   it("编译和发布回调隔离已切换流程或已修改定义", () => {
     const validation = homeSource.split("onValidate={() => {")[1]?.split("onRun={startRun}")[0];
     expect(validation?.match(/matchesLiveDraft\(selectedId, draftDefinition\)/g)).toHaveLength(4);
@@ -367,7 +370,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_412 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_413 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 419 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");

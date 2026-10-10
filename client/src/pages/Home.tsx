@@ -938,7 +938,7 @@ function FlowConsole({
   useEffect(() => {
     setCompileDiagnostics([]);
     setCompileCheck({ status: "idle" });
-  }, [draftDefinition, selectedId]);
+  }, [draftDefinition, draftName, selectedId]);
   const duplicateFlow = trpc.workflow.duplicate.useMutation({
     onSuccess: (workflow: any) => {
       void utils.workflow.page.invalidate();

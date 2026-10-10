@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Unsaved workflow navigation protection: 1411.30 KiB raw / 418.31 KiB gzip.
-const maxTotalBytes = 1_412 * 1024;
+// Workflow navigation and stale-response protection: 1412.26 KiB raw / 418.74 KiB gzip.
+const maxTotalBytes = 1_413 * 1024;
 const maxTotalGzipBytes = 419 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
