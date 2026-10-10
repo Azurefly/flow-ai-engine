@@ -24,8 +24,15 @@ describe("分页流程缓存联动", () => {
     expect(restore).toContain("shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)");
     expect(restore).toContain("window.history.pushState(");
     expect(restore).toContain("formatConsoleRoute(requestedRoute.route)");
-    expect(restore).toContain("discardUnsavedDraft()");
+    expect(restore).toContain("setPendingNavigation(next)");
+    expect(restore).not.toContain("window.confirm");
     expect(restore).toContain("setRequestedRoute(next)");
+  });
+  it("页面内离页对话框提供安全取消与明确丢弃操作", () => {
+    expect(homeSource).toContain('<Dialog open={Boolean(pendingNavigation)}');
+    expect(homeSource).toContain("继续编辑</Button>");
+    expect(homeSource).toContain("丢弃修改并离开</Button>");
+    expect(homeSource).toContain("navigateRoute(target.route, { editorReturn: target.editorReturn })");
   });
   it("未保存的编辑草稿在浏览器关闭或刷新时提示并释放监听", () => {
     expect(homeSource).toContain("if (!editorActive || !isDraftDirty) return;");

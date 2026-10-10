@@ -464,6 +464,7 @@ function FlowConsole({
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
   const unsavedWorkflowId = useRef<string | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<RequestedConsoleRoute | null>(null);
   const discardUnsavedDraft = useCallback(() => {
     const persisted = persistedDraftSnapshot.current;
     if (persisted) {
@@ -481,8 +482,8 @@ function FlowConsole({
       options?: { replace?: boolean; editorReturn?: FlowEditorReturn }
     ) => {
       if (!options?.replace && shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, route)) {
-        if (!window.confirm("当前流程有未保存的修改。离开将丢弃这些修改，确定离开吗？")) return false;
-        discardUnsavedDraft();
+        setPendingNavigation({ route, editorReturn: options?.editorReturn });
+        return false;
       }
       setRequestedRoute({
         route,
@@ -499,7 +500,7 @@ function FlowConsole({
       if (typeof window !== "undefined") window.scrollTo(0, 0);
       return true;
     },
-    [discardUnsavedDraft]
+    []
   );
   const navigateSection = useCallback(
     (next: ConsoleSection) => {
@@ -566,15 +567,13 @@ function FlowConsole({
     const restoreConsoleRoute = () => {
       const next = readConsoleRoute();
       if (shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)) {
-        if (!window.confirm("当前流程有未保存的修改。离开将丢弃这些修改，确定离开吗？")) {
-          window.history.pushState(
-            { aiflowEditorReturn: requestedRoute.editorReturn ?? null },
-            "",
-            formatConsoleRoute(requestedRoute.route)
-          );
-          return;
-        }
-        discardUnsavedDraft();
+        window.history.pushState(
+          { aiflowEditorReturn: requestedRoute.editorReturn ?? null },
+          "",
+          formatConsoleRoute(requestedRoute.route)
+        );
+        setPendingNavigation(next);
+        return;
       }
       setRequestedRoute(next);
     };
@@ -584,7 +583,7 @@ function FlowConsole({
       window.removeEventListener("popstate", restoreConsoleRoute);
       window.removeEventListener("hashchange", restoreConsoleRoute);
     };
-  }, [discardUnsavedDraft, requestedRoute]);
+  }, [requestedRoute]);
 
   const [flowSearch, setFlowSearch] = useState("");
   const [flowSearchValue, setFlowSearchValue] = useState("");
@@ -1255,6 +1254,24 @@ function FlowConsole({
       data-aiflow-console=""
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
+      <Dialog open={Boolean(pendingNavigation)} onOpenChange={open => { if (!open) setPendingNavigation(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>离开前保留流程修改</DialogTitle>
+            <DialogDescription>当前流程有未保存的修改。继续编辑后可保存画布；丢弃修改会恢复最后保存的版本。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" autoFocus onClick={() => setPendingNavigation(null)}>继续编辑</Button>
+            <Button variant="destructive" onClick={() => {
+              if (!pendingNavigation) return;
+              const target = pendingNavigation;
+              discardUnsavedDraft();
+              setPendingNavigation(null);
+              navigateRoute(target.route, { editorReturn: target.editorReturn });
+            }}>丢弃修改并离开</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <a className="aiflow-skip-link" href="#aiflow-console-panel">
         跳到主要工作区
       </a>
