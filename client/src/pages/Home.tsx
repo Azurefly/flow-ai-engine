@@ -556,7 +556,20 @@ function FlowConsole({
     };
   }, []);
 
-  const workflows = trpc.workflow.list.useQuery();
+  const [flowSearch, setFlowSearch] = useState("");
+  const [flowSearchValue, setFlowSearchValue] = useState("");
+  const [flowPager, setFlowPager] = useState({ scope: "", page: 0 });
+  useEffect(() => {
+    const timer = setTimeout(() => setFlowSearchValue(flowSearch.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [flowSearch]);
+  const flowScope = `${selectedProject?.id ?? "all"}:${flowSearchValue}`;
+  const flowPage = flowPager.scope === flowScope ? flowPager.page : 0;
+  const workflows = trpc.workflow.page.useQuery({
+    limit: 10, cursor: flowPage * 10,
+    search: flowSearchValue || undefined,
+    projectId: selectedProject?.id,
+  }, { enabled: section === "flows" && flowView === "editor" && flowListOpen });
   const projects = trpc.project.list.useQuery();
   const routeProjectId =
     requestedRoute.route.section === "flows" &&
@@ -580,7 +593,7 @@ function FlowConsole({
       !routeProjectFromList &&
       (!routeProjectQuery.isSuccess || routeProjectQuery.isFetching)
   );
-  const workflowItems = (workflows.data ?? []) as any[];
+  const workflowItems = (workflows.data?.items ?? []) as any[];
   const routeWorkflowId =
     requestedRoute.route.section === "flows" &&
     (requestedRoute.route.view === "detail" ||
@@ -703,7 +716,6 @@ function FlowConsole({
       }
       setSection("runs");
       setRunView("monitor");
-      if (!workflows.isSuccess) return;
       if (!selectedWorkflowFromList && selectedWorkflowQuery.isPending) return;
       const workflow = selectedWorkflow;
       if (!workflow || workflow.id !== route.workflowId) {
@@ -751,7 +763,6 @@ function FlowConsole({
     setSection("flows");
     setFlowView(route.view);
     if (
-      !workflows.isSuccess ||
       !projects.isSuccess ||
       (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)
     )
@@ -785,7 +796,6 @@ function FlowConsole({
     selectedWorkflowFromList,
     selectedWorkflowQuery.isPending,
     user.role,
-    workflows.isSuccess,
   ]);
 
   useEffect(() => {
@@ -835,8 +845,7 @@ function FlowConsole({
 
   const routeRestoring = Boolean(
     (routeWorkflowId &&
-      (!workflows.isSuccess ||
-        (!selectedWorkflowFromList && selectedWorkflowQuery.isPending))) ||
+      (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)) ||
       (requestedRoute.route.section === "flows" &&
         requestedRoute.route.view === "workspace" &&
         (!projects.isSuccess || routeProjectUnresolved)) ||
@@ -848,7 +857,7 @@ function FlowConsole({
 
   const createFlow = trpc.workflow.create.useMutation({
     onSuccess: (workflow: any) => {
-      void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       setCreateFlowOpen(false);
       if (workflow?.id)
         openFlowEditor(workflow.id, selectedProject ? "workspace" : "center");
@@ -859,7 +868,7 @@ function FlowConsole({
   });
   const saveFlow = trpc.workflow.update.useMutation({
     onSuccess: (workflow: any) => {
-      void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       if (workflow) {
         const definition = decodeJson(workflow.definition) as Definition;
         setDraftDefinition(definition);
@@ -876,7 +885,7 @@ function FlowConsole({
   });
   const publishFlow = trpc.workflow.publish.useMutation({
     onSuccess: () => {
-      void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       toast.success("流程已发布。");
     },
     onError: error => toast.error(error.message),
@@ -894,7 +903,7 @@ function FlowConsole({
   }, [draftDefinition, selectedId]);
   const duplicateFlow = trpc.workflow.duplicate.useMutation({
     onSuccess: (workflow: any) => {
-      void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       if (workflow?.id) openFlowEditor(workflow.id, flowEditorReturn);
       toast.success("已创建流程副本。");
     },
@@ -902,7 +911,7 @@ function FlowConsole({
   });
   const deleteFlow = trpc.workflow.delete.useMutation({
     onSuccess: () => {
-      void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       void utils.project.list.invalidate();
       setSelectedWorkflowId(null);
       setDraftDefinition(null);
@@ -1435,6 +1444,7 @@ function FlowConsole({
                   </Button>
                 </div>
               </div>
+              <Input className="mt-3" aria-label="搜索流程名称或编号" placeholder="搜索流程名称或编号" value={flowSearch} onChange={event => setFlowSearch(event.target.value.slice(0, 100))} />
             </div>
             <div className="max-h-[calc(100vh-196px)] overflow-y-auto p-2">
               {workflows.isLoading && (
@@ -1442,6 +1452,8 @@ function FlowConsole({
                   正在读取项目流程…
                 </div>
               )}
+              {workflows.isError && <div role="alert" className="p-3 text-sm text-destructive">流程读取失败。<Button variant="outline" size="sm" onClick={() => void workflows.refetch()}>重试</Button></div>}
+              {workflows.isSuccess && !workspaceWorkflows.length && <p className="p-3 text-sm text-muted-foreground">没有匹配的流程。</p>}
               {workspaceWorkflows.map(workflow => {
                 const definition = decodeJson(
                   workflow.definition
@@ -1472,6 +1484,11 @@ function FlowConsole({
                   </button>
                 );
               })}
+              <div className="flex items-center justify-between gap-2 border-t border-border pt-2 text-xs text-muted-foreground">
+                <Button variant="outline" size="sm" disabled={flowPage === 0 || workflows.isFetching || flowSearch.trim() !== flowSearchValue} onClick={() => setFlowPager({ scope: flowScope, page: flowPage - 1 })}>上一页</Button>
+                <span>第{flowPage + 1}页 · 每页10条</span>
+                <Button variant="outline" size="sm" disabled={!workflows.data?.hasMore || workflows.isFetching || flowSearch.trim() !== flowSearchValue} onClick={() => setFlowPager({ scope: flowScope, page: flowPage + 1 })}>下一页</Button>
+              </div>
             </div>
           </aside>
         )}
@@ -2293,7 +2310,7 @@ function FlowDesigner({
   const utils = trpc.useUtils();
   const unpublishFlow = trpc.workflow.unpublish.useMutation({
     onSuccess: () => {
-      void utils.workflow.list.invalidate();
+      void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate({ id: workflow.id });
       toast.success("流程已取消发布；历史版本与运行审计已保留。");
     },

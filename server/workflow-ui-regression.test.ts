@@ -296,8 +296,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_409 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 418 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_411 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 419 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -1398,7 +1398,7 @@ describe("流程设计器界面回归约束", () => {
       'view: "monitor"; workflowId: string; runId?: string'
     );
     expect(homeSource).toContain("const [requestedRoute, setRequestedRoute]");
-    expect(homeSource).toContain("!workflows.isSuccess || !projects.isSuccess");
+    expect(homeSource).toContain("!projects.isSuccess || (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)");
     expect(homeSource).toContain(
       "!selectedWorkflowFromList && selectedWorkflowQuery.isPending"
     );
@@ -3617,4 +3617,13 @@ it("账号缓存隔离完成后才渲染工作台并重置页面选择", () => {
   expect(homeSource).toContain("useAccountQueryIsolation(me.data?.id ?? null)");
   expect(homeSource).toContain("me.isLoading || !accountQueriesReady");
   expect(homeSource).toContain("key={me.data.id}");
+});
+it("侧栏流程按服务端十条分页搜索，独立于编辑器路由恢复", () => {
+  expect(homeSource).toContain("trpc.workflow.page.useQuery");
+  expect(homeSource).toContain("limit: 10, cursor: flowPage * 10");
+  expect(homeSource).toContain("搜索流程名称或编号");
+  expect(homeSource).toContain("flowPager.scope === flowScope ? flowPager.page : 0");
+  expect(homeSource).toContain("!workflows.data?.hasMore");
+  expect(homeSource).not.toContain("if (!workflows.isSuccess) return;");
+  expect(homeSource).not.toContain("trpc.workflow.list.useQuery()");
 });
