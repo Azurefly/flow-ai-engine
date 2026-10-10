@@ -72,6 +72,7 @@ export default function WorkflowRoleBindingsDialog({
   const validUser = Boolean(
     userIds[0] && users.data?.some(item => String(item.id) === userIds[0])
   );
+  const expiryError = roleExpiryInput(hours).error;
   const validRole = Boolean(
     roles.isSuccess &&
       !roles.isFetching &&
@@ -227,17 +228,21 @@ export default function WorkflowRoleBindingsDialog({
             <Input
               id="workflow-custom-role-hours"
               inputMode="numeric"
+              aria-invalid={Boolean(expiryError)}
+              aria-describedby={expiryError ? "workflow-custom-role-expiry-error" : undefined}
               value={hours}
               disabled={busy}
               onChange={event => setHours(event.target.value)}
               placeholder="留空表示长期有效"
             />
+            {expiryError && <p id="workflow-custom-role-expiry-error" role="alert" className="text-sm text-destructive">{expiryError}</p>}
           </div>
           <Button
             disabled={
               busy ||
               !validUser ||
               !validRole ||
+              Boolean(expiryError) ||
               roles.isLoading ||
               roles.isError
             }

@@ -10,6 +10,13 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("自定义流程角色有效期即时校验并阻止无效提交", () => {
+    const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");
+    expect(bindings).toContain("const expiryError = roleExpiryInput(hours).error");
+    expect(bindings).toContain("aria-invalid={Boolean(expiryError)}");
+    expect(bindings).toContain('id="workflow-custom-role-expiry-error" role="alert"');
+    expect(bindings).toContain("!validRole || Boolean(expiryError) ||");
+  });
   it("预检期间修改名称也重置检查状态", () => {
     expect(homeSource).toContain('setCompileCheck({ status: "idle" }); }, [draftDefinition, draftName, selectedId])');
   });
