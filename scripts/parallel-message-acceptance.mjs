@@ -56,20 +56,22 @@ if (restartStage === "resume") {
     "Resume requires the exact workflow and run IDs emitted before restart"
   );
   restoredWorkflow = await admin.request("workflow.get", { id: workflowId });
-  const match = /^并行消息_state_([a-f0-9]{8})$/.exec(restoredWorkflow.name);
+  const match = /^并行消息_(state|control)_([a-f0-9]{8})$/.exec(restoredWorkflow.name);
   assert(match, "Resume is restricted to the isolated message fixture");
-  assert.equal(restoredWorkflow.flowType, "state");
+  assert.equal(restoredWorkflow.flowType, match[1]);
   const existingRun = await admin.request("workflow.runDetail", { runId });
   assert.equal(existingRun.workflowId, workflowId);
   restartFixture = {
-    tag: match[1],
+    tag: match[2],
     projectId: restoredWorkflow.projectId,
     workflowId,
     runId,
-    flowType: "state",
+    flowType: match[1],
   };
 }
 const tag = restartFixture?.tag ?? randomBytes(4).toString("hex");
+const restartFlowType = restartFixture?.flowType ?? process.env.FLOW_PARALLEL_MESSAGE_FLOW_TYPE ?? "state";
+assert(["state", "control"].includes(restartFlowType), "Restart flow type must be state or control");
 const project = restartFixture
   ? { id: restartFixture.projectId }
   : await admin.request(
@@ -94,7 +96,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
   restartStage
 )
   ? ["control", "state"]
-  : ["state"]) {
+  : [restartFlowType]) {
   const nodes = [
     node("start", "start"),
     node(
@@ -218,7 +220,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
       );
   if (restartFixture) {
     assert.equal(workflow.projectId, restartFixture.projectId);
-    assert.equal(workflow.name, `并行消息_state_${tag}`);
+    assert.equal(workflow.name, `并行消息_${flowType}_${tag}`);
   }
   if (publishedMode && !restartFixture) {
     await admin.request("project.auditWorkflow", { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" }, true);
@@ -248,8 +250,10 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
     );
     if (["prepare", "resume"].includes(restartStage)) {
       if (publishedMode) assert.equal(waiting.executionSource, "published_plan");
-      assert.equal(waiting.currentStateCode, "PENDING");
-      assert.equal(waiting.stateVersion, 1);
+      if (flowType === "state") {
+        assert.equal(waiting.currentStateCode, "PENDING");
+        assert.equal(waiting.stateVersion, 1);
+      }
     }
     if (restartStage === "prepare") {
       completed = true;
@@ -260,8 +264,9 @@ for (const flowType of ["normal", "cancel", "terminate", "pause"].includes(
           runId: started.runId,
           waitingMessages: 2,
           publishedMode,
-          currentStateCode: "PENDING",
-          stateVersion: 1,
+          flowType,
+          currentStateCode: waiting.currentStateCode,
+          stateVersion: waiting.stateVersion,
         })
       );
       continue;
