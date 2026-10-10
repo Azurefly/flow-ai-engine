@@ -425,6 +425,7 @@ function FlowConsole({
     null
   );
   const [draftName, setDraftName] = useState("");
+  const liveDraft = useRef<{ workflowId: string | null; name: string; definition: Definition | null }>({ workflowId: null, name: "", definition: null });
   const persistedDraftSnapshot = useRef<{
     workflowId: string;
     name: string;
@@ -655,6 +656,7 @@ function FlowConsole({
     ? (decodeJson(selectedWorkflow.definition) as Definition)
     : null;
   const selectedId = selectedWorkflow?.id ?? null;
+  liveDraft.current = { workflowId: effectiveWorkflowId, name: draftName, definition: draftDefinition };
   const detailInput = useMemo(
     () => ({ runId: selectedRunId ?? "00000000-0000-0000-0000-000000000000" }),
     [selectedRunId]
@@ -897,13 +899,16 @@ function FlowConsole({
     onError: error => toast.error(error.message),
   });
   const saveFlow = trpc.workflow.update.useMutation({
-    onSuccess: (workflow: any) => {
+    onSuccess: (workflow: any, submitted) => {
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
-      if (workflow) {
+      if (workflow && liveDraft.current.workflowId === submitted.id) {
         const definition = decodeJson(workflow.definition) as Definition;
-        setDraftDefinition(definition);
-        setDraftName(workflow.name);
+        if ((liveDraft.current.name.trim() || "未命名流程") === submitted.name &&
+          matchesWorkflowDefinitionSnapshot(JSON.stringify(submitted.definition), liveDraft.current.definition)) {
+          setDraftDefinition(definition);
+          setDraftName(workflow.name);
+        }
         persistedDraftSnapshot.current = {
           workflowId: String(workflow.id ?? selectedId ?? ""),
           name: String(workflow.name ?? ""),

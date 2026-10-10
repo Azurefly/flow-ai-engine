@@ -10,6 +10,12 @@ const source = (path: string) =>
 const homeSource = source("../client/src/pages/Home.tsx");
 
 describe("分页流程缓存联动", () => {
+  it("保存响应只同步当前流程且不覆盖提交之后的修改", () => {
+    const save = homeSource.split("const saveFlow = trpc.workflow.update.useMutation({")[1]?.split("const publishFlow")[0];
+    expect(save).toContain("liveDraft.current.workflowId === submitted.id");
+    expect(save).toContain("liveDraft.current.name.trim()");
+    expect(save).toContain("matchesWorkflowDefinitionSnapshot(JSON.stringify(submitted.definition), liveDraft.current.definition)");
+  });
   it("浏览器历史和哈希切换取消离开时恢复当前编辑路由", () => {
     const restore = homeSource.split("const restoreConsoleRoute = () => {")[1]?.split('window.addEventListener("popstate"')[0];
     expect(restore).toContain("shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)");
