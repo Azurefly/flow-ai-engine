@@ -39,6 +39,7 @@ assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
 const accounts = [];
+const grants = [];
 const createdRuns = new Set();
 let unit;
 try {
@@ -64,11 +65,13 @@ try {
     );
     const account = { id: created.userId, session: new Session() };
     accounts.push(account);
-    await admin.request(
-      "project.grantMember",
-      { projectId: project.id, userId: account.id, role: "operator" },
-      true
-    );
+    const grant = {
+      projectId: project.id,
+      userId: account.id,
+      role: "operator",
+    };
+    await admin.request("project.grantMember", grant, true);
+    grants.push(grant);
     await admin.request(
       "config.assignOrganizationMember",
       { unitId: unit.id, userId: account.id },
@@ -615,6 +618,7 @@ try {
     );
   }
 } finally {
+  const cleanupFailures = [];
   for (const runId of createdRuns) {
     const run = await admin.request("workflow.runDetail", { runId });
     if (["queued", "running", "waiting", "blocked"].includes(run.status)) {
@@ -624,21 +628,31 @@ try {
       );
     }
   }
+  for (const grant of grants)
+    await admin
+      .request("project.revokeMember", grant, true)
+      .catch(error => cleanupFailures.push(error.message));
   for (const account of accounts)
-    await admin.request(
-      "iam.updateUserStatus",
-      { userId: account.id, status: "disabled" },
-      true
-    );
+    await admin
+      .request(
+        "iam.updateUserStatus",
+        { userId: account.id, status: "disabled" },
+        true
+      )
+      .catch(error => cleanupFailures.push(error.message));
   if (unit)
-    await admin.request(
-      "config.updateOrganizationUnit",
-      { id: unit.id, status: "disabled" },
-      true
-    );
+    await admin
+      .request(
+        "config.updateOrganizationUnit",
+        { id: unit.id, status: "disabled" },
+        true
+      )
+      .catch(error => cleanupFailures.push(error.message));
+  assert.equal(cleanupFailures.length, 0, cleanupFailures.join("\n"));
   console.log(
     JSON.stringify({
       cleanup: "test-accounts-and-department-disabled",
+      ownProjectGrantsRevoked: true,
       accounts: accounts.length,
     })
   );
