@@ -122,7 +122,7 @@ it("并行分支共享等待节点时登记独立订阅与人员快照", async (
   const waits: any[] = [];
   const originalParallel = structuredClone(context.runtime.parallelCheckpoint);
   mocks.query.mockImplementation(async (sql: string, params: any[]) => {
-    if (sql.startsWith("SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=?"))
+    if (sql.startsWith("SELECT id,nodeRunId FROM workflow_wait_subscription WHERE runId=? AND nodeId=?"))
       return [waits.filter(wait => wait.runId === params[0] && wait.nodeId === params[1] && (params[2] === undefined || wait.executionKey === params[2]))];
     if (sql.includes("INSERT INTO workflow_wait_subscription"))
       waits.push({ id: params[0], runId: params[1], nodeId: params[3], executionKey: params[11], checkpoint: JSON.parse(params[9]) });

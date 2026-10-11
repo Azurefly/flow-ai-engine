@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   queue: ["ready-node"] as string[],
   task: false,
   wait: true,
+  parallel: true,
 }));
 vi.mock("./db", () => ({
   getSharedPool: () => ({ getConnection: mocks.getConnection }),
@@ -19,6 +20,7 @@ beforeEach(() => {
   mocks.queue = ["ready-node"];
   mocks.task = false;
   mocks.wait = true;
+  mocks.parallel = true;
   mocks.getConnection.mockResolvedValue({
     query: mocks.query,
     beginTransaction: mocks.beginTransaction,
@@ -33,7 +35,22 @@ beforeEach(() => {
           {
             id: "run-ready",
             status: "blocked",
-            contextJson: { runtime: { executionQueue: mocks.queue } },
+            contextJson: {
+              runtime: {
+                executionQueue: mocks.queue,
+                ...(mocks.parallel
+                  ? {
+                      parallelCheckpoint: {
+                        frames: {},
+                        queue: mocks.queue.map(nodeId => ({
+                          nodeId,
+                          tokens: [],
+                        })),
+                      },
+                    }
+                  : {}),
+              },
+            },
           },
         ],
       ];
@@ -70,5 +87,21 @@ it("没有就绪队列的消息等待仅恢复等待，不重启起点", async (
 it("没有就绪队列的人工任务保持等待", async () => {
   mocks.queue = [];
   mocks.task = true;
+  expect((await resumeWorkflowRun("run-ready"))?.status).toBe("waiting");
+});
+it("线性等待恢复不能将尚未触发的后继当作就绪节点", async () => {
+  mocks.parallel = false;
+  mocks.queue = ["after-wait"];
+  expect((await resumeWorkflowRun("run-ready"))?.status).toBe("waiting");
+  expect(
+    mocks.query.mock.calls.some(([sql]) =>
+      sql.startsWith("INSERT INTO workflow_run_job")
+    )
+  ).toBe(false);
+});
+it("线性人工待办恢复不能绕过当前待办执行后继", async () => {
+  mocks.parallel = false;
+  mocks.task = true;
+  mocks.queue = ["after-task"];
   expect((await resumeWorkflowRun("run-ready"))?.status).toBe("waiting");
 });

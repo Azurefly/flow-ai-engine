@@ -400,11 +400,33 @@ async function handleJobFailure(job: ClaimedJob, error: unknown) {
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
+      const [ownership] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT status,executionLockToken FROM workflow_run WHERE id=? FOR UPDATE",
+        [job.runId]
+      );
+      if (
+        ownership[0] &&
+        String(ownership[0].executionLockToken ?? "") !== job.leaseToken
+      ) {
+        await connection.query(
+          "UPDATE workflow_run_job SET status=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND status='leased' AND leaseToken=?",
+          [
+            String(ownership[0].status) === "waiting"
+              ? "completed"
+              : "cancelled",
+            job.id,
+            job.leaseToken,
+          ]
+        );
+        await connection.commit();
+        state.lastError = null;
+        return;
+      }
       const [released] = await connection.query<mysql.ResultSetHeader>(
-        `UPDATE workflow_run_job
-            SET status='queued',lastErrorJson=?,availableAt=DATE_ADD(NOW(),INTERVAL ? SECOND),leaseToken=NULL,leaseExpiresAt=NULL,workerId=NULL
-          WHERE id=? AND status='leased' AND leaseToken=?`,
-        [JSON.stringify(details), delaySeconds, job.id, job.leaseToken]
+        `UPDATE workflow_run_job j JOIN workflow_run r ON r.id=j.runId
+            SET j.status='queued',j.lastErrorJson=?,j.availableAt=DATE_ADD(NOW(),INTERVAL ? SECOND),j.leaseToken=NULL,j.leaseExpiresAt=NULL,j.workerId=NULL
+          WHERE j.id=? AND j.status='leased' AND j.leaseToken=? AND r.executionLockToken=?`,
+        [JSON.stringify(details), delaySeconds, job.id, job.leaseToken, job.leaseToken]
       );
       if (!released.affectedRows)
         throw new Error("工作流重试排队时租约已失效。");

@@ -1,4 +1,5 @@
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
+import { restoreHumanCreationRuntime, completeCurrentHumanCheckpoint } from "./workflow-human-checkpoint";
 import { workflowWaitExecutionKey, workflowTaskExecutionKey } from "./workflow-wait-execution-key";
 import {
   subflowRuntimeContext,
@@ -89,7 +90,7 @@ type WorkflowNode = Definition["nodes"][number];
 type WorkflowEdge = Definition["edges"][number];
 
 export type WorkflowExecutionFaultPoint =
-  "after_state_commit_before_checkpoint";
+  "after_state_commit_before_checkpoint" | "after_human_commit_before_checkpoint" | "after_wait_commit_before_checkpoint";
 
 export class WorkflowExecutionInjectedCrash extends Error {
   constructor(point: WorkflowExecutionFaultPoint) {
@@ -1870,10 +1871,12 @@ async function finishNodeRun(
   status: "success" | "failed" | "waiting" | "skipped",
   startedAt: number,
   output?: unknown,
-  error?: unknown
+  error?: unknown,
+  executor: mysql.Pool | mysql.PoolConnection = db(),
+  onlyIfRunning = false
 ) {
-  await db().query(
-    "UPDATE workflow_node_run SET status=?,outputJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?",
+  await executor.query(
+    `UPDATE workflow_node_run SET status=?,outputJson=?,errorJson=?,finishedAt=NOW(),durationMs=? WHERE id=?${onlyIfRunning ? " AND status='running'" : ""}`,
     [
       status,
       output === undefined ? null : JSON.stringify(output),
@@ -2015,6 +2018,8 @@ export async function submitWorkflowRun(input: {
       httpIdempotencyVersion: 3,
       durableWaitVersion: 1,
       durableTaskVersion: 1,
+      atomicHumanTaskVersion: 1,
+      deferredRootWaitVersion: 1,
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],
@@ -2159,7 +2164,7 @@ export async function executePreparedWorkflowRun(input: {
       suppliedCheckpoint.queue
     );
   const queue =
-    suppliedCheckpoint.queue.length || runtime.parallelCheckpoint !== undefined
+    suppliedCheckpoint.queue.length || Array.isArray(runtime.executionQueue) || runtime.parallelCheckpoint !== undefined
       ? [...suppliedCheckpoint.queue]
       : startNode
         ? [startNode.id]
@@ -2201,6 +2206,7 @@ export async function executePreparedWorkflowRun(input: {
     queue,
     finalOutput: suppliedCheckpoint.finalOutput,
     checkpoint: persistCheckpoint,
+    leaseToken: input.leaseToken,
   });
   if (segment.status === "waiting") {
     const waitingParams: unknown[] = [input.runId];
@@ -2463,7 +2469,7 @@ export async function resumeWorkflowRun(runId: string) {
       "SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed') ORDER BY createdAt,id LIMIT 1",
       [runId]
     );
-    if (pendingTasks[0] && !queue.length) {
+    if (pendingTasks[0] && (!queue.length || runtime.parallelCheckpoint === undefined)) {
       await connection.query(
         "UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'",
         [runId]
@@ -2480,7 +2486,7 @@ export async function resumeWorkflowRun(runId: string) {
       "SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active' ORDER BY createdAt,id LIMIT 1",
       [runId]
     );
-    if (activeWaits[0] && !queue.length) {
+    if (activeWaits[0] && (!queue.length || runtime.parallelCheckpoint === undefined)) {
       await connection.query(
         "UPDATE workflow_run SET status='waiting',errorJson=NULL WHERE id=? AND status='blocked'",
         [runId]
@@ -2621,6 +2627,12 @@ type RunSegmentResult =
   | { status: "success"; output: unknown }
   | { status: "waiting"; taskId: string };
 
+async function assertArtifactLease(connection: mysql.PoolConnection, runId: string, leaseToken?: string) {
+  if (!leaseToken) return;
+  const [owned] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM workflow_run WHERE id=? AND status='running' AND executionLockToken=? AND executionLockExpiresAt>NOW() FOR UPDATE", [runId, leaseToken]);
+  if (!owned[0]) throw new Error("运行租约已失效，持久化任务或等待未写入。");
+}
+
 async function persistWorkflowWait(input: {
   runId: string;
   workflowId: string;
@@ -2629,6 +2641,7 @@ async function persistWorkflowWait(input: {
   context: JsonRecord;
   queue: string[];
   finalOutput: unknown;
+  leaseToken?: string;
 }) {
   const config = asRecord(resolveTemplates(input.node.config, input.context));
   const waitType = input.node.type === "wait" ? "timer" : "message";
@@ -2651,33 +2664,52 @@ async function persistWorkflowWait(input: {
     currentNodeId: null,
   };
   const waitId = randomUUID();
-  await db().query(
-    `INSERT INTO workflow_wait_subscription
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    await assertArtifactLease(connection, input.runId, input.leaseToken);
+    await connection.query(
+      `INSERT INTO workflow_wait_subscription
       (id,runId,workflowId,nodeId,nodeRunId,waitType,status,resumeAt,messageName,correlationKey,checkpointJson,requestId,executionKey)
       VALUES (?,?,?,?,?,?,'active',?,?,?,?,?,?)`,
-    [
-      waitId,
-      input.runId,
-      input.workflowId,
-      input.node.id,
-      input.nodeRunId,
-      waitType,
-      waitType === "timer"
-        ? new Date(Date.now() + durationSeconds * 1000)
-        : null,
-      messageName,
-      correlationKey,
-      JSON.stringify(checkpoint),
-      String(
-        asRecord(input.context.runtime).requestId ?? currentRequestId() ?? ""
-      ) || null,
-      workflowWaitExecutionKey(asRecord(input.context.runtime), (asRecord(input.context.runtime).parallelActiveTokens as BranchToken[] | undefined) ?? []),
-    ]
-  );
-  await db().query(
-    "UPDATE workflow_node_run SET status='waiting' WHERE id=? AND status='running'",
-    [input.nodeRunId]
-  );
+      [
+        waitId,
+        input.runId,
+        input.workflowId,
+        input.node.id,
+        input.nodeRunId,
+        waitType,
+        waitType === "timer"
+          ? new Date(Date.now() + durationSeconds * 1000)
+          : null,
+        messageName,
+        correlationKey,
+        JSON.stringify(checkpoint),
+        String(
+          asRecord(input.context.runtime).requestId ?? currentRequestId() ?? ""
+        ) || null,
+        workflowWaitExecutionKey(
+          asRecord(input.context.runtime),
+          (asRecord(input.context.runtime).parallelActiveTokens as
+            | BranchToken[]
+            | undefined) ?? []
+        ),
+      ]
+    );
+    const [waitingNode] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow_node_run SET status='waiting' WHERE id=? AND status='running'",
+      [input.nodeRunId]
+    );
+    if (!waitingNode.affectedRows)
+      throw new Error("等待节点状态已变化，订阅未保存。");
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+  injectWorkflowExecutionFault("after_wait_commit_before_checkpoint");
   return { waitId, checkpoint };
 }
 
@@ -3082,6 +3114,7 @@ export async function executeRunSegment(input: {
   queue: string[];
   finalOutput?: unknown;
   checkpoint?: (checkpoint: WorkflowCheckpoint) => Promise<void>;
+  leaseToken?: string;
 }): Promise<RunSegmentResult> {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
@@ -3161,9 +3194,12 @@ export async function executeRunSegment(input: {
     }
     if (["wait", "message_catch"].includes(node.type)) {
       const [existingWaits] = await db().query<mysql.RowDataPacket[]>(
-        "SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND executionKey=? AND status='active' LIMIT 1",
+        "SELECT id,nodeRunId FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND executionKey=? AND status='active' LIMIT 1",
         [input.runId, node.id, workflowWaitExecutionKey(asRecord(input.context.runtime), activeTokens)]
       );
+      if (existingWaits[0]?.nodeRunId) {
+        await db().query("UPDATE workflow_node_run SET status='waiting',errorJson=NULL,finishedAt=NULL WHERE id=? AND runId=? AND nodeId=? AND status IN ('running','failed')", [existingWaits[0].nodeRunId, input.runId, node.id]);
+      }
       if (existingWaits[0] && parallel) {
         parallel.queue.shift();
         await persistCheckpoint({ queue: [...input.queue], context: input.context, finalOutput, currentNodeId: null });
@@ -3171,6 +3207,19 @@ export async function executeRunSegment(input: {
       }
       if (existingWaits[0])
         return { status: "waiting", taskId: String(existingWaits[0].id) };
+    }
+    if (node.type === "operate" && asRecord(input.context.runtime).atomicHumanTaskVersion === 1) {
+      const [existingTasks] = await db().query<mysql.RowDataPacket[]>(
+        "SELECT id,payloadJson FROM workflow_task WHERE runId=? AND nodeId=? AND executionKey=? AND status IN ('pending','claimed') ORDER BY createdAt,id LIMIT 1",
+        [input.runId, node.id, workflowTaskExecutionKey(asRecord(input.context.runtime), activeTokens)]
+      );
+      if (existingTasks[0]) {
+        restoreHumanCreationRuntime(input.context, readJson(existingTasks[0].payloadJson));
+        parallel?.queue.shift();
+        await persistCheckpoint({ queue: [...input.queue], context: input.context, finalOutput, currentNodeId: null });
+        if (parallel) continue;
+        return { status: "waiting", taskId: String(existingTasks[0].id) };
+      }
     }
     executed.add(executionKey);
     await persistCheckpoint({
@@ -3210,6 +3259,7 @@ export async function executeRunSegment(input: {
     const startedAt = Date.now();
     try {
       if (node.type === "wait" || node.type === "message_catch") {
+        const deferredRootWait = !parallel && asRecord(input.context.runtime).deferredRootWaitVersion === 1;
         const nextNodeIds = input.definition.edges
           .filter(edge => edge.sourceNodeId === node.id)
           .map(edge => edge.targetNodeId);
@@ -3219,11 +3269,14 @@ export async function executeRunSegment(input: {
             nextNodeId,
             currentParticipants
           );
-          if (!parallel) enqueue(nextNodeId);
+          if (!parallel && !deferredRootWait) enqueue(nextNodeId);
         }
         const waitContext = parallel
           ? (JSON.parse(JSON.stringify(input.context)) as JsonRecord)
           : input.context;
+        if (deferredRootWait) {
+          asRecord(waitContext.runtime).rootWaitContinuation = { nextNodeIds, participantUserIds: currentParticipants };
+        }
         if (parallel) {
           asRecord(waitContext.runtime).parallelWaitContinuation = {
             nextNodeIds,
@@ -3239,6 +3292,7 @@ export async function executeRunSegment(input: {
           context: waitContext,
           queue: [...input.queue],
           finalOutput,
+          leaseToken: input.leaseToken,
         });
         if (parallel) {
           await persistCheckpoint({
@@ -3403,207 +3457,231 @@ export async function executeRunSegment(input: {
         const approvalGroupId =
           reference.signMode === "single" ? null : randomUUID();
         const taskExecutionKey = workflowTaskExecutionKey(runtime, activeTokens);
-        if (approvalGroupId) {
-          const requiredApprovals = approvalRequirement(
-            reference.signMode,
-            approverUserIds.length,
-            reference.passPercent
+        const taskIds: string[] = [];
+        const artifactConnection = await db().getConnection();
+        try {
+          await artifactConnection.beginTransaction();
+          await assertArtifactLease(
+            artifactConnection,
+            input.runId,
+            input.leaseToken
           );
-          await db().query(
-            "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            [
-              approvalGroupId,
-              input.workflow.id,
-              input.runId,
-              node.id,
+          if (approvalGroupId) {
+            const requiredApprovals = approvalRequirement(
               reference.signMode,
               approverUserIds.length,
-              requiredApprovals,
-              Math.round(reference.passPercent * 10000),
-              JSON.stringify(nextNodeIds),
-              String(
-                asRecord(input.context.runtime).requestId ??
-                  currentRequestId() ??
-                  ""
-              ) || null,
-              taskExecutionKey,
-            ]
-          );
-        }
-        const sequentialSign = reference.signMode === "sequentialSignFor";
-        const taskAssignments = approvalGroupId
-          ? approverUserIds.map((userId, approvalOrder) => ({
-              assignedUserId: userId,
-              candidateUserIds: [userId],
-              approvalOrder,
-            }))
-          : [
-              {
-                assignedUserId: assignment.assignedUserId,
-                candidateUserIds: approverUserIds,
-                approvalOrder: 0,
-              },
-            ];
-        const taskIds: string[] = [];
-        for (const taskAssignment of taskAssignments) {
-          const taskId = randomUUID();
-          taskIds.push(taskId);
-          await db().query(
-            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [
-              taskId,
-              input.workflow.id,
-              input.workflow.projectId ?? null,
-              input.runId,
-              node.id,
-              node.name,
-              taskAssignment.assignedUserId,
-              taskAssignment.candidateUserIds.length
-                ? JSON.stringify(taskAssignment.candidateUserIds)
-                : null,
-              approvalGroupId,
-              reference.signMode,
-              taskAssignment.approvalOrder,
-              taskRoleKey,
-              operationName,
-              operationCode,
-              pendingStatusName,
-              String(
-                firstConfiguredString(config.instruction) ?? operationName
-              ),
-              JSON.stringify({
-                config,
-                context: input.context,
-                nodeRunId,
-                ...(parallel ? { parallelTokens: activeTokens } : {}),
-                assignmentMode: assignment.mode,
-                reference,
-              }),
-              JSON.stringify({
-                ...assignment,
-                candidateUserIds: taskAssignment.candidateUserIds,
-              }),
-              JSON.stringify(outcomeContract),
-              taskAssignment.assignedUserId,
-              formSchemaVersion,
-              !sequentialSign || taskAssignment.approvalOrder === 0
-                ? dueAt
-                : null,
-              JSON.stringify(nextNodeIds),
-              String(
-                asRecord(input.context.runtime).requestId ??
-                  currentRequestId() ??
-                  ""
-              ) || null,
-              taskExecutionKey,
-            ]
-          );
-          if (!sequentialSign || taskAssignment.approvalOrder === 0) {
-            const taskRecipientUserIds = Array.from(
-              new Set(
-                [
-                  taskAssignment.assignedUserId,
-                  ...taskAssignment.candidateUserIds,
-                ]
-                  .map(Number)
-                  .filter(userId => Number.isInteger(userId) && userId > 0)
-              )
+              reference.passPercent
             );
-            if (!taskRecipientUserIds.length)
-              taskRecipientUserIds.push(Number(input.workflow.ownerUserId));
-            const schedules: Array<{
-              eventType: "reminder" | "due" | "escalation";
-              seconds: number;
-              recipients: number[];
-            }> = [];
-            if (reminderAfterSeconds)
-              schedules.push({
-                eventType: "reminder",
-                seconds: reminderAfterSeconds,
-                recipients: taskRecipientUserIds,
-              });
-            if (dueAfterSeconds)
-              schedules.push({
-                eventType: "due",
-                seconds: dueAfterSeconds,
-                recipients: taskRecipientUserIds,
-              });
-            if (escalationAfterSeconds)
-              schedules.push({
-                eventType: "escalation",
-                seconds: escalationAfterSeconds,
-                recipients: Array.from(
-                  new Set([
-                    ...taskRecipientUserIds,
-                    Number(input.workflow.ownerUserId),
-                  ])
+            await artifactConnection.query(
+              "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+              [
+                approvalGroupId,
+                input.workflow.id,
+                input.runId,
+                node.id,
+                reference.signMode,
+                approverUserIds.length,
+                requiredApprovals,
+                Math.round(reference.passPercent * 10000),
+                JSON.stringify(nextNodeIds),
+                String(
+                  asRecord(input.context.runtime).requestId ??
+                    currentRequestId() ??
+                    ""
+                ) || null,
+                taskExecutionKey,
+              ]
+            );
+          }
+          const sequentialSign = reference.signMode === "sequentialSignFor";
+          const taskAssignments = approvalGroupId
+            ? approverUserIds.map((userId, approvalOrder) => ({
+                assignedUserId: userId,
+                candidateUserIds: [userId],
+                approvalOrder,
+              }))
+            : [
+                {
+                  assignedUserId: assignment.assignedUserId,
+                  candidateUserIds: approverUserIds,
+                  approvalOrder: 0,
+                },
+              ];
+          for (const taskAssignment of taskAssignments) {
+            const taskId = randomUUID();
+            taskIds.push(taskId);
+            await artifactConnection.query(
+              "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+              [
+                taskId,
+                input.workflow.id,
+                input.workflow.projectId ?? null,
+                input.runId,
+                node.id,
+                node.name,
+                taskAssignment.assignedUserId,
+                taskAssignment.candidateUserIds.length
+                  ? JSON.stringify(taskAssignment.candidateUserIds)
+                  : null,
+                approvalGroupId,
+                reference.signMode,
+                taskAssignment.approvalOrder,
+                taskRoleKey,
+                operationName,
+                operationCode,
+                pendingStatusName,
+                String(
+                  firstConfiguredString(config.instruction) ?? operationName
                 ),
-              });
-            for (const schedule of schedules)
-              for (const recipientUserId of schedule.recipients)
-                await db().query(
-                  `INSERT INTO workflow_task_schedule
+                JSON.stringify({
+                  config,
+                  context: input.context,
+                  nodeRunId,
+                  ...(parallel ? { parallelTokens: activeTokens } : {}),
+                  assignmentMode: assignment.mode,
+                  reference,
+                }),
+                JSON.stringify({
+                  ...assignment,
+                  candidateUserIds: taskAssignment.candidateUserIds,
+                }),
+                JSON.stringify(outcomeContract),
+                taskAssignment.assignedUserId,
+                formSchemaVersion,
+                !sequentialSign || taskAssignment.approvalOrder === 0
+                  ? dueAt
+                  : null,
+                JSON.stringify(nextNodeIds),
+                String(
+                  asRecord(input.context.runtime).requestId ??
+                    currentRequestId() ??
+                    ""
+                ) || null,
+                taskExecutionKey,
+              ]
+            );
+            if (!sequentialSign || taskAssignment.approvalOrder === 0) {
+              const taskRecipientUserIds = Array.from(
+                new Set(
+                  [
+                    taskAssignment.assignedUserId,
+                    ...taskAssignment.candidateUserIds,
+                  ]
+                    .map(Number)
+                    .filter(userId => Number.isInteger(userId) && userId > 0)
+                )
+              );
+              if (!taskRecipientUserIds.length)
+                taskRecipientUserIds.push(Number(input.workflow.ownerUserId));
+              const schedules: Array<{
+                eventType: "reminder" | "due" | "escalation";
+                seconds: number;
+                recipients: number[];
+              }> = [];
+              if (reminderAfterSeconds)
+                schedules.push({
+                  eventType: "reminder",
+                  seconds: reminderAfterSeconds,
+                  recipients: taskRecipientUserIds,
+                });
+              if (dueAfterSeconds)
+                schedules.push({
+                  eventType: "due",
+                  seconds: dueAfterSeconds,
+                  recipients: taskRecipientUserIds,
+                });
+              if (escalationAfterSeconds)
+                schedules.push({
+                  eventType: "escalation",
+                  seconds: escalationAfterSeconds,
+                  recipients: Array.from(
+                    new Set([
+                      ...taskRecipientUserIds,
+                      Number(input.workflow.ownerUserId),
+                    ])
+                  ),
+                });
+              for (const schedule of schedules)
+                for (const recipientUserId of schedule.recipients)
+                  await artifactConnection.query(
+                    `INSERT INTO workflow_task_schedule
                     (id,taskId,runId,workflowId,recipientUserId,eventType,status,fireAt,payloadJson,requestId)
                    VALUES (?,?,?,?,?,?,'scheduled',DATE_ADD(NOW(),INTERVAL ? SECOND),?,?)
                    ON DUPLICATE KEY UPDATE id=id`,
-                  [
-                    randomUUID(),
-                    taskId,
-                    input.runId,
-                    input.workflow.id,
-                    recipientUserId,
-                    schedule.eventType,
-                    schedule.seconds,
-                    JSON.stringify({
+                    [
+                      randomUUID(),
                       taskId,
-                      nodeId: node.id,
-                      operationName,
-                    }),
-                    String(
-                      asRecord(input.context.runtime).requestId ??
-                        currentRequestId() ??
-                        ""
-                    ) || null,
-                  ]
-                );
+                      input.runId,
+                      input.workflow.id,
+                      recipientUserId,
+                      schedule.eventType,
+                      schedule.seconds,
+                      JSON.stringify({
+                        taskId,
+                        nodeId: node.id,
+                        operationName,
+                      }),
+                      String(
+                        asRecord(input.context.runtime).requestId ??
+                          currentRequestId() ??
+                          ""
+                      ) || null,
+                    ]
+                  );
+            }
+            for (const userId of taskAssignment.candidateUserIds) {
+              const availableOperation = {
+                taskId,
+                name: operationName,
+                ...(reference.signMode === "single"
+                  ? {}
+                  : { signMode: reference.signMode }),
+                outcomeMode,
+                outcomes,
+              };
+              await upsertParticipantState({
+                executor: artifactConnection,
+                runId: input.runId,
+                workflowId: input.workflow.id,
+                userId,
+                roleKey: taskRoleKey,
+                stateCode: node.id,
+                stateName: pendingStatusName,
+                flowStatus: pendingStatusName,
+                sourceNodeId: node.id,
+                availableOperations:
+                  !sequentialSign || taskAssignment.approvalOrder === 0
+                    ? [availableOperation]
+                    : [],
+              });
+            }
           }
-          for (const userId of taskAssignment.candidateUserIds) {
-            const availableOperation = {
-              taskId,
-              name: operationName,
-              ...(reference.signMode === "single"
-                ? {}
-                : { signMode: reference.signMode }),
-              outcomeMode,
-              outcomes,
-            };
-            await upsertParticipantState({
-              runId: input.runId,
-              workflowId: input.workflow.id,
-              userId,
-              roleKey: taskRoleKey,
-              stateCode: node.id,
-              stateName: pendingStatusName,
-              flowStatus: pendingStatusName,
-              sourceNodeId: node.id,
-              availableOperations:
-                !sequentialSign || taskAssignment.approvalOrder === 0
-                  ? [availableOperation]
-                  : [],
-            });
-          }
+          addRuntimeParticipants(input.context, approverUserIds);
+          await finishNodeRun(
+            nodeRunId,
+            "waiting",
+            startedAt,
+            {
+              taskId: taskIds[0],
+              taskIds,
+              approvalGroupId,
+              signMode: reference.signMode,
+              status: "pending",
+              assignedUserId: assignment.assignedUserId,
+              candidateUserIds: approverUserIds,
+              operationName,
+            },
+            undefined,
+            artifactConnection
+          );
+          await artifactConnection.commit();
+        } catch (error) {
+          await artifactConnection.rollback();
+          throw error;
+        } finally {
+          artifactConnection.release();
         }
-        addRuntimeParticipants(input.context, approverUserIds);
-        await finishNodeRun(nodeRunId, "waiting", startedAt, {
-          taskId: taskIds[0],
-          taskIds,
-          approvalGroupId,
-          signMode: reference.signMode,
-          status: "pending",
-          assignedUserId: assignment.assignedUserId,
-          candidateUserIds: approverUserIds,
-          operationName,
-        });
+        injectWorkflowExecutionFault("after_human_commit_before_checkpoint");
         await persistCheckpoint({
           queue: [...input.queue],
           context: input.context,
@@ -3812,11 +3890,11 @@ export async function executeRunSegment(input: {
       const details = {
         message: error instanceof Error ? error.message : String(error),
       };
-      await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details);
+      await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details, db(), ["operate", "wait", "message_catch"].includes(node.type));
       throw error;
     }
   }
-  if (parallel) {
+  {
     const [pending] = await db().query<mysql.RowDataPacket[]>(
       `SELECT id FROM workflow_task WHERE runId=? AND status IN ('pending','claimed')
        UNION ALL SELECT id FROM workflow_wait_subscription WHERE runId=? AND status='active'
@@ -3824,6 +3902,10 @@ export async function executeRunSegment(input: {
       [input.runId, input.runId, input.runId]
     );
     if (pending[0]) return { status: "waiting", taskId: String(pending[0].id) };
+  }
+  if (!reachedEnd && !input.queue.length) {
+    const [completedEnds] = await db().query<mysql.RowDataPacket[]>("SELECT outputJson FROM workflow_node_run WHERE runId=? AND nodeType='end' AND status='success' ORDER BY sequenceNo DESC LIMIT 1", [input.runId]);
+    if (completedEnds[0]) { reachedEnd = true; finalOutput = readJson(completedEnds[0].outputJson); }
   }
   if (!reachedEnd)
     throw new Error("流程未到达结束节点，已阻止将不完整运行标记为成功。");
@@ -4291,6 +4373,8 @@ export async function resumeWorkflowTask(input: {
         output: taskOutput,
       };
     }
+    restoreHumanCreationRuntime(context, taskPayload);
+    completeCurrentHumanCheckpoint(asRecord(context.runtime), String(task.nodeId), task.executionKey);
     const nextNodeIds = readJson(task.nextNodeIdsJson);
     let continuationNodeIds = Array.isArray(nextNodeIds)
       ? nextNodeIds.map(String)
@@ -4400,6 +4484,7 @@ async function triggerWorkflowWaitSubscription(
     const continuation = asRecord(
       asRecord(asRecord(checkpoint.context).runtime).parallelWaitContinuation
     );
+    const rootContinuation = asRecord(asRecord(asRecord(checkpoint.context).runtime).rootWaitContinuation);
     const action = waitSubscriptionResumeAction({
       runStatus: String(wait.runStatus),
       waitType: String(wait.waitType),
@@ -4452,6 +4537,10 @@ async function triggerWorkflowWaitSubscription(
       );
       checkpoint.queue = [...pending, ...next];
       context.runtime = runtime;
+    }
+    if (continuation.nextNodeIds === undefined && asRecord(context.runtime).deferredRootWaitVersion === 1 && Array.isArray(rootContinuation.nextNodeIds)) {
+      checkpoint.queue = resumeWorkflowQueue(checkpoint.queue, rootContinuation.nextNodeIds.map(String));
+      delete asRecord(context.runtime).rootWaitContinuation;
     }
     const output = {
       waitId,
@@ -4736,6 +4825,8 @@ export async function reconcileWorkflowContinuations(limit = 20) {
           ]
         );
       } else {
+        restoreHumanCreationRuntime(context, readJson(task.payloadJson));
+        completeCurrentHumanCheckpoint(asRecord(context.runtime), String(task.nodeId), task.executionKey);
         const nextNodeIds = readJson(task.nextNodeIdsJson);
         let queue = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
         if (outcomeRouting.mode === "explicit") {
