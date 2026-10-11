@@ -1081,7 +1081,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "assigneeMode",
         label: "处理人方式",
-        help: "人工操作必须解析为明确的当前处理人或候选人，不允许全员开放领取。",
+        help: "选择处理人来源，运行时解析实际办理人员。",
         kind: "select",
         required: true,
         options: [
@@ -1101,7 +1101,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "assigneeFallback",
         label: "无人候选兜底",
-        help: "默认失败并阻塞流程；可安全回退到流程发起人或流程所有者，不会默认开放给所有用户。",
+        help: "无人或全部停用时按配置兜底；部分人员停用仍报错，审批要求不变。",
         kind: "select",
         options: [
           { value: "error", label: "失败并阻塞" },
@@ -1112,7 +1112,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "assigneeRoleCode",
         label: "处理人角色代号",
-        help: "“权限角色”方式使用；匹配系统级或当前流程范围内的有效角色授权。",
+        help: "匹配系统或当前流程中的有效角色授权。",
         kind: "text",
       },
       {

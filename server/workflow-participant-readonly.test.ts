@@ -60,6 +60,18 @@ it("任意未配置人员与全局搜索均被拒绝", async () => {
   ).rejects.toMatchObject({ code: "FORBIDDEN" });
   expect(mocks.query).toHaveBeenCalledTimes(1);
 });
+it("只读回显停用处理人的姓名和状态，但不提供新增目录候选", async () => {
+  mocks.query.mockResolvedValueOnce([
+    [{ id: 17, name: "停用审批人", username: "inactive", status: "disabled" }],
+  ]);
+  expect(await searchWorkflowParticipants(user, input)).toMatchObject({
+    items: [],
+    selected: [
+      { value: "17", label: "停用审批人（inactive） · 已停用", disabled: true },
+    ],
+  });
+  expect(mocks.query.mock.calls[1][0]).not.toContain("status='active'");
+});
 it("没有流程查看权限时不读取定义或人员", async () => {
   mocks.permission.mockResolvedValue(false);
   await expect(searchWorkflowParticipants(user, input)).rejects.toMatchObject({

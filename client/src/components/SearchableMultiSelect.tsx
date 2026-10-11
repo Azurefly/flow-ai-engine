@@ -164,7 +164,7 @@ export function SearchableMultiSelect({
                       <CommandItem
                         key={option.value}
                         value={option.value}
-                        disabled={atLimit}
+                        disabled={atLimit || (option.disabled && !selected)}
                         onSelect={() => toggle(option.value)}
                         className="min-h-11 items-center py-2"
                       >

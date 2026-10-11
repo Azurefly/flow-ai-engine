@@ -3,6 +3,7 @@ import type { RowDataPacket } from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasWorkflowPermission } from "./iam-service";
 import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
+import type { SearchSelectOption } from "../shared/search-select";
 
 export async function searchWorkflowParticipants(
   user: { id: number; role: "user" | "admin" },
@@ -86,7 +87,7 @@ export async function searchWorkflowParticipants(
           [query, query]
         )
       : [[]];
-    const option = (row: RowDataPacket) => ({
+    const option = (row: RowDataPacket): SearchSelectOption => ({
       value: String(row.code),
       label: `${row.name}（${row.code}）`,
     });
@@ -99,11 +100,11 @@ export async function searchWorkflowParticipants(
   const people = input.kind === "user";
   const table = people ? "users" : "organization_unit";
   const code = people ? "username" : "code";
-  const columns = `id, name, ${code}`;
+  const columns = `id, name, ${code}, status`;
   const pool = getSharedPool();
   const [selected] = selectedIds.length
     ? await pool.query<RowDataPacket[]>(
-        `SELECT ${columns} FROM ${table} WHERE status='active' AND id IN (${selectedIds.map(() => "?").join(",")})`,
+        `SELECT ${columns} FROM ${table} WHERE id IN (${selectedIds.map(() => "?").join(",")})`,
         selectedIds
       )
     : [[]];
@@ -115,7 +116,10 @@ export async function searchWorkflowParticipants(
     : [[]];
   const option = (row: RowDataPacket) => ({
     value: String(row.id),
-    label: row.name ? `${row.name}（${row[code]}）` : String(row[code]),
+    label:
+      (row.name ? `${row.name}（${row[code]}）` : String(row[code])) +
+      (row.status === "disabled" ? " · 已停用" : ""),
+    ...(row.status === "disabled" ? { disabled: true } : {}),
   });
   return {
     items: matches.slice(0, 50).map(option),

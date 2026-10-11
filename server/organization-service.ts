@@ -1181,6 +1181,22 @@ export async function resolveOperateAssignees(input: {
   candidates = Array.from(
     new Set(candidates.filter(id => Number.isInteger(id) && id > 0))
   );
+  const excluded: Array<{ userId: number; reason: string }> = [];
+  if (candidates.length) {
+    const [active] = await db().query<mysql.RowDataPacket[]>(
+      "SELECT id FROM users WHERE id IN (?) AND status='active'",
+      [candidates]
+    );
+    const activeIds = new Set(active.map(row => Number(row.id)));
+    for (const userId of candidates)
+      if (!activeIds.has(userId))
+        excluded.push({ userId, reason: "不存在或已停用" });
+    if (excluded.length === candidates.length) candidates = [];
+    else if (excluded.length)
+      throw new Error(
+        "部分操作候选人不存在或已停用，请调整人员配置，审批要求不会自动降低。"
+      );
+  }
   let fallbackApplied: string | undefined;
   if (candidates.length === 0) {
     const fallback = String(input.config.assigneeFallback ?? "error").trim();
@@ -1204,8 +1220,7 @@ export async function resolveOperateAssignees(input: {
     if (candidates.length === 0)
       throw new Error("操作节点未解析到有效处理人，且未配置可用兜底策略。");
   }
-  for (const candidate of candidates)
-    await assertActiveUser(candidate, "操作候选人");
+  if (fallbackApplied) await assertActiveUser(candidates[0]!, "兜底处理人");
   return {
     mode,
     assignedUserId: candidates.length === 1 ? candidates[0] : null,
@@ -1225,7 +1240,7 @@ export async function resolveOperateAssignees(input: {
           ? String(input.config.assigneeFormField || "input.userId")
           : undefined,
     },
-    excluded: [],
+    excluded,
     fallbackApplied,
   };
 }

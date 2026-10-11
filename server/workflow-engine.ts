@@ -21,7 +21,7 @@ import {
   forkParallelScopes,
 } from "./workflow-parallel-scope";
 import { resumeWorkflowQueue } from "./workflow-resume-queue";
-import { orderOperateApprovers } from "../shared/operate-approval-editor";
+import { selectOperateApprovers } from "./operate-approver-selection";
 import { getRunApprovalProgress } from "./run-approval-progress";
 import type { RunApprovalGroup } from "../shared/run-approval-progress";
 import {
@@ -3381,21 +3381,11 @@ export async function executeRunSegment(input: {
           context: input.context,
           workflowId: input.workflow.id,
         });
-        let approverUserIds = assignment.candidateUserIds;
-        if (
-          reference.signMode !== "single" &&
-          reference.signSelectorUserIds.length
-        ) {
-          approverUserIds = orderOperateApprovers(
-            approverUserIds,
-            reference.signSelectorUserIds,
-            reference.signMode === "sequentialSignFor"
-          );
-          if (!approverUserIds.length)
-            throw new Error("或签/会签指定方未命中当前操作候选人。");
-        }
-        if (reference.signMode !== "single" && !approverUserIds.length)
-          throw new Error("或签/会签必须解析到至少一名审批人。");
+        const approverUserIds = selectOperateApprovers(
+          assignment.candidateUserIds,
+          reference.signSelectorUserIds,
+          reference.signMode
+        );
         setRuntimeReceivers(input.context, approverUserIds);
         updateRuntimeRoles(
           input.context,

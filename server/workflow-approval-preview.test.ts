@@ -58,6 +58,15 @@ it("指定审批人没有候选资格时不展示错误成功结果", async () =
   ).rejects.toThrow("未命中");
   expect(mocks.query).not.toHaveBeenCalled();
 });
+it("部分指定人员无资格时预览不能减少审批人数", async () => {
+  await expect(
+    previewOperateApproval({
+      ...input,
+      config: { bdcz: { hqhqsz: "andSignFor", xzdfhq: [2, 99], hqtgbfb: 100 } },
+    })
+  ).rejects.toThrow("审批要求不会自动降低");
+  expect(mocks.query).not.toHaveBeenCalled();
+});
 it("大量候选人限制姓名查询体积，人数和通过要求仍按完整名单计算", async () => {
   mocks.resolve.mockResolvedValue({
     candidateUserIds: Array.from({ length: 120 }, (_, index) => index + 1),

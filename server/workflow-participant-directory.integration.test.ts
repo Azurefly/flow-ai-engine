@@ -66,6 +66,11 @@ test("流程编辑者可搜索和回显处理人，查看者和撤权用户无�
     expect(result.items).toHaveLength(3);
     expect(result.selected).toEqual([
       { value: String(editor!.id), label: `${tag} editor（${tag}_editor）` },
+      {
+        value: String(ids[3]),
+        label: `${tag} inactive（${tag}_inactive） · 已停用`,
+        disabled: true,
+      },
     ]);
     expect(
       result.items.every(
@@ -93,7 +98,14 @@ test("流程编辑者可搜索和回显处理人，查看者和撤权用户无�
     expect(units.items).toEqual([
       { value: unitIds[0], label: `搜索验收部门（${tag}_active）` },
     ]);
-    expect(units.selected).toEqual(units.items);
+    expect(units.selected).toEqual([
+      ...units.items,
+      {
+        value: unitIds[1],
+        label: `停用验收部门（${tag}_disabled） · 已停用`,
+        disabled: true,
+      },
+    ]);
     await expect(
       caller(editor).workflow.memberCandidates({ workflowId: workflowId! })
     ).rejects.toThrow("无权管理流程成员");

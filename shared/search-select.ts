@@ -2,6 +2,7 @@ export type SearchSelectOption = {
   value: string;
   label: string;
   keywords?: string;
+  disabled?: boolean;
 };
 
 export function searchSelectOptions<T extends SearchSelectOption>(

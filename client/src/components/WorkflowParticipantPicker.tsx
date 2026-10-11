@@ -53,7 +53,10 @@ export function WorkflowParticipantPicker({
   );
   const missing = directory.isSuccess
     ? value.filter(
-        id => !directory.data.selected.some(option => option.value === id)
+        id =>
+          !directory.data.selected.some(
+            option => option.value === id && !option.disabled
+          )
       )
     : [];
   return (
@@ -137,7 +140,9 @@ export function WorkflowParticipantPicker({
         <p role="status" className="text-xs text-amber-700">
           已选项目已停用或不存在
           {readOnly ? "，请联系流程管理员" : "，请重新选择"}：
-          {missing.join("、")}
+          {missing
+            .map(id => options.find(option => option.value === id)?.label ?? id)
+            .join("、")}
         </p>
       )}
       <p className="text-xs text-muted-foreground">
