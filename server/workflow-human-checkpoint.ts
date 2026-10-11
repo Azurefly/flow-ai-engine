@@ -63,7 +63,14 @@ export function completeCurrentHumanCheckpoint(
   const parallel = runtime.parallelCheckpoint as ParallelCheckpoint | undefined;
   const entry = parallel?.queue[0];
   if (parallel && (!entry || entry.nodeId !== nodeId)) return;
-  if (workflowTaskExecutionKey(runtime, entry?.tokens ?? []) !== executionKey)
+  const identityRuntime =
+    parallel && runtime.durableTaskVersion === 2
+      ? { ...runtime, executionLoopCursor: entry?.loopCursor }
+      : runtime;
+  if (
+    workflowTaskExecutionKey(identityRuntime, entry?.tokens ?? []) !==
+    executionKey
+  )
     return;
   runtime.executionQueue = runtime.executionQueue.slice(1);
   parallel?.queue.shift();

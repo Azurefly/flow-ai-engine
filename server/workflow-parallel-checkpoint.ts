@@ -4,6 +4,10 @@ import {
   restoreParallelScopes,
   type ParallelScopes,
 } from "./workflow-parallel-scope";
+import {
+  restoreWorkflowLoopCursor,
+  type WorkflowLoopCursor,
+} from "./workflow-loop-cursor";
 export type ParallelCheckpoint = {
   frames: ParallelState;
   scopes?: ParallelScopes;
@@ -12,6 +16,7 @@ export type ParallelCheckpoint = {
     tokens: BranchToken[];
     participantUserIds?: number[];
     releasedJoinFrameId?: string;
+    loopCursor?: WorkflowLoopCursor;
   }[];
 };
 export function resumeParallelCheckpoint(
@@ -19,7 +24,8 @@ export function resumeParallelCheckpoint(
   pending: string[],
   next: string[],
   tokens: unknown,
-  participantUserIds?: unknown
+  participantUserIds?: unknown,
+  loopCursor?: unknown
 ) {
   const checkpoint = restoreParallelCheckpoint(value, pending);
   return restoreParallelCheckpoint(
@@ -31,6 +37,7 @@ export function resumeParallelCheckpoint(
           nodeId,
           tokens,
           ...(participantUserIds === undefined ? {} : { participantUserIds }),
+          ...(loopCursor === undefined ? {} : { loopCursor }),
         })),
       ],
     },
@@ -114,6 +121,9 @@ export function restoreParallelCheckpoint(
         ? {}
         : { participantUserIds: [...entry.participantUserIds] }),
       ...(releasedJoinFrameId === undefined ? {} : { releasedJoinFrameId }),
+      ...(entry.loopCursor === undefined
+        ? {}
+        : { loopCursor: restoreWorkflowLoopCursor(entry.loopCursor) }),
     };
   });
   return {

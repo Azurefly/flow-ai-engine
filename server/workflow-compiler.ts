@@ -72,7 +72,8 @@ export type WorkflowExecutionPlan = {
     | "1.3.0"
     | "1.4.0"
     | "1.5.0"
-    | "1.6.0";
+    | "1.6.0"
+    | "1.7.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -1080,6 +1081,59 @@ export function analyzeWorkflowDefinition(
         );
       }
     }
+    // Every cycle must cross a bounded edge. One declared edge inside a larger
+    // strongly connected component does not bound all of its internal cycles.
+    if (validEdges.some(edge => edge.loop)) {
+      const withoutLoopEdges = new Map(
+        Array.from(outgoing, ([nodeId, edges]) => [
+          nodeId,
+          edges.filter(edge => !edge.loop),
+        ])
+      );
+      const unboundedComponents = stronglyConnectedComponents(
+        Array.from(nodeIds),
+        withoutLoopEdges
+      );
+      const regionByNode = new Map<string, number>();
+      components.forEach((region, index) =>
+        region.forEach(nodeId => regionByNode.set(nodeId, index))
+      );
+      const regionsWithDeclaredLoops = new Set(
+        validEdges
+          .filter(
+            edge =>
+              edge.loop &&
+              regionByNode.get(edge.sourceNodeId) ===
+                regionByNode.get(edge.targetNodeId)
+          )
+          .map(edge => regionByNode.get(edge.sourceNodeId))
+      );
+      for (const component of unboundedComponents.filter(
+        item => item.length > 1
+      )) {
+        const members = new Set(component);
+        if (!regionsWithDeclaredLoops.has(regionByNode.get(component[0]!)))
+          continue; // Already reported as wholly undeclared.
+        const edge = validEdges
+          .filter(
+            item =>
+              !item.loop &&
+              members.has(item.sourceNodeId) &&
+              members.has(item.targetNodeId)
+          )
+          .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0]!;
+        diagnostics.push(
+          diagnostic(
+            "WF_LOOP_NOT_BOUNDED",
+            `循环次数上限未覆盖全部回路：${component
+              .map(id => nodesById.get(id)?.name || id)
+              .sort()
+              .join("、")}。请为剩余回路的返回连线设置次数上限。`,
+            { kind: "edge", edgeId: edge.id, field: "loop" }
+          )
+        );
+      }
+    }
     validEdges
       .filter(edge => edge.loop)
       .forEach(edge => {
@@ -1234,7 +1288,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.6.0",
+    compilerVersion: "1.7.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,

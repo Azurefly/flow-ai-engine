@@ -31,11 +31,12 @@ it("分支等待标识在序列化恢复后稳定，并区分分支和嵌套路�
   ).not.toBe(key);
 });
 it("拒绝未知等待版本和损坏的分支路径", () => {
-  expect(() => workflowWaitExecutionKey({ durableWaitVersion: 2 }, [])).toThrow(
+  expect(() => workflowWaitExecutionKey({ durableWaitVersion: 3 }, [])).toThrow(
     "版本无效"
   );
   for (const tokens of [
     null,
+    Array(1),
     [{ frameId: "", branchId: "a" }],
     [
       { frameId: "f", branchId: "a" },
@@ -64,7 +65,7 @@ it("审批任务使用独立版本快照，并区分共享节点的分支", () =
       { frameId: "f", branchId: "b" },
     ])
   ).not.toBe(key);
-  expect(() => workflowTaskExecutionKey({ durableTaskVersion: 2 }, [])).toThrow(
+  expect(() => workflowTaskExecutionKey({ durableTaskVersion: 3 }, [])).toThrow(
     "人工任务执行身份版本无效"
   );
 });
