@@ -3779,13 +3779,33 @@ it("版本更新提示保留未保存草稿并由用户主动刷新", () => {
   expect(homeSource).toContain("请先保存或丢弃修改再刷新");
 });
 it("窄屏普通节点选择定位配置区，多选不跳转并可返回画布", () => {
-  expect(canvasSource).toContain('window.matchMedia("(max-width: 1023px)").matches || document.fullscreenElement');
+  expect(canvasSource).toContain('if (!window.matchMedia("(max-width: 1023px)").matches) return');
   expect(canvasSource).toContain("if (!additive) revealInspector()");
   expect(canvasSource).toContain("inspectorHeadingRef.current?.focus({ preventScroll: true })");
   expect(canvasSource).toContain('behavior: prefersReducedMotion ? "auto" : "smooth"');
   expect(canvasSource).toContain("canvasRegionRef.current?.focus({ preventScroll: true })");
   expect(canvasSource).toContain("返回画布</button>");
   expect(canvasSource).toContain("window.cancelAnimationFrame(inspectorRevealFrameRef.current)");
+});
+it("全屏包含节点检查器，面板有独立滚动且窄屏可返回画布", () => {
+  expect(canvasSource).toContain("ref={editorRegionRef} data-aiflow-workflow-canvas");
+  expect(canvasSource).toContain("document.fullscreenElement === editorRegionRef.current");
+  expect(canvasSource).toContain("editorRegionRef.current.requestFullscreen()");
+  expect(canvasSource).not.toContain("canvasRegionRef.current.requestFullscreen()");
+  expect(canvasSource).toContain("h-[100dvh] min-h-0 overflow-y-auto");
+  expect(canvasSource).toContain("lg:grid-rows-[minmax(0,1fr)_auto]");
+  expect(canvasSource).toContain('fullscreen ? "min-h-0 overflow-y-auto lg:flex-1"');
+});
+it("全屏弹窗、菜单和人员选择浮层留在全屏元素内并响应退出", () => {
+  for (const path of ["dialog", "dropdown-menu", "popover"]) {
+    const overlay = source(`../client/src/components/ui/${path}.tsx`);
+    expect(overlay).toContain("const container = useFullscreenPortalContainer()");
+    expect(overlay).toContain("container={container}");
+  }
+  const hook = source("../client/src/hooks/useFullscreenPortalContainer.ts");
+  expect(hook).toContain("document.fullscreenElement as HTMLElement");
+  expect(hook).toContain('document.addEventListener("fullscreenchange", sync)');
+  expect(hook).toContain('document.removeEventListener("fullscreenchange", sync)');
 });
 it("人员目录默认启用并按服务端状态筛选，切换后重置分页与详情", () => {
   expect(homeSource).toContain('useState<"active" | "disabled" | "all">("active")');

@@ -2403,6 +2403,7 @@ export default function WorkflowCanvas({
   const [reuseSearch, setReuseSearch] = useState("");
   const lastInitialFitKeyRef = useRef<string | null>(null);
   const participantPreview = trpc.workflow.previewParticipants.useMutation();
+  const editorRegionRef = useRef<HTMLDivElement>(null);
   const canvasRegionRef = useRef<HTMLDivElement>(null);
   const inspectorHeadingRef = useRef<HTMLHeadingElement>(null);
   const inspectorRevealFrameRef = useRef<number | null>(null);
@@ -2422,7 +2423,7 @@ export default function WorkflowCanvas({
 
   const { prefersReducedMotion } = useMotionPreference();
   const revealInspector = useCallback(() => {
-    if (!window.matchMedia("(max-width: 1023px)").matches || document.fullscreenElement) return;
+    if (!window.matchMedia("(max-width: 1023px)").matches) return;
     if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
     inspectorRevealFrameRef.current = window.requestAnimationFrame(() => {
       inspectorRevealFrameRef.current = null;
@@ -2691,7 +2692,7 @@ export default function WorkflowCanvas({
 
   useEffect(() => {
     const syncFullscreen = () =>
-      setFullscreen(document.fullscreenElement === canvasRegionRef.current);
+      setFullscreen(document.fullscreenElement === editorRegionRef.current);
     document.addEventListener("fullscreenchange", syncFullscreen);
     return () =>
       document.removeEventListener("fullscreenchange", syncFullscreen);
@@ -3688,10 +3689,10 @@ export default function WorkflowCanvas({
   };
 
   const toggleFullscreen = async () => {
-    if (!canvasRegionRef.current) return;
+    if (!editorRegionRef.current) return;
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else await canvasRegionRef.current.requestFullscreen();
+      else await editorRegionRef.current.requestFullscreen();
     } catch (err) {
       console.warn("[WorkflowCanvas] Fullscreen toggle failed:", err);
     }
@@ -3850,15 +3851,16 @@ export default function WorkflowCanvas({
 
   return (
     <div
+      ref={editorRegionRef}
       data-aiflow-workflow-canvas=""
       data-workflow-editor={compactReadOnlyPreview ? undefined : ""}
-      className={
+      className={`grid min-w-0 max-w-full grid-cols-1 bg-card ${fullscreen ? `h-[100dvh] min-h-0 overflow-y-auto lg:overflow-hidden ${selected && inspectorMode === "compact" ? "lg:grid-rows-[minmax(0,1fr)_auto]" : "lg:grid-rows-[minmax(0,1fr)]"}` : `${canvasMinHeight} overflow-hidden rounded-xl border border-border shadow-2xs`} ${
         !selectedId || !selected || inspectorMode === "compact"
-          ? `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs`
+          ? ""
           : inspectorMode === "maximized"
-            ? `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs lg:grid-cols-[minmax(0,1fr)_620px]`
-            : `grid ${canvasMinHeight} min-w-0 max-w-full grid-cols-1 overflow-hidden rounded-xl border border-border bg-card shadow-2xs lg:grid-cols-[minmax(0,1fr)_420px]`
-      }
+            ? "lg:grid-cols-[minmax(0,1fr)_620px]"
+            : "lg:grid-cols-[minmax(0,1fr)_420px]"
+      }`}
     >
       <section
         ref={canvasRegionRef}
@@ -3866,7 +3868,7 @@ export default function WorkflowCanvas({
         style={{ scrollMarginTop: "4rem" }}
         className={
           fullscreen
-            ? "relative min-w-0 bg-muted flex h-screen flex-col overflow-hidden"
+            ? "relative min-h-0 min-w-0 bg-muted flex flex-col lg:h-full"
             : "relative min-w-0 bg-muted flex flex-col"
         }
       >
@@ -4196,7 +4198,7 @@ export default function WorkflowCanvas({
         </div>
         <div
           ref={flowViewportRef}
-          className={`relative ${fullscreen ? "h-full flex-1" : compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
+          className={`relative ${fullscreen ? "h-[480px] shrink-0 sm:h-[600px] lg:min-h-0 lg:h-auto lg:flex-1" : compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
         >
@@ -4495,11 +4497,11 @@ export default function WorkflowCanvas({
       {selectedId && selected && (
         <aside
           data-workflow-inspector=""
-          className="border-t border-border bg-card lg:border-l lg:border-t-0"
+          className={`border-t border-border bg-card lg:border-l lg:border-t-0 ${fullscreen ? "min-h-0 flex flex-col" : ""}`}
         >
           <div
             data-workflow-inspector-header=""
-            className="flex min-h-16 items-center justify-between border-b border-border px-4 py-3"
+            className="flex min-h-16 shrink-0 items-center justify-between border-b border-border px-4 py-3"
           >
             <div className={inspectorMode === "compact" ? "hidden" : ""}>
               <h2 ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
@@ -4553,7 +4555,7 @@ export default function WorkflowCanvas({
             (selected && selectedDefinition ? (
               <div
                 data-workflow-inspector-content=""
-                className="max-h-[650px] overflow-y-auto"
+                className={fullscreen ? "min-h-0 overflow-y-auto lg:flex-1" : "max-h-[650px] overflow-y-auto"}
               >
                 <div className="space-y-3 p-4">
                   <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
@@ -5034,7 +5036,7 @@ export default function WorkflowCanvas({
               </div>
             ))}
           {inspectorMode !== "compact" && !readOnly && (
-            <div className="border-t border-border p-4">
+            <div className={`border-t border-border p-4 ${fullscreen ? "shrink-0 lg:max-h-[25vh] lg:overflow-y-auto" : ""}`}>
               <details>
                 <summary className="aiflow-type-control cursor-pointer font-semibold text-foreground">
                   管理我的模板与子流程
