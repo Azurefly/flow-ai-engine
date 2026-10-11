@@ -146,6 +146,24 @@ async function cleanup(fixture) {
   await bootstrap();
   const people = [...(fixture.people ?? [])],
     failures = [];
+  if (fixture.identityRoleCode) {
+    try {
+      await revokeIdentity(fixture);
+      const role = (await request("iam.roles", { scope: "system" })).find(
+        item => item.code === fixture.identityRoleCode
+      );
+      if (role) {
+        assert.equal(role.name, "临时身份管理员_" + fixture.tag);
+        await request(
+          "iam.deleteCustomRole",
+          { code: fixture.identityRoleCode },
+          true
+        );
+      }
+    } catch (error) {
+      failures.push(error.message);
+    }
+  }
   for (const pending of fixture.pendingPeople ?? []) {
     try {
       assert(pending.username.startsWith(fixture.tag + "_"));
@@ -210,6 +228,74 @@ async function cleanup(fixture) {
       disabledOwnAccounts: people.length,
     })
   );
+}
+
+async function revokeIdentity(fixture) {
+  assert.equal(
+    fixture.identityRoleCode,
+    "custom_ui_iam_" + fixture.tag.slice(9)
+  );
+  await bootstrap();
+  const directory = await request("iam.userDirectory", {
+    search: fixture.tag + "_disabled",
+    offset: 0,
+    limit: 20,
+  });
+  assert.equal(
+    directory.items.find(item => item.username === fixture.tag + "_disabled")
+      ?.id,
+    fixture.disabledUserId
+  );
+  const details = await request("iam.userAuthorizationDetails", {
+    userId: fixture.disabledUserId,
+  });
+  for (const role of details.directRoles.filter(
+    item => item.roleCode === fixture.identityRoleCode
+  )) {
+    await request(
+      "iam.revokeRoleAssignment",
+      { assignmentId: role.assignmentId },
+      true
+    );
+  }
+}
+
+async function grantIdentity(fixture) {
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  fixture.identityRoleCode = "custom_ui_iam_" + fixture.tag.slice(9);
+  console.log(JSON.stringify({ fixture }));
+  await bootstrap();
+  const directory = await request("iam.userDirectory", {
+    search: fixture.tag + "_disabled",
+    offset: 0,
+    limit: 20,
+  });
+  assert.equal(
+    directory.items.find(item => item.username === fixture.tag + "_disabled")
+      ?.id,
+    fixture.disabledUserId
+  );
+  await request(
+    "iam.updateUserStatus",
+    { userId: fixture.disabledUserId, status: "active" },
+    true
+  );
+  await request(
+    "iam.createCustomRole",
+    {
+      code: fixture.identityRoleCode,
+      name: "临时身份管理员_" + fixture.tag,
+      scope: "system",
+      permissions: ["iam:manage"],
+    },
+    true
+  );
+  await request(
+    "iam.assignSystemRole",
+    { userId: fixture.disabledUserId, roleCode: fixture.identityRoleCode },
+    true
+  );
+  console.log(JSON.stringify({ fixture }));
 }
 
 async function setup(intent) {
@@ -318,6 +404,10 @@ assert(
   "Run through browser-config-acceptance.cjs"
 );
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "grant_identity")
+  await grantIdentity(browserFixtureIntent.fixture);
+else if (browserFixtureIntent.action === "revoke_identity")
+  await revokeIdentity(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "cleanup")
   await cleanup(browserFixtureIntent.fixture);
 else throw new Error("Unknown fixture action");

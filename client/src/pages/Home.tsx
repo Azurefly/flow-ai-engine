@@ -155,6 +155,7 @@ type UserIdentity = {
   username: string | null;
   name: string | null;
   role: "user" | "admin";
+  canManageIdentity: boolean;
 };
 type PublicGeneral = {
   platformName: string;
@@ -209,7 +210,7 @@ function formatTime(value: unknown) {
 
 export default function Home() {
   const utils = trpc.useUtils();
-  const me = trpc.auth.me.useQuery();
+  const me = trpc.auth.me.useQuery(undefined, { refetchInterval: query => query.state.data ? 30_000 : false });
   const accountQueriesReady = useAccountQueryIsolation(me.data?.id ?? null);
   const general = trpc.config.publicGeneral.useQuery();
   const [credentials, setCredentials] = useState({
@@ -377,6 +378,8 @@ function FlowConsole({
   const { theme, toggleTheme } = useTheme();
   const utils = trpc.useUtils();
   const [initialRoute] = useState(readConsoleRoute);
+  const canManageIdentity = user.canManageIdentity;
+  const systemRootView = user.role === "admin" ? "config" : "identity";
   const [requestedRoute, setRequestedRoute] =
     useState<RequestedConsoleRoute>(initialRoute);
   const [section, setSection] = useState<ConsoleSection>(
@@ -479,7 +482,7 @@ function FlowConsole({
   }, []);
   const detailActive = section === "flows" && flowView === "detail";
   const identityActive =
-    section === "system" && systemView === "identity" && user.role === "admin";
+    section === "system" && systemView === "identity" && canManageIdentity;
   const navigateRoute = useCallback(
     (
       route: ConsoleRoute,
@@ -508,7 +511,7 @@ function FlowConsole({
   );
   const navigateSection = useCallback(
     (next: ConsoleSection) => {
-      const permitted = next !== "system" || user.role === "admin";
+      const permitted = next !== "system" || canManageIdentity;
       const resolved = permitted ? next : "flows";
       navigateRoute(
         resolved === "flows"
@@ -517,10 +520,10 @@ function FlowConsole({
             ? { section: "runs", view: "workbench" }
             : resolved === "warehouse"
               ? { section: "warehouse" }
-              : { section: "system", view: "config" }
+              : { section: "system", view: systemRootView }
       );
     },
-    [navigateRoute, user.role]
+    [navigateRoute, canManageIdentity, systemRootView]
   );
 
   const openFlowEditor = useCallback(
@@ -726,8 +729,12 @@ function FlowConsole({
         );
     };
     if (route.section === "system") {
-      if (user.role !== "admin") {
+      if (!canManageIdentity) {
         replaceWith({ section: "flows", view: "center" });
+        return;
+      }
+      if (route.view === "config" && systemRootView === "identity") {
+        replaceWith({ section: "system", view: "identity" });
         return;
       }
       setSection("system");
@@ -829,7 +836,8 @@ function FlowConsole({
     selectedWorkflow,
     selectedWorkflowFromList,
     selectedWorkflowQuery.isPending,
-    user.role,
+    canManageIdentity,
+    systemRootView,
   ]);
 
   useEffect(() => {
@@ -1228,7 +1236,7 @@ function FlowConsole({
     { id: "flows" as const, label: "流程设计", icon: FolderKanban },
     { id: "runs" as const, label: "已启动流程", icon: Activity },
     { id: "warehouse" as const, label: "流程仓库", icon: FolderKanban },
-    ...(user.role === "admin"
+    ...(canManageIdentity
       ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }]
       : []),
   ];
@@ -2121,27 +2129,28 @@ function FlowConsole({
               />
             )}
           {section === "system" &&
-            user.role === "admin" &&
+            canManageIdentity &&
             systemView === "organization" && (
               <OrganizationManagementPage
                 onBack={() =>
-                  navigateRoute({ section: "system", view: "config" })
+                  navigateRoute({ section: "system", view: systemRootView })
                 }
               />
             )}
           {section === "system" &&
-            user.role === "admin" &&
+            canManageIdentity &&
             systemView === "identity" && (
               <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
                 <div>
                   <button
                     className="aiflow-type-control aiflow-action-target mb-4 inline-flex items-center rounded px-3 text-aiflow-info hover:bg-accent hover:underline"
                     onClick={() =>
-                      navigateRoute({ section: "system", view: "config" })
+                      navigateRoute(user.role === "admin" ? { section: "system", view: "config" } : { section: "flows", view: "center" })
                     }
                   >
-                    ← 返回系统配置
+                    ← {user.role === "admin" ? "返回系统配置" : "返回工作区"}
                   </button>
+                  <Button className="ml-2 mb-4 min-h-11" variant="outline" onClick={() => navigateRoute({ section: "system", view: "organization" })}>组织架构</Button>
                   <IamCenter
                     roles={roles.data ?? []}
                     audit={audit.data ?? []}
@@ -4009,7 +4018,7 @@ function IamCenter({
             内部账号与权限中心
           </h1>
           <p className="aiflow-type-body mt-1 text-muted-foreground">
-            管理内部账号、角色和有效权限；直接授权与组织继承分别展示。
+            管理账号与角色，查看有效权限和授权来源。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -5305,9 +5314,6 @@ function UserAuthorizationPanel({
       >
         <div className="min-w-0">
           <p className="font-semibold">用户权限详情</p>
-          <p className="aiflow-type-body mt-0.5 text-muted-foreground">
-            直接授权可在此维护，组织继承保持只读。
-          </p>
         </div>
         <Button
           size="sm"
@@ -5354,7 +5360,7 @@ function UserAuthorizationPanel({
                 role="status"
                 className="rounded-lg bg-aiflow-warning-surface p-3 text-aiflow-warning"
               >
-                账号已停用，当前不能登录、办理流程或接受新授权。已有角色保留，重新启用后按授权有效期计算。
+                账号停用：不可登录、办理或接受新授权。已有角色保留。
               </p>
             )}
             <RoleDetailGroup
@@ -5374,7 +5380,7 @@ function UserAuthorizationPanel({
                 系统级有效权限（{data.effectivePermissions.length}）
               </p>
               <p className="mb-2 text-muted-foreground">
-                仅列出系统范围内的有效权限。具体流程还需结合该业务的项目成员与流程成员授权。
+                {data.authorizationSummary}
               </p>
               <div className="grid gap-1.5 sm:grid-cols-2">
                 {data.effectivePermissions.map((permission: any) => (
@@ -5388,6 +5394,7 @@ function UserAuthorizationPanel({
                     <p className="mt-0.5 break-words text-muted-foreground">
                       {permission.name}
                     </p>
+                    <p className="text-xs break-words text-muted-foreground">{permission.sourceLabels?.join("；")}</p>
                   </div>
                 ))}
                 {!data.effectivePermissions.length && (

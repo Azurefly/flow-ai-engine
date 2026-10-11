@@ -5,6 +5,7 @@ import {
   revokeWorkflowCustomRole,
 } from "./workflow-role-service";
 import { TEMPLATE_NODE_TYPES } from "../shared/workflow-template";
+import { publicAuthAccount } from "./auth-account";
 import { previewOperateApproval } from "./workflow-approval-preview";
 import { parse } from "cookie";
 import { searchWorkflowParticipants } from "./workflow-participant-directory";
@@ -244,7 +245,7 @@ export const appRouter = router({
     }),
     me: publicProcedure.query(async ({ ctx }) => {
       await ensureBootstrapAdmin();
-      return ctx.user;
+      return publicAuthAccount(ctx.user);
     }),
     login: publicProcedure
       .input(
@@ -289,7 +290,7 @@ export const appRouter = router({
           sameSite: "lax",
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
-        return result.user;
+        return publicAuthAccount(result.user);
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
       await logout(

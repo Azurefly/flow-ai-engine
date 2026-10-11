@@ -9,9 +9,14 @@ const {
 const root = path.resolve(__dirname, "..");
 const base = "http://124.223.198.84:1180/";
 const verifyUpdated = process.env.FLOW_UI_EXPECT_UPDATED === "1";
+const verifySources = process.env.FLOW_UI_PERMISSION_SOURCES === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
+  password: "Test9_" + randomBytes(24).toString("base64url"),
+};
+const memberLogin = {
+  username: tag + "_disabled",
   password: "Test9_" + randomBytes(24).toString("base64url"),
 };
 const directory = path.join(root, ".cache", tag);
@@ -22,7 +27,7 @@ const helper = fs.readFileSync(
   "utf8"
 );
 
-function remote(intent) {
+function remoteOnce(intent) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -73,6 +78,21 @@ function remote(intent) {
   });
 }
 
+async function remote(intent) {
+  try {
+    return await remoteOnce(intent);
+  } catch (error) {
+    // A banner timeout happens before authentication: no remote command started.
+    if (
+      intent.action !== "cleanup" ||
+      !error.message.includes("Connection timed out during banner exchange")
+    )
+      throw error;
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    return remoteOnce(intent);
+  }
+}
+
 function executable() {
   if (process.env.FLOW_UI_BROWSER_EXECUTABLE)
     return process.env.FLOW_UI_BROWSER_EXECUTABLE;
@@ -98,7 +118,7 @@ function executable() {
       action: "setup",
       tag,
       login,
-      disabledPassword: "Test9_" + randomBytes(24).toString("base64url"),
+      disabledPassword: memberLogin.password,
     });
     assert.equal(fixture.workflows.length, 3);
     browser = await chromium.launch({
@@ -126,6 +146,7 @@ function executable() {
     await page
       .getByText("正在读取当前账号可见的业务项目…", { exact: true })
       .waitFor({ state: "hidden" });
+    await page.locator("[data-aiflow-business-center]").waitFor();
     await page.screenshot({
       path: path.join(directory, "home.png"),
       fullPage: true,
@@ -275,6 +296,17 @@ function executable() {
       .getByText(/^直接角色/)
       .first()
       .waitFor();
+    if (verifySources) {
+      await page
+        .getByText("管理员账号自带全部全局权限，撤销角色不会移除这些权限。", {
+          exact: true,
+        })
+        .waitFor();
+      assert.equal(
+        await page.getByText("账号内置：管理员", { exact: true }).count(),
+        7
+      );
+    }
     await page.screenshot({
       path: path.join(directory, "identity.png"),
       fullPage: true,
@@ -399,6 +431,71 @@ function executable() {
       );
     }
     assert.deepEqual(errors, []);
+    if (verifySources) {
+      await remote({ action: "grant_identity", fixture });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.getByRole("button", { name: "退出", exact: true }).click();
+      await page
+        .getByLabel("用户名", { exact: true })
+        .fill(memberLogin.username);
+      await page.getByLabel("密码", { exact: true }).fill(memberLogin.password);
+      await page
+        .getByRole("button", { name: "登录流程引擎", exact: true })
+        .click();
+      await page.goto(`${base}#/system/config`, { waitUntil: "networkidle" });
+      await page
+        .getByRole("button", { name: "新增账号", exact: true })
+        .waitFor();
+      assert(page.url().endsWith("#/system/identity"));
+      await page
+        .getByPlaceholder("搜索名称、账号或邮箱", { exact: true })
+        .fill(memberLogin.username);
+      await page
+        .getByRole("button")
+        .filter({ hasText: memberLogin.username })
+        .first()
+        .click();
+      await page
+        .getByText("直接授权：临时身份管理员_" + tag, { exact: true })
+        .waitFor();
+      await page.screenshot({
+        path: path.join(directory, "delegated-identity-manager.png"),
+        fullPage: true,
+      });
+      await page.getByRole("button", { name: "组织架构", exact: true }).click();
+      await page
+        .getByRole("heading", { name: "组织架构管理", exact: true })
+        .waitFor();
+      console.log(
+        JSON.stringify({
+          stage: "delegated-identity-manager",
+          identityPage: true,
+          generalSettingsRedirected: true,
+          organizationEntry: true,
+        })
+      );
+      await remote({ action: "revoke_identity", fixture });
+      await page.goto(`${base}#/system/identity`, { waitUntil: "networkidle" });
+      await page.reload({ waitUntil: "networkidle" });
+      await page.locator("[data-aiflow-business-center]").waitFor();
+      assert.equal(
+        await page.getByRole("tab", { name: "系统配置", exact: true }).count(),
+        0
+      );
+      assert.equal(
+        await page
+          .getByRole("button", { name: "新增账号", exact: true })
+          .count(),
+        0
+      );
+      assert.deepEqual(errors, []);
+      console.log(
+        JSON.stringify({
+          stage: "delegated-identity-revoked",
+          managementEntryRemoved: true,
+        })
+      );
+    }
   } finally {
     if (browser) await browser.close();
     if (fixture)

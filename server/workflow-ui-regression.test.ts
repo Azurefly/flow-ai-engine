@@ -1498,7 +1498,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(homeSource).toContain("data-aiflow-route-restoring");
     expect(homeSource).toContain(
-      'if (user.role !== "admin") { replaceWith({ section: "flows", view: "center" })'
+      'if (!canManageIdentity) { replaceWith({ section: "flows", view: "center" })'
     );
     expect(homeSource).toContain("const navigateSection = useCallback");
     expect(homeSource).toContain(
@@ -1546,7 +1546,7 @@ describe("流程设计器界面回归约束", () => {
       'const editorActive = section === "flows" && flowView === "editor"'
     );
     expect(homeSource).toContain(
-      'const identityActive = section === "system" && systemView === "identity" && user.role === "admin"'
+      'const identityActive = section === "system" && systemView === "identity" && canManageIdentity'
     );
     expect(homeSource).toContain(
       "trpc.workflow.templates.useQuery(undefined, { enabled: editorActive"

@@ -174,9 +174,24 @@ async function seedIamCatalog() {
 
 type PermissionRow = mysql.RowDataPacket & { code: PermissionCode };
 
-async function assignedPermissions(userId: number, workflowId?: string) {
+type GrantedPermissionRow = PermissionRow & {
+  name?: string;
+  description?: string;
+  sourceKind?: "direct" | "organization";
+  assignmentId?: string;
+  unitId?: string;
+  unitName?: string;
+  roleId?: number;
+  roleCode?: string;
+  roleName?: string;
+};
+
+async function assignedPermissionRows(userId: number, workflowId?: string, withSources = false) {
   const scopeClause = workflowId ? "(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))" : "ra.scopeType='system'";
-  const [rows] = await db().query<PermissionRow[]>(
+  const directSource = withSources ? ", 'direct' AS sourceKind,ra.id AS assignmentId,NULL AS unitId" : "";
+  const inheritedSource = withSources ? ", 'organization' AS sourceKind,NULL AS assignmentId,our.unitId" : "";
+  const metadata = withSources ? ",p.name,p.description,effective_role.sourceKind,effective_role.assignmentId,effective_role.unitId,origin_unit.name AS unitName,r.id AS roleId,r.code AS roleCode,r.name AS roleName" : "";
+  const [rows] = await db().query<GrantedPermissionRow[]>(
     `WITH RECURSIVE membership_units AS (
        SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
          FROM organization_membership om
@@ -188,15 +203,15 @@ async function assignedPermissions(userId: number, workflowId?: string) {
          JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
         WHERE mu.depth<32
      )
-     SELECT DISTINCT p.code
+     SELECT DISTINCT p.code${metadata}
        FROM (
-         SELECT ra.roleId
+         SELECT ra.roleId${directSource}
            FROM role_assignment ra
           WHERE ra.userId=? AND ra.revokedAt IS NULL
             AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
             AND ${scopeClause}
          UNION
-         SELECT our.roleId
+         SELECT our.roleId${inheritedSource}
            FROM membership_units mu
            JOIN organization_unit_role our ON our.unitId=mu.unitId
              AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
@@ -206,6 +221,7 @@ async function assignedPermissions(userId: number, workflowId?: string) {
        JOIN iam_role r ON r.id=effective_role.roleId
        JOIN role_permission rp ON rp.roleId=r.id
        JOIN permission p ON p.id=rp.permissionId
+       ${withSources ? "LEFT JOIN organization_unit origin_unit ON origin_unit.id=effective_role.unitId" : ""}
       WHERE r.code<>'system_admin' OR EXISTS (
         SELECT 1 FROM role_assignment admin_ra
          WHERE admin_ra.userId=? AND admin_ra.roleId=r.id AND admin_ra.scopeType='system'
@@ -216,7 +232,11 @@ async function assignedPermissions(userId: number, workflowId?: string) {
       ? [userId, userId, workflowId, userId]
       : [userId, userId, userId]
   );
-  return new Set(rows.map(row => row.code));
+  return rows;
+}
+
+async function assignedPermissions(userId: number, workflowId?: string) {
+  return new Set((await assignedPermissionRows(userId, workflowId)).map(row => row.code));
 }
 
 export async function hasSystemPermission(user: { id: number; role: "user" | "admin" }, permission: PermissionCode) {
@@ -603,29 +623,58 @@ export async function getUserAuthorizationDetails(userId: number) {
       WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
       ORDER BY ou.name,r.name,r.code`, [userId]
   );
-  const [permissionRows] = await db().query<mysql.RowDataPacket[]>(
-    `WITH RECURSIVE membership_units AS (
-       SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
-         FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId AND ou.status='active'
-        WHERE om.userId=?
-       UNION ALL
-       SELECT mu.userId,mu.memberUnitId,parent.id,parent.parentUnitId,mu.depth+1
-         FROM membership_units mu JOIN organization_unit parent ON parent.id=mu.parentUnitId AND parent.status='active'
-        WHERE mu.depth<32
-     )
-     SELECT DISTINCT p.code,p.name,p.description
-       FROM (
-         SELECT ra.roleId FROM role_assignment ra WHERE ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())
-         UNION
-         SELECT our.roleId FROM membership_units mu JOIN organization_unit_role our ON our.unitId=mu.unitId
-           AND our.effectiveFrom<=NOW() AND (our.expiresAt IS NULL OR our.expiresAt>NOW())
-          WHERE mu.unitId=mu.memberUnitId OR our.includeDescendants=1
-       ) effective_role
-       JOIN role_permission rp ON rp.roleId=effective_role.roleId JOIN permission p ON p.id=rp.permissionId ORDER BY p.code`, [userId, userId]
-  );
-  const systemCodes = String(user.status) !== "active" ? new Set<PermissionCode>() : user.role === "admin" ? new Set<PermissionCode>(ALL_PERMISSIONS) : await assignedPermissions(userId);
-  const effectivePermissions = Array.from(systemCodes).map(code => permissionRows.find(row => row.code === code) ?? { code, name: permissionCatalog[code].name, description: permissionCatalog[code].description }).sort((a, b) => String(a.code).localeCompare(String(b.code)));
-  return { user, directRoles, inheritedRoles, effectivePermissions };
+  const active = String(user.status) === "active";
+  const permissionRows = active ? await assignedPermissionRows(userId, undefined, true) : [];
+  const systemCodes = active && user.role === "admin" ? new Set<PermissionCode>(ALL_PERMISSIONS) : new Set(permissionRows.map(row => row.code));
+  type Source = {
+    kind: "builtin" | "direct" | "organization";
+    label: string;
+    assignmentId?: string;
+    unitId?: string;
+    roleId?: number;
+    roleCode?: string;
+  };
+  const sourcesByCode = new Map<PermissionCode, Map<string, Source>>();
+  const addSource = (code: PermissionCode, key: string, source: Source) => {
+    const sources = sourcesByCode.get(code) ?? new Map<string, Source>();
+    sources.set(key, source);
+    sourcesByCode.set(code, sources);
+  };
+  if (active && user.role === "admin") {
+    for (const code of ALL_PERMISSIONS) {
+      systemCodes.add(code);
+      addSource(code, "builtin", { kind: "builtin", label: "账号内置：管理员" });
+    }
+  }
+  for (const row of permissionRows) {
+    if (row.sourceKind === "direct") {
+      addSource(row.code, `direct:${row.assignmentId}`, {
+        kind: "direct", assignmentId: row.assignmentId,
+        roleId: row.roleId, roleCode: row.roleCode,
+        label: `直接授权：${row.roleName || row.roleCode}`,
+      });
+    } else if (row.sourceKind === "organization") {
+      addSource(row.code, `organization:${row.unitId}:${row.roleId}`, {
+        kind: "organization", unitId: row.unitId,
+        roleId: row.roleId, roleCode: row.roleCode,
+        label: `组织继承：${row.unitName || row.unitId} · ${row.roleName || row.roleCode}`,
+      });
+    }
+  }
+  const effectivePermissions = Array.from(systemCodes).sort().map(code => {
+    const row = permissionRows.find(item => item.code === code);
+    const sources = Array.from(sourcesByCode.get(code)?.entries() ?? [])
+      .sort(([a], [b]) => a.localeCompare(b)).map(([, source]) => source);
+    return {
+      code, name: row?.name ?? permissionCatalog[code]?.name ?? code,
+      description: row?.description ?? permissionCatalog[code]?.description ?? "",
+      sources, sourceLabels: Array.from(new Set(sources.map(source => source.label))),
+    };
+  });
+  const authorizationSummary = user.role === "admin"
+    ? active ? "管理员账号自带全部全局权限，撤销角色不会移除这些权限。" : "管理员账号已停用，内置权限暂不生效。"
+    : active ? "全局权限来自有效的直接授权与组织继承；单个流程权限另见项目或流程授权。" : "账号已停用，角色仍保留，当前无有效权限。";
+  return { user, directRoles, inheritedRoles, effectivePermissions, authorizationSummary };
 }
 
 export async function getRoleAuthorizationDetails(roleId: number) {
