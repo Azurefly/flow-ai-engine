@@ -41,6 +41,8 @@ await admin.request("auth.login", { username, password }, true);
 
 const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
 const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
+const expectLegacyWait = process.env.FLOW_PARALLEL_EXPECT_LEGACY_WAIT === "1";
+if (expectLegacyWait) assert.equal(restartStage, "resume");
 assert(
   [
     "normal",
@@ -279,6 +281,12 @@ for (const flowType of [
         ).length === 2,
       "two message subscriptions"
     );
+    if (expectLegacyWait) {
+      const initial = waiting.nodeRuns.find(node => node.nodeId === "start");
+      assert(initial, "Legacy run must preserve its start snapshot");
+      const snapshot = typeof initial.inputJson === "string" ? JSON.parse(initial.inputJson) : initial.inputJson;
+      assert.equal(snapshot.context.runtime.durableWaitVersion, undefined, "Legacy run must retain its original wait identity");
+    }
     if (!restartFixture) {
       const initialNode = waiting.nodeRuns.find(
         node => node.nodeId === "start"
@@ -529,6 +537,7 @@ for (const flowType of [
         publishedMode,
         httpIdempotencySnapshotVerified: !restartFixture,
         restartResumeStage: restartStage === "resume",
+        legacyWaitSnapshotVerified: expectLegacyWait,
         pauseResumeVerified: restartStage === "pause",
         unpublishLifecycleVerified: restartStage === "unpublish",
         duplicateDenied: true,

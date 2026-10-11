@@ -196,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-12).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-13).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -209,8 +209,16 @@ describe("database migration integrity", () => {
       "0033_service_endpoint_environment",
       "0034_project_unit_collation",
       "0035_custom_role_audit_actions",
+      "0036_wait_execution_identity",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(35);
+    expect(journal.entries.at(-1)?.idx).toBe(36);
+  });
+  it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
+    const migration = readFileSync(new URL("../drizzle/0036_wait_execution_identity.sql", import.meta.url), "utf8");
+    expect(migration).toContain("DEFAULT 'legacy' NOT NULL");
+    expect(migration).toContain("UNIQUE(`runId`,`nodeId`,`executionKey`)");
+    expect(migration.match(/ALTER TABLE/g)).toHaveLength(1);
+    expect(migration).not.toMatch(/DELETE|TRUNCATE|DROP TABLE/i);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
     expect(workflowWaitMigration).toContain(

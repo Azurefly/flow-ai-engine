@@ -895,6 +895,7 @@ export const workflowWaitSubscriptions = mysqlTable(
       .notNull()
       .references(() => workflows.id),
     nodeId: varchar("nodeId", { length: 128 }).notNull(),
+    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
     nodeRunId: varchar("nodeRunId", { length: 36 })
       .notNull()
       .references(() => workflowNodeRuns.id),
@@ -914,7 +915,8 @@ export const workflowWaitSubscriptions = mysqlTable(
   table => [
     unique("workflow_wait_subscription_run_node_unique").on(
       table.runId,
-      table.nodeId
+      table.nodeId,
+      table.executionKey
     ),
     index("workflow_wait_subscription_timer_idx").on(
       table.status,

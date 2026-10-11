@@ -1,4 +1,5 @@
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
+import { workflowWaitExecutionKey } from "./workflow-wait-execution-key";
 import {
   subflowRuntimeContext,
   type SubflowRuntimeContext,
@@ -2012,6 +2013,7 @@ export async function submitWorkflowRun(input: {
     runtime: {
       executionRunId: runId,
       httpIdempotencyVersion: 3,
+      durableWaitVersion: 1,
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],
@@ -2650,8 +2652,8 @@ async function persistWorkflowWait(input: {
   const waitId = randomUUID();
   await db().query(
     `INSERT INTO workflow_wait_subscription
-      (id,runId,workflowId,nodeId,nodeRunId,waitType,status,resumeAt,messageName,correlationKey,checkpointJson,requestId)
-      VALUES (?,?,?,?,?,?,'active',?,?,?,?,?)`,
+      (id,runId,workflowId,nodeId,nodeRunId,waitType,status,resumeAt,messageName,correlationKey,checkpointJson,requestId,executionKey)
+      VALUES (?,?,?,?,?,?,'active',?,?,?,?,?,?)`,
     [
       waitId,
       input.runId,
@@ -2668,6 +2670,7 @@ async function persistWorkflowWait(input: {
       String(
         asRecord(input.context.runtime).requestId ?? currentRequestId() ?? ""
       ) || null,
+      workflowWaitExecutionKey(asRecord(input.context.runtime), (asRecord(input.context.runtime).parallelActiveTokens as BranchToken[] | undefined) ?? []),
     ]
   );
   await db().query(
@@ -3157,9 +3160,14 @@ export async function executeRunSegment(input: {
     }
     if (["wait", "message_catch"].includes(node.type)) {
       const [existingWaits] = await db().query<mysql.RowDataPacket[]>(
-        "SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND status='active' LIMIT 1",
-        [input.runId, node.id]
+        "SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND executionKey=? AND status='active' LIMIT 1",
+        [input.runId, node.id, workflowWaitExecutionKey(asRecord(input.context.runtime), activeTokens)]
       );
+      if (existingWaits[0] && parallel) {
+        parallel.queue.shift();
+        await persistCheckpoint({ queue: [...input.queue], context: input.context, finalOutput, currentNodeId: null });
+        continue;
+      }
       if (existingWaits[0])
         return { status: "waiting", taskId: String(existingWaits[0].id) };
     }

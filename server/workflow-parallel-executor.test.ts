@@ -106,6 +106,56 @@ it("同一节点来自两个分支时使用各自人员快照，汇聚后再合�
     JSON.parse(join![1][6]).context.runtime.currentNodeParticipantUserIds
   ).toEqual([11, 22]);
 });
+it("并行分支共享等待节点时登记独立订阅与人员快照", async () => {
+  const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
+  const context: any = {
+    vars: {}, nodes: {},
+    runtime: {
+      durableWaitVersion: 1,
+      parallelCheckpoint: {
+        frames: fork.state,
+        queue: fork.tokens.map((tokens, index) => ({ nodeId: "shared", tokens, participantUserIds: [index + 1] })),
+      },
+    },
+  };
+  const baseQuery = mocks.query.getMockImplementation()!;
+  const waits: any[] = [];
+  const originalParallel = structuredClone(context.runtime.parallelCheckpoint);
+  mocks.query.mockImplementation(async (sql: string, params: any[]) => {
+    if (sql.startsWith("SELECT id FROM workflow_wait_subscription WHERE runId=? AND nodeId=?"))
+      return [waits.filter(wait => wait.runId === params[0] && wait.nodeId === params[1] && (params[2] === undefined || wait.executionKey === params[2]))];
+    if (sql.includes("INSERT INTO workflow_wait_subscription"))
+      waits.push({ id: params[0], runId: params[1], nodeId: params[3], executionKey: params[11], checkpoint: JSON.parse(params[9]) });
+    if (sql.includes("UNION ALL SELECT id FROM workflow_wait_subscription")) return [[waits[0]]];
+    return baseQuery(sql, params);
+  });
+  const queue = ["shared", "shared"];
+  const result = await executeRunSegment({
+    runId: "run", workflow: { id: "flow", ownerUserId: 1 } as any,
+    definition: {
+      nodes: [node("shared", "message_catch", { messageName: "ready", correlationKey: "{{runtime.parallelActiveTokens.0.branchId}}" }), node("join", "transform", { parallelForNodeId: "router" }), node("end", "end")],
+      edges: [edge("shared", "join"), edge("join", "end")],
+    } as any,
+    context, queue,
+  });
+  expect(result.status).toBe("waiting");
+  expect(waits).toHaveLength(2);
+  expect(new Set(waits.map(wait => wait.executionKey)).size).toBe(2);
+  expect(waits.map(wait => wait.checkpoint.context.runtime.parallelWaitContinuation.participantUserIds)).toEqual([[1], [2]]);
+  expect(queue).toEqual([]);
+  expect(context.runtime.parallelCheckpoint.queue).toEqual([]);
+  context.runtime.parallelCheckpoint = originalParallel;
+  const replayQueue = ["shared", "shared"];
+  const replay = await executeRunSegment({
+    runId: "run", workflow: { id: "flow", ownerUserId: 1 } as any,
+    definition: { nodes: [node("shared", "message_catch", { messageName: "ready", correlationKey: "{{runtime.parallelActiveTokens.0.branchId}}" })], edges: [] } as any,
+    context, queue: replayQueue,
+  });
+  expect(replay.status).toBe("waiting");
+  expect(waits).toHaveLength(2);
+  expect(replayQueue).toEqual([]);
+  expect(context.runtime.parallelCheckpoint.queue).toEqual([]);
+});
 it("消息等待续跑使用最新汇聚状态和其他分支输出，避免旧快照覆盖", async () => {
   const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
   const arrived = reachParallelJoin(fork.state, "join", fork.tokens[1]);

@@ -4,9 +4,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0035_custom_role_audit_actions";
-export const DATABASE_MIGRATION_EPOCH = 1791558159175;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 41;
+export const DATABASE_MIGRATION_VERSION = "0036_wait_execution_identity";
+export const DATABASE_MIGRATION_EPOCH = 1791698814263;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 42;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -102,6 +102,7 @@ export async function checkReadiness() {
           (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
           (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR
           (table_name='project_service_endpoint' AND column_name='targetEnvironment') OR
+          (table_name='workflow_wait_subscription' AND column_name='executionKey') OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -114,7 +115,7 @@ export async function checkReadiness() {
           (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique') OR
           (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_sequence_unique')
           OR (table_name='project_service_endpoint' AND index_name='project_service_endpoint_project_ref_unique')
-          OR (table_name='workflow_wait_subscription' AND index_name='workflow_wait_subscription_run_node_unique')
+          OR (table_name='workflow_wait_subscription' AND index_name='workflow_wait_subscription_run_node_unique' AND column_name='executionKey')
           OR (table_name='workflow_milestone' AND index_name='workflow_milestone_run_node_unique')
           OR (table_name='workflow_task_schedule' AND index_name='workflow_task_schedule_task_event_recipient_unique')
           OR (table_name='dataflow_run_job' AND index_name='dataflow_run_job_run_unique')
