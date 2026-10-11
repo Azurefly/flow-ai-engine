@@ -1,5 +1,17 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ query: vi.fn() }));
+import { EventEmitter } from "node:events";
+const mocks = vi.hoisted(() => ({ query: vi.fn(), request: vi.fn() }));
+vi.mock("node:dns/promises", () => ({
+  lookup: async () => [{ address: "93.184.216.34", family: 4 }],
+}));
+vi.mock("node:https", async importOriginal => {
+  const actual = await importOriginal<typeof import("node:https")>();
+  return { ...actual, default: { ...actual.default, request: mocks.request } };
+});
+vi.mock("node:http", async importOriginal => {
+  const actual = await importOriginal<typeof import("node:http")>();
+  return { ...actual, default: { ...actual.default, request: mocks.request } };
+});
 vi.mock("./db", () => ({
   getSharedPool: () => ({
     query: mocks.query,
@@ -200,7 +212,12 @@ async function run(
   onCheckpoint?: (checkpoint: any) => void
 ) {
   const checkpoints: any[] = [];
-  const context = { input: {}, vars: {}, nodes: {}, runtime: {} };
+  const context = {
+    input: {},
+    vars: {},
+    nodes: {},
+    runtime: { httpIdempotencyVersion: 2 },
+  };
   const result = await executeRunSegment({
     runId: "run",
     workflow: { id: "flow", ownerUserId: 1 } as any,
@@ -269,6 +286,129 @@ it("执行器执行两条广播分支并仅执行一次汇聚及结束", async (
   );
   expect(result.result.status).toBe("success");
   expect(result.executed).toEqual(["start", "router", "a", "b", "join", "end"]);
+});
+function mockIdempotentHttpWrites() {
+  const writes = new Map<string, { branch: string }>();
+  const returned: { branch: string }[] = [];
+  mocks.request.mockImplementation(
+    (options: any, callback: (response: any) => void) => {
+      let body = "";
+      const request = Object.assign(new EventEmitter(), {
+        setTimeout: () => request,
+        destroy: (error: Error) => request.emit("error", error),
+        write: (chunk: string) => {
+          body += chunk;
+        },
+        end: () =>
+          queueMicrotask(() => {
+            const key = options.headers["Idempotency-Key"];
+            if (!writes.has(key)) writes.set(key, JSON.parse(body));
+            const result = writes.get(key)!;
+            returned.push(result);
+            const response = Object.assign(new EventEmitter(), {
+              statusCode: 200,
+              statusMessage: "OK",
+              headers: { "content-type": "application/json" },
+              destroy: vi.fn(),
+            });
+            callback(response);
+            response.emit("data", Buffer.from(JSON.stringify(result)));
+            response.emit("end");
+          }),
+      });
+      return request;
+    }
+  );
+  return { writes, returned };
+}
+function sharedHttpDefinition() {
+  return {
+    nodes: [
+      node("start", "start"),
+      router("router", "join", ["a", "b"]),
+      node("a"),
+      node("b"),
+      node("shared", "http", {
+        url: "https://example.com/write",
+        method: "POST",
+        body: { branch: "{{runtime.parallelActiveTokens.0.branchId}}" },
+      }),
+      node("join", "transform", { parallelForNodeId: "router" }),
+      node("end", "end"),
+    ],
+    edges: [
+      edge("start", "router"),
+      edge("router", "a", "a"),
+      edge("router", "b", "b"),
+      edge("a", "shared"),
+      edge("b", "shared"),
+      edge("shared", "join"),
+      edge("join", "end"),
+    ],
+  };
+}
+it("两个分支的同一写入HTTP节点不会被外部幂等服务合并", async () => {
+  const { writes, returned } = mockIdempotentHttpWrites();
+  const definition = sharedHttpDefinition();
+  const result = await run(definition.nodes, definition.edges);
+  expect(result.result.status).toBe("success");
+  expect(result.executed.filter(id => id === "shared")).toHaveLength(2);
+  expect(mocks.request).toHaveBeenCalledTimes(2);
+  const keys = mocks.request.mock.calls.map(
+    ([options]) => options.headers["Idempotency-Key"]
+  );
+  expect(
+    keys.every(key => /^flow:run:shared:branch:[a-f0-9]{32}$/.test(key))
+  ).toBe(true);
+  expect(new Set(keys).size).toBe(2);
+  expect(writes.size).toBe(2);
+  expect(new Set(returned.map(result => result.branch)).size).toBe(2);
+  expect(result.executed.filter(id => id === "join")).toHaveLength(1);
+});
+it("HTTP写入后检查点前失败，恢复保持同一分支键且不重复副作用", async () => {
+  const { writes } = mockIdempotentHttpWrites();
+  const definition = sharedHttpDefinition();
+  const originalQuery = mocks.query.getMockImplementation()!;
+  let injected = false;
+  let checkpoint: any;
+  mocks.query.mockImplementation(async (sql: string, params: any[]) => {
+    if (
+      !injected &&
+      sql.includes("UPDATE workflow_node_run SET status=?") &&
+      params?.[0] === "success" &&
+      params[1] &&
+      JSON.parse(params[1]).status === 200
+    ) {
+      injected = true;
+      throw new Error("simulated checkpoint failure after HTTP write");
+    }
+    return originalQuery(sql, params);
+  });
+  await expect(
+    run(definition.nodes, definition.edges, saved => {
+      if (saved.currentNodeId === "shared" && !checkpoint)
+        checkpoint = structuredClone(saved);
+    })
+  ).rejects.toThrow("simulated checkpoint failure after HTTP write");
+  expect(checkpoint).toBeDefined();
+  expect(checkpoint.context.runtime.httpIdempotencyVersion).toBe(2);
+  expect(writes.size).toBe(1);
+  const result = await executeRunSegment({
+    runId: "run",
+    workflow: { id: "flow", ownerUserId: 1 } as any,
+    definition: definition as any,
+    context: checkpoint.context,
+    queue: [...checkpoint.queue],
+    finalOutput: checkpoint.finalOutput,
+  });
+  expect(result.status).toBe("success");
+  const keys = mocks.request.mock.calls.map(
+    ([options]) => options.headers["Idempotency-Key"]
+  );
+  expect(keys).toHaveLength(3);
+  expect(keys[0]).toBe(keys[1]);
+  expect(keys[2]).not.toBe(keys[0]);
+  expect(writes.size).toBe(2);
 });
 it("两个并行人工任务同时生成，依次提交后仅汇聚一次", async () => {
   const nodes = [

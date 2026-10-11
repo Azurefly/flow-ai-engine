@@ -42,11 +42,21 @@ await admin.request("auth.login", { username, password }, true);
 const restartStage = process.env.FLOW_PARALLEL_MESSAGE_STAGE ?? "normal";
 const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
 assert(
-  ["normal", "prepare", "resume", "cancel", "terminate", "pause", "unpublish"].includes(
-    restartStage
-  )
+  [
+    "normal",
+    "prepare",
+    "resume",
+    "cancel",
+    "terminate",
+    "pause",
+    "unpublish",
+  ].includes(restartStage)
 );
-if (restartStage === "unpublish") assert(publishedMode, "Unpublish lifecycle requires formal published execution");
+if (restartStage === "unpublish")
+  assert(
+    publishedMode,
+    "Unpublish lifecycle requires formal published execution"
+  );
 let restartFixture = null;
 let restoredWorkflow = null;
 if (restartStage === "resume") {
@@ -57,7 +67,9 @@ if (restartStage === "resume") {
     "Resume requires the exact workflow and run IDs emitted before restart"
   );
   restoredWorkflow = await admin.request("workflow.get", { id: workflowId });
-  const match = /^并行消息_(state|control)_([a-f0-9]{8})$/.exec(restoredWorkflow.name);
+  const match = /^并行消息_(state|control)_([a-f0-9]{8})$/.exec(
+    restoredWorkflow.name
+  );
   assert(match, "Resume is restricted to the isolated message fixture");
   assert.equal(restoredWorkflow.flowType, match[1]);
   const existingRun = await admin.request("workflow.runDetail", { runId });
@@ -71,8 +83,14 @@ if (restartStage === "resume") {
   };
 }
 const tag = restartFixture?.tag ?? randomBytes(4).toString("hex");
-const restartFlowType = restartFixture?.flowType ?? process.env.FLOW_PARALLEL_MESSAGE_FLOW_TYPE ?? "state";
-assert(["state", "control"].includes(restartFlowType), "Restart flow type must be state or control");
+const restartFlowType =
+  restartFixture?.flowType ??
+  process.env.FLOW_PARALLEL_MESSAGE_FLOW_TYPE ??
+  "state";
+assert(
+  ["state", "control"].includes(restartFlowType),
+  "Restart flow type must be state or control"
+);
 const project = restartFixture
   ? { id: restartFixture.projectId }
   : await admin.request(
@@ -93,9 +111,13 @@ const edge = (sourceNodeId, targetNodeId, sourceHandle) => ({
   targetNodeId,
   ...(sourceHandle ? { sourceHandle } : {}),
 });
-for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].includes(
-  restartStage
-)
+for (const flowType of [
+  "normal",
+  "cancel",
+  "terminate",
+  "pause",
+  "unpublish",
+].includes(restartStage)
   ? ["control", "state"]
   : [restartFlowType]) {
   const nodes = [
@@ -224,7 +246,15 @@ for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].i
     assert.equal(workflow.name, `并行消息_${flowType}_${tag}`);
   }
   if (publishedMode && !restartFixture) {
-    await admin.request("project.auditWorkflow", { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" }, true);
+    await admin.request(
+      "project.auditWorkflow",
+      {
+        projectId: project.id,
+        workflowId: workflow.id,
+        auditStatus: "approved",
+      },
+      true
+    );
     await admin.request("workflow.publish", { id: workflow.id }, true);
   }
   const started = restartFixture
@@ -249,8 +279,24 @@ for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].i
         ).length === 2,
       "two message subscriptions"
     );
+    if (!restartFixture) {
+      const initialNode = waiting.nodeRuns.find(
+        node => node.nodeId === "start"
+      );
+      assert(initialNode, "A new run must retain its start execution snapshot");
+      const snapshot =
+        typeof initialNode.inputJson === "string"
+          ? JSON.parse(initialNode.inputJson)
+          : initialNode.inputJson;
+      assert.equal(
+        snapshot.context.runtime.httpIdempotencyVersion,
+        2,
+        "New runs must capture the HTTP idempotency policy"
+      );
+    }
     if (["prepare", "resume"].includes(restartStage)) {
-      if (publishedMode) assert.equal(waiting.executionSource, "published_plan");
+      if (publishedMode)
+        assert.equal(waiting.executionSource, "published_plan");
       if (flowType === "state") {
         assert.equal(waiting.currentStateCode, "PENDING");
         assert.equal(waiting.stateVersion, 1);
@@ -274,18 +320,42 @@ for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].i
     }
     if (restartStage === "unpublish") {
       assert.equal(waiting.executionSource, "published_plan");
-      const versionsBefore = await admin.request("workflow.versions", { workflowId: workflow.id });
-      assert(versionsBefore.length > 0);
-      const unpublished = await admin.request("workflow.unpublish", { id: workflow.id }, true);
-      assert.equal(unpublished.status, "draft");
-      await assert.rejects(() => admin.request("workflow.run", {
+      const versionsBefore = await admin.request("workflow.versions", {
         workflowId: workflow.id,
-        triggerType: "manual",
-        idempotencyKey: `unpublished-${flowType}-${tag}`,
-      }, true), /尚未发布/);
-      const versionsAfter = await admin.request("workflow.versions", { workflowId: workflow.id });
-      for (const version of versionsBefore) assert(versionsAfter.some(item => item.id === version.id), "Historical version must remain");
-      assert.equal((await admin.request("workflow.runDetail", { runId: started.runId })).status, "waiting");
+      });
+      assert(versionsBefore.length > 0);
+      const unpublished = await admin.request(
+        "workflow.unpublish",
+        { id: workflow.id },
+        true
+      );
+      assert.equal(unpublished.status, "draft");
+      await assert.rejects(
+        () =>
+          admin.request(
+            "workflow.run",
+            {
+              workflowId: workflow.id,
+              triggerType: "manual",
+              idempotencyKey: `unpublished-${flowType}-${tag}`,
+            },
+            true
+          ),
+        /尚未发布/
+      );
+      const versionsAfter = await admin.request("workflow.versions", {
+        workflowId: workflow.id,
+      });
+      for (const version of versionsBefore)
+        assert(
+          versionsAfter.some(item => item.id === version.id),
+          "Historical version must remain"
+        );
+      assert.equal(
+        (await admin.request("workflow.runDetail", { runId: started.runId }))
+          .status,
+        "waiting"
+      );
     }
     const signal = key =>
       admin.request(
@@ -448,7 +518,8 @@ for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].i
       assert.equal(result.stateVersion, 2);
     }
     completed = true;
-    if (restartStage === "unpublish") assert.equal(result.executionSource, "published_plan");
+    if (restartStage === "unpublish")
+      assert.equal(result.executionSource, "published_plan");
     console.log(
       JSON.stringify({
         workflowId: workflow.id,
@@ -456,6 +527,7 @@ for (const flowType of ["normal", "cancel", "terminate", "pause", "unpublish"].i
         flowType,
         concurrentMessages: 2,
         publishedMode,
+        httpIdempotencySnapshotVerified: !restartFixture,
         restartResumeStage: restartStage === "resume",
         pauseResumeVerified: restartStage === "pause",
         unpublishLifecycleVerified: restartStage === "unpublish",

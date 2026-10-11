@@ -23,7 +23,7 @@ import {
   validateFormSubmission,
 } from "../shared/task-form";
 export { validateFormSubmission } from "../shared/task-form";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import http from "node:http";
 import https from "node:https";
@@ -743,8 +743,39 @@ export function withWorkflowIdempotencyHeader(
     typeof runtime.executionNodeId === "string"
       ? runtime.executionNodeId.trim()
       : "";
-  if (runId && nodeId)
-    normalizedHeaders["Idempotency-Key"] = `flow:${runId}:${nodeId}`;
+  if (runId && nodeId) {
+    const version = runtime.httpIdempotencyVersion ?? 1;
+    if (version !== 1 && version !== 2)
+      throw new Error("HTTP 幂等策略版本无效，拒绝执行写请求。");
+    const tokens = runtime.parallelActiveTokens;
+    if (
+      version === 2 &&
+      tokens !== undefined &&
+      tokens !== null &&
+      !Array.isArray(tokens)
+    )
+      throw new Error("并行 HTTP 调用的分支身份无效，无法生成幂等键。");
+    let branchSuffix = "";
+    if (version === 2 && Array.isArray(tokens) && tokens.length) {
+      const path = tokens.map(token => {
+        const value = asRecord(token);
+        if (
+          typeof value.frameId !== "string" ||
+          !value.frameId.trim() ||
+          typeof value.branchId !== "string" ||
+          !value.branchId.trim()
+        )
+          throw new Error("并行 HTTP 调用缺少有效分支身份，无法生成幂等键。");
+        return [value.frameId, value.branchId];
+      });
+      const identity = createHash("sha256")
+        .update(JSON.stringify(path))
+        .digest("hex")
+        .slice(0, 32);
+      branchSuffix = `:branch:${identity}`;
+    }
+    normalizedHeaders["Idempotency-Key"] = `flow:${runId}:${nodeId}${branchSuffix}`;
+  }
   return normalizedHeaders;
 }
 
@@ -1922,6 +1953,7 @@ export async function submitWorkflowRun(input: {
     nodes: {},
     runtime: {
       executionRunId: runId,
+      httpIdempotencyVersion: 2,
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],

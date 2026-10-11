@@ -225,6 +225,152 @@ describe("HTTP 节点 SSRF 防护", () => {
       "idempotency-key": "business-key",
     });
   });
+  it("同一 HTTP 节点的并行分支独立幂等，分支重试保持稳定", () => {
+    const context = (branchId: string) => ({
+      runtime: {
+        httpIdempotencyVersion: 2,
+        executionRunId: "run-1",
+        executionNodeId: "shared-http",
+        parallelActiveTokens: [{ frameId: "fork-1", branchId }],
+      },
+    });
+    const first = withWorkflowIdempotencyHeader("POST", {}, context("a"));
+    expect(first).toEqual(
+      withWorkflowIdempotencyHeader(
+        "POST",
+        {},
+        JSON.parse(JSON.stringify(context("a")))
+      )
+    );
+    expect(first["Idempotency-Key"]).toMatch(
+      /^flow:run-1:shared-http:branch:[a-f0-9]{32}$/
+    );
+    expect(first).not.toEqual(
+      withWorkflowIdempotencyHeader("POST", {}, context("b"))
+    );
+  });
+  it("嵌套路径、执行帧分别隔离，汇聚后保持原有串行键", () => {
+    const context = (frameId: string, outer: string) => ({
+      runtime: {
+        httpIdempotencyVersion: 2,
+        executionRunId: "run-1",
+        executionNodeId: "shared-http",
+        parallelActiveTokens: [
+          { frameId: "outer", branchId: outer },
+          { frameId, branchId: "same-inner" },
+        ],
+      },
+    });
+    const first = withWorkflowIdempotencyHeader(
+      "PUT",
+      {},
+      context("inner-1", "a")
+    );
+    expect(first).not.toEqual(
+      withWorkflowIdempotencyHeader("PUT", {}, context("inner-1", "b"))
+    );
+    expect(first).not.toEqual(
+      withWorkflowIdempotencyHeader("PUT", {}, context("inner-2", "a"))
+    );
+    expect(
+      withWorkflowIdempotencyHeader(
+        "PUT",
+        {},
+        {
+          runtime: {
+            executionRunId: "run-1",
+            executionNodeId: "shared-http",
+            parallelActiveTokens: [],
+          },
+        }
+      )
+    ).toEqual({ "Idempotency-Key": "flow:run-1:shared-http" });
+  });
+  it("分支字段顺序和附加信息不改变幂等键，不直接泄露分支文本", () => {
+    const runtime = {
+      executionRunId: "run-1",
+      executionNodeId: "shared-http",
+      httpIdempotencyVersion: 2,
+    };
+    const first = withWorkflowIdempotencyHeader(
+      "PATCH",
+      {},
+      {
+        runtime: {
+          httpIdempotencyVersion: 2,
+          ...runtime,
+          parallelActiveTokens: [{ frameId: "fork", branchId: "审核分支" }],
+        },
+      }
+    );
+    expect(first).toEqual(
+      withWorkflowIdempotencyHeader(
+        "PATCH",
+        {},
+        {
+          runtime: {
+            ...runtime,
+            parallelActiveTokens: [
+              { branchId: "审核分支", extra: "ignored", frameId: "fork" },
+            ],
+          },
+        }
+      )
+    );
+    expect(first["Idempotency-Key"]).not.toContain("审核分支");
+  });
+  it("已有运行未记录版本时保留原键，未知策略拒绝写请求", () => {
+    const runtime = {
+      executionRunId: "old-run",
+      executionNodeId: "notify",
+      parallelActiveTokens: [{ frameId: "old-fork", branchId: "a" }],
+    };
+    expect(withWorkflowIdempotencyHeader("POST", {}, { runtime })).toEqual({
+      "Idempotency-Key": "flow:old-run:notify",
+    });
+    expect(
+      withWorkflowIdempotencyHeader(
+        "POST",
+        {},
+        { runtime: { ...runtime, httpIdempotencyVersion: 1 } }
+      )
+    ).toEqual({ "Idempotency-Key": "flow:old-run:notify" });
+    expect(() =>
+      withWorkflowIdempotencyHeader(
+        "POST",
+        {},
+        { runtime: { ...runtime, httpIdempotencyVersion: 3 } }
+      )
+    ).toThrow("策略版本");
+  });
+  it("缺失分支身份拒绝写请求，读取和显式业务键保留原有行为", () => {
+    for (const tokens of [
+      {},
+      [null],
+      [{ frameId: "fork" }],
+      [{ frameId: "", branchId: "a" }],
+    ]) {
+      const context = {
+        runtime: {
+          executionRunId: "run-1",
+          executionNodeId: "shared-http",
+          parallelActiveTokens: tokens,
+          httpIdempotencyVersion: 2,
+        },
+      };
+      expect(() =>
+        withWorkflowIdempotencyHeader("DELETE", {}, context)
+      ).toThrow("分支身份");
+      expect(withWorkflowIdempotencyHeader("GET", {}, context)).toEqual({});
+      expect(
+        withWorkflowIdempotencyHeader(
+          "POST",
+          { "idempotency-key": "business-key" },
+          context
+        )
+      ).toEqual({ "idempotency-key": "business-key" });
+    }
+  });
 });
 
 describe("原版 REST 与方法节点配置映射", () => {
