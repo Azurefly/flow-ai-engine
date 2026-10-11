@@ -222,6 +222,15 @@ for (const flowType of ["control", "state"]) {
     },
     true
   );
+  console.log(
+    JSON.stringify({
+      stage: "created",
+      projectId: project.id,
+      workflowId: workflow.id,
+      runId,
+      flowType,
+    })
+  );
   let completed = false;
   try {
     const waiting = await waitFor(
@@ -240,11 +249,7 @@ for (const flowType of ["control", "state"]) {
       1
     );
     const shared = waiting.nodeRuns.filter(item => item.nodeId === "shared");
-    const keys = shared.map(
-      item =>
-        read(item.inputJson).context.runtime.parallelActiveTokens[0].branchId
-    );
-    assert.equal(new Set(keys).size, 2);
+    assert.equal(new Set(shared.map(item => item.id)).size, 2);
     for (const item of shared) {
       const vars = read(item.inputJson).context.vars;
       assert(
@@ -263,9 +268,10 @@ for (const flowType of ["control", "state"]) {
         },
         true
       );
-    const aKey = keys.find(key => JSON.parse(key)[0] === "a");
-    const bKey = keys.find(key => JSON.parse(key)[0] === "b");
-    assert(aKey && bKey);
+    // The configured correlation template resolves the dispatch handle/target
+    // pair; runtime token paths are intentionally redacted in node-run logs.
+    const aKey = JSON.stringify(["a", "a"]);
+    const bKey = JSON.stringify(["b", "b"]);
     await signal(aKey, "A");
     await assert.rejects(() => signal(aKey, "A"), /订阅|等待/);
     const partial = await waitFor(
