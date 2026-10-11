@@ -32,7 +32,12 @@ const tag = randomBytes(4).toString("hex");
 const missingTarget = process.env.FLOW_SUBROUTE_MODE === "missing-target";
 const expectLegacy = process.env.FLOW_SUBROUTE_EXPECT === "legacy";
 const diagnosticType = process.env.FLOW_SUBROUTE_DIAGNOSTIC;
+const participantContext = process.env.FLOW_SUBROUTE_PARTICIPANTS === "1";
+const publishedMode = process.env.FLOW_SUBROUTE_PUBLISHED === "1";
 assert(!diagnosticType || ["wait", "message_catch"].includes(diagnosticType));
+assert(
+  !participantContext || (!missingTarget && !diagnosticType && !expectLegacy)
+);
 const node = (id, type, config = {}) => ({
   id,
   type,
@@ -58,51 +63,88 @@ const child = await request(
   {
     name: `子流程目标路由验证_${tag}`,
     flowType: "control",
-    definition: diagnosticType ? definition(
-      [node("start", "start"), node("waiting", diagnosticType, diagnosticType === "wait" ? { durationSeconds: 3 } : { messageName: "child.diagnostic", correlationKey: tag }), node("end", "end")],
-      [edge("start", "waiting"), edge("waiting", "end")]
-    ) : definition(
-      [
-        node("start", "start"),
-        node("router", "router", {
-          defaultRoute: "fallback",
-          routes: [
-            {
-              handle: "legacy",
-              priority: 50,
-              targetNodeId: missingTarget ? "missing" : "correct",
-              condition: {
-                left: "{{input.amount}}",
-                operator: "greaterThan",
-                right: 10000,
-              },
-            },
-            {
-              handle: "chosen",
-              priority: 100,
-              targetNodeId: missingTarget ? "missing" : "correct",
-              condition: {
-                left: "{{input.amount}}",
-                operator: "greaterThan",
-                right: 0,
-              },
-            },
-            { handle: "fallback", priority: -1, targetNodeId: "wrong" },
+    definition: diagnosticType
+      ? definition(
+          [
+            node("start", "start"),
+            node(
+              "waiting",
+              diagnosticType,
+              diagnosticType === "wait"
+                ? { durationSeconds: 3 }
+                : { messageName: "child.diagnostic", correlationKey: tag }
+            ),
+            node("end", "end"),
           ],
-        }),
-        node("correct", "transform", { mappings: { marker: "correct" } }),
-        node("wrong", "transform", { mappings: { marker: "wrong" } }),
-        node("end", "end", { resultTemplate: "{{vars}}" }),
-      ],
-      [
-        edge("start", "router"),
-        edge("router", "correct", "legacy"),
-        edge("router", "wrong", "chosen"),
-        edge("router", "wrong", "fallback"),
-        edge("correct", "end"),
-        edge("wrong", "end"),
-      ]
-    ),
+          [edge("start", "waiting"), edge("waiting", "end")]
+        )
+      : definition(
+          [
+            node("start", "start"),
+            node("router", "router", {
+              defaultRoute: "fallback",
+              routes: [
+                {
+                  handle: "legacy",
+                  priority: 50,
+                  targetNodeId: missingTarget ? "missing" : "correct",
+                  condition: {
+                    left: "{{input.amount}}",
+                    operator: "greaterThan",
+                    right: 10000,
+                  },
+                },
+                {
+                  handle: "chosen",
+                  priority: 100,
+                  ...(participantContext ? { roleKeys: ["initiator"] } : {}),
+                  targetNodeId: missingTarget ? "missing" : "correct",
+                  condition: {
+                    left: "{{input.amount}}",
+                    operator: "greaterThan",
+                    right: 0,
+                  },
+                },
+                { handle: "fallback", priority: -1, targetNodeId: "wrong" },
+              ],
+            }),
+            node("correct", "transform", {
+              mappings: {
+                marker: "correct",
+                ...(participantContext
+                  ? {
+                      people: "{{runtime.currentNodeParticipantUserIds}}",
+                      callPath: "{{runtime.httpInvocationPath}}",
+                      policy: "{{runtime.httpIdempotencyVersion}}",
+                      parentLeak: "{{vars.parentOnly}}",
+                    }
+                  : {}),
+              },
+            }),
+            node("wrong", "transform", {
+              mappings: {
+                marker: "wrong",
+                ...(participantContext
+                  ? {
+                      people: "{{runtime.currentNodeParticipantUserIds}}",
+                      callPath: "{{runtime.httpInvocationPath}}",
+                      policy: "{{runtime.httpIdempotencyVersion}}",
+                      parentLeak: "{{vars.parentOnly}}",
+                    }
+                  : {}),
+              },
+            }),
+            node("end", "end", { resultTemplate: "{{vars}}" }),
+          ],
+          [
+            edge("start", "router"),
+            edge("router", "correct", "legacy"),
+            edge("router", "wrong", "chosen"),
+            edge("router", "wrong", "fallback"),
+            edge("correct", "end"),
+            edge("wrong", "end"),
+          ]
+        ),
   },
   true
 ).catch(error => {
@@ -132,7 +174,13 @@ const parent = await request(
     flowType: "control",
     definition: definition(
       [
-        node("start", "start"),
+        node(
+          "start",
+          "start",
+          participantContext
+            ? { initialVariables: { parentOnly: "not-passed-to-child" } }
+            : {}
+        ),
         node("child", "subflow", { subflowId: child.id, input: "{{input}}" }),
         node("end", "end", { resultTemplate: "{{vars.child.result.result}}" }),
       ],
@@ -144,14 +192,35 @@ const parent = await request(
 if (diagnosticType) {
   const precheck = await request("workflow.compile", { id: parent.id }, true);
   assert.equal(precheck.ok, false);
-  const diagnostic = precheck.diagnostics.find(item => item.code === "WF_SUBFLOW_SYNC_NODE_UNSUPPORTED");
+  const diagnostic = precheck.diagnostics.find(
+    item => item.code === "WF_SUBFLOW_SYNC_NODE_UNSUPPORTED"
+  );
   assert(diagnostic);
   assert.equal(diagnostic.location.nodeId, "child");
   assert.equal(diagnostic.location.field, "config.subflowId");
   assert(diagnostic.message.includes(diagnosticType));
-  await assert.rejects(() => request("workflow.publish", { id: parent.id }, true), /同步子流程不支持/);
-  console.log(JSON.stringify({ workflowId: parent.id, childId: child.id, diagnosticType, precheckLocatedCaller: true, publicationRejected: true }));
+  await assert.rejects(
+    () => request("workflow.publish", { id: parent.id }, true),
+    /同步子流程不支持/
+  );
+  console.log(
+    JSON.stringify({
+      workflowId: parent.id,
+      childId: child.id,
+      diagnosticType,
+      precheckLocatedCaller: true,
+      publicationRejected: true,
+    })
+  );
   process.exit(0);
+}
+if (publishedMode) {
+  await request(
+    "project.auditWorkflow",
+    { projectId: project.id, workflowId: parent.id, auditStatus: "approved" },
+    true
+  );
+  await request("workflow.publish", { id: parent.id }, true);
 }
 for (const [amount, expected] of missingTarget
   ? [[10, "failed"]]
@@ -163,7 +232,7 @@ for (const [amount, expected] of missingTarget
     "workflow.run",
     {
       workflowId: parent.id,
-      triggerType: "test",
+      triggerType: publishedMode ? "manual" : "test",
       input: { amount },
       idempotencyKey: `subroute-${tag}-${amount}`,
     },
@@ -200,6 +269,25 @@ for (const [amount, expected] of missingTarget
         output.result[expected === "correct" ? "wrong" : "correct"],
         undefined
       );
+      if (participantContext) {
+        const first = run.nodeRuns.find(node => node.nodeId === "start");
+        const snapshot =
+          typeof first.inputJson === "string"
+            ? JSON.parse(first.inputJson)
+            : first.inputJson;
+        assert.deepEqual(output.result[expected].people, [
+          snapshot.context.runtime.triggeredByUserId,
+        ]);
+        assert.deepEqual(output.result[expected].callPath, [
+          "child",
+          "$subflow",
+          child.id,
+          expected,
+        ]);
+        assert.equal(output.result[expected].policy, 3);
+        assert.equal(output.result[expected].parentLeak, undefined);
+      }
+      if (publishedMode) assert.equal(run.executionSource, "published_plan");
     }
     console.log(
       JSON.stringify({
@@ -209,6 +297,8 @@ for (const [amount, expected] of missingTarget
         amount,
         output,
         status: run.status,
+        publishedMode,
+        participantContextVerified: participantContext,
         monitorUrl: `${base}/#/runs/monitor/${parent.id}/${started.runId}`,
       })
     );

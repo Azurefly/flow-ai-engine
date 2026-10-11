@@ -339,9 +339,50 @@ describe("HTTP 节点 SSRF 防护", () => {
       withWorkflowIdempotencyHeader(
         "POST",
         {},
-        { runtime: { ...runtime, httpIdempotencyVersion: 3 } }
+        { runtime: { ...runtime, httpIdempotencyVersion: 4 } }
       )
     ).toThrow("策略版本");
+  });
+  it("调用路径区分主节点、调用方和子流程节点并保持重试稳定", () => {
+    const header = (path: string[]) =>
+      withWorkflowIdempotencyHeader(
+        "POST",
+        {},
+        {
+          runtime: {
+            executionRunId: "run",
+            executionNodeId: path[path.length - 1],
+            httpIdempotencyVersion: 3,
+            httpInvocationPath: path,
+          },
+        }
+      );
+    expect(header(["caller", "$subflow", "child", "writer"])).toEqual(
+      header(["caller", "$subflow", "child", "writer"])
+    );
+    expect(header(["caller", "$subflow", "child", "writer"])).not.toEqual(
+      header(["other", "$subflow", "child", "writer"])
+    );
+    expect(header(["caller", "$subflow", "child", "writer"])).not.toEqual(
+      header(["writer"])
+    );
+    expect(header(["中文节点"])["Idempotency-Key"]).toMatch(
+      /^flow:run:v3:[a-f0-9]{32}$/
+    );
+    expect(() =>
+      withWorkflowIdempotencyHeader(
+        "POST",
+        {},
+        {
+          runtime: {
+            executionRunId: "run",
+            executionNodeId: "writer",
+            httpIdempotencyVersion: 3,
+            httpInvocationPath: ["wrong"],
+          },
+        }
+      )
+    ).toThrow("执行路径");
   });
   it("缺失分支身份拒绝写请求，读取和显式业务键保留原有行为", () => {
     for (const tokens of [

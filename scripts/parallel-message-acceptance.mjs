@@ -290,7 +290,7 @@ for (const flowType of [
           : initialNode.inputJson;
       assert.equal(
         snapshot.context.runtime.httpIdempotencyVersion,
-        2,
+        3,
         "New runs must capture the HTTP idempotency policy"
       );
     }

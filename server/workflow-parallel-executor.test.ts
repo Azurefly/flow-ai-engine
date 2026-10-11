@@ -35,6 +35,7 @@ vi.mock("./organization-service", () => ({
 }));
 import {
   executeRunSegment,
+  executeSubflowNode,
   resumeWorkflowTask,
   signalWorkflowMessage,
 } from "./workflow-engine";
@@ -216,7 +217,7 @@ async function run(
     input: {},
     vars: {},
     nodes: {},
-    runtime: { httpIdempotencyVersion: 2 },
+    runtime: { httpIdempotencyVersion: 3 },
   };
   const result = await executeRunSegment({
     runId: "run",
@@ -357,9 +358,7 @@ it("两个分支的同一写入HTTP节点不会被外部幂等服务合并", asy
   const keys = mocks.request.mock.calls.map(
     ([options]) => options.headers["Idempotency-Key"]
   );
-  expect(
-    keys.every(key => /^flow:run:shared:branch:[a-f0-9]{32}$/.test(key))
-  ).toBe(true);
+  expect(keys.every(key => /^flow:run:v3:[a-f0-9]{32}$/.test(key))).toBe(true);
   expect(new Set(keys).size).toBe(2);
   expect(writes.size).toBe(2);
   expect(new Set(returned.map(result => result.branch)).size).toBe(2);
@@ -391,7 +390,7 @@ it("HTTP写入后检查点前失败，恢复保持同一分支键且不重复副
     })
   ).rejects.toThrow("simulated checkpoint failure after HTTP write");
   expect(checkpoint).toBeDefined();
-  expect(checkpoint.context.runtime.httpIdempotencyVersion).toBe(2);
+  expect(checkpoint.context.runtime.httpIdempotencyVersion).toBe(3);
   expect(writes.size).toBe(1);
   const result = await executeRunSegment({
     runId: "run",
@@ -409,6 +408,96 @@ it("HTTP写入后检查点前失败，恢复保持同一分支键且不重复副
   expect(keys[0]).toBe(keys[1]);
   expect(keys[2]).not.toBe(keys[0]);
   expect(writes.size).toBe(2);
+});
+function httpChildConfig(subflowId = "private-child") {
+  return {
+    subflowId,
+    resolvedSubflowDefinition: {
+      nodes: [
+        node("start", "start"),
+        node("writer", "http", {
+          url: "https://example.com/write",
+          method: "POST",
+          body: { branch: "{{input.branch}}" },
+        }),
+        node("end", "end", { resultTemplate: "{{vars.writer.body}}" }),
+      ],
+      edges: [edge("start", "writer"), edge("writer", "end")],
+    },
+  };
+}
+it("子流程HTTP按调用方、引用及父分支隔离，父任务重试不重复写入", async () => {
+  const { writes } = mockIdempotentHttpWrites();
+  const parent = (caller: string, label: string, tokens: any[] = []) => ({
+    input: { branch: label },
+    vars: { parentOnly: "private" },
+    nodes: { parentOnly: {} },
+    runtime: {
+      httpIdempotencyVersion: 3,
+      executionRunId: "run",
+      executionNodeId: caller,
+      httpInvocationPath: [caller],
+      parallelActiveTokens: tokens,
+      currentNodeParticipantUserIds: [11],
+    },
+  });
+  const first = parent("caller-a", "first");
+  const before = structuredClone(first);
+  const a = await executeSubflowNode(httpChildConfig(), first, 1);
+  const retry = await executeSubflowNode(httpChildConfig(), first, 1);
+  expect(a.result).toEqual({ result: { branch: "first" } });
+  expect(retry).toEqual(a);
+  expect(first).toEqual(before);
+  await executeSubflowNode(httpChildConfig(), parent("caller-b", "second"), 1);
+  await executeSubflowNode(
+    httpChildConfig("other-child"),
+    parent("caller-a", "other"),
+    1
+  );
+  await executeSubflowNode(
+    httpChildConfig(),
+    parent("caller-a", "branch-a", [{ frameId: "fork", branchId: "a" }]),
+    1
+  );
+  await executeSubflowNode(
+    httpChildConfig(),
+    parent("caller-a", "branch-b", [{ frameId: "fork", branchId: "b" }]),
+    1
+  );
+  const keys = mocks.request.mock.calls.map(
+    ([options]) => options.headers["Idempotency-Key"]
+  );
+  expect(keys).toHaveLength(6);
+  expect(keys[0]).toBe(keys[1]);
+  expect(new Set(keys).size).toBe(5);
+  expect(writes.size).toBe(5);
+  expect(keys.every(key => /^flow:run:v3:[a-f0-9]{32}$/.test(key))).toBe(true);
+});
+it("旧子流程保持原有HTTP头行为，缺少新策略父身份时不发送请求", async () => {
+  mockIdempotentHttpWrites();
+  await executeSubflowNode(
+    httpChildConfig(),
+    {
+      input: { branch: "legacy" },
+      runtime: {
+        httpIdempotencyVersion: 2,
+        executionRunId: "old-run",
+        executionNodeId: "caller",
+      },
+    },
+    1
+  );
+  expect(mocks.request.mock.calls[0][0].headers).not.toHaveProperty(
+    "Idempotency-Key"
+  );
+  await expect(
+    executeSubflowNode(
+      httpChildConfig(),
+      { input: {}, runtime: { httpIdempotencyVersion: 3 } },
+      1
+    )
+  ).rejects.toThrow("父运行执行身份");
+  expect(mocks.request).toHaveBeenCalledTimes(1);
 });
 it("两个并行人工任务同时生成，依次提交后仅汇聚一次", async () => {
   const nodes = [

@@ -1,4 +1,8 @@
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
+import {
+  subflowRuntimeContext,
+  type SubflowRuntimeContext,
+} from "./subflow-runtime-context";
 import { waitSubscriptionResumeAction } from "./workflow-message-resume";
 import {
   restoreParallelCheckpoint,
@@ -745,19 +749,20 @@ export function withWorkflowIdempotencyHeader(
       : "";
   if (runId && nodeId) {
     const version = runtime.httpIdempotencyVersion ?? 1;
-    if (version !== 1 && version !== 2)
+    if (version !== 1 && version !== 2 && version !== 3)
       throw new Error("HTTP 幂等策略版本无效，拒绝执行写请求。");
     const tokens = runtime.parallelActiveTokens;
     if (
-      version === 2 &&
+      version >= 2 &&
       tokens !== undefined &&
       tokens !== null &&
       !Array.isArray(tokens)
     )
       throw new Error("并行 HTTP 调用的分支身份无效，无法生成幂等键。");
     let branchSuffix = "";
-    if (version === 2 && Array.isArray(tokens) && tokens.length) {
-      const path = tokens.map(token => {
+    let branchPath: string[][] = [];
+    if (version >= 2 && Array.isArray(tokens) && tokens.length) {
+      branchPath = tokens.map(token => {
         const value = asRecord(token);
         if (
           typeof value.frameId !== "string" ||
@@ -769,12 +774,26 @@ export function withWorkflowIdempotencyHeader(
         return [value.frameId, value.branchId];
       });
       const identity = createHash("sha256")
-        .update(JSON.stringify(path))
+        .update(JSON.stringify(branchPath))
         .digest("hex")
         .slice(0, 32);
       branchSuffix = `:branch:${identity}`;
     }
-    normalizedHeaders["Idempotency-Key"] = `flow:${runId}:${nodeId}${branchSuffix}`;
+    if (version === 3) {
+      const path = runtime.httpInvocationPath ?? [nodeId];
+      if (
+        !Array.isArray(path) ||
+        !path.length ||
+        path.some(part => typeof part !== "string" || !part.trim()) ||
+        path[path.length - 1] !== nodeId
+      )
+        throw new Error("HTTP 调用执行路径无效，无法生成幂等键。");
+      const identity = createHash("sha256")
+        .update(JSON.stringify([path, branchPath]))
+        .digest("hex")
+        .slice(0, 32);
+      normalizedHeaders["Idempotency-Key"] = `flow:${runId}:v3:${identity}`;
+    } else normalizedHeaders["Idempotency-Key"] = `flow:${runId}:${nodeId}${branchSuffix}`;
   }
   return normalizedHeaders;
 }
@@ -1397,9 +1416,15 @@ export function selectRouterRoute(config: JsonRecord, context: JsonRecord) {
 async function executeInlineDefinition(
   definition: Definition,
   input: JsonRecord,
-  projectId?: string
+  projectId?: string,
+  execution?: SubflowRuntimeContext
 ) {
-  const context: JsonRecord = { input, vars: {}, nodes: {} };
+  const context: JsonRecord = execution
+    ? { input: structuredClone(input), vars: {}, nodes: {}, runtime: execution.runtime }
+    : { input, vars: {}, nodes: {} };
+  const initialParticipants = Array.isArray(execution?.runtime.currentNodeParticipantUserIds)
+    ? execution.runtime.currentNodeParticipantUserIds.map(Number).filter(id => Number.isInteger(id) && id > 0)
+    : [];
   const nodes = new Map(definition.nodes.map(node => [node.id, node]));
   const startNode = definition.nodes.find(node => node.type === "start");
   if (!startNode) throw new Error("子流程缺少开始节点。");
@@ -1416,6 +1441,19 @@ async function executeInlineDefinition(
     if (!node) throw new Error(`子流程引用了不存在的节点：${nodeId}`);
     if (node.type === "subflow") throw new Error("子流程不允许嵌套调用。");
     executed.add(nodeId);
+    if (execution) {
+      const runtime = asRecord(context.runtime);
+      runtime.executionNodeId = node.id;
+      runtime.httpInvocationPath = [...execution.invocationBase, node.id];
+      context.runtime = runtime;
+      const byNode = asRecord(runtime.nodeParticipantUserIds);
+      setCurrentNodeParticipants(
+        context,
+        Object.prototype.hasOwnProperty.call(byNode, node.id)
+          ? runtimeNodeParticipants(context, node.id)
+          : initialParticipants
+      );
+    }
     const result = await executeNode(
       node,
       context,
@@ -1452,7 +1490,27 @@ async function executeInlineDefinition(
             : !result.route ||
               (edge.sourceHandle ?? "default") === result.route)
       )
-      .forEach(edge => queue.push(edge.targetNodeId));
+      .forEach(edge => {
+        if (execution) {
+          const matchingBranches =
+            node.type === "router" && Array.isArray(result.routeTargets)
+              ? result.routeTargets.map(asRecord).filter(branch =>
+                  branch.targetNodeId
+                    ? edge.targetNodeId === branch.targetNodeId
+                    : (edge.sourceHandle ?? "default") ===
+                      String(branch.handle ?? result.route ?? "default")
+                )
+              : [];
+          const currentUsers = asRecord(context.runtime).currentNodeParticipantUserIds as number[];
+          const users = matchingBranches.length
+            ? matchingBranches.flatMap(branch =>
+                Array.isArray(branch.userIds) ? branch.userIds.map(Number) : currentUsers
+              )
+            : currentUsers;
+          setRuntimeNodeParticipants(context, edge.targetNodeId, users);
+        }
+        queue.push(edge.targetNodeId);
+      });
   }
   if (!reachedEnd)
     throw new Error("子流程未到达结束节点，请检查路由目标与连线配置。");
@@ -1490,7 +1548,7 @@ export async function executeSubflowNode(
   }
   if (!definition?.nodes?.length) throw new Error("引用的子流程定义为空。");
   const input = asRecord(resolved.input ?? context.input);
-  const result = await executeInlineDefinition(definition, input, projectId);
+  const result = await executeInlineDefinition(definition, input, projectId, subflowRuntimeContext(asRecord(context.runtime), subflowId));
   return {
     subflowId,
     subflowName,
@@ -1953,7 +2011,7 @@ export async function submitWorkflowRun(input: {
     nodes: {},
     runtime: {
       executionRunId: runId,
-      httpIdempotencyVersion: 2,
+      httpIdempotencyVersion: 3,
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],
@@ -3119,6 +3177,7 @@ export async function executeRunSegment(input: {
     const executionRuntime = asRecord(input.context.runtime);
     executionRuntime.executionRunId = input.runId;
     executionRuntime.executionNodeId = node.id;
+    if (executionRuntime.httpIdempotencyVersion === 3) executionRuntime.httpInvocationPath = [node.id];
     if (parallel) executionRuntime.parallelActiveTokens = activeTokens;
     input.context.runtime = executionRuntime;
     setCurrentNodeParticipants(

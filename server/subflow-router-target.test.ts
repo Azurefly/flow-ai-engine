@@ -1,5 +1,95 @@
 import { expect, it } from "vitest";
 import { executeSubflowNode } from "./workflow-engine";
+it("新子流程继承父参与人和角色并按各自路径传递人员，隔离父变量", async () => {
+  const result = await executeSubflowNode(
+    {
+      subflowId: "role-child",
+      resolvedSubflowDefinition: {
+        nodes: [
+          { id: "start", type: "start", config: {} },
+          {
+            id: "router",
+            type: "router",
+            config: {
+              gbms: false,
+              routes: [
+                {
+                  handle: "employee",
+                  priority: 2,
+                  roleKeys: ["employee"],
+                  targetNodeId: "left",
+                },
+                {
+                  handle: "supervisor",
+                  priority: 1,
+                  roleKeys: ["supervisor"],
+                  targetNodeId: "right",
+                },
+              ],
+            },
+          },
+          {
+            id: "left",
+            type: "transform",
+            config: {
+              mappings: { people: "{{runtime.currentNodeParticipantUserIds}}" },
+            },
+          },
+          {
+            id: "right",
+            type: "transform",
+            config: {
+              mappings: { people: "{{runtime.currentNodeParticipantUserIds}}" },
+            },
+          },
+          {
+            id: "end",
+            type: "end",
+            config: {
+              resultTemplate: {
+                left: "{{vars.left.people}}",
+                right: "{{vars.right.people}}",
+                all: "{{runtime.currentNodeParticipantUserIds}}",
+                leaked: "{{vars.parentOnly}}",
+              },
+            },
+          },
+        ],
+        edges: [
+          { sourceNodeId: "start", targetNodeId: "router" },
+          {
+            sourceNodeId: "router",
+            sourceHandle: "employee",
+            targetNodeId: "left",
+          },
+          {
+            sourceNodeId: "router",
+            sourceHandle: "supervisor",
+            targetNodeId: "right",
+          },
+          { sourceNodeId: "left", targetNodeId: "end" },
+          { sourceNodeId: "right", targetNodeId: "end" },
+        ],
+      },
+    },
+    {
+      input: {},
+      vars: { parentOnly: "private" },
+      runtime: {
+        httpIdempotencyVersion: 3,
+        executionRunId: "run",
+        executionNodeId: "caller",
+        currentNodeParticipantUserIds: [11, 22],
+        roleKeysByUser: { "11": ["employee"], "22": ["supervisor"] },
+        nodeParticipantUserIds: { left: [99] },
+      },
+    },
+    1
+  );
+  expect(result.result).toEqual({
+    result: { left: [11], right: [22], all: [11, 22], leaked: undefined },
+  });
+});
 
 it.each([
   [10, "correct"],
