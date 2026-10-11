@@ -646,6 +646,7 @@ export const workflowTaskGroups = mysqlTable(
       .notNull()
       .references(() => workflowRuns.id),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
     signMode: mysqlEnum("signMode", [
       "single",
       "orSignFor",
@@ -679,7 +680,7 @@ export const workflowTaskGroups = mysqlTable(
     completedAt: timestamp("completedAt"),
   },
   table => [
-    unique("workflow_task_group_run_node_unique").on(table.runId, table.nodeId),
+    unique("workflow_task_group_run_node_unique").on(table.runId, table.nodeId, table.executionKey),
     index("workflow_task_group_run_status_idx").on(table.runId, table.status),
   ]
 );
@@ -699,6 +700,7 @@ export const workflowTasks = mysqlTable(
       .notNull()
       .references(() => workflowRuns.id),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
     nodeName: varchar("nodeName", { length: 160 }).notNull(),
     taskType: mysqlEnum("taskType", ["operate"]).default("operate").notNull(),
     status: mysqlEnum("status", [
@@ -764,7 +766,8 @@ export const workflowTasks = mysqlTable(
     unique("workflow_task_run_node_assignee_unique").on(
       table.runId,
       table.nodeId,
-      table.assignedUserId
+      table.assignedUserId,
+      table.executionKey
     ),
   ]
 );

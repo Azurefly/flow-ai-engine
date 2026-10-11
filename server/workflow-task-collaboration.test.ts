@@ -53,6 +53,7 @@ describe("人工任务协作变更", () => {
       "utf8"
     );
     expect(service).toContain("memberVersion=memberVersion+1");
+    expect(service).toContain('source.executionKey ?? "legacy"');
     expect(service).toContain("String(member.status) !== \"pending\"");
     expect(service).toContain('"task_delegated"');
     expect(service).toContain("representedUserId");

@@ -1,5 +1,8 @@
 import { expect, it } from "vitest";
-import { workflowWaitExecutionKey } from "./workflow-wait-execution-key";
+import {
+  workflowWaitExecutionKey,
+  workflowTaskExecutionKey,
+} from "./workflow-wait-execution-key";
 
 it("旧运行保留单节点等待标识，新运行保存根节点标识", () => {
   const tokens = [{ frameId: "f", branchId: "a" }];
@@ -42,4 +45,26 @@ it("拒绝未知等待版本和损坏的分支路径", () => {
     expect(() =>
       workflowWaitExecutionKey({ durableWaitVersion: 1 }, tokens as any)
     ).toThrow();
+});
+it("审批任务使用独立版本快照，并区分共享节点的分支", () => {
+  const tokens = [{ frameId: "f", branchId: "a" }];
+  expect(workflowTaskExecutionKey({ durableWaitVersion: 1 }, tokens)).toBe(
+    "legacy"
+  );
+  expect(workflowWaitExecutionKey({ durableTaskVersion: 1 }, tokens)).toBe(
+    "legacy"
+  );
+  expect(workflowTaskExecutionKey({ durableTaskVersion: 1 }, [])).toBe("root");
+  const key = workflowTaskExecutionKey({ durableTaskVersion: 1 }, tokens);
+  expect(
+    workflowTaskExecutionKey({ durableTaskVersion: 1 }, structuredClone(tokens))
+  ).toBe(key);
+  expect(
+    workflowTaskExecutionKey({ durableTaskVersion: 1 }, [
+      { frameId: "f", branchId: "b" },
+    ])
+  ).not.toBe(key);
+  expect(() => workflowTaskExecutionKey({ durableTaskVersion: 2 }, [])).toThrow(
+    "人工任务执行身份版本无效"
+  );
 });

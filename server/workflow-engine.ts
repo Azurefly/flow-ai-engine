@@ -1,5 +1,5 @@
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
-import { workflowWaitExecutionKey } from "./workflow-wait-execution-key";
+import { workflowWaitExecutionKey, workflowTaskExecutionKey } from "./workflow-wait-execution-key";
 import {
   subflowRuntimeContext,
   type SubflowRuntimeContext,
@@ -2014,6 +2014,7 @@ export async function submitWorkflowRun(input: {
       executionRunId: runId,
       httpIdempotencyVersion: 3,
       durableWaitVersion: 1,
+      durableTaskVersion: 1,
       triggeredByUserId: input.triggeredBy.id,
       lastActorUserId: input.triggeredBy.id,
       participantUserIds: [input.triggeredBy.id],
@@ -3401,6 +3402,7 @@ export async function executeRunSegment(input: {
         );
         const approvalGroupId =
           reference.signMode === "single" ? null : randomUUID();
+        const taskExecutionKey = workflowTaskExecutionKey(runtime, activeTokens);
         if (approvalGroupId) {
           const requiredApprovals = approvalRequirement(
             reference.signMode,
@@ -3408,7 +3410,7 @@ export async function executeRunSegment(input: {
             reference.passPercent
           );
           await db().query(
-            "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO workflow_task_group (id,workflowId,runId,nodeId,signMode,totalApprovers,requiredApprovals,passPercentBasisPoints,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             [
               approvalGroupId,
               input.workflow.id,
@@ -3424,6 +3426,7 @@ export async function executeRunSegment(input: {
                   currentRequestId() ??
                   ""
               ) || null,
+              taskExecutionKey,
             ]
           );
         }
@@ -3446,7 +3449,7 @@ export async function executeRunSegment(input: {
           const taskId = randomUUID();
           taskIds.push(taskId);
           await db().query(
-            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [
               taskId,
               input.workflow.id,
@@ -3492,6 +3495,7 @@ export async function executeRunSegment(input: {
                   currentRequestId() ??
                   ""
               ) || null,
+              taskExecutionKey,
             ]
           );
           if (!sequentialSign || taskAssignment.approvalOrder === 0) {

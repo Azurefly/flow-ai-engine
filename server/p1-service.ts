@@ -1026,7 +1026,7 @@ export async function addWorkflowTaskSigner(
       addedSignByUserId: user.id,
     };
     await connection.query(
-      "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO workflow_task (id,workflowId,projectId,runId,nodeId,nodeName,assignedUserId,candidateUserIdsJson,approvalGroupId,signMode,approvalOrder,roleKey,operationName,operationCode,pendingStatusName,instruction,payloadJson,participantSnapshotJson,outcomeHandlesJson,responsibleUserId,formSchemaVersion,dueAt,nextNodeIdsJson,requestId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
       [
         newTaskId,
         source.workflowId,
@@ -1052,6 +1052,7 @@ export async function addWorkflowTaskSigner(
         source.dueAt,
         taskJsonColumnValue(source.nextNodeIdsJson),
         source.requestId,
+        source.executionKey ?? "legacy",
       ]
     );
     const newTotal = Number(group.totalApprovers) + 1;

@@ -30,7 +30,7 @@ vi.mock("./organization-service", () => ({
   resolveOperateAssignees: async ({ config }: any) => ({
     mode: "user",
     assignedUserId: config.assigneeUserId ?? 1,
-    candidateUserIds: [config.assigneeUserId ?? 1],
+    candidateUserIds: config.candidateUserIds ?? [config.assigneeUserId ?? 1],
   }),
 }));
 import {
@@ -155,6 +155,59 @@ it("并行分支共享等待节点时登记独立订阅与人员快照", async (
   expect(waits).toHaveLength(2);
   expect(replayQueue).toEqual([]);
   expect(context.runtime.parallelCheckpoint.queue).toEqual([]);
+});
+it.each(["andSignFor", "orSignFor", "sequentialSignFor"])("并行分支共享签署节点时保留独立审批组与成员任务：%s", async signMode => {
+  const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
+  const context: any = { vars: {}, nodes: {}, runtime: { durableTaskVersion: 1, parallelCheckpoint: { frames: fork.state, queue: fork.tokens.map(tokens => ({ nodeId: "shared", tokens, participantUserIds: [1, 2] })) } } };
+  const baseQuery = mocks.query.getMockImplementation()!;
+  const groups: any[] = [];
+  const taskIdentities = new Set<string>();
+  mocks.query.mockImplementation(async (sql: string, params: any[]) => {
+    if (sql.includes("INSERT INTO workflow_task_group")) {
+      const executionKey = params[10] ?? "legacy";
+      if (groups.some(group => group.executionKey === executionKey)) throw new Error("Duplicate run/node/group identity");
+      groups.push({ id: params[0], executionKey, required: params[6] });
+    }
+    if (sql.includes("INSERT INTO workflow_task (")) {
+      const identity = JSON.stringify([params[3], params[4], params[6], params[24] ?? "legacy"]);
+      if (taskIdentities.has(identity)) throw new Error("Duplicate run/node/assignee identity");
+      taskIdentities.add(identity);
+    }
+    if (sql.includes("UNION ALL SELECT id FROM workflow_wait_subscription")) return [[{ id: "pending" }]];
+    return baseQuery(sql, params);
+  });
+  const result = await executeRunSegment({
+    runId: "run", workflow: { id: "flow", ownerUserId: 1 } as any,
+    definition: { nodes: [node("shared", "operate", { candidateUserIds: [1, 2], bdcz: { hqhqsz: signMode, hqtgbfb: 100 } })], edges: [] } as any,
+    context, queue: ["shared", "shared"],
+  });
+  expect(result.status).toBe("waiting");
+  expect(groups).toHaveLength(2);
+  expect(new Set(groups.map(group => group.executionKey)).size).toBe(2);
+  expect(groups.map(group => group.required)).toEqual(signMode === "orSignFor" ? [1, 1] : [2, 2]);
+  const tasks = mocks.query.mock.calls.filter(([sql]) => sql.includes("INSERT INTO workflow_task ("));
+  expect(tasks).toHaveLength(4);
+  for (const group of groups) expect(tasks.filter(([, params]) => params[8] === group.id).map(([, params]) => params[6])).toEqual([1, 2]);
+  expect(new Set(tasks.map(([, params]) => params[11])).size).toBe(2);
+  expect(new Set(tasks.map(([, params]) => params[24])).size).toBe(2);
+});
+it("同一处理人可以分别收到共享节点的两个并行单人任务", async () => {
+  const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
+  const context: any = { vars: {}, nodes: {}, runtime: { durableTaskVersion: 1, parallelCheckpoint: { frames: fork.state, queue: fork.tokens.map(tokens => ({ nodeId: "shared", tokens, participantUserIds: [1] })) } } };
+  const baseQuery = mocks.query.getMockImplementation()!;
+  const identities = new Set<string>();
+  mocks.query.mockImplementation(async (sql: string, params: any[]) => {
+    if (sql.includes("INSERT INTO workflow_task (")) {
+      const key = JSON.stringify([params[3], params[4], params[6], params[24] ?? "legacy"]);
+      if (identities.has(key)) throw new Error("Duplicate task identity");
+      identities.add(key);
+    }
+    if (sql.includes("UNION ALL SELECT id FROM workflow_wait_subscription")) return [[{ id: "pending" }]];
+    return baseQuery(sql, params);
+  });
+  const result = await executeRunSegment({ runId: "run", workflow: { id: "flow", ownerUserId: 1 } as any, definition: { nodes: [node("shared", "operate", { assigneeUserId: 1 })], edges: [] } as any, context, queue: ["shared", "shared"] });
+  expect(result.status).toBe("waiting");
+  expect(identities.size).toBe(2);
 });
 it("消息等待续跑使用最新汇聚状态和其他分支输出，避免旧快照覆盖", async () => {
   const fork = forkParallelState({}, "f", "router", "join", ["a", "b"], []);
