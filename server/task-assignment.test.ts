@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import {
   canManageTask,
+  canReassignTask,
   taskAssignmentTargetReason,
 } from "../shared/task-assignment";
 it("only permits assignment controls for actionable active tasks", () => {
@@ -11,6 +12,24 @@ it("only permits assignment controls for actionable active tasks", () => {
   expect(canManageTask({ status: "pending", canAct: false })).toBe(false);
   expect(canManageTask({ status: "pending", canAct: "true" })).toBe(false);
   expect(canManageTask(undefined)).toBe(false);
+});
+
+it("管理恢复入口严格依赖服务端能力与未完成的任务状态", () => {
+  expect(canReassignTask({ status: "pending", canReassign: true })).toBe(true);
+  expect(canReassignTask({ status: "claimed", canReassign: true })).toBe(true);
+  expect(canReassignTask({ status: "completed", canReassign: true })).toBe(
+    false
+  );
+  expect(canReassignTask({ status: "pending", canReassign: "true" })).toBe(
+    false
+  );
+  expect(canReassignTask(undefined)).toBe(false);
+  expect(
+    taskAssignmentTargetReason(
+      { status: "pending", viewerUserId: 12, canReassign: true },
+      12
+    )
+  ).toBeNull();
 });
 
 it("分配选择排除当前处理人和已存在的审批成员", () => {

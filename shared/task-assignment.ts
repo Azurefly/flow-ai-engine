@@ -1,11 +1,17 @@
+function isOpenTask(task: { status?: unknown } | null | undefined) {
+  return Boolean(task && ["pending", "claimed"].includes(String(task.status)));
+}
+
 export function canManageTask(
   task: { status?: unknown; canAct?: unknown } | null | undefined
 ) {
-  return Boolean(
-    task &&
-      ["pending", "claimed"].includes(String(task.status)) &&
-      task.canAct === true
-  );
+  return isOpenTask(task) && task?.canAct === true;
+}
+
+export function canReassignTask(
+  task: { status?: unknown; canReassign?: unknown } | null | undefined
+) {
+  return isOpenTask(task) && task?.canReassign === true;
 }
 
 export function taskAssignmentTargetReason(
@@ -15,6 +21,7 @@ export function taskAssignmentTargetReason(
         assignedUserId?: unknown;
         claimedByUserId?: unknown;
         viewerUserId?: unknown;
+        canReassign?: unknown;
         approvalGroupId?: unknown;
         approvalMembers?: Array<{ assignedUserId?: unknown }>;
       }
@@ -27,7 +34,7 @@ export function taskAssignmentTargetReason(
   const owner =
     Number(
       task?.status === "claimed" ? task.claimedByUserId : task?.assignedUserId
-    ) || Number(task?.viewerUserId);
+    ) || (task?.canReassign === true ? 0 : Number(task?.viewerUserId));
   if (id === owner) return "目标人员已经是当前处理人，请选择其他人员。";
   if (
     task?.approvalGroupId &&

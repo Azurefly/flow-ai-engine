@@ -145,6 +145,45 @@ function isTaskRunActionable(task: mysql.RowDataPacket) {
   );
 }
 
+export function currentTaskHandlerIds(task: mysql.RowDataPacket) {
+  if (!["pending", "claimed"].includes(String(task.status))) return [];
+  const ownerId = Number(
+    task.status === "claimed" ? task.claimedByUserId : task.assignedUserId
+  );
+  return Number.isInteger(ownerId) && ownerId > 0
+    ? [ownerId]
+    : task.status === "pending"
+      ? candidateIds(task)
+      : [];
+}
+
+async function taskReassignmentState(
+  task: mysql.RowDataPacket,
+  connection?: mysql.PoolConnection
+) {
+  if (
+    !["pending", "claimed"].includes(String(task.status)) ||
+    !isTaskRunActionable(task) ||
+    (task.approvalGroupId && task.groupStatus !== "waiting")
+  )
+    return { eligible: false, reason: null };
+  const owners = currentTaskHandlerIds(task);
+  if (owners.length) {
+    const [rows] = await (connection ?? db()).query<mysql.RowDataPacket[]>(
+      `SELECT id,status FROM users WHERE id IN (?) ORDER BY id${connection ? " FOR UPDATE" : ""}`,
+      [owners]
+    );
+    if (rows.some(row => row.status === "active"))
+      return { eligible: false, reason: null };
+  }
+  return {
+    eligible: true,
+    reason: owners.length
+      ? "当前处理人已停用，可重新分配给其他可办理人员。"
+      : "当前任务没有有效处理人，可重新分配。",
+  };
+}
+
 async function assertCurrentTaskOperation(
   user: User,
   task: mysql.RowDataPacket
@@ -442,7 +481,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT t.*,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             responsible.name AS responsibleName,represented.name AS representedName,
-            g.totalApprovers,g.requiredApprovals,g.memberVersion,
+            g.totalApprovers,g.requiredApprovals,g.memberVersion,g.status AS groupStatus,
             ${earlierPendingSignerSql} AS hasEarlierPendingSigner,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed' AND JSON_UNQUOTE(JSON_EXTRACT(gt.resultJson,'$.decision'))='approved') AS approvedApprovals,
@@ -471,10 +510,19 @@ export async function getWorkflowTask(user: User, taskId: string) {
     );
     approvalMembers = memberRows;
   }
+  const reassignment = (await hasWorkflowPermission(
+    user,
+    String(task.workflowId),
+    "workflow:members:manage"
+  ))
+    ? await taskReassignmentState(task)
+    : { eligible: false, reason: null };
   return {
     ...presentTask(task),
     viewerUserId: user.id,
     ...taskActionState(user.id, task),
+    canReassign: reassignment.eligible,
+    reassignmentReason: reassignment.reason,
     canViewRun: await hasWorkflowPermission(
       user,
       String(task.workflowId),
@@ -757,7 +805,10 @@ export async function listWorkflowTaskAssignees(
   search?: string
 ) {
   const task: any = await getWorkflowTask(user, taskId);
-  if (!task || !(await canAccessTask(user, task, true)))
+  if (
+    !task ||
+    (!(await canAccessTask(user, task, true)) && task.canReassign !== true)
+  )
     throw new Error("人工任务不存在或无分配权限。 ");
   const query = search?.trim().toLocaleLowerCase();
   if (search !== undefined && !query) return [];
@@ -791,29 +842,78 @@ export async function listWorkflowTaskAssignees(
 
 export async function handoverWorkflowTask(
   user: User,
-  input: { taskId: string; targetUserId: number; delegation?: boolean }
+  input: {
+    taskId: string;
+    targetUserId: number;
+    delegation?: boolean;
+    recovery?: { reason: string; ownerVersion: number };
+  }
 ) {
-  const actionLabel = input.delegation ? "代理" : "移交";
+  if (input.recovery && input.delegation)
+    throw new Error("重新分配不能同时设置代理关系。");
+  const actionLabel = input.recovery
+    ? "重新分配"
+    : input.delegation
+      ? "代理"
+      : "移交";
   const task: any = await getWorkflowTask(user, input.taskId);
-  if (!task || !(await canAccessTask(user, task, true)))
+  if (
+    !task ||
+    (input.recovery
+      ? task.canReassign !== true
+      : !(await canAccessTask(user, task, true)))
+  )
     throw new Error(`人工任务不存在或无${actionLabel}权限。 `);
+  if (
+    input.recovery &&
+    (!Number.isInteger(input.recovery.ownerVersion) ||
+      input.recovery.ownerVersion < 0 ||
+      input.recovery.reason.trim().length < 3 ||
+      input.recovery.reason.trim().length > 500)
+  )
+    throw new Error("重新分配需填写 3 至 500 字的原因，并使用当前任务版本。");
   if (
     !["pending", "claimed"].includes(String(task.status)) ||
     !isTaskRunActionable(task)
   )
     throw new Error(`仅可${actionLabel}正在等待处理的人工任务。 `);
-  if (task.status === "claimed" && Number(task.claimedByUserId) !== user.id)
+  if (
+    !input.recovery &&
+    task.status === "claimed" &&
+    Number(task.claimedByUserId) !== user.id
+  )
     throw new Error(`仅当前处理人可${actionLabel}已领取任务。 `);
-  await assertCurrentTaskOperation(user, task);
+  if (!input.recovery) await assertCurrentTaskOperation(user, task);
   const target = await getEligibleAssignee(task, input.targetUserId);
   const currentOwnerId =
-    Number(task.claimedByUserId ?? task.assignedUserId ?? 0) || user.id;
+    Number(task.claimedByUserId ?? task.assignedUserId ?? 0) ||
+    (input.recovery ? 0 : user.id);
   if (currentOwnerId === input.targetUserId)
     throw new Error("目标处理人已经是当前任务处理人。 ");
   const delegationId = input.delegation ? randomUUID() : null;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    const [runs] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT status FROM workflow_run WHERE id=? FOR UPDATE",
+      [task.runId]
+    );
+    if (
+      !runs[0] ||
+      !isTaskRunActionable({
+        ...task,
+        runStatus: runs[0].status,
+      } as mysql.RowDataPacket)
+    )
+      throw new Error("流程实例当前不在可操作状态。");
+    if (task.approvalGroupId) {
+      const [groups] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,status FROM workflow_task_group WHERE id=? FOR UPDATE",
+        [task.approvalGroupId]
+      );
+      if (groups[0]?.status !== "waiting")
+        throw new Error("审批组已结束，无法变更处理人。");
+    }
     const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT * FROM workflow_task WHERE id=? FOR UPDATE",
       [input.taskId]
@@ -822,11 +922,41 @@ export async function handoverWorkflowTask(
     if (
       !locked ||
       String(locked.status) !== String(task.status) ||
-      Number(locked.ownerVersion ?? 0) !== Number(task.ownerVersion ?? 0) ||
-      !isCurrentTaskOwner(user.id, locked)
+      Number(locked.ownerVersion ?? 0) !==
+        Number(input.recovery?.ownerVersion ?? task.ownerVersion ?? 0) ||
+      String(locked.approvalGroupId ?? "") !==
+        String(task.approvalGroupId ?? "") ||
+      (!input.recovery && !isCurrentTaskOwner(user.id, locked))
     ) {
       throw new Error("人工任务状态已变化，请刷新后重试。 ");
     }
+    if (input.recovery) {
+      if (
+        !(await hasWorkflowPermission(
+          user,
+          String(locked.workflowId),
+          "workflow:members:manage"
+        ))
+      )
+        throw new Error("无重新分配权限。");
+      const state = await taskReassignmentState(
+        {
+          ...locked,
+          runStatus: runs[0].status,
+          groupStatus: task.groupStatus,
+        } as mysql.RowDataPacket,
+        connection
+      );
+      if (!state.eligible)
+        throw new Error("当前任务仍有启用的处理人，不能重新分配。");
+    }
+    const [targetRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,status FROM users WHERE id=? FOR UPDATE",
+      [input.targetUserId]
+    );
+    if (targetRows[0]?.status !== "active")
+      throw new Error("目标处理人不存在或已停用。");
+    await getEligibleAssignee(locked, input.targetUserId);
     if (locked.approvalGroupId) {
       const [duplicates] = await connection.query<mysql.RowDataPacket[]>(
         "SELECT id FROM workflow_task WHERE approvalGroupId=? AND id<>? AND assignedUserId=? LIMIT 1",
@@ -907,6 +1037,41 @@ export async function handoverWorkflowTask(
     );
     if (!result.affectedRows)
       throw new Error("人工任务状态已变化，请刷新后重试。 ");
+    if (input.recovery) {
+      const recovery = {
+        actorUserId: user.id,
+        fromUserIds: previousUserIds,
+        toUserId: input.targetUserId,
+        reason: input.recovery.reason.trim(),
+        reassignedAt: new Date().toISOString(),
+      };
+      await connection.query(
+        "UPDATE workflow_task SET payloadJson=? WHERE id=?",
+        [
+          JSON.stringify({
+            ...parseJson(locked.payloadJson),
+            assignmentRecovery: recovery,
+          }),
+          input.taskId,
+        ]
+      );
+      if (locked.approvalGroupId)
+        await connection.query(
+          "UPDATE workflow_task_group SET memberVersion=memberVersion+1 WHERE id=? AND status='waiting'",
+          [locked.approvalGroupId]
+        );
+      await recordAuthorizationAudit(
+        {
+          actorUserId: user.id,
+          targetUserId: input.targetUserId,
+          action: "user_updated",
+          resourceType: "workflow_task",
+          resourceId: input.taskId,
+          details: { operation: "task_reassigned", ...recovery },
+        },
+        connection
+      );
+    }
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -914,21 +1079,22 @@ export async function handoverWorkflowTask(
   } finally {
     connection.release();
   }
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    targetUserId: Number(target.id),
-    action: "user_updated",
-    resourceType: "workflow_task",
-    resourceId: input.taskId,
-    details: {
-      operation: input.delegation ? "task_delegated" : "task_handover",
-      fromUserId: task.assignedUserId ?? task.claimedByUserId ?? null,
-      toUserId: input.targetUserId,
-      responsibleUserId: input.targetUserId,
-      representedUserId: input.delegation ? currentOwnerId : null,
-      delegationId,
-    },
-  });
+  if (!input.recovery)
+    await recordAuthorizationAudit({
+      actorUserId: user.id,
+      targetUserId: Number(target.id),
+      action: "user_updated",
+      resourceType: "workflow_task",
+      resourceId: input.taskId,
+      details: {
+        operation: input.delegation ? "task_delegated" : "task_handover",
+        fromUserId: task.assignedUserId ?? task.claimedByUserId ?? null,
+        toUserId: input.targetUserId,
+        responsibleUserId: input.targetUserId,
+        representedUserId: input.delegation ? currentOwnerId : null,
+        delegationId,
+      },
+    });
   return getWorkflowTask(user, input.taskId);
 }
 
@@ -937,6 +1103,22 @@ export async function delegateWorkflowTask(
   input: { taskId: string; targetUserId: number }
 ) {
   return handoverWorkflowTask(user, { ...input, delegation: true });
+}
+
+export async function reassignWorkflowTask(
+  user: User,
+  input: {
+    taskId: string;
+    targetUserId: number;
+    reason: string;
+    ownerVersion: number;
+  }
+) {
+  return handoverWorkflowTask(user, {
+    taskId: input.taskId,
+    targetUserId: input.targetUserId,
+    recovery: { reason: input.reason, ownerVersion: input.ownerVersion },
+  });
 }
 
 export function approvalRequirementAfterMemberChange(input: {

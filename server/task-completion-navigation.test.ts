@@ -16,7 +16,10 @@ beforeEach(() => vi.resetAllMocks());
 it.each([false, true])(
   "完成任务返回本人实例查看权限 %s，办理权限仍独立校验",
   async canViewRun => {
-    mocks.permission.mockResolvedValue(canViewRun);
+    mocks.permission.mockImplementation(
+      async (_user, _workflowId, permission) =>
+        permission === "workflow:view" && canViewRun
+    );
     mocks.query
       .mockResolvedValueOnce([
         [

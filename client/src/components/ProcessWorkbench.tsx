@@ -7,6 +7,7 @@ import {
 } from "@shared/task-form";
 import {
   canManageTask,
+  canReassignTask,
   taskAssignmentTargetReason,
 } from "@shared/task-assignment";
 import { taskResultView } from "@shared/task-result-view";
@@ -284,7 +285,7 @@ export default function ProcessWorkbench() {
         selectedTaskId &&
           (taskDetail.data as { id?: string } | undefined)?.id ===
             selectedTaskId &&
-          canManageTask(taskDetail.data)
+          (canManageTask(taskDetail.data) || canReassignTask(taskDetail.data))
       ),
       retry: false,
     }
@@ -310,41 +311,32 @@ export default function ProcessWorkbench() {
     },
     onError: error => toast.error(error.message),
   });
+  const taskFinished = (result: {
+    status: string;
+    runId?: string;
+    canViewRun?: boolean;
+  }) => {
+    invalidate(false);
+    if (result.status === "cancelled")
+      toast.warning("处理结果已记录，流程已结束。");
+    else
+      toast.success(
+        result.status === "waiting"
+          ? "处理结果已记录，正在等待其他审批人。"
+          : result.status === "queued"
+            ? "处理结果已记录，后续节点已排队执行。"
+            : "处理结果已记录，流程已完成。"
+      );
+    if (result.runId && result.canViewRun === true)
+      setSelectedRunId(result.runId);
+    setSelectedTaskId(null);
+  };
   const complete = trpc.task.complete.useMutation({
-    onSuccess: result => {
-      setSelectedTaskId(null);
-      invalidate(false);
-      if (result.status === "cancelled")
-        toast.warning("审批已拒绝，流程已按安全策略终止。");
-      else
-        toast.success(
-          result.status === "waiting"
-            ? "当前决定已记录，流程正在等待其他审批人。"
-            : result.status === "queued"
-              ? "审批已通过，后续节点已进入持久化续跑队列。"
-              : "审批已通过，流程已由服务端继续执行。"
-        );
-      if (result.canViewRun === true) setSelectedRunId(result.runId);
-    },
+    onSuccess: taskFinished,
     onError: error => toast.error(error.message),
   });
   const execute = trpc.task.execute.useMutation({
-    onSuccess: result => {
-      invalidate(false);
-      if (result.status === "cancelled")
-        toast.warning("审批已拒绝，流程已按安全策略终止。");
-      else
-        toast.success(
-          result.status === "waiting"
-            ? "当前决定已记录，流程正在等待其他审批人。"
-            : result.status === "queued"
-              ? "审批已通过，后续节点已进入持久化续跑队列。"
-              : "审批已通过，流程已完成。"
-        );
-      if (result.runId && result.canViewRun === true)
-        setSelectedRunId(result.runId);
-      setSelectedTaskId(null);
-    },
+    onSuccess: taskFinished,
     onError: error => toast.error(error.message),
   });
   const handover = trpc.task.handover.useMutation({
@@ -360,6 +352,14 @@ export default function ProcessWorkbench() {
       setSelectedTaskId(null);
       invalidate(false);
       toast.success("任务已代理给指定处理人，已保留被代理主体审计。");
+    },
+    onError: error => toast.error(error.message),
+  });
+  const reassign = trpc.task.reassign.useMutation({
+    onSuccess: () => {
+      setSelectedTaskId(null);
+      invalidate(false);
+      toast.success("任务已重新分配，等待新处理人办理。");
     },
     onError: error => toast.error(error.message),
   });
@@ -422,6 +422,7 @@ export default function ProcessWorkbench() {
     execute.isPending ||
     handover.isPending ||
     delegate.isPending ||
+    reassign.isPending ||
     addSigner.isPending ||
     removeSigner.isPending ||
     returnToPending.isPending ||
@@ -841,6 +842,7 @@ export default function ProcessWorkbench() {
       </div>
       {selectedTaskId && (
         <TaskDrawer
+          key={selectedTaskId}
           task={taskDetail.data as any}
           assignees={(assignees.data ?? []) as any[]}
           assigneeQuery={assigneeQuery}
@@ -874,6 +876,18 @@ export default function ProcessWorkbench() {
           }
           onDelegate={(targetUserId: number) =>
             delegate.mutate({ taskId: selectedTaskId, targetUserId })
+          }
+          onReassign={(
+            targetUserId: number,
+            reason: string,
+            ownerVersion: number
+          ) =>
+            reassign.mutate({
+              taskId: selectedTaskId,
+              targetUserId,
+              reason,
+              ownerVersion,
+            })
           }
           onAddSigner={(targetUserId: number, memberVersion: number) =>
             addSigner.mutate({
@@ -2509,11 +2523,13 @@ function TaskDrawer({
   onComplete,
   onHandover,
   onDelegate,
+  onReassign,
   onAddSigner,
   onRemoveSigner,
   onReturn,
 }: any) {
   const [targetUserId, setTargetUserId] = useState("");
+  const [reassignmentReason, setReassignmentReason] = useState("");
   const [removeMemberTaskId, setRemoveMemberTaskId] = useState("");
   const targetUnavailableReason = taskAssignmentTargetReason(
     task,
@@ -2577,6 +2593,7 @@ function TaskDrawer({
     ...(comment.trim() ? { comment: comment.trim() } : {}),
   });
   const canManage = canManageTask(task);
+  const canReassign = canReassignTask(task);
   const isHistoricalTask =
     task?.status === "completed" || task?.status === "cancelled";
   const resultView = taskResultView(task?.payload?.config, task?.result);
@@ -2680,6 +2697,11 @@ function TaskDrawer({
         </div>
         {task && (
           <div className="mt-5 space-y-5">
+            {task.payload?.assignmentRecovery?.reason && (
+              <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-6">
+                重新分配说明：{task.payload.assignmentRecovery.reason}
+              </p>
+            )}
             {(task.status === "pending" || task.status === "claimed") &&
               task.canAct !== true && (
                 <div className="flex flex-col gap-3 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2753,18 +2775,35 @@ function TaskDrawer({
                 )}
               </div>
             </div>
-            {canManage && (
+            {(canManage || canReassign) && (
               <div className="rounded-lg border border-aiflow-info-border bg-aiflow-info-surface/50 p-4">
                 <p className="aiflow-type-body font-semibold text-foreground">
-                  任务移交与回退
+                  {canReassign ? "重新分配任务" : "任务移交与回退"}
                 </p>
                 <p className="aiflow-type-body mt-1 text-muted-foreground">
-                  仅显示拥有该流程运行权限的内部用户。移交变更责任人；代理同时保留被代理主体。两者都不会直接推进流程。
+                  {canReassign
+                    ? `${task.reassignmentReason}填写原因并选择新处理人，分配后等待其办理。`
+                    : "仅显示拥有该流程运行权限的内部用户。移交变更责任人；代理同时保留被代理主体。两者都不会直接推进流程。"}
                 </p>
+                {canReassign && (
+                  <textarea
+                    aria-label="重新分配原因"
+                    placeholder="填写原因（3 至 500 字）"
+                    value={reassignmentReason}
+                    onChange={event =>
+                      setReassignmentReason(event.target.value)
+                    }
+                    maxLength={500}
+                    rows={3}
+                    className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+                )}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <div className="min-w-0 flex-1">
                     <SearchableMultiSelect
-                      ariaLabel="选择移交处理人"
+                      ariaLabel={
+                        canReassign ? "选择新处理人" : "选择移交处理人"
+                      }
                       value={targetUserId ? [targetUserId] : []}
                       options={assignees
                         .filter(
@@ -2802,29 +2841,43 @@ function TaskDrawer({
                     type="button"
                     variant="outline"
                     size="sm"
-                    disabled={busy || Boolean(targetUnavailableReason)}
-                    onClick={() => onHandover(Number(targetUserId))}
+                    disabled={
+                      busy ||
+                      Boolean(targetUnavailableReason) ||
+                      (canReassign && reassignmentReason.trim().length < 3)
+                    }
+                    onClick={() =>
+                      canReassign
+                        ? onReassign(
+                            Number(targetUserId),
+                            reassignmentReason.trim(),
+                            Number(task.ownerVersion ?? 0)
+                          )
+                        : onHandover(Number(targetUserId))
+                    }
                   >
                     <UserRoundPlus size={14} />
-                    移交
+                    {canReassign ? "重新分配" : "移交"}
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy || Boolean(targetUnavailableReason)}
-                    onClick={() => onDelegate(Number(targetUserId))}
-                  >
-                    <UsersRound size={14} />
-                    代理
-                  </Button>
+                  {canManage && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy || Boolean(targetUnavailableReason)}
+                      onClick={() => onDelegate(Number(targetUserId))}
+                    >
+                      <UsersRound size={14} />
+                      代理
+                    </Button>
+                  )}
                 </div>
                 {targetUserId && targetUnavailableReason && (
                   <p role="status" className="mt-2 text-sm text-amber-800">
                     {targetUnavailableReason}
                   </p>
                 )}
-                {task.approvalGroupId && (
+                {canManage && task.approvalGroupId && (
                   <div className="mt-3 border-t border-aiflow-info-border pt-3">
                     <p className="aiflow-type-body font-semibold text-foreground">
                       加签与减签
@@ -2888,7 +2941,7 @@ function TaskDrawer({
                     </div>
                   </div>
                 )}
-                {task.status === "claimed" && (
+                {canManage && task.status === "claimed" && (
                   <Button
                     type="button"
                     variant="outline"

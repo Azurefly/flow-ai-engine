@@ -87,7 +87,7 @@ const permissionCatalog: Record<PermissionCode, { name: string; description: str
   },
   "workflow:members:manage": {
     name: "管理流程成员",
-    description: "授予、调整或撤销流程资源级角色。",
+    description: "授予、调整或撤销流程资源级角色，并重新分配停用人员的待办。",
   },
   "iam:manage": {
     name: "管理身份与权限",
