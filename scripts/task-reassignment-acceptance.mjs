@@ -335,7 +335,7 @@ try {
     );
     await assert.rejects(
       () => execute(manager.session, initial.id, reference),
-      /无|领取|处理人|权限/
+      /无|领取|处理人|权限|不可执行/
     );
     const candidates = await manager.session.request("task.assignees", {
       taskId: initial.id,
