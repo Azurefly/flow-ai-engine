@@ -115,3 +115,48 @@ temp/
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
 .project-config.json
+
+# Local test outputs and verification materials
+.manus-logs/
+**/__pycache__/
+**/.pytest_cache/
+**/.venv/
+playwright-report/
+test-results/
+blob-report/
+allure-results/
+allure-report/
+/01-test/018-测试报告/
+/01-test/remote-verify-screenshots/
+/01-test/016-数据库测试/pg_sql_static_review_report_*.md
+
+# Historical audit notes and generated reference inventories (keep locally)
+/docs/BUSINESS_SCENARIOS_VERIFICATION_REPORT.md
+/docs/FUNCTIONAL_TEST_REPORT.md
+/docs/aiflow-node-evidence-matrix.md
+/docs/aiflow-reference-baseline.md
+/docs/aiflow-reference-file-inventory.md
+/docs/aiflow-reference-page-action-matrix.md
+/docs/aiflow-visual-gap-audit.md
+/docs/browser-acceptance-*.md
+/docs/extended-browser-verification.md
+/docs/flow-ai-engine-ui-browser-review-addendum-*.md
+/docs/flow-engine-deep-audit-remediation-todo-*.md
+/docs/flow-engine-remediation-completion-*.md
+/docs/leave-approval-browser-acceptance-*.md
+/docs/p*-browser-acceptance-notes.md
+/docs/p*-reference-*.txt
+/docs/reference-*.txt
+/docs/stage-commit-policy.md
+/docs/ten-round-verification.md
+/docs/validation-rounds.md
+/docs/validation/
+/docs/migration-archive/
+/todo.md
+
+# One-off historical server audit and deployment helpers
+/.audit-*.sh
+/.cleanup-failed-tests.sh
+/.compare-backup-residue.sh
+/.deploy-*.sh
+/.deploy-*-test.yaml
