@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { roleExpiryInput } from "@shared/role-expiry";
+import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,8 +54,15 @@ export default function WorkflowRoleBindingsDialog({
   }, [userQuery, search]);
   const roles = trpc.workflow.customRoles.useQuery(
     { workflowId },
-    { retry: false }
+    authorizationQueryPolicy(true)
   );
+  useEffect(() => {
+    if (!roleCode || !roles.isSuccess) return;
+    if (!roles.data.some(role => role.code === roleCode && role.permissionLabels.length > 0)) {
+      setRoleCode("");
+      setError("已选角色已删除或没有有效权限，请重新选择。");
+    }
+  }, [roleCode, roles.data, roles.isSuccess]);
   const assignments = trpc.workflow.customRoleAssignments.useQuery(
     { workflowId, page, query: queries.assignments },
     {
@@ -166,7 +174,7 @@ export default function WorkflowRoleBindingsDialog({
               className="aiflow-type-control min-h-11 w-full rounded-md border border-border bg-background px-3"
               value={roleCode}
               disabled={busy || roles.isLoading || roles.isError}
-              onChange={event => setRoleCode(event.target.value)}
+              onChange={event => { setRoleCode(event.target.value); setError(""); }}
             >
               <option value="">请选择自定义流程角色</option>
               {roles.data?.map(role => (

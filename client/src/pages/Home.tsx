@@ -3630,6 +3630,7 @@ function IamCenter({
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState("");
+  const [userStatus, setUserStatus] = useState<"active" | "disabled" | "all">("active");
   const [userPage, setUserPage] = useState(0);
   const [rolePage, setRolePage] = useState(0);
   const [auditPage, setAuditPage] = useState(0);
@@ -3664,6 +3665,7 @@ function IamCenter({
   const userDirectory = trpc.iam.userDirectory.useQuery(
     {
       search: userSearch.trim(),
+      status: userStatus === "all" ? undefined : userStatus,
       offset: userPage * userPageSize,
       limit: userPageSize,
     },
@@ -3818,9 +3820,14 @@ function IamCenter({
     if (
       first &&
       !filteredUsers.some(account => Number(account.id) === selectedUserId)
-    )
+    ) {
+      setMobileUserDetailsOpen(false);
       setSelectedUserId(Number(first.id));
-    if (!first && selectedUserId !== null) setSelectedUserId(null);
+    }
+    if (!first && selectedUserId !== null) {
+      setMobileUserDetailsOpen(false);
+      setSelectedUserId(null);
+    }
   }, [
     filteredUsers,
     selectedUserId,
@@ -4565,6 +4572,20 @@ function IamCenter({
                   }}
                 />
               </label>
+              <label className="mt-3 grid gap-1.5 text-sm text-muted-foreground">
+                账号状态
+                <select aria-label="账号状态" className="aiflow-type-control min-h-11 rounded-md border border-input bg-card px-3 text-foreground min-[1024px]:min-h-10" value={userStatus} onChange={event => {
+                  setUserStatus(event.target.value as typeof userStatus);
+                  setUserPage(0);
+                  setSelectedUserId(null);
+                  setMobileUserDetailsOpen(false);
+                }}>
+                  <option value="active">启用账号</option>
+                  <option value="disabled">停用账号</option>
+                  <option value="all">全部账号</option>
+                </select>
+              </label>
+              <p className="mt-2 text-xs text-muted-foreground">默认显示启用账号；查看停用账号请切换状态。</p>
             </div>
             <div className="p-2">
               {userDirectory.isPending && (

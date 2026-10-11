@@ -68,6 +68,34 @@ const definition = {
   edges: [{ id: "start-end", sourceNodeId: "start", targetNodeId: "end" }],
 };
 if (stage === "prepare" || apiOnly) {
+  let browserRole = null;
+  if (process.env.FLOW_ROLE_BROWSER_CODE) {
+    assert(
+      !apiOnly,
+      "Existing browser roles are only accepted in prepare mode"
+    );
+    assert(
+      /^custom_ui_browser_\d{8}_\d{4}$/.test(process.env.FLOW_ROLE_BROWSER_CODE)
+    );
+    browserRole = (await admin("iam.roles", {})).find(
+      role => role.code === process.env.FLOW_ROLE_BROWSER_CODE
+    );
+    assert(
+      browserRole &&
+        Number(browserRole.isSystem) === 0 &&
+        browserRole.scope === "workflow"
+    );
+    assert(/^浏览器角色配置验收_\d{4}_已编辑$/.test(browserRole.name));
+    assert(
+      String(browserRole.description).startsWith("浏览器创建与编辑已验证")
+    );
+    assert.deepEqual(
+      typeof browserRole.permissions === "string"
+        ? JSON.parse(browserRole.permissions)
+        : browserRole.permissions,
+      ["workflow:view"]
+    );
+  }
   const tag = randomBytes(4).toString("hex");
   const password = `Test9_${randomBytes(24).toString("hex")}`;
   const username = `roleui_${tag}`;
@@ -108,9 +136,11 @@ if (stage === "prepare" || apiOnly) {
     userId: user.userId,
     workflowId: target.id,
     siblingId: sibling.id,
-    roleCode: `custom_ui_${tag}`,
-    roleName: `角色闭环验证_${tag}`,
-    description: `隔离角色闭环_${tag}`,
+    roleCode: browserRole?.code ?? `custom_ui_${tag}`,
+    roleName: browserRole?.name ?? `角色闭环验证_${tag}`,
+    description: browserRole?.description ?? `隔离角色闭环_${tag}`,
+    browserOwnedRole: Boolean(browserRole),
+    editedRoleName: browserRole?.name,
   };
   writeFileSync(manifestPath(tag), JSON.stringify(meta), {
     mode: 0o600,
@@ -173,7 +203,10 @@ if (stage !== "prepare") {
   const meta = JSON.parse(readFileSync(manifestPath(tag), "utf8"));
   assert.equal(meta.tag, tag);
   assert.equal(meta.username, `roleui_${tag}`);
-  assert.equal(meta.roleCode, `custom_ui_${tag}`);
+  if (meta.browserOwnedRole) {
+    assert(/^custom_ui_browser_\d{8}_\d{4}$/.test(meta.roleCode));
+    assert(/^浏览器角色配置验收_\d{4}_已编辑$/.test(meta.editedRoleName));
+  } else assert.equal(meta.roleCode, `custom_ui_${tag}`);
   const account = await admin("iam.userAuthorizationDetails", {
     userId: meta.userId,
   });
@@ -239,7 +272,7 @@ if (stage !== "prepare") {
     assert(role, "Create the exact own role in the browser first");
     assert.equal(
       role.name,
-      `${meta.roleName}_已调整`,
+      meta.editedRoleName ?? `${meta.roleName}_已调整`,
       "Edit the own role name in the browser before verification"
     );
     const perms =

@@ -388,7 +388,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalBytes = 1_420 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 421 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 422 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -1063,7 +1063,7 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).not.toContain('{ id: "organization" as const');
     expect(systemConfigSource).not.toContain('{ id: "identity" as const');
     expect(systemConfigSource).toContain(
-      "组织、账号、角色和权限统一从一个入口管理"
+      "维护部门成员与岗位，配置账号角色，查看授权来源和有效期。"
     );
     expect(systemConfigSource).toContain("打开身份与权限中心");
     expect(organizationManagementSource).toContain(
@@ -3786,4 +3786,21 @@ it("窄屏普通节点选择定位配置区，多选不跳转并可返回画布"
   expect(canvasSource).toContain("canvasRegionRef.current?.focus({ preventScroll: true })");
   expect(canvasSource).toContain("返回画布</button>");
   expect(canvasSource).toContain("window.cancelAnimationFrame(inspectorRevealFrameRef.current)");
+});
+it("人员目录默认启用并按服务端状态筛选，切换后重置分页与详情", () => {
+  expect(homeSource).toContain('useState<"active" | "disabled" | "all">("active")');
+  expect(homeSource).toContain('status: userStatus === "all" ? undefined : userStatus');
+  const filter = homeSource.slice(homeSource.indexOf('<select aria-label="账号状态"'));
+  expect(filter.slice(0, 700)).toContain("setUserPage(0)");
+  expect(filter.slice(0, 700)).toContain("setSelectedUserId(null)");
+  expect(filter.slice(0, 700)).toContain("setMobileUserDetailsOpen(false)");
+  expect(homeSource).toContain("默认显示启用账号；查看停用账号请切换状态。");
+});
+it("流程角色目录在绑定页打开时刷新并清除已失效选择", () => {
+  const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");
+  expect(bindings).toContain("authorizationQueryPolicy(true)");
+  expect(bindings).toContain("if (!roleCode || !roles.isSuccess) return");
+  expect(bindings).toContain("role.code === roleCode && role.permissionLabels.length > 0");
+  expect(bindings).toContain("已选角色已删除或没有有效权限，请重新选择。");
+  expect(bindings).toContain('setRoleCode(event.target.value); setError("")');
 });

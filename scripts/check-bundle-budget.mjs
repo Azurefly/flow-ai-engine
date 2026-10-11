@@ -12,9 +12,9 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Narrow-screen inspector navigation: 1419.07 KiB raw / 420.97 KiB gzip.
+// Account status filtering and live role catalog: 1419.98 KiB raw / 421.15 KiB gzip.
 const maxTotalBytes = 1_420 * 1024;
-const maxTotalGzipBytes = 421 * 1024;
+const maxTotalGzipBytes = 422 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

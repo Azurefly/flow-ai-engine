@@ -1154,7 +1154,7 @@ function AccessSettings({
       <Header
         eyebrow="ORGANIZATION & AUTHORIZATION"
         title="组织与权限"
-        description="组织、账号、角色和权限统一从一个入口管理，避免系统配置中出现功能重叠的并列菜单。"
+        description="维护部门成员与岗位，配置账号角色，查看授权来源和有效期。"
       />
       <div className="mt-6 grid gap-4 md:grid-cols-2">
         <section className={accessCardClassName}>
