@@ -355,7 +355,6 @@ try {
       assert.equal(
         output.outcome,
         customOutcome,
-        flowType,
         "Custom outcome must survive deferred continuation"
       );
       assert.equal(
@@ -406,6 +405,7 @@ try {
         status: "success",
         concurrentHumanTasks: branchCount,
         customOutcome,
+        flowType,
         deferredContinuations,
         recoveredContinuations,
         publishedMode,
