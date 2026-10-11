@@ -2431,6 +2431,17 @@ export default function WorkflowCanvas({
       inspectorHeadingRef.current?.focus({ preventScroll: true });
     });
   }, [prefersReducedMotion]);
+  const inspectCanvasNode = useCallback((nodeId: string) => {
+    const node = latestNodesRef.current.find(item => item.id === nodeId);
+    if (!node) return;
+    setSelectedId(node.id);
+    setSelectedEdgeId(null);
+    setContextMenu(null);
+    setInspectorMode("normal");
+    setNodes(current => current.map(item => ({ ...item, selected: item.id === node.id })));
+    reactFlow?.fitView({ ...automaticCanvasFit(compactReadOnlyPreview, node.id), duration: prefersReducedMotion ? 0 : 180 });
+    revealInspector();
+  }, [compactReadOnlyPreview, prefersReducedMotion, reactFlow, revealInspector, setNodes]);
   useEffect(() => () => {
     if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
   }, []);
@@ -4115,6 +4126,20 @@ export default function WorkflowCanvas({
                   <span className="hidden sm:inline">整理画布</span>
                 </Button>
               )}
+              <select
+                aria-label="定位并配置节点"
+                className="aiflow-type-control h-11 min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-foreground sm:max-w-64 min-[1024px]:h-9"
+                value={selectedId ?? ""}
+                disabled={!nodes.length}
+                onChange={event => inspectCanvasNode(event.target.value)}
+              >
+                <option value="" disabled>选择节点（共 {nodes.length} 个）</option>
+                {nodes.map(node => (
+                  <option key={node.id} value={node.id}>
+                    {String(node.data.label || "未命名节点")} · {FLOW_NODE_DEFINITIONS[node.data.kind]?.label ?? node.data.kind} · {node.id}
+                  </option>
+                ))}
+              </select>
               <Button
                 type="button"
                 variant="ghost"

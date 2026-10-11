@@ -3,7 +3,7 @@
 
 /* Desktop editor uses one bounded workspace; only the inspector scrolls. */
 @media (min-width: 1024px) {
-  [data-workflow-editor] {
+  [data-workflow-editor]:not(:fullscreen) {
     height: max(520px, calc(100dvh - 200px));
     min-height: 0;
     grid-template-rows: minmax(0, 1fr);
@@ -19,7 +19,7 @@
     height: auto;
     min-height: 0;
   }
-  [data-workflow-editor] [data-workflow-inspector] {
+  [data-workflow-editor]:not(:fullscreen) [data-workflow-inspector] {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -31,7 +31,7 @@
     z-index: 10;
     background: var(--card);
   }
-  [data-workflow-editor] [data-workflow-inspector-content] {
+  [data-workflow-editor]:not(:fullscreen) [data-workflow-inspector-content] {
     max-height: none;
     overflow: visible;
   }

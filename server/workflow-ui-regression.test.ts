@@ -387,7 +387,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_420 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_422 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 422 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -3795,6 +3795,25 @@ it("全屏包含节点检查器，面板有独立滚动且窄屏可返回画布"
   expect(canvasSource).toContain("h-[100dvh] min-h-0 overflow-y-auto");
   expect(canvasSource).toContain("lg:grid-rows-[minmax(0,1fr)_auto]");
   expect(canvasSource).toContain('fullscreen ? "min-h-0 overflow-y-auto lg:flex-1"');
+});
+it("三类流程可从节点选择器定位配置，且不改动定义和撤销历史", () => {
+  expect(canvasSource).toContain('aria-label="定位并配置节点"');
+  expect(canvasSource).toContain("onChange={event => inspectCanvasNode(event.target.value)}");
+  expect(canvasSource).toContain("value={selectedId ?? \"\"}");
+  expect(canvasSource).toContain("<option key={node.id} value={node.id}>");
+  const inspect = canvasSource.split("const inspectCanvasNode =")[1]?.split("useEffect")[0];
+  expect(inspect).toContain("latestNodesRef.current.find");
+  expect(inspect).toContain('setInspectorMode("normal")');
+  expect(inspect).toContain("setSelectedEdgeId(null)");
+  expect(inspect).toContain("revealInspector()");
+  expect(inspect).toContain("automaticCanvasFit(compactReadOnlyPreview, node.id)");
+  expect(inspect).not.toContain("pushHistory");
+  expect(inspect).not.toContain("onDefinitionChange");
+});
+it("普通编辑器高度和滚动规则不覆盖原生全屏布局", () => {
+  expect(styleSource).toContain("[data-workflow-editor]:not(:fullscreen) {");
+  expect(styleSource).toContain("[data-workflow-editor]:not(:fullscreen) [data-workflow-inspector] {");
+  expect(styleSource).toContain("[data-workflow-editor]:not(:fullscreen) [data-workflow-inspector-content] {");
 });
 it("全屏弹窗、菜单和人员选择浮层留在全屏元素内并响应退出", () => {
   for (const path of ["dialog", "dropdown-menu", "popover"]) {

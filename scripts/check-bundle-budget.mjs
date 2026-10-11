@@ -12,8 +12,8 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Fullscreen inspector and overlays: 1420.46 KiB raw / 421.33 KiB gzip.
-const maxTotalBytes = 1_421 * 1024;
+// Node locator and fullscreen scroll: 1421.18 KiB raw / 421.52 KiB gzip.
+const maxTotalBytes = 1_422 * 1024;
 const maxTotalGzipBytes = 422 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
