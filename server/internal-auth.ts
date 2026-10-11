@@ -165,17 +165,28 @@ export async function createUser(values: {
   if (!/^[a-z][a-z0-9._-]{2,63}$/.test(username))
     throw new Error("用户名格式无效。");
   const passwordHash = await hashPassword(values.password);
-  const [result] = await db().query<mysql.ResultSetHeader>(
-    "INSERT INTO users (openId,username,passwordHash,name,email,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,'active','internal',NOW())",
-    [
-      `internal:${username}`,
-      username,
-      passwordHash,
-      values.name.trim(),
-      values.email ?? null,
-      values.role ?? "user",
-    ]
-  );
+  let result: mysql.ResultSetHeader;
+  try {
+    [result] = await db().query<mysql.ResultSetHeader>(
+      "INSERT INTO users (openId,username,passwordHash,name,email,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,'active','internal',NOW())",
+      [
+        `internal:${username}`,
+        username,
+        passwordHash,
+        values.name.trim(),
+        values.email ?? null,
+        values.role ?? "user",
+      ]
+    );
+  } catch (error) {
+    const failure = error as { code?: string; errno?: number; message?: string };
+    if (
+      (failure?.code === "ER_DUP_ENTRY" || failure?.errno === 1062) &&
+      /users_(?:username|openId)_unique/.test(failure.message ?? "")
+    )
+      throw new Error("用户名已存在，请更换用户名。", { cause: error });
+    throw error;
+  }
   return result.insertId;
 }
 export async function setUserStatus(

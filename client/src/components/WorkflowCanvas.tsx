@@ -2394,6 +2394,7 @@ export default function WorkflowCanvas({
   const previousInspectorExpandedRef = useRef(false);
   const [inspectorLocked, setInspectorLocked] = useState(false);
   const [inspectorTab, setInspectorTab] = useState("");
+  const inspectorTabId = useId();
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance<
     CanvasNode,
     Edge
@@ -4604,6 +4605,9 @@ export default function WorkflowCanvas({
                         : selectedConfigState === "editing"
                           ? "已配置（默认）"
                           : "已配置"}
+                      {selected.data.kind === "operate" && readOperateOutcomeMode(selectedConfig) === "legacy_cancel" && (
+                        <button type="button" className="ml-2 min-h-11 text-aiflow-warning underline" onClick={() => setInspectorTab("结果与分支")}>兼容分支</button>
+                      )}
                     </p>
                     {selectedConfigAssessment?.error && (
                       <p
@@ -4615,15 +4619,74 @@ export default function WorkflowCanvas({
                       </p>
                     )}
                   </div>
+                </div>
+                <div
+                  role="tablist"
+                  aria-label={`${selectedDefinition.label}配置分类`}
+                  className="sticky top-0 z-10 grid min-w-0 grid-cols-2 gap-1.5 border-y border-border bg-muted px-3 py-2 sm:flex sm:flex-wrap"
+                  onKeyDown={event => {
+                    const current = selectedFieldGroups.findIndex(group => group.label === activeInspectorGroup?.label);
+                    const target = event.key === "Home" ? 0 : event.key === "End" ? selectedFieldGroups.length - 1 : event.key === "ArrowRight" ? (current + 1) % selectedFieldGroups.length : event.key === "ArrowLeft" ? (current - 1 + selectedFieldGroups.length) % selectedFieldGroups.length : null;
+                    if (target === null) return;
+                    event.preventDefault();
+                    setInspectorTab(selectedFieldGroups[target].label);
+                    event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]')[target]?.focus();
+                  }}
+                >
+                  {selectedFieldGroups.map(group => (
+                    <button
+                      key={group.label}
+                      type="button"
+                      role="tab"
+                      id={`${inspectorTabId}-${group.label}`}
+                      aria-controls={`${inspectorTabId}-panel`}
+                      tabIndex={activeInspectorGroup?.label === group.label ? 0 : -1}
+                      aria-selected={
+                        activeInspectorGroup?.label === group.label
+                      }
+                      className={`min-w-0 whitespace-normal rounded-lg px-2 py-1.5 text-xs font-medium transition-all sm:px-3 ${
+                        activeInspectorGroup?.label === group.label
+                          ? "bg-blue-600 text-white shadow-xs"
+                          : "border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                      onClick={() => setInspectorTab(group.label)}
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
+                {activeInspectorGroup && (
+                  <section
+                    role="tabpanel"
+                    id={`${inspectorTabId}-panel`}
+                    aria-labelledby={`${inspectorTabId}-${activeInspectorGroup.label}`}
+                    className="m-4 rounded-xl border border-border bg-card p-4 shadow-sm"
+                  >
+                      {selected.data.kind === "router" &&
+                        activeInspectorGroup.label === "兼容规则" && (
+                          <p className="aiflow-type-body mt-2 text-muted-foreground">
+                            {Array.isArray(selected.data.config.routes) &&
+                            selected.data.config.routes.length
+                              ? "当前使用“分支规则”；兼容字段不覆盖已有规则。"
+                              : "未配置分支规则时使用兼容规则。请优先维护“分支规则”。"}
+                          </p>
+                        )}
+                      {selected.data.kind === "operate" &&
+                        activeInspectorGroup.label === "高级配置" && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            兼容对象、身份与自动执行配置。请先设置处理人、表单和结果分支。
+                          </p>
+                        )}
                   {selected.data.kind === "operate" &&
+                    activeInspectorGroup.label === "结果与分支" &&
                     readOperateOutcomeMode(selectedConfig) ===
                       "legacy_cancel" && (
-                      <div className="aiflow-type-body rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-aiflow-warning">
-                        该历史操作仍使用“拒绝即取消实例”的兼容语义。请将结果路由模式改为显式出口，并分别连接同意、拒绝分支。
+                      <div className="mb-4 aiflow-type-body rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-aiflow-warning">
+                        当前为兼容分支：同意后继续，拒绝即取消实例。切换为显式出口可配置各结果的后续节点。
                       </div>
                     )}
-                  {selected.data.kind === "operate" && workflowId && (
-                    <div className="aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
+                  {selected.data.kind === "operate" && activeInspectorGroup.label === "处理人" && workflowId && (
+                    <div className="mb-4 aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="font-semibold">参与人解析预览</p>
@@ -4672,7 +4735,7 @@ export default function WorkflowCanvas({
                             {participantPreview.data.fallbackApplied && (
                               <p className="text-aiflow-warning">
                                 已使用兜底：
-                                {participantPreview.data.fallbackApplied}
+                                {participantPreview.data.fallbackApplied === "owner" ? "流程所有者" : "流程发起人"}
                               </p>
                             )}
                           </div>
@@ -4686,56 +4749,6 @@ export default function WorkflowCanvas({
                         )}
                     </div>
                   )}
-                </div>
-                <div
-                  role="tablist"
-                  aria-label={`${selectedDefinition.label}配置分类`}
-                  className="grid min-w-0 grid-cols-2 gap-1.5 border-y border-border bg-muted/80 px-3 py-2 sm:flex sm:flex-wrap"
-                >
-                  {selectedFieldGroups.map(group => (
-                    <button
-                      key={group.label}
-                      type="button"
-                      role="tab"
-                      aria-selected={
-                        activeInspectorGroup?.label === group.label
-                      }
-                      className={`min-w-0 whitespace-normal rounded-lg px-2 py-1.5 text-xs font-medium transition-all sm:px-3 ${
-                        activeInspectorGroup?.label === group.label
-                          ? "bg-blue-600 text-white shadow-xs"
-                          : "border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                      onClick={() => setInspectorTab(group.label)}
-                    >
-                      {group.label}
-                    </button>
-                  ))}
-                </div>
-                {activeInspectorGroup && (
-                  <section
-                    role="tabpanel"
-                    className="m-4 rounded-xl border border-border bg-card p-4 shadow-sm"
-                  >
-                    <div className="mb-4">
-                      <h3 className="aiflow-type-section-title font-semibold text-foreground">
-                        {activeInspectorGroup.label}
-                      </h3>
-                      {selected.data.kind === "router" &&
-                        activeInspectorGroup.label === "兼容规则" && (
-                          <p className="aiflow-type-body mt-2 text-muted-foreground">
-                            {Array.isArray(selected.data.config.routes) &&
-                            selected.data.config.routes.length
-                              ? "当前运行优先使用“分支规则”页签中的规则。此处保留原版迁移字段，修改它们不会覆盖已配置的分支规则。"
-                              : "未配置分支规则时会读取原版兼容规则。新增或维护路由请优先使用“分支规则”页签。"}
-                          </p>
-                        )}
-                      {selected.data.kind === "operate" &&
-                        activeInspectorGroup.label === "高级配置" && (
-                          <p className="mt-2 text-xs text-muted-foreground">
-                            对象绑定、身份传递和历史自动执行配置。常规人工办理请先设置处理人、表单与结果分支。
-                          </p>
-                        )}
-                    </div>
                     <div className="space-y-4">
                       {activeInspectorGroup.fields.map(field => {
                         const fieldValue =

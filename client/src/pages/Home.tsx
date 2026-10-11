@@ -3507,6 +3507,13 @@ type InternalUserForm = {
   role: "user" | "admin";
 };
 
+const internalAccountFields = [
+  { key: "username", label: "用户名（3–64 位）", type: "text", placeholder: "字母开头，可含数字和 ._-", minLength: 3, maxLength: 64, pattern: "[A-Za-z][A-Za-z0-9._\\-]{2,63}" },
+  { key: "name", label: "显示名称", type: "text", placeholder: "填写显示名称", maxLength: 160 },
+  { key: "password", label: "初始密码（至少 12 位）", type: "password", placeholder: "包含字母和数字或符号", minLength: 12, maxLength: 256, pattern: "(?=.*[A-Za-z])(?=.*[0-9\\W_]).{12,256}" },
+  { key: "email", label: "邮箱（可选）", type: "email", placeholder: "name@example.com" },
+] as const;
+
 type AiInternalUserForm = {
   goal: string;
   maxUsers: string;
@@ -3625,6 +3632,7 @@ function IamCenter({
   const rolePageSize = 10;
   const auditPageSize = 10;
   const [normalDialogOpen, setNormalDialogOpen] = useState(false);
+  const [normalError, setNormalError] = useState("");
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [tab, setTab] = useState<"users" | "roles" | "audit">("users");
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
@@ -3874,8 +3882,13 @@ function IamCenter({
   }, [aiPreview]);
 
   const submitNormalUser = async () => {
-    await onCreate();
-    setNormalDialogOpen(false);
+    setNormalError("");
+    try {
+      await onCreate();
+      setNormalDialogOpen(false);
+    } catch (error) {
+      setNormalError(error instanceof Error ? error.message : "创建账号失败，请重试。");
+    }
   };
 
   const submitAiUser = async () => {
@@ -4014,7 +4027,7 @@ function IamCenter({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setNormalDialogOpen(true)}>
+              <DropdownMenuItem onClick={() => { setNormalError(""); setNormalDialogOpen(true); }}>
                 <Plus size={14} />
                 新增单个账号
               </DropdownMenuItem>
@@ -4038,40 +4051,25 @@ function IamCenter({
         open={normalDialogOpen}
         onOpenChange={setNormalDialogOpen}
         title="新增内部账号"
-        description="填写账号信息并确认创建；取消保留现有账号。"
+        description="填写账号信息和初始密码。"
         submitLabel="创建账号"
         pending={creating}
+        errorMessage={normalError}
         onSubmit={submitNormalUser}
       >
-        <Input
-          autoFocus
-          placeholder="用户名"
-          value={form.username}
-          onChange={event => setForm({ ...form, username: event.target.value })}
-          required
-        />
-        <Input
-          placeholder="显示名称"
-          value={form.name}
-          onChange={event => setForm({ ...form, name: event.target.value })}
-          required
-        />
-        <Input
-          type="password"
-          minLength={12}
-          placeholder="至少 12 位密码"
-          value={form.password}
-          onChange={event => setForm({ ...form, password: event.target.value })}
-          required
-        />
-        <Input
-          type="email"
-          placeholder="邮箱（可选）"
-          value={form.email}
-          onChange={event => setForm({ ...form, email: event.target.value })}
-        />
+        {internalAccountFields.map(({ key, label, ...props }) => (
+          <label key={key} className="grid gap-1.5 text-sm font-medium text-foreground">
+            {label}
+            <Input {...props} className="h-11" autoFocus={key === "username"}
+              autoComplete={key === "password" ? "new-password" : "off"}
+              value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })}
+              required={key !== "email"} />
+          </label>
+        ))}
+        <label className="grid gap-1.5 text-sm font-medium text-foreground">
+          账号类型
         <select
-          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-11 rounded-md border border-border bg-card px-2 text-sm"
           value={form.role}
           onChange={event =>
             setForm({
@@ -4083,6 +4081,7 @@ function IamCenter({
           <option value="user">普通用户</option>
           <option value="admin">管理员</option>
         </select>
+        </label>
       </CreationDialog>
 
       <CreationDialog

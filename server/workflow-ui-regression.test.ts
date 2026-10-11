@@ -3644,8 +3644,8 @@ it("路由默认展示实际分支规则，并解释兼容规则执行优先级"
   expect(groups.indexOf('label: "基础信息"')).toBeLessThan(
     groups.indexOf('label: "兼容规则"')
   );
-  expect(canvasSource).toContain("修改它们不会覆盖已配置的分支规则");
-  expect(canvasSource).toContain("未配置分支规则时会读取原版兼容规则");
+  expect(canvasSource).toContain("兼容字段不覆盖已有规则");
+  expect(canvasSource).toContain("未配置分支规则时使用兼容规则");
 });
 
 it("路由分支可直接配置优先级并同步默认与兼容字段", () => {
