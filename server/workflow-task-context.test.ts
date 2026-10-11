@@ -145,3 +145,175 @@ it("人工任务完成使用行锁获取的最新上下文，保留另一分支�
   expect(mocks.commit).toHaveBeenCalledOnce();
   expect(mocks.rollback).not.toHaveBeenCalled();
 });
+
+it.each([
+  {
+    decision: "approved",
+    outcome: "revise",
+    expectedDecision: "approved",
+    approved: 1,
+    rejected: 0,
+  },
+  {
+    decision: "rejected",
+    outcome: "send_back",
+    expectedDecision: "rejected",
+    approved: 0,
+    rejected: 1,
+  },
+  {
+    decision: "abstained",
+    outcome: "abstained",
+    expectedDecision: "rejected",
+    approved: 0,
+    rejected: 0,
+  },
+])("补偿续跑保留单人操作结果 $outcome 和正确的签署统计", async sample => {
+  const task = {
+    id: "task",
+    runId: "run",
+    nodeId: "review",
+    nodeName: "审核",
+    nodeRunId: "node-run",
+    assignedUserId: 11,
+    completedByUserId: 11,
+    operationCode: "REVIEW",
+    responsibleUserId: 33,
+    representedUserId: 44,
+    delegationId: "delegation",
+    resultJson: JSON.stringify({
+      decision: sample.decision,
+      outcome: sample.outcome,
+      comment: "请修改后提交",
+      field: "原始表单值",
+    }),
+    payloadJson: JSON.stringify({ parallelTokens: [] }),
+    nextNodeIdsJson: JSON.stringify(["wrong-default"]),
+    outcomeHandlesJson: JSON.stringify({
+      mode: "explicit",
+      handles: { [sample.outcome]: "selected" },
+    }),
+    definitionSnapshotJson: JSON.stringify({
+      nodes: [],
+      edges: [
+        {
+          sourceNodeId: "review",
+          sourceHandle: "selected",
+          targetNodeId: "next",
+        },
+      ],
+    }),
+  };
+  const latest = {
+    vars: { sibling: "已完成" },
+    nodes: {},
+    runtime: {
+      executionQueue: ["other-next"],
+      parallelCheckpoint: {
+        frames: {},
+        queue: [{ nodeId: "other-next", tokens: [] }],
+      },
+    },
+  };
+  mocks.query.mockImplementation(async (sql: string) => {
+    if (sql.includes("FROM workflow_task t")) return [[task]];
+    if (sql.includes("FROM workflow_run WHERE"))
+      return [
+        [
+          {
+            id: "run",
+            status: "waiting",
+            contextJson: JSON.stringify(latest),
+            startedAt: new Date(),
+          },
+        ],
+      ];
+    if (sql.includes("FROM workflow_run_job")) return [[]];
+    if (sql.includes("SELECT id,startedAt FROM workflow_node_run"))
+      return [[{ id: "node-run", startedAt: new Date() }]];
+    return [{ affectedRows: 1 }];
+  });
+  await expect(reconcileWorkflowContinuations()).resolves.toBe(1);
+  const insert = mocks.query.mock.calls.find(([sql]) =>
+    sql.includes("INSERT INTO workflow_run_job")
+  );
+  const checkpoint = JSON.parse(insert![1][3]);
+  expect(checkpoint.queue).toEqual(["other-next", "next"]);
+  expect(checkpoint.context.vars.sibling).toBe("已完成");
+  expect(checkpoint.context.vars.review).toMatchObject({
+    decision: sample.expectedDecision,
+    outcome: sample.outcome,
+    operationCode: "REVIEW",
+    completedByUserId: 11,
+    responsibleUserId: 33,
+    representedUserId: 44,
+    delegationId: "delegation",
+    result: { field: "原始表单值" },
+    approvalProgress: {
+      approved: sample.approved,
+      rejected: sample.rejected,
+      decided: 1,
+    },
+  });
+  expect(checkpoint.context.runtime.roleKeysByUser["11"]).toContain("sender");
+  expect(checkpoint.context.runtime.participantUserIds).toContain(11);
+});
+
+it("会签补偿使用最终决定任务的处理人，不能按成员创建顺序猜测", async () => {
+  const task = {
+    id: "first-member",
+    runId: "run",
+    nodeId: "review",
+    nodeRunId: "node-run",
+    approvalGroupId: "group",
+    groupStatus: "completed",
+    groupOutcome: "approved",
+    requiredApprovals: 2,
+    totalApprovers: 2,
+    assignedUserId: 11,
+    completedByUserId: 11,
+    resultJson: JSON.stringify({ decision: "approved", outcome: "approved" }),
+    nextNodeIdsJson: "[]",
+    payloadJson: "{}",
+  };
+  mocks.query.mockImplementation(async (sql: string) => {
+    if (sql.includes("FROM workflow_task t")) return [[task]];
+    if (sql.includes("FROM workflow_run WHERE"))
+      return [
+        [
+          {
+            id: "run",
+            status: "waiting",
+            contextJson: "{}",
+            startedAt: new Date(),
+          },
+        ],
+      ];
+    if (sql.includes("FROM workflow_run_job")) return [[]];
+    if (sql.includes("SELECT id,startedAt FROM workflow_node_run"))
+      return [[{ id: "node-run", startedAt: new Date() }]];
+    if (sql.includes("FROM workflow_task WHERE approvalGroupId"))
+      return [
+        [
+          {
+            id: "first-member",
+            completedByUserId: 11,
+            resultJson: task.resultJson,
+          },
+          {
+            id: "second-member",
+            completedByUserId: 22,
+            resultJson: task.resultJson,
+          },
+        ],
+      ];
+    return [{ affectedRows: 1 }];
+  });
+  expect(await reconcileWorkflowContinuations()).toBe(1);
+  const insert = mocks.query.mock.calls.find(([sql]) =>
+    sql.includes("INSERT INTO workflow_run_job")
+  );
+  expect(JSON.parse(insert![1][3]).context.vars.review.completedByUserId).toBe(
+    11
+  );
+});

@@ -4727,34 +4727,42 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       const groupResults = memberRows.map(member =>
         readJson(member.resultJson)
       );
-      const lastMember = memberRows[memberRows.length - 1] ?? task;
+      const normalizedTaskResult = normalizeApprovalResult(
+        asRecord(readJson(task.resultJson))
+      );
+      const progress = evaluateApprovalResults({
+        totalApprovers: Number(task.totalApprovers ?? 1),
+        requiredApprovals: Number(task.requiredApprovals ?? 1),
+        results: groupResults,
+      });
       const rejected = task.approvalGroupId
         ? task.groupOutcome === "rejected" || task.groupStatus === "cancelled"
-        : normalizeApprovalResult(asRecord(readJson(task.resultJson)))
-            .decision === "rejected";
-      const approvedCount = groupResults.filter(
-        item => normalizeApprovalResult(asRecord(item)).decision === "approved"
-      ).length;
-      const rejectedCount = groupResults.length - approvedCount;
+        : progress.outcome === "rejected";
       const taskOutput = {
         taskId: String(task.id),
         approvalGroupId: task.approvalGroupId ?? null,
         signMode: task.signMode ?? "single",
         completedByUserId: Number(
-          lastMember.completedByUserId || lastMember.assignedUserId
+          task.completedByUserId || task.assignedUserId
         ),
+        responsibleUserId:
+          Number(task.responsibleUserId) ||
+          Number(task.completedByUserId || task.assignedUserId),
+        representedUserId: Number(task.representedUserId) || null,
+        delegationId: task.delegationId ?? null,
         operationName: task.operationName ?? task.nodeName,
+        operationCode: task.operationCode ?? task.nodeId,
         decision: rejected ? "rejected" : "approved",
-        outcome: String(
-          task.groupOutcome || (rejected ? "rejected" : "approved")
-        ),
+        outcome: task.approvalGroupId
+          ? String(task.groupOutcome || progress.outcome)
+          : normalizedTaskResult.outcome,
         result: readJson(task.resultJson),
         groupResults,
         approvalProgress: {
-          completed: approvedCount,
-          approved: approvedCount,
-          rejected: rejectedCount,
-          decided: groupResults.length,
+          completed: progress.approved,
+          approved: progress.approved,
+          rejected: progress.rejected,
+          decided: progress.completed,
           required: Number(task.requiredApprovals ?? 1),
           total: Number(task.totalApprovers ?? 1),
         },
@@ -4778,6 +4786,8 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       runtime.representedUserId = Number(task.representedUserId) || null;
       runtime.delegationId = task.delegationId ?? null;
       context.runtime = runtime;
+      updateRuntimeRoles(context, [taskOutput.completedByUserId], [], "sender");
+      addRuntimeParticipants(context, [taskOutput.completedByUserId]);
       const vars = asRecord(context.vars);
       const nodeOutputs = asRecord(context.nodes);
       vars[String(task.nodeId)] = taskOutput;
@@ -4826,7 +4836,11 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         );
       } else {
         restoreHumanCreationRuntime(context, readJson(task.payloadJson));
-        completeCurrentHumanCheckpoint(asRecord(context.runtime), String(task.nodeId), task.executionKey);
+        completeCurrentHumanCheckpoint(
+          asRecord(context.runtime),
+          String(task.nodeId),
+          task.executionKey
+        );
         const nextNodeIds = readJson(task.nextNodeIdsJson);
         let queue = Array.isArray(nextNodeIds) ? nextNodeIds.map(String) : [];
         if (outcomeRouting.mode === "explicit") {

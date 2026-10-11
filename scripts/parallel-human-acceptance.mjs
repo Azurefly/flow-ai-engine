@@ -39,202 +39,398 @@ assert(username && password, "Missing existing login configuration");
 await admin.request("auth.login", { username, password }, true);
 const tag = randomBytes(4).toString("hex");
 const publishedMode = process.env.FLOW_PARALLEL_PUBLISHED === "1";
+const customOutcome = process.env.FLOW_PARALLEL_CUSTOM_OUTCOME || "approved";
+assert(
+  ["approved", "revise", "send_back", "abstained"].includes(customOutcome),
+  "Unsupported test outcome"
+);
+const selectedDecision =
+  customOutcome === "send_back"
+    ? "rejected"
+    : customOutcome === "abstained"
+      ? "abstained"
+      : "approved";
+const branchCount = customOutcome === "approved" ? 2 : 6;
+const flowType = process.env.FLOW_PARALLEL_FLOW_TYPE || "control";
+assert(["control", "state"].includes(flowType), "Unsupported flow type");
 const runner = publishedMode ? new Session() : admin;
 let userId;
 let grantedWorkflowId;
 try {
-if (publishedMode) {
-  const memberPassword = `Test9_${randomBytes(24).toString("base64url")}`;
-  const created = await admin.request("iam.createUser", { username: `human_parallel_${tag}`, name: `正式并行办理_${tag}`, password: memberPassword, role: "user" }, true);
-  userId = created.userId;
-  await runner.request("auth.login", { username: `human_parallel_${tag}`, password: memberPassword }, true);
-}
-const project = await admin.request(
-  "project.create",
-  { code: `PARTEST_${tag}`.toUpperCase(), name: `并行运行验证_${tag}` },
-  true
-);
-const actor = await runner.request("auth.me", null);
-const node = (id, type, config = {}, x = 0, y = 0) => ({
-  id,
-  type,
-  name: id,
-  config,
-  position: { x, y },
-});
-const branches = ["a", "b"];
-const fixture = await admin.request(
-  "project.createWorkflow",
-  {
-    projectId: project.id,
-    name: `并行人工并发_${tag}`,
-    flowType: "control",
-    definition: {
-      schemaVersion: 1,
-      viewport: { x: 0, y: 0, zoom: 1 },
-      settings: {},
-      nodes: [
-        node("start", "start"),
-        node(
-          "router",
-          "router",
-          {
-            nodeDh: `R${tag}`,
-            lymc: "并行审核",
-            broadcast: true,
-            parallelJoinNodeId: "join",
-            defaultRoute: "b",
-            routes: branches.map((id, i) => ({
-              handle: id,
-              label: id,
-              targetNodeId: id,
-              priority: 100 - i,
-              conditions: [],
-            })),
-          },
-          200
-        ),
-        ...branches.map((id, i) =>
-          node(
-            id,
-            "operate",
-            {
-              nodeDh: `APPROVE${id.toUpperCase()}`,
-              czmc: `审核${id}`,
-              instruction: "隔离测试项目功能验证",
-              assigneeMode: "user",
-              assigneeUserId: actor.id,
-              outcomeMode: "explicit",
-              outcomes: [
-                { code: "approved", label: "同意", sourceHandle: "approved" },
-                { code: "rejected", label: "拒绝", sourceHandle: "rejected" },
-              ],
-              formSchema: { fields: [] },
-            },
-            400,
-            i * 150
-          )
-        ),
-        node("join", "transform", { parallelForNodeId: "router" }, 600),
-        node("end", "end", { resultTemplate: "{{vars}}" }, 800),
-      ],
-      edges: [
-        { id: "s-r", sourceNodeId: "start", targetNodeId: "router" },
-        ...branches.flatMap(id => [
-          {
-            id: `r-${id}`,
-            sourceNodeId: "router",
-            targetNodeId: id,
-            sourceHandle: id,
-          },
-          ...["approved", "rejected"].map(outcome => ({
-            id: `${id}-${outcome}`,
-            sourceNodeId: id,
-            targetNodeId: "join",
-            sourceHandle: outcome,
-          })),
-        ]),
-        { id: "j-e", sourceNodeId: "join", targetNodeId: "end" },
-      ],
-    },
-  },
-  true
-);
-if (publishedMode) {
-  await admin.request("project.auditWorkflow", { projectId: project.id, workflowId: fixture.id, auditStatus: "approved" }, true);
-  await admin.request("workflow.publish", { id: fixture.id }, true);
-  await assert.rejects(() => runner.request("workflow.run", { workflowId: fixture.id }, true), /无权运行/);
-  await admin.request("workflow.grantMember", { workflowId: fixture.id, userId, role: "operator" }, true);
-  grantedWorkflowId = fixture.id;
-}
-const started = await runner.request(
-  "workflow.run",
-  {
-    workflowId: fixture.id,
-    triggerType: publishedMode ? "manual" : "test",
-    idempotencyKey: `human-${tag}`,
-  },
-  true
-);
-let succeeded = false;
-try {
-  await waitFor(
-    () => runner.request("workflow.runDetail", { runId: started.runId }),
-    run => run.status === "waiting",
-    "both human tasks"
+  if (publishedMode) {
+    const memberPassword = `Test9_${randomBytes(24).toString("base64url")}`;
+    const created = await admin.request(
+      "iam.createUser",
+      {
+        username: `human_parallel_${tag}`,
+        name: `正式并行办理_${tag}`,
+        password: memberPassword,
+        role: "user",
+      },
+      true
+    );
+    userId = created.userId;
+    await runner.request(
+      "auth.login",
+      { username: `human_parallel_${tag}`, password: memberPassword },
+      true
+    );
+  }
+  const project = await admin.request(
+    "project.create",
+    { code: `PARTEST_${tag}`.toUpperCase(), name: `并行运行验证_${tag}` },
+    true
   );
-  const tasks = (
-    await runner.request("task.list", { view: "todo", projectId: project.id })
-  ).filter(task => task.runId === started.runId);
-  assert.equal(tasks.length, 2, "Both parallel tasks must be visible");
-  const attempts = await Promise.allSettled(
-    tasks.map(task =>
-      runner.request(
-        "task.execute",
-        {
-          taskId: task.id,
-          result: {
-            decision: "approved",
-            outcome: "approved",
-            comment: "并行任务真实并发验证",
-          },
-        },
-        true
-      )
-    )
+  const actor = await runner.request("auth.me", null);
+  const node = (id, type, config = {}, x = 0, y = 0) => ({
+    id,
+    type,
+    name: id,
+    config,
+    position: { x, y },
+  });
+  const branches = Array.from({ length: branchCount }, (_, index) =>
+    String.fromCharCode(97 + index)
   );
-  console.log(
-    JSON.stringify({
+  const fixture = await admin.request(
+    "project.createWorkflow",
+    {
       projectId: project.id,
+      name: `并行人工并发_${tag}`,
+      flowType,
+      definition: {
+        schemaVersion: 1,
+        viewport: { x: 0, y: 0, zoom: 1 },
+        settings: {},
+        nodes: [
+          node("start", "start"),
+          ...(flowType === "state"
+            ? [
+                node("pending", "state", {
+                  stateCode: "PENDING",
+                  displayName: "待办理",
+                  stateType: "business",
+                }),
+                node("done", "state", {
+                  stateCode: "DONE",
+                  displayName: "办理完成",
+                  stateType: "business",
+                }),
+              ]
+            : []),
+          node(
+            "router",
+            "router",
+            {
+              nodeDh: `R${tag}`,
+              lymc: "并行审核",
+              broadcast: true,
+              parallelJoinNodeId: "join",
+              defaultRoute: "b",
+              routes: branches.map((id, i) => ({
+                handle: id,
+                label: id,
+                targetNodeId: id,
+                priority: 100 - i,
+                conditions: [],
+              })),
+            },
+            200
+          ),
+          ...branches.map((id, i) =>
+            node(
+              id,
+              "operate",
+              {
+                nodeDh: `APPROVE${id.toUpperCase()}`,
+                czmc: `审核${id}`,
+                instruction: "隔离测试项目功能验证",
+                assigneeMode: "user",
+                assigneeUserId: actor.id,
+                outcomeMode: "explicit",
+                outcomes: [
+                  { code: "approved", label: "同意", sourceHandle: "approved" },
+                  { code: "rejected", label: "拒绝", sourceHandle: "rejected" },
+                  ...(customOutcome === "approved"
+                    ? []
+                    : [
+                        {
+                          code: customOutcome,
+                          label: "修改后续处理",
+                          sourceHandle: customOutcome,
+                          requireComment: true,
+                        },
+                      ]),
+                ],
+                formSchema: { fields: [] },
+              },
+              400,
+              i * 150
+            )
+          ),
+          ...(customOutcome === "approved"
+            ? []
+            : branches.flatMap(id => [
+                node(`${id}-selected`, "transform", {
+                  mappings: { selectedOutcome: customOutcome },
+                }),
+                node(`${id}-fallback`, "transform", {
+                  mappings: { wrongOutcome: true },
+                }),
+              ])),
+          node("join", "transform", { parallelForNodeId: "router" }, 600),
+          node("end", "end", { resultTemplate: "{{vars}}" }, 800),
+        ],
+        edges: [
+          {
+            id: "s-r",
+            sourceNodeId: "start",
+            targetNodeId: flowType === "state" ? "pending" : "router",
+          },
+          ...(flowType === "state"
+            ? [
+                { id: "p-r", sourceNodeId: "pending", targetNodeId: "router" },
+                { id: "d-e", sourceNodeId: "done", targetNodeId: "end" },
+              ]
+            : []),
+          ...branches.flatMap(id => [
+            {
+              id: `r-${id}`,
+              sourceNodeId: "router",
+              targetNodeId: id,
+              sourceHandle: id,
+            },
+            ...Array.from(new Set(["approved", "rejected", customOutcome])).map(
+              outcome => ({
+                id: `${id}-${outcome}`,
+                sourceNodeId: id,
+                targetNodeId:
+                  customOutcome === "approved"
+                    ? "join"
+                    : outcome === customOutcome
+                      ? `${id}-selected`
+                      : `${id}-fallback`,
+                sourceHandle: outcome,
+              })
+            ),
+            ...(customOutcome === "approved"
+              ? []
+              : ["selected", "fallback"].map(kind => ({
+                  id: `${id}-${kind}-join`,
+                  sourceNodeId: `${id}-${kind}`,
+                  targetNodeId: "join",
+                }))),
+          ]),
+          {
+            id: "j-e",
+            sourceNodeId: "join",
+            targetNodeId: flowType === "state" ? "done" : "end",
+          },
+        ],
+      },
+    },
+    true
+  );
+  if (publishedMode) {
+    await admin.request(
+      "project.auditWorkflow",
+      {
+        projectId: project.id,
+        workflowId: fixture.id,
+        auditStatus: "approved",
+      },
+      true
+    );
+    await admin.request("workflow.publish", { id: fixture.id }, true);
+    await assert.rejects(
+      () => runner.request("workflow.run", { workflowId: fixture.id }, true),
+      /无权运行/
+    );
+    await admin.request(
+      "workflow.grantMember",
+      { workflowId: fixture.id, userId, role: "operator" },
+      true
+    );
+    grantedWorkflowId = fixture.id;
+  }
+  const started = await runner.request(
+    "workflow.run",
+    {
       workflowId: fixture.id,
-      runId: started.runId,
-      attempts: attempts.map(item =>
-        item.status === "fulfilled"
-          ? { status: item.status }
-          : { status: item.status, error: item.reason.message }
-      ),
-    })
+      triggerType: publishedMode ? "manual" : "test",
+      idempotencyKey: `human-${tag}`,
+    },
+    true
   );
-  assert.equal(
-    attempts.filter(item => item.status === "fulfilled").length,
-    2,
-    "Both decisions must be accepted"
-  );
-  const result = await waitFor(
-    () => runner.request("workflow.runDetail", { runId: started.runId }),
-    run => ["success", "failed"].includes(run.status),
-    "parallel human join"
-  );
-  assert.equal(result.status, "success", JSON.stringify(result.errorJson));
-  if (publishedMode) assert.equal(result.executionSource, "published_plan");
-  assert.equal(
-    result.nodeRuns.filter(
-      nodeRun => nodeRun.nodeId === "join" && nodeRun.status === "success"
-    ).length,
-    1
-  );
-  assert.equal(
-    result.nodeRuns.filter(
-      nodeRun => nodeRun.nodeId === "end" && nodeRun.status === "success"
-    ).length,
-    1
-  );
-  succeeded = true;
-  console.log(
-    JSON.stringify({
-      runId: started.runId,
-      status: "success",
-      concurrentHumanTasks: 2,
-      publishedMode,
-      normalUserHandled: publishedMode,
-    })
-  );
+  let succeeded = false;
+  try {
+    await waitFor(
+      () => runner.request("workflow.runDetail", { runId: started.runId }),
+      run => run.status === "waiting",
+      "both human tasks"
+    );
+    const tasks = (
+      await runner.request("task.list", { view: "todo", projectId: project.id })
+    ).filter(task => task.runId === started.runId);
+    assert.equal(
+      tasks.length,
+      branchCount,
+      "All parallel tasks must be visible"
+    );
+    const attempts = await Promise.allSettled(
+      tasks.map(task =>
+        runner.request(
+          "task.execute",
+          {
+            taskId: task.id,
+            result: {
+              decision: selectedDecision,
+              outcome: customOutcome,
+              comment: "并行任务真实并发验证",
+            },
+          },
+          true
+        )
+      )
+    );
+    console.log(
+      JSON.stringify({
+        projectId: project.id,
+        workflowId: fixture.id,
+        runId: started.runId,
+        attempts: attempts.map(item =>
+          item.status === "fulfilled"
+            ? {
+                status: item.status,
+                continuationPending: item.value.continuationPending === true,
+              }
+            : { status: item.status, error: item.reason.message }
+        ),
+      })
+    );
+    assert.equal(
+      attempts.filter(item => item.status === "fulfilled").length,
+      branchCount,
+      "All decisions must be accepted"
+    );
+    const result = await waitFor(
+      () => runner.request("workflow.runDetail", { runId: started.runId }),
+      run => ["success", "failed"].includes(run.status),
+      "parallel human join"
+    );
+    assert.equal(result.status, "success", JSON.stringify(result.errorJson));
+    const humanNodeRuns = result.nodeRuns.filter(nodeRun =>
+      branches.includes(nodeRun.nodeId)
+    );
+    if (customOutcome !== "approved") {
+      assert.equal(
+        result.nodeRuns.filter(
+          nodeRun =>
+            nodeRun.nodeId.endsWith("-selected") && nodeRun.status === "success"
+        ).length,
+        branchCount,
+        "Every custom outcome must follow its selected route"
+      );
+      assert.equal(
+        result.nodeRuns.filter(nodeRun => nodeRun.nodeId.endsWith("-fallback"))
+          .length,
+        0,
+        "Default outcome routes must not execute"
+      );
+    }
+    if (flowType === "state") {
+      assert.equal(result.currentStateCode, "DONE");
+      assert.equal(result.stateVersion, 2);
+    }
+    assert.equal(
+      humanNodeRuns.length,
+      branchCount,
+      "Human nodes must not be repeated"
+    );
+    for (const nodeRun of humanNodeRuns) {
+      const output =
+        typeof nodeRun.outputJson === "string"
+          ? JSON.parse(nodeRun.outputJson)
+          : nodeRun.outputJson;
+      assert.equal(
+        output.outcome,
+        customOutcome,
+        flowType,
+        "Custom outcome must survive deferred continuation"
+      );
+      assert.equal(
+        output.completedByUserId,
+        actor.id,
+        "Final actor must match the actual handler"
+      );
+      assert.equal(
+        output.approvalProgress.rejected,
+        selectedDecision === "rejected" ? 1 : 0,
+        "Abstentions must not count as rejections"
+      );
+    }
+    const deferredContinuations = attempts.filter(
+      item =>
+        item.status === "fulfilled" && item.value.continuationPending === true
+    ).length;
+    const recoveredContinuations = humanNodeRuns.filter(
+      nodeRun =>
+        (typeof nodeRun.outputJson === "string"
+          ? JSON.parse(nodeRun.outputJson)
+          : nodeRun.outputJson
+        ).recoveredByWorker === true
+    ).length;
+    if (process.env.FLOW_REQUIRE_DEFERRED_CONTINUATION === "1") {
+      assert(
+        deferredContinuations > 0 && recoveredContinuations > 0,
+        "Deferred continuation must actually be exercised"
+      );
+    }
+    if (publishedMode) assert.equal(result.executionSource, "published_plan");
+    assert.equal(
+      result.nodeRuns.filter(
+        nodeRun => nodeRun.nodeId === "join" && nodeRun.status === "success"
+      ).length,
+      1
+    );
+    assert.equal(
+      result.nodeRuns.filter(
+        nodeRun => nodeRun.nodeId === "end" && nodeRun.status === "success"
+      ).length,
+      1
+    );
+    succeeded = true;
+    console.log(
+      JSON.stringify({
+        runId: started.runId,
+        status: "success",
+        concurrentHumanTasks: branchCount,
+        customOutcome,
+        deferredContinuations,
+        recoveredContinuations,
+        publishedMode,
+        normalUserHandled: publishedMode,
+      })
+    );
+  } finally {
+    if (!succeeded)
+      await admin.request("workflow.cancelRun", { runId: started.runId }, true);
+  }
 } finally {
-  if (!succeeded)
-    await admin.request("workflow.cancelRun", { runId: started.runId }, true);
-}
-} finally {
-  if (grantedWorkflowId) await admin.request("workflow.revokeMember", { workflowId: grantedWorkflowId, userId, role: "operator" }, true);
-  if (userId) await admin.request("iam.updateUserStatus", { userId, status: "disabled" }, true);
-  if (publishedMode) console.log(JSON.stringify({ ownGrantRevoked: true, ownAccountDisabled: true }));
+  if (grantedWorkflowId)
+    await admin.request(
+      "workflow.revokeMember",
+      { workflowId: grantedWorkflowId, userId, role: "operator" },
+      true
+    );
+  if (userId)
+    await admin.request(
+      "iam.updateUserStatus",
+      { userId, status: "disabled" },
+      true
+    );
+  if (publishedMode)
+    console.log(
+      JSON.stringify({ ownGrantRevoked: true, ownAccountDisabled: true })
+    );
 }
