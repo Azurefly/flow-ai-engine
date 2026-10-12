@@ -423,20 +423,14 @@ export const appRouter = router({
         z.object({
           userId: z.number().int().positive(),
           status: z.enum(["active", "disabled"]),
+          expectedStatus: z.enum(["active", "disabled"]).optional(),
+          expectedVersion: z.number().int().positive().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        await setUserStatus(input.userId, input.status);
-        await recordAuthorizationAudit({
-          actorUserId: ctx.user.id,
-          targetUserId: input.userId,
-          action:
-            input.status === "disabled" ? "user_disabled" : "user_updated",
-          resourceType: "user",
-          resourceId: String(input.userId),
-          details: { status: input.status },
+        return setUserStatus(input.userId, input.status, {
+          actorUserId: ctx.user.id, expectedStatus: input.expectedStatus, expectedVersion: input.expectedVersion,
         });
-        return { success: true };
       }),
     permissionCatalog: iamManageProcedure.query(() => listPermissionCatalog()),
     roles: iamManageProcedure

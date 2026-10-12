@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 const base = "http://124.223.198.84:1180/";
 const verifyUpdated = process.env.FLOW_UI_EXPECT_UPDATED === "1";
 const verifySources = process.env.FLOW_UI_PERMISSION_SOURCES === "1";
+const verifyStatus = process.env.FLOW_UI_ACCOUNT_STATUS === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -427,6 +428,108 @@ function executable() {
           stage: "create-account-retry",
           created: true,
           dialogClosed: true,
+        })
+      );
+    }
+    if (verifyStatus) {
+      assert(
+        verifyUpdated,
+        "Status verification requires account creation verification"
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      const search = page.getByPlaceholder("搜索名称、账号或邮箱", {
+        exact: true,
+      });
+      await search.fill(login.username);
+      await page
+        .getByRole("button", {
+          name: "更多账号操作：界面隔离验收_" + tag,
+          exact: true,
+        })
+        .click();
+      assert.equal(
+        await page
+          .getByRole("menuitem", { name: "当前登录账号", exact: true })
+          .isDisabled(),
+        true
+      );
+      await page.keyboard.press("Escape");
+      await search.fill(tag + "_created");
+      const more = page.getByRole("button", {
+        name: "更多账号操作：保留填写_" + tag,
+        exact: true,
+      });
+      const open = async action => {
+        await more.click();
+        await page
+          .getByRole("menuitem", { name: action + "账号", exact: true })
+          .click();
+        await page
+          .getByRole("heading", { name: "确认" + action + "账号", exact: true })
+          .waitFor();
+        assert(
+          (await page.getByRole("dialog").innerText()).includes(
+            tag + "_created"
+          )
+        );
+      };
+      await open("停用");
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "取消", exact: true })
+        .click();
+      await open("停用");
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "确认停用", exact: true })
+        .click();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      await page
+        .getByLabel("账号状态", { exact: true })
+        .selectOption("disabled");
+      await open("启用");
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "确认启用", exact: true })
+        .click();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      await page.getByLabel("账号状态", { exact: true }).selectOption("all");
+      await open("停用");
+      await remote({ action: "cycle_status", fixture });
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "确认停用", exact: true })
+        .click();
+      await page
+        .getByRole("dialog")
+        .getByRole("alert")
+        .filter({ hasText: "账号状态已变化" })
+        .waitFor();
+      await page.screenshot({
+        path: path.join(directory, "status-conflict.png"),
+        fullPage: true,
+      });
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "刷新并重新确认", exact: true })
+        .click();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "确认停用", exact: true })
+        .waitFor();
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "确认停用", exact: true })
+        .click();
+      await page.getByRole("dialog").waitFor({ state: "hidden" });
+      console.log(
+        JSON.stringify({
+          stage: "account-status-confirmation",
+          selfActionDisabled: true,
+          cancelPreserved: true,
+          disableEnable: true,
+          staleRevisionDenied: true,
+          refreshAndReconfirm: true,
         })
       );
     }

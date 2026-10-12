@@ -1054,6 +1054,7 @@ function FlowConsole({
     },
     onError: error => toast.error(error.message),
   });
+  const refreshUserQueries = () => { void utils.iam.invalidate(); };
   const createUser = trpc.iam.createUser.useMutation({
     onSuccess: () => {
       setUserForm({
@@ -1063,21 +1064,14 @@ function FlowConsole({
         email: "",
         role: "user",
       });
-      void utils.iam.users.invalidate();
-      void utils.iam.userDirectory.invalidate();
-      void utils.iam.roleAssignableUsers.invalidate();
-      void utils.iam.authorizationAudit.invalidate();
+      refreshUserQueries();
       toast.success("内部账号已创建。");
     },
     onError: error => toast.error(error.message),
   });
   const updateUserStatus = trpc.iam.updateUserStatus.useMutation({
     onSuccess: () => {
-      void utils.iam.userAuthorizationDetails.invalidate();
-      void utils.iam.users.invalidate();
-      void utils.iam.userDirectory.invalidate();
-      void utils.iam.roleAssignableUsers.invalidate();
-      void utils.iam.authorizationAudit.invalidate();
+      refreshUserQueries();
     },
     onError: error => toast.error(error.message),
   });
@@ -1090,10 +1084,7 @@ function FlowConsole({
   });
   const createUsersBatch = trpc.iam.createUsersBatch.useMutation({
     onSuccess: result => {
-      void utils.iam.users.invalidate();
-      void utils.iam.userDirectory.invalidate();
-      void utils.iam.roleAssignableUsers.invalidate();
-      void utils.iam.authorizationAudit.invalidate();
+      refreshUserQueries();
       toast[result.failed ? "warning" : "success"](
         `批量创建完成：成功 ${result.created}，失败 ${result.failed}`
       );
@@ -2152,6 +2143,8 @@ function FlowConsole({
                   </button>
                   <Button className="ml-2 mb-4 min-h-11" variant="outline" onClick={() => navigateRoute({ section: "system", view: "organization" })}>组织架构</Button>
                   <IamCenter
+                    currentUserId={user.id}
+                    changingStatus={updateUserStatus.isPending}
                     roles={roles.data ?? []}
                     audit={audit.data ?? []}
                     form={userForm}
@@ -2165,10 +2158,11 @@ function FlowConsole({
                     creating={
                       createUser.isPending || createUsersBatch.isPending
                     }
-                    onToggleStatus={(id, status) =>
-                      updateUserStatus.mutate({
+                    onToggleStatus={(id, status, version) =>
+                      updateUserStatus.mutateAsync({
                         userId: id,
                         status: status === "active" ? "disabled" : "active",
+                        expectedStatus: status, expectedVersion: version,
                       })
                     }
                     aiForm={aiUserForm}
@@ -3597,6 +3591,8 @@ async function copyAuditActionCode(value: string) {
 }
 
 function IamCenter({
+  currentUserId,
+  changingStatus,
   roles,
   audit,
   form,
@@ -3614,11 +3610,13 @@ function IamCenter({
 }: {
   roles: any[];
   audit: any[];
+  currentUserId: number;
+  changingStatus: boolean;
   form: InternalUserForm;
   setForm: (next: InternalUserForm) => void;
   onCreate: () => Promise<unknown>;
   creating: boolean;
-  onToggleStatus: (id: number, status: "active" | "disabled") => void;
+  onToggleStatus: (id: number, status: "active" | "disabled", version: number) => Promise<unknown>;
   aiForm: AiInternalUserForm;
   setAiForm: (next: AiInternalUserForm) => void;
   aiPreview: { users: AiUserPreview[]; generatedBy: "ai" | "fallback" } | null;
@@ -3641,6 +3639,10 @@ function IamCenter({
   const rolePageSize = 10;
   const auditPageSize = 10;
   const [normalDialogOpen, setNormalDialogOpen] = useState(false);
+  const [statusTarget, setStatusTarget] = useState<any>(null);
+  const [statusError, setStatusError] = useState("");
+  const [statusBusy, setStatusBusy] = useState(false);
+  const statusAction = statusTarget?.status === "active" ? "停用" : "启用";
   const [normalError, setNormalError] = useState("");
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
   const [tab, setTab] = useState<"users" | "roles" | "audit">("users");
@@ -3717,19 +3719,14 @@ function IamCenter({
     authorizationQueryPolicy(tab === "roles" && selectedRoleId !== null)
   );
   const roleCandidateUsers = roleAssignmentUsers.data?.items ?? [];
+  const refreshRoleQueries = () => Promise.all([
+    utils.iam.invalidate(), utils.auth.me.invalidate(),
+    utils.workflow.page.invalidate(), utils.workflow.get.invalidate(), utils.workflow.access.invalidate(),
+    utils.project.list.invalidate(), utils.project.access.invalidate(),
+  ]);
   const assignSystemRole = trpc.iam.assignSystemRole.useMutation({
     onSuccess: async () => {
-      await Promise.all([
-        utils.iam.userAuthorizationDetails.invalidate(),
-        utils.iam.roleAuthorizationDetails.invalidate(),
-        utils.iam.roleAssignableUsers.invalidate(),
-        utils.iam.authorizationAudit.invalidate(),
-        utils.workflow.page.invalidate(),
-        utils.workflow.get.invalidate(),
-        utils.workflow.access.invalidate(),
-        utils.project.list.invalidate(),
-        utils.project.access.invalidate(),
-      ]);
+      await refreshRoleQueries();
       setAssignmentDialog(null);
       setAssignmentHours("");
       setAssignmentNote("");
@@ -3739,17 +3736,7 @@ function IamCenter({
   });
   const revokeRole = trpc.iam.revokeRoleAssignment.useMutation({
     onSuccess: async () => {
-      await Promise.all([
-        utils.iam.userAuthorizationDetails.invalidate(),
-        utils.iam.roleAuthorizationDetails.invalidate(),
-        utils.iam.roleAssignableUsers.invalidate(),
-        utils.iam.authorizationAudit.invalidate(),
-        utils.workflow.page.invalidate(),
-        utils.workflow.get.invalidate(),
-        utils.workflow.access.invalidate(),
-        utils.project.list.invalidate(),
-        utils.project.access.invalidate(),
-      ]);
+      await refreshRoleQueries();
       setPendingRevokeRoleId(null);
       toast.success("直接角色授权已撤销。");
     },
@@ -3985,14 +3972,9 @@ function IamCenter({
               onClose={() => setRoleEditor(null)}
               onSaved={async code => {
                 await Promise.all([
-                  utils.iam.invalidate(),
+                  refreshRoleQueries(),
                   utils.workflow.customRoles.invalidate(),
                   utils.workflow.customRoleAssignments.invalidate(),
-                  utils.workflow.access.invalidate(),
-                  utils.workflow.page.invalidate(),
-                  utils.workflow.get.invalidate(),
-                  utils.project.list.invalidate(),
-                  utils.project.access.invalidate(),
                 ]);
                 setRoleSearch(code ?? "");
                 setRolePage(0);
@@ -4056,6 +4038,27 @@ function IamCenter({
         </div>
       </div>
 
+      <CreationDialog open={!!statusTarget} onOpenChange={open => { if (!open) setStatusTarget(null); }}
+        title={`确认${statusAction}账号`}
+        description={statusAction === "停用" ? "停用会退出所有会话，不能办理任务，授权与记录保留。" : "启用需重新登录，有效权限恢复。"}
+        submitLabel={statusError ? "刷新并重新确认" : `确认${statusAction}`}
+        pending={changingStatus || statusBusy} errorMessage={statusError}
+        onSubmit={async () => {
+          if (!statusTarget) return;
+          setStatusBusy(true);
+          try {
+            if (statusError) {
+              const fresh = (await utils.iam.userDirectory.fetch({ search: statusTarget.username, offset: 0, limit: 10 }, { staleTime: 0 })).items.find(account => Number(account.id) === Number(statusTarget.id));
+              if (!fresh) throw new Error("账号已不存在，请返回目录。");
+              setStatusTarget(fresh); setStatusError(""); return;
+            }
+            await onToggleStatus(statusTarget.id, statusTarget.status, statusTarget.statusVersion);
+            setStatusTarget(null); toast.success("账号状态已更新。");
+          } catch (error) { setStatusError(error instanceof Error ? error.message : "修改失败，请重试。"); }
+          finally { setStatusBusy(false); }
+        }}>
+        <p className="break-words font-semibold">{statusTarget?.name || statusTarget?.username}（{statusTarget?.username}）</p>
+      </CreationDialog>
       <CreationDialog
         open={normalDialogOpen}
         onOpenChange={setNormalDialogOpen}
@@ -4694,11 +4697,10 @@ function IamCenter({
                             ? "text-aiflow-danger focus:text-aiflow-danger"
                             : "text-aiflow-success focus:text-aiflow-success"
                         }
-                        onClick={() =>
-                          onToggleStatus(account.id, account.status)
-                        }
+                        disabled={changingStatus || Number(account.id) === currentUserId || !account.statusVersion}
+                        onClick={() => { setStatusError(""); setStatusTarget(account); }}
                       >
-                        {account.status === "active" ? "停用账号" : "启用账号"}
+                        {Number(account.id) === currentUserId ? "当前登录账号" : account.status === "active" ? "停用账号" : "启用账号"}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

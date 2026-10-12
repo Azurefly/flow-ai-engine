@@ -403,7 +403,48 @@ assert(
   typeof browserFixtureIntent !== "undefined",
   "Run through browser-config-acceptance.cjs"
 );
+async function cycleStatus(fixture) {
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await bootstrap();
+  const username = fixture.tag + "_created";
+  const directory = await request("iam.userDirectory", {
+    search: username,
+    offset: 0,
+    limit: 10,
+  });
+  const person = directory.items.find(item => item.username === username);
+  assert.equal(
+    person?.id,
+    fixture.people.find(item => item.username === username)?.id
+  );
+  assert.equal(person?.role, "user");
+  assert.equal(person?.status, "active");
+  assert.equal(person?.name, "保留填写_" + fixture.tag);
+  const disabled = await request(
+    "iam.updateUserStatus",
+    {
+      userId: person.id,
+      status: "disabled",
+      expectedStatus: "active",
+      expectedVersion: person.statusVersion,
+    },
+    true
+  );
+  await request(
+    "iam.updateUserStatus",
+    {
+      userId: person.id,
+      status: "active",
+      expectedStatus: "disabled",
+      expectedVersion: disabled.statusVersion,
+    },
+    true
+  );
+  console.log(JSON.stringify({ ownAccountCycled: true }));
+}
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "cycle_status")
+  await cycleStatus(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "grant_identity")
   await grantIdentity(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "revoke_identity")

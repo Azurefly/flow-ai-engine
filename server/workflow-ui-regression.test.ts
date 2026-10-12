@@ -13,8 +13,10 @@ describe("分页流程缓存联动", () => {
   it("直接系统角色授予撤销和角色定义修改刷新资源权限与列表", () => {
     for (const marker of ["const assignSystemRole =", "const revokeRole =", "onSaved={async code => {"]) {
       const callback = homeSource.split(marker)[1]?.split("toast.success")[0];
+      expect(callback).toContain("refreshRoleQueries()");
+      const refresh = homeSource.split("const refreshRoleQueries =")[1]?.split("const assignSystemRole")[0];
       for (const query of ["workflow.page", "workflow.get", "workflow.access", "project.list", "project.access"])
-        expect(callback).toContain(`utils.${query}.invalidate()`);
+        expect(refresh).toContain(`utils.${query}.invalidate()`);
     }
     const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");
     expect(bindings).toContain("utils.workflow.page.invalidate()");
@@ -387,8 +389,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_422 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 422 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_423 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 423 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');

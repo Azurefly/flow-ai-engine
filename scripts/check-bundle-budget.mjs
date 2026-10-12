@@ -12,9 +12,10 @@ const debugCollectorArtifact = join(
   "debug-collector.js"
 );
 const maxChunkBytes = 450 * 1024;
-// Node locator and fullscreen scroll: 1421.18 KiB raw / 421.52 KiB gzip.
-const maxTotalBytes = 1_422 * 1024;
-const maxTotalGzipBytes = 422 * 1024;
+// Account status confirmation/recovery: 1422.16 KiB raw / 422.10 KiB gzip.
+// Keep one-KiB headroom for this measured increment; chunk/HTML limits stay fixed.
+const maxTotalBytes = 1_423 * 1024;
+const maxTotalGzipBytes = 423 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

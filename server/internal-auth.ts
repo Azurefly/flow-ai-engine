@@ -9,6 +9,7 @@ import mysql from "mysql2/promise";
 import type { User } from "../drizzle/schema";
 import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
+import { changeAccountStatus, type AccountStatusChange } from "./account-status";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_MAX_SECONDS = 60 * 60 * 24 * 7;
@@ -80,24 +81,25 @@ export async function login(
   }
   const token = randomBytes(32).toString("base64url");
   const id = randomBytes(18).toString("hex");
-  await db().query(
-    "INSERT INTO auth_session (id,userId,tokenHash,expiresAt,userAgent) VALUES (?,?,?,?,?)",
-    [
-      id,
-      user.id,
-      tokenHash(token),
-      new Date(Date.now() + SESSION_MAX_SECONDS * 1000),
-      userAgent?.slice(0, 255) ?? null,
-    ]
-  );
-  await db().query("UPDATE users SET lastSignedIn=NOW() WHERE id=?", [user.id]);
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    targetUserId: user.id,
-    action: "login_success",
-    resourceType: "auth",
-  });
-  return { user, token };
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const [current] = await connection.query<mysql.RowDataPacket[]>("SELECT * FROM users WHERE id=? FOR UPDATE", [user.id]);
+    const locked = current[0] as User | undefined;
+    if (!locked || locked.status !== "active" || locked.tokenVersion !== user.tokenVersion || locked.passwordHash !== user.passwordHash) {
+      await connection.rollback();
+      return null;
+    }
+    await connection.query("INSERT INTO auth_session (id,userId,tokenHash,expiresAt,userAgent) VALUES (?,?,?,?,?)",
+      [id, user.id, tokenHash(token), new Date(Date.now() + SESSION_MAX_SECONDS * 1000), userAgent?.slice(0, 255) ?? null]);
+    await connection.query("UPDATE users SET lastSignedIn=NOW() WHERE id=?", [user.id]);
+    await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: user.id, action: "login_success", resourceType: "auth" }, connection);
+    await connection.commit();
+    return { user: locked, token };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally { connection.release(); }
 }
 
 export async function logout(token?: string, actorUserId?: number) {
@@ -115,7 +117,7 @@ export async function logout(token?: string, actorUserId?: number) {
 }
 export async function listUsers() {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,username,name,email,role,status,lastSignedIn,createdAt FROM users ORDER BY createdAt DESC"
+    "SELECT id,username,name,email,role,status,tokenVersion AS statusVersion,lastSignedIn,createdAt FROM users ORDER BY createdAt DESC"
   );
   return rows;
 }
@@ -145,7 +147,7 @@ export async function listUsersPage(input: {
   );
   const total = Number(countRows[0]?.total ?? 0);
   const [items] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT id,username,name,email,role,status,lastSignedIn,createdAt FROM users${where} ORDER BY createdAt DESC, id DESC LIMIT ? OFFSET ?`,
+    `SELECT id,username,name,email,role,status,tokenVersion AS statusVersion,lastSignedIn,createdAt FROM users${where} ORDER BY createdAt DESC, id DESC LIMIT ? OFFSET ?`,
     [...queryArgs, input.limit, input.offset]
   );
   return { items, total, offset: input.offset, limit: input.limit };
@@ -191,12 +193,8 @@ export async function createUser(values: {
 }
 export async function setUserStatus(
   userId: number,
-  status: "active" | "disabled"
+  status: "active" | "disabled",
+  options: Omit<AccountStatusChange, "userId" | "status"> = {}
 ) {
-  await db().query("UPDATE users SET status=? WHERE id=?", [status, userId]);
-  if (status === "disabled")
-    await db().query(
-      "UPDATE auth_session SET revokedAt=NOW() WHERE userId=? AND revokedAt IS NULL",
-      [userId]
-    );
+  return changeAccountStatus({ ...options, userId, status });
 }
