@@ -146,6 +146,7 @@ async function cleanup(fixture) {
   await bootstrap();
   const people = [...(fixture.people ?? [])],
     failures = [];
+  let archivedOwnProjects = 0;
   if (fixture.identityRoleCode) {
     try {
       await revokeIdentity(fixture);
@@ -224,9 +225,20 @@ async function cleanup(fixture) {
           assert.equal(active.length, 0, "隔离项目仍有未归档流程，拒绝归档项目");
           await pool.query("UPDATE flow_project_member SET revokedAt=COALESCE(revokedAt,NOW()) WHERE projectId=? AND userId=?", [project.id, fixture.disabledUserId]);
           await pool.query("UPDATE flow_project SET status='archived' WHERE id=? AND ownerUserId=? AND name=? AND code=?", [project.id, fixture.userId, project.name, project.code]);
+          archivedOwnProjects++;
         } catch (error) { failures.push(error.message); }
       }
     } finally { await pool.end(); }
+  }
+  if (fixture.domain) {
+    try {
+      const actual = (await request("config.workDomains")).find(item => item.id === fixture.domain.id);
+      assert.equal(actual?.createdByUserId, fixture.userId);
+      assert.equal(actual?.code, fixture.domain.code);
+      assert.equal(actual?.name, fixture.domain.name);
+      assert(actual.name.endsWith(fixture.tag));
+      await request("config.updateWorkDomain", { id: actual.id, status: "disabled" }, true);
+    } catch (error) { failures.push(error.message); }
   }
   for (const person of people) {
     try {
@@ -254,8 +266,9 @@ async function cleanup(fixture) {
     JSON.stringify({
       cleanup: true,
       archivedOwnWorkflows: fixture.workflows?.length ?? 0,
-      archivedOwnProjects: (fixture.projects?.length ?? 0) + (fixture.pendingProjects?.length ?? 0),
+      archivedOwnProjects,
       disabledOwnAccounts: people.length,
+      disabledOwnDomains: fixture.domain ? 1 : 0,
     })
   );
 }
@@ -372,6 +385,13 @@ async function setup(intent) {
       true
     );
     await request("auth.login", intent.login, true);
+    if (intent.pagination) {
+      const spec = { code: intent.tag.toUpperCase() + "_DOMAIN", name: "CSV验收工作域_" + intent.tag };
+      const domain = await request("config.createWorkDomain", spec, true);
+      fixture.domain = { id: domain.id, ...spec };
+      fixture.csvDomainCode = spec.code;
+      progress();
+    }
     const project = await request(
       "project.create",
       { code: intent.tag.toUpperCase(), name: "界面隔离验收_" + intent.tag },
@@ -458,7 +478,7 @@ async function verifyPagination(intent) {
   assert.equal((await request("project.page", { search: fixture.tag, createdFrom: tomorrow })).total, 0);
   await assert.rejects(request("project.page", { limit: 51 }));
   const codes = fixture.projects.slice(0, 2).map(item => item.code);
-  fixture.csvDomainCode = (await request("project.activeDomains"))[0]?.code ?? "";
+  assert((await request("project.activeDomains")).some(domain => domain.code === fixture.csvDomainCode));
   console.log(JSON.stringify({ fixture }));
   assert.deepEqual((await request("project.existingCodes", { codes })).sort(), codes.sort());
   await bootstrap();

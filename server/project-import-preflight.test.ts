@@ -26,6 +26,9 @@ it.each([[], ["1_INVALID"], Array(501).fill("OPS")])("无效或超过批次上�
   await expect(existingProjectCodes(user, codes)).rejects.toThrow();
   expect(mocks.query).not.toHaveBeenCalled();
 });
+it("导入代号格式错误提供直接可读的中文反馈", async () => {
+  await expect(existingProjectCodes(user, ["1INVALID"])).rejects.toMatchObject({ code: "BAD_REQUEST", message: "业务代号须以字母开头，且仅包含字母、数字、下划线或连字符，长度为 2–64 个字符。" });
+});
 it("预检后并发创建仍由唯一约束拦截，返回中文错误并回滚事务", async () => {
   mocks.transactionQuery.mockRejectedValue({ code: "ER_DUP_ENTRY", errno: 1062 });
   await expect(createProject(user, { code: "OPS", name: "运营" })).rejects.toMatchObject({ code: "CONFLICT", message: "业务代号已存在，请更换代号；已归档业务也会保留原代号。" });

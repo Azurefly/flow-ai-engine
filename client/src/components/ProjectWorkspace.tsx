@@ -795,17 +795,17 @@ function BusinessCenterView({
           </div>
 
           {queryState.loading ? (
-            <div data-business-list-loading="" role="status" className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+            <div data-business-list-loading="" role="status" className="aiflow-type-body flex items-center gap-2 p-6 text-muted-foreground">
               <Loader2 className="animate-spin" size={16} />正在读取当前账号可见的业务项目…
             </div>
           ) : queryState.error ? (
             <div data-business-list-error={!queryState.hasData ? "" : undefined}
               data-business-list-stale={queryState.hasData ? "" : undefined}
-              role="alert" className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm text-aiflow-danger">
+              role="alert" className="aiflow-type-body flex flex-wrap items-center justify-between gap-2 p-4 text-aiflow-danger">
               <span>{queryState.hasData ? "刷新失败，当前显示上次成功读取的业务列表。" : "业务列表暂时无法加载；这不代表当前没有可访问的业务项目。"}</span>
               <Button variant="outline" onClick={queryState.retry}>重试</Button>
             </div>
-          ) : queryState.refreshing && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">正在刷新业务列表…</p>}
+          ) : queryState.refreshing && <p role="status" className="aiflow-type-body px-4 py-2 text-muted-foreground">正在刷新业务列表…</p>}
 
           <div className="hidden min-[900px]:block">
             <div className="overflow-x-auto">

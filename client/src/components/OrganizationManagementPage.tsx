@@ -279,9 +279,8 @@ export default function OrganizationManagementPage({
     await Promise.all([
       utils.config.organizationDirectory.invalidate(),
       utils.config.organizationMembersPage.invalidate(),
-      utils.iam.userDirectory.invalidate(),
-      utils.iam.userAuthorizationDetails.invalidate(),
-      utils.iam.roleAuthorizationDetails.invalidate(),
+      utils.iam.invalidate(),
+      utils.auth.me.invalidate(),
       utils.workflow.access.invalidate(),
       utils.workflow.list.invalidate(),
       utils.workflow.page.invalidate(),

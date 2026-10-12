@@ -15,8 +15,11 @@ import {
 
 function Command({
   className,
+  children,
+  label,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive>) {
+  const input = React.Children.toArray(children).find(child => React.isValidElement(child) && child.type === CommandInput) as React.ReactElement<React.ComponentProps<typeof CommandInput>> | undefined;
   return (
     <CommandPrimitive
       data-slot="command"
@@ -25,7 +28,10 @@ function Command({
         className
       )}
       {...props}
-    />
+      label={label ?? input?.props["aria-label"] ?? props["aria-label"] ?? "搜索选项"}
+    >
+      {children}
+    </CommandPrimitive>
   );
 }
 

@@ -176,7 +176,9 @@ function executable() {
       assert((await center.innerText()).includes("2 / 2"));
       await center.getByLabel("每页显示数量").selectOption("25");
       await page.waitForFunction(() => document.querySelector("[data-aiflow-business-center] table tbody")?.children.length === 13);
-      const importInput = center.locator('input[type="file"][accept=".csv,text/csv"]');
+      const importInput = page.locator('input[type="file"][accept=".csv,text/csv"]');
+      await importInput.setInputFiles({ name: "invalid.csv", mimeType: "text/csv", buffer: Buffer.from("业务代号,业务名称\n1INVALID,无效代号\n", "utf8") });
+      await page.getByText("业务代号须以字母开头，且仅包含字母、数字、下划线或连字符，长度为 2–64 个字符。", { exact: true }).waitFor();
       await importInput.setInputFiles({ name: "duplicate.csv", mimeType: "text/csv", buffer: Buffer.from(`业务代号,业务名称\n${fixture.projects[0].code},重复导入\n`, "utf8") });
       await page.getByText("业务代号已存在：" + fixture.projects[0].code + "。请先修正 CSV 再导入。", { exact: true }).waitFor();
       const importedProject = { code: fixture.tag.toUpperCase() + "_CSV", name: "CSV导入_" + fixture.tag };
@@ -195,8 +197,14 @@ function executable() {
       await page.getByRole("option").filter({ hasText: fixture.projects[11].code }).click();
       await page.waitForFunction(code => document.querySelector("[data-aiflow-business-selector]")?.textContent.includes(code), fixture.projects[11].code);
       await page.screenshot({ path: path.join(directory, "project-pagination.png"), fullPage: true });
+      await page.goto(`${base}#/warehouse`, { waitUntil: "domcontentloaded" });
+      await page.getByRole("combobox", { name: /切换流程仓库项目/ }).click();
+      await page.getByLabel("搜索仓库项目").fill(fixture.projects[0].code);
+      await page.getByRole("option", { name: `${fixture.projects[0].code} · ${fixture.projects[0].name}`, exact: true }).click();
+      await page.getByRole("combobox", { name: `切换流程仓库项目，当前：${fixture.projects[0].code}`, exact: true }).waitFor();
+      await page.screenshot({ path: path.join(directory, "warehouse-project-search.png"), fullPage: true });
       assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
-      console.log(JSON.stringify({ stage: "project-pagination-browser", defaultPage: 10, secondPage: 3, pageSizeChanged: true, literalSearch: true, csvDuplicateBlocked: true, csvCreated: true, csvDomainTested: Boolean(fixture.csvDomainCode), directRoute: true, remoteSelector: true, fullProjectListRequests: 0 }));
+      console.log(JSON.stringify({ stage: "project-pagination-browser", defaultPage: 10, secondPage: 3, pageSizeChanged: true, literalSearch: true, csvInvalidCodeFeedback: true, csvDuplicateBlocked: true, csvCreated: true, csvDomainTested: Boolean(fixture.csvDomainCode), directRoute: true, remoteSelector: true, warehouseSearch: true, fullProjectListRequests: 0 }));
     }
     for (const workflow of fixture.workflows) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {
@@ -641,6 +649,16 @@ function executable() {
     if (verifyProjectPaging)
       assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
     assert.deepEqual(errors, []);
+  } catch (error) {
+    const page = browser?.contexts()[0]?.pages()[0];
+    if (page) {
+      await page.screenshot({ path: path.join(directory, "failure.png"), fullPage: true }).catch(() => {});
+      const diagnostic = await page.evaluate(() => ({ url: location.href,
+        controls: [...document.querySelectorAll("input,button,[role='combobox']")].map(element => ({ tag: element.tagName, role: element.getAttribute("role"), label: element.getAttribute("aria-label"), labelledBy: element.getAttribute("aria-labelledby"), placeholder: element.getAttribute("placeholder"), visible: Boolean(element.getClientRects().length) })),
+      })).catch(() => null);
+      fs.writeFileSync(path.join(directory, "failure-controls.json"), JSON.stringify(diagnostic), "utf8");
+    }
+    throw error;
   } finally {
     if (browser) await browser.close();
     if (fixture)

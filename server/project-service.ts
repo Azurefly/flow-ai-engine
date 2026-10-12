@@ -250,7 +250,9 @@ export async function getProject(user: ProjectUser, projectId: string) {
 export async function existingProjectCodes(user: ProjectUser, codes: string[]) {
   if (!(await hasSystemPermission(user, "workflow:create")))
     throw new TRPCError({ code: "FORBIDDEN", message: "当前账号没有创建项目的权限。" });
-  const values = z.array(z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9_-]{1,63}$/)).min(1).max(500).parse(codes);
+  const values = z.array(z.string().trim().toUpperCase()).min(1).max(500).parse(codes);
+  if (values.some(code => !/^[A-Z][A-Z0-9_-]{1,63}$/.test(code)))
+    throw new TRPCError({ code: "BAD_REQUEST", message: "业务代号须以字母开头，且仅包含字母、数字、下划线或连字符，长度为 2–64 个字符。" });
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT code FROM flow_project WHERE ownerUserId=? AND code IN (?)", [user.id, values]
   );

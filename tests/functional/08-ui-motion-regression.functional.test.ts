@@ -210,7 +210,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "aiflow-type-control truncate rounded bg-aiflow-info-surface"
       );
       expect(processWorkbenchSource).not.toContain("text-[9px]");
-      expectSemanticBodyForCopy(homeSource, "管理内部账号、角色和有效权限");
+      expectSemanticBodyForCopy(homeSource, "管理账号与角色，查看有效权限和授权来源。");
       expectSemanticBodyForCopy(homeSource, "当前流程未提供可读取的入口字段");
       expectSemanticBodyForCopy(homeSource, "你可编辑画布并保存版本。");
       expectSemanticBodyForCopy(
@@ -220,12 +220,11 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expectSemanticBodyForCopy(homeSource, "取消发布会阻止后续发起");
       expectSemanticBodyForCopy(
         canvasSource,
-        "该历史操作仍使用“拒绝即取消实例”的兼容语义"
+        "当前为兼容分支：同意后继续，拒绝即取消实例。"
       );
-      expectSemanticBodyForCopy(
-        canvasSource,
-        "以当前登录用户模拟发起人与当前操作人"
-      );
+      expect(canvasSource).toContain('"预览候选人"');
+      expect(readFileSync("client/src/components/ui/button.tsx", "utf8")).toContain("aiflow-button");
+      expect(styleSource).toMatch(/\.aiflow-button\s*\{[^}]*font-size: var\(--aiflow-type-control\)/);
       expectSemanticBodyForCopy(
         canvasSource,
         "从选中节点保存模板，或在设计器顶部"
@@ -296,7 +295,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "账号由管理员创建；系统不提供公开注册。"
       );
       expectSemanticBodyForCopy(
-        homeSource,
+        projectWorkspaceSource,
         "刷新失败，当前显示上次成功读取的业务列表。"
       );
       expectSemanticBodyForCopy(
@@ -304,9 +303,10 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "部分账号创建失败，请修正目标后重新生成"
       );
       expectSemanticBodyForCopy(runCenterSource, "请查看运行节点日志。");
-      expectSemanticBodyForCopy(
+      expectSemanticRoleForCopy(
         canvasSource,
-        "请从此路径句柄连线到目标状态节点"
+        "请从此路径句柄连线到目标状态节点",
+        "aiflow-type-control"
       );
       expectSemanticBodyForCopy(
         multiSelectSource,
@@ -380,11 +380,9 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(
         readFileSync("client/src/components/DataResourceCenter.tsx", "utf8")
       ).toContain("aiflow-type-code my-2 max-h-72 max-w-full overflow-auto");
-      expect(
-        readFileSync("client/src/components/ProcessWorkbench.tsx", "utf8")
-      ).toContain(
-        "aiflow-type-code mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-words"
-      );
+      expect(processWorkbenchSource).toContain("taskResultView(task?.payload?.config, task?.result)");
+      expect(processWorkbenchSource).toContain("resultView.rows.map");
+      expect(processWorkbenchSource).toContain("whitespace-pre-wrap break-words text-sm text-foreground");
       expect(workflowTestRunSource).toContain(
         "aiflow-type-body font-semibold text-foreground"
       );
@@ -634,7 +632,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
     });
   });
 
-  describe("TC-REG-002: 业务中心 (BusinessCenterView) 客户端分页与 CSV 模板契约", () => {
+  describe("TC-REG-002: 业务中心 (BusinessCenterView) 服务端分页与 CSV 模板契约", () => {
     it("笔记本宽度使用紧凑表格，窄屏保留可读项目卡片", () => {
       const source = readFileSync(
         "client/src/components/ProjectWorkspace.tsx",
@@ -649,69 +647,26 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       );
     });
 
-    it("大列表切片分页计算、切换页长与页码重置逻辑正常", () => {
+    it("业务列表绑定服务端分页响应，翻页与查询不依赖客户端全量切片", () => {
       const start = performance.now();
-
-      // Mock 111 projects as reported on production
-      const mockProjects = Array.from({ length: 111 }, (_, i) => ({
-        id: `prj_${i + 1}`,
-        code: `PRJ_${String(i + 1).padStart(3, "0")}`,
-        name: `业务项目测试_${i + 1}`,
-        workflowCount: i % 5,
-        domainCode: i % 2 === 0 ? "DEFAULT" : null,
-        domainName: i % 2 === 0 ? "默认工作域" : null,
-        createdAt: new Date(2026, 8, 1, 10, i).toISOString(),
-      }));
-
-      const paginate = (
-        items: typeof mockProjects,
-        page: number,
-        pageSize: number
-      ) => {
-        const total = items.length;
-        const totalPages = Math.max(1, Math.ceil(total / pageSize));
-        const safePage = Math.max(1, Math.min(page, totalPages));
-        const startIndex = (safePage - 1) * pageSize;
-        const sliced = items.slice(startIndex, startIndex + pageSize);
-        return {
-          total,
-          totalPages,
-          page: safePage,
-          pageSize,
-          startIndex,
-          items: sliced,
-        };
-      };
-
-      // 1. Default page 1, pageSize 25
-      const p1 = paginate(mockProjects, 1, 25);
-      expect(p1.total).toBe(111);
-      expect(p1.totalPages).toBe(5);
-      expect(p1.items.length).toBe(25);
-      expect(p1.items[0].code).toBe("PRJ_001");
-      expect(p1.items[24].code).toBe("PRJ_025");
-
-      // 2. Last page (page 5)
-      const p5 = paginate(mockProjects, 5, 25);
-      expect(p5.items.length).toBe(11); // 111 - 100 = 11
-      expect(p5.items[10].code).toBe("PRJ_111");
-
-      // 3. Switch page size to 50
-      const p50 = paginate(mockProjects, 1, 50);
-      expect(p50.totalPages).toBe(3);
-      expect(p50.items.length).toBe(50);
-
-      // 4. Page out of bounds automatically clamped
-      const pOver = paginate(mockProjects, 999, 25);
-      expect(pOver.page).toBe(5);
-      expect(pOver.items.length).toBe(11);
-
+      const source = readFileSync("client/src/components/ProjectWorkspace.tsx", "utf8");
+      expect(source).toContain("trpc.project.page.useQuery(pageInput)");
+      expect(source).toContain("const [pageSize, setPageSize] = useState(10)");
+      expect(source).toContain("total={projects.data?.total ?? 0}");
+      expect(source).toContain("page={projects.data?.page ?? page}");
+      expect(source).toContain("onPageChange={setPage}");
+      expect(source).toContain("setPageSize(value); setPage(1)");
+      expect(source).toContain("setPage(1); setAppliedFilters");
+      expect(source).toContain("queryState.refreshing || currentPage >= totalPages");
+      expect(source).not.toContain("projects.slice(");
+      for (const size of [10, 25, 50])
+        expect(source).toContain(`<option value={${size}}>${size} 条</option>`);
       TestResultCollector.record({
         testId: "TC-REG-PAGE-002",
-        name: "业务中心 111 条大列表切片分页与自适应页长约束",
-        category: "validation",
+        name: "业务中心服务端分页响应与筛选重置绑定",
+        category: "contract",
         module: "业务中心",
-        target: "BusinessCenterView.pagination",
+        target: "project.page → BusinessCenterView",
         status: "passed",
         start,
       });

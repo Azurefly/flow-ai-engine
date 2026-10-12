@@ -149,6 +149,9 @@ export default function WorkflowWarehouse({
   const previousSelectedWorkflowId = useRef<string | null>(selectedWorkflowId);
   const currentProject =
     pickedProject ?? projects[0] ?? null;
+  useEffect(() => {
+    if (!pickedProject && projects[0]) setPickedProject(projects[0]);
+  }, [pickedProject, projectsQuery.data]);
   const projectOptions = useMemo(
     () =>
       ((projectResults.data?.items ?? []) as ProjectRecord[]).map(project => ({

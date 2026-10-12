@@ -83,6 +83,7 @@ describe("项目加载与导航隔离", () => {
       expect(source(file)).not.toContain("trpc.project.list.useQuery");
     const warehouse = source("components/WorkflowWarehouse.tsx");
     expect(warehouse).toContain("pickedProject ?? projects[0] ?? null");
+    expect(warehouse).toContain("if (!pickedProject && projects[0]) setPickedProject(projects[0])");
     expect(warehouse).toContain("{ enabled: projectSelectorOpen }");
     expect(source("components/DataResourceCenter.tsx")).toContain("trpc.project.get.useQuery({ projectId })");
   });

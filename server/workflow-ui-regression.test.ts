@@ -15,7 +15,7 @@ describe("分页流程缓存联动", () => {
       const callback = homeSource.split(marker)[1]?.split("toast.success")[0];
       expect(callback).toContain("refreshRoleQueries()");
       const refresh = homeSource.split("const refreshRoleQueries =")[1]?.split("const assignSystemRole")[0];
-      for (const query of ["workflow.page", "workflow.get", "workflow.access", "project"])
+      for (const query of ["workflow", "project"])
         expect(refresh).toContain(`utils.${query}.invalidate()`);
     }
     const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");

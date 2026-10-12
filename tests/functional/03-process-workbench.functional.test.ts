@@ -176,7 +176,7 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
       expect(source).toContain("table-fixed");
       expect(source).toContain('data-workbench-instance-name=""');
       expect(source).toContain("max-w-full break-words whitespace-normal");
-      expect(source.match(/useState\(10\)/g)?.length).toBe(2);
+      expect(source.match(/const \[mobileVisibleCount, setMobileVisibleCount\] = useState\(10\)/g)).toHaveLength(2);
       expect(source).toContain("current + 10");
       expect(source).toContain("展开本页后续");
       expect(source).toContain("h-11 lg:h-9");
@@ -226,7 +226,7 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
       });
     });
 
-    it("流程列表默认每页20条并统一主要表格字号", () => {
+    it("流程列表默认每页10条并统一主要表格字号", () => {
       const start = performance.now();
       const source = readFileSync(
         new URL(
@@ -236,9 +236,10 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
         "utf8"
       );
 
-      expect(source).toContain("const [pageSize, setPageSize] = useState(20);");
+      expect(source).toContain("const [pageSize, setPageSize] = useState(10);");
       expect(source.match(/limit: pageSize/g)).toHaveLength(2);
       expect(source).toContain('aria-label="每页条数"');
+      expect(source).toContain("<option value={10}>10 条</option>");
       expect(source).toContain("<option value={20}>20 条</option>");
       expect(source).toContain("<option value={50}>50 条</option>");
       expect(source).toContain("<option value={100}>100 条</option>");
@@ -283,7 +284,8 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
       expect(statusMap.running).toBe("运行中");
       expect(statusMap.waiting).toBe("等待中");
       expect(statusMap.blocked).toBe("已阻塞");
-      expect(source).toContain('"运行状态 / 业务状态"');
+      expect(source).toContain('"运行状态和业务状态"');
+      expect(source).toContain('"运行状态和我的办理状态"');
       expect(source).toContain("业务：{businessStatus}");
 
       TestResultCollector.record({

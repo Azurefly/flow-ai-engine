@@ -3651,7 +3651,7 @@ function IamCenter({
   const roleCandidateUsers = roleAssignmentUsers.data?.items ?? [];
   const refreshRoleQueries = () => Promise.all([
     utils.iam.invalidate(), utils.auth.me.invalidate(),
-    utils.workflow.page.invalidate(), utils.workflow.get.invalidate(), utils.workflow.access.invalidate(),
+    utils.workflow.invalidate(),
     utils.project.invalidate(),
   ]);
   const assignSystemRole = trpc.iam.assignSystemRole.useMutation({
