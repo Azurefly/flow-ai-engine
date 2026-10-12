@@ -137,7 +137,7 @@ function executable() {
     page.setDefaultTimeout(15000);
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
-    await page.goto(base, { waitUntil: "networkidle" });
+    await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.getByLabel("用户名", { exact: true }).fill(login.username);
     await page.getByLabel("密码", { exact: true }).fill(login.password);
     await page
@@ -161,7 +161,7 @@ function executable() {
     );
     for (const workflow of fixture.workflows) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
       await page.locator("[data-workflow-editor]").waitFor();
       await page.screenshot({
@@ -284,7 +284,7 @@ function executable() {
           assert((await inspector.innerText()).includes("拒绝即取消实例"));
       }
     }
-    await page.goto(`${base}#/system/identity`, { waitUntil: "networkidle" });
+    await page.goto(`${base}#/system/identity`, { waitUntil: "domcontentloaded" });
     await page
       .getByPlaceholder("搜索名称、账号或邮箱", { exact: true })
       .fill(login.username);
@@ -545,7 +545,7 @@ function executable() {
       await page
         .getByRole("button", { name: "登录流程引擎", exact: true })
         .click();
-      await page.goto(`${base}#/system/config`, { waitUntil: "networkidle" });
+      await page.goto(`${base}#/system/config`, { waitUntil: "domcontentloaded" });
       await page
         .getByRole("button", { name: "新增账号", exact: true })
         .waitFor();
@@ -578,8 +578,8 @@ function executable() {
         })
       );
       await remote({ action: "revoke_identity", fixture });
-      await page.goto(`${base}#/system/identity`, { waitUntil: "networkidle" });
-      await page.reload({ waitUntil: "networkidle" });
+      await page.goto(`${base}#/system/identity`, { waitUntil: "domcontentloaded" });
+      await page.reload({ waitUntil: "domcontentloaded" });
       await page.locator("[data-aiflow-business-center]").waitFor();
       assert.equal(
         await page.getByRole("tab", { name: "系统配置", exact: true }).count(),
