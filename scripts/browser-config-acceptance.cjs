@@ -201,7 +201,7 @@ function executable() {
       await page.getByRole("combobox", { name: /切换流程仓库项目/ }).click();
       await page.getByLabel("搜索仓库项目").fill(fixture.projects[0].code);
       await page.getByRole("option", { name: `${fixture.projects[0].code} · ${fixture.projects[0].name}`, exact: true }).click();
-      await page.getByRole("combobox", { name: `切换流程仓库项目，当前：${fixture.projects[0].code}`, exact: true }).waitFor();
+      await page.getByRole("combobox", { name: `切换流程仓库项目，当前：${fixture.projects[0].code} · ${fixture.projects[0].name}`, exact: true }).waitFor();
       await page.screenshot({ path: path.join(directory, "warehouse-project-search.png"), fullPage: true });
       assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
       console.log(JSON.stringify({ stage: "project-pagination-browser", defaultPage: 10, secondPage: 3, pageSizeChanged: true, literalSearch: true, csvInvalidCodeFeedback: true, csvDuplicateBlocked: true, csvCreated: true, csvDomainTested: Boolean(fixture.csvDomainCode), directRoute: true, remoteSelector: true, warehouseSearch: true, fullProjectListRequests: 0 }));
