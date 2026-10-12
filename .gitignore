@@ -121,6 +121,9 @@ client/public/__manus__/version.json
 **/__pycache__/
 **/.pytest_cache/
 **/.venv/
+*.py[cod]
+*.tmp
+*.temp
 playwright-report/
 test-results/
 blob-report/
@@ -128,7 +131,12 @@ allure-results/
 allure-report/
 /01-test/018-测试报告/
 /01-test/remote-verify-screenshots/
+/01-test/014-自动化脚本/**/reports/
 /01-test/016-数据库测试/pg_sql_static_review_report_*.md
+
+# Superseded generated scaffold and bundle checker (keep locally)
+/template.json
+/scripts/check-bundle-budget.mts
 
 # Historical audit notes and generated reference inventories (keep locally)
 /docs/BUSINESS_SCENARIOS_VERIFICATION_REPORT.md

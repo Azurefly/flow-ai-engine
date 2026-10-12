@@ -24,3 +24,7 @@ scripts/dev/
 .cleanup-failed-tests.sh
 .compare-backup-residue.sh
 .deploy-*-test.yaml
+
+# 保留在本地的旧脚手架快照和已替代脚本
+template.json
+scripts/check-bundle-budget.mts
