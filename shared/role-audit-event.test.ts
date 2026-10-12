@@ -1,5 +1,10 @@
 import { expect, it } from "vitest";
 import { normalizeRoleAuditEvent } from "./role-audit-event";
+it.each(["project_archived", "project_restored"])("业务生命周期 %s 使用治理动作且保留原事件", operation => {
+  const event = { action: "user_updated", resourceType: "flow_project", detailsJson: { operation } };
+  expect(normalizeRoleAuditEvent(event)).toMatchObject({ action: operation, legacyAction: "user_updated" });
+  expect(event.action).toBe("user_updated");
+});
 it.each(["created", "updated", "deleted"])(
   "历史角色 %s 记录归入角色操作且不改写原记录",
   kind => {

@@ -1,0 +1,1 @@
+ALTER TABLE `flow_project` ADD `lifecycleVersion` int DEFAULT 1 NOT NULL;

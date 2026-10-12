@@ -214,6 +214,7 @@ export const flowProjects = mysqlTable(
     status: mysqlEnum("status", ["active", "archived"])
       .default("active")
       .notNull(),
+    lifecycleVersion: int("lifecycleVersion").default(1).notNull(),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   },

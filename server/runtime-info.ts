@@ -4,9 +4,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0037_task_execution_identity";
-export const DATABASE_MIGRATION_EPOCH = 1791700975083;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 44;
+export const DATABASE_MIGRATION_VERSION = "0038_project_lifecycle";
+export const DATABASE_MIGRATION_EPOCH = 1791813377041;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 45;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -102,6 +102,7 @@ export async function checkReadiness() {
           (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
           (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR
           (table_name='project_service_endpoint' AND column_name='targetEnvironment') OR
+          (table_name='flow_project' AND column_name='lifecycleVersion') OR
           (table_name='workflow_wait_subscription' AND column_name='executionKey') OR
           (table_name IN ('workflow_task','workflow_task_group') AND column_name='executionKey') OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR

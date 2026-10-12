@@ -65,6 +65,7 @@ import {
 } from "./workflow-engine";
 import { submitWorkflowRun, wakeWorkflowWorker } from "./workflow-worker";
 import { checkReadiness, getRuntimeInfo } from "./runtime-info";
+import { changeProjectStatus, projectLifecycleInput } from "./project-lifecycle";
 import { previewUserBatch, previewUserCreation } from "./iam-ai-service";
 import {
   archiveWorkflow,
@@ -110,6 +111,7 @@ import {
   listProjectPage,
   projectPageInput,
   existingProjectCodes,
+  getProjectLifecycleRecord,
   listProjectWorkflowAudit,
   listProjectWorkflows,
   listWarehouse,
@@ -547,6 +549,10 @@ export const appRouter = router({
       .query(({ ctx, input }) => getProject(ctx.user, input.projectId)),
     list: protectedProcedure.query(({ ctx }) => listProjects(ctx.user)),
     page: protectedProcedure.input(projectPageInput).query(({ ctx, input }) => listProjectPage(ctx.user, input)),
+    lifecyclePreview: protectedProcedure.input(z.object({ projectId: z.string().min(8).max(64) }))
+      .query(({ ctx, input }) => getProjectLifecycleRecord(ctx.user, input.projectId)),
+    changeStatus: protectedProcedure.input(projectLifecycleInput)
+      .mutation(({ ctx, input }) => changeProjectStatus(ctx.user, input)),
     existingCodes: protectedProcedure.input(z.object({ codes: z.array(z.string().trim().min(2).max(64)).min(1).max(500) }))
       .query(({ ctx, input }) => existingProjectCodes(ctx.user, input.codes)),
     access: protectedProcedure

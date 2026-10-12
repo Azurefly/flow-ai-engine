@@ -43,7 +43,7 @@ describe("项目服务端分页", () => {
       expect(sql).toContain("EXISTS");
     }
     expect(count[1]).toEqual([7, 7, 7]);
-    expect(rows[1]).toEqual([7, 7, 7, 10, 10]);
+    expect(rows[1]).toEqual([7, 7, 7, 7, 7, 7, 10, 10]);
     expect(rows[0]).toContain(count[0].slice(count[0].indexOf(" WHERE ") + 7));
   });
   it("搜索名称、代号、说明与工作域，特殊字符始终作为字面文本", async () => {
@@ -52,7 +52,8 @@ describe("项目服务端分页", () => {
       expect(sql).not.toContain("%_!");
       expect(sql).toContain("LOCATE(?,p.name)>0");
       expect(sql).toContain("search_domain.name");
-      expect(args.slice(3, 8)).toEqual(Array(5).fill("%_!'中文"));
+      const start = sql.startsWith("SELECT COUNT") ? 3 : 6;
+      expect(args.slice(start, start + 5)).toEqual(Array(5).fill("%_!'中文"));
     }
   });
   it("日期使用绝对时间和结束上界，不丢失当天的毫秒记录", async () => {

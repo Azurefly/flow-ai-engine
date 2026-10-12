@@ -188,6 +188,15 @@ async function cleanup(fixture) {
   for (const person of fixture.people ?? []) {
     assert(person.username.startsWith(fixture.tag + "_"));
   }
+  for (const run of fixture.runs ?? []) {
+    try {
+      assert(fixture.workflows.some(flow => flow.id === run.workflowId));
+      const actual = await request("workflow.runDetail", { runId: run.id });
+      assert.equal(actual.workflowId, run.workflowId); assert.equal(actual.ownerUserId, fixture.userId);
+      if (["queued", "running", "waiting", "blocked"].includes(actual.status))
+        await request("workflow.cancelRun", { runId: run.id }, true);
+    } catch (error) { failures.push(error.message); }
+  }
   for (const workflow of fixture.workflows ?? []) {
     try {
       const current = await request("workflow.get", { id: workflow.id });
@@ -217,14 +226,15 @@ async function cleanup(fixture) {
         try {
           assert(project.name.endsWith(fixture.tag));
           assert(project.code.startsWith(fixture.tag.toUpperCase()));
-          const [rows] = await pool.query("SELECT id,ownerUserId,name,code FROM flow_project WHERE id=?", [project.id]);
+          const [rows] = await pool.query("SELECT id,ownerUserId,name,code,status,lifecycleVersion FROM flow_project WHERE id=?", [project.id]);
           assert.equal(rows[0]?.ownerUserId, fixture.userId);
           assert.equal(rows[0]?.name, project.name);
           assert.equal(rows[0]?.code, project.code);
           const [active] = await pool.query("SELECT id FROM workflow WHERE projectId=? AND archivedAt IS NULL", [project.id]);
           assert.equal(active.length, 0, "隔离项目仍有未归档流程，拒绝归档项目");
           await pool.query("UPDATE flow_project_member SET revokedAt=COALESCE(revokedAt,NOW()) WHERE projectId=? AND userId=?", [project.id, fixture.disabledUserId]);
-          await pool.query("UPDATE flow_project SET status='archived' WHERE id=? AND ownerUserId=? AND name=? AND code=?", [project.id, fixture.userId, project.name, project.code]);
+          if (rows[0].status === "active")
+            await request("project.changeStatus", { projectId: project.id, status: "archived", expectedVersion: rows[0].lifecycleVersion, expectedWorkflowCount: 0 }, true);
           archivedOwnProjects++;
         } catch (error) { failures.push(error.message); }
       }
@@ -502,6 +512,77 @@ async function verifyPagination(intent) {
   await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "disabled" }, true);
   console.log(JSON.stringify({ stage: "project-page-api", scenarios: 10, pageSize: 10, secondPageItems: 3, scopedBeforePaging: true, revocationApplied: true }));
 }
+async function restoreOwnedWorkflows(fixture) {
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await bootstrap();
+  for (const workflow of fixture.workflows) {
+    const current = await request("workflow.get", { id: workflow.id });
+    assert.equal(current.ownerUserId, fixture.userId); assert.equal(current.name, workflow.name);
+    if (current.archivedAt) await request("workflow.restore", { id: workflow.id }, true);
+  }
+  console.log(JSON.stringify({ restoredOwnWorkflows: fixture.workflows.length }));
+}
+async function verifyLifecycle(intent) {
+  const { fixture } = intent;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await request("auth.login", intent.login, true);
+  const preview = () => request("project.lifecyclePreview", { projectId: fixture.projectId });
+  const initial = await preview();
+  assert.equal(initial.ownerUserId, fixture.userId); assert.equal(initial.name, "界面隔离验收_" + fixture.tag);
+  assert.equal(initial.lifecycleVersion, 1); assert.equal(initial.workflowCount, 3);
+  const change = (row, status) => request("project.changeStatus", { projectId: fixture.projectId, status, expectedVersion: row.lifecycleVersion, expectedWorkflowCount: row.workflowCount }, true);
+  const control = fixture.workflows.find(flow => flow.flowType === "control");
+  const run = await request("workflow.run", { workflowId: control.id, triggerType: "test", idempotencyKey: fixture.tag + "_archive_guard" }, true);
+  fixture.runs = [{ id: run.runId, workflowId: control.id }];
+  console.log(JSON.stringify({ fixture }));
+  await assert.rejects(change(initial, "archived"));
+  assert.equal((await preview()).status, "active");
+  await request("workflow.cancelRun", { runId: run.runId }, true);
+  const cancelled = await request("workflow.runDetail", { runId: run.runId });
+  assert.equal(cancelled.status, "cancelled");
+  const competing = await Promise.allSettled([change(initial, "archived"), change(initial, "archived")]);
+  assert.equal(competing.filter(result => result.status === "fulfilled").length, 1);
+  const archived = await preview();
+  assert.equal(archived.lifecycleVersion, 2); assert.equal(archived.workflowCount, 0); assert.equal(archived.archivedWorkflowCount, 3);
+  assert.equal((await request("project.page", { search: fixture.tag })).items.length, 0);
+  const archivePage = await request("project.page", { search: fixture.tag, status: "archived" });
+  assert.equal(archivePage.total, 1); assert.equal(archivePage.items[0].id, fixture.projectId);
+  assert((await request("workflow.archived", { projectId: fixture.projectId })).every(flow => !flow.canRestore));
+  await assert.rejects(request("workflow.restore", { id: control.id }, true));
+  await assert.rejects(request("workflow.run", { workflowId: control.id, triggerType: "test" }, true));
+  await assert.rejects(request("project.createWorkflow", { projectId: fixture.projectId, name: "不应创建", flowType: "control" }, true));
+  await assert.rejects(request("data.createSource", { projectId: fixture.projectId, name: "不应创建", sourceType: "inline", connection: {} }, true));
+  await bootstrap();
+  await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "active" }, true);
+  // Granting an owner role is a lifecycle operation; restore before configuring it.
+  await change(archived, "active");
+  await request("project.grantMember", { projectId: fixture.projectId, userId: fixture.disabledUserId, role: "viewer" }, true);
+  await request("auth.login", intent.memberLogin, true);
+  const viewer = await preview(); assert.equal(Boolean(viewer.canManageArchive), false);
+  await assert.rejects(change(viewer, "archived"));
+  await bootstrap();
+  await request("project.grantMember", { projectId: fixture.projectId, userId: fixture.disabledUserId, role: "owner" }, true);
+  await request("auth.login", intent.memberLogin, true);
+  const owner = await preview(); assert.equal(Boolean(owner.canManageArchive), true);
+  await change(owner, "archived");
+  const closed = await preview();
+  assert.equal((await request("workflow.archived", { projectId: fixture.projectId })).length, 3);
+  assert.equal((await request("workflow.get", { id: control.id })).projectStatus, "archived");
+  const resources = await request("data.resources", { projectId: fixture.projectId });
+  assert.equal(resources.assets.length, 1);
+  await change(closed, "active");
+  const reopened = await preview();
+  assert.equal(reopened.lifecycleVersion, 5); assert.equal(reopened.workflowCount, 0);
+  await assert.rejects(change(initial, "archived"));
+  await bootstrap();
+  await request("project.revokeMember", { projectId: fixture.projectId, userId: fixture.disabledUserId }, true);
+  await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "disabled" }, true);
+  const audits = await request("iam.authorizationAudit", { limit: 200 });
+  assert(audits.some(row => row.resourceId === fixture.projectId && row.action === "project_archived"));
+  assert(audits.some(row => row.resourceId === fixture.projectId && row.action === "project_restored"));
+  await restoreOwnedWorkflows(fixture);
+  console.log(JSON.stringify({ stage: "project-lifecycle-api", scenarios: 12, pendingRunBlocked: true, competingArchivesSingleWinner: true, staleRevisionDenied: true, ordinaryOwnerManaged: true, viewerDenied: true, historicalReadAllowed: true, noAutomaticPublication: true, auditLabels: true }));
+}
 async function cycleStatus(fixture) {
   assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
   await bootstrap();
@@ -543,6 +624,8 @@ async function cycleStatus(fixture) {
 }
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_pagination") await verifyPagination(browserFixtureIntent);
+else if (browserFixtureIntent.action === "verify_lifecycle") await verifyLifecycle(browserFixtureIntent);
+else if (browserFixtureIntent.action === "restore_owned_workflows") await restoreOwnedWorkflows(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "cycle_status")
   await cycleStatus(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "grant_identity")

@@ -1,7 +1,7 @@
 export function normalizeRoleAuditEvent<T extends Record<string, unknown>>(
   event: T
 ): T {
-  if (event.action !== "user_updated" || event.resourceType !== "iam_role")
+  if (event.action !== "user_updated" || !["iam_role", "flow_project"].includes(String(event.resourceType)))
     return event;
   let details = event.detailsJson;
   if (typeof details === "string") {
@@ -13,7 +13,10 @@ export function normalizeRoleAuditEvent<T extends Record<string, unknown>>(
   }
   if (!details || typeof details !== "object" || Array.isArray(details))
     return event;
-  const operations: Record<string, string> = {
+  const operations: Record<string, string> = event.resourceType === "flow_project" ? {
+    project_archived: "project_archived",
+    project_restored: "project_restored",
+  } : {
     custom_role_created: "role_created",
     custom_role_updated: "role_updated",
     custom_role_deleted: "role_deleted",

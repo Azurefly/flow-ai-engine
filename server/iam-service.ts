@@ -276,7 +276,7 @@ export async function getWorkflowAccess(user: { id: number; role: "user" | "admi
   let projectRoles: ProjectMemberRole[] = [];
   if (workflow.projectId) {
     const { getProjectAccess } = await import("./project-service");
-    const projectAccess = await getProjectAccess(user, String(workflow.projectId));
+    const projectAccess = await getProjectAccess(user, String(workflow.projectId), { includeArchived: true });
     projectRoles = projectAccess.roles;
     projectRoles.forEach(role => projectMemberWorkflowPermissions[role]?.forEach(permission => permissions.add(permission)));
   }

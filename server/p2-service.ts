@@ -9,6 +9,7 @@ import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
 import { getProjectAccess, type ProjectUser } from "./project-service";
+import { lockActiveProject } from "./project-lifecycle-lock";
 import {
   createHeartbeatJob,
   deleteHeartbeatJob,
@@ -95,7 +96,7 @@ async function requireProjectAccess(
   projectId: string,
   mode: "view" | "edit" | "run"
 ) {
-  const access = await getProjectAccess(user, projectId);
+  const access = await getProjectAccess(user, projectId, { includeArchived: mode === "view" });
   const permission =
     mode === "view"
       ? "project:view"
@@ -1993,6 +1994,7 @@ export async function runDataflow(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    await lockActiveProject(connection, input.projectId);
     const [workflows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND archivedAt IS NULL LIMIT 1 FOR UPDATE",
       [input.workflowId, input.projectId]
@@ -2323,38 +2325,60 @@ export async function activateDataflowSchedule(
   const flow = await getPublishedDataflow(input.projectId, input.workflowId);
   const callbackPath = "/api/scheduled/dataflow";
   const description = `数据流调度：${flow.name}（${input.workflowId.slice(0, 8)}）`;
-  if (schedule.scheduleCronTaskUid) {
-    await updateHeartbeatJob(
-      String(schedule.scheduleCronTaskUid),
-      {
-        cron: schedule.cronExpression,
-        path: callbackPath,
-        method: "POST",
-        description,
-        enable: true,
-      },
-      ""
+  let taskUid = schedule.scheduleCronTaskUid ? String(schedule.scheduleCronTaskUid) : "";
+  let connection: mysql.PoolConnection | undefined;
+  try {
+    if (schedule.scheduleCronTaskUid) {
+      await updateHeartbeatJob(
+        String(schedule.scheduleCronTaskUid),
+        {
+          cron: schedule.cronExpression,
+          path: callbackPath,
+          method: "POST",
+          description,
+          enable: true,
+        },
+        ""
+      );
+    } else {
+      const job = await createHeartbeatJob(
+        {
+          name: `dataflow-${schedule.id}`,
+          cron: schedule.cronExpression,
+          path: callbackPath,
+          method: "POST",
+          description,
+        },
+        ""
+      );
+      taskUid = job.taskUid;
+      await db().query(
+        "UPDATE dataflow_schedule SET scheduleCronTaskUid=? WHERE id=?",
+        [job.taskUid, schedule.id]
+      );
+    }
+    connection = await db().getConnection();
+    await connection.beginTransaction();
+    await lockActiveProject(connection, input.projectId);
+    const [workflows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM workflow WHERE id=? AND projectId=? AND archivedAt IS NULL AND status='published' FOR UPDATE", [input.workflowId, input.projectId]
     );
-  } else {
-    const job = await createHeartbeatJob(
-      {
-        name: `dataflow-${schedule.id}`,
-        cron: schedule.cronExpression,
-        path: callbackPath,
-        method: "POST",
-        description,
-      },
-      ""
+    if (!workflows[0]) throw new Error("流程已归档或取消发布，调度未激活。请刷新后重新确认。");
+    const [currentSchedules] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT status,scheduleCronTaskUid,cronExpression FROM dataflow_schedule WHERE id=? AND projectId=? AND workflowId=? FOR UPDATE", [schedule.id, input.projectId, input.workflowId]
     );
-    await db().query(
-      "UPDATE dataflow_schedule SET scheduleCronTaskUid=? WHERE id=?",
-      [job.taskUid, schedule.id]
-    );
-  }
-  await db().query(
-    "UPDATE dataflow_schedule SET status='active',updatedAt=NOW() WHERE id=?",
-    [schedule.id]
-  );
+    if (!currentSchedules[0] || currentSchedules[0].status === "deleted" || currentSchedules[0].scheduleCronTaskUid !== taskUid || currentSchedules[0].cronExpression !== schedule.cronExpression)
+      throw new Error("调度配置已变化，未激活本次计划，请刷新后重新确认。");
+    await connection.query("UPDATE dataflow_schedule SET status='active',updatedAt=NOW() WHERE id=? AND scheduleCronTaskUid=?", [schedule.id, taskUid]);
+    await connection.commit();
+  } catch (error) {
+    if (connection) await connection.rollback();
+    if (taskUid) {
+      try { await updateHeartbeatJob(taskUid, { enable: false }, ""); }
+      catch { throw new Error("调度未生效，且远端计划的停用尚未确认，请管理员检查调度服务。"); }
+    }
+    throw error;
+  } finally { connection?.release(); }
   return { id: schedule.id, status: "active" as const };
 }
 

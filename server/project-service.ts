@@ -75,14 +75,14 @@ export async function ensureProjectUnitTable() {
   projectUnitTableInitialized = true;
 }
 
-export async function getProjectAccess(user: ProjectUser, projectId: string) {
+export async function getProjectAccess(user: ProjectUser, projectId: string, options?: { includeArchived?: boolean }) {
   await ensureProjectUnitTable();
   const [projects] = await db().query<mysql.RowDataPacket[]>(
     "SELECT ownerUserId,status FROM flow_project WHERE id=? LIMIT 1",
     [projectId]
   );
   const project = projects[0];
-  if (!project || project.status !== "active")
+  if (!project || (project.status !== "active" && !(options?.includeArchived && project.status === "archived")))
     return {
       exists: false,
       permissions: new Set<ProjectPermission>(),
@@ -91,7 +91,7 @@ export async function getProjectAccess(user: ProjectUser, projectId: string) {
   if (user.role === "admin" || Number(project.ownerUserId) === user.id)
     return {
       exists: true,
-      permissions: new Set<ProjectPermission>(rolePermissions.owner),
+      permissions: new Set<ProjectPermission>(project.status === "archived" ? ["project:view"] : rolePermissions.owner),
       roles: ["owner"] as ProjectMemberRole[],
     };
   const [members] = await db().query<mysql.RowDataPacket[]>(
@@ -114,6 +114,8 @@ export async function getProjectAccess(user: ProjectUser, projectId: string) {
   roles.forEach(role =>
     rolePermissions[role]?.forEach(permission => permissions.add(permission))
   );
+  if (project.status === "archived")
+    permissions.forEach(permission => { if (permission !== "project:view") permissions.delete(permission); });
   return { exists: true, permissions, roles };
 }
 
@@ -122,7 +124,7 @@ async function requireProjectPermission(
   projectId: string,
   permission: ProjectPermission
 ) {
-  const access = await getProjectAccess(user, projectId);
+  const access = await getProjectAccess(user, projectId, { includeArchived: permission === "project:view" });
   if (!access.exists || !access.permissions.has(permission))
     throw new Error("项目不存在或当前账号无权执行此操作。");
   return access;
@@ -179,6 +181,7 @@ export const projectPageInput = z.object({
   page: z.number().int().min(1).max(100000).default(1),
   limit: z.number().int().min(1).max(50).default(10),
   search: z.string().trim().max(160).default(""),
+  status: z.enum(["active", "archived"]).default("active"),
   createdFrom: z.string().datetime().optional(),
   createdBefore: z.string().datetime().optional(),
 }).refine(input => !input.createdFrom || !input.createdBefore ||
@@ -189,7 +192,7 @@ export const projectPageInput = z.object({
 export async function listProjectPage(user: ProjectUser, value: z.input<typeof projectPageInput> = {}) {
   const input = projectPageInput.parse(value);
   await ensureProjectUnitTable();
-  const clauses = ["p.status='active'"];
+  const clauses = [input.status === "archived" ? "p.status='archived'" : "p.status='active'"];
   const args: unknown[] = [];
   if (user.role !== "admin") {
     clauses.push(`(p.ownerUserId=? OR EXISTS (
@@ -227,13 +230,37 @@ export async function listProjectPage(user: ProjectUser, value: z.input<typeof p
   const [items] = await db().query<mysql.RowDataPacket[]>(
     `SELECT p.*,owner.username AS ownerUsername,owner.name AS ownerName,
       d.code AS domainCode,d.name AS domainName,
-      (SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount
+      (SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount,
+      (SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NOT NULL) AS archivedWorkflowCount,
+      ${projectOwnerVisibility(user).sql} AS canManageArchive
       FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId
       LEFT JOIN work_domain d ON d.id=p.domainId WHERE ${where}
       ORDER BY p.updatedAt DESC,p.id DESC LIMIT ? OFFSET ?`,
-    [...args, input.limit, (page - 1) * input.limit]
+    [...projectOwnerVisibility(user).args, ...args, input.limit, (page - 1) * input.limit]
   );
   return { items, total, page, limit: input.limit, hasMore: page * input.limit < total };
+}
+
+export function projectOwnerVisibility(user: ProjectUser) {
+  return user.role === "admin" ? { sql: "1", args: [] as number[] } : {
+    sql: `(p.ownerUserId=? OR EXISTS (SELECT 1 FROM flow_project_member own_member WHERE own_member.projectId=p.id AND own_member.userId=? AND own_member.role='owner' AND own_member.revokedAt IS NULL AND own_member.effectiveFrom<=NOW() AND (own_member.expiresAt IS NULL OR own_member.expiresAt>NOW()))
+      OR EXISTS (SELECT 1 FROM flow_project_unit own_unit JOIN organization_membership own_membership ON own_membership.unitId=own_unit.unitId JOIN organization_unit own_department ON own_department.id=own_unit.unitId AND own_department.status='active' WHERE own_unit.projectId=p.id AND own_unit.role='owner' AND own_membership.userId=?))`,
+    args: [user.id, user.id, user.id],
+  };
+}
+
+export async function getProjectLifecycleRecord(user: ProjectUser, projectId: string) {
+  await ensureProjectUnitTable();
+  const owner = projectOwnerVisibility(user);
+  const access = await getProjectAccess(user, projectId, { includeArchived: true });
+  if (!access.exists || !access.permissions.has("project:view")) return null;
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT p.*,${owner.sql} AS canManageArchive,
+      (SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount,
+      (SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NOT NULL) AS archivedWorkflowCount
+      FROM flow_project p WHERE p.id=? LIMIT 1`, [...owner.args, projectId]
+  );
+  return rows[0] ?? null;
 }
 
 export async function getProject(user: ProjectUser, projectId: string) {

@@ -10,6 +10,7 @@ import {
 } from "../shared/workflow-template";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
+import { lockActiveProject } from "./project-lifecycle-lock";
 import { getSharedPool } from "./db";
 import {
   getWorkflowAccess,
@@ -326,7 +327,7 @@ export async function listArchivedWorkflows(
     user.role === "admin"
       ? "SELECT DISTINCT w.* FROM workflow w WHERE w.projectId=? AND w.archivedAt IS NOT NULL ORDER BY w.archivedAt DESC"
       : `SELECT DISTINCT w.* FROM workflow w
-          LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
+          LEFT JOIN flow_project fp ON fp.id=w.projectId
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
           LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
           LEFT JOIN role_assignment ra ON ra.userId=? AND ra.revokedAt IS NULL AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW()) AND (ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=w.id))
@@ -347,9 +348,12 @@ export async function listArchivedWorkflows(
       ? [projectId]
       : [user.id, user.id, user.id, projectId, user.id, user.id, user.id]
   );
+  if (!rows.length) return [];
+  const [projects] = await db().query<mysql.RowDataPacket[]>("SELECT status FROM flow_project WHERE id=? LIMIT 1", [projectId]);
+  if (projects[0]?.status !== "active")
+    return rows.map(row => ({ ...hydrateWorkflow(row), canRestore: false }));
   if (user.role === "admin")
     return rows.map(row => ({ ...hydrateWorkflow(row), canRestore: true }));
-  if (!rows.length) return [];
   const workflowIds = rows.map(row => String(row.id));
   const [manageableRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT DISTINCT w.id FROM workflow w
@@ -383,7 +387,7 @@ export async function getWorkflow(idValue: string, user: WorkflowUser) {
   )
     return null;
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT * FROM workflow WHERE id=? LIMIT 1",
+    "SELECT w.*,p.status AS projectStatus FROM workflow w LEFT JOIN flow_project p ON p.id=w.projectId WHERE w.id=? LIMIT 1",
     [idValue]
   );
   const row = rows[0];
@@ -416,6 +420,7 @@ export async function createWorkflow(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    if (options?.projectId) await lockActiveProject(connection, options.projectId);
     await connection.query(
       "INSERT INTO workflow (id,ownerUserId,projectId,folderId,processCode,name,description,flowType,creationSource,dataSourceId,auditStatus,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'draft',1)",
       [
@@ -561,6 +566,12 @@ export async function updateWorkflow(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    if (current.projectId) await lockActiveProject(connection, current.projectId);
+    const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT archivedAt,definitionVersion,status FROM workflow WHERE id=? LIMIT 1 FOR UPDATE", [workflowId]
+    );
+    if (!lockedRows[0] || lockedRows[0].archivedAt || Number(lockedRows[0].definitionVersion) !== Number(current.definitionVersion) || lockedRows[0].status !== current.status)
+      throw new Error("流程状态或版本已变化，请刷新后重新确认；本次修改尚未保存。");
     await connection.query(
       "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
       [
@@ -1215,17 +1226,18 @@ export async function restoreWorkflow(workflowId: string, user: WorkflowUser) {
     !(await hasWorkflowPermission(user, workflowId, "workflow:members:manage"))
   )
     return false;
-  const [result] = await db().query<mysql.ResultSetHeader>(
-    "UPDATE workflow SET archivedAt=NULL,archivedByUserId=NULL,updatedAt=NOW() WHERE id=? AND archivedAt IS NOT NULL",
-    [workflowId]
-  );
-  if (!result.affectedRows) return false;
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "workflow",
-    resourceId: workflowId,
-    details: { operation: "workflow_restored" },
-  });
-  return true;
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT projectId FROM workflow WHERE id=? LIMIT 1", [workflowId]);
+  if (!rows[0]) return false;
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    if (rows[0].projectId) await lockActiveProject(connection, String(rows[0].projectId));
+    const [result] = await connection.query<mysql.ResultSetHeader>(
+      "UPDATE workflow SET archivedAt=NULL,archivedByUserId=NULL,updatedAt=NOW() WHERE id=? AND archivedAt IS NOT NULL", [workflowId]
+    );
+    if (result.affectedRows) await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: workflowId, details: { operation: "workflow_restored" } }, connection);
+    await connection.commit();
+    return Boolean(result.affectedRows);
+  } catch (error) { await connection.rollback(); throw error; }
+  finally { connection.release(); }
 }

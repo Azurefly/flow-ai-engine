@@ -1,4 +1,5 @@
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
+import { lockActiveProject } from "./project-lifecycle-lock";
 import { restoreHumanCreationRuntime, completeCurrentHumanCheckpoint } from "./workflow-human-checkpoint";
 import { workflowWaitExecutionKey, workflowTaskExecutionKey } from "./workflow-wait-execution-key";
 import {
@@ -2047,6 +2048,7 @@ export async function submitWorkflowRun(input: {
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    if (workflow.projectId) await lockActiveProject(connection, String(workflow.projectId));
     const [lockedWorkflowRows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT archivedAt,flowType,status,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
       [input.workflowId]

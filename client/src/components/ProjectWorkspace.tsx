@@ -44,7 +44,7 @@ import {
   Building2,
   Trash2,
 } from "lucide-react";
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type ChangeEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Popover,
@@ -52,9 +52,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import DataResourceCenter from "./DataResourceCenter";
+const ProjectArchiveDialog = lazy(() => import("./ProjectArchiveDialog"));
 
 export type ProjectRecord = {
   id: string;
+  status?: "active" | "archived";
+  lifecycleVersion?: number;
+  canManageArchive?: boolean | number;
+  archivedWorkflowCount?: number;
   code: string;
   name: string;
   description?: string | null;
@@ -113,9 +118,13 @@ const formatDate = (value?: string | Date | null) =>
 
 export function BusinessCenter({
   canCreate,
+  status,
+  onStatusChange,
   onOpenProject,
 }: {
   canCreate: boolean;
+  status: "active" | "archived";
+  onStatusChange: (status: "active" | "archived") => void;
   onOpenProject: (project: ProjectRecord) => void;
 }) {
   const utils = trpc.useUtils();
@@ -132,13 +141,14 @@ export function BusinessCenter({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [filterError, setFilterError] = useState("");
+  const [archiveTarget, setArchiveTarget] = useState<ProjectRecord | null>(null);
   const pageInput = useMemo(() => {
     const end = appliedFilters.endDate ? new Date(`${appliedFilters.endDate}T00:00:00`) : null;
     if (end) end.setDate(end.getDate() + 1);
-    return { page, limit: pageSize, search: appliedFilters.keyword,
+    return { page, limit: pageSize, search: appliedFilters.keyword, status,
       createdFrom: appliedFilters.startDate ? new Date(`${appliedFilters.startDate}T00:00:00`).toISOString() : undefined,
       createdBefore: end?.toISOString() };
-  }, [page, pageSize, appliedFilters]);
+  }, [page, pageSize, appliedFilters, status]);
   const projects = trpc.project.page.useQuery(pageInput);
   const [showCreate, setShowCreate] = useState(false);
   const [unitDirectoryQuery, setUnitDirectoryQuery] = useState("");
@@ -360,6 +370,9 @@ export function BusinessCenter({
           error: projects.isError, hasData: projects.data !== undefined,
           retry: () => void projects.refetch() }}
         filterError={filterError}
+        status={status}
+        onStatusChange={value => { setPage(1); onStatusChange(value); }}
+        onLifecycle={setArchiveTarget}
         canCreate={canCreate}
         filterForm={filterForm}
         setFilterForm={setFilterForm}
@@ -433,6 +446,9 @@ export function BusinessCenter({
         className="hidden"
         onChange={event => void importBusinesses(event)}
       />
+      {archiveTarget && <Suspense fallback={<p role="status" className="aiflow-type-body p-4">正在加载业务归档管理…</p>}>
+        <ProjectArchiveDialog key={archiveTarget.id} project={archiveTarget} onClose={() => setArchiveTarget(null)} />
+      </Suspense>}
     </>
   );
 }
@@ -455,6 +471,9 @@ type DirectoryStatus = {
 
 type BusinessCenterViewProps = {
   projects: ProjectRecord[];
+  status: "active" | "archived";
+  onStatusChange: (status: "active" | "archived") => void;
+  onLifecycle: (project: ProjectRecord) => void;
   total: number;
   page: number;
   pageSize: number;
@@ -545,6 +564,7 @@ function DirectoryRetry({
 
 function BusinessCenterView({
   projects,
+  status, onStatusChange, onLifecycle,
   total, page, pageSize, onPageChange, onPageSizeChange, queryState, filterError,
   canCreate,
   filterForm,
@@ -669,7 +689,7 @@ function BusinessCenterView({
                 </button>
                 <button
                   type="button"
-                  disabled={!canCreate || importing}
+                  disabled={!canCreate || importing || status === "archived"}
                   aria-label={importing ? "正在导入业务 CSV" : "导入业务 CSV"}
                   onClick={onRequestImport}
                   className="aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 min-[1280px]:min-h-0"
@@ -688,7 +708,7 @@ function BusinessCenterView({
                 </button>
               </div>
             </details>
-            {canCreate && (
+            {canCreate && status === "active" && (
               <Button
                 type="button"
                 size="sm"
@@ -710,6 +730,10 @@ function BusinessCenterView({
               <span className="aiflow-type-meta font-normal text-muted-foreground">
                 （{total}）
               </span>
+            </div>
+            <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="业务归档范围">
+              {([['active', '在用业务'], ['archived', '已归档']] as const).map(([value, label]) =>
+                <Button key={value} type="button" variant={status === value ? "secondary" : "outline"} aria-pressed={status === value} onClick={() => onStatusChange(value)}>{label}</Button>)}
             </div>
             <div className="flex flex-col gap-2 sm:flex-row">
               <Input
@@ -832,7 +856,7 @@ function BusinessCenterView({
                 <tbody>
                   {pageProjects.map(project => (
                     <tr
-                      key={project.id}
+                      key={project.id} data-project-row="" data-project-id={project.id}
                       className="border-t border-border hover:bg-muted/70"
                     >
                       <td className="min-w-0 px-4 py-3">
@@ -847,7 +871,7 @@ function BusinessCenterView({
                         </p>
                       </td>
                       <td className="aiflow-type-body px-4 py-3 text-right font-mono tabular-nums text-foreground">
-                        {project.workflowCount == null
+                        {status === "archived" ? (project.archivedWorkflowCount ?? 0) : project.workflowCount == null
                           ? "—"
                           : project.workflowCount}
                       </td>
@@ -876,18 +900,17 @@ function BusinessCenterView({
                           type="button"
                           size="sm"
                           className="aiflow-type-control h-8 px-2.5"
-                          onClick={() => onOpenProject(project)}
+                          onClick={() => status === "archived" ? onLifecycle(project) : onOpenProject(project)}
                         >
-                          进入
+                          {status === "archived" ? "查看归档" : "进入"}
                         </Button>
-                        <details className="relative inline-block align-middle">
-                          <summary className="aiflow-type-control ml-1 inline-flex h-8 cursor-pointer list-none items-center rounded-md border border-border px-2 text-muted-foreground hover:bg-muted">
-                            信息
-                          </summary>
-                          <div className="absolute right-0 z-20 mt-1 w-80 rounded-lg border border-border bg-card p-3 text-left shadow-lg">
+                        <Popover>
+                          <PopoverTrigger asChild><Button variant="outline" size="sm" className="ml-1" aria-label={`更多业务操作：${project.name}`}>更多</Button></PopoverTrigger>
+                          <PopoverContent align="end" className="w-[min(360px,calc(100vw-24px))] p-3 text-left">
                             <ProjectMoreDetails project={project} />
-                          </div>
-                        </details>
+                            {status === "active" && Boolean(project.canManageArchive) && <Button type="button" variant="outline" className="mt-3 w-full" aria-label={`归档业务：${project.name}`} onClick={() => onLifecycle(project)}>归档业务</Button>}
+                          </PopoverContent>
+                        </Popover>
                       </td>
                     </tr>
                   ))}
@@ -909,7 +932,7 @@ function BusinessCenterView({
           <ul className="grid gap-2 p-3 sm:grid-cols-2 sm:gap-3 min-[900px]:hidden">
             {pageProjects.map(project => (
               <li
-                key={project.id}
+                key={project.id} data-project-row="" data-project-id={project.id}
                 className="min-w-0 rounded-md border border-border p-3 sm:p-3.5"
               >
                 <div className="flex items-start justify-between gap-3">
@@ -925,10 +948,11 @@ function BusinessCenterView({
                     type="button"
                     size="sm"
                     className="aiflow-type-control h-11 shrink-0 px-2.5 min-[1280px]:h-8"
-                    onClick={() => onOpenProject(project)}
+                    onClick={() => status === "archived" ? onLifecycle(project) : onOpenProject(project)}
                   >
-                    进入
+                    {status === "archived" ? "查看归档" : "进入"}
                   </Button>
+                  {status === "active" && Boolean(project.canManageArchive) && <Button type="button" variant="outline" size="sm" className="aiflow-type-control h-11 shrink-0 px-2.5" aria-label={`归档业务：${project.name}`} onClick={() => onLifecycle(project)}>归档</Button>}
                 </div>
                 <dl className="aiflow-type-body mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
                   <div>
@@ -936,7 +960,7 @@ function BusinessCenterView({
                       流程数
                     </dt>
                     <dd className="aiflow-type-body mt-0.5 font-mono tabular-nums text-foreground">
-                      {project.workflowCount == null
+                      {status === "archived" ? (project.archivedWorkflowCount ?? 0) : project.workflowCount == null
                         ? "—"
                         : project.workflowCount}
                     </dd>

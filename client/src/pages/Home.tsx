@@ -402,6 +402,7 @@ function FlowConsole({
     null
   );
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [businessStatus, setBusinessStatus] = useState<"active" | "archived">("active");
   const [projectSearch, setProjectSearch] = useState("");
   const [projectSearchValue, setProjectSearchValue] = useState("");
   useEffect(() => {
@@ -1076,10 +1077,11 @@ function FlowConsole({
     onError: error => toast.error(error.message),
   });
 
-  const canEdit = Boolean(access.data?.permissions?.has("workflow:edit"));
+  const workflowArchived = Boolean(selectedWorkflow?.archivedAt) || selectedWorkflow?.projectStatus === "archived";
+  const canEdit = !workflowArchived && Boolean(access.data?.permissions?.has("workflow:edit"));
   const clientUpdateAvailable = useClientVersionUpdate(Boolean(user.id));
-  const canPublish = Boolean(access.data?.permissions?.has("workflow:publish"));
-  const canRun = Boolean(access.data?.permissions?.has("workflow:run"));
+  const canPublish = !workflowArchived && Boolean(access.data?.permissions?.has("workflow:publish"));
+  const canRun = !workflowArchived && Boolean(access.data?.permissions?.has("workflow:run"));
   const canManageMembers = Boolean(
     access.data?.permissions?.has("workflow:members:manage")
   );
@@ -1582,6 +1584,7 @@ function FlowConsole({
             !routeRestoring &&
             (
                 <BusinessCenter
+                  status={businessStatus} onStatusChange={setBusinessStatus}
                   canCreate={
                     user.role === "admin" ||
                     Boolean(access.data?.permissions?.has("workflow:create"))
@@ -2868,7 +2871,9 @@ function FlowDesigner({
               权限感知设计器
             </div>
             <p className="aiflow-type-body mt-1 text-aiflow-info">
-              {canEdit
+              {workflow?.archivedAt || workflow?.projectStatus === "archived"
+                ? "业务或流程已归档，可查看定义与历史运行；恢复后再继续编辑。"
+                : canEdit
                 ? "你可编辑画布并保存版本。"
                 : "当前为只读授权；仍可查看定义与运行反馈。"}
             </p>
@@ -3464,7 +3469,7 @@ type AiUserPreview = {
   rationale: string;
 };
 
-type AuditCategory = "authentication" | "account" | "roles";
+type AuditCategory = "authentication" | "account" | "roles" | "projects";
 const authorizationAuditActions: Record<
   string,
   { label: string; category: AuditCategory }
@@ -3476,6 +3481,8 @@ const authorizationAuditActions: Record<
   user_updated: { label: "更新账号或成员关系", category: "account" },
   user_disabled: { label: "停用账号", category: "account" },
   role_created: { label: "创建自定义角色", category: "roles" },
+  project_archived: { label: "归档业务", category: "projects" },
+  project_restored: { label: "恢复业务", category: "projects" },
   role_updated: { label: "修改自定义角色", category: "roles" },
   role_deleted: { label: "删除自定义角色", category: "roles" },
   role_assigned: { label: "授予角色", category: "roles" },
@@ -3493,6 +3500,7 @@ function auditCategoryLabel(category: string) {
     authentication: "认证",
     account: "账号管理",
     roles: "角色授权",
+    projects: "业务归档",
     other: "其他",
   };
   return labels[category] ?? "其他";
@@ -4955,6 +4963,7 @@ function IamCenter({
               <option value="authentication">认证</option>
               <option value="account">账号管理</option>
               <option value="roles">角色授权</option>
+              <option value="projects">业务归档</option>
               <option value="other">其他 / 未识别</option>
             </select>
             <details

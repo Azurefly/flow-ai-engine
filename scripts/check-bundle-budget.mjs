@@ -14,8 +14,9 @@ const debugCollectorArtifact = join(
 const maxChunkBytes = 450 * 1024;
 // Account status confirmation/recovery: 1422.16 KiB raw / 422.10 KiB gzip.
 // Keep one-KiB headroom for this measured increment; chunk/HTML limits stay fixed.
-const maxTotalBytes = 1_423 * 1024;
-const maxTotalGzipBytes = 423 * 1024;
+// Project archive/restore and its history dialog add about 2.5 KiB gzip.
+const maxTotalBytes = 1_430 * 1024;
+const maxTotalGzipBytes = 426 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

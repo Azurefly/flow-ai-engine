@@ -12,6 +12,7 @@ const verifyUpdated = process.env.FLOW_UI_EXPECT_UPDATED === "1";
 const verifySources = process.env.FLOW_UI_PERMISSION_SOURCES === "1";
 const verifyStatus = process.env.FLOW_UI_ACCOUNT_STATUS === "1";
 const verifyProjectPaging = process.env.FLOW_UI_PROJECT_PAGING === "1";
+const verifyProjectLifecycle = process.env.FLOW_UI_PROJECT_LIFECYCLE === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -126,6 +127,8 @@ function executable() {
     assert.equal(fixture.workflows.length, 3);
     if (verifyProjectPaging)
       console.log((await remote({ action: "verify_pagination", fixture, login, memberLogin })).trim());
+    if (verifyProjectLifecycle)
+      console.log((await remote({ action: "verify_lifecycle", fixture, login, memberLogin })).trim());
     browser = await chromium.launch({
       headless: true,
       executablePath: executable(),
@@ -205,6 +208,33 @@ function executable() {
       await page.screenshot({ path: path.join(directory, "warehouse-project-search.png"), fullPage: true });
       assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
       console.log(JSON.stringify({ stage: "project-pagination-browser", defaultPage: 10, secondPage: 3, pageSizeChanged: true, literalSearch: true, csvInvalidCodeFeedback: true, csvDuplicateBlocked: true, csvCreated: true, csvDomainTested: Boolean(fixture.csvDomainCode), directRoute: true, remoteSelector: true, warehouseSearch: true, fullProjectListRequests: 0 }));
+    }
+    if (verifyProjectLifecycle) {
+      const center = page.locator("[data-aiflow-business-center]");
+      await center.getByLabel("搜索业务名称、代号或工作域").fill(fixture.tag);
+      await center.getByRole("button", { name: "查询", exact: true }).click();
+      await center.getByRole("button", { name: `更多业务操作：界面隔离验收_${fixture.tag}`, exact: true }).click();
+      await page.getByRole("button", { name: `归档业务：界面隔离验收_${fixture.tag}`, exact: true }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByRole("button", { name: "确认归档业务", exact: true }).waitFor();
+      const before = requests.filter(url => url.includes("project.changeStatus")).length;
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      assert.equal(requests.filter(url => url.includes("project.changeStatus")).length, before);
+      const action = page.getByRole("button", { name: `归档业务：界面隔离验收_${fixture.tag}`, exact: true });
+      if (!(await action.isVisible())) await center.getByRole("button", { name: `更多业务操作：界面隔离验收_${fixture.tag}`, exact: true }).click();
+      await action.click();
+      await page.getByRole("dialog").getByRole("button", { name: "确认归档业务", exact: true }).click();
+      await page.getByText("业务及在用流程已归档，历史数据已保留。", { exact: true }).waitFor();
+      await center.getByRole("button", { name: "已归档", exact: true }).click();
+      await center.getByRole("button", { name: "查看归档", exact: true }).click();
+      await page.getByRole("dialog").getByRole("heading", { name: "已归档流程", exact: true }).waitFor();
+      assert.equal(await page.getByRole("dialog").getByRole("link", { name: "查看历史", exact: true }).count(), 3);
+      await page.screenshot({ path: path.join(directory, "project-archive-history.png"), fullPage: true });
+      await page.getByRole("dialog").getByRole("button", { name: "恢复业务", exact: true }).click();
+      await page.getByText("业务已恢复，请按需恢复流程并重新发布。", { exact: true }).waitFor();
+      await center.getByRole("button", { name: "在用业务", exact: true }).click();
+      await remote({ action: "restore_owned_workflows", fixture });
+      console.log(JSON.stringify({ stage: "project-lifecycle-browser", cancelNoMutation: true, explicitArchive: true, archiveScope: true, historyReadable: true, explicitRestore: true }));
     }
     for (const workflow of fixture.workflows) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {

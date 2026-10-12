@@ -267,6 +267,13 @@
       "when": 1791700975083,
       "tag": "0037_task_execution_identity",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1791813377041,
+      "tag": "0038_project_lifecycle",
+      "breakpoints": true
     }
   ]
 }
