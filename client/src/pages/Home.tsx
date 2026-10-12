@@ -402,6 +402,12 @@ function FlowConsole({
     null
   );
   const [projectPickerOpen, setProjectPickerOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectSearchValue, setProjectSearchValue] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setProjectSearchValue(projectSearch.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [projectSearch]);
   const [flowListOpen, setFlowListOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mobileNavDialogRef = useRef<HTMLDialogElement>(null);
@@ -606,29 +612,12 @@ function FlowConsole({
     search: flowSearchValue || undefined,
     projectId: selectedProject?.id,
   }, { enabled: section === "flows" && flowView === "editor" && flowListOpen });
-  const projects = trpc.project.list.useQuery();
+  const projects = trpc.project.page.useQuery({ limit: 50, search: projectSearchValue }, { enabled: projectPickerOpen });
   const routeProjectId =
     requestedRoute.route.section === "flows" &&
     requestedRoute.route.view === "workspace"
       ? requestedRoute.route.projectId
       : null;
-  const routeProjectFromList = ((projects.data ?? []) as ProjectRecord[]).find(
-    item => item.id === routeProjectId
-  );
-  const routeProjectQuery = trpc.project.get.useQuery(
-    { projectId: routeProjectId ?? "00000000" },
-    {
-      enabled: Boolean(
-        routeProjectId && projects.isSuccess && !routeProjectFromList
-      ),
-      retry: false,
-    }
-  );
-  const routeProjectUnresolved = Boolean(
-    routeProjectId &&
-      !routeProjectFromList &&
-      (!routeProjectQuery.isSuccess || routeProjectQuery.isFetching)
-  );
   const workflowItems = (workflows.data?.items ?? []) as any[];
   const routeWorkflowId =
     requestedRoute.route.section === "flows" &&
@@ -658,6 +647,12 @@ function FlowConsole({
     effectiveWorkflowId,
     selectedWorkflowQuery.data as any
   );
+  const projectLookupId = routeProjectId ?? (routeWorkflowId ? selectedWorkflow?.projectId : null);
+  const routeProjectQuery = trpc.project.get.useQuery(
+    { projectId: projectLookupId ?? "00000000" },
+    { enabled: Boolean(projectLookupId), retry: false }
+  );
+  const routeProjectUnresolved = Boolean(routeProjectId && !routeProjectQuery.isSuccess);
   const selectedWorkflowDefinition = selectedWorkflow
     ? (decodeJson(selectedWorkflow.definition) as Definition)
     : null;
@@ -764,12 +759,8 @@ function FlowConsole({
         return;
       }
       setSelectedWorkflowId(workflow.id);
-      if (projects.isSuccess)
-        setSelectedProject(
-          ((projects.data ?? []) as ProjectRecord[]).find(
-            project => project.id === workflow.projectId
-          ) ?? null
-        );
+      if (projectLookupId && routeProjectQuery.isPending) return;
+      setSelectedProject((routeProjectQuery.data as ProjectRecord | null | undefined) ?? null);
       setSelectedRunId(route.runId ?? null);
       setSection("runs");
       setRunView("monitor");
@@ -785,11 +776,8 @@ function FlowConsole({
     if (route.view === "workspace") {
       setSection("flows");
       setFlowView("workspace");
-      if (!projects.isSuccess) return;
       if (routeProjectUnresolved) return;
-      const project =
-        routeProjectFromList ??
-        (routeProjectQuery.data as ProjectRecord | null | undefined);
+      const project = routeProjectQuery.data as ProjectRecord | null | undefined;
       if (!project) {
         replaceWith({ section: "flows", view: "center" });
         return;
@@ -804,7 +792,7 @@ function FlowConsole({
     setSection("flows");
     setFlowView(route.view);
     if (
-      !projects.isSuccess ||
+      (projectLookupId && routeProjectQuery.isPending) ||
       (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)
     )
       return;
@@ -813,10 +801,7 @@ function FlowConsole({
       replaceWith({ section: "flows", view: "center" });
       return;
     }
-    const project =
-      ((projects.data ?? []) as ProjectRecord[]).find(
-        item => item.id === workflow.projectId
-      ) ?? null;
+    const project = (routeProjectQuery.data as ProjectRecord | null | undefined) ?? null;
     setSelectedWorkflowId(workflow.id);
     setSelectedProject(project);
     setSection("flows");
@@ -828,10 +813,9 @@ function FlowConsole({
     canonicalize();
   }, [
     routeProjectUnresolved,
-    routeProjectFromList,
     routeProjectQuery.data,
-    projects.data,
-    projects.isSuccess,
+    routeProjectQuery.isPending,
+    projectLookupId,
     requestedRoute,
     selectedWorkflow,
     selectedWorkflowFromList,
@@ -890,11 +874,11 @@ function FlowConsole({
       (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)) ||
       (requestedRoute.route.section === "flows" &&
         requestedRoute.route.view === "workspace" &&
-        (!projects.isSuccess || routeProjectUnresolved)) ||
+        routeProjectUnresolved) ||
       (requestedRoute.route.section === "flows" &&
         (requestedRoute.route.view === "detail" ||
           requestedRoute.route.view === "editor") &&
-        !projects.isSuccess)
+        Boolean(projectLookupId && routeProjectQuery.isPending))
   );
 
   const createFlow = trpc.workflow.create.useMutation({
@@ -962,7 +946,7 @@ function FlowConsole({
     onSuccess: () => {
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
-      void utils.project.list.invalidate();
+      void utils.project.invalidate();
       setSelectedWorkflowId(null);
       setDraftDefinition(null);
       returnFromFlowEditor();
@@ -1596,62 +1580,8 @@ function FlowConsole({
           {section === "flows" &&
             flowView === "center" &&
             !routeRestoring &&
-            (projects.isLoading && projects.data === undefined ? (
-              <div
-                data-business-list-loading=""
-                role="status"
-                aria-live="polite"
-                className="grid min-h-[calc(100dvh-48px)] place-items-center bg-background p-6"
-              >
-                <div className="flex items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-2xs">
-                  <Loader2 className="animate-spin text-foreground" size={18} />
-                  正在读取当前账号可见的业务项目…
-                </div>
-              </div>
-            ) : projects.isError && projects.data === undefined ? (
-              <div
-                data-business-list-error=""
-                role="alert"
-                className="grid min-h-[calc(100dvh-48px)] place-items-center bg-background p-6"
-              >
-                <div className="w-full max-w-md rounded-lg border border-aiflow-danger-border bg-card p-5 text-center shadow-2xs">
-                  <h2 className="aiflow-type-section-title font-semibold text-foreground">
-                    业务列表暂时无法加载
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    这不代表当前没有可访问的业务项目。请检查连接后重试。
-                  </p>
-                  <Button
-                    type="button"
-                    className="mt-4"
-                    onClick={() => void projects.refetch()}
-                  >
-                    重试
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <>
-                {projects.isError && projects.data !== undefined && (
-                  <div
-                    data-business-list-stale=""
-                    role="status"
-                    className="aiflow-type-body flex flex-wrap items-center justify-between gap-2 border-b border-aiflow-warning-border bg-aiflow-warning-surface px-4 py-2 text-amber-900"
-                  >
-                    <span>刷新失败，当前显示上次成功读取的业务列表。</span>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 border-amber-300 bg-card text-xs text-amber-900"
-                      onClick={() => void projects.refetch()}
-                    >
-                      重试
-                    </Button>
-                  </div>
-                )}
+            (
                 <BusinessCenter
-                  projects={projects.data as ProjectRecord[]}
                   canCreate={
                     user.role === "admin" ||
                     Boolean(access.data?.permissions?.has("workflow:create"))
@@ -1664,8 +1594,7 @@ function FlowConsole({
                     })
                   }
                 />
-              </>
-            ))}
+            )}
           {section === "flows" &&
             !routeRestoring &&
             flowView === "workspace" &&
@@ -1712,15 +1641,21 @@ function FlowConsole({
                         align="start"
                         className="w-[min(360px,calc(100vw-24px))] p-0"
                       >
-                        <Command>
+                        <Command shouldFilter={false}>
                           <CommandInput
                             placeholder="搜索业务名称或代号…"
                             aria-label="搜索有权限的业务项目"
+                            value={projectSearch}
+                            onValueChange={setProjectSearch}
                           />
                           <CommandList className="max-h-[min(360px,60vh)]">
-                            <CommandEmpty>没有匹配的业务项目</CommandEmpty>
+                            {projects.isFetching || projectSearch.trim() !== projectSearchValue ? (
+                              <p role="status" className="p-3 text-sm text-muted-foreground">正在搜索业务项目…</p>
+                            ) : projects.isError ? (
+                              <div role="alert" className="p-3 text-sm text-aiflow-danger">搜索失败，请重试。<Button variant="outline" onClick={() => void projects.refetch()}>重试</Button></div>
+                            ) : <CommandEmpty>没有匹配的业务项目</CommandEmpty>}
                             <CommandGroup>
-                              {((projects.data ?? []) as ProjectRecord[]).map(
+                              {(!projects.isFetching && projectSearch.trim() === projectSearchValue ? (projects.data?.items ?? []) as ProjectRecord[] : []).map(
                                 project => (
                                   <CommandItem
                                     key={project.id}
@@ -1758,6 +1693,7 @@ function FlowConsole({
                               )}
                             </CommandGroup>
                           </CommandList>
+                          {projects.data?.hasMore && <p className="border-t p-3 text-sm text-muted-foreground">显示前 50 个匹配项目；输入名称或代号以缩小范围。</p>}
                         </Command>
                       </PopoverContent>
                     </Popover>
@@ -2095,12 +2031,6 @@ function FlowConsole({
           )}
           {section === "warehouse" && (
             <WorkflowWarehouse
-              projects={(projects.data ?? []) as ProjectRecord[]}
-              projectsLoading={
-                projects.isLoading && projects.data === undefined
-              }
-              projectsError={projects.isError}
-              onRetryProjects={() => void projects.refetch()}
               onOpenWorkflow={(project, workflowId) => {
                 setSelectedProject(project);
                 openFlowEditor(workflowId, "warehouse");
@@ -3722,7 +3652,7 @@ function IamCenter({
   const refreshRoleQueries = () => Promise.all([
     utils.iam.invalidate(), utils.auth.me.invalidate(),
     utils.workflow.page.invalidate(), utils.workflow.get.invalidate(), utils.workflow.access.invalidate(),
-    utils.project.list.invalidate(), utils.project.access.invalidate(),
+    utils.project.invalidate(),
   ]);
   const assignSystemRole = trpc.iam.assignSystemRole.useMutation({
     onSuccess: async () => {

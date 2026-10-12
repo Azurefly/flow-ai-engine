@@ -11,6 +11,7 @@ const base = "http://124.223.198.84:1180/";
 const verifyUpdated = process.env.FLOW_UI_EXPECT_UPDATED === "1";
 const verifySources = process.env.FLOW_UI_PERMISSION_SOURCES === "1";
 const verifyStatus = process.env.FLOW_UI_ACCOUNT_STATUS === "1";
+const verifyProjectPaging = process.env.FLOW_UI_PROJECT_PAGING === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -120,8 +121,11 @@ function executable() {
       tag,
       login,
       disabledPassword: memberLogin.password,
+      pagination: verifyProjectPaging,
     });
     assert.equal(fixture.workflows.length, 3);
+    if (verifyProjectPaging)
+      console.log((await remote({ action: "verify_pagination", fixture, login, memberLogin })).trim());
     browser = await chromium.launch({
       headless: true,
       executablePath: executable(),
@@ -136,6 +140,8 @@ function executable() {
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     const errors = [];
+    const requests = [];
+    page.on("request", request => requests.push(request.url()));
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(base, { waitUntil: "domcontentloaded" });
     await page.getByLabel("用户名", { exact: true }).fill(login.username);
@@ -159,6 +165,39 @@ function executable() {
         directory,
       })
     );
+    if (verifyProjectPaging) {
+      const center = page.locator("[data-aiflow-business-center]");
+      await center.getByLabel("搜索业务名称、代号或工作域").fill(fixture.tag);
+      await center.getByRole("button", { name: "查询", exact: true }).click();
+      await page.waitForFunction(() => document.querySelector("[data-aiflow-business-center] table tbody")?.children.length === 10 && document.querySelector("[data-aiflow-business-center]")?.textContent.includes("共 13 个业务项目"));
+      assert((await center.innerText()).includes("共 13 个业务项目"));
+      await center.getByRole("button", { name: "下一页", exact: true }).click();
+      await page.waitForFunction(() => document.querySelector("[data-aiflow-business-center] table tbody")?.children.length === 3);
+      assert((await center.innerText()).includes("2 / 2"));
+      await center.getByLabel("每页显示数量").selectOption("25");
+      await page.waitForFunction(() => document.querySelector("[data-aiflow-business-center] table tbody")?.children.length === 13);
+      const importInput = center.locator('input[type="file"][accept=".csv,text/csv"]');
+      await importInput.setInputFiles({ name: "duplicate.csv", mimeType: "text/csv", buffer: Buffer.from(`业务代号,业务名称\n${fixture.projects[0].code},重复导入\n`, "utf8") });
+      await page.getByText("业务代号已存在：" + fixture.projects[0].code + "。请先修正 CSV 再导入。", { exact: true }).waitFor();
+      const importedProject = { code: fixture.tag.toUpperCase() + "_CSV", name: "CSV导入_" + fixture.tag };
+      fixture.pendingProjects = [importedProject];
+      fs.writeFileSync(path.join(directory, "fixture.json"), JSON.stringify(fixture), "utf8");
+      await importInput.setInputFiles({ name: "valid.csv", mimeType: "text/csv", buffer: Buffer.from(`业务代号,业务名称,工作域代号\n${importedProject.code},${importedProject.name},${fixture.csvDomainCode}\n`, "utf8") });
+      await page.getByText("已导入 1 个业务项目。", { exact: true }).waitFor();
+      await page.waitForFunction(() => document.querySelector("[data-aiflow-business-center] table tbody")?.children.length === 14);
+      await center.getByLabel("搜索业务名称、代号或工作域").fill(fixture.tag + "%_");
+      await center.getByRole("button", { name: "查询", exact: true }).click();
+      await center.getByText("没有符合条件的业务项目。请调整筛选条件，或重置筛选。", { exact: true }).first().waitFor();
+      await page.goto(`${base}#/flows/project/${fixture.projectId}`, { waitUntil: "domcontentloaded" });
+      await page.locator("[data-aiflow-business-selector]").waitFor();
+      await page.getByRole("button", { name: "切换当前受权业务", exact: true }).click();
+      await page.getByLabel("搜索有权限的业务项目").fill(fixture.projects[11].code);
+      await page.getByRole("option").filter({ hasText: fixture.projects[11].code }).click();
+      await page.waitForFunction(code => document.querySelector("[data-aiflow-business-selector]")?.textContent.includes(code), fixture.projects[11].code);
+      await page.screenshot({ path: path.join(directory, "project-pagination.png"), fullPage: true });
+      assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
+      console.log(JSON.stringify({ stage: "project-pagination-browser", defaultPage: 10, secondPage: 3, pageSizeChanged: true, literalSearch: true, csvDuplicateBlocked: true, csvCreated: true, csvDomainTested: Boolean(fixture.csvDomainCode), directRoute: true, remoteSelector: true, fullProjectListRequests: 0 }));
+    }
     for (const workflow of fixture.workflows) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {
         waitUntil: "domcontentloaded",
@@ -599,6 +638,9 @@ function executable() {
         })
       );
     }
+    if (verifyProjectPaging)
+      assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
+    assert.deepEqual(errors, []);
   } finally {
     if (browser) await browser.close();
     if (fixture)

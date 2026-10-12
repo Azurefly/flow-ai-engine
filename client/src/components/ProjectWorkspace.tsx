@@ -112,11 +112,9 @@ const formatDate = (value?: string | Date | null) =>
   value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "—";
 
 export function BusinessCenter({
-  projects,
   canCreate,
   onOpenProject,
 }: {
-  projects: ProjectRecord[];
   canCreate: boolean;
   onOpenProject: (project: ProjectRecord) => void;
 }) {
@@ -131,6 +129,17 @@ export function BusinessCenter({
     startDate: "",
     endDate: "",
   });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [filterError, setFilterError] = useState("");
+  const pageInput = useMemo(() => {
+    const end = appliedFilters.endDate ? new Date(`${appliedFilters.endDate}T00:00:00`) : null;
+    if (end) end.setDate(end.getDate() + 1);
+    return { page, limit: pageSize, search: appliedFilters.keyword,
+      createdFrom: appliedFilters.startDate ? new Date(`${appliedFilters.startDate}T00:00:00`).toISOString() : undefined,
+      createdBefore: end?.toISOString() };
+  }, [page, pageSize, appliedFilters]);
+  const projects = trpc.project.page.useQuery(pageInput);
   const [showCreate, setShowCreate] = useState(false);
   const [unitDirectoryQuery, setUnitDirectoryQuery] = useState("");
   const [userDirectoryQuery, setUserDirectoryQuery] = useState("");
@@ -190,7 +199,7 @@ export function BusinessCenter({
   const createProject = trpc.project.create.useMutation({
     onSuccess: () => {
       if (csvImportInProgressRef.current) return;
-      void utils.project.list.invalidate();
+      void utils.project.invalidate();
       setShowCreate(false);
       setForm({
         code: "",
@@ -209,6 +218,9 @@ export function BusinessCenter({
   const importBusinesses = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    if (csvImportInProgressRef.current) return;
+    csvImportInProgressRef.current = true;
+    setImporting(true);
     let importedCount = 0;
     try {
       const lines = (await file.text())
@@ -271,8 +283,9 @@ export function BusinessCenter({
       );
       if (duplicate)
         throw new Error(`CSV 中存在重复业务代号：${duplicate.code}。`);
+      if (imported.length > 500) throw new Error("每次最多导入 500 个业务项目，请分批导入。");
       const existingCodes = new Set(
-        projects.map(project => project.code.toUpperCase())
+        await utils.project.existingCodes.fetch({ codes: imported.map(item => item.code) }, { staleTime: 0 })
       );
       const alreadyExists = imported.find(item => existingCodes.has(item.code));
       if (alreadyExists)
@@ -280,7 +293,7 @@ export function BusinessCenter({
           "业务代号已存在：" + alreadyExists.code + "。请先修正 CSV 再导入。"
         );
       const domainByCode = new Map(
-        (domains.data ?? []).map(domain => [
+        (imported.some(item => item.domainCode) ? await utils.project.activeDomains.fetch(undefined, { staleTime: 0 }) : []).map(domain => [
           String(domain.code).toUpperCase(),
           domain.id,
         ])
@@ -293,8 +306,6 @@ export function BusinessCenter({
         throw new Error(
           `工作域代号不存在：${invalidDomain.domainCode}。请留空或使用当前可选工作域。`
         );
-      setImporting(true);
-      csvImportInProgressRef.current = true;
       for (const item of imported) {
         await createProject.mutateAsync({
           code: item.code,
@@ -306,10 +317,10 @@ export function BusinessCenter({
         });
         importedCount += 1;
       }
-      void utils.project.list.invalidate();
+      void utils.project.invalidate();
       toast.success("已导入 " + importedCount + " 个业务项目。");
     } catch (error) {
-      if (importedCount > 0) void utils.project.list.invalidate();
+      if (importedCount > 0) void utils.project.invalidate();
       const message =
         error instanceof Error ? error.message : "业务 CSV 导入失败。";
       toast.error(
@@ -336,40 +347,34 @@ export function BusinessCenter({
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast.success("已下载标准业务导入 CSV 模板。");
   };
-  const visible = useMemo(
-    () =>
-      projects.filter(project => {
-        const haystack =
-          `${project.code} ${project.name} ${project.description ?? ""} ${project.domainCode ?? ""} ${project.domainName ?? ""}`.toLowerCase();
-        if (!haystack.includes(appliedFilters.keyword.toLowerCase()))
-          return false;
-        const createdAt = project.createdAt
-          ? new Date(project.createdAt).getTime()
-          : Number.NaN;
-        const start = appliedFilters.startDate
-          ? new Date(`${appliedFilters.startDate}T00:00:00`).getTime()
-          : Number.NEGATIVE_INFINITY;
-        const end = appliedFilters.endDate
-          ? new Date(`${appliedFilters.endDate}T23:59:59.999`).getTime()
-          : Number.POSITIVE_INFINITY;
-        return Number.isNaN(createdAt)
-          ? !appliedFilters.startDate && !appliedFilters.endDate
-          : createdAt >= start && createdAt <= end;
-      }),
-    [appliedFilters, projects]
-  );
   return (
     <>
       <BusinessCenterView
-        projects={visible}
+        projects={(projects.data?.items ?? []) as ProjectRecord[]}
+        total={projects.data?.total ?? 0}
+        page={projects.data?.page ?? page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={value => { setPageSize(value); setPage(1); }}
+        queryState={{ loading: projects.isLoading, refreshing: projects.isFetching,
+          error: projects.isError, hasData: projects.data !== undefined,
+          retry: () => void projects.refetch() }}
+        filterError={filterError}
         canCreate={canCreate}
         filterForm={filterForm}
         setFilterForm={setFilterForm}
-        onQuery={() => setAppliedFilters(filterForm)}
+        onQuery={() => {
+          if (filterForm.startDate && filterForm.endDate && filterForm.startDate > filterForm.endDate) {
+            setFilterError("创建时间范围无效，结束日期不能早于开始日期。");
+            return;
+          }
+          setFilterError(""); setPage(1); setAppliedFilters({ ...filterForm, keyword: filterForm.keyword.trim() });
+        }}
         onReset={() => {
           const empty = { keyword: "", startDate: "", endDate: "" };
           setFilterForm(empty);
           setAppliedFilters(empty);
+          setFilterError(""); setPage(1);
         }}
         showCreate={showCreate}
         setShowCreate={setShowCreate}
@@ -450,6 +455,13 @@ type DirectoryStatus = {
 
 type BusinessCenterViewProps = {
   projects: ProjectRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: number) => void;
+  queryState: { loading: boolean; refreshing: boolean; error: boolean; hasData: boolean; retry: () => void };
+  filterError: string;
   canCreate: boolean;
   filterForm: { keyword: string; startDate: string; endDate: string };
   setFilterForm: (value: {
@@ -533,6 +545,7 @@ function DirectoryRetry({
 
 function BusinessCenterView({
   projects,
+  total, page, pageSize, onPageChange, onPageSizeChange, queryState, filterError,
   canCreate,
   filterForm,
   setFilterForm,
@@ -553,27 +566,17 @@ function BusinessCenterView({
   onCreate,
   onOpenProject,
 }: BusinessCenterViewProps) {
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(10);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [domainSelectorQuery, setDomainSelectorQuery] = useState("");
   useEffect(() => {
     if (!showCreate) setDomainSelectorQuery("");
   }, [showCreate]);
-  const total = projects.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const pageProjects = useMemo(() => {
-    const startIndex = (currentPage - 1) * pageSize;
-    return projects.slice(startIndex, startIndex + pageSize);
-  }, [currentPage, pageSize, projects]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [projects]);
+  const pageProjects = projects;
 
   const pagination =
-    totalPages > 1 ? (
+    (
       <div className="aiflow-type-meta flex flex-col gap-2 border-t border-border/80 bg-card px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
         <span aria-live="polite">
           显示第 {total ? (currentPage - 1) * pageSize + 1 : 0}–
@@ -585,9 +588,9 @@ function BusinessCenterView({
             <select
               className="aiflow-type-control h-11 rounded-md border border-border bg-card px-2 min-[1280px]:h-8"
               value={pageSize}
+              disabled={queryState.refreshing}
               onChange={event => {
-                setPageSize(Number(event.target.value));
-                setPage(1);
+                onPageSizeChange(Number(event.target.value));
               }}
               aria-label="每页显示数量"
             >
@@ -601,8 +604,8 @@ function BusinessCenterView({
             variant="outline"
             size="sm"
             className="aiflow-type-control h-11 min-[1280px]:h-8"
-            disabled={currentPage <= 1}
-            onClick={() => setPage(value => Math.max(1, value - 1))}
+            disabled={queryState.refreshing || currentPage <= 1}
+            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
           >
             上一页
           </Button>
@@ -617,14 +620,14 @@ function BusinessCenterView({
             variant="outline"
             size="sm"
             className="aiflow-type-control h-11 min-[1280px]:h-8"
-            disabled={currentPage >= totalPages}
-            onClick={() => setPage(value => Math.min(totalPages, value + 1))}
+            disabled={queryState.refreshing || currentPage >= totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
           >
             下一页
           </Button>
         </div>
       </div>
-    ) : null;
+    );
 
   return (
     <div
@@ -788,7 +791,21 @@ function BusinessCenterView({
             <p className="aiflow-type-body mt-2 text-muted-foreground">
               仅展示当前账号有权查看的业务项目；筛选不会扩大访问范围。
             </p>
+            {filterError && <p role="alert" className="mt-2 text-sm text-aiflow-danger">{filterError}</p>}
           </div>
+
+          {queryState.loading ? (
+            <div data-business-list-loading="" role="status" className="flex items-center gap-2 p-6 text-sm text-muted-foreground">
+              <Loader2 className="animate-spin" size={16} />正在读取当前账号可见的业务项目…
+            </div>
+          ) : queryState.error ? (
+            <div data-business-list-error={!queryState.hasData ? "" : undefined}
+              data-business-list-stale={queryState.hasData ? "" : undefined}
+              role="alert" className="flex flex-wrap items-center justify-between gap-2 p-4 text-sm text-aiflow-danger">
+              <span>{queryState.hasData ? "刷新失败，当前显示上次成功读取的业务列表。" : "业务列表暂时无法加载；这不代表当前没有可访问的业务项目。"}</span>
+              <Button variant="outline" onClick={queryState.retry}>重试</Button>
+            </div>
+          ) : queryState.refreshing && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">正在刷新业务列表…</p>}
 
           <div className="hidden min-[900px]:block">
             <div className="overflow-x-auto">
@@ -874,7 +891,7 @@ function BusinessCenterView({
                       </td>
                     </tr>
                   ))}
-                  {!pageProjects.length && (
+                  {!queryState.loading && !queryState.error && !pageProjects.length && (
                     <tr>
                       <td
                         colSpan={5}
@@ -950,7 +967,7 @@ function BusinessCenterView({
                 </details>
               </li>
             ))}
-            {!pageProjects.length && (
+            {!queryState.loading && !queryState.error && !pageProjects.length && (
               <li className="aiflow-type-body p-8 text-center text-muted-foreground">
                 没有符合条件的业务项目。请调整筛选条件，或重置筛选。
               </li>
@@ -1205,7 +1222,7 @@ export function ProjectWorkspace({
   const createWorkflow = trpc.project.createWorkflow.useMutation({
     onSuccess: (workflow: any) => {
       void utils.project.workflows.invalidate({ projectId: project.id });
-      void utils.project.list.invalidate();
+      void utils.project.invalidate();
       setShowCreate(false);
       setForm({
         processCode: "",
@@ -1365,7 +1382,7 @@ export function ProjectWorkspace({
             }}
             onRefreshWorkflows={() => {
               void workflows.refetch();
-              void utils.project.list.invalidate();
+              void utils.project.invalidate();
             }}
             refreshingWorkflows={workflows.isFetching}
             workflowLoadFailed={workflows.isError}
@@ -3263,10 +3280,7 @@ function ProjectMembers({
 
   const refreshProjectAuthorization = () =>
     Promise.all([
-      utils.project.members.invalidate({ projectId }),
-      utils.project.units.invalidate({ projectId }),
-      utils.project.access.invalidate({ projectId }),
-      utils.project.list.invalidate(),
+      utils.project.invalidate(),
       utils.workflow.access.invalidate(),
       utils.workflow.list.invalidate(),
       utils.workflow.page.invalidate(),

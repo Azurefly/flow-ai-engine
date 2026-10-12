@@ -46,7 +46,6 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { searchSelectOptions } from "../../../shared/search-select";
 import type { ProjectRecord } from "./ProjectWorkspace";
 
 type Folder = {
@@ -110,20 +109,17 @@ function FlowBadge({ type }: { type: string }) {
 }
 
 export default function WorkflowWarehouse({
-  projects,
-  projectsLoading,
-  projectsError,
-  onRetryProjects,
   onOpenWorkflow,
 }: {
-  projects: ProjectRecord[];
-  projectsLoading: boolean;
-  projectsError: boolean;
-  onRetryProjects: () => void;
   onOpenWorkflow: (project: ProjectRecord, workflowId: string) => void;
 }) {
   const utils = trpc.useUtils();
-  const [projectId, setProjectId] = useState("");
+  const [pickedProject, setPickedProject] = useState<ProjectRecord | null>(null);
+  const projectsQuery = trpc.project.page.useQuery({ limit: 1 });
+  const projects = (projectsQuery.data?.items ?? []) as ProjectRecord[];
+  const projectsLoading = projectsQuery.isLoading;
+  const projectsError = projectsQuery.isError;
+  const onRetryProjects = () => void projectsQuery.refetch();
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(
     null
@@ -138,6 +134,12 @@ export default function WorkflowWarehouse({
   const [keyword, setKeyword] = useState("");
   const [projectSelectorOpen, setProjectSelectorOpen] = useState(false);
   const [projectQuery, setProjectQuery] = useState("");
+  const [projectSearchValue, setProjectSearchValue] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setProjectSearchValue(projectQuery.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [projectQuery]);
+  const projectResults = trpc.project.page.useQuery({ limit: 50, search: projectSearchValue }, { enabled: projectSelectorOpen });
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
@@ -146,20 +148,17 @@ export default function WorkflowWarehouse({
   const returnToWorkflowListRef = useRef<HTMLButtonElement | null>(null);
   const previousSelectedWorkflowId = useRef<string | null>(selectedWorkflowId);
   const currentProject =
-    projects.find(project => project.id === projectId) ?? projects[0] ?? null;
+    pickedProject ?? projects[0] ?? null;
   const projectOptions = useMemo(
     () =>
-      projects.map(project => ({
+      ((projectResults.data?.items ?? []) as ProjectRecord[]).map(project => ({
         value: project.id,
         label: `${project.code} · ${project.name}`,
         keywords: `${project.code} ${project.name}`,
       })),
-    [projects]
+    [projectResults.data]
   );
-  const projectSearch = useMemo(
-    () => searchSelectOptions(projectOptions, projectQuery, 50),
-    [projectOptions, projectQuery]
-  );
+  const projectSearch = { options: projectOptions, totalMatches: projectResults.data?.total ?? 0, hasMore: projectResults.data?.hasMore ?? false };
   const activeProjectId = currentProject?.id ?? "00000000";
   const warehouse = trpc.project.warehouse.useQuery(
     { projectId: activeProjectId },
@@ -521,7 +520,11 @@ export default function WorkflowWarehouse({
                     onValueChange={setProjectQuery}
                   />
                   <CommandList>
-                    {projectSearch.totalMatches === 0 ? (
+                    {projectResults.isFetching || projectQuery.trim() !== projectSearchValue ? (
+                      <p role="status" className="p-3 text-sm text-muted-foreground">正在搜索业务项目…</p>
+                    ) : projectResults.isError ? (
+                      <div role="alert" className="p-3 text-sm text-aiflow-danger">搜索失败，请重试。<Button variant="outline" onClick={() => void projectResults.refetch()}>重试</Button></div>
+                    ) : projectSearch.totalMatches === 0 ? (
                       <CommandEmpty>
                         没有匹配的项目，请更换搜索词。
                       </CommandEmpty>
@@ -534,7 +537,7 @@ export default function WorkflowWarehouse({
                             key={option.value}
                             value={option.value}
                             onSelect={() => {
-                              setProjectId(option.value);
+                              setPickedProject(((projectResults.data?.items ?? []) as ProjectRecord[]).find(item => item.id === option.value) ?? null);
                               setSelectedFolderId(null);
                               setSelectedWorkflowId(null);
                               setCheckedIds([]);

@@ -15,7 +15,7 @@ describe("分页流程缓存联动", () => {
       const callback = homeSource.split(marker)[1]?.split("toast.success")[0];
       expect(callback).toContain("refreshRoleQueries()");
       const refresh = homeSource.split("const refreshRoleQueries =")[1]?.split("const assignSystemRole")[0];
-      for (const query of ["workflow.page", "workflow.get", "workflow.access", "project.list", "project.access"])
+      for (const query of ["workflow.page", "workflow.get", "workflow.access", "project"])
         expect(refresh).toContain(`utils.${query}.invalidate()`);
     }
     const bindings = source("../client/src/components/WorkflowRoleBindingsDialog.tsx");
@@ -812,19 +812,11 @@ describe("流程设计器界面回归约束", () => {
 
     expect(businessCenterStart).toBeGreaterThanOrEqual(0);
     expect(businessCenterEnd).toBeGreaterThan(businessCenterStart);
-    expect(homeSource).toContain(
-      "projects.isLoading && projects.data === undefined"
-    );
-    expect(homeSource).toContain("data-business-list-loading");
-    expect(homeSource).toContain(
-      "projects.isError && projects.data === undefined"
-    );
-    expect(homeSource).toContain("data-business-list-error");
-    expect(homeSource).toContain("projects.refetch()");
-    expect(homeSource).toContain("data-business-list-stale");
-    expect(businessCenterUsage).toContain(
-      "projects={projects.data as ProjectRecord[]}"
-    );
+    expect(projectWorkspaceSource).toContain("data-business-list-loading");
+    expect(projectWorkspaceSource).toContain("data-business-list-error");
+    expect(projectWorkspaceSource).toContain("projects.refetch()");
+    expect(projectWorkspaceSource).toContain("data-business-list-stale");
+    expect(projectWorkspaceSource).toContain("!queryState.loading && !queryState.error && !pageProjects.length");
     expect(businessCenterUsage).not.toContain(
       "projects={(projects.data ?? []) as ProjectRecord[]}"
     );
@@ -888,7 +880,7 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain('aria-label="搜索仓库项目"');
     expect(warehouseSource).toContain("输入项目名称或代号搜索");
     expect(warehouseSource).toContain(
-      "searchSelectOptions(projectOptions, projectQuery, 50)"
+      "trpc.project.page.useQuery({ limit: 50, search: projectSearchValue }, { enabled: projectSelectorOpen })"
     );
     expect(warehouseSource).toContain("显示前 50 个匹配项目");
     expect(warehouseSource).toContain('className="min-h-11"');
@@ -1491,7 +1483,8 @@ describe("流程设计器界面回归约束", () => {
       'view: "monitor"; workflowId: string; runId?: string'
     );
     expect(homeSource).toContain("const [requestedRoute, setRequestedRoute]");
-    expect(homeSource).toContain("!projects.isSuccess || (!selectedWorkflowFromList && selectedWorkflowQuery.isPending)");
+    expect(homeSource).not.toContain("projects.isSuccess");
+    expect(homeSource).toContain("projectLookupId && routeProjectQuery.isPending");
     expect(homeSource).toContain(
       "!selectedWorkflowFromList && selectedWorkflowQuery.isPending"
     );
@@ -2483,7 +2476,7 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain(
       "执行会创建真实运行，可能读取或写入外部数据。"
     );
-    expect(dataResourceSource).toContain("trpc.project.list.useQuery()");
+    expect(dataResourceSource).toContain("trpc.project.get.useQuery({ projectId })");
     expect(dataResourceSource).toContain("数据资源");
     expect(dataResourceSource).toContain("函数资源");
     expect(dataResourceSource).toContain('"overview" | "runs" | "schedules"');

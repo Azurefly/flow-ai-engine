@@ -20,9 +20,7 @@ it("身份与组织入口按有效能力开放，普通身份管理员不进入�
     'route.view === "config" && systemRootView === "identity"'
   );
   expect(home).toContain("...(canManageIdentity");
-  expect(home).toContain(
-    'user.role === "admin" &&\n            systemView === "config"'
-  );
+  expect(home).toMatch(/user\.role === "admin" &&\s+systemView === "config"/);
   expect(home).toContain("query.state.data ? 30_000 : false");
 });
 it("权限详情显示服务端来源说明，不猜测组织或流程授权", () => {

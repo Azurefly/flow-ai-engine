@@ -58,10 +58,8 @@ export default function DataResourceCenter({
   onOpenWorkflow: (workflowId: string) => void;
 }) {
   const utils = trpc.useUtils();
-  const projects = trpc.project.list.useQuery();
-  const projectName =
-    projects.data?.find(project => project.id === projectId)?.name ??
-    "当前业务";
+  const project = trpc.project.get.useQuery({ projectId });
+  const projectName = project.data?.name ?? "当前业务";
   const [tab, setTab] = useState<Tab>("sources");
   const [dataflowSection, setDataflowSection] = useState<
     "overview" | "runs" | "schedules"

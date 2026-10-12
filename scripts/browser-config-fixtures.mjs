@@ -199,6 +199,35 @@ async function cleanup(fixture) {
       failures.push(error.message);
     }
   }
+  if (fixture.projects?.length || fixture.pendingProjects?.length) {
+    const { default: mysql } = await import("mysql2/promise");
+    const pool = mysql.createPool(process.env.DATABASE_URL);
+    try {
+      const ownedProjects = [...(fixture.projects ?? [])];
+      for (const pending of fixture.pendingProjects ?? []) {
+        assert(pending.name.endsWith(fixture.tag));
+        assert(pending.code.startsWith(fixture.tag.toUpperCase()));
+        const [rows] = await pool.query("SELECT id,code,name FROM flow_project WHERE ownerUserId=? AND code=?", [fixture.userId, pending.code]);
+        if (!rows.length) continue;
+        assert.equal(rows[0].name, pending.name);
+        if (!ownedProjects.some(project => project.id === rows[0].id)) ownedProjects.push(rows[0]);
+      }
+      for (const project of ownedProjects) {
+        try {
+          assert(project.name.endsWith(fixture.tag));
+          assert(project.code.startsWith(fixture.tag.toUpperCase()));
+          const [rows] = await pool.query("SELECT id,ownerUserId,name,code FROM flow_project WHERE id=?", [project.id]);
+          assert.equal(rows[0]?.ownerUserId, fixture.userId);
+          assert.equal(rows[0]?.name, project.name);
+          assert.equal(rows[0]?.code, project.code);
+          const [active] = await pool.query("SELECT id FROM workflow WHERE projectId=? AND archivedAt IS NULL", [project.id]);
+          assert.equal(active.length, 0, "隔离项目仍有未归档流程，拒绝归档项目");
+          await pool.query("UPDATE flow_project_member SET revokedAt=COALESCE(revokedAt,NOW()) WHERE projectId=? AND userId=?", [project.id, fixture.disabledUserId]);
+          await pool.query("UPDATE flow_project SET status='archived' WHERE id=? AND ownerUserId=? AND name=? AND code=?", [project.id, fixture.userId, project.name, project.code]);
+        } catch (error) { failures.push(error.message); }
+      }
+    } finally { await pool.end(); }
+  }
   for (const person of people) {
     try {
       assert(person.username.startsWith(fixture.tag + "_"));
@@ -225,6 +254,7 @@ async function cleanup(fixture) {
     JSON.stringify({
       cleanup: true,
       archivedOwnWorkflows: fixture.workflows?.length ?? 0,
+      archivedOwnProjects: (fixture.projects?.length ?? 0) + (fixture.pendingProjects?.length ?? 0),
       disabledOwnAccounts: people.length,
     })
   );
@@ -299,7 +329,7 @@ async function grantIdentity(fixture) {
 }
 
 async function setup(intent) {
-  const fixture = { tag: intent.tag, people: [], workflows: [] };
+  const fixture = { tag: intent.tag, people: [], workflows: [], projects: [] };
   const progress = () => console.log(JSON.stringify({ fixture }));
   assert(/^uiconfig_[a-f0-9]{12}$/.test(intent.tag));
   assert.equal(intent.login.username, intent.tag + "_admin");
@@ -348,7 +378,16 @@ async function setup(intent) {
       true
     );
     fixture.projectId = project.id;
+    fixture.projects.push({ id: project.id, code: intent.tag.toUpperCase(), name: "界面隔离验收_" + intent.tag });
     progress();
+    if (intent.pagination) {
+      for (let index = 1; index <= 12; index++) {
+        const spec = { code: `${intent.tag.toUpperCase()}_P${index}`, name: `分页样本_${index}_${intent.tag}` };
+        const createdProject = await request("project.create", spec, true);
+        fixture.projects.push({ id: createdProject.id, ...spec });
+        progress();
+      }
+    }
     const source = await request(
       "data.createSource",
       {
@@ -403,6 +442,46 @@ assert(
   typeof browserFixtureIntent !== "undefined",
   "Run through browser-config-acceptance.cjs"
 );
+async function verifyPagination(intent) {
+  const { fixture } = intent;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  assert.equal(fixture.projects.length, 13);
+  await request("auth.login", intent.login, true);
+  const first = await request("project.page", { search: fixture.tag });
+  assert.equal(first.items.length, 10); assert.equal(first.limit, 10); assert.equal(first.total, 13);
+  const second = await request("project.page", { search: fixture.tag, page: 2 });
+  assert.equal(second.items.length, 3); assert.equal(second.hasMore, false);
+  assert.deepEqual([...first.items, ...second.items].map(item => item.id).sort(), fixture.projects.map(item => item.id).sort());
+  assert.equal((await request("project.page", { search: fixture.tag, page: 999 })).page, 2);
+  assert.equal((await request("project.page", { search: fixture.tag + "%_" })).total, 0);
+  const tomorrow = new Date(Date.now() + 86400000).toISOString();
+  assert.equal((await request("project.page", { search: fixture.tag, createdFrom: tomorrow })).total, 0);
+  await assert.rejects(request("project.page", { limit: 51 }));
+  const codes = fixture.projects.slice(0, 2).map(item => item.code);
+  fixture.csvDomainCode = (await request("project.activeDomains"))[0]?.code ?? "";
+  console.log(JSON.stringify({ fixture }));
+  assert.deepEqual((await request("project.existingCodes", { codes })).sort(), codes.sort());
+  await bootstrap();
+  await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "active" }, true);
+  await request("auth.login", intent.memberLogin, true);
+  assert.equal((await request("project.page", { search: fixture.tag })).total, 0);
+  await assert.rejects(request("project.existingCodes", { codes }));
+  await bootstrap();
+  for (const project of fixture.projects.slice(0, 3))
+    await request("project.grantMember", { projectId: project.id, userId: fixture.disabledUserId, role: "viewer" }, true);
+  await request("auth.login", intent.memberLogin, true);
+  const scoped = await request("project.page", { search: fixture.tag, limit: 2 });
+  assert.equal(scoped.total, 3); assert.equal(scoped.items.length, 2);
+  assert(scoped.items.every(item => fixture.projects.slice(0, 3).some(project => project.id === item.id)));
+  await bootstrap();
+  for (const project of fixture.projects.slice(0, 3))
+    await request("project.revokeMember", { projectId: project.id, userId: fixture.disabledUserId }, true);
+  await request("auth.login", intent.memberLogin, true);
+  assert.equal((await request("project.page", { search: fixture.tag })).total, 0);
+  await bootstrap();
+  await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "disabled" }, true);
+  console.log(JSON.stringify({ stage: "project-page-api", scenarios: 10, pageSize: 10, secondPageItems: 3, scopedBeforePaging: true, revocationApplied: true }));
+}
 async function cycleStatus(fixture) {
   assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
   await bootstrap();
@@ -443,6 +522,7 @@ async function cycleStatus(fixture) {
   console.log(JSON.stringify({ ownAccountCycled: true }));
 }
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "verify_pagination") await verifyPagination(browserFixtureIntent);
 else if (browserFixtureIntent.action === "cycle_status")
   await cycleStatus(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "grant_identity")

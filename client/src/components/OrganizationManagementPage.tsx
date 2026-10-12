@@ -283,11 +283,10 @@ export default function OrganizationManagementPage({
       utils.iam.userAuthorizationDetails.invalidate(),
       utils.iam.roleAuthorizationDetails.invalidate(),
       utils.workflow.access.invalidate(),
-      utils.project.access.invalidate(),
       utils.workflow.list.invalidate(),
       utils.workflow.page.invalidate(),
       utils.workflow.get.invalidate(),
-      utils.project.list.invalidate(),
+      utils.project.invalidate(),
     ]);
   };
 

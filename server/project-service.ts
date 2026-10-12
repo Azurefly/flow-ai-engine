@@ -2,6 +2,7 @@ import { assertRoleExpiryRange } from "../shared/role-expiry";
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
+import { z } from "zod";
 import { getSharedPool } from "./db";
 import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
 import { attachOrganizationPaths } from "./organization-service";
@@ -174,6 +175,67 @@ export async function listProjects(user: ProjectUser) {
   return rows;
 }
 
+export const projectPageInput = z.object({
+  page: z.number().int().min(1).max(100000).default(1),
+  limit: z.number().int().min(1).max(50).default(10),
+  search: z.string().trim().max(160).default(""),
+  createdFrom: z.string().datetime().optional(),
+  createdBefore: z.string().datetime().optional(),
+}).refine(input => !input.createdFrom || !input.createdBefore ||
+  Date.parse(input.createdFrom) < Date.parse(input.createdBefore), {
+  message: "创建时间范围无效，请调整后重试。",
+});
+
+export async function listProjectPage(user: ProjectUser, value: z.input<typeof projectPageInput> = {}) {
+  const input = projectPageInput.parse(value);
+  await ensureProjectUnitTable();
+  const clauses = ["p.status='active'"];
+  const args: unknown[] = [];
+  if (user.role !== "admin") {
+    clauses.push(`(p.ownerUserId=? OR EXISTS (
+      SELECT 1 FROM flow_project_member pm WHERE pm.projectId=p.id AND pm.userId=?
+        AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW()
+        AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
+    ) OR EXISTS (
+      SELECT 1 FROM flow_project_unit pu
+      JOIN organization_membership om ON om.unitId=pu.unitId
+      JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
+      WHERE pu.projectId=p.id AND om.userId=?
+    ))`);
+    args.push(user.id, user.id, user.id);
+  }
+  if (input.search) {
+    clauses.push(`(LOCATE(?,p.code)>0 OR LOCATE(?,p.name)>0 OR LOCATE(?,COALESCE(p.description,''))>0
+      OR EXISTS (SELECT 1 FROM work_domain search_domain WHERE search_domain.id=p.domainId
+        AND (LOCATE(?,search_domain.code)>0 OR LOCATE(?,search_domain.name)>0)))`);
+    args.push(input.search, input.search, input.search, input.search, input.search);
+  }
+  if (input.createdFrom) {
+    clauses.push("p.createdAt>=?");
+    args.push(new Date(input.createdFrom));
+  }
+  if (input.createdBefore) {
+    clauses.push("p.createdAt<?");
+    args.push(new Date(input.createdBefore));
+  }
+  const where = clauses.join(" AND ");
+  const [counts] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM flow_project p WHERE ${where}`, args
+  );
+  const total = Number(counts[0]?.total ?? 0);
+  const page = Math.min(input.page, Math.max(1, Math.ceil(total / input.limit)));
+  const [items] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT p.*,owner.username AS ownerUsername,owner.name AS ownerName,
+      d.code AS domainCode,d.name AS domainName,
+      (SELECT COUNT(*) FROM workflow w WHERE w.projectId=p.id AND w.archivedAt IS NULL) AS workflowCount
+      FROM flow_project p LEFT JOIN users owner ON owner.id=p.ownerUserId
+      LEFT JOIN work_domain d ON d.id=p.domainId WHERE ${where}
+      ORDER BY p.updatedAt DESC,p.id DESC LIMIT ? OFFSET ?`,
+    [...args, input.limit, (page - 1) * input.limit]
+  );
+  return { items, total, page, limit: input.limit, hasMore: page * input.limit < total };
+}
+
 export async function getProject(user: ProjectUser, projectId: string) {
   const access = await getProjectAccess(user, projectId);
   if (!access.exists || !access.permissions.has("project:view")) return null;
@@ -184,6 +246,15 @@ export async function getProject(user: ProjectUser, projectId: string) {
     [projectId]
   );
   return rows[0] ?? null;
+}
+export async function existingProjectCodes(user: ProjectUser, codes: string[]) {
+  if (!(await hasSystemPermission(user, "workflow:create")))
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前账号没有创建项目的权限。" });
+  const values = z.array(z.string().trim().toUpperCase().regex(/^[A-Z][A-Z0-9_-]{1,63}$/)).min(1).max(500).parse(codes);
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT code FROM flow_project WHERE ownerUserId=? AND code IN (?)", [user.id, values]
+  );
+  return rows.map(row => String(row.code));
 }
 export async function createProject(
   user: ProjectUser,
@@ -261,6 +332,8 @@ export async function createProject(
     await connection.commit();
   } catch (error) {
     await connection.rollback();
+    if ((error as { code?: string; errno?: number }).code === "ER_DUP_ENTRY" || (error as { errno?: number }).errno === 1062)
+      throw new TRPCError({ code: "CONFLICT", message: "业务代号已存在，请更换代号；已归档业务也会保留原代号。" });
     throw error;
   } finally {
     connection.release();
