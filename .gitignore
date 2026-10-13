@@ -129,6 +129,19 @@ test-results/
 blob-report/
 allure-results/
 allure-report/
+/reports/
+/screenshots/
+/backups/
+/01-test/**/screenshots/
+/01-test/**/videos/
+/01-test/**/traces/
+/01-test/**/.auth/
+/tests/**/reports/
+/tests/**/screenshots/
+/tests/**/videos/
+/tests/**/traces/
+/tests/**/.auth/
+/docs/screenshots/
 /01-test/018-测试报告/
 /01-test/remote-verify-screenshots/
 /01-test/014-自动化脚本/**/reports/
@@ -137,6 +150,12 @@ allure-report/
 # Superseded generated scaffold and bundle checker (keep locally)
 /template.json
 /scripts/check-bundle-budget.mts
+
+# Redundant empty placeholders (keep locally)
+/.gitkeep
+/01-test/014-自动化脚本/api_test/.gitkeep
+/01-test/014-自动化脚本/e2e/.gitkeep
+/drizzle/migrations/.gitkeep
 
 # Historical audit notes and generated reference inventories (keep locally)
 /docs/BUSINESS_SCENARIOS_VERIFICATION_REPORT.md

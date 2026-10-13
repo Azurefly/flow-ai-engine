@@ -10,6 +10,25 @@ build/
 # Generated files
 *.tsbuildinfo
 coverage/
+.cache/
+.manus-logs/
+playwright-report/
+test-results/
+blob-report/
+allure-results/
+allure-report/
+reports/
+screenshots/
+backups/
+01-test/018-测试报告/
+01-test/remote-verify-screenshots/
+01-test/**/reports/
+01-test/**/screenshots/
+01-test/**/.auth/
+tests/**/reports/
+tests/**/screenshots/
+tests/**/.auth/
+docs/screenshots/
 
 # Package files
 package-lock.json
