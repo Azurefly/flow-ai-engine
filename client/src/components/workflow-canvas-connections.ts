@@ -23,7 +23,7 @@ export function canConnectCanvasNodes(
   flowType: FlowType
 ) {
   if (
-    source.id === target.id ||
+    (source.id === target.id && flowType === "data") ||
     source.data.kind === "end" ||
     target.data.kind === "start"
   )

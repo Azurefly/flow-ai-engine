@@ -20,7 +20,7 @@ describe("持久化 Wait 与 Message Catch", () => {
       ],
     };
     const compiled = compileWorkflowDefinition(definition, { flowType: "control" });
-    expect(compiled.plan.compilerVersion).toBe("1.7.0");
+    expect(compiled.plan.compilerVersion).toBe("1.8.0");
     expect(compiled.plan.profile?.profileVersion).toBe(4);
 
     const invalid = analyzeWorkflowDefinition(

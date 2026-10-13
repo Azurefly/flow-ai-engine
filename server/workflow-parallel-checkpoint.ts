@@ -25,19 +25,22 @@ export function resumeParallelCheckpoint(
   next: string[],
   tokens: unknown,
   participantUserIds?: unknown,
-  loopCursor?: unknown
+  loopCursor?: unknown,
+  nextLoopCursors?: WorkflowLoopCursor[]
 ) {
+  if (nextLoopCursors && nextLoopCursors.length !== next.length)
+    throw new Error("循环后继检查点与执行队列不一致。");
   const checkpoint = restoreParallelCheckpoint(value, pending);
   return restoreParallelCheckpoint(
     {
       ...checkpoint,
       queue: [
         ...checkpoint.queue,
-        ...next.map(nodeId => ({
+        ...next.map((nodeId, index) => ({
           nodeId,
           tokens,
           ...(participantUserIds === undefined ? {} : { participantUserIds }),
-          ...(loopCursor === undefined ? {} : { loopCursor }),
+          ...(nextLoopCursors ? { loopCursor: nextLoopCursors[index] } : loopCursor === undefined ? {} : { loopCursor }),
         })),
       ],
     },
@@ -73,7 +76,12 @@ export function restoreParallelCheckpoint(
       !frame.joinNodeId.trim()
     )
       return invalid();
-    frames[id] = { ...frame, barrier: restoreParallelBarrier(frame.barrier) };
+    const barrier = restoreParallelBarrier(frame.barrier);
+    if (frame.loopCursors !== undefined && (!frame.loopCursors || typeof frame.loopCursors !== "object" || Array.isArray(frame.loopCursors) || Object.keys(frame.loopCursors).some(key => !barrier.expected.includes(key))))
+      return invalid();
+    frames[id] = { ...frame, barrier,
+      ...(frame.loopCursors === undefined ? {} : { loopCursors: Object.fromEntries(Object.entries(frame.loopCursors).map(([branch, cursor]) => [branch, restoreWorkflowLoopCursor(cursor)])) }),
+    };
   }
   const queue = raw.queue.map((entry, index) => {
     if (

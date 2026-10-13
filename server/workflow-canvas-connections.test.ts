@@ -7,6 +7,11 @@ const node = (id: string, kind: FlowNodeType) => ({
 });
 
 describe("画布多分支连线", () => {
+  it("控制流程可创建受上限保护的同节点返回线，数据流程保持无环", () => {
+    const router = node("route", "router");
+    expect(canConnectCanvasNodes(router, router, [], "control")).toBe(true);
+    expect(canConnectCanvasNodes(router, router, [], "data")).toBe(false);
+  });
   it("数据开始节点可连接多路资源，控制流程保留单出口限制", () => {
     const edges = [{ source: "start", target: "left" }];
     expect(

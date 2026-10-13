@@ -3,10 +3,11 @@ import {
   createParallelBarrier,
   type ParallelBarrier,
 } from "./workflow-parallel-barrier";
+import type { WorkflowLoopCursor } from "./workflow-loop-cursor";
 export type BranchToken = { frameId: string; branchId: string };
 export type ParallelState = Record<
   string,
-  { routerNodeId: string; joinNodeId: string; barrier: ParallelBarrier }
+  { routerNodeId: string; joinNodeId: string; barrier: ParallelBarrier; loopCursors?: Record<string, WorkflowLoopCursor> }
 >;
 export function forkParallelState(
   state: ParallelState,

@@ -73,7 +73,8 @@ export type WorkflowExecutionPlan = {
     | "1.4.0"
     | "1.5.0"
     | "1.6.0"
-    | "1.7.0";
+    | "1.7.0"
+    | "1.8.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -256,9 +257,10 @@ function allPathsReachTarget(
   while (changed) {
     changed = false;
     for (const [nodeId, edges] of Array.from(outgoing.entries())) {
-      if (nodeId === blockedNodeId || guaranteed.has(nodeId) || !edges.length)
+      const exits = edges.filter(edge => !edge.loop);
+      if (nodeId === blockedNodeId || guaranteed.has(nodeId) || !exits.length)
         continue;
-      if (edges.every(edge => guaranteed.has(edge.targetNodeId))) {
+      if (exits.every(edge => guaranteed.has(edge.targetNodeId))) {
         guaranteed.add(nodeId);
         changed = true;
       }
@@ -459,7 +461,7 @@ export function analyzeWorkflowDefinition(
         )
       );
     edgeIds.add(edge.id);
-    if (edge.sourceNodeId === edge.targetNodeId)
+    if (edge.sourceNodeId === edge.targetNodeId && (!edge.loop || profile.runtimeKind === "dataflow"))
       diagnostics.push(
         diagnostic(
           "WF_EDGE_SELF_LOOP",
@@ -493,6 +495,8 @@ export function analyzeWorkflowDefinition(
       );
     edgeKeys.add(edgeKey);
     if (edge.loop) {
+      if (profile.runtimeKind === "dataflow")
+        diagnostics.push(diagnostic("WF_DATAFLOW_LOOP_UNSUPPORTED", "数据流程采用有向无环计算，不能设置返回循环。", { ...location, field: "loop" }));
       const maxIterations = Number(edge.loop.maxIterations);
       if (
         !Number.isInteger(maxIterations) ||
@@ -1049,10 +1053,23 @@ export function analyzeWorkflowDefinition(
                 diagnostics.push(
                   diagnostic(
                     "WF_PARALLEL_BRANCH_MISSES_JOIN",
-                    `并行分支 ${edge.id} 必须让所有出口到达汇聚节点“${joinNode.name}”，不能绕过汇聚、进入死路或在汇聚前循环。`,
+                    `并行分支 ${edge.id} 必须让所有出口到达汇聚节点“${joinNode.name}”，不能绕过汇聚、进入死路或形成没有上限的循环。`,
                     { kind: "edge", edgeId: edge.id }
                   )
                 );
+            }
+            const members = new Set<string>();
+            const pending = nodeOutgoing.map(edge => edge.targetNodeId);
+            while (pending.length) {
+              const id = pending.pop()!;
+              if (id === node.id || id === joinNodeId || members.has(id)) continue;
+              members.add(id);
+              for (const edge of outgoing.get(id) ?? []) pending.push(edge.targetNodeId);
+            }
+            for (const edge of validEdges.filter(edge => edge.loop)) {
+              const sourceInside = members.has(edge.sourceNodeId), targetInside = members.has(edge.targetNodeId);
+              if ((sourceInside && !targetInside && edge.targetNodeId !== joinNodeId) || (!sourceInside && targetInside && edge.sourceNodeId !== node.id))
+                diagnostics.push(diagnostic("WF_LOOP_PARALLEL_SCOPE_MISMATCH", `循环连线 ${edge.id} 不能跨越并行分支的创建或汇聚边界。请在分支内部返回，或在汇聚后返回并行路由。`, { kind: "edge", edgeId: edge.id, field: "loop" }));
             }
           }
         }
@@ -1137,17 +1154,9 @@ export function analyzeWorkflowDefinition(
     validEdges
       .filter(edge => edge.loop)
       .forEach(edge => {
-        if (executable)
-          diagnostics.push(
-            diagnostic(
-              "WF_RUNTIME_LOOP_UNSUPPORTED",
-              `循环边 ${edge.id} 尚未启用持久化迭代计数，当前版本禁止发布。`,
-              { kind: "edge", edgeId: edge.id, field: "loop" }
-            )
-          );
         const inCycle = components.some(
           component =>
-            component.length > 1 &&
+            (component.length > 1 || edge.sourceNodeId === edge.targetNodeId) &&
             component.includes(edge.sourceNodeId) &&
             component.includes(edge.targetNodeId)
         );
@@ -1288,7 +1297,7 @@ export function analyzeWorkflowDefinition(
     }));
   const plan: WorkflowExecutionPlan = {
     schemaVersion: 1,
-    compilerVersion: "1.7.0",
+    compilerVersion: "1.8.0",
     profile: {
       flowType: profile.type,
       profileVersion: profile.version,

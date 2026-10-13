@@ -4,9 +4,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0038_project_lifecycle";
-export const DATABASE_MIGRATION_EPOCH = 1791813377041;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 45;
+export const DATABASE_MIGRATION_VERSION = "0039_loop_visit_facts";
+export const DATABASE_MIGRATION_EPOCH = 1791874432913;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 48;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -103,6 +103,8 @@ export async function checkReadiness() {
           (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR
           (table_name='project_service_endpoint' AND column_name='targetEnvironment') OR
           (table_name='flow_project' AND column_name='lifecycleVersion') OR
+          (table_name='workflow_milestone' AND column_name='executionKey') OR
+          (table_name='workflow_state_transition' AND column_name IN ('nodeId','executionKey')) OR
           (table_name='workflow_wait_subscription' AND column_name='executionKey') OR
           (table_name IN ('workflow_task','workflow_task_group') AND column_name='executionKey') OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
@@ -120,7 +122,8 @@ export async function checkReadiness() {
           OR (table_name='workflow_wait_subscription' AND index_name='workflow_wait_subscription_run_node_unique' AND column_name='executionKey')
           OR (table_name='workflow_task_group' AND index_name='workflow_task_group_run_node_unique' AND column_name='executionKey')
           OR (table_name='workflow_task' AND index_name='workflow_task_run_node_assignee_unique' AND column_name='executionKey')
-          OR (table_name='workflow_milestone' AND index_name='workflow_milestone_run_node_unique')
+          OR (table_name='workflow_milestone' AND index_name='workflow_milestone_run_node_unique' AND column_name='executionKey')
+          OR (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_visit_unique' AND column_name='executionKey')
           OR (table_name='workflow_task_schedule' AND index_name='workflow_task_schedule_task_event_recipient_unique')
           OR (table_name='dataflow_run_job' AND index_name='dataflow_run_job_run_unique')
           OR (table_name='dataflow_node_run' AND index_name='dataflow_node_run_run_node_unique')
@@ -143,7 +146,7 @@ export async function checkReadiness() {
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
       Number(tableRows[0]?.count ?? 0) === 13 &&
       Number(columnRows[0]?.count ?? 0) === DATABASE_REQUIRED_COLUMN_COUNT &&
-      Number(indexRows[0]?.count ?? 0) === 15 &&
+      Number(indexRows[0]?.count ?? 0) === 16 &&
       Number(projectUnitCollationRows[0]?.count ?? 0) === 3;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }

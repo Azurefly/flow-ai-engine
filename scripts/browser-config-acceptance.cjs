@@ -13,6 +13,7 @@ const verifySources = process.env.FLOW_UI_PERMISSION_SOURCES === "1";
 const verifyStatus = process.env.FLOW_UI_ACCOUNT_STATUS === "1";
 const verifyProjectPaging = process.env.FLOW_UI_PROJECT_PAGING === "1";
 const verifyProjectLifecycle = process.env.FLOW_UI_PROJECT_LIFECYCLE === "1";
+const verifyLoopPolicy = process.env.FLOW_UI_LOOP_POLICY === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -123,8 +124,9 @@ function executable() {
       login,
       disabledPassword: memberLogin.password,
       pagination: verifyProjectPaging,
+      loopPolicy: verifyLoopPolicy,
     });
-    assert.equal(fixture.workflows.length, 3);
+    assert.equal(fixture.workflows.length, verifyLoopPolicy ? 4 : 3);
     if (verifyProjectPaging)
       console.log((await remote({ action: "verify_pagination", fixture, login, memberLogin })).trim());
     if (verifyProjectLifecycle)
@@ -237,7 +239,21 @@ function executable() {
       await remote({ action: "restore_owned_workflows", fixture });
       console.log(JSON.stringify({ stage: "project-lifecycle-browser", cancelNoMutation: true, explicitArchive: true, archiveScope: true, historyReadable: true, explicitRestore: true }));
     }
-    for (const workflow of fixture.workflows) {
+    if (verifyLoopPolicy) {
+      await page.goto(`${base}#/flows/workflow/${fixture.loopWorkflowId}/editor`, { waitUntil: "domcontentloaded" });
+      await page.locator("[data-workflow-editor]").waitFor();
+      await page.locator('.react-flow__edge[data-id="back"] .react-flow__edge-interaction').click({ force: true });
+      await page.locator("[data-loop-policy-editor]").waitFor();
+      assert.equal(await page.getByLabel("启用循环返回上限").isChecked(), true);
+      await page.getByLabel("最多返回次数").fill("4");
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "4");
+      await page.screenshot({ path: path.join(directory, "loop-policy-editor.png"), fullPage: true });
+      await page.getByLabel("启用循环返回上限").uncheck();
+      await page.getByLabel("启用循环返回上限").check();
+      await page.getByLabel("最多返回次数").fill("3");
+      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true }));
+    }
+    for (const workflow of fixture.workflows.filter(flow => flow.flowType !== "loop")) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {
         waitUntil: "domcontentloaded",
       });

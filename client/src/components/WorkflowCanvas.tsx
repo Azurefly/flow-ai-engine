@@ -4,6 +4,7 @@ import {
   type TemplateNodeType,
 } from "@shared/workflow-template";
 import { CanvasNameDialog } from "./CanvasNameDialog";
+import { Input } from "./ui/input";
 import {
   dataflowInputFields,
   usesDataflowInputFieldSuggestions,
@@ -521,6 +522,7 @@ function toFlowEdges(definition: Definition): Edge[] {
     sourceHandle: edge.sourceHandle,
     target: edge.targetNodeId,
     targetHandle: "target",
+    data: { loop: edge.loop ?? null },
     animated: true,
     interactionWidth: 24,
     style: { stroke: "#94a3b8", strokeWidth: 1.7 },
@@ -550,6 +552,7 @@ function toDefinition(
       sourceNodeId: edge.source,
       sourceHandle: edge.sourceHandle ?? undefined,
       targetNodeId: edge.target,
+      ...(edge.data && Object.hasOwn(edge.data, "loop") ? { loop: (edge.data.loop ?? undefined) as Definition["edges"][number]["loop"] } : {}),
     })),
   };
 }
@@ -3198,6 +3201,7 @@ export default function WorkflowCanvas({
         ...connection,
         id: "edge-" + Date.now(),
         targetHandle: "target",
+        data: { loop: source.id === target.id && flowType !== "data" ? { maxIterations: 3 } : null },
         animated: true,
         interactionWidth: 24,
         style: { stroke: "#94a3b8", strokeWidth: 1.7 },
@@ -3240,6 +3244,13 @@ export default function WorkflowCanvas({
     });
     setSelectedEdgeId(null);
   }, [nodes, pushHistory, readOnly, selectedEdgeId, setEdges, setNodes]);
+  const updateSelectedEdgeLoop = (maxIterations: number | null) => {
+    if (readOnly || !selectedEdgeId || flowType === "data") return;
+    pushHistory();
+    setEdges(current => current.map(edge => edge.id === selectedEdgeId ? {
+      ...edge, data: { ...edge.data, loop: maxIterations === null ? null : { maxIterations } },
+    } : edge));
+  };
 
   const undoDeletedEdge = useCallback(() => {
     if (readOnly || !deletedEdge) return;
@@ -5064,6 +5075,22 @@ export default function WorkflowCanvas({
                   可点击顶部“删除连线”，或按 Delete /
                   Backspace。删除后可立即撤销。
                 </p>
+                {flowType !== "data" && <div className="aiflow-type-body mt-4 space-y-3 border-t border-indigo-200 pt-3" data-loop-policy-editor="">
+                  <label className="flex min-h-11 items-center gap-2 font-medium">
+                    <input type="checkbox" aria-label="启用循环返回上限" disabled={readOnly}
+                      checked={Boolean(edges.find(edge => edge.id === selectedEdgeId)?.data?.loop)}
+                      onChange={event => updateSelectedEdgeLoop(event.target.checked ? 3 : null)} />
+                    启用循环返回上限
+                  </label>
+                  {Boolean(edges.find(edge => edge.id === selectedEdgeId)?.data?.loop) && <label className="grid gap-1">
+                    最多返回次数（1–1000）
+                    <Input type="number" min={1} max={1000} step={1} aria-label="最多返回次数" disabled={readOnly}
+                      value={Number((edges.find(edge => edge.id === selectedEdgeId)?.data?.loop as any)?.maxIterations ?? 3)}
+                      onChange={event => updateSelectedEdgeLoop(Number(event.target.value))} />
+                  </label>}
+                  <p>只在经过此连线时累计；等待、审批和恢复不会重置。请通过路由或办理结果配置退出分支。</p>
+                  <p>路由条件可引用此连线的已返回次数：<code className="break-all">{`{{runtime.loopIterations.${selectedEdgeId}}}`}</code></p>
+                </div>}
               </div>
             ) : (
               <div className="m-4 mt-8 rounded-lg border border-dashed border-border bg-muted p-4 text-sm leading-6 text-muted-foreground">

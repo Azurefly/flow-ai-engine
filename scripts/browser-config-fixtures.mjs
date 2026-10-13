@@ -462,6 +462,20 @@ async function setup(intent) {
       fixture.workflows.push({ id: workflow.id, flowType, name });
       progress();
     }
+    if (intent.loopPolicy) {
+      const nodes = [
+        { id: "start", type: "start", name: "开始", config: {}, position: { x: 0, y: 80 } },
+        { id: "body", type: "milestone", name: "迭代检查", config: { milestoneCode: "CHECK", displayName: "迭代检查" }, position: { x: 220, y: 80 } },
+        { id: "route", type: "router", name: "是否继续", config: { defaultRoute: "done", routes: [{ handle: "retry", condition: { left: "{{runtime.loopIterations.back}}", operator: "lessThan", right: 2 } }] }, position: { x: 440, y: 80 } },
+        { id: "end", type: "end", name: "结束", config: {}, position: { x: 660, y: 80 } },
+      ];
+      const edges = [{ id: "initial", sourceNodeId: "start", targetNodeId: "body" }, { id: "forward", sourceNodeId: "body", targetNodeId: "route" }, { id: "back", sourceNodeId: "route", sourceHandle: "retry", targetNodeId: "body", loop: { maxIterations: 3 } }, { id: "done", sourceNodeId: "route", sourceHandle: "done", targetNodeId: "end" }];
+      const name = "循环配置_" + intent.tag;
+      const workflow = await request("project.createWorkflow", { projectId: project.id, name, flowType: "control", definition: { schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, settings: {}, nodes, edges } }, true);
+      fixture.loopWorkflowId = workflow.id;
+      fixture.workflows.push({ id: workflow.id, flowType: "loop", name });
+      progress();
+    }
   } catch (error) {
     await cleanup(fixture);
     throw error;

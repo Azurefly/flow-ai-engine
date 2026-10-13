@@ -1,4 +1,6 @@
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
+import { activateWorkflowLoopVisit, chargeWorkflowLoopVisit, initialWorkflowLoopQueue, restoreParentLoopVisits, usesWorkflowLoopVisits, workflowLoopSuccessorCursors, workflowLoopVisitIdentity } from "./workflow-loop-runtime";
+import { emptyWorkflowLoopCursor, restoreWorkflowLoopCursor, type WorkflowLoopCursor } from "./workflow-loop-cursor";
 import { lockActiveProject } from "./project-lifecycle-lock";
 import { restoreHumanCreationRuntime, completeCurrentHumanCheckpoint } from "./workflow-human-checkpoint";
 import { workflowWaitExecutionKey, workflowTaskExecutionKey } from "./workflow-wait-execution-key";
@@ -752,7 +754,7 @@ export function withWorkflowIdempotencyHeader(
       : "";
   if (runId && nodeId) {
     const version = runtime.httpIdempotencyVersion ?? 1;
-    if (version !== 1 && version !== 2 && version !== 3)
+    if (version !== 1 && version !== 2 && version !== 3 && version !== 4)
       throw new Error("HTTP 幂等策略版本无效，拒绝执行写请求。");
     const tokens = runtime.parallelActiveTokens;
     if (
@@ -782,7 +784,7 @@ export function withWorkflowIdempotencyHeader(
         .slice(0, 32);
       branchSuffix = `:branch:${identity}`;
     }
-    if (version === 3) {
+    if (version === 3 || version === 4) {
       const path = runtime.httpInvocationPath ?? [nodeId];
       if (
         !Array.isArray(path) ||
@@ -792,10 +794,10 @@ export function withWorkflowIdempotencyHeader(
       )
         throw new Error("HTTP 调用执行路径无效，无法生成幂等键。");
       const identity = createHash("sha256")
-        .update(JSON.stringify([path, branchPath]))
+        .update(JSON.stringify(version === 4 ? [path, branchPath, restoreWorkflowLoopCursor(runtime.executionLoopCursor).traversals, restoreParentLoopVisits(runtime.httpParentLoopVisits)] : [path, branchPath]))
         .digest("hex")
         .slice(0, 32);
-      normalizedHeaders["Idempotency-Key"] = `flow:${runId}:v3:${identity}`;
+      normalizedHeaders["Idempotency-Key"] = `flow:${runId}:v${version}:${identity}`;
     } else normalizedHeaders["Idempotency-Key"] = `flow:${runId}:${nodeId}${branchSuffix}`;
   }
   return normalizedHeaders;
@@ -1432,18 +1434,23 @@ async function executeInlineDefinition(
   const startNode = definition.nodes.find(node => node.type === "start");
   if (!startNode) throw new Error("子流程缺少开始节点。");
   const queue = [startNode.id];
+  const loopVisits = usesWorkflowLoopVisits(asRecord(context.runtime));
+  const loopQueue = [emptyWorkflowLoopCursor()];
   const executed = new Set<string>();
   let finalOutput: unknown = null;
   let reachedEnd = false;
   while (queue.length) {
-    if (executed.size >= MAX_STEPS)
+    if (!loopVisits && executed.size >= MAX_STEPS)
       throw new Error("子流程执行超过最大节点步数。");
     const nodeId = queue.shift()!;
-    if (executed.has(nodeId)) continue;
+    if (loopVisits) activateWorkflowLoopVisit(asRecord(context.runtime), loopQueue.shift(), definition.edges);
+    const visit = loopVisits ? workflowLoopVisitIdentity(asRecord(context.runtime), nodeId, Array.isArray(asRecord(context.runtime).parallelActiveTokens) ? asRecord(context.runtime).parallelActiveTokens as BranchToken[] : []) : nodeId;
+    if (executed.has(visit)) continue;
     const node = nodes.get(nodeId);
     if (!node) throw new Error(`子流程引用了不存在的节点：${nodeId}`);
     if (node.type === "subflow") throw new Error("子流程不允许嵌套调用。");
-    executed.add(nodeId);
+    executed.add(visit);
+    chargeWorkflowLoopVisit(asRecord(context.runtime), nodeId, Array.isArray(asRecord(context.runtime).parallelActiveTokens) ? asRecord(context.runtime).parallelActiveTokens as BranchToken[] : []);
     if (execution) {
       const runtime = asRecord(context.runtime);
       runtime.executionNodeId = node.id;
@@ -1513,6 +1520,7 @@ async function executeInlineDefinition(
           setRuntimeNodeParticipants(context, edge.targetNodeId, users);
         }
         queue.push(edge.targetNodeId);
+        if (loopVisits) loopQueue.push(workflowLoopSuccessorCursors(asRecord(context.runtime), definition.edges, node.id, [edge.targetNodeId], edge.sourceHandle?.trim() || "default")![0]);
       });
   }
   if (!reachedEnd)
@@ -1552,6 +1560,11 @@ export async function executeSubflowNode(
   if (!definition?.nodes?.length) throw new Error("引用的子流程定义为空。");
   const input = asRecord(resolved.input ?? context.input);
   const result = await executeInlineDefinition(definition, input, projectId, subflowRuntimeContext(asRecord(context.runtime), subflowId));
+  if (usesWorkflowLoopVisits(asRecord(context.runtime))) {
+    const runtime = asRecord(context.runtime);
+    runtime.executionStepCount = asRecord(result.context.runtime).executionStepCount;
+    runtime.executionChargedVisit = workflowLoopVisitIdentity(runtime, String(runtime.executionNodeId), Array.isArray(runtime.parallelActiveTokens) ? runtime.parallelActiveTokens as BranchToken[] : []);
+  }
   return {
     subflowId,
     subflowName,
@@ -2033,6 +2046,17 @@ export async function submitWorkflowRun(input: {
     },
   };
   setRuntimeNodeParticipants(context, startNode.id, [input.triggeredBy.id]);
+  if (executableDefinition.edges.some(edge => edge.loop) || executableDefinition.nodes.some(node => {
+    const childEdges = asRecord(node.config.resolvedSubflowDefinition).edges;
+    return Array.isArray(childEdges) && childEdges.some(edge => Boolean(asRecord(edge).loop));
+  })) {
+    Object.assign(asRecord(context.runtime), {
+      loopExecutionVersion: 1, executionStepCount: 0,
+      executionLoopCursor: emptyWorkflowLoopCursor(),
+      durableWaitVersion: 2, durableTaskVersion: 2, httpIdempotencyVersion: 4,
+      parallelCheckpoint: initialWorkflowLoopQueue(startNode.id),
+    });
+  }
   const authorizationSnapshot = {
     userId: input.triggeredBy.id,
     userRole: input.triggeredBy.role,
@@ -2981,7 +3005,11 @@ async function persistStateNode(input: {
     const run = runRows[0];
     if (!run) throw new Error("状态流程运行实例不存在。");
     const currentVersion = Number(run.stateVersion ?? 0);
-    if (String(run.currentStateNodeId ?? "") !== input.node.id) {
+    const visitKey = usesWorkflowLoopVisits(runtime) ? workflowLoopVisitIdentity(runtime, input.node.id, Array.isArray(runtime.parallelActiveTokens) ? runtime.parallelActiveTokens as BranchToken[] : []) : null;
+    const [existingVisits] = visitKey ? await connection.query<mysql.RowDataPacket[]>(
+      "SELECT sequenceNo FROM workflow_state_transition WHERE runId=? AND nodeId=? AND executionKey=? LIMIT 1", [input.runId, input.node.id, visitKey]
+    ) : [[]];
+    if (visitKey ? !existingVisits[0] : String(run.currentStateNodeId ?? "") !== input.node.id) {
       const nextVersion = currentVersion + 1;
       const [advanced] = await connection.query<mysql.ResultSetHeader>(
         "UPDATE workflow_run SET currentStateCode=?,currentStateNodeId=?,stateVersion=? WHERE id=? AND stateVersion=?",
@@ -2995,7 +3023,7 @@ async function persistStateNode(input: {
       const transitionId = randomUUID();
       const transitionResult = runtime.pendingTransitionResult ?? null;
       await connection.query(
-        "INSERT INTO workflow_state_transition (id,runId,workflowId,sequenceNo,fromStateCode,toStateCode,transitionCode,taskId,actorUserId,responsibleUserId,representedUserId,payloadJson,resultJson,requestId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO workflow_state_transition (id,runId,workflowId,sequenceNo,fromStateCode,toStateCode,transitionCode,taskId,actorUserId,responsibleUserId,representedUserId,payloadJson,resultJson,requestId,nodeId,executionKey) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
           transitionId,
           input.runId,
@@ -3011,6 +3039,8 @@ async function persistStateNode(input: {
           JSON.stringify({ nodeId: input.node.id, stateName, flowStatus }),
           transitionResult === null ? null : JSON.stringify(transitionResult),
           String(runtime.requestId ?? currentRequestId() ?? "") || null,
+          visitKey ? input.node.id : null,
+          visitKey ?? "legacy",
         ]
       );
       await connection.query(
@@ -3089,8 +3119,8 @@ async function persistMilestoneNode(input: {
   );
   await db().query(
     `INSERT INTO workflow_milestone
-      (id,runId,workflowId,nodeId,milestoneCode,displayName,category,detailsJson,actorUserId,requestId,occurredAt)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)
+      (id,runId,workflowId,nodeId,milestoneCode,displayName,category,detailsJson,actorUserId,requestId,occurredAt,executionKey)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
      ON DUPLICATE KEY UPDATE id=id`,
     [
       randomUUID(),
@@ -3104,6 +3134,7 @@ async function persistMilestoneNode(input: {
       Number.isInteger(actorUserId) && actorUserId > 0 ? actorUserId : null,
       String(runtime.requestId ?? currentRequestId() ?? "") || null,
       output.occurredAt ? new Date(String(output.occurredAt)) : new Date(),
+      usesWorkflowLoopVisits(runtime) ? workflowLoopVisitIdentity(runtime, input.node.id, Array.isArray(runtime.parallelActiveTokens) ? runtime.parallelActiveTokens as BranchToken[] : []) : "legacy",
     ]
   );
 }
@@ -3121,6 +3152,7 @@ export async function executeRunSegment(input: {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
   const executed = new Set<string>();
   const initialRuntime = asRecord(input.context.runtime);
+  const loopVisits = usesWorkflowLoopVisits(initialRuntime);
   let parallel: ParallelCheckpoint | undefined =
     initialRuntime.parallelCheckpoint === undefined
       ? undefined
@@ -3130,6 +3162,7 @@ export async function executeRunSegment(input: {
         );
   let activeTokens: BranchToken[] = [];
   let activeParticipantUserIds: number[] = [];
+  let activeLoopCursor: WorkflowLoopCursor | undefined;
   const persistCheckpoint = async (checkpoint: WorkflowCheckpoint) => {
     saveParallelScope(parallel?.scopes, activeTokens, input.context);
     if (parallel) asRecord(input.context.runtime).parallelCheckpoint = parallel;
@@ -3138,7 +3171,8 @@ export async function executeRunSegment(input: {
   const enqueue = (
     nodeId: string,
     tokens = activeTokens,
-    participantUserIds = activeParticipantUserIds
+    participantUserIds = activeParticipantUserIds,
+    loopCursor = activeLoopCursor
   ) => {
     input.queue.push(nodeId);
     if (parallel) {
@@ -3146,6 +3180,7 @@ export async function executeRunSegment(input: {
         nodeId,
         tokens: tokens.map(token => ({ ...token })),
         participantUserIds: [...participantUserIds],
+        ...(loopVisits ? { loopCursor: restoreWorkflowLoopCursor(loopCursor) } : {}),
       });
       asRecord(input.context.runtime).parallelCheckpoint = parallel;
     }
@@ -3153,15 +3188,21 @@ export async function executeRunSegment(input: {
   let finalOutput: unknown = input.finalOutput ?? null;
   let reachedEnd = false;
   while (input.queue.length) {
-    if (executed.size >= MAX_STEPS)
+    if (!loopVisits && executed.size >= MAX_STEPS)
       throw new Error("流程执行超过最大节点步数，可能存在循环。");
     const nodeId = input.queue.shift()!;
     activeTokens = parallel?.queue[0]?.tokens ?? [];
+    if (loopVisits) {
+      if (!parallel) throw new Error("循环执行队列缺少持久化迭代检查点。");
+      activeLoopCursor = parallel.queue[0]?.loopCursor;
+      activateWorkflowLoopVisit(asRecord(input.context.runtime), activeLoopCursor, input.definition.edges);
+    }
     activateParallelScope(parallel?.scopes, activeTokens, input.context);
     const executionKey = JSON.stringify([
       nodeId,
       activeTokens,
       parallel?.queue[0]?.releasedJoinFrameId,
+      ...(loopVisits ? [activeLoopCursor?.traversals] : []),
     ]);
     if (executed.has(executionKey)) {
       parallel?.queue.shift();
@@ -3183,6 +3224,10 @@ export async function executeRunSegment(input: {
         continue;
       }
       activeTokens = parallel.queue[0].tokens;
+      if (loopVisits) {
+        activeLoopCursor = parallel.queue[0].loopCursor;
+        activateWorkflowLoopVisit(asRecord(input.context.runtime), activeLoopCursor, input.definition.edges);
+      }
       mergeParallelScope(
         parallel.scopes,
         parallel.queue[0].releasedJoinFrameId!,
@@ -3224,6 +3269,7 @@ export async function executeRunSegment(input: {
       }
     }
     executed.add(executionKey);
+    chargeWorkflowLoopVisit(asRecord(input.context.runtime), node.id, activeTokens);
     await persistCheckpoint({
       queue: [nodeId, ...input.queue],
       context: input.context,
@@ -3237,7 +3283,7 @@ export async function executeRunSegment(input: {
     const executionRuntime = asRecord(input.context.runtime);
     executionRuntime.executionRunId = input.runId;
     executionRuntime.executionNodeId = node.id;
-    if (executionRuntime.httpIdempotencyVersion === 3) executionRuntime.httpInvocationPath = [node.id];
+    if (executionRuntime.httpIdempotencyVersion === 3 || executionRuntime.httpIdempotencyVersion === 4) executionRuntime.httpInvocationPath = [node.id];
     if (parallel) executionRuntime.parallelActiveTokens = activeTokens;
     input.context.runtime = executionRuntime;
     setCurrentNodeParticipants(
@@ -3284,6 +3330,7 @@ export async function executeRunSegment(input: {
             nextNodeIds,
             tokens: activeTokens,
             participantUserIds: currentParticipants,
+            ...(loopVisits ? { loopCursors: workflowLoopSuccessorCursors(asRecord(waitContext.runtime), input.definition.edges, node.id, nextNodeIds) } : {}),
           };
         }
         const persisted = await persistWorkflowWait({
@@ -3785,7 +3832,7 @@ export async function executeRunSegment(input: {
       if (node.type === "router" && routeTargets.length) {
         const dispatches = new Map<
           string,
-          { targetNodeId: string; userIds: number[] }
+          { targetNodeId: string; handle: string; userIds: number[] }
         >();
         for (const branch of routeTargets) {
           const handle = String(branch.handle ?? routed.route ?? "default");
@@ -3810,6 +3857,7 @@ export async function executeRunSegment(input: {
             const previous = dispatches.get(key);
             dispatches.set(key, {
               targetNodeId: edge.targetNodeId,
+              handle: edge.sourceHandle?.trim() || "default",
               userIds: Array.from(
                 new Set([...(previous?.userIds ?? []), ...branchUsers])
               ),
@@ -3850,7 +3898,8 @@ export async function executeRunSegment(input: {
             branch.targetNodeId,
             branch.userIds
           );
-          enqueue(branch.targetNodeId, branchTokens[index], branch.userIds);
+          enqueue(branch.targetNodeId, branchTokens[index], branch.userIds,
+            workflowLoopSuccessorCursors(asRecord(input.context.runtime), input.definition.edges, node.id, [branch.targetNodeId], branch.handle)?.[0]);
         });
       } else {
         input.definition.edges
@@ -3866,7 +3915,8 @@ export async function executeRunSegment(input: {
               edge.targetNodeId,
               currentParticipants
             );
-            enqueue(edge.targetNodeId);
+            enqueue(edge.targetNodeId, activeTokens, activeParticipantUserIds,
+              workflowLoopSuccessorCursors(asRecord(input.context.runtime), input.definition.edges, node.id, [edge.targetNodeId], edge.sourceHandle?.trim() || "default")?.[0]);
           });
       }
       const completedRuntime = asRecord(input.context.runtime);
@@ -4394,7 +4444,9 @@ export async function resumeWorkflowTask(input: {
         pending,
         continuationNodeIds,
         taskPayload.parallelTokens,
-        taskBranchParticipants(taskPayload, gate.affectedUserIds)
+        taskBranchParticipants(taskPayload, gate.affectedUserIds),
+        undefined,
+        workflowLoopSuccessorCursors(asRecord(asRecord(taskPayload.context).runtime), (readJson(task.definitionSnapshotJson) as Definition).edges, String(task.nodeId), continuationNodeIds, outcomeRouting.mode === "explicit" ? outcomeRouting.handle : undefined)
       );
     }
     continuationNodeIds = resumeWorkflowQueue(
@@ -4525,7 +4577,9 @@ async function triggerWorkflowWaitSubscription(
         pending,
         next,
         continuation.tokens,
-        continuation.participantUserIds
+        continuation.participantUserIds,
+        undefined,
+        continuation.loopCursors as WorkflowLoopCursor[] | undefined
       );
       checkpoint.queue = [...pending, ...next];
       context.runtime = runtime;
@@ -4865,7 +4919,9 @@ export async function reconcileWorkflowContinuations(limit = 20) {
               asRecord(readJson(task.payloadJson)).parallelTokens,
               taskBranchParticipants(asRecord(readJson(task.payloadJson)), [
                 taskOutput.completedByUserId,
-              ])
+              ]),
+              undefined,
+              workflowLoopSuccessorCursors(asRecord(asRecord(asRecord(readJson(task.payloadJson)).context).runtime), (readJson(task.definitionSnapshotJson) as Definition).edges, String(task.nodeId), queue, outcomeRouting.mode === "explicit" ? outcomeRouting.handle : undefined)
             );
         }
         queue = resumeWorkflowQueue(

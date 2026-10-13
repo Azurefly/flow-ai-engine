@@ -689,11 +689,7 @@ describe("WorkflowCompiler", () => {
       flowType: "state",
       executable: true,
     });
-    expect(loopPublish.ok).toBe(false);
-    if (!loopPublish.ok)
-      expect(loopPublish.diagnostics.map(item => item.code)).toContain(
-        "WF_RUNTIME_LOOP_UNSUPPORTED"
-      );
+    expect(loopPublish.ok).toBe(true);
   });
 
   it("keeps legacy open-claim nodes editable but requires an owner for publication", () => {

@@ -1,3 +1,5 @@
+import { emptyWorkflowLoopCursor, restoreWorkflowLoopCursor } from "./workflow-loop-cursor";
+import { restoreParentLoopVisits, usesWorkflowLoopVisits } from "./workflow-loop-runtime";
 type JsonRecord = Record<string, unknown>;
 export type SubflowRuntimeContext = {
   runtime: JsonRecord;
@@ -9,10 +11,10 @@ export function subflowRuntimeContext(
   subflowId: string
 ): SubflowRuntimeContext | undefined {
   const version = parent.httpIdempotencyVersion ?? 1;
-  if (version !== 1 && version !== 2 && version !== 3)
+  if (version !== 1 && version !== 2 && version !== 3 && version !== 4)
     throw new Error("子流程执行策略版本无效。");
   // Existing runs retain their original inline context and HTTP header policy.
-  if (version !== 3) return undefined;
+  if (version !== 3 && version !== 4) return undefined;
   const runId =
     typeof parent.executionRunId === "string"
       ? parent.executionRunId.trim()
@@ -32,10 +34,19 @@ export function subflowRuntimeContext(
   )
     throw new Error("子流程父执行路径无效。");
   const runtime: JsonRecord = {
-    httpIdempotencyVersion: 3,
+    httpIdempotencyVersion: version,
     executionRunId: runId,
     nodeParticipantUserIds: {},
   };
+  if (version === 4) {
+    runtime.executionLoopCursor = emptyWorkflowLoopCursor();
+    runtime.httpParentLoopVisits = [...restoreParentLoopVisits(parent.httpParentLoopVisits), restoreWorkflowLoopCursor(parent.executionLoopCursor)];
+    if (usesWorkflowLoopVisits(parent)) {
+      runtime.loopExecutionVersion = 1;
+      runtime.executionStepCount = parent.executionStepCount;
+      runtime.executionVisitScope = [...path, "$subflow", subflowId];
+    }
+  }
   for (const key of [
     "triggeredByUserId",
     "lastActorUserId",

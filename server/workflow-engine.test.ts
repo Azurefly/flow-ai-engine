@@ -339,7 +339,7 @@ describe("HTTP 节点 SSRF 防护", () => {
       withWorkflowIdempotencyHeader(
         "POST",
         {},
-        { runtime: { ...runtime, httpIdempotencyVersion: 4 } }
+        { runtime: { ...runtime, httpIdempotencyVersion: 5 } }
       )
     ).toThrow("策略版本");
   });

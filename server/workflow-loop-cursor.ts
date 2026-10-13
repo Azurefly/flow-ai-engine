@@ -87,3 +87,13 @@ export function advanceWorkflowLoopCursor(value: unknown, edge: LoopEdge) {
   else cursor.traversals.push({ edgeId: edge.id, count });
   return restoreWorkflowLoopCursor(cursor);
 }
+
+/** Sibling branches keep independent counts; a join preserves their maxima. */
+export function mergeWorkflowLoopCursors(values: unknown[]) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    for (const entry of restoreWorkflowLoopCursor(value).traversals)
+      counts.set(entry.edgeId, Math.max(counts.get(entry.edgeId) ?? 0, entry.count));
+  }
+  return restoreWorkflowLoopCursor({ schemaVersion: 1, traversals: Array.from(counts, ([edgeId, count]) => ({ edgeId, count })) });
+}

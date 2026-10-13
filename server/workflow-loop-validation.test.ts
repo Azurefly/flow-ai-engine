@@ -50,6 +50,14 @@ function fixture(
 }
 
 describe("所有回路必须受次数上限约束", () => {
+  it("有界同节点返回可编译，未声明的同节点回路仍拒绝", () => {
+    const definition = fixture("control", true);
+    definition.nodes = definition.nodes.filter(node => ["start", "a", "end"].includes(node.id));
+    definition.edges = [{ id: "initial", sourceNodeId: "start", targetNodeId: "a" }, { id: "self", sourceNodeId: "a", targetNodeId: "a", loop: { maxIterations: 2 } }, { id: "exit", sourceNodeId: "a", targetNodeId: "end" }];
+    expect(analyzeWorkflowDefinition(definition, { flowType: "control" }).ok).toBe(true);
+    delete definition.edges[1].loop;
+    expect(analyzeWorkflowDefinition(definition, { flowType: "control" }).diagnostics.map(item => item.code)).toContain("WF_EDGE_SELF_LOOP");
+  });
   it("已发布的旧版执行计划仍按原始哈希验证，新草稿标记新版编译器", () => {
     const result = analyzeWorkflowDefinition(fixture("control", true), {
       flowType: "control",
@@ -57,7 +65,7 @@ describe("所有回路必须受次数上限约束", () => {
     });
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.plan.compilerVersion).toBe("1.7.0");
+    expect(result.plan.compilerVersion).toBe("1.8.0");
     const legacy = { ...result.plan, compilerVersion: "1.6.0" as const };
     expect(
       assertWorkflowExecutionPlan(
@@ -89,16 +97,17 @@ describe("所有回路必须受次数上限约束", () => {
   );
 
   it.each(["state", "control"] as const)(
-    "%s：所有回路声明上限后不再报告遗漏，运行仍等待完整执行支持",
+    "%s：所有回路声明上限后可生成迭代执行计划",
     flowType => {
       const definition = fixture(flowType, true);
       const result = analyzeWorkflowDefinition(definition, { flowType });
       expect(result.diagnostics.map(item => item.code)).not.toContain(
         "WF_LOOP_NOT_BOUNDED"
       );
-      expect(result.diagnostics.map(item => item.code)).toContain(
+      expect(result.diagnostics.map(item => item.code)).not.toContain(
         "WF_RUNTIME_LOOP_UNSUPPORTED"
       );
+      expect(result.ok).toBe(true);
       const draft = analyzeWorkflowDefinition(definition, {
         flowType,
         executable: false,

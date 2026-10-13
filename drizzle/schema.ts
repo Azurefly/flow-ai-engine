@@ -863,6 +863,7 @@ export const workflowMilestones = mysqlTable(
       .notNull()
       .references(() => workflows.id, { onDelete: "cascade" }),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
+    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
     milestoneCode: varchar("milestoneCode", { length: 96 }).notNull(),
     displayName: varchar("displayName", { length: 160 }).notNull(),
     category: mysqlEnum("category", [
@@ -879,7 +880,7 @@ export const workflowMilestones = mysqlTable(
     occurredAt: timestamp("occurredAt").defaultNow().notNull(),
   },
   table => [
-    unique("workflow_milestone_run_node_unique").on(table.runId, table.nodeId),
+    unique("workflow_milestone_run_node_unique").on(table.runId, table.nodeId, table.executionKey),
     index("workflow_milestone_workflow_time_idx").on(
       table.workflowId,
       table.occurredAt
@@ -948,6 +949,8 @@ export const workflowStateTransitions = mysqlTable(
       .notNull()
       .references(() => workflows.id, { onDelete: "cascade" }),
     sequenceNo: int("sequenceNo").notNull(),
+    nodeId: varchar("nodeId", { length: 160 }),
+    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
     fromStateCode: varchar("fromStateCode", { length: 160 }),
     toStateCode: varchar("toStateCode", { length: 160 }).notNull(),
     transitionCode: varchar("transitionCode", { length: 160 }).notNull(),
@@ -965,6 +968,7 @@ export const workflowStateTransitions = mysqlTable(
       table.runId,
       table.sequenceNo
     ),
+    unique("workflow_state_transition_run_visit_unique").on(table.runId, table.nodeId, table.executionKey),
     index("workflow_state_transition_workflow_idx").on(
       table.workflowId,
       table.createdAt
