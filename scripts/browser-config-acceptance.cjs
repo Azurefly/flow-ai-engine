@@ -228,6 +228,7 @@ function executable() {
       await center.getByRole("button", { name: "已归档", exact: true }).click();
       await center.getByRole("button", { name: "查看归档", exact: true }).click();
       await page.getByRole("dialog").getByRole("heading", { name: "已归档流程", exact: true }).waitFor();
+      await page.getByRole("dialog").getByRole("link", { name: "查看历史", exact: true }).nth(2).waitFor({ state: "visible" });
       assert.equal(await page.getByRole("dialog").getByRole("link", { name: "查看历史", exact: true }).count(), 3);
       await page.screenshot({ path: path.join(directory, "project-archive-history.png"), fullPage: true });
       await page.getByRole("dialog").getByRole("button", { name: "恢复业务", exact: true }).click();
