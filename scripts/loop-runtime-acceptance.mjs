@@ -15,7 +15,7 @@ class Session {
 }
 const root = new Session(), own = new Session();
 const tag = "looprun_" + randomBytes(6).toString("hex"), password = "Test9_" + randomBytes(24).toString("base64url");
-let account, project; const workflows = [], runs = [];
+let account, project; const workflows = [], runs = [], subflows = [];
 const node = (id, type, config = {}) => ({ id, type, name: id, config, position: { x: 0, y: 0 } });
 const edge = (id, sourceNodeId, targetNodeId, sourceHandle, limit) => ({ id, sourceNodeId, targetNodeId, ...(sourceHandle ? { sourceHandle } : {}), ...(limit ? { loop: { maxIterations: limit } } : {}) });
 const route = (id, loopEdge, count) => node(id, "router", { defaultRoute: "done", routes: [{ handle: "retry", condition: { left: `{{runtime.loopIterations.${loopEdge}}}`, operator: "lessThan", right: count } }] });
@@ -82,7 +82,19 @@ try {
   assert.equal(parallel.nodeRuns.filter(row => row.nodeId === "waitB" && row.status === "success").length, 2);
   assert.equal(parallel.nodeRuns.filter(row => row.nodeId === "join" && row.status === "success").length, 2);
   console.log(JSON.stringify({ scenario: "parallel-loop", firstBranchVisits: 3, secondBranchVisits: 2, joins: 2, mergedCountersPreserved: true, runId: parallelId }));
-  const limitId = await create("次数上限", "control", definition([node("start", "start"), node("body", "transform"), node("route", "router", { defaultRoute: "retry" }), node("end", "end")], [edge("initial", "start", "body"), edge("forward", "body", "route"), edge("back", "route", "body", "retry", 2), edge("finish", "route", "end", "done")]));
+  const childDef = definition([node("start", "start"), node("body", "transform"), route("route", "childBack", 2), node("end", "end", { resultTemplate: "{{runtime.loopIterations.childBack}}" })], [edge("initial", "start", "body"), edge("forward", "body", "route"), edge("childBack", "route", "body", "retry", 3), edge("finish", "route", "end", "done")]);
+  const child = await own.request("workflow.createSubflow", { name: "循环子流程_" + tag, flowType: "control", definition: childDef }, true);
+  subflows.push(child.id);
+  const parentId = await create("同步子流程返回", "control", definition([node("start", "start"), node("call", "subflow", { subflowId: child.id }), node("end", "end")], [edge("initial", "start", "call"), edge("finish", "call", "end")]));
+  const parent = await settle(parentId);
+  const callOutput = parent.nodeRuns.find(row => row.nodeId === "call").outputJson;
+  const output = typeof callOutput === "string" ? JSON.parse(callOutput) : callOutput;
+  assert.equal(output.result.result, 2);
+  const endInput = parent.nodeRuns.find(row => row.nodeId === "end").inputJson;
+  const endContext = typeof endInput === "string" ? JSON.parse(endInput) : endInput;
+  assert.equal(endContext.context.runtime.executionStepCount, 11);
+  console.log(JSON.stringify({ scenario: "inline-child-loop", childReturns: 2, cumulativeSteps: 11, runId: parentId }));
+  const limitId = await create("次数上限", "control", definition([node("start", "start"), node("body", "transform"), node("route", "router", { defaultRoute: "retry", routes: [{ handle: "done", condition: { left: "never", operator: "equals", right: "always" } }] }), node("end", "end")], [edge("initial", "start", "body"), edge("forward", "body", "route"), edge("back", "route", "body", "retry", 2), edge("finish", "route", "end", "done")]));
   const failed = await settle(limitId, "failed"); assert(JSON.stringify(failed.errorJson).includes("2 次上限"));
   console.log(JSON.stringify({ scenario: "loop-limit", failedAtDeclaredLimit: true, runId: limitId }));
 } finally {
@@ -94,6 +106,7 @@ try {
     try { const actual = await root.request("workflow.get", { id: workflow.id }); assert.equal(actual.name, workflow.name); assert.equal(actual.ownerUserId, account.userId); if (!actual.archivedAt) await root.request("workflow.delete", { id: workflow.id }, true); } catch (error) { failures.push(error.message); }
   }
   if (project) { try { const current = await root.request("project.lifecyclePreview", { projectId: project.id }); assert.equal(current.ownerUserId, account.userId); assert.equal(current.name, "循环隔离验收_" + tag); if (current.status === "active") await root.request("project.changeStatus", { projectId: project.id, status: "archived", expectedVersion: current.lifecycleVersion, expectedWorkflowCount: current.workflowCount }, true); } catch (error) { failures.push(error.message); } }
+  for (const id of subflows) { try { assert((await own.request("workflow.subflows")).some(row => row.id === id && row.name === "循环子流程_" + tag)); await own.request("workflow.deleteSubflow", { id }, true); } catch (error) { failures.push(error.message); } }
   if (account) { try { const users = await root.request("iam.userDirectory", { search: tag, limit: 20, offset: 0 }); assert.equal(users.items.find(row => row.username === tag)?.id, account.userId); await root.request("iam.updateUserStatus", { userId: account.userId, status: "disabled" }, true); } catch (error) { failures.push(error.message); } }
   assert.deepEqual(failures, [], "循环隔离资源清理失败");
   console.log(JSON.stringify({ cleanup: true, ownWorkflowsArchived: workflows.length, ownProjectArchived: Boolean(project), ownAccountDisabled: Boolean(account) }));

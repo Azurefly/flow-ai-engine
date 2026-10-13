@@ -15,7 +15,7 @@ const maxChunkBytes = 450 * 1024;
 // Account status confirmation/recovery: 1422.16 KiB raw / 422.10 KiB gzip.
 // Keep one-KiB headroom for this measured increment; chunk/HTML limits stay fixed.
 // Project archive/restore and its history dialog add about 2.5 KiB gzip.
-const maxTotalBytes = 1_431 * 1024;
+const maxTotalBytes = 1_432 * 1024;
 const maxTotalGzipBytes = 426 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

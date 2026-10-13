@@ -7,12 +7,19 @@ import { prepareParallelJoin } from "./workflow-parallel-join";
 import { restoreParallelCheckpoint, resumeParallelCheckpoint } from "./workflow-parallel-checkpoint";
 import { withWorkflowIdempotencyHeader } from "./workflow-engine";
 import { subflowRuntimeContext } from "./subflow-runtime-context";
+import { readFileSync } from "node:fs";
 const edges: WorkflowEdge[] = [
   { id: "forward", sourceNodeId: "start", targetNodeId: "review" },
   { id: "return", sourceNodeId: "review", targetNodeId: "start", sourceHandle: "retry", loop: { maxIterations: 3 } },
   { id: "finish", sourceNodeId: "review", targetNodeId: "end", sourceHandle: "done" },
 ];
 const runtime = () => ({ loopExecutionVersion: 1, executionStepCount: 0, executionLoopCursor: emptyWorkflowLoopCursor() } as Record<string, unknown>);
+it("节点重叠时连线定位入口仍可打开循环设置，沿用同一选择处理器", () => {
+  const source = readFileSync(new URL("../client/src/components/WorkflowCanvas.tsx", import.meta.url), "utf8");
+  expect(source).toContain('aria-label="定位并配置连线"');
+  expect(source).toContain('new CustomEvent("flow:focus-node", { detail: { edgeId: event.target.value } })');
+  expect(source).toContain('setSelectedEdgeId(edge.id)');
+});
 it("初始访问有独立检查点，激活后提供明确的连线计数", () => {
   const queue = initialWorkflowLoopQueue("start");
   expect(queue.queue[0].loopCursor).toEqual(emptyWorkflowLoopCursor());

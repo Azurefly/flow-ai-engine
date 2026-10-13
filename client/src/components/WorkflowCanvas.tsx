@@ -4152,6 +4152,12 @@ export default function WorkflowCanvas({
                   </option>
                 ))}
               </select>
+              <select aria-label="定位并配置连线" className="aiflow-type-control h-11 min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-foreground sm:max-w-64 min-[1024px]:h-9"
+                value={selectedEdgeId ?? ""} disabled={!edges.length}
+                onChange={event => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { edgeId: event.target.value } }))}>
+                <option value="" disabled>选择连线（共 {edges.length} 条）</option>
+                {edges.map(edge => <option key={edge.id} value={edge.id}>{`${String(nodeMap.get(edge.source)?.data.label ?? edge.source)} → ${String(nodeMap.get(edge.target)?.data.label ?? edge.target)}${edge.data?.loop ? " · 循环返回" : ""}`}</option>)}
+              </select>
               <Button
                 type="button"
                 variant="ghost"

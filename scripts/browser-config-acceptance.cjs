@@ -242,16 +242,27 @@ function executable() {
     if (verifyLoopPolicy) {
       await page.goto(`${base}#/flows/workflow/${fixture.loopWorkflowId}/editor`, { waitUntil: "domcontentloaded" });
       await page.locator("[data-workflow-editor]").waitFor();
-      await page.locator('.react-flow__edge[data-id="back"] .react-flow__edge-interaction').click({ force: true });
+      await page.getByLabel("定位并配置连线").selectOption("back");
       await page.locator("[data-loop-policy-editor]").waitFor();
       assert.equal(await page.getByLabel("启用循环返回上限").isChecked(), true);
       await page.getByLabel("最多返回次数").fill("4");
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "4");
+      let saved = page.waitForResponse(response => response.url().includes("workflow.update") && response.request().method() === "POST" && response.status() === 200);
+      await page.getByRole("button", { name: /保存画布/ }).click();
+      await saved;
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await page.locator("[data-workflow-editor]").waitFor();
+      await page.getByLabel("定位并配置连线").selectOption("back");
+      await page.getByLabel("最多返回次数").waitFor();
       assert.equal(await page.getByLabel("最多返回次数").inputValue(), "4");
       await page.screenshot({ path: path.join(directory, "loop-policy-editor.png"), fullPage: true });
       await page.getByLabel("启用循环返回上限").uncheck();
       await page.getByLabel("启用循环返回上限").check();
       await page.getByLabel("最多返回次数").fill("3");
-      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true }));
+      saved = page.waitForResponse(response => response.url().includes("workflow.update") && response.request().method() === "POST" && response.status() === 200);
+      await page.getByRole("button", { name: /保存画布/ }).click();
+      await saved;
+      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true, savedAndReloaded: true }));
     }
     for (const workflow of fixture.workflows.filter(flow => flow.flowType !== "loop")) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {
