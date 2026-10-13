@@ -474,7 +474,8 @@ export function analyzeWorkflowDefinition(
     if (
       sourceNode.type !== "end" &&
       targetNode.type !== "start" &&
-      !canConnectFlowNodeTypes(sourceNode.type, targetNode.type)
+      !canConnectFlowNodeTypes(sourceNode.type, targetNode.type) &&
+      !(options.flowType === "control" && edge.sourceNodeId === edge.targetNodeId && edge.loop)
     )
       diagnostics.push(
         diagnostic(

@@ -28,7 +28,7 @@ export function canConnectCanvasNodes(
     target.data.kind === "start"
   )
     return false;
-  if (!canConnectFlowNodeTypes(source.data.kind, target.data.kind))
+  if (!canConnectFlowNodeTypes(source.data.kind, target.data.kind) && !(flowType === "control" && source.id === target.id))
     return false;
   const outgoing = edges.filter(edge => edge.source === source.id);
   const singleOutlet =

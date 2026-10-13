@@ -45,10 +45,11 @@ try {
   project = await own.request("project.create", { code: tag.toUpperCase(), name: "循环隔离验收_" + tag }, true);
   for (const flowType of ["control", "state"]) {
     const middle = flowType === "state" ? node("body", "state", { stateCode: "BODY", displayName: "处理中", stateType: "business" }) : node("body", "milestone", { milestoneCode: "CHECK", displayName: "迭代检查" });
-    const runId = await create("同步返回_" + flowType, flowType, definition([node("start", "start"), middle, route("route", "back", 2), node("end", "end")], [edge("initial", "start", "body"), edge("forward", "body", "route"), edge("back", "route", "body", "retry", 3), edge("finish", "route", "end", "done")]));
+    const terminal = flowType === "state" ? [node("doneState", "state", { stateCode: "DONE", displayName: "已完成", stateType: "terminal" })] : [];
+    const runId = await create("同步返回_" + flowType, flowType, definition([node("start", "start"), middle, route("route", "back", 2), ...terminal, node("end", "end")], [edge("initial", "start", "body"), edge("forward", "body", "route"), edge("back", "route", "body", "retry", 3), edge("finish", "route", flowType === "state" ? "doneState" : "end", "done"), ...(flowType === "state" ? [edge("terminal", "doneState", "end")] : [])]));
     const run = await settle(runId);
     assert.equal(run.nodeRuns.filter(row => row.nodeId === "body" && row.status === "success").length, 3);
-    if (flowType === "state") { assert.equal(run.stateTransitions.length, 3); assert.equal(run.stateVersion, 3); assert.equal(new Set(run.stateTransitions.map(row => row.executionKey)).size, 3); }
+    if (flowType === "state") { assert.equal(run.stateTransitions.length, 4); assert.equal(run.stateVersion, 4); assert.equal(new Set(run.stateTransitions.filter(row => row.toStateCode === "BODY").map(row => row.executionKey)).size, 3); }
     else { assert.equal(run.milestones.length, 3); assert.equal(new Set(run.milestones.map(row => row.executionKey)).size, 3); }
     console.log(JSON.stringify({ scenario: "sync-loop", flowType, visits: 3, distinctFacts: true, runId }));
   }

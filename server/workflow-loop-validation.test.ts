@@ -58,6 +58,15 @@ describe("所有回路必须受次数上限约束", () => {
     delete definition.edges[1].loop;
     expect(analyzeWorkflowDefinition(definition, { flowType: "control" }).diagnostics.map(item => item.code)).toContain("WF_EDGE_SELF_LOOP");
   });
+  it("控制操作节点可按显式结果重办，状态流程仍需通过业务状态", () => {
+    const definition = fixture("control", true);
+    definition.nodes = definition.nodes.filter(node => ["start", "a", "end"].includes(node.id));
+    const review = definition.nodes.find(node => node.id === "a")!;
+    review.type = "operate";
+    review.config = { assigneeMode: "user", assigneeUserId: 7, outcomeMode: "explicit", outcomes: [{ code: "retry", label: "重办", sourceHandle: "retry" }, { code: "approved", label: "完成", sourceHandle: "approved" }] };
+    definition.edges = [{ id: "initial", sourceNodeId: "start", targetNodeId: "a" }, { id: "retry", sourceNodeId: "a", targetNodeId: "a", sourceHandle: "retry", loop: { maxIterations: 2 } }, { id: "exit", sourceNodeId: "a", targetNodeId: "end", sourceHandle: "approved" }];
+    expect(analyzeWorkflowDefinition(definition, { flowType: "control" }).ok).toBe(true);
+  });
   it("已发布的旧版执行计划仍按原始哈希验证，新草稿标记新版编译器", () => {
     const result = analyzeWorkflowDefinition(fixture("control", true), {
       flowType: "control",

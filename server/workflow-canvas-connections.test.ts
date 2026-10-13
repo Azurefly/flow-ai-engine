@@ -11,6 +11,9 @@ describe("画布多分支连线", () => {
     const router = node("route", "router");
     expect(canConnectCanvasNodes(router, router, [], "control")).toBe(true);
     expect(canConnectCanvasNodes(router, router, [], "data")).toBe(false);
+    const review = node("review", "operate");
+    expect(canConnectCanvasNodes(review, review, [], "control")).toBe(true);
+    expect(canConnectCanvasNodes(review, review, [], "state")).toBe(false);
   });
   it("数据开始节点可连接多路资源，控制流程保留单出口限制", () => {
     const edges = [{ source: "start", target: "left" }];
