@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { expect, it } from "vitest";
@@ -87,9 +88,9 @@ test("错误审批结果可保存草稿，但发布必须拒绝，修复后可�
       { ...valid, code: 1 },
     ]) {
       definition.nodes[1]!.config.outcomes = [valid, invalid];
-      await caller.workflow.update({ id: workflowId!, definition });
+      await caller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId!), id: workflowId!, definition });
       await expect(
-        caller.workflow.publish({ id: workflowId! })
+        caller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId!), id: workflowId! })
       ).rejects.toThrow(/操作结果/);
       const [rows] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT status,publishedExecutionPlanHash FROM workflow WHERE id=?",
@@ -101,8 +102,8 @@ test("错误审批结果可保存草稿，但发布必须拒绝，修复后可�
       });
     }
     definition.nodes[1]!.config.outcomes = [valid];
-    await caller.workflow.update({ id: workflowId!, definition });
-    await caller.workflow.publish({ id: workflowId! });
+    await caller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId!), id: workflowId!, definition });
+    await caller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId!), id: workflowId! });
     const [rows] = await pool.query<mysql.RowDataPacket[]>(
       "SELECT status,publishedExecutionPlanHash FROM workflow WHERE id=?",
       [workflowId]

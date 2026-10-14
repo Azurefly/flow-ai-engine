@@ -1616,6 +1616,7 @@ export const appRouter = router({
           id: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
           definition: z.unknown().optional(),
+          expectedDefinitionVersion: z.number().int().positive(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -1629,6 +1630,7 @@ export const appRouter = router({
           id: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
           definition: z.unknown().optional(),
+          expectedDefinitionVersion: z.number().int().positive(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -1636,15 +1638,17 @@ export const appRouter = router({
           name: input.name,
           definition: input.definition,
           publish: true,
+          expectedDefinitionVersion: input.expectedDefinitionVersion,
         });
         if (!workflow) throw new Error("流程不存在或无发布权限。");
         return workflow;
       }),
     unpublish: protectedProcedure
-      .input(z.object({ id: z.string().min(8).max(64) }))
+      .input(z.object({ id: z.string().min(8).max(64), expectedDefinitionVersion: z.number().int().positive() }))
       .mutation(async ({ ctx, input }) => {
         const workflow = await updateWorkflow(input.id, ctx.user, {
           unpublish: true,
+          expectedDefinitionVersion: input.expectedDefinitionVersion,
         });
         if (!workflow) throw new Error("流程不存在或无取消发布权限。");
         return workflow;

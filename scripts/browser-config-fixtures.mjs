@@ -636,7 +636,41 @@ async function cycleStatus(fixture) {
   );
   console.log(JSON.stringify({ ownAccountCycled: true }));
 }
+async function verifyWorkflowRevision(intent) {
+  const fixture = intent.fixture;
+  await request("auth.login", intent.login, true);
+  for (const item of fixture.workflows.filter(flow => flow.flowType !== "loop")) {
+    const original = await request("workflow.get", { id: item.id });
+    assert.equal(original.ownerUserId, fixture.userId);
+    assert.equal(original.name, item.name);
+    const definition = typeof original.definition === "string" ? JSON.parse(original.definition) : original.definition;
+    const renamed = name => ({ ...structuredClone(definition), nodes: definition.nodes.map((node, index) => index === 0 ? { ...node, name } : node) });
+    try {
+      const baseline = Number(original.definitionVersion);
+      const first = await request("workflow.update", { id: item.id, definition: renamed("首次保存"), expectedDefinitionVersion: baseline }, true);
+      assert.equal(first.definitionVersion, baseline + 1);
+      for (const path of ["workflow.update", "workflow.publish", "workflow.unpublish"])
+        await assert.rejects(request(path, { id: item.id, expectedDefinitionVersion: baseline, ...(path === "workflow.update" ? { definition: renamed("旧页面覆盖") } : {}) }, true), /流程版本已变化/);
+      await assert.rejects(request("workflow.update", { id: item.id, definition: renamed("缺少版本") }, true), /expectedDefinitionVersion/);
+      await assert.rejects(request("workflow.update", { id: item.id, definition: first.definition, expectedDefinitionVersion: baseline }, true), /流程版本已变化/);
+      const results = await Promise.allSettled(["并发甲", "并发乙"].map(name => request("workflow.update", { id: item.id, definition: renamed(name), expectedDefinitionVersion: baseline + 1 }, true)));
+      assert.equal(results.filter(row => row.status === "fulfilled").length, 1);
+      const denied = results.find(row => row.status === "rejected");
+      assert.match(denied.reason.message, /流程版本已变化/);
+      const latest = await request("workflow.get", { id: item.id });
+      assert.equal(latest.definitionVersion, baseline + 2);
+      assert(["并发甲", "并发乙"].includes(latest.definition.nodes[0].name));
+      console.log(JSON.stringify({ stage: "workflow-revision-api", flowType: item.flowType, staleSavePublishUnpublishDenied: true, missingVersionDenied: true, staleNoopDenied: true, concurrentSingleWinner: true }));
+    } finally {
+      const latest = await request("workflow.get", { id: item.id });
+      assert.equal(latest.ownerUserId, fixture.userId); assert.equal(latest.name, item.name);
+      await request("workflow.update", { id: item.id, definition, expectedDefinitionVersion: Number(latest.definitionVersion) }, true);
+    }
+  }
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "verify_revision") await verifyWorkflowRevision(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_pagination") await verifyPagination(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_lifecycle") await verifyLifecycle(browserFixtureIntent);
 else if (browserFixtureIntent.action === "restore_owned_workflows") await restoreOwnedWorkflows(browserFixtureIntent.fixture);

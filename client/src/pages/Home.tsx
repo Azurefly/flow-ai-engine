@@ -57,6 +57,7 @@ import {
   matchesWorkflowDefinitionSnapshot,
 } from "../../../shared/workflow-publish";
 import type { Definition } from "../../../server/workflow-service";
+import { workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -444,7 +445,10 @@ function FlowConsole({
     workflowId: string;
     name: string;
     definitionJson: string;
+    definitionVersion: number;
   } | null>(null);
+  const [draftConflict, setDraftConflict] = useState<{ id: string; message: string } | null>(null);
+  const [reloadDraftPending, setReloadDraftPending] = useState(false);
   // Do not seed production runs with demo data. The designer input panel lets
   // users add only the fields required by the selected workflow.
   const [runInput, setRunInput] = useState<Record<string, unknown>>({});
@@ -834,6 +838,7 @@ function FlowConsole({
         workflowId: selectedWorkflow.id,
         name: selectedWorkflow.name,
         definitionJson: JSON.stringify(definition),
+        definitionVersion: Number(selectedWorkflow.definitionVersion),
       };
       // Runtime input belongs to a specific workflow. Never carry fields from a
       // previously selected workflow into the next execution context.
@@ -909,19 +914,38 @@ function FlowConsole({
           workflowId: String(workflow.id ?? selectedId ?? ""),
           name: String(workflow.name ?? ""),
           definitionJson: JSON.stringify(definition),
+          definitionVersion: Number(workflow.definitionVersion),
         };
       }
       toast.success("流程定义已保存。");
     },
-    onError: error => toast.error(error.message),
+    onError: (error, submitted) => {
+      if (error.data?.code === "CONFLICT" && liveDraft.current.workflowId === submitted.id)
+        setDraftConflict({ id: submitted.id, message: error.message });
+      toast.error(error.message);
+    },
   });
   const publishFlow = trpc.workflow.publish.useMutation({
-    onSuccess: () => {
+    onSuccess: (workflow: any, submitted) => {
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
+      if (workflow && liveDraft.current.workflowId === submitted.id) {
+        const definition = decodeJson(workflow.definition) as Definition;
+        if ((liveDraft.current.name.trim() || "未命名流程") === submitted.name &&
+          matchesWorkflowDefinitionSnapshot(JSON.stringify(submitted.definition), liveDraft.current.definition)) {
+          setDraftDefinition(definition);
+          setDraftName(workflow.name);
+        }
+        persistedDraftSnapshot.current = { workflowId: workflow.id, name: workflow.name,
+          definitionJson: JSON.stringify(definition), definitionVersion: Number(workflow.definitionVersion) };
+      }
       toast.success("流程已发布。");
     },
-    onError: error => toast.error(error.message),
+    onError: (error, submitted) => {
+      if (error.data?.code === "CONFLICT" && liveDraft.current.workflowId === submitted.id)
+        setDraftConflict({ id: submitted.id, message: error.message });
+      toast.error(error.message);
+    },
   });
   const compileFlow = trpc.workflow.compile.useMutation();
   const [compileDiagnostics, setCompileDiagnostics] = useState<
@@ -1109,6 +1133,7 @@ function FlowConsole({
       id: selectedId,
       name: draftName.trim() || "未命名流程",
       definition: draftDefinition,
+      expectedDefinitionVersion: workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current),
     });
   }, [
     draftDefinition,
@@ -1128,6 +1153,7 @@ function FlowConsole({
       id: selectedId,
       name: draftName.trim() || "未命名流程",
       definition: draftDefinition,
+      expectedDefinitionVersion: workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current),
     });
   }, [
     draftDefinition,
@@ -1156,6 +1182,23 @@ function FlowConsole({
     anchor.download = `${draftName || "workflow"}.json`;
     anchor.click();
     URL.revokeObjectURL(anchor.href);
+  };
+
+  const reloadLatestDraft = async () => {
+    const id = draftConflict?.id;
+    if (!id || reloadDraftPending) return;
+    setReloadDraftPending(true);
+    try {
+      const workflow = await utils.workflow.get.fetch({ id }, { staleTime: 0 }) as any;
+      if (!workflow || liveDraft.current.workflowId !== id) throw new Error("流程已切换或不可访问，当前修改已保留。");
+      const definition = decodeJson(workflow.definition) as Definition;
+      persistedDraftSnapshot.current = { workflowId: id, name: workflow.name, definitionJson: JSON.stringify(definition), definitionVersion: Number(workflow.definitionVersion) };
+      setDraftName(workflow.name);
+      setDraftDefinition(definition);
+      setDraftConflict(null);
+      toast.success("已读取最新流程版本。");
+    } catch (error) { toast.error(error instanceof Error ? error.message : "读取失败，当前修改已保留。"); }
+    finally { setReloadDraftPending(false); }
   };
 
   const importDefinition = (event: ChangeEvent<HTMLInputElement>) => {
@@ -1229,6 +1272,19 @@ function FlowConsole({
       data-aiflow-console=""
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
+      <Dialog open={Boolean(draftConflict)} onOpenChange={open => { if (!open && !reloadDraftPending) setDraftConflict(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>流程已被更新，当前修改已保留</DialogTitle>
+            <DialogDescription>{draftConflict?.message} 可以先导出当前修改，再读取最新版本进行合并。读取最新版本会替换当前画布。</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex-wrap gap-2">
+            <Button variant="outline" disabled={reloadDraftPending} onClick={exportCurrent}>导出我的修改</Button>
+            <Button variant="outline" autoFocus disabled={reloadDraftPending} onClick={() => setDraftConflict(null)}>保留并继续编辑</Button>
+            <Button disabled={reloadDraftPending} onClick={() => void reloadLatestDraft()}>{reloadDraftPending ? "正在读取…" : "读取最新版本并替换画布"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={Boolean(pendingNavigation)} onOpenChange={open => { if (!open) setPendingNavigation(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1832,6 +1888,7 @@ function FlowConsole({
                 }}
                 onPublish={() => {
                   if (!selectedId || !draftDefinition) return;
+                  const expectedDefinitionVersion = workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current);
                   if (
                     !canPublishWorkflowVersion(
                       selectedWorkflow?.status,
@@ -1875,17 +1932,8 @@ function FlowConsole({
                             id: selectedId,
                             name: draftName.trim() || "未命名流程",
                             definition: draftDefinition,
+                            expectedDefinitionVersion,
                           },
-                          {
-                            onSuccess: () => {
-                              if (liveDraft.current.workflowId !== selectedId) return;
-                              persistedDraftSnapshot.current = {
-                                workflowId: selectedId,
-                                name: draftName.trim() || "未命名流程",
-                                definitionJson: JSON.stringify(draftDefinition),
-                              };
-                            },
-                          }
                         );
                       },
                       onError: error => {
@@ -2321,7 +2369,7 @@ function FlowDesigner({
   const displayedMembers = liveMembers.data ?? members;
   const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
-  const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; name: string } | null>(null);
+  const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; name: string; definitionVersion: number } | null>(null);
   const [unpublishError, setUnpublishError] = useState("");
   useEffect(() => { setUnpublishTarget(null); setUnpublishError(""); }, [workflow.id]);
   useEffect(() => setSubflowDialogOpen(false), [workflow.id]);
@@ -2334,12 +2382,12 @@ function FlowDesigner({
       setUnpublishError("");
       toast.success("流程已取消发布；历史版本与运行审计已保留。");
     },
-    onError: error => { setUnpublishError(error.message); toast.error(error.message); },
+    onError: error => { void utils.workflow.get.invalidate({ id: workflow.id }); setUnpublishError(error.message); toast.error(error.message); },
   });
   const onUnpublish = () => {
     if (!canPublish || workflow.status !== "published" || unpublishFlow.isPending) return;
     setUnpublishError("");
-    setUnpublishTarget({ id: workflow.id, name: workflow.name });
+    setUnpublishTarget({ id: workflow.id, name: workflow.name, definitionVersion: Number(workflow.definitionVersion) });
   };
 
   useEffect(() => {
@@ -3131,10 +3179,19 @@ function FlowDesigner({
           {unpublishError && <p role="alert" className="text-sm text-destructive">{unpublishError}</p>}
           <div className="flex flex-wrap justify-end gap-2">
             <Button variant="outline" autoFocus disabled={unpublishFlow.isPending} onClick={() => setUnpublishTarget(null)}>保持发布</Button>
+            {unpublishError && <Button variant="outline" disabled={unpublishFlow.isPending} onClick={async () => {
+              try {
+                const latest = await utils.workflow.get.fetch({ id: workflow.id }, { staleTime: 0 }) as any;
+                if (!latest || latest.status !== "published" || latest.archivedAt) throw new Error("流程已取消发布或归档，请关闭弹窗查看最新状态。");
+                setUnpublishTarget(current => current?.id === latest.id ? { id: latest.id, name: latest.name, definitionVersion: Number(latest.definitionVersion) } : current);
+                setUnpublishError("");
+                toast.info("已读取最新版本，请再次确认取消发布。");
+              } catch (error) { setUnpublishError(error instanceof Error ? error.message : "读取失败，请重试。"); }
+            }}>读取最新版本后重新确认</Button>}
             <Button variant="destructive" disabled={!canPublish || unpublishFlow.isPending || unpublishTarget?.id !== workflow.id || workflow.status !== "published"} onClick={() => {
               if (!unpublishTarget || !canPublish || unpublishFlow.isPending || unpublishTarget.id !== workflow.id || workflow.status !== "published") return;
               setUnpublishError("");
-              unpublishFlow.mutate({ id: unpublishTarget.id });
+              unpublishFlow.mutate({ id: unpublishTarget.id, expectedDefinitionVersion: unpublishTarget.definitionVersion });
             }}>{unpublishFlow.isPending ? "正在取消发布…" : "确认取消发布"}</Button>
           </div>
         </DialogContent>

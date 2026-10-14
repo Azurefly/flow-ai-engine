@@ -23,6 +23,12 @@ class TrpcSession {
   cookie = "";
 
   async request(path, method, input = null) {
+    // Fixture writes explicitly submit the revision just inspected; callers may supply an older revision to test conflicts.
+    if (["workflow.update", "workflow.publish", "workflow.unpublish"].includes(path) && input?.id && input.expectedDefinitionVersion === undefined) {
+      const current = await this.request("workflow.get", "GET", { id: input.id });
+      input = { ...input, expectedDefinitionVersion: Number(current.definitionVersion) };
+    }
+
     const envelope = JSON.stringify({ json: input });
     const url =
       method === "GET"

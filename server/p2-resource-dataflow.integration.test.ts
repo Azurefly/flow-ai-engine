@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -334,7 +335,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId,
         auditStatus: "approved",
       });
-      await owner.workflow.publish({ id: workflowId });
+      await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
       const run = await owner.data.run({ projectId, workflowId });
       expect(run.status).toBe("success");
       expect((run.output.terminals[0] as any).rows).toEqual([
@@ -430,7 +431,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId: joinWorkflowId,
         auditStatus: "approved",
       });
-      await owner.workflow.publish({ id: joinWorkflowId });
+      await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(joinWorkflowId), id: joinWorkflowId });
       const joined = await owner.data.run({
         projectId,
         workflowId: joinWorkflowId,
@@ -550,7 +551,7 @@ describe("P2 项目数据资源与数据流", () => {
           workflowId: aggregateWorkflowId,
           auditStatus: "approved",
         });
-        await owner.workflow.publish({ id: aggregateWorkflowId });
+        await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(aggregateWorkflowId), id: aggregateWorkflowId });
         const aggregated = await owner.data.run({
           projectId,
           workflowId: aggregateWorkflowId,
@@ -612,7 +613,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId: sqlWorkflowId,
         auditStatus: "approved",
       });
-      await owner.workflow.publish({ id: sqlWorkflowId });
+      await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(sqlWorkflowId), id: sqlWorkflowId });
       const sqlRun = await owner.data.run({
         projectId,
         workflowId: sqlWorkflowId,
@@ -668,7 +669,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId: jdbcReadWorkflowId,
         auditStatus: "approved",
       });
-      await owner.workflow.publish({ id: jdbcReadWorkflowId });
+      await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(jdbcReadWorkflowId), id: jdbcReadWorkflowId });
       const jdbcRead = await owner.data.run({
         projectId,
         workflowId: jdbcReadWorkflowId,
@@ -798,7 +799,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId: batchWorkflowId,
         auditStatus: "approved",
       });
-      await owner.workflow.publish({ id: batchWorkflowId });
+      await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(batchWorkflowId), id: batchWorkflowId });
       const batch = await owner.data.run({
         projectId,
         workflowId: batchWorkflowId,
@@ -870,7 +871,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId: failedWorkflowId,
         auditStatus: "approved",
       });
-      await owner.workflow.publish({ id: failedWorkflowId });
+      await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(failedWorkflowId), id: failedWorkflowId });
       const retrying = await owner.data.run({
         projectId,
         workflowId: failedWorkflowId,

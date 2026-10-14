@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { executableStateFixture } from "./workflow-integration-fixtures";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
@@ -339,12 +340,12 @@ describe("流程定义 JSON 导入导出与持久化", () => {
       ) as Definition;
       (invalidImported.nodes[1] as any).config = [];
       await expect(
-        routeCaller.workflow.update({
+        routeCaller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
           id: workflowId,
           definition: invalidImported,
         })
       ).rejects.toThrow("节点配置必须是 JSON 对象");
-      const routedUpdate = await routeCaller.workflow.update({
+      const routedUpdate = await routeCaller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
         id: workflowId,
         name: "导入定义已保存",
         definition: imported,

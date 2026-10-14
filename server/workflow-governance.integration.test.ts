@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { executableStateFixture } from "./workflow-integration-fixtures";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
@@ -137,7 +138,7 @@ describe("流程版本、运行分析与节点复用", () => {
       const workflow = await createWorkflow(owner, "版本治理验收流程");
       workflowId = (workflow as any).id;
 
-      await ownerCaller.workflow.update({
+      await ownerCaller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
         id: workflowId,
         definition: executableStateFixture({
           ...subflowDefinition,
@@ -251,7 +252,7 @@ describe("流程版本、运行分析与节点复用", () => {
         role: "editor",
       });
       await expect(
-        outsiderCaller.workflow.update({
+        outsiderCaller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
           id: workflowId,
           definition: executableStateFixture({
             ...subflowDefinition,
@@ -283,7 +284,7 @@ describe("流程版本、运行分析与节点复用", () => {
           }),
         })
       ).rejects.toThrow("流程只能引用流程所有者创建的私有子流程");
-      await ownerCaller.workflow.update({
+      await ownerCaller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
         id: workflowId,
         definition: executableStateFixture({
           ...subflowDefinition,
@@ -317,7 +318,7 @@ describe("流程版本、运行分析与节点复用", () => {
           ],
         }),
       });
-      await ownerCaller.workflow.publish({ id: workflowId });
+      await ownerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
       const [publishedRows] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT publishedExecutionPlanJson FROM workflow WHERE id=?",
         [workflowId]
@@ -352,9 +353,9 @@ describe("流程版本、运行分析与节点复用", () => {
         status: "success",
         output: { result: "已复用" },
       });
-      await ownerCaller.workflow.unpublish({ id: workflowId });
+      await ownerCaller.workflow.unpublish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
 
-      await ownerCaller.workflow.update({
+      await ownerCaller.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
         id: workflowId,
         definition: executableStateFixture({
           ...subflowDefinition,

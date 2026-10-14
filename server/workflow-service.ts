@@ -11,6 +11,7 @@ import {
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import { lockActiveProject } from "./project-lifecycle-lock";
+import { assertWorkflowRevision } from "./workflow-revision";
 import { getSharedPool } from "./db";
 import {
   getWorkflowAccess,
@@ -479,6 +480,7 @@ export async function updateWorkflow(
     definition?: unknown;
     publish?: boolean;
     unpublish?: boolean;
+    expectedDefinitionVersion?: number;
   }
 ) {
   if (values.publish && values.unpublish)
@@ -500,6 +502,8 @@ export async function updateWorkflow(
     publishedExecutionPlanHash?: string | null;
   } | null;
   if (!current) return null;
+  if (values.expectedDefinitionVersion !== undefined)
+    assertWorkflowRevision(Number(current.definitionVersion), values.expectedDefinitionVersion);
   if (current.archivedAt)
     throw new Error("已归档流程必须先恢复后才能编辑或发布。");
   assertWorkflowUpdateTransition(current.status, values);
@@ -570,6 +574,8 @@ export async function updateWorkflow(
     const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT archivedAt,definitionVersion,status FROM workflow WHERE id=? LIMIT 1 FOR UPDATE", [workflowId]
     );
+    if (lockedRows[0] && values.expectedDefinitionVersion !== undefined)
+      assertWorkflowRevision(Number(lockedRows[0].definitionVersion), values.expectedDefinitionVersion);
     if (!lockedRows[0] || lockedRows[0].archivedAt || Number(lockedRows[0].definitionVersion) !== Number(current.definitionVersion) || lockedRows[0].status !== current.status)
       throw new Error("流程状态或版本已变化，请刷新后重新确认；本次修改尚未保存。");
     await connection.query(

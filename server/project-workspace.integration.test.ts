@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -220,7 +221,7 @@ describe("原始项目工作区 P0", () => {
         fields: { nameChanged: true, descriptionChanged: true },
       });
       await expect(
-        designerCaller.workflow.publish({ id: workflowId })
+        designerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
       await ownerCaller.project.auditWorkflow({
         projectId,
@@ -240,7 +241,7 @@ describe("原始项目工作区 P0", () => {
         outsiderCaller.project.workflowAudit({ projectId, workflowId })
       ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
       await expect(
-        designerCaller.workflow.publish({ id: workflowId })
+        designerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).resolves.toMatchObject({
         status: "published",
         auditStatus: "approved",
@@ -266,9 +267,9 @@ describe("原始项目工作区 P0", () => {
       );
       expect(completedRun.status).toBe("success");
       await expect(
-        outsiderCaller.workflow.unpublish({ id: workflowId })
+        outsiderCaller.workflow.unpublish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).rejects.toThrow("流程不存在或无取消发布权限");
-      const unpublished = await designerCaller.workflow.unpublish({
+      const unpublished = await designerCaller.workflow.unpublish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
         id: workflowId,
       });
       expect(unpublished).toMatchObject({
@@ -427,7 +428,7 @@ describe("原始项目工作区 P0", () => {
         workflowId,
         auditStatus: "approved",
       });
-      await designerCaller.workflow.publish({ id: workflowId });
+      await designerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
       const queuedArchiveRun = await designerCaller.workflow.run({
         workflowId,
         input: { archiveGuard: true },
@@ -443,7 +444,7 @@ describe("原始项目工作区 P0", () => {
         "UPDATE workflow_run SET status='cancelled',finishedAt=NOW() WHERE id=?",
         [queuedArchiveRun.runId]
       );
-      await designerCaller.workflow.unpublish({ id: workflowId });
+      await designerCaller.workflow.unpublish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
       await designerCaller.workflow.delete({ id: workflowId });
       await expect(
         outsiderCaller.workflow.get({ id: workflowId })

@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, expect, it } from "vitest";
@@ -121,7 +122,7 @@ run(
     expect(access.permissions.has("workflow:run")).toBe(true);
     expect(access.permissions.has("workflow:edit")).toBe(true);
     expect(access.permissions.has("workflow:members:manage")).toBe(false);
-    await staff.workflow.update({ id: workflowId, name: "部门设计者可编辑" });
+    await staff.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId, name: "部门设计者可编辑" });
     await owner.workflow.delete({ id: workflowId });
     expect(
       (await listArchivedWorkflows(employee, projectId)).find(
@@ -164,7 +165,7 @@ run(
       )
     ).toBe(false);
     await expect(
-      staff.workflow.update({ id: workflowId, name: "停用后不可编辑" })
+      staff.workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId, name: "停用后不可编辑" })
     ).rejects.toThrow();
     expect(
       (await getWorkflowAccess(employee, workflowId)).permissions.has(

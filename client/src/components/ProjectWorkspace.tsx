@@ -2137,14 +2137,14 @@ function ProcessCenter({
       refreshWorkflows();
       toast.success("流程已发布。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => { refreshWorkflows(); toast.error(error.message); },
   });
   const unpublish = trpc.workflow.unpublish.useMutation({
     onSuccess: () => {
       refreshWorkflows();
       toast.success("流程已取消发布；版本与运行审计已保留。");
     },
-    onError: error => toast.error(error.message),
+    onError: error => { refreshWorkflows(); toast.error(error.message); },
   });
   const [launchWorkflow, setLaunchWorkflow] = useState<any | null>(null);
   const [openWorkflowActionsId, setOpenWorkflowActionsId] = useState<
@@ -2359,7 +2359,7 @@ function ProcessCenter({
                   className="aiflow-type-control min-h-11 rounded-md border border-aiflow-success-border bg-card px-3 py-2 text-aiflow-success hover:bg-aiflow-success-surface sm:min-h-0 sm:px-2.5 sm:py-1.5"
                   onClick={() => {
                     setOpenWorkflowActionsId(null);
-                    publish.mutate({ id: workflow.id });
+                    publish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) });
                   }}
                 >
                   发布流程
@@ -2371,7 +2371,7 @@ function ProcessCenter({
                 className="aiflow-type-control min-h-11 rounded-md border border-aiflow-warning-border bg-card px-3 py-2 text-aiflow-warning hover:bg-aiflow-warning-surface sm:min-h-0 sm:px-2.5 sm:py-1.5"
                 onClick={() => {
                   setOpenWorkflowActionsId(null);
-                  unpublish.mutate({ id: workflow.id });
+                  unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) });
                 }}
               >
                 取消发布

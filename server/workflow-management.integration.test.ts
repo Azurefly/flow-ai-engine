@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -120,7 +121,7 @@ describe("流程仓库管理", () => {
       member = users.find(row => row.username === memberUsername);
       const source = await createWorkflow(owner, "仓库管理集成测试");
       sourceId = (source as any).id;
-      await callerFor(owner).workflow.update({
+      await callerFor(owner).workflow.update({ expectedDefinitionVersion: await workflowRevisionForTest(sourceId),
         id: sourceId,
         definition: minimalStateFixture(),
       });

@@ -14,6 +14,7 @@ const verifyStatus = process.env.FLOW_UI_ACCOUNT_STATUS === "1";
 const verifyProjectPaging = process.env.FLOW_UI_PROJECT_PAGING === "1";
 const verifyProjectLifecycle = process.env.FLOW_UI_PROJECT_LIFECYCLE === "1";
 const verifyLoopPolicy = process.env.FLOW_UI_LOOP_POLICY === "1";
+const verifyWorkflowRevision = process.env.FLOW_UI_WORKFLOW_REVISION === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -127,6 +128,8 @@ function executable() {
       loopPolicy: verifyLoopPolicy,
     });
     assert.equal(fixture.workflows.length, verifyLoopPolicy ? 4 : 3);
+    if (verifyWorkflowRevision)
+      console.log((await remote({ action: "verify_revision", fixture, login })).trim());
     if (verifyProjectPaging)
       console.log((await remote({ action: "verify_pagination", fixture, login, memberLogin })).trim());
     if (verifyProjectLifecycle)
@@ -238,6 +241,66 @@ function executable() {
       await center.getByRole("button", { name: "在用业务", exact: true }).click();
       await remote({ action: "restore_owned_workflows", fixture });
       console.log(JSON.stringify({ stage: "project-lifecycle-browser", cancelNoMutation: true, explicitArchive: true, archiveScope: true, historyReadable: true, explicitRestore: true }));
+    }
+    if (verifyWorkflowRevision) {
+      const workflow = fixture.workflows.find(flow => flow.flowType === "control");
+      const editorUrl = `${base}#/flows/workflow/${workflow.id}/editor`;
+      const second = await context.newPage();
+      second.setDefaultTimeout(15000);
+      second.on("pageerror", error => errors.push(error.message));
+      const read = () => page.evaluate(async id => {
+        const input = encodeURIComponent(JSON.stringify({ json: { id } }));
+        const response = await fetch(`/api/trpc/workflow.get?input=${input}`);
+        const payload = await response.json();
+        if (!response.ok || payload.error) throw new Error("Cannot inspect owned workflow");
+        return payload.result.data.json;
+      }, workflow.id);
+      const changeNode = async (target, name) => {
+        await target.getByLabel("定位并配置节点").selectOption("review");
+        await target.getByLabel("节点名称", { exact: true }).fill(name);
+      };
+      try {
+        await page.goto(editorUrl, { waitUntil: "domcontentloaded" });
+        await second.goto(editorUrl, { waitUntil: "domcontentloaded" });
+        await page.locator("[data-workflow-editor]").waitFor();
+        await second.locator("[data-workflow-editor]").waitFor();
+        const original = await read();
+        await changeNode(page, "甲页已保存");
+        let response = page.waitForResponse(row => row.url().includes("workflow.update") && row.request().method() === "POST");
+        await page.getByRole("button", { name: /保存画布/ }).click();
+        assert.equal((await response).status(), 200);
+        await changeNode(second, "乙页未保存");
+        response = second.waitForResponse(row => row.url().includes("workflow.update") && row.request().method() === "POST");
+        await second.getByRole("button", { name: /保存画布/ }).click();
+        assert.equal((await response).status(), 409);
+        const conflict = second.getByRole("dialog");
+        await conflict.getByText("流程已被更新，当前修改已保留", { exact: true }).waitFor();
+        const current = await read();
+        assert.equal(current.definition.nodes.find(node => node.id === "review").name, "甲页已保存");
+        assert.equal(current.definitionVersion, original.definitionVersion + 1);
+        const downloaded = second.waitForEvent("download");
+        await conflict.getByRole("button", { name: "导出我的修改", exact: true }).click();
+        const exportPath = path.join(directory, "conflicting-draft.json");
+        await (await downloaded).saveAs(exportPath);
+        const exported = JSON.parse(fs.readFileSync(exportPath, "utf8"));
+        assert.equal(exported.workflow.definition.nodes.find(node => node.id === "review").name, "乙页未保存");
+        await conflict.getByRole("button", { name: "保留并继续编辑", exact: true }).click();
+        assert.equal(await second.getByLabel("节点名称", { exact: true }).inputValue(), "乙页未保存");
+        response = second.waitForResponse(row => row.url().includes("workflow.update") && row.request().method() === "POST");
+        await second.getByRole("button", { name: /保存画布/ }).click();
+        assert.equal((await response).status(), 409);
+        await conflict.getByRole("button", { name: "读取最新版本并替换画布", exact: true }).click();
+        await conflict.waitFor({ state: "hidden" });
+        await changeNode(second, "乙页合并后保存");
+        response = second.waitForResponse(row => row.url().includes("workflow.update") && row.request().method() === "POST");
+        await second.getByRole("button", { name: /保存画布/ }).click();
+        assert.equal((await response).status(), 200);
+        const merged = await read();
+        assert.equal(merged.definition.nodes.find(node => node.id === "review").name, "乙页合并后保存");
+        assert.equal(merged.definitionVersion, original.definitionVersion + 2);
+        await second.screenshot({ path: path.join(directory, "workflow-revision-resolved.png"), fullPage: true });
+        console.log(JSON.stringify({ stage: "workflow-revision-browser", stalePageDenied: true, draftPreserved: true, exportPreserved: true, continuedEditsPreserved: true, explicitReload: true, saveAfterReload: true }));
+      } finally { await second.close(); }
     }
     if (verifyLoopPolicy) {
       await page.goto(`${base}#/flows/workflow/${fixture.loopWorkflowId}/editor`, { waitUntil: "domcontentloaded" });

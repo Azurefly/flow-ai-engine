@@ -5,6 +5,12 @@ const base = "http://124.223.198.84:1180";
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {
+    // Fixture writes explicitly submit the revision just inspected; callers may supply an older revision to test conflicts.
+    if (["workflow.update", "workflow.publish", "workflow.unpublish"].includes(path) && input?.id && input.expectedDefinitionVersion === undefined) {
+      const current = await this.request("workflow.get", { id: input.id });
+      input = { ...input, expectedDefinitionVersion: Number(current.definitionVersion) };
+    }
+
     const body = JSON.stringify(superjson.serialize(input ?? null));
     const response = await fetch(`${base}/api/trpc/${path}${mutation ? "" : `?input=${encodeURIComponent(body)}`}`, { method: mutation ? "POST" : "GET", headers: { "content-type": "application/json", cookie: this.cookie }, ...(mutation ? { body } : {}), signal: AbortSignal.timeout(30000) });
     const next = response.headers.getSetCookie()[0]; if (next) this.cookie = next.split(";", 1)[0];

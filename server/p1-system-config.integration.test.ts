@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -197,7 +198,7 @@ describe("P1 系统配置与工作域", () => {
         })
       ).id;
       await expect(
-        callerFor(admin).workflow.publish({ id: workflowId })
+        callerFor(admin).workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
       await callerFor(admin).config.updateSetting({
         key: "approval",
@@ -207,7 +208,7 @@ describe("P1 系统配置与工作域", () => {
         },
       });
       await expect(
-        callerFor(admin).workflow.publish({ id: workflowId })
+        callerFor(admin).workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).resolves.toMatchObject({ status: "published" });
       await callerFor(admin).config.updateWorkDomain({
         id: domainId!,

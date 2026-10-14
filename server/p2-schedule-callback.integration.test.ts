@@ -1,3 +1,4 @@
+import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it, vi } from "vitest";
@@ -56,7 +57,7 @@ describe("P2 托管计划可信回调", () => {
     projectId = (await owner.project.create({ code: `CB${suffix.slice(0, 5).toUpperCase()}`, name: "计划回调验收" })).id;
     workflowId = (await owner.project.createWorkflow({ projectId, name: "计划回调数据流", flowType: "data", definition: { schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, settings: {}, nodes: [{ id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} }, { id: "end", type: "end", name: "结束", position: { x: 240, y: 0 }, config: {} }], edges: [{ id: "e", sourceNodeId: "start", targetNodeId: "end" }] } })).id;
     await owner.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
-    await owner.workflow.publish({ id: workflowId });
+    await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
     await pool.query("INSERT INTO dataflow_schedule (id,projectId,workflowId,cronExpression,status,scheduleCronTaskUid,createdByUserId) VALUES (?,?,?,?,?,?,?)", [`schedule-${suffix}`, projectId, workflowId, "0 0 9 * * *", "active", taskUid, user.id]);
 
     const authenticate = vi.spyOn(sdk, "authenticateRequest");

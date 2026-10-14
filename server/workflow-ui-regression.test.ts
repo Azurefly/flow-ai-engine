@@ -36,7 +36,10 @@ describe("分页流程缓存联动", () => {
     const validation = homeSource.split("onValidate={() => {")[1]?.split("onRun={startRun}")[0];
     expect(validation?.match(/matchesLiveDraft\(selectedId, draftDefinition\)/g)).toHaveLength(4);
     expect(validation).toContain("liveDraft.current.name !== draftName");
-    expect(validation).toContain("if (liveDraft.current.workflowId !== selectedId) return;");
+    const publishing = homeSource.split("const publishFlow = trpc.workflow.publish.useMutation({")[1]?.split("const compileFlow")[0];
+    expect(publishing).toContain("workflow && liveDraft.current.workflowId === submitted.id");
+    expect(publishing).toContain("definitionVersion: Number(workflow.definitionVersion)");
+    expect(validation).toContain("const expectedDefinitionVersion = workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current)");
   });
   it("折叠的流程侧栏隐藏可访问语义并禁用内部键盘焦点", () => {
     expect(homeSource).toContain('data-aiflow-workflow-library="" aria-hidden={!flowListOpen} inert={!flowListOpen}');
@@ -389,8 +392,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_432 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 426 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_435 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 427 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2241,7 +2244,7 @@ describe("流程设计器界面回归约束", () => {
       'workflow.status === "published" && ( <button'
     );
     expect(projectWorkspaceSource).toContain(
-      "unpublish.mutate({ id: workflow.id })"
+      "unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) })"
     );
     expect(projectWorkspaceSource).toContain("取消发布");
     expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
