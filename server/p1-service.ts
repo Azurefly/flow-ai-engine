@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasWorkflowPermission, recordAuthorizationAudit } from "./iam-service";
-import { resumeWorkflowTask } from "./workflow-engine";
+import { resumeWorkflowTask, validateWorkflowTaskSubmission } from "./workflow-engine";
 import { wakeWorkflowWorker } from "./workflow-worker";
 import {
   collectAuthorizedPage,
@@ -570,13 +570,16 @@ export async function executeWorkflowTask(
 ) {
   const task: any = await getWorkflowTask(user, taskId);
   if (!task) throw new Error("人工任务不存在或无访问权限。");
-  if (task.status === "pending") await claimWorkflowTask(user, taskId);
-  else if (
+  if (task.status !== "pending" && (
     task.status !== "claimed" ||
     Number(task.claimedByUserId) !== user.id
-  )
+  ))
     throw new Error("当前操作不可执行，请刷新任务状态。");
+  if (!(await canAccessTask(user, task, true)))
+    throw new Error("无权执行该人工任务。");
   await assertCurrentTaskOperation(user, task);
+  validateWorkflowTaskSubmission(task, result);
+  if (task.status === "pending") await claimWorkflowTask(user, taskId);
   return completeWorkflowTask(user, taskId, result);
 }
 

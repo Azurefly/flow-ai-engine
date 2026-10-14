@@ -1849,6 +1849,18 @@ export function validateOperateOutcomeSubmission(
     throw new Error(`操作结果“${outcome}”必须填写处理意见。`);
 }
 
+export function validateWorkflowTaskSubmission(task: JsonRecord, result: JsonRecord) {
+  const normalized = normalizeApprovalResult(result);
+  validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalized);
+  const payload = asRecord(readJson(task.payloadJson ?? task.payload));
+  const schema = asRecord(asRecord(payload.config).formSchema);
+  assertTaskFormSchema(schema);
+  if (Array.isArray(schema.fields)) Object.assign(normalized, validateFormSubmission(schema.fields, normalized));
+  if (task.approvalGroupId && !["approved", "rejected", "abstained"].includes(String(normalized.outcome)))
+    throw new Error("多人签署暂不支持自定义退回结果，请使用同意、拒绝或弃权。");
+  return normalized;
+}
+
 export function evaluateApprovalResults(input: {
   totalApprovers: number;
   requiredApprovals: number;
@@ -4245,25 +4257,7 @@ export async function resumeWorkflowTask(input: {
       ).includes(String(task.runStatus))
     )
       throw new Error("所属流程实例不处于等待人工操作状态。 ");
-    validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalizedResult);
-    const taskSchema = asRecord(asRecord(taskPayload.config).formSchema);
-    assertTaskFormSchema(taskSchema);
-    if (Array.isArray(taskSchema.fields)) {
-      const submittedForm = validateFormSubmission(
-        taskSchema.fields,
-        normalizedResult
-      );
-      Object.assign(normalizedResult, submittedForm);
-    }
-    if (
-      task.approvalGroupId &&
-      !["approved", "rejected", "abstained"].includes(
-        String(normalizedResult.outcome)
-      )
-    )
-      throw new Error(
-        "多人签署暂不支持自定义退回结果，请使用同意、拒绝或弃权。"
-      );
+    Object.assign(normalizedResult, validateWorkflowTaskSubmission(task, normalizedResult));
     const gate = await completeTaskAndEvaluateApprovalGroup(connection, task, {
       ...input,
       result: normalizedResult,
