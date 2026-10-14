@@ -57,6 +57,8 @@ async function reserve(workflow) {
     reportFixture();
     const [found] = await pool.query("SELECT id FROM workflow_run_job WHERE runId=? ORDER BY createdAt LIMIT 1", [started.runId]);
     assert(found[0], "新建测试任务不存在。");
+    const actual = await own.request("workflow.get", { id: workflow.id });
+    assert(actual.ownerUserId === account.userId && actual.projectId === project.id && actual.name === workflow.name);
     const connection = await pool.getConnection();
     let reserved;
     try {
@@ -65,8 +67,7 @@ async function reserve(workflow) {
       const job = rows[0];
       const [runRows] = await connection.query("SELECT ownerUserId,workflowId,status,executionLockToken FROM workflow_run WHERE id=? FOR UPDATE", [started.runId]);
       const run = runRows[0];
-      const actual = await own.request("workflow.get", { id: workflow.id });
-      assert(job && run && run.ownerUserId === account.userId && run.workflowId === workflow.id && actual.ownerUserId === account.userId && actual.projectId === project.id && actual.name === workflow.name);
+      assert(job && run && run.ownerUserId === account.userId && run.workflowId === workflow.id);
       if (job.status === "queued" && run.status === "queued" && !run.executionLockToken) {
         const leaseToken = randomUUID().replaceAll("-", "");
         const [claimed] = await connection.query("UPDATE workflow_run_job SET status='leased',attempt=attempt+1,workerId='isolated-recovery',leaseToken=?,leaseExpiresAt=DATE_ADD(NOW(),INTERVAL 60 SECOND) WHERE id=? AND status='queued'", [leaseToken, job.id]);
@@ -107,6 +108,10 @@ async function crash(job, point, minStep = 0) {
   } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
   console.log(JSON.stringify({ stage: "isolated-process-killed", point, minStep, signal: exit.signal, runId: job.runId }));
 }
+async function assertReclaimed(job) {
+  const [rows] = await pool.query("SELECT j.status,j.attempt,j.workerId,j.leaseToken,r.ownerUserId,r.executionLockToken FROM workflow_run_job j JOIN workflow_run r ON r.id=j.runId WHERE j.id=? AND j.runId=?", [job.jobId, job.runId]);
+  assert(rows[0]?.ownerUserId === account.userId && rows[0].status === "completed" && rows[0].attempt >= 2 && rows[0].workerId !== "isolated-recovery" && rows[0].leaseToken === null && rows[0].executionLockToken === null);
+}
 try {
   await root.request("auth.login", { username: process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME, password: process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD }, true);
   account = await root.request("iam.createUser", { username: tag, password, name: "恢复隔离验收_" + tag, role: "admin" }, true);
@@ -117,8 +122,10 @@ try {
   const stateJob = await reserve(stateFlow); await crash(stateJob, "after_state_commit_before_checkpoint", 4);
   const state = await waitFor(stateJob.runId, run => run.status === "success");
   assert.equal(state.stateVersion, 4); assert.equal(state.stateTransitions.length, 4);
+  assert.equal(state.currentStateCode, "DONE");
   assert.equal(new Set(state.stateTransitions.map(row => row.executionKey)).size, 4);
   assert.equal(readJson(state.contextJson).runtime.executionStepCount, 9);
+  await assertReclaimed(stateJob);
   console.log(JSON.stringify({ scenario: "state-loop-recovery", transitions: 4, secondVisitCommitReplayedOnce: true, cumulativeSteps: 9, danglingRunningNodes: state.nodeRuns.filter(row => row.status === "running").length }));
   const humanFlow = await create("人工循环中断", "control", definition([node("start", "start"), node("review", "operate", { nodeDh: "REVIEW", czmc: "恢复办理", assigneeMode: "user", assigneeUserId: account.userId, signMode: "single", outcomeMode: "explicit", outcomes: [{ code: "retry", label: "重办", sourceHandle: "retry" }, { code: "approved", label: "完成", sourceHandle: "approved" }] }), node("end", "end")], [edge("initial", "start", "review"), edge("back", "review", "review", "retry", 2), edge("finish", "review", "end", "approved")]));
   const humanJob = await reserve(humanFlow); await crash(humanJob, "after_human_commit_before_checkpoint");
@@ -131,6 +138,7 @@ try {
   }
   const human = await waitFor(humanJob.runId, run => run.status === "success");
   assert.equal(new Set(keys).size, 3); assert.equal(readJson(human.contextJson).runtime.executionStepCount, 5);
+  await assertReclaimed(humanJob);
   console.log(JSON.stringify({ scenario: "human-loop-recovery", tasks: 3, taskCommitReplayedOnce: true, cumulativeSteps: 5 }));
   const messageFlow = await create("消息循环中断", "control", definition([node("start", "start"), node("wait", "message_catch", { messageName: tag, correlationKey: tag }), router, node("end", "end")], [edge("initial", "start", "wait"), edge("forward", "wait", "route"), edge("back", "route", "wait", "retry", 2), edge("finish", "route", "end", "done")]));
   const messageJob = await reserve(messageFlow); await crash(messageJob, "after_wait_commit_before_checkpoint");
@@ -142,6 +150,7 @@ try {
   const message = await waitFor(messageJob.runId, run => run.status === "success");
   const [waits] = await pool.query("SELECT id,executionKey FROM workflow_wait_subscription WHERE runId=?", [messageJob.runId]);
   assert.equal(waits.length, 3); assert.equal(new Set(waits.map(row => row.executionKey)).size, 3); assert.equal(readJson(message.contextJson).runtime.executionStepCount, 8);
+  await assertReclaimed(messageJob);
   console.log(JSON.stringify({ scenario: "message-loop-recovery", waits: 3, waitCommitReplayedOnce: true, cumulativeSteps: 8 }));
 } catch (error) {
   console.error(JSON.stringify({ failure: true, message: error.message, code: error.code ?? null }));
