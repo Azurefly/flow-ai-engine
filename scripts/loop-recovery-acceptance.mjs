@@ -122,7 +122,7 @@ try {
   const human = await waitFor(humanJob.runId, run => run.status === "success");
   assert.equal(new Set(keys).size, 3); assert.equal(readJson(human.contextJson).runtime.executionStepCount, 5);
   console.log(JSON.stringify({ scenario: "human-loop-recovery", tasks: 3, taskCommitReplayedOnce: true, cumulativeSteps: 5 }));
-  const messageFlow = await create("消息循环中断", "control", definition([node("start", "start"), node("wait", "messageWait", { messageName: tag, correlationKey: tag }), router, node("end", "end")], [edge("initial", "start", "wait"), edge("forward", "wait", "route"), edge("back", "route", "wait", "retry", 2), edge("finish", "route", "end", "done")]));
+  const messageFlow = await create("消息循环中断", "control", definition([node("start", "start"), node("wait", "message_catch", { messageName: tag, correlationKey: tag }), router, node("end", "end")], [edge("initial", "start", "wait"), edge("forward", "wait", "route"), edge("back", "route", "wait", "retry", 2), edge("finish", "route", "end", "done")]));
   const messageJob = await reserve(messageFlow); await crash(messageJob, "after_wait_commit_before_checkpoint");
   for (let round = 0; round < 3; round++) {
     await waitFor(messageJob.runId, run => run.status === "waiting");
