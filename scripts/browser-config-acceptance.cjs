@@ -264,6 +264,10 @@ function executable() {
         await second.goto(editorUrl, { waitUntil: "domcontentloaded" });
         await page.locator("[data-workflow-editor]").waitFor();
         await second.locator("[data-workflow-editor]").waitFor();
+        const listLoaded = second.waitForResponse(row => row.url().includes("workflow.page") && row.status() === 200);
+        await second.getByLabel("展开流程列表", { exact: true }).click();
+        await listLoaded;
+        await second.getByLabel("收起流程列表", { exact: true }).click();
         const original = await read();
         await changeNode(page, "甲页已保存");
         let response = page.waitForResponse(row => row.url().includes("workflow.update") && row.request().method() === "POST");
@@ -299,7 +303,7 @@ function executable() {
         assert.equal(merged.definition.nodes.find(node => node.id === "review").name, "乙页合并后保存");
         assert.equal(merged.definitionVersion, original.definitionVersion + 2);
         await second.screenshot({ path: path.join(directory, "workflow-revision-resolved.png"), fullPage: true });
-        console.log(JSON.stringify({ stage: "workflow-revision-browser", stalePageDenied: true, draftPreserved: true, exportPreserved: true, continuedEditsPreserved: true, explicitReload: true, saveAfterReload: true }));
+        console.log(JSON.stringify({ stage: "workflow-revision-browser", stalePageDenied: true, staleListCached: true, draftPreserved: true, exportPreserved: true, continuedEditsPreserved: true, explicitReload: true, saveAfterReload: true }));
       } finally { await second.close(); }
     }
     if (verifyLoopPolicy) {

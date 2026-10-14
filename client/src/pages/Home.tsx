@@ -901,6 +901,7 @@ function FlowConsole({
   });
   const saveFlow = trpc.workflow.update.useMutation({
     onSuccess: (workflow: any, submitted) => {
+      if (workflow) utils.workflow.get.setData({ id: submitted.id }, workflow);
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
       if (workflow && liveDraft.current.workflowId === submitted.id) {
@@ -927,6 +928,7 @@ function FlowConsole({
   });
   const publishFlow = trpc.workflow.publish.useMutation({
     onSuccess: (workflow: any, submitted) => {
+      if (workflow) utils.workflow.get.setData({ id: submitted.id }, workflow);
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
       if (workflow && liveDraft.current.workflowId === submitted.id) {
