@@ -245,8 +245,21 @@ function executable() {
       await page.getByLabel("定位并配置连线").selectOption("back");
       await page.locator("[data-loop-policy-editor]").waitFor();
       assert.equal(await page.getByLabel("启用循环返回上限").isChecked(), true);
+      await page.getByLabel("最多返回次数").fill("0");
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "3");
+      await page.getByText("返回次数请输入 1–1000 之间的整数，已保留原设置。", { exact: true }).first().waitFor();
+      await page.getByLabel("最多返回次数").fill("1001");
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "3");
       await page.getByLabel("最多返回次数").fill("4");
       assert.equal(await page.getByLabel("最多返回次数").inputValue(), "4");
+      await page.getByLabel("锁定配置面板", { exact: true }).click();
+      assert.equal(await page.getByLabel("最多返回次数").isDisabled(), true);
+      assert.equal(await page.getByLabel("启用循环返回上限").isDisabled(), true);
+      await page.getByLabel("解除面板锁定", { exact: true }).click();
+      await page.getByLabel("最小化面板", { exact: true }).click();
+      assert.equal(await page.locator("[data-loop-policy-editor]").isVisible(), false);
+      await page.getByLabel("恢复配置面板", { exact: true }).click();
+      await page.locator("[data-loop-policy-editor]").waitFor();
       let saved = page.waitForResponse(response => response.url().includes("workflow.update") && response.request().method() === "POST" && response.status() === 200);
       await page.getByRole("button", { name: /保存画布/ }).click();
       await saved;
@@ -262,7 +275,14 @@ function executable() {
       saved = page.waitForResponse(response => response.url().includes("workflow.update") && response.request().method() === "POST" && response.status() === 200);
       await page.getByRole("button", { name: /保存画布/ }).click();
       await saved;
-      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true, savedAndReloaded: true }));
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByLabel("定位并配置连线").selectOption("back");
+      await page.locator("[data-workflow-inspector-header] h2").waitFor();
+      await page.waitForFunction(() => document.activeElement?.textContent?.trim() === "配置信息");
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true);
+      await page.screenshot({ path: path.join(directory, "loop-policy-mobile.png"), fullPage: true });
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true, savedAndReloaded: true, invalidLimitPreserved: true, panelLock: true, minimizeRestore: true, mobileFocus: true }));
     }
     for (const workflow of fixture.workflows.filter(flow => flow.flowType !== "loop")) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {

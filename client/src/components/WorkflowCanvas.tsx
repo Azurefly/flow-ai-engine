@@ -39,7 +39,7 @@ import "@xyflow/react/dist/style.css";
 import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
-import { automaticCanvasFit } from "./workflow-canvas-viewport";
+import { automaticCanvasFit, hasCanvasInspectorSelection, readWorkflowLoopLimit } from "./workflow-canvas-viewport";
 import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
 import { WorkflowOutcomeEditor } from "./WorkflowOutcomeEditor";
 import {
@@ -2446,6 +2446,17 @@ export default function WorkflowCanvas({
     reactFlow?.fitView({ ...automaticCanvasFit(compactReadOnlyPreview, node.id), duration: prefersReducedMotion ? 0 : 180 });
     revealInspector();
   }, [compactReadOnlyPreview, prefersReducedMotion, reactFlow, revealInspector, setNodes]);
+  const inspectCanvasEdge = useCallback((edgeId: string) => {
+    const edge = latestEdgesRef.current.find(item => item.id === edgeId);
+    if (!edge) return;
+    setSelectedId(null);
+    setSelectedEdgeId(edge.id);
+    setContextMenu(null);
+    setInspectorMode("normal");
+    setNodes(current => current.map(node => ({ ...node, selected: false })));
+    reactFlow?.fitView({ nodes: latestNodesRef.current.filter(node => node.id === edge.source || node.id === edge.target), padding: 0.6, duration: prefersReducedMotion ? 0 : 180 });
+    revealInspector();
+  }, [prefersReducedMotion, reactFlow, revealInspector, setNodes]);
   useEffect(() => () => {
     if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
   }, []);
@@ -2612,7 +2623,8 @@ export default function WorkflowCanvas({
     workflowId,
   ]);
 
-  const inspectorExpanded = Boolean(selectedId && inspectorMode !== "compact");
+  const hasInspectorSelection = hasCanvasInspectorSelection(nodes, edges, selectedId, selectedEdgeId);
+  const inspectorExpanded = hasInspectorSelection && inspectorMode !== "compact";
   useEffect(() => {
     if (!reactFlow) return;
     const wasExpanded = previousInspectorExpandedRef.current;
@@ -2741,13 +2753,7 @@ export default function WorkflowCanvas({
     const focus = (event: Event) => {
       const detail = (event as CustomEvent<{ nodeId?: string; edgeId?: string }>).detail;
       if (detail?.edgeId) {
-        const edge = latestEdgesRef.current.find(item => item.id === detail.edgeId);
-        if (!edge) return;
-        setSelectedId(null);
-        setSelectedEdgeId(edge.id);
-        setInspectorMode("normal");
-        canvasRegionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-        reactFlow?.fitView({ nodes: latestNodesRef.current.filter(node => node.id === edge.source || node.id === edge.target), padding: 0.6, duration: 180 });
+        inspectCanvasEdge(detail.edgeId);
         return;
       }
       const nodeId = detail?.nodeId;
@@ -2765,7 +2771,7 @@ export default function WorkflowCanvas({
     };
     window.addEventListener("flow:focus-node", focus);
     return () => window.removeEventListener("flow:focus-node", focus);
-  }, [reactFlow]);
+  }, [inspectCanvasEdge, reactFlow]);
 
   const selected = useMemo(
     () => nodes.find(node => node.id === selectedId),
@@ -3245,7 +3251,8 @@ export default function WorkflowCanvas({
     setSelectedEdgeId(null);
   }, [nodes, pushHistory, readOnly, selectedEdgeId, setEdges, setNodes]);
   const updateSelectedEdgeLoop = (maxIterations: number | null) => {
-    if (readOnly || !selectedEdgeId || flowType === "data") return;
+    if (inspectorDisabled || !selectedEdgeId || flowType === "data") return;
+    if (maxIterations !== null && readWorkflowLoopLimit(String(maxIterations)) === null) return;
     pushHistory();
     setEdges(current => current.map(edge => edge.id === selectedEdgeId ? {
       ...edge, data: { ...edge.data, loop: maxIterations === null ? null : { maxIterations } },
@@ -3877,8 +3884,8 @@ export default function WorkflowCanvas({
       ref={editorRegionRef}
       data-aiflow-workflow-canvas=""
       data-workflow-editor={compactReadOnlyPreview ? undefined : ""}
-      className={`grid min-w-0 max-w-full grid-cols-1 bg-card ${fullscreen ? `h-[100dvh] min-h-0 overflow-y-auto lg:overflow-hidden ${selected && inspectorMode === "compact" ? "lg:grid-rows-[minmax(0,1fr)_auto]" : "lg:grid-rows-[minmax(0,1fr)]"}` : `${canvasMinHeight} overflow-hidden rounded-xl border border-border shadow-2xs`} ${
-        !selectedId || !selected || inspectorMode === "compact"
+      className={`grid min-w-0 max-w-full grid-cols-1 bg-card ${fullscreen ? `h-[100dvh] min-h-0 overflow-y-auto lg:overflow-hidden ${hasInspectorSelection && inspectorMode === "compact" ? "lg:grid-rows-[minmax(0,1fr)_auto]" : "lg:grid-rows-[minmax(0,1fr)]"}` : `${canvasMinHeight} overflow-hidden rounded-xl border border-border shadow-2xs`} ${
+        !hasInspectorSelection || inspectorMode === "compact"
           ? ""
           : inspectorMode === "maximized"
             ? "lg:grid-cols-[minmax(0,1fr)_620px]"
@@ -4497,9 +4504,7 @@ export default function WorkflowCanvas({
             onNodeContextMenu={onNodeContextMenu}
             onEdgeClick={(event, edge) => {
               event.stopPropagation();
-              setSelectedEdgeId(edge.id);
-              setSelectedId(null);
-              setContextMenu(null);
+              inspectCanvasEdge(edge.id);
             }}
             onEdgeContextMenu={onEdgeContextMenu}
             onPaneClick={() => {
@@ -4537,7 +4542,7 @@ export default function WorkflowCanvas({
           </ReactFlow>
         </div>
       </section>
-      {selectedId && selected && (
+      {hasInspectorSelection && (
         <aside
           data-workflow-inspector=""
           className={`border-t border-border bg-card lg:border-l lg:border-t-0 ${fullscreen ? "min-h-0 flex flex-col" : ""}`}
@@ -5075,24 +5080,28 @@ export default function WorkflowCanvas({
                 )}
               </div>
             ) : selectedEdgeId ? (
-              <div className="m-4 mt-8 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm leading-6 text-indigo-800">
+              <div className="m-4 rounded-lg border border-border bg-muted/40 p-4 text-sm leading-6 text-foreground">
                 <p className="font-semibold">已选中连线</p>
                 <p className="aiflow-type-body mt-1">
                   可点击顶部“删除连线”，或按 Delete /
                   Backspace。删除后可立即撤销。
                 </p>
-                {flowType !== "data" && <div className="aiflow-type-body mt-4 space-y-3 border-t border-indigo-200 pt-3" data-loop-policy-editor="">
+                {flowType !== "data" && <div className="aiflow-type-body mt-4 space-y-3 border-t border-border pt-3" data-loop-policy-editor="">
                   <label className="flex min-h-11 items-center gap-2 font-medium">
-                    <input type="checkbox" aria-label="启用循环返回上限" disabled={readOnly}
+                    <input type="checkbox" aria-label="启用循环返回上限" disabled={inspectorDisabled}
                       checked={Boolean(edges.find(edge => edge.id === selectedEdgeId)?.data?.loop)}
                       onChange={event => updateSelectedEdgeLoop(event.target.checked ? 3 : null)} />
                     启用循环返回上限
                   </label>
                   {Boolean(edges.find(edge => edge.id === selectedEdgeId)?.data?.loop) && <label className="grid gap-1">
                     最多返回次数（1–1000）
-                    <Input type="number" min={1} max={1000} step={1} aria-label="最多返回次数" disabled={readOnly}
+                    <Input type="number" min={1} max={1000} step={1} aria-label="最多返回次数" disabled={inspectorDisabled}
                       value={Number((edges.find(edge => edge.id === selectedEdgeId)?.data?.loop as any)?.maxIterations ?? 3)}
-                      onChange={event => updateSelectedEdgeLoop(Number(event.target.value))} />
+                      onChange={event => {
+                        const limit = readWorkflowLoopLimit(event.target.value);
+                        if (limit === null) { toast.error("返回次数请输入 1–1000 之间的整数，已保留原设置。"); return; }
+                        updateSelectedEdgeLoop(limit);
+                      }} />
                   </label>}
                   <p>只在经过此连线时累计；等待、审批和恢复不会重置。请通过路由或办理结果配置退出分支。</p>
                   <p>路由条件可引用此连线的已返回次数：<code className="break-all">{`{{runtime.loopIterations.${selectedEdgeId}}}`}</code></p>

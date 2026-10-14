@@ -1,3 +1,17 @@
+export function hasCanvasInspectorSelection(
+  nodes: ReadonlyArray<{ id: string }>,
+  edges: ReadonlyArray<{ id: string }>,
+  nodeId: string | null,
+  edgeId: string | null
+) {
+  return nodes.some(node => node.id === nodeId) || edges.some(edge => edge.id === edgeId);
+}
+
+export function readWorkflowLoopLimit(value: string): number | null {
+  const count = Number(value);
+  return value.trim() && Number.isInteger(count) && count >= 1 && count <= 1000 ? count : null;
+}
+
 export function automaticCanvasFit(
   preview: boolean,
   selectedId?: string | null
