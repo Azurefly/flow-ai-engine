@@ -370,13 +370,33 @@ function executable() {
       await page.getByLabel("定位并配置连线").selectOption("back");
       await page.locator("[data-loop-policy-editor]").waitFor();
       assert.equal(await page.getByLabel("启用循环返回上限").isChecked(), true);
+      await page.getByLabel("最多返回次数").fill("");
+      await page.locator("[data-workflow-draft-error]").waitFor();
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "");
+      assert.equal(await page.getByLabel("最多返回次数").getAttribute("aria-invalid"), "true");
+      assert.equal(await page.getByRole("button", { name: /保存画布/ }).isDisabled(), true);
+      assert.equal(await page.getByRole("button", { name: "发布", exact: true }).isDisabled(), true);
+      const writes = [];
+      const observeWrite = request => { if (request.method() === "POST" && /workflow\.(update|publish|run)/.test(request.url())) writes.push(request.url()); };
+      page.on("request", observeWrite);
+      await page.keyboard.press("Control+s");
+      await page.getByText(/请修正后再保存、发布或运行/).last().waitFor();
+      assert.equal(writes.length, 0);
+      page.off("request", observeWrite);
       await page.getByLabel("最多返回次数").fill("0");
-      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "3");
-      await page.getByText("返回次数请输入 1–1000 之间的整数，已保留原设置。", { exact: true }).first().waitFor();
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "0");
+      await page.getByText("请输入 1–1000 之间的整数；当前输入尚未保存。", { exact: true }).waitFor();
       await page.getByLabel("最多返回次数").fill("1001");
-      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "3");
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "1001");
+      await page.getByRole("button", { name: "更多操作", exact: true }).click();
+      assert.equal(await page.getByRole("menuitem", { name: "运行控制流程", exact: true }).getAttribute("aria-disabled"), "true");
+      await page.keyboard.press("Escape");
+      await page.getByLabel("定位并配置连线").selectOption("back");
+      assert.equal(await page.getByLabel("最多返回次数").inputValue(), "1001");
+      await page.screenshot({ path: path.join(directory, "loop-invalid-draft.png"), fullPage: true });
       await page.getByLabel("最多返回次数").fill("4");
       assert.equal(await page.getByLabel("最多返回次数").inputValue(), "4");
+      await page.locator("[data-workflow-draft-error]").waitFor({ state: "hidden" });
       await page.getByLabel("锁定配置面板", { exact: true }).click();
       assert.equal(await page.getByLabel("最多返回次数").isDisabled(), true);
       assert.equal(await page.getByLabel("启用循环返回上限").isDisabled(), true);
@@ -407,7 +427,7 @@ function executable() {
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true);
       await page.screenshot({ path: path.join(directory, "loop-policy-mobile.png"), fullPage: true });
       await page.setViewportSize({ width: 1440, height: 1000 });
-      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true, savedAndReloaded: true, invalidLimitPreserved: true, panelLock: true, minimizeRestore: true, mobileFocus: true }));
+      console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true, savedAndReloaded: true, invalidDraftPreserved: true, emptyThenType: true, invalidSavePublishRunBlocked: true, shortcutNoWrite: true, panelLock: true, minimizeRestore: true, mobileFocus: true }));
     }
     for (const workflow of fixture.workflows.filter(flow => ["state", "control", "data"].includes(flow.flowType))) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {

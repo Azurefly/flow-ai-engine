@@ -16,8 +16,9 @@ const maxChunkBytes = 450 * 1024;
 // Keep one-KiB headroom for this measured increment; chunk/HTML limits stay fixed.
 // Project archive/restore and its history dialog add about 2.5 KiB gzip.
 // Draft revision conflicts, export/reload recovery, and cancel-publish reconfirm add about 0.76 KiB gzip.
-const maxTotalBytes = 1_435 * 1024;
-const maxTotalGzipBytes = 427 * 1024;
+// Inline loop draft validation adds about 1.07 KiB raw / 0.38 KiB gzip.
+const maxTotalBytes = 1_437 * 1024;
+const maxTotalGzipBytes = 428 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

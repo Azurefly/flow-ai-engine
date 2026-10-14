@@ -2398,6 +2398,7 @@ export default function WorkflowCanvas({
   const [inspectorLocked, setInspectorLocked] = useState(false);
   const [inspectorTab, setInspectorTab] = useState("");
   const inspectorTabId = useId();
+  const loopLimitErrorId = useId();
   const [reactFlow, setReactFlow] = useState<ReactFlowInstance<
     CanvasNode,
     Edge
@@ -2777,6 +2778,8 @@ export default function WorkflowCanvas({
     () => nodes.find(node => node.id === selectedId),
     [nodes, selectedId]
   );
+  const loopLimitValue = (edges.find(edge => edge.id === selectedEdgeId)?.data?.loop as any)?.maxIterations ?? "";
+  const loopLimitInvalid = readWorkflowLoopLimit(String(loopLimitValue)) === null;
   const selectedDefinition = selected
     ? FLOW_NODE_DEFINITIONS[selected.data.kind]
     : null;
@@ -3250,9 +3253,8 @@ export default function WorkflowCanvas({
     });
     setSelectedEdgeId(null);
   }, [nodes, pushHistory, readOnly, selectedEdgeId, setEdges, setNodes]);
-  const updateSelectedEdgeLoop = (maxIterations: number | null) => {
+  const updateSelectedEdgeLoop = (maxIterations: number | undefined | null) => {
     if (inspectorDisabled || !selectedEdgeId || flowType === "data") return;
-    if (maxIterations !== null && readWorkflowLoopLimit(String(maxIterations)) === null) return;
     pushHistory();
     setEdges(current => current.map(edge => edge.id === selectedEdgeId ? {
       ...edge, data: { ...edge.data, loop: maxIterations === null ? null : { maxIterations } },
@@ -5095,13 +5097,12 @@ export default function WorkflowCanvas({
                   </label>
                   {Boolean(edges.find(edge => edge.id === selectedEdgeId)?.data?.loop) && <label className="grid gap-1">
                     最多返回次数（1–1000）
-                    <Input type="number" min={1} max={1000} step={1} aria-label="最多返回次数" disabled={inspectorDisabled}
-                      value={Number((edges.find(edge => edge.id === selectedEdgeId)?.data?.loop as any)?.maxIterations ?? 3)}
-                      onChange={event => {
-                        const limit = readWorkflowLoopLimit(event.target.value);
-                        if (limit === null) { toast.error("返回次数请输入 1–1000 之间的整数，已保留原设置。"); return; }
-                        updateSelectedEdgeLoop(limit);
-                      }} />
+                    <Input type="number" inputMode="numeric" min={1} max={1000} step={1} aria-label="最多返回次数" disabled={inspectorDisabled}
+                      aria-invalid={loopLimitInvalid}
+                      aria-describedby={loopLimitInvalid ? loopLimitErrorId : undefined}
+                      value={loopLimitValue}
+                      onChange={event => updateSelectedEdgeLoop(event.target.value === "" ? undefined : Number(event.target.value))} />
+                    {loopLimitInvalid && <span id={loopLimitErrorId} role="alert" className="text-sm text-destructive">请输入 1–1000 之间的整数；当前输入尚未保存。</span>}
                   </label>}
                   <p>只在经过此连线时累计；等待、审批和恢复不会重置。请通过路由或办理结果配置退出分支。</p>
                   <p>路由条件可引用此连线的已返回次数：<code className="break-all">{`{{runtime.loopIterations.${selectedEdgeId}}}`}</code></p>

@@ -58,6 +58,7 @@ import {
 } from "../../../shared/workflow-publish";
 import type { Definition } from "../../../server/workflow-service";
 import { workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
+import { workflowLoopDraftError } from "../../../shared/workflow-loop-policy-draft";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -1112,6 +1113,7 @@ function FlowConsole({
     access.data?.permissions?.has("workflow:members:manage")
   );
   const isDraftDirty = isWorkflowDraftDirty(effectiveWorkflowId, persistedDraftSnapshot.current, draftName, draftDefinition);
+  const draftError = useMemo(() => workflowLoopDraftError(draftDefinition), [draftDefinition]);
   unsavedWorkflowId.current = editorActive && isDraftDirty ? persistedDraftSnapshot.current?.workflowId ?? null : null;
   useEffect(() => {
     if (!editorActive || !isDraftDirty) return;
@@ -1125,6 +1127,7 @@ function FlowConsole({
 
   const saveCurrent = useCallback(() => {
     if (!selectedId || !draftDefinition || !isDraftDirty) return;
+    if (draftError) { toast.error(draftError); return; }
     if (selectedWorkflow?.status === "published") {
       toast.error(
         "已发布流程请使用“发布”提交新版本，或先取消发布后再保存草稿。"
@@ -1141,6 +1144,7 @@ function FlowConsole({
     draftDefinition,
     draftName,
     isDraftDirty,
+    draftError,
     saveFlow,
     selectedId,
     selectedWorkflow?.status,
@@ -1148,6 +1152,7 @@ function FlowConsole({
   const saveDraftBeforeRun = useCallback(async () => {
     if (!selectedId || !draftDefinition)
       throw new Error("流程定义尚未就绪，无法保存运行版本。");
+    if (draftError) throw new Error(draftError);
     if (selectedWorkflow?.status === "published")
       throw new Error("已发布流程不能保存为草稿运行版本。");
     if (!isDraftDirty) return;
@@ -1161,6 +1166,7 @@ function FlowConsole({
     draftDefinition,
     draftName,
     isDraftDirty,
+    draftError,
     saveFlow,
     selectedId,
     selectedWorkflow?.status,
@@ -1833,6 +1839,7 @@ function FlowConsole({
             ) : (
               <FlowDesigner
                 workflow={selectedWorkflow}
+                draftError={draftError}
                 definition={draftDefinition}
                 name={draftName}
                 setName={setDraftName}
@@ -1890,6 +1897,7 @@ function FlowConsole({
                 }}
                 onPublish={() => {
                   if (!selectedId || !draftDefinition) return;
+                  if (draftError) { toast.error(draftError); return; }
                   const expectedDefinitionVersion = workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current);
                   if (
                     !canPublishWorkflowVersion(
@@ -2221,6 +2229,7 @@ function FlowConsole({
 
 function FlowDesigner({
   workflow,
+  draftError,
   definition,
   name,
   setName,
@@ -2262,6 +2271,7 @@ function FlowDesigner({
   onRevoke,
 }: {
   workflow: any;
+  draftError: string | null;
   definition: Definition | null;
   name: string;
   setName: (value: string) => void;
@@ -2507,15 +2517,16 @@ function FlowDesigner({
             disabled={
               !canEdit ||
               !hasUnpublishedChanges ||
+              Boolean(draftError) ||
               savePending ||
               workflow.status === "published"
             }
             title={
-              workflow.status === "published"
+              draftError || (workflow.status === "published"
                 ? "修改后使用“发布新版本”；需要保存草稿时，请先取消发布"
                 : hasUnpublishedChanges
                   ? "保存当前画布草稿 (Ctrl+S / ⌘S)"
-                  : "没有未保存修改"
+                  : "没有未保存修改")
             }
           >
             {savePending ? (
@@ -2537,17 +2548,18 @@ function FlowDesigner({
             disabled={
               !canPublish ||
               !publishVersionAllowed ||
+              Boolean(draftError) ||
               publishPending ||
               compilePending
             }
             title={
-              !canPublish
+              draftError || (!canPublish
                 ? "当前账号没有发布权限"
                 : !publishVersionAllowed
                   ? "当前已发布版本没有未发布修改；编辑流程后才能发布新版本"
                   : workflow.status === "published"
                     ? "发布前会自动检查拓扑与语法，并创建新版本"
-                    : "发布前会自动检查拓扑与语法"
+                    : "发布前会自动检查拓扑与语法")
             }
           >
             {publishPending && (
@@ -2578,7 +2590,7 @@ function FlowDesigner({
               <DropdownMenuItem
                 className="aiflow-type-control"
                 onClick={() => setRunDialogOpen(true)}
-                disabled={workflow.flowType !== "data" && !canRun}
+                disabled={Boolean(draftError) || (workflow.flowType !== "data" && !canRun)}
                 title={
                   workflow.flowType === "state"
                     ? "会推进流程状态或创建待办；提交前可查看运行影响。"
@@ -2705,6 +2717,7 @@ function FlowDesigner({
           </DropdownMenu>
         </div>
       </div>
+      {draftError && <p role="alert" data-workflow-draft-error="" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{draftError}</p>}
       {workflow.status === "published" && (
         <section
           aria-label="已发布流程编辑说明"

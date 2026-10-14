@@ -197,7 +197,7 @@ describe("流程版本发布状态", () => {
       "if (!selectedId || !draftDefinition || !isDraftDirty) return;"
     );
     expect(homeSource).toContain(
-      "!canEdit || !hasUnpublishedChanges || savePending"
+      "!canEdit || !hasUnpublishedChanges || Boolean(draftError) || savePending"
     );
     expect(homeSource).toContain("没有未保存修改");
     expect(workflowServiceSource).toContain("isWorkflowUpdateNoop({");
@@ -341,7 +341,7 @@ describe("流程设计器界面回归约束", () => {
     expect(menuStart).toBeGreaterThanOrEqual(0);
     expect(menuEnd).toBeGreaterThan(menuStart);
     expect(operationMenu).toContain("onClick={() => setRunDialogOpen(true)}");
-    expect(operationMenu).toContain('disabled={workflow.flowType !== "data" && !canRun}');
+    expect(operationMenu).toContain('disabled={Boolean(draftError) || (workflow.flowType !== "data" && !canRun)}');
     expect(operationMenu).toContain("运行控制流程");
     expect(operationMenu).toContain("仅执行预检");
     expect(operationMenu).toContain('className="aiflow-type-control"');
@@ -392,8 +392,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_435 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 427 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_437 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 428 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3766,8 +3766,11 @@ it("数据流程测试弹窗按项目权限禁用执行并显示原因", () => {
   expect(modal).toContain("open && isDataflow && workflow?.projectId");
   expect(modal).toContain("!dataProjectAccess.isError && !dataProjectAccess.isFetching");
   expect(modal).toContain("const canExecute = isDataflow ?");
+  expect(modal).toContain("const draftError = workflowLoopDraftError(definition)");
+  expect(modal).toContain(": !draftError && canRun");
+  expect(modal).toContain("const executionPermissionHint = draftError ||");
   expect(modal).toContain("!isDataflow && !canRun");
-  expect(homeSource).toContain('disabled={workflow.flowType !== "data" && !canRun}');
+  expect(homeSource).toContain('disabled={Boolean(draftError) || (workflow.flowType !== "data" && !canRun)}');
   expect(modal).toContain("dataProjectAccess.refetch()");
 });
 it("版本更新提示保留未保存草稿并由用户主动刷新", () => {
