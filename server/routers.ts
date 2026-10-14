@@ -6,6 +6,7 @@ import {
 } from "./workflow-role-service";
 import { TEMPLATE_NODE_TYPES } from "../shared/workflow-template";
 import { publicAuthAccount } from "./auth-account";
+import { isWorkflowRunController, workflowRunControlCapabilities } from "../shared/workflow-run-controls";
 import { previewOperateApproval } from "./workflow-approval-preview";
 import { parse } from "cookie";
 import { searchWorkflowParticipants } from "./workflow-participant-directory";
@@ -224,11 +225,7 @@ function assertWorkflowRunController(
     triggeredByUserId?: unknown;
     ownerUserId?: unknown;
   } | null;
-  if (
-    !record ||
-    (Number(record.triggeredByUserId) !== user.id &&
-      Number(record.ownerUserId) !== user.id)
-  ) {
+  if (!isWorkflowRunController(user.id, record)) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: `仅流程发起人或流程所有者可${action}。`,
@@ -2190,16 +2187,10 @@ export const appRouter = router({
       .input(z.object({ runId: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
         const run = await getWorkflowRun(input.runId, ctx.user.id);
-        if (
-          !run ||
-          !(await hasWorkflowPermission(
-            ctx.user,
-            run.workflowId,
-            "workflow:view"
-          ))
-        )
+        const access = run ? await getWorkflowAccess(ctx.user, run.workflowId) : null;
+        if (!run || !access?.permissions.has("workflow:view"))
           throw new Error("运行记录不存在或无访问权限。");
-        return run;
+        return Object.assign(run, { controlCapabilities: workflowRunControlCapabilities(ctx.user.id, run, access.permissions.has("workflow:run")) });
       }),
   }),
 });

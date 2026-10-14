@@ -141,7 +141,7 @@ function definition(flowType, userId, assetId) {
   };
 }
 
-async function cleanup(fixture) {
+async function cleanup(fixture, ownerLogin) {
   assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
   await bootstrap();
   const people = [...(fixture.people ?? [])],
@@ -188,6 +188,8 @@ async function cleanup(fixture) {
   for (const person of fixture.people ?? []) {
     assert(person.username.startsWith(fixture.tag + "_"));
   }
+  const rootCookie = cookie;
+  if (fixture.runs?.length && ownerLogin) await request("auth.login", ownerLogin, true);
   for (const run of fixture.runs ?? []) {
     try {
       assert(fixture.workflows.some(flow => flow.id === run.workflowId));
@@ -197,6 +199,7 @@ async function cleanup(fixture) {
         await request("workflow.cancelRun", { runId: run.id }, true);
     } catch (error) { failures.push(error.message); }
   }
+  cookie = rootCookie;
   for (const workflow of fixture.workflows ?? []) {
     try {
       const current = await request("workflow.get", { id: workflow.id });
@@ -462,6 +465,28 @@ async function setup(intent) {
       fixture.workflows.push({ id: workflow.id, flowType, name });
       progress();
     }
+    if (intent.runControls) {
+      const node = (id, type, config, index) => ({ id, type, name: id, config, position: { x: index * 240, y: 80 } });
+      const name = "运行权限_" + intent.tag;
+      const def = { schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, settings: {}, nodes: [node("start", "start", {}, 0), node("wait", "wait", { durationSeconds: 3600 }, 1), node("end", "end", {}, 2)], edges: [{ id: "initial", sourceNodeId: "start", targetNodeId: "wait" }, { id: "finish", sourceNodeId: "wait", targetNodeId: "end" }] };
+      const workflow = await request("project.createWorkflow", { projectId: project.id, name, flowType: "control", definition: def }, true);
+      fixture.controlWorkflowId = workflow.id;
+      fixture.workflows.push({ id: workflow.id, name, flowType: "run-controls" }); progress();
+      await bootstrap();
+      const peer = await request("iam.createUser", { ...intent.peerLogin, name: "旁观管理员_" + intent.tag, role: "admin" }, true);
+      fixture.peerUserId = peer.userId; fixture.people.push({ id: peer.userId, username: intent.peerLogin.username }); progress();
+      await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "active" }, true);
+      await request("project.auditWorkflow", { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" }, true);
+      await request("auth.login", intent.login, true);
+      const current = await request("workflow.get", { id: workflow.id });
+      await request("workflow.publish", { id: workflow.id, expectedDefinitionVersion: current.definitionVersion }, true);
+      await request("project.grantMember", { projectId: project.id, userId: fixture.disabledUserId, role: "viewer" }, true);
+      await request("workflow.grantMember", { workflowId: workflow.id, userId: fixture.disabledUserId, role: "operator" }, true);
+      await request("auth.login", { username: intent.tag + "_disabled", password: intent.disabledPassword }, true);
+      const started = await request("workflow.run", { workflowId: workflow.id, triggerType: "manual", idempotencyKey: intent.tag + "_controls" }, true);
+      fixture.controlRunId = started.runId; fixture.runs = [...(fixture.runs ?? []), { id: started.runId, workflowId: workflow.id }]; progress();
+      await request("auth.login", intent.login, true);
+    }
     if (intent.loopPolicy) {
       const nodes = [
         { id: "start", type: "start", name: "开始", config: {}, position: { x: 0, y: 80 } },
@@ -477,7 +502,7 @@ async function setup(intent) {
       progress();
     }
   } catch (error) {
-    await cleanup(fixture);
+    await cleanup(fixture, intent.login);
     throw error;
   }
 }
@@ -639,7 +664,7 @@ async function cycleStatus(fixture) {
 async function verifyWorkflowRevision(intent) {
   const fixture = intent.fixture;
   await request("auth.login", intent.login, true);
-  for (const item of fixture.workflows.filter(flow => flow.flowType !== "loop")) {
+  for (const item of fixture.workflows.filter(flow => ["state", "control", "data"].includes(flow.flowType))) {
     const original = await request("workflow.get", { id: item.id });
     assert.equal(original.ownerUserId, fixture.userId);
     assert.equal(original.name, item.name);
@@ -669,7 +694,43 @@ async function verifyWorkflowRevision(intent) {
   }
 }
 
+async function verifyRunControls(intent) {
+  const fixture = intent.fixture;
+  const detail = () => request("workflow.runDetail", { runId: fixture.controlRunId });
+  await request("auth.login", intent.login, true);
+  let run;
+  for (let index = 0; index < 40; index++) { run = await detail(); if (run.status === "waiting") break; await new Promise(resolve => setTimeout(resolve, 500)); }
+  assert.equal(run.ownerUserId, fixture.userId); assert.equal(run.triggeredByUserId, fixture.disabledUserId); assert.equal(run.status, "waiting");
+  assert.equal(run.controlCapabilities.canPause, true);
+  await request("auth.login", intent.peerLogin, true);
+  assert.equal((await detail()).controlCapabilities.canCancel, false);
+  for (const path of ["workflow.pauseRun", "workflow.resumeRun", "workflow.cancelRun", "workflow.terminateRun"])
+    await assert.rejects(request(path, { runId: fixture.controlRunId, ...(path.endsWith("terminateRun") ? { reason: "不应写入" } : {}) }, true), /仅流程发起人或流程所有者/);
+  await request("auth.login", intent.memberLogin, true);
+  assert.equal((await detail()).controlCapabilities.canCancel, true);
+  console.log(JSON.stringify({ stage: "run-control-api", ownerAllowed: true, initiatorAllowed: true, unrelatedAdminDenied: true, allFourMutationsDenied: true }));
+}
+async function revokeRunPermission(intent) {
+  await request("auth.login", intent.login, true);
+  assert((intent.fixture.workflows ?? []).some(flow => flow.id === intent.fixture.controlWorkflowId && flow.name === "运行权限_" + intent.fixture.tag));
+  await request("workflow.revokeMember", { workflowId: intent.fixture.controlWorkflowId, userId: intent.fixture.disabledUserId, role: "operator" }, true);
+}
+async function finishRunControls(intent) {
+  const fixture = intent.fixture;
+  await request("auth.login", intent.login, true);
+  const run = await request("workflow.runDetail", { runId: fixture.controlRunId });
+  assert.equal(run.ownerUserId, fixture.userId); assert.equal(run.workflowId, fixture.controlWorkflowId);
+  if (["queued", "running", "waiting", "blocked"].includes(run.status)) await request("workflow.cancelRun", { runId: run.id }, true);
+  await request("workflow.revokeMember", { workflowId: fixture.controlWorkflowId, userId: fixture.disabledUserId, role: "operator" }, true);
+  await request("project.revokeMember", { projectId: fixture.projectId, userId: fixture.disabledUserId }, true);
+  await bootstrap();
+  await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "disabled" }, true);
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "verify_run_controls") await verifyRunControls(browserFixtureIntent);
+else if (browserFixtureIntent.action === "revoke_run_permission") await revokeRunPermission(browserFixtureIntent);
+else if (browserFixtureIntent.action === "finish_run_controls") await finishRunControls(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_revision") await verifyWorkflowRevision(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_pagination") await verifyPagination(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_lifecycle") await verifyLifecycle(browserFixtureIntent);
@@ -681,5 +742,5 @@ else if (browserFixtureIntent.action === "grant_identity")
 else if (browserFixtureIntent.action === "revoke_identity")
   await revokeIdentity(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "cleanup")
-  await cleanup(browserFixtureIntent.fixture);
+  await cleanup(browserFixtureIntent.fixture, browserFixtureIntent.login);
 else throw new Error("Unknown fixture action");

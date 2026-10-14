@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RunPayloadDetails } from "./RunPayloadDetails";
+import { workflowRunControlAllowed, type WorkflowRunControlCapabilities } from "@shared/workflow-run-controls";
 
 function formatTime(value: unknown) {
   return value
@@ -108,6 +109,8 @@ export default function RunCenter({
   const previousSelectedRunId = useRef<string | null>(selectedRunId);
   const runDetail =
     selectedRunId && selectedRun?.id !== selectedRunId ? null : selectedRun;
+  const controlCapabilities = runDetail?.controlCapabilities as WorkflowRunControlCapabilities | undefined;
+  const dialogAllowed = Boolean(controlDialog && controlDialog.runId === runDetail?.id && workflowRunControlAllowed(controlCapabilities, controlDialog.action));
   const nodeEntries = useMemo(
     () => nodeExecutionEntries<any>(runDetail?.nodeRuns ?? []),
     [runDetail?.nodeRuns]
@@ -210,6 +213,10 @@ export default function RunCenter({
   const markRead = trpc.workflow.markAlertRead.useMutation({
     onSuccess: () => void utils.workflow.alerts.invalidate(),
   });
+  const refreshControlError = (error: { message: string }, input: { runId: string }) => {
+    void utils.workflow.runDetail.invalidate({ runId: input.runId });
+    toast.error(error.message);
+  };
   const cancelRun = trpc.workflow.cancelRun.useMutation({
     onSuccess: () => {
       void utils.workflow.runs.invalidate();
@@ -217,7 +224,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => toast.error(error.message),
+    onError: refreshControlError,
   });
   const terminateRun = trpc.workflow.terminateRun.useMutation({
     onSuccess: () => {
@@ -226,7 +233,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => toast.error(error.message),
+    onError: refreshControlError,
   });
   const pauseRun = trpc.workflow.pauseRun.useMutation({
     onSuccess: () => {
@@ -235,7 +242,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => toast.error(error.message),
+    onError: refreshControlError,
   });
   const resumeRun = trpc.workflow.resumeRun.useMutation({
     onSuccess: () => {
@@ -244,7 +251,7 @@ export default function RunCenter({
       void utils.workflow.runDetail.invalidate();
       if (workflowId) void utils.workflow.runMetrics.invalidate({ workflowId });
     },
-    onError: error => toast.error(error.message),
+    onError: refreshControlError,
   });
   const workflowAlerts = (alerts.data ?? []) as any[];
   const workflowRuns = runs.data?.items ?? [];
@@ -735,10 +742,7 @@ export default function RunCenter({
                   <ArrowLeft size={14} aria-hidden="true" />
                   返回运行记录
                 </Button>
-                {runDetail &&
-                  ["queued", "waiting", "blocked"].includes(
-                    String(runDetail.status)
-                  ) && (
+                {runDetail && (workflowRunControlAllowed(controlCapabilities, "pause") || workflowRunControlAllowed(controlCapabilities, "resume")) && (
                     <Button
                       type="button"
                       variant="outline"
@@ -747,7 +751,7 @@ export default function RunCenter({
                       disabled={controlPending}
                       onClick={() => {
                         if (runDetail.status === "blocked") {
-                          resumeRun.mutate({ runId: runDetail.id });
+                          if (workflowRunControlAllowed(controlCapabilities, "resume")) resumeRun.mutate({ runId: runDetail.id });
                         } else {
                           setControlError("");
                           setControlDialog({
@@ -760,10 +764,7 @@ export default function RunCenter({
                       {runDetail.status === "blocked" ? "恢复运行" : "暂停运行"}
                     </Button>
                   )}
-                {runDetail &&
-                  ["queued", "running", "waiting", "blocked"].includes(
-                    String(runDetail.status)
-                  ) && (
+                {runDetail && workflowRunControlAllowed(controlCapabilities, "cancel") && (
                     <Button
                       type="button"
                       variant="outline"
@@ -781,10 +782,7 @@ export default function RunCenter({
                       取消运行
                     </Button>
                   )}
-                {runDetail &&
-                  ["queued", "running", "waiting", "blocked"].includes(
-                    String(runDetail.status)
-                  ) && (
+                {runDetail && workflowRunControlAllowed(controlCapabilities, "terminate") && (
                     <Button
                       type="button"
                       variant="outline"
@@ -805,6 +803,7 @@ export default function RunCenter({
                   )}
               </div>
             </div>
+            {controlCapabilities?.disabledReason && <p role="status" data-run-controls-readonly="" className="mt-3 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">{controlCapabilities.disabledReason}</p>}
             {runDetail && (
               <dl
                 aria-label="运行状态摘要"
@@ -999,6 +998,7 @@ export default function RunCenter({
               {controlError}
             </p>
           )}
+          {!dialogAllowed && controlDialog && <p role="alert" className="text-sm text-destructive">当前权限或运行状态已变化，此操作不可提交。请返回并刷新运行记录。</p>}
           <DialogFooter>
             <Button
               variant="outline"
@@ -1010,12 +1010,13 @@ export default function RunCenter({
             <Button
               disabled={
                 controlPending ||
+                !dialogAllowed ||
                 !controlDialog ||
                 controlDialog.runId !== selectedRunId ||
                 (controlDialog.action === "terminate" && !controlReason.trim())
               }
               onClick={async () => {
-                if (!controlDialog || controlDialog.runId !== selectedRunId)
+                if (!controlDialog || controlDialog.runId !== selectedRunId || !dialogAllowed)
                   return;
                 setControlError("");
                 try {

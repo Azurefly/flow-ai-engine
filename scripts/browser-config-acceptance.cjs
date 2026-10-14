@@ -15,6 +15,7 @@ const verifyProjectPaging = process.env.FLOW_UI_PROJECT_PAGING === "1";
 const verifyProjectLifecycle = process.env.FLOW_UI_PROJECT_LIFECYCLE === "1";
 const verifyLoopPolicy = process.env.FLOW_UI_LOOP_POLICY === "1";
 const verifyWorkflowRevision = process.env.FLOW_UI_WORKFLOW_REVISION === "1";
+const verifyRunControls = process.env.FLOW_UI_RUN_CONTROLS === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -24,6 +25,7 @@ const memberLogin = {
   username: tag + "_disabled",
   password: "Test9_" + randomBytes(24).toString("base64url"),
 };
+const peerLogin = { username: tag + "_peer", password: "Test9_" + randomBytes(24).toString("base64url") };
 const directory = path.join(root, ".cache", tag);
 fs.mkdirSync(directory, { recursive: true });
 let fixture;
@@ -126,8 +128,12 @@ function executable() {
       disabledPassword: memberLogin.password,
       pagination: verifyProjectPaging,
       loopPolicy: verifyLoopPolicy,
+      runControls: verifyRunControls,
+      peerLogin,
     });
-    assert.equal(fixture.workflows.length, verifyLoopPolicy ? 4 : 3);
+    assert.equal(fixture.workflows.length, 3 + Number(verifyLoopPolicy) + Number(verifyRunControls));
+    if (verifyRunControls)
+      console.log((await remote({ action: "verify_run_controls", fixture, login, memberLogin, peerLogin })).trim());
     if (verifyWorkflowRevision)
       console.log((await remote({ action: "verify_revision", fixture, login })).trim());
     if (verifyProjectPaging)
@@ -242,6 +248,52 @@ function executable() {
       await remote({ action: "restore_owned_workflows", fixture });
       console.log(JSON.stringify({ stage: "project-lifecycle-browser", cancelNoMutation: true, explicitArchive: true, archiveScope: true, historyReadable: true, explicitRestore: true }));
     }
+    if (verifyRunControls) {
+      const monitorUrl = `${base}#/runs/monitor/${fixture.controlWorkflowId}/${fixture.controlRunId}`;
+      const openMonitor = async (target, credentials) => {
+        await target.goto(base, { waitUntil: "domcontentloaded" });
+        await target.getByLabel("用户名", { exact: true }).fill(credentials.username);
+        await target.getByLabel("密码", { exact: true }).fill(credentials.password);
+        await target.getByRole("button", { name: "登录流程引擎", exact: true }).click();
+        await target.locator('input[type="password"]').waitFor({ state: "hidden" });
+        await target.goto(monitorUrl, { waitUntil: "domcontentloaded" });
+        await target.locator("[data-run-detail-panel]").waitFor();
+      };
+      const peerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: "block" });
+      const memberContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: "block" });
+      for (const scoped of [peerContext, memberContext]) await scoped.route("**/*", route => route.request().url().startsWith(base) ? route.continue() : route.abort());
+      try {
+        const observer = await peerContext.newPage();
+        await openMonitor(observer, peerLogin);
+        await observer.locator("[data-run-controls-readonly]").waitFor();
+        for (const name of ["暂停运行", "恢复运行", "取消运行", "终止运行"])
+          assert.equal(await observer.getByRole("button", { name, exact: true }).count(), 0);
+        await observer.screenshot({ path: path.join(directory, "readonly-run-controls.png"), fullPage: true });
+        await page.goto(monitorUrl, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "暂停运行", exact: true }).waitFor();
+        await page.getByRole("button", { name: "暂停运行", exact: true }).click();
+        await page.getByRole("dialog").getByRole("button", { name: "确认暂停", exact: true }).click();
+        await page.getByRole("button", { name: "恢复运行", exact: true }).waitFor();
+        await page.getByRole("button", { name: "恢复运行", exact: true }).click();
+        await page.getByRole("button", { name: "暂停运行", exact: true }).waitFor();
+        const initiator = await memberContext.newPage();
+        await openMonitor(initiator, memberLogin);
+        await initiator.getByRole("button", { name: "取消运行", exact: true }).waitFor();
+        await initiator.getByRole("button", { name: "取消运行", exact: true }).click();
+        const confirm = initiator.getByRole("dialog").getByRole("button", { name: "确认取消", exact: true });
+        assert.equal(await confirm.isEnabled(), true);
+        await remote({ action: "revoke_run_permission", fixture, login });
+        await initiator.waitForFunction(() => [...document.querySelectorAll('[role="dialog"] button')].some(button => button.textContent.trim() === "确认取消" && button.disabled));
+        await initiator.getByRole("dialog").getByText("当前权限或运行状态已变化，此操作不可提交。请返回并刷新运行记录。", { exact: true }).waitFor();
+        await initiator.getByRole("dialog").getByRole("button", { name: "返回", exact: true }).click();
+        await initiator.locator("[data-run-controls-readonly]").waitFor();
+        assert.equal(await initiator.getByRole("button", { name: "取消运行", exact: true }).count(), 0);
+        console.log(JSON.stringify({ stage: "run-control-browser", unrelatedAdminReadonly: true, ownerPauseResume: true, initiatorControl: true, revokedOpenDialogDisabled: true }));
+      } finally {
+        await peerContext.close(); await memberContext.close();
+        await remote({ action: "finish_run_controls", fixture, login });
+      }
+    }
     if (verifyWorkflowRevision) {
       const workflow = fixture.workflows.find(flow => flow.flowType === "control");
       const editorUrl = `${base}#/flows/workflow/${workflow.id}/editor`;
@@ -351,7 +403,7 @@ function executable() {
       await page.setViewportSize({ width: 1440, height: 1000 });
       console.log(JSON.stringify({ stage: "loop-policy-browser", enabledLoaded: true, editableLimit: true, disableEnable: true, savedAndReloaded: true, invalidLimitPreserved: true, panelLock: true, minimizeRestore: true, mobileFocus: true }));
     }
-    for (const workflow of fixture.workflows.filter(flow => flow.flowType !== "loop")) {
+    for (const workflow of fixture.workflows.filter(flow => ["state", "control", "data"].includes(flow.flowType))) {
       await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, {
         waitUntil: "domcontentloaded",
       });
@@ -807,7 +859,7 @@ function executable() {
   } finally {
     if (browser) await browser.close();
     if (fixture)
-      console.log((await remote({ action: "cleanup", fixture })).trim());
+      console.log((await remote({ action: "cleanup", fixture, login })).trim());
   }
 })().catch(error => {
   console.error(error.message);
