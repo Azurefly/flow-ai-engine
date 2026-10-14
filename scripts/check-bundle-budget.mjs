@@ -17,7 +17,8 @@ const maxChunkBytes = 450 * 1024;
 // Project archive/restore and its history dialog add about 2.5 KiB gzip.
 // Draft revision conflicts, export/reload recovery, and cancel-publish reconfirm add about 0.76 KiB gzip.
 // Inline loop draft validation adds about 1.07 KiB raw / 0.38 KiB gzip.
-const maxTotalBytes = 1_437 * 1024;
+// Task form trial preview and the shared task display contract add 2.53 KiB raw.
+const maxTotalBytes = 1_440 * 1024;
 const maxTotalGzipBytes = 428 * 1024;
 const maxHtmlBytes = 20 * 1024;
 

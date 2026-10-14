@@ -40,7 +40,7 @@ async function bootstrap() {
   );
 }
 
-function definition(flowType, userId, assetId) {
+function definition(flowType, userId, assetId, formPreview = false) {
   const node = (id, type, config = {}, index = 0) => ({
     id,
     type,
@@ -100,13 +100,21 @@ function definition(flowType, userId, assetId) {
                     label: "申请说明",
                     type: "textarea",
                     required: true,
+                    ...(formPreview ? { defaultValue: "默认申请说明", maxLength: 40 } : {}),
                   },
                   {
                     key: "amount",
                     label: "订单金额",
                     type: "number",
                     required: true,
+                    ...(formPreview ? { min: 10, max: 100 } : {}),
                   },
+                  ...(formPreview ? [
+                    { key: "reference", label: "申请单号", type: "text", readOnly: true, required: true, defaultValue: "FORM-01" },
+                    { key: "category", label: "申请类别", type: "select", options: [{ value: "normal", label: "常规申请" }, { value: "urgent", label: "紧急申请" }], defaultValue: "normal" },
+                    { key: "tags", label: "办理标签", type: "multiselect", options: [{ value: 1, label: "财务" }, { value: 2, label: "采购" }], defaultValue: [1] },
+                    { key: "confirmed", label: "已确认资料", type: "boolean", defaultValue: false },
+                  ] : []),
                 ],
               },
             },
@@ -458,7 +466,7 @@ async function setup(intent) {
           projectId: project.id,
           name,
           flowType,
-          definition: definition(flowType, fixture.disabledUserId, asset.id),
+          definition: definition(flowType, fixture.disabledUserId, asset.id, intent.formPreview),
         },
         true
       );
@@ -729,7 +737,62 @@ async function finishRunControls(intent) {
   await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "disabled" }, true);
 }
 
+async function startFormTask(intent) {
+  const { fixture, workflowId } = intent;
+  const item = fixture.workflows.find(flow => flow.id === workflowId);
+  assert(item && ["state", "control"].includes(item.flowType));
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await request("auth.login", intent.login, true);
+  const current = await request("workflow.get", { id: workflowId });
+  assert.equal(current.name, item.name); assert.equal(current.ownerUserId, fixture.userId);
+  await bootstrap();
+  await request("project.auditWorkflow", { projectId: fixture.projectId, workflowId, auditStatus: "approved" }, true);
+  await request("auth.login", intent.login, true);
+  const approved = await request("workflow.get", { id: workflowId });
+  await request("workflow.publish", { id: workflowId, expectedDefinitionVersion: approved.definitionVersion }, true);
+  const run = await request("workflow.run", { workflowId, triggerType: "test", idempotencyKey: fixture.tag + "_form_" + item.flowType }, true);
+  fixture.runs = [...(fixture.runs ?? []), { id: run.runId, workflowId }];
+  console.log(JSON.stringify({ fixture }));
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const task = (await request("task.list", { projectId: fixture.projectId, view: "todo", limit: 50 })).find(task => task.runId === run.runId);
+    if (task) {
+      assert.equal(task.status, "pending");
+      const valid = { decision: "approved", outcome: "approved", reason: "真实办理校验", amount: 50, reference: "FORM-01", category: "urgent", tags: [1, 2], confirmed: true };
+      await assert.rejects(request("task.execute", { taskId: task.id, result: { ...valid, amount: 1 } }, true));
+      await assert.rejects(request("task.execute", { taskId: task.id, result: { ...valid, reference: "改写只读值" } }, true));
+      assert.equal((await request("task.get", { taskId: task.id })).status, "pending");
+      fixture.formTaskId = task.id;
+      console.log(JSON.stringify({ fixture }));
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  throw new Error("Owned form task was not created");
+}
+
+async function verifyFormTask(intent) {
+  await request("auth.login", intent.login, true);
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(intent.fixture.tag));
+  const task = await request("task.get", { taskId: intent.fixture.formTaskId });
+  assert(intent.fixture.runs.some(run => run.id === task.runId));
+  assert.equal(task.status, "completed");
+  const result = typeof task.result === "string" ? JSON.parse(task.result) : task.result;
+  for (const [key, value] of Object.entries({ reason: "真实办理校验", amount: 50, reference: "FORM-01", category: "urgent", tags: [1, 2], confirmed: true })) assert.deepEqual(result[key], value);
+  let complete = false;
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const run = await request("workflow.runDetail", { runId: task.runId });
+    assert.equal(run.ownerUserId, intent.fixture.userId);
+    if (run.status === "success") { complete = true; break; }
+    assert(!["failed", "cancelled", "terminated"].includes(run.status));
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  assert(complete, "Form task did not resume and finish its workflow");
+  console.log(JSON.stringify({ stage: "form-task-api", typedValuesPersisted: true, invalidBoundsRejected: true, readonlyTamperingRejected: true }));
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "start_form_task") await startFormTask(browserFixtureIntent);
+else if (browserFixtureIntent.action === "verify_form_task") await verifyFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_run_controls") await verifyRunControls(browserFixtureIntent);
 else if (browserFixtureIntent.action === "revoke_run_permission") await revokeRunPermission(browserFixtureIntent);
 else if (browserFixtureIntent.action === "finish_run_controls") await finishRunControls(browserFixtureIntent);

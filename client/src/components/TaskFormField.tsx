@@ -1,13 +1,17 @@
+import * as React from "react";
+
 export function TaskFormField({
   field,
   value,
   onChange,
   error,
+  errorId,
 }: {
   field: { label: string; type: string; readOnly: boolean; options: unknown[] };
   value: string;
   onChange: (value: string) => void;
   error?: string;
+  errorId?: string;
 }) {
   const className =
     "min-h-11 rounded border border-border bg-card px-3 py-2 text-sm font-normal disabled:opacity-70";
@@ -17,6 +21,7 @@ export function TaskFormField({
         type="checkbox"
         aria-label={field.label}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         className="size-5 accent-blue-600"
         checked={value === "true"}
         disabled={field.readOnly}
@@ -43,6 +48,7 @@ export function TaskFormField({
           role="group"
           aria-label={field.label}
           aria-invalid={Boolean(error)}
+          aria-describedby={error ? errorId : undefined}
           className="grid max-h-48 gap-1 overflow-y-auto rounded border border-border p-2"
         >
           {options.map((option, index) => {
@@ -79,6 +85,7 @@ export function TaskFormField({
       <select
         aria-label={field.label}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         className={className}
         disabled={field.readOnly}
         value={value}
@@ -100,6 +107,7 @@ export function TaskFormField({
       <textarea
         aria-label={field.label}
         aria-invalid={Boolean(error)}
+        aria-describedby={error ? errorId : undefined}
         className={`${className} min-h-20 resize-y`}
         value={value}
         readOnly={field.readOnly}
@@ -110,6 +118,7 @@ export function TaskFormField({
     <input
       aria-label={field.label}
       aria-invalid={Boolean(error)}
+      aria-describedby={error ? errorId : undefined}
       type={
         ["number", "email", "date"].includes(field.type) ? field.type : "text"
       }

@@ -12,6 +12,7 @@ import {
 } from "@shared/task-assignment";
 import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
+import { taskFormViewFields } from "@shared/task-form-view";
 import { visibleTaskFormErrors } from "@shared/task-form-feedback";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
@@ -2477,34 +2478,8 @@ function taskOutcomeOptions(task: any): Array<{
   ];
 }
 
-function taskFormFields(task: any): Array<{
-  key: string;
-  label: string;
-  type: string;
-  required: boolean;
-  defaultValue: string;
-  readOnly: boolean;
-  options: unknown[];
-}> {
-  const fields = task?.payload?.config?.formSchema?.fields;
-  if (!Array.isArray(fields)) return [];
-  return fields
-    .filter((item: any) => item && typeof item === "object")
-    .map((item: any) => ({
-      key: String(item.key ?? "").trim(),
-      label: String(item.label ?? "").trim() || String(item.key ?? "").trim(),
-      type: String(item.type ?? "text").toLowerCase(),
-      required: item.required === true,
-      readOnly: item.readOnly === true,
-      options: Array.isArray(item.options) ? item.options : [],
-      defaultValue: Array.isArray(item.defaultValue)
-        ? JSON.stringify(item.defaultValue)
-        : String(
-            item.defaultValue ??
-              (item.type === "boolean" && !item.readOnly ? false : "")
-          ),
-    }))
-    .filter((item: any) => item.key && item.label);
+function taskFormFields(task: any) {
+  return taskFormViewFields(task?.payload?.config?.formSchema);
 }
 
 function TaskDrawer({

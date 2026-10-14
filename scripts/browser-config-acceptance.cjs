@@ -16,6 +16,7 @@ const verifyProjectLifecycle = process.env.FLOW_UI_PROJECT_LIFECYCLE === "1";
 const verifyLoopPolicy = process.env.FLOW_UI_LOOP_POLICY === "1";
 const verifyWorkflowRevision = process.env.FLOW_UI_WORKFLOW_REVISION === "1";
 const verifyRunControls = process.env.FLOW_UI_RUN_CONTROLS === "1";
+const verifyFormPreview = process.env.FLOW_UI_FORM_PREVIEW === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -129,6 +130,7 @@ function executable() {
       pagination: verifyProjectPaging,
       loopPolicy: verifyLoopPolicy,
       runControls: verifyRunControls,
+      formPreview: verifyFormPreview,
       peerLogin,
     });
     assert.equal(fixture.workflows.length, 3 + Number(verifyLoopPolicy) + Number(verifyRunControls));
@@ -547,11 +549,78 @@ function executable() {
           path: path.join(directory, `${workflow.flowType}-form.png`),
           fullPage: true,
         });
+        if (verifyFormPreview) {
+          const preview = inspector.locator("[data-task-form-preview]");
+          await preview.locator("summary").click();
+          assert.equal(await preview.getByRole("alert").count(), 0);
+          assert.equal(await preview.getByLabel("申请说明", { exact: true }).inputValue(), "默认申请说明");
+          assert.equal(await preview.getByLabel("申请单号", { exact: true }).evaluate(input => input.readOnly), true);
+          const writes = [];
+          const track = request => { if (request.method() === "POST") writes.push(request.url()); };
+          page.on("request", track);
+          await preview.getByLabel("申请说明", { exact: true }).fill("");
+          await preview.getByLabel("订单金额", { exact: true }).fill("1");
+          await preview.getByRole("button", { name: "检查试填内容", exact: true }).click();
+          await preview.getByText("还有 2 项需要修正。", { exact: true }).waitFor();
+          assert.equal(await preview.getByLabel("订单金额", { exact: true }).getAttribute("aria-invalid"), "true");
+          const errorId = await preview.getByLabel("订单金额", { exact: true }).getAttribute("aria-describedby");
+          assert(errorId && await preview.locator(`[id="${errorId}"]`).isVisible());
+          await preview.getByLabel("申请说明", { exact: true }).fill("预览试填说明");
+          await preview.getByLabel("订单金额", { exact: true }).fill("50");
+          await preview.getByLabel("申请类别", { exact: true }).selectOption("urgent");
+          await preview.getByLabel("采购", { exact: true }).check();
+          await preview.getByLabel("已确认资料", { exact: true }).check();
+          await preview.getByText("试填校验通过。", { exact: true }).waitFor();
+          await preview.getByRole("button", { name: "恢复默认值", exact: true }).click();
+          assert.equal(await preview.getByLabel("订单金额", { exact: true }).inputValue(), "");
+          assert.equal(await preview.getByLabel("申请类别", { exact: true }).inputValue(), "normal");
+          assert.equal(await preview.getByLabel("采购", { exact: true }).isChecked(), false);
+          assert.equal(await preview.getByRole("alert").count(), 0);
+          assert.deepEqual(writes, []);
+          page.off("request", track);
+          await page.screenshot({ path: path.join(directory, `${workflow.flowType}-form-preview.png`), fullPage: true });
+          await preview.locator("summary").click();
+          console.log(JSON.stringify({ stage: "form-preview-browser", flowType: workflow.flowType, localOnly: true, requiredAndBounds: true, typedChoices: true, readonlyDefault: true, reset: true }));
+        }
         await page
           .getByRole("tab", { name: "结果与分支", exact: true })
           .click();
         if (verifyUpdated)
           assert((await inspector.innerText()).includes("拒绝即取消实例"));
+      }
+    }
+    if (verifyFormPreview) {
+      for (const workflow of fixture.workflows.filter(flow => ["state", "control"].includes(flow.flowType))) {
+        await remote({ action: "start_form_task", fixture, login, workflowId: workflow.id });
+        await page.goto(`${base}#/runs/workbench`, { waitUntil: "domcontentloaded" });
+        await page.getByRole("button", { name: "待办", exact: true }).click();
+        await page.getByLabel("搜索流程、任务节点或发起人", { exact: true }).fill(workflow.name);
+        const row = page.getByRole("row").filter({ hasText: workflow.name });
+        await row.getByRole("button", { name: "处理审批", exact: true }).click();
+        const drawer = page.getByRole("dialog");
+        await drawer.getByLabel("订单金额", { exact: true }).waitFor();
+        assert.equal(await drawer.getByLabel("申请说明", { exact: true }).inputValue(), "默认申请说明");
+        assert.equal(await drawer.getByLabel("申请单号", { exact: true }).inputValue(), "FORM-01");
+        assert.equal(await drawer.getByLabel("申请单号", { exact: true }).evaluate(input => input.readOnly), true);
+        const submit = drawer.getByRole("button", { name: "提交同意", exact: true });
+        assert.equal(await submit.isDisabled(), true);
+        await drawer.getByLabel("订单金额", { exact: true }).fill("1");
+        await drawer.getByLabel("申请说明", { exact: true }).focus();
+        await drawer.getByText("表单字段“订单金额”低于最小值。", { exact: true }).waitFor();
+        assert.equal(await submit.isDisabled(), true);
+        await drawer.getByLabel("订单金额", { exact: true }).fill("50");
+        await drawer.getByLabel("申请说明", { exact: true }).fill("真实办理校验");
+        await drawer.getByLabel("申请类别", { exact: true }).selectOption("urgent");
+        await drawer.getByLabel("采购", { exact: true }).check();
+        await drawer.getByLabel("已确认资料", { exact: true }).check();
+        assert.equal(await submit.isEnabled(), true);
+        await page.screenshot({ path: path.join(directory, `${workflow.flowType}-actual-task-form.png`), fullPage: true });
+        const executed = page.waitForResponse(response => response.url().includes("task.execute") && response.request().method() === "POST" && response.status() === 200);
+        await submit.click();
+        await executed;
+        await drawer.waitFor({ state: "hidden" });
+        console.log((await remote({ action: "verify_form_task", fixture, login })).trim());
+        console.log(JSON.stringify({ stage: "actual-task-form-browser", flowType: workflow.flowType, matchesPreview: true, boundsBlockSubmission: true, completed: true }));
       }
     }
     await page.goto(`${base}#/system/identity`, { waitUntil: "domcontentloaded" });

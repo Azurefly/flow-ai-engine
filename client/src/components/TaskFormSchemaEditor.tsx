@@ -1,6 +1,7 @@
 import * as React from "react";
 import { assertTaskFormSchema, taskFormInputValue } from "@shared/task-form";
 import { TaskFormField } from "./TaskFormField";
+import { TaskFormPreview } from "./TaskFormPreview";
 import { Button } from "./ui/button";
 
 type RecordValue = Record<string, unknown>;
@@ -66,6 +67,7 @@ export function TaskFormSchemaEditor({
       <p className="text-xs text-muted-foreground">
         显示名称供办理人查看；字段代号用于流程取值。字段顺序即办理时的显示顺序。
       </p>
+      <TaskFormPreview schema={schema} />
       {!fields.length && (
         <p className="rounded bg-muted p-3 text-sm text-muted-foreground">
           尚未添加字段，办理人只需选择处理结果。
