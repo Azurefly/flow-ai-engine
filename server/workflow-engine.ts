@@ -103,11 +103,13 @@ export class WorkflowExecutionInjectedCrash extends Error {
 }
 
 export function injectWorkflowExecutionFault(
-  point: WorkflowExecutionFaultPoint
+  point: WorkflowExecutionFaultPoint,
+  runtime?: JsonRecord
 ) {
   if (
     process.env.NODE_ENV === "test" &&
-    process.env.WORKFLOW_WORKER_FAULT_POINT === point
+    process.env.WORKFLOW_WORKER_FAULT_POINT === point &&
+    Number(runtime?.executionStepCount ?? 0) >= Number(process.env.WORKFLOW_WORKER_FAULT_MIN_STEP ?? 0)
   )
     throw new WorkflowExecutionInjectedCrash(point);
 }
@@ -2735,7 +2737,7 @@ async function persistWorkflowWait(input: {
   } finally {
     connection.release();
   }
-  injectWorkflowExecutionFault("after_wait_commit_before_checkpoint");
+  injectWorkflowExecutionFault("after_wait_commit_before_checkpoint", asRecord(input.context.runtime));
   return { waitId, checkpoint };
 }
 
@@ -3720,7 +3722,7 @@ export async function executeRunSegment(input: {
         } finally {
           artifactConnection.release();
         }
-        injectWorkflowExecutionFault("after_human_commit_before_checkpoint");
+        injectWorkflowExecutionFault("after_human_commit_before_checkpoint", asRecord(input.context.runtime));
         await persistCheckpoint({
           queue: [...input.queue],
           context: input.context,
@@ -3804,7 +3806,7 @@ export async function executeRunSegment(input: {
         // committed atomically before the durable job checkpoint advances. A
         // retry therefore re-enters this node idempotently if the worker dies
         // in this narrow two-phase window.
-        injectWorkflowExecutionFault("after_state_commit_before_checkpoint");
+        injectWorkflowExecutionFault("after_state_commit_before_checkpoint", asRecord(input.context.runtime));
       }
       if (node.type === "milestone")
         await persistMilestoneNode({

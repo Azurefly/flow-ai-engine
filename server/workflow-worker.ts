@@ -458,7 +458,7 @@ async function handleJobFailure(job: ClaimedJob, error: unknown) {
   );
 }
 
-async function processJob(job: ClaimedJob) {
+export async function processClaimedWorkflowJob(job: ClaimedJob) {
   const heartbeat = setInterval(
     () => {
       void renewLease(job).catch(error => {
@@ -520,7 +520,7 @@ export async function runWorkflowWorkerOnce() {
         exhaustedJobsReconciled > 0
       );
     lastWorkflowJobClaimed = true;
-    await processJob(job);
+    await processClaimedWorkflowJob(job);
     return true;
   } finally {
     processing = false;
