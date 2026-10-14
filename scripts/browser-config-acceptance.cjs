@@ -579,6 +579,13 @@ function executable() {
           assert.deepEqual(writes, []);
           page.off("request", track);
           await page.screenshot({ path: path.join(directory, `${workflow.flowType}-form-preview.png`), fullPage: true });
+          if (workflow.flowType === "state") {
+            await page.setViewportSize({ width: 390, height: 844 });
+            await preview.scrollIntoViewIfNeeded();
+            assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true);
+            await page.screenshot({ path: path.join(directory, "form-preview-mobile.png"), fullPage: true });
+            await page.setViewportSize({ width: 1440, height: 1000 });
+          }
           await preview.locator("summary").click();
           console.log(JSON.stringify({ stage: "form-preview-browser", flowType: workflow.flowType, localOnly: true, requiredAndBounds: true, typedChoices: true, readonlyDefault: true, reset: true }));
         }
@@ -593,7 +600,7 @@ function executable() {
       for (const workflow of fixture.workflows.filter(flow => ["state", "control"].includes(flow.flowType))) {
         await remote({ action: "start_form_task", fixture, login, workflowId: workflow.id });
         await page.goto(`${base}#/runs/workbench`, { waitUntil: "domcontentloaded" });
-        await page.getByRole("button", { name: "待办", exact: true }).click();
+        await page.locator("[data-workbench-view-navigation]").getByRole("button", { name: "待办", exact: true }).click();
         await page.getByLabel("搜索流程、任务节点或发起人", { exact: true }).fill(workflow.name);
         const row = page.getByRole("row").filter({ hasText: workflow.name });
         await row.getByRole("button", { name: "详情", exact: true }).click();
