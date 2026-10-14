@@ -13,6 +13,9 @@ import {
 import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
 import { taskFormViewFields } from "@shared/task-form-view";
+import { hasTaskDraftChanges } from "@shared/task-draft-dirty";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "./ui/alert-dialog";
 import { visibleTaskFormErrors } from "@shared/task-form-feedback";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
@@ -49,7 +52,7 @@ import {
   UserRoundPlus,
   UsersRound,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type View = "board" | "calendar" | "todo" | "done" | "initiated" | "all";
@@ -2539,18 +2542,21 @@ function TaskDrawer({
     () => taskFormFields(task),
     [task?.id, task?.formSchemaVersion, task?.payload]
   );
+  const [exitAction, setExitAction] = useState<(() => void) | null>(null);
+  const taskOpener = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement);
+  const initialOutcome = configuredOutcomes.find(item => item.code === "approved")?.code ?? configuredOutcomes[0]?.code ?? "approved";
+  const isDraftDirty = hasTaskDraftChanges({ rows: resultRows, initialRows: formFields.map(field => ({ key: field.key, value: field.defaultValue })), outcome: selectedOutcome?.code ?? "approved", initialOutcome, comment, targetUserId, reassignmentReason, removeMemberTaskId });
+  const requestExit = (action: () => void = onClose) => {
+    if (busy) return;
+    if (isDraftDirty) setExitAction(() => action);
+    else action();
+  };
   useEffect(() => {
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [onClose]);
+    if (!isDraftDirty && !busy) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [isDraftDirty, busy]);
   useEffect(() => {
     if (!configuredOutcomes.some(item => item.code === outcome))
       setOutcome(configuredOutcomes[0]?.code ?? "approved");
@@ -2630,48 +2636,42 @@ function TaskDrawer({
       )
     );
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-slate-900/25"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="workflow-task-drawer-title"
-      onMouseDown={event => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-    >
-      <section className="h-full w-full max-w-lg overflow-y-auto bg-card p-5 shadow-2xl">
+    <Dialog open onOpenChange={open => { if (!open) requestExit(); }}>
+      <DialogContent data-task-drawer="" showCloseButton={false}
+        onCloseAutoFocus={event => { event.preventDefault(); if (taskOpener.current?.isConnected) taskOpener.current.focus(); }}
+        className="top-0 right-0 bottom-0 left-auto block h-dvh w-full max-w-full translate-x-0 translate-y-0 overflow-y-auto rounded-none border-l bg-card p-5 shadow-2xl sm:max-w-lg">
         <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
           <div>
             <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
               MANUAL TASK
             </p>
-            <h3
-              id="workflow-task-drawer-title"
+            <DialogTitle
               className="mt-1 text-lg font-semibold text-foreground"
             >
               {task?.workflowName || "正在读取任务…"}
-            </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-sm text-muted-foreground">
               {task?.nodeName}
               {approvalLabel(task) && (
                 <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
                   {approvalProgressText(task)}
                 </span>
               )}
-            </p>
+            </DialogDescription>
           </div>
           <Button
             type="button"
             variant="ghost"
             className="min-h-11 min-w-11"
-            onClick={onClose}
+            onClick={() => requestExit()}
+            disabled={busy}
             autoFocus
           >
             关闭
           </Button>
         </div>
         {task && (
-          <div className="mt-5 space-y-5">
+          <fieldset disabled={busy} className="mt-5 min-w-0 space-y-5">
             {task.payload?.assignmentRecovery?.reason && (
               <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-6">
                 重新分配说明：{task.payload.assignmentRecovery.reason}
@@ -2689,7 +2689,7 @@ function TaskDrawer({
                       type="button"
                       variant="outline"
                       className="min-h-11 shrink-0"
-                      onClick={() => onOpenRun(String(task.runId))}
+                      onClick={() => requestExit(() => onOpenRun(String(task.runId)))}
                     >
                       查看运行详情
                     </Button>
@@ -3145,9 +3145,19 @@ function TaskDrawer({
                 </div>
               </div>
             )}
-          </div>
+          </fieldset>
         )}
-      </section>
-    </div>
+      </DialogContent>
+      <AlertDialog open={Boolean(exitAction)} onOpenChange={open => { if (!open) setExitAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogTitle>放弃未提交的填写？</AlertDialogTitle>
+          <AlertDialogDescription>任务中的表单、处理意见或转交设置尚未提交，关闭后将丢失本次填写。</AlertDialogDescription>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续填写</AlertDialogCancel>
+            <AlertDialogAction onClick={() => exitAction?.()}>放弃填写</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Dialog>
   );
 }

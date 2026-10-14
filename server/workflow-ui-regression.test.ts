@@ -393,7 +393,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalBytes = 1_440 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 428 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 430 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2706,9 +2706,13 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("PanelLeftClose");
     expect(processWorkbenchSource).toContain("PanelLeftOpen");
     expect(processWorkbenchSource).toContain(
-      'aria-labelledby="workflow-task-drawer-title"'
+      '<DialogTitle'
     );
-    expect(processWorkbenchSource).toContain('event.key === "Escape"');
+    expect(processWorkbenchSource).toContain('<Dialog open onOpenChange=');
+    expect(processWorkbenchSource).toContain('data-task-drawer=""');
+    expect(processWorkbenchSource).toContain('hasTaskDraftChanges({');
+    expect(processWorkbenchSource).toContain('if (busy) return; if (isDraftDirty) setExitAction(() => action)');
+    expect(processWorkbenchSource).toContain('window.addEventListener("beforeunload", warnBeforeUnload)');
     expect(processWorkbenchSource).toContain("data-process-workbench-loading");
     expect(processWorkbenchSource).toContain("正在读取已启动流程");
     expect(processWorkbenchSource).toContain(

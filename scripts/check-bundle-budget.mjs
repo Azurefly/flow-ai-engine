@@ -19,7 +19,8 @@ const maxChunkBytes = 450 * 1024;
 // Inline loop draft validation adds about 1.07 KiB raw / 0.38 KiB gzip.
 // Task form trial preview and the shared task display contract add 2.53 KiB raw.
 const maxTotalBytes = 1_440 * 1024;
-const maxTotalGzipBytes = 428 * 1024;
+// Task drawer draft protection adds about 0.82 KiB gzip.
+const maxTotalGzipBytes = 430 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

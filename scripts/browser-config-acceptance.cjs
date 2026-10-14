@@ -17,6 +17,7 @@ const verifyLoopPolicy = process.env.FLOW_UI_LOOP_POLICY === "1";
 const verifyWorkflowRevision = process.env.FLOW_UI_WORKFLOW_REVISION === "1";
 const verifyRunControls = process.env.FLOW_UI_RUN_CONTROLS === "1";
 const verifyFormPreview = process.env.FLOW_UI_FORM_PREVIEW === "1";
+const verifyTaskDraft = process.env.FLOW_UI_TASK_DRAFT === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -606,6 +607,11 @@ function executable() {
         await row.getByRole("button", { name: "详情", exact: true }).click();
         const drawer = page.getByRole("dialog");
         await drawer.getByLabel("订单金额", { exact: true }).waitFor();
+        if (verifyTaskDraft) {
+          await drawer.getByRole("button", { name: "关闭", exact: true }).focus();
+          await page.keyboard.press("Shift+Tab");
+          assert.equal(await drawer.evaluate(element => element.contains(document.activeElement)), true);
+        }
         assert.equal(await drawer.getByLabel("申请说明", { exact: true }).inputValue(), "默认申请说明");
         assert.equal(await drawer.getByLabel("申请单号", { exact: true }).inputValue(), "FORM-01");
         assert.equal(await drawer.getByLabel("申请单号", { exact: true }).evaluate(input => input.readOnly), true);
@@ -615,6 +621,23 @@ function executable() {
         await drawer.getByLabel("申请说明", { exact: true }).focus();
         await drawer.getByText("表单字段“订单金额”低于最小值。", { exact: true }).waitFor();
         assert.equal(await submit.isDisabled(), true);
+        if (verifyTaskDraft) {
+          assert.equal(await page.evaluate(() => window.dispatchEvent(new Event("beforeunload", { cancelable: true }))), false);
+          await page.keyboard.press("Escape");
+          const warning = page.getByRole("alertdialog", { name: "放弃未提交的填写？", exact: true });
+          await warning.waitFor();
+          await warning.getByRole("button", { name: "继续填写", exact: true }).click();
+          await warning.waitFor({ state: "hidden" });
+          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "1");
+          await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+          await warning.getByRole("button", { name: "放弃填写", exact: true }).click();
+          await drawer.waitFor({ state: "hidden" });
+          assert.equal(await row.getByRole("button", { name: "详情", exact: true }).evaluate(element => element === document.activeElement), true);
+          await row.getByRole("button", { name: "详情", exact: true }).click();
+          await drawer.getByLabel("订单金额", { exact: true }).waitFor();
+          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "");
+          console.log(JSON.stringify({ stage: "task-draft-browser", flowType: workflow.flowType, focusContained: true, escapeConfirm: true, cancelPreserved: true, discardExplicit: true, refreshProtected: true, openerFocusRestored: true }));
+        }
         await drawer.getByLabel("订单金额", { exact: true }).fill("50");
         await drawer.getByLabel("申请说明", { exact: true }).fill("真实办理校验");
         await drawer.getByLabel("申请类别", { exact: true }).selectOption("urgent");
@@ -623,7 +646,22 @@ function executable() {
         assert.equal(await submit.isEnabled(), true);
         await page.screenshot({ path: path.join(directory, `${workflow.flowType}-actual-task-form.png`), fullPage: true });
         const executed = page.waitForResponse(response => /task\.(execute|complete)/.test(response.url()) && response.request().method() === "POST" && response.status() === 200);
-        await submit.click();
+        if (verifyTaskDraft) {
+          let releaseSubmission;
+          const gate = new Promise(resolve => { releaseSubmission = resolve; });
+          const pattern = /\/api\/trpc\/task\.(execute|complete)/;
+          const hold = async route => { if (route.request().method() === "POST") await gate; await route.continue(); };
+          await page.route(pattern, hold);
+          try {
+            await submit.click();
+            await page.waitForFunction(() => document.querySelector("[data-task-drawer] button")?.disabled === true);
+            assert.equal(await drawer.getByLabel("订单金额", { exact: true }).isDisabled(), true);
+            await page.keyboard.press("Escape");
+            assert.equal(await drawer.isVisible(), true);
+            assert.equal(await page.getByRole("alertdialog").count(), 0);
+            console.log(JSON.stringify({ stage: "task-submitting-browser", flowType: workflow.flowType, fieldsLocked: true, closeBlocked: true }));
+          } finally { releaseSubmission(); await page.unroute(pattern, hold); }
+        } else await submit.click();
         await executed;
         await drawer.waitFor({ state: "hidden" });
         console.log((await remote({ action: "verify_form_task", fixture, login })).trim());
