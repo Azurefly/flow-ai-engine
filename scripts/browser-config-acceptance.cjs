@@ -256,8 +256,14 @@ function executable() {
         await target.getByLabel("密码", { exact: true }).fill(credentials.password);
         await target.getByRole("button", { name: "登录流程引擎", exact: true }).click();
         await target.locator('input[type="password"]').waitFor({ state: "hidden" });
+        await target.getByRole("button", { name: "退出", exact: true }).waitFor();
         await target.goto(monitorUrl, { waitUntil: "domcontentloaded" });
-        await target.locator("[data-run-detail-panel]").waitFor();
+        try { await target.locator("[data-run-detail-panel]").waitFor(); }
+        catch (error) {
+          fs.writeFileSync(path.join(directory, credentials.username.endsWith("_peer") ? "peer-monitor-failure.json" : "initiator-monitor-failure.json"), JSON.stringify({ url: target.url(), text: (await target.locator("body").innerText()).slice(0, 6000) }), "utf8");
+          await target.screenshot({ path: path.join(directory, "monitor-open-failure.png"), fullPage: true });
+          throw error;
+        }
       };
       const peerContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: "block" });
       const memberContext = await browser.newContext({ viewport: { width: 1440, height: 1000 }, serviceWorkers: "block" });
