@@ -596,13 +596,13 @@ function executable() {
         await page.getByRole("button", { name: "待办", exact: true }).click();
         await page.getByLabel("搜索流程、任务节点或发起人", { exact: true }).fill(workflow.name);
         const row = page.getByRole("row").filter({ hasText: workflow.name });
-        await row.getByRole("button", { name: "处理审批", exact: true }).click();
+        await row.getByRole("button", { name: "详情", exact: true }).click();
         const drawer = page.getByRole("dialog");
         await drawer.getByLabel("订单金额", { exact: true }).waitFor();
         assert.equal(await drawer.getByLabel("申请说明", { exact: true }).inputValue(), "默认申请说明");
         assert.equal(await drawer.getByLabel("申请单号", { exact: true }).inputValue(), "FORM-01");
         assert.equal(await drawer.getByLabel("申请单号", { exact: true }).evaluate(input => input.readOnly), true);
-        const submit = drawer.getByRole("button", { name: "提交同意", exact: true });
+        const submit = drawer.getByRole("button", { name: /^提交/ });
         assert.equal(await submit.isDisabled(), true);
         await drawer.getByLabel("订单金额", { exact: true }).fill("1");
         await drawer.getByLabel("申请说明", { exact: true }).focus();
@@ -615,7 +615,7 @@ function executable() {
         await drawer.getByLabel("已确认资料", { exact: true }).check();
         assert.equal(await submit.isEnabled(), true);
         await page.screenshot({ path: path.join(directory, `${workflow.flowType}-actual-task-form.png`), fullPage: true });
-        const executed = page.waitForResponse(response => response.url().includes("task.execute") && response.request().method() === "POST" && response.status() === 200);
+        const executed = page.waitForResponse(response => /task\.(execute|complete)/.test(response.url()) && response.request().method() === "POST" && response.status() === 200);
         await submit.click();
         await executed;
         await drawer.waitFor({ state: "hidden" });

@@ -756,11 +756,12 @@ async function startFormTask(intent) {
   for (let attempt = 0; attempt < 60; attempt++) {
     const task = (await request("task.list", { projectId: fixture.projectId, view: "todo", limit: 50 })).find(task => task.runId === run.runId);
     if (task) {
-      assert.equal(task.status, "pending");
+      assert(["pending", "claimed"].includes(task.status));
+      const action = task.status === "claimed" ? "task.complete" : "task.execute";
       const valid = { decision: "approved", outcome: "approved", reason: "真实办理校验", amount: 50, reference: "FORM-01", category: "urgent", tags: [1, 2], confirmed: true };
-      await assert.rejects(request("task.execute", { taskId: task.id, result: { ...valid, amount: 1 } }, true));
-      await assert.rejects(request("task.execute", { taskId: task.id, result: { ...valid, reference: "改写只读值" } }, true));
-      assert.equal((await request("task.get", { taskId: task.id })).status, "pending");
+      await assert.rejects(request(action, { taskId: task.id, result: { ...valid, amount: 1 } }, true), /低于最小值/);
+      await assert.rejects(request(action, { taskId: task.id, result: { ...valid, reference: "改写只读值" } }, true), /只读/);
+      assert.equal((await request("task.get", { taskId: task.id })).status, task.status);
       fixture.formTaskId = task.id;
       console.log(JSON.stringify({ fixture }));
       return;
