@@ -51,14 +51,14 @@ async function create(name, type, def) {
   return workflows.at(-1);
 }
 async function reserve(workflow) {
+  const actual = await own.request("workflow.get", { id: workflow.id });
+  assert(actual.ownerUserId === account.userId && actual.projectId === project.id && actual.name === workflow.name);
   for (let attempt = 0; attempt < 3; attempt++) {
     const started = await own.request("workflow.run", { workflowId: workflow.id, triggerType: "manual", idempotencyKey: `${tag}_${workflow.id}_${attempt}` }, true);
     runs.push({ id: started.runId, workflowId: workflow.id });
     reportFixture();
     const [found] = await pool.query("SELECT id FROM workflow_run_job WHERE runId=? ORDER BY createdAt LIMIT 1", [started.runId]);
     assert(found[0], "新建测试任务不存在。");
-    const actual = await own.request("workflow.get", { id: workflow.id });
-    assert(actual.ownerUserId === account.userId && actual.projectId === project.id && actual.name === workflow.name);
     const connection = await pool.getConnection();
     let reserved;
     try {
