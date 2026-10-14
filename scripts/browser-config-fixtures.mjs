@@ -721,7 +721,9 @@ async function finishRunControls(intent) {
   const run = await request("workflow.runDetail", { runId: fixture.controlRunId });
   assert.equal(run.ownerUserId, fixture.userId); assert.equal(run.workflowId, fixture.controlWorkflowId);
   if (["queued", "running", "waiting", "blocked"].includes(run.status)) await request("workflow.cancelRun", { runId: run.id }, true);
-  await request("workflow.revokeMember", { workflowId: fixture.controlWorkflowId, userId: fixture.disabledUserId, role: "operator" }, true);
+  const members = await request("workflow.members", { workflowId: fixture.controlWorkflowId });
+  if (members.some(member => Number(member.userId) === fixture.disabledUserId && member.role === "operator" && !member.revokedAt))
+    await request("workflow.revokeMember", { workflowId: fixture.controlWorkflowId, userId: fixture.disabledUserId, role: "operator" }, true);
   await request("project.revokeMember", { projectId: fixture.projectId, userId: fixture.disabledUserId }, true);
   await bootstrap();
   await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "disabled" }, true);
