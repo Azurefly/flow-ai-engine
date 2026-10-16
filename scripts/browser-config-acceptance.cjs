@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   chromium,
+  expect,
 } = require("../01-test/014-自动化脚本/e2e/node_modules/@playwright/test");
 const root = path.resolve(__dirname, "..");
 const base = "http://124.223.198.84:1180/";
@@ -632,7 +633,7 @@ function executable() {
           await drawer.getByRole("button", { name: "关闭", exact: true }).click();
           await warning.getByRole("button", { name: "放弃填写", exact: true }).click();
           await drawer.waitFor({ state: "hidden" });
-          assert.equal(await row.getByRole("button", { name: "详情", exact: true }).evaluate(element => element === document.activeElement), true);
+          await expect(row.getByRole("button", { name: "详情", exact: true })).toBeFocused({ timeout: 5000 });
           await row.getByRole("button", { name: "详情", exact: true }).click();
           await drawer.getByLabel("订单金额", { exact: true }).waitFor();
           assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "");
@@ -990,7 +991,7 @@ function executable() {
     const page = browser?.contexts()[0]?.pages()[0];
     if (page) {
       await page.screenshot({ path: path.join(directory, "failure.png"), fullPage: true }).catch(() => {});
-      const diagnostic = await page.evaluate(() => ({ url: location.href,
+      const diagnostic = await page.evaluate(() => ({ url: location.href, activeElement: { tag: document.activeElement?.tagName, text: document.activeElement?.textContent?.slice(0, 120), label: document.activeElement?.getAttribute("aria-label") },
         controls: [...document.querySelectorAll("input,button,[role='combobox']")].map(element => ({ tag: element.tagName, role: element.getAttribute("role"), label: element.getAttribute("aria-label"), labelledBy: element.getAttribute("aria-labelledby"), placeholder: element.getAttribute("placeholder"), visible: Boolean(element.getClientRects().length) })),
       })).catch(() => null);
       fs.writeFileSync(path.join(directory, "failure-controls.json"), JSON.stringify(diagnostic), "utf8");
@@ -1002,6 +1003,6 @@ function executable() {
       console.log((await remote({ action: "cleanup", fixture, login })).trim());
   }
 })().catch(error => {
-  console.error(error.message);
+  console.error(error.stack || error.message);
   process.exitCode = 1;
 });

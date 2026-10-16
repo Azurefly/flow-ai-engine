@@ -4,8 +4,8 @@ services:
   mysql:
     image: mysql:8.4
     restart: unless-stopped
-    # 目标主机当前约 3.3 GiB 且无 Swap。限制核心容器合计为 2.25 GiB，
-    # 为宿主系统和运维进程保留余量，同时严格低于部署上限 8 GiB。
+    # 核心容器硬限制合计 2.25 GiB，为宿主和运维进程保留内存。
+    # 低内存主机通过预构建镜像部署；运行容器不使用额外 Swap。
     mem_limit: 1536m
     mem_reservation: 768m
     memswap_limit: 1536m

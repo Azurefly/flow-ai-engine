@@ -1,5 +1,30 @@
 # Linux Docker 部署
 
+## 低内存服务器构建
+
+应用部署脚本要求本机编译前至少有 2 GiB 可用内存。内存不足时，在独立构建机生成镜像，通过 `docker image save` 导出，再把镜像包和同一提交的源码归档上传到部署服务器。
+
+通过 `FLOW_PREBUILT_IMAGE_TAR` 指定服务器上的镜像包绝对路径，通过 `FLOW_PREBUILT_IMAGE_SHA256` 提供 SHA256。脚本校验镜像包摘要、镜像内的源码指纹和构建时间，再继续应用切换和健康检查。数据库备份与容器一致性检查仍然执行。构建失败或摘要不匹配时，运行中的应用不切换。
+
+在 Linux 构建机的 Bash 中，从同一提交的干净源码目录构建：
+
+```bash
+SOURCE_HASH="$(bash scripts/source-fingerprint.sh)"
+BUILD_TIME="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+docker build --build-arg "BUILD_ID=source-$SOURCE_HASH" --build-arg "BUILD_TIME=$BUILD_TIME" -t flow-ai-engine:local .
+docker image save --output /tmp/flow-ai-engine-image.tar flow-ai-engine:local
+sha256sum /tmp/flow-ai-engine-image.tar
+```
+
+镜像包放在部署源码目录之外，上传后再次核对摘要，并在远程 Linux Bash 中执行：
+
+```bash
+sudo env FLOW_COMPOSE_ENV_FILE=/opt/flow-ai-engine/source/.env \
+  FLOW_PREBUILT_IMAGE_TAR=/tmp/flow-ai-engine-image.tar \
+  FLOW_PREBUILT_IMAGE_SHA256=替换为镜像包的SHA256 \
+  bash scripts/deploy-app.sh
+```
+
 ## 目标
 
 - 应用通过宿主机端口 `1180` 提供服务。

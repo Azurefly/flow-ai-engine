@@ -15,7 +15,7 @@ ENV BUILD_ID=${BUILD_ID}
 ENV BUILD_TIME=${BUILD_TIME}
 
 COPY . .
-RUN pnpm build
+RUN NODE_OPTIONS=--max-old-space-size=768 pnpm build
 
 FROM node:22-bookworm-slim AS runtime
 

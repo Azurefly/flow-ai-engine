@@ -48,12 +48,7 @@ while IFS= read -r -d '' secret_path; do
 done < <(sudo -n find "$SECRET_DIR" -mindepth 1 -maxdepth 1 -print0)
 
 cd "$ROOT"
-SOURCE_HASH="$({
-  find . \
-    \( -type d \( -name .git -o -name .cache -o -name node_modules -o -name dist -o -name docs -o -name reference-analysis-temp \) -prune \) -o \
-    \( -type f \( -name .env -o \( -name '.env.*' ! -name .env.example \) -o -name '*.log' \) -prune \) -o \
-    -type f -print0
-} | LC_ALL=C sort -z | xargs -0 -r sha256sum | sha256sum | awk '{print $1}')"
+SOURCE_HASH="$(bash "$SCRIPT_DIR/source-fingerprint.sh" "$ROOT")"
 [[ "$SOURCE_HASH" =~ ^[a-f0-9]{64}$ ]] || die "Could not compute the source fingerprint"
 
 BUILD_ID="source-$SOURCE_HASH"
@@ -204,7 +199,23 @@ if [[ -n "$APP_BEFORE_ID" ]]; then
 fi
 
 printf 'Building %s at %s\n' "$BUILD_ID" "$BUILD_TIME"
-compose build "$APP_SERVICE"
+if [[ -n "${FLOW_PREBUILT_IMAGE_TAR:-}" ]]; then
+  [[ "$FLOW_PREBUILT_IMAGE_TAR" == /* && -f "$FLOW_PREBUILT_IMAGE_TAR" && ! -L "$FLOW_PREBUILT_IMAGE_TAR" ]] || die "Prebuilt image must be an absolute regular file"
+  [[ "${FLOW_PREBUILT_IMAGE_SHA256:-}" =~ ^[a-f0-9]{64}$ ]] || die "Prebuilt image SHA256 is required"
+  [[ "$(sha256sum "$FLOW_PREBUILT_IMAGE_TAR" | awk '{print $1}')" == "$FLOW_PREBUILT_IMAGE_SHA256" ]] || die "Prebuilt image archive SHA256 mismatch"
+  docker_sudo image load --input "$FLOW_PREBUILT_IMAGE_TAR"
+  IMAGE_BUILD_ID="$(docker_sudo image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE_NAME" | sed -n 's/^BUILD_ID=//p')"
+  [[ "$IMAGE_BUILD_ID" == "$BUILD_ID" ]] || die "Prebuilt image source fingerprint mismatch"
+  IMAGE_BUILD_TIME="$(docker_sudo image inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$IMAGE_NAME" | sed -n 's/^BUILD_TIME=//p')"
+  [[ "$IMAGE_BUILD_TIME" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] || die "Prebuilt image build time is invalid"
+  BUILD_TIME="$IMAGE_BUILD_TIME"
+  RELEASE_TAG="flow-ai-engine:release-${SOURCE_HASH:0:16}-${BUILD_TIME//:/-}"
+  printf 'Verified prebuilt image: buildId=%s buildTime=%s\n' "$BUILD_ID" "$BUILD_TIME"
+else
+  AVAILABLE_BUILD_KIB="$(awk '/^MemAvailable:/ { print $2 }' /proc/meminfo)"
+  [[ "$AVAILABLE_BUILD_KIB" =~ ^[0-9]+$ && "$AVAILABLE_BUILD_KIB" -ge 2097152 ]] || die "Building requires at least 2 GiB available memory; build off-host and provide FLOW_PREBUILT_IMAGE_TAR with FLOW_PREBUILT_IMAGE_SHA256"
+  compose build "$APP_SERVICE"
+fi
 IMAGE_ID="$(docker_sudo image inspect --format '{{.Id}}' "$IMAGE_NAME")"
 [[ "$IMAGE_ID" =~ ^sha256:[a-f0-9]{64}$ ]] || die "Docker returned an invalid image ID"
 docker_sudo image tag "$IMAGE_ID" "$RELEASE_TAG"

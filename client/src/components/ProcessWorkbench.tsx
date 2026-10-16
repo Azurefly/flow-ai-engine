@@ -847,6 +847,7 @@ export default function ProcessWorkbench() {
       {selectedTaskId && (
         <TaskDrawer
           key={selectedTaskId}
+          taskId={selectedTaskId}
           task={taskDetail.data as any}
           assignees={(assignees.data ?? []) as any[]}
           assigneeQuery={assigneeQuery}
@@ -1465,6 +1466,7 @@ function TaskList({
                     variant="outline"
                     size="sm"
                     className={`min-h-11 ${selectable ? "flex-1" : "w-full"} text-xs text-aiflow-info`}
+                    data-task-open-id={task.id}
                     onClick={() => onTask(task.id)}
                   >
                     详情
@@ -1572,6 +1574,7 @@ function TaskList({
                       variant="ghost"
                       size="sm"
                       className="min-h-11 text-xs text-aiflow-info"
+                      data-task-open-id={task.id}
                       onClick={() => onTask(task.id)}
                     >
                       详情
@@ -2486,6 +2489,7 @@ function taskFormFields(task: any) {
 }
 
 function TaskDrawer({
+  taskId,
   task,
   assignees,
   assigneeQuery,
@@ -2638,7 +2642,14 @@ function TaskDrawer({
   return (
     <Dialog open onOpenChange={open => { if (!open) requestExit(); }}>
       <DialogContent data-task-drawer="" showCloseButton={false}
-        onCloseAutoFocus={event => { event.preventDefault(); if (taskOpener.current?.isConnected) taskOpener.current.focus(); }}
+        onCloseAutoFocus={event => {
+          event.preventDefault();
+          requestAnimationFrame(() => {
+            const opener = taskOpener.current;
+            const target = opener?.isConnected && opener !== document.body ? opener : Array.from(document.querySelectorAll<HTMLElement>("[data-task-open-id]")).find(element => element.dataset.taskOpenId === taskId);
+            target?.focus({ preventScroll: true });
+          });
+        }}
         className="top-0 right-0 bottom-0 left-auto block h-dvh w-full max-w-full translate-x-0 translate-y-0 overflow-y-auto rounded-none border-l bg-card p-5 shadow-2xl sm:max-w-lg">
         <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
           <div>

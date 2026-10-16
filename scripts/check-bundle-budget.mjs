@@ -18,7 +18,8 @@ const maxChunkBytes = 450 * 1024;
 // Draft revision conflicts, export/reload recovery, and cancel-publish reconfirm add about 0.76 KiB gzip.
 // Inline loop draft validation adds about 1.07 KiB raw / 0.38 KiB gzip.
 // Task form trial preview and the shared task display contract add 2.53 KiB raw.
-const maxTotalBytes = 1_440 * 1024;
+// Task opener lookup after nested dialogs adds about 0.23 KiB raw.
+const maxTotalBytes = 1_442 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
 const maxTotalGzipBytes = 430 * 1024;
 const maxHtmlBytes = 20 * 1024;

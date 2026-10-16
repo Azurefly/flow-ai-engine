@@ -33,6 +33,14 @@ const credentialAcceptanceScripts = [
 ].map(path => readFileSync(new URL(path, import.meta.url), "utf8"));
 
 describe("生产 Compose 内存限制", () => {
+  it("低内存部署拒绝现场构建，并校验离机构建的镜像和源码身份", () => {
+    expect(deployScript).toContain('"$AVAILABLE_BUILD_KIB" -ge 2097152');
+    expect(deployScript).toContain('FLOW_PREBUILT_IMAGE_SHA256');
+    expect(deployScript).toContain('Prebuilt image archive SHA256 mismatch');
+    expect(deployScript).toContain('"$IMAGE_BUILD_ID" == "$BUILD_ID"');
+    expect(deployScript.indexOf('Prebuilt image source fingerprint mismatch')).toBeLessThan(deployScript.indexOf('compose up -d --no-deps --force-recreate'));
+    expect(dockerfile).toContain('NODE_OPTIONS=--max-old-space-size=768 pnpm build');
+  });
   it("应用与 MySQL 的硬限制合计不超过 8 GiB，并禁用额外 Swap", () => {
     expect(compose).toMatch(/mysql:[\s\S]*?mem_limit:\s*1536m/);
     expect(compose).toMatch(/mysql:[\s\S]*?memswap_limit:\s*1536m/);
