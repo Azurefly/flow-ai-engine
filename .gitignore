@@ -187,3 +187,27 @@ allure-report/
 /.compare-backup-residue.sh
 /.deploy-*.sh
 /.deploy-*-test.yaml
+
+# Historical implementation plans and one-off fixture tools (keep locally)
+/docs/flow-ai-engine-ui-motion-redesign-proposal-2026.md
+/docs/organization-management-plan-2026-08-23.md
+/docs/three-flow-profile-implementation-design-2026-08-25.md
+/docs/ui-interaction-navigation-plan-2026-08-23.md
+/scripts/create-p0-ui-verifier.mjs
+/scripts/activate-existing-dataflow-schedule.mts
+/scripts/verify-existing-dataflow-schedule-lifecycle.mts
+
+# Local reference packages and browser/profiling output
+/.reference-audit/
+/reference-analysis-temp/
+/test-artifacts/
+/artifacts/
+**/playwright/.auth/
+**/.vitest/
+**/.v8-coverage/
+*.har
+*.cpuprofile
+*.heapprofile
+*.heapsnapshot
+junit.xml
+test-results*.xml
