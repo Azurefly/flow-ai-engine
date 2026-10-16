@@ -19,6 +19,7 @@ const verifyWorkflowRevision = process.env.FLOW_UI_WORKFLOW_REVISION === "1";
 const verifyRunControls = process.env.FLOW_UI_RUN_CONTROLS === "1";
 const verifyFormPreview = process.env.FLOW_UI_FORM_PREVIEW === "1";
 const verifyTaskDraft = process.env.FLOW_UI_TASK_DRAFT === "1";
+const verifyTaskLayout = process.env.FLOW_UI_TASK_LAYOUT === "1";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const login = {
   username: tag + "_admin",
@@ -669,6 +670,28 @@ function executable() {
         assert.equal(await drawer.getByLabel("申请单号", { exact: true }).evaluate(input => input.readOnly), true);
         const submit = drawer.getByRole("button", { name: /^提交/ });
         assert.equal(await submit.isDisabled(), true);
+        if (verifyTaskLayout) {
+          const body = drawer.locator(".task-body"), actions = drawer.locator("[data-task-actions]");
+          await expect(submit).toBeInViewport({ ratio: 1 });
+          assert.equal(await drawer.locator("[data-task-assignment]").evaluate(element => element.open), false);
+          await actions.locator(".task-feedback").click();
+          await expect(drawer.getByLabel("订单金额", { exact: true })).toBeFocused();
+          const errorId = await drawer.getByLabel("订单金额", { exact: true }).getAttribute("aria-describedby");
+          assert(errorId && await drawer.locator(`[id="${errorId}"]`).count() === 1);
+          await body.evaluate(element => { element.scrollTop = element.scrollHeight; });
+          await expect(submit).toBeInViewport({ ratio: 1 });
+          await expect(drawer.getByRole("button", { name: "关闭", exact: true })).toBeInViewport({ ratio: 1 });
+          await page.setViewportSize({ width: 390, height: 844 });
+          await expect(submit).toBeInViewport({ ratio: 1 });
+          assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
+          await page.screenshot({ path: path.join(directory, `${workflow.flowType}-task-layout-mobile.png`), fullPage: true });
+          await page.setViewportSize({ width: 1440, height: 1000 });
+          await body.evaluate(element => { element.scrollTop = 0; });
+          const first = await drawer.getByLabel("申请说明", { exact: true }).boundingBox();
+          assert(first && first.y < 500, "主表单仍未进入桌面首屏上半部分");
+          await page.screenshot({ path: path.join(directory, `${workflow.flowType}-task-layout-desktop.png`), fullPage: true });
+          console.log(JSON.stringify({ stage: "task-layout-browser", flowType: workflow.flowType, formPrioritized: true, footerAlwaysVisible: true, headerAlwaysVisible: true, mobileWithinViewport: true, errorFocusAndDescription: true }));
+        }
         await drawer.getByLabel("订单金额", { exact: true }).fill("1");
         await drawer.getByLabel("申请说明", { exact: true }).focus();
         await drawer.getByText("表单字段“订单金额”低于最小值。", { exact: true }).waitFor();
@@ -717,6 +740,49 @@ function executable() {
         await drawer.getByLabel("采购", { exact: true }).check();
         await drawer.getByLabel("已确认资料", { exact: true }).check();
         assert.equal(await submit.isEnabled(), true);
+        if (verifyTaskLayout) {
+          const extras = drawer.locator("[data-task-extra]"), names = extras.getByLabel("处理结果字段名称", { exact: true }), values = extras.getByLabel("处理结果字段值", { exact: true });
+          await extras.locator("summary").click();
+          assert.equal(await names.count(), 0, "配置字段仍可通过补充字段重复编辑");
+          await extras.getByRole("button", { name: /添加处理结果字段/ }).click();
+          await names.nth(0).fill("reference");
+          await values.nth(0).fill("补充记录");
+          await expect(submit).toBeDisabled();
+          await extras.getByRole("alert").waitFor();
+          assert.equal(await drawer.getByLabel("申请单号", { exact: true }).inputValue(), "FORM-01");
+          assert.equal(await drawer.getByLabel("申请单号", { exact: true }).getAttribute("aria-invalid"), "false");
+          await names.nth(0).fill("extra_note");
+          await extras.getByRole("button", { name: /添加处理结果字段/ }).click();
+          await names.nth(1).fill("extra_note");
+          await values.nth(1).fill("导航验收");
+          await extras.locator("summary").click();
+          await drawer.locator("[data-task-actions] .task-feedback").click();
+          await expect(names.nth(1)).toBeFocused();
+          assert.equal(await names.nth(1).getAttribute("aria-invalid"), "true");
+          await names.nth(1).fill("extra_tag");
+          await expect(submit).toBeEnabled();
+          await extras.locator("summary").click();
+          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "50");
+          await page.setViewportSize({ width: 390, height: 844 });
+          await expect(submit).toBeInViewport({ ratio: 1 });
+          await drawer.locator(".task-body").evaluate(element => { element.scrollTop = element.scrollHeight; });
+          await expect(submit).toBeInViewport({ ratio: 1 });
+          await page.screenshot({ path: path.join(directory, `${workflow.flowType}-task-ready-mobile.png`), fullPage: true });
+          await page.setViewportSize({ width: 1440, height: 1000 });
+          console.log(JSON.stringify({ stage: "task-extra-fields-browser", flowType: workflow.flowType, configuredFieldsProtected: true, duplicateBlocked: true, exactErrorFocused: true, correctionsPreserved: true, readyActionVisible: true }));
+          if (workflow.flowType === "state") {
+            const claimed = page.waitForResponse(response => response.url().includes("task.claim") && response.request().method() === "POST" && response.status() === 200);
+            await drawer.getByRole("button", { name: "仅领取，稍后处理", exact: true }).click();
+            await claimed;
+            await drawer.getByRole("button", { name: "仅领取，稍后处理", exact: true }).waitFor({ state: "hidden" });
+            assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "50");
+            assert.equal(await drawer.getByLabel("申请说明", { exact: true }).inputValue(), "真实办理校验");
+            assert.equal(await values.nth(0).inputValue(), "补充记录");
+            assert.equal(await values.nth(1).inputValue(), "导航验收");
+            await expect(submit).toBeEnabled();
+            console.log(JSON.stringify({ stage: "task-claim-draft-browser", fieldsPreserved: true, extrasPreserved: true, readyToComplete: true }));
+          }
+        }
         await page.screenshot({ path: path.join(directory, `${workflow.flowType}-actual-task-form.png`), fullPage: true });
         const executed = page.waitForResponse(response => /task\.(execute|complete)/.test(response.url()) && response.request().method() === "POST" && response.status() === 200);
         let removeSubmissionRoute = async () => {};
@@ -747,7 +813,7 @@ function executable() {
         await executed;
         await removeSubmissionRoute();
         await drawer.waitFor({ state: "hidden" });
-        console.log((await remote({ action: "verify_form_task", fixture, login })).trim());
+        console.log((await remote({ action: "verify_form_task", fixture, login, extraFields: verifyTaskLayout ? { extra_note: "补充记录", extra_tag: "导航验收" } : undefined })).trim());
         console.log(JSON.stringify({ stage: "actual-task-form-browser", flowType: workflow.flowType, matchesPreview: true, boundsBlockSubmission: true, completed: true }));
       }
     }

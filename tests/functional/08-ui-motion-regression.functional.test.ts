@@ -1160,10 +1160,10 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         'className="aiflow-type-code mt-1 block truncate whitespace-nowrap text-muted-foreground"'
       );
       expect(processWorkbenchSrc).toContain(
-        'className="aiflow-type-section-title font-semibold text-muted-foreground"'
+        'className="task-heading task-muted"'
       );
       expect(processWorkbenchSrc).toContain(
-        'className="aiflow-type-meta text-muted-foreground"'
+        'className="task-caption"'
       );
 
       // WorkflowDetailPage

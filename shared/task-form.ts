@@ -261,6 +261,31 @@ export function taskFormFieldErrors(fields: unknown[], submitted: unknown) {
   return errors;
 }
 
+export function taskAdditionalFieldError(
+  fields: ReadonlyArray<{ key: string }>,
+  rows: ReadonlyArray<{ key: string; value: string }>
+) {
+  const used = new Set([
+    "decision",
+    "outcome",
+    "comment",
+    "__proto__",
+    "constructor",
+    "prototype",
+    ...fields.map(field => field.key),
+  ]);
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index];
+    const key = row.key.trim();
+    if (!key && !row.value) continue;
+    if (!key) return { index, message: "请填写补充字段名称。" };
+    if (used.has(key))
+      return { index, message: `字段“${key}”已被占用，请更换补充字段名称。` };
+    used.add(key);
+  }
+  return null;
+}
+
 export function taskFormRowValues(
   fields: unknown[],
   rows: Array<{ key: string; value: string }>

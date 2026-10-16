@@ -779,6 +779,7 @@ async function verifyFormTask(intent) {
   assert.equal(task.status, "completed");
   const result = typeof task.result === "string" ? JSON.parse(task.result) : task.result;
   for (const [key, value] of Object.entries({ reason: "真实办理校验", amount: 50, reference: "FORM-01", category: "urgent", tags: [1, 2], confirmed: true })) assert.deepEqual(result[key], value);
+  for (const [key, value] of Object.entries(intent.extraFields ?? {})) { assert(["extra_note", "extra_tag"].includes(key)); assert.deepEqual(result[key], value); }
   let complete = false;
   for (let attempt = 0; attempt < 60; attempt++) {
     const run = await request("workflow.runDetail", { runId: task.runId });

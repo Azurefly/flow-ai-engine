@@ -3,6 +3,7 @@ import {
   taskFormInputValue,
   taskFormFieldErrors,
   taskFormRowValues,
+  taskAdditionalFieldError,
   validateFormSubmission,
 } from "@shared/task-form";
 import {
@@ -56,6 +57,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import "./task-drawer.css";
 
 type View = "board" | "calendar" | "todo" | "done" | "initiated" | "all";
 const labels: Record<View, string> = {
@@ -2549,9 +2551,29 @@ function TaskDrawer({
     [task?.id, task?.formSchemaVersion, task?.payload]
   );
   const [exitAction, setExitAction] = useState<(() => void) | null>(null);
-  const taskOpener = useRef<HTMLElement | null>(typeof document === "undefined" ? null : document.activeElement as HTMLElement);
-  const initialOutcome = configuredOutcomes.find(item => item.code === "approved")?.code ?? configuredOutcomes[0]?.code ?? "approved";
-  const isDraftDirty = hasTaskDraftChanges({ rows: resultRows, initialRows: formFields.map(field => ({ key: field.key, value: field.defaultValue })), outcome: selectedOutcome?.code ?? "approved", initialOutcome, comment, targetUserId, reassignmentReason, removeMemberTaskId });
+  const taskBody = useRef<HTMLFieldSetElement>(null);
+  const taskOpener = useRef<HTMLElement | null>(
+    typeof document === "undefined"
+      ? null
+      : (document.activeElement as HTMLElement)
+  );
+  const initialOutcome =
+    configuredOutcomes.find(item => item.code === "approved")?.code ??
+    configuredOutcomes[0]?.code ??
+    "approved";
+  const isDraftDirty = hasTaskDraftChanges({
+    rows: resultRows,
+    initialRows: formFields.map(field => ({
+      key: field.key,
+      value: field.defaultValue,
+    })),
+    outcome: selectedOutcome?.code ?? "approved",
+    initialOutcome,
+    comment,
+    targetUserId,
+    reassignmentReason,
+    removeMemberTaskId,
+  });
   const requestExit = (action: () => void = onClose) => {
     if (busy) return;
     if (isDraftDirty) setExitAction(() => action);
@@ -2563,7 +2585,10 @@ function TaskDrawer({
       event.preventDefault();
       requestExit((event as ConsoleNavigationEvent).detail.proceed);
     };
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
     window.addEventListener(consoleNavigationEvent, guardNavigation);
     window.addEventListener("beforeunload", warnBeforeUnload);
     return () => {
@@ -2614,13 +2639,44 @@ function TaskDrawer({
   const submissionFields = Array.isArray(rawFormFields) ? rawFormFields : [];
   const formErrors = taskFormFieldErrors(
     submissionFields,
-    createPayload(resultRows)
+    taskFormRowValues(formFields, resultRows.slice(0, formFields.length))
   );
   const visibleErrors = visibleTaskFormErrors(
     formErrors,
     touchedFormFields,
     formFields
   );
+  const invalidKeys = Object.keys(formErrors);
+  const additionalError = taskAdditionalFieldError(
+    formFields,
+    resultRows.slice(formFields.length)
+  );
+  const revealErrors = () => {
+    setTouchedFormFields(new Set(invalidKeys));
+    const root = taskBody.current;
+    const field = root?.querySelector<HTMLElement>(
+      '[data-task-field][data-invalid="true"]'
+    );
+    if (field)
+      (
+        field.querySelector<HTMLElement>(
+          "input:not(:disabled),textarea,select:not(:disabled)"
+        ) ?? field
+      ).focus();
+    else if (additionalError) {
+      const extras =
+        root?.querySelector<HTMLDetailsElement>("[data-task-extra]");
+      if (extras) {
+        extras.open = true;
+        extras
+          .querySelectorAll<HTMLInputElement>(
+            'input[aria-label="处理结果字段名称"]'
+          )
+          [additionalError.index]?.focus();
+      }
+    } else
+      root?.querySelector<HTMLTextAreaElement>("[data-task-comment]")?.focus();
+  };
   const setFormFieldValue = (key: string, value: string) =>
     setResultRows(rows => {
       const index = rows.findIndex(row => row.key === key);
@@ -2631,6 +2687,10 @@ function TaskDrawer({
           );
     });
   const submitResult = () => {
+    if (additionalError) {
+      toast.error(additionalError.message);
+      return;
+    }
     const payload = createPayload(resultRows);
     try {
       validateFormSubmission(submissionFields, payload);
@@ -2650,24 +2710,30 @@ function TaskDrawer({
       )
     );
   return (
-    <Dialog open onOpenChange={open => { if (!open) requestExit(); }}>
-      <DialogContent data-task-drawer="" showCloseButton={false}
+    <Dialog
+      open
+      onOpenChange={open => {
+        if (!open) requestExit();
+      }}
+    >
+      <DialogContent
+        data-task-drawer=""
+        showCloseButton={false}
         onCloseAutoFocus={event => {
           event.preventDefault();
-          requestAnimationFrame(() => restoreTaskDrawerFocus(taskId, taskOpener.current));
+          requestAnimationFrame(() =>
+            restoreTaskDrawerFocus(taskId, taskOpener.current)
+          );
         }}
-        className="top-0 right-0 bottom-0 left-auto block h-dvh w-full max-w-full translate-x-0 translate-y-0 overflow-y-auto rounded-none border-l bg-card p-5 shadow-2xl sm:max-w-lg">
-        <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
+        className="task-drawer"
+      >
+        <header className="task-header">
           <div>
-            <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
-              MANUAL TASK
-            </p>
-            <DialogTitle
-              className="mt-1 text-lg font-semibold text-foreground"
-            >
+            <p className="task-caption">人工任务</p>
+            <DialogTitle className="task-title">
               {task?.workflowName || "正在读取任务…"}
             </DialogTitle>
-            <DialogDescription className="mt-1 text-sm text-muted-foreground">
+            <DialogDescription className="task-subtitle">
               {task?.nodeName}
               {approvalLabel(task) && (
                 <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
@@ -2686,9 +2752,9 @@ function TaskDrawer({
           >
             关闭
           </Button>
-        </div>
+        </header>
         {task && (
-          <fieldset disabled={busy} className="mt-5 min-w-0 space-y-5">
+          <fieldset ref={taskBody} disabled={busy} className="task-body">
             {task.payload?.assignmentRecovery?.reason && (
               <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-6">
                 重新分配说明：{task.payload.assignmentRecovery.reason}
@@ -2706,7 +2772,9 @@ function TaskDrawer({
                       type="button"
                       variant="outline"
                       className="min-h-11 shrink-0"
-                      onClick={() => requestExit(() => onOpenRun(String(task.runId)))}
+                      onClick={() =>
+                        requestExit(() => onOpenRun(String(task.runId)))
+                      }
                     >
                       查看运行详情
                     </Button>
@@ -2721,61 +2789,267 @@ function TaskDrawer({
                 {taskHistoryNotice}
               </p>
             )}
-            <div className="rounded-lg border border-border bg-muted p-4">
-              <p className="aiflow-type-body font-semibold text-muted-foreground">
+            <section className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {badge(task.displayStatus || task.status)}
+                {task.dueAt && <span>截止于 {date(task.dueAt)}</span>}
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">
                 {taskInstructionLabel}
               </p>
-              <p className="mt-2 text-sm leading-6 text-foreground">
-                {taskInstruction}
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {badge(task.displayStatus || task.status)}
-                <span className="aiflow-type-meta text-muted-foreground">
-                  创建于 {date(task.createdAt)}
-                </span>
-                {task.formSchemaVersion && (
-                  <span className="aiflow-type-meta text-muted-foreground">
-                    表单版本 v{task.formSchemaVersion}
-                  </span>
-                )}
-                {task.dueAt && (
-                  <span className="aiflow-type-meta text-muted-foreground">
-                    截止于 {date(task.dueAt)}
-                  </span>
-                )}
-                {task.assignedName && (
-                  <span className="text-sm text-muted-foreground">
-                    指定处理人：{task.assignedName}
-                  </span>
-                )}
-                {task.claimedByName &&
-                  Number(task.claimedByUserId) !==
-                    Number(task.assignedUserId) && (
-                    <span className="text-sm text-muted-foreground">
-                      当前经办人：{task.claimedByName}
-                    </span>
+              <p className="task-instruction">{taskInstruction}</p>
+              <details>
+                <summary className="task-summary text-muted-foreground">
+                  任务信息
+                </summary>
+                <div className="task-info">
+                  <span>创建于 {date(task.createdAt)}</span>
+                  {task.formSchemaVersion && (
+                    <span>表单版本 v{task.formSchemaVersion}</span>
                   )}
-                {task.responsibleName && (
-                  <span className="text-sm text-muted-foreground">
-                    责任主体：{task.responsibleName}
-                  </span>
+                  {task.assignedName && (
+                    <span>指定处理人：{task.assignedName}</span>
+                  )}
+                  {task.claimedByName &&
+                    Number(task.claimedByUserId) !==
+                      Number(task.assignedUserId) && (
+                      <span>当前经办人：{task.claimedByName}</span>
+                    )}
+                  {task.responsibleName && (
+                    <span>责任主体：{task.responsibleName}</span>
+                  )}
+                  {task.representedName && (
+                    <span>代理关系：代表 {task.representedName} 办理</span>
+                  )}
+                </div>
+              </details>
+            </section>
+            {canManage && (
+              <div className="space-y-4">
+                {formFields.length > 0 && (
+                  <section data-task-form="" className="space-y-3">
+                    <p className="task-heading task-muted">
+                      任务表单 · v{task.formSchemaVersion ?? 1}
+                    </p>
+                    <div className="task-form-grid">
+                      {formFields.map((field, index) => (
+                        <div
+                          key={field.key}
+                          data-task-field={field.key}
+                          data-invalid={Boolean(formErrors[field.key])}
+                          tabIndex={-1}
+                          onBlur={event => {
+                            if (
+                              !event.currentTarget.contains(event.relatedTarget)
+                            ) {
+                              setTouchedFormFields(previous =>
+                                new Set(previous).add(field.key)
+                              );
+                            }
+                          }}
+                          className={`task-field ${["textarea", "multiselect"].includes(field.type) ? "task-field-wide" : ""}`}
+                        >
+                          <span>
+                            {field.label}
+                            {field.required ? "（必填）" : "（可选）"}
+                            {field.readOnly && (
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                只读
+                              </span>
+                            )}
+                          </span>
+                          <TaskFormField
+                            field={field}
+                            error={visibleErrors[field.key]}
+                            errorId={`task-field-error-${index}`}
+                            value={
+                              resultRows.find(row => row.key === field.key)
+                                ?.value ?? ""
+                            }
+                            onChange={value =>
+                              setFormFieldValue(field.key, value)
+                            }
+                          />
+                          {visibleErrors[field.key] && (
+                            <p
+                              role="alert"
+                              id={`task-field-error-${index}`}
+                              className="text-xs font-normal text-red-600"
+                            >
+                              {visibleErrors[field.key]}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
                 )}
-                {task.representedName && (
-                  <span className="text-sm text-indigo-700">
-                    代理关系：代表 {task.representedName} 办理
-                  </span>
-                )}
-              </div>
-            </div>
-            {(canManage || canReassign) && (
-              <div className="rounded-lg border border-aiflow-info-border bg-aiflow-info-surface/50 p-4">
-                <p className="aiflow-type-body font-semibold text-foreground">
-                  {canReassign ? "重新分配任务" : "任务移交与回退"}
+                <p className="text-sm font-semibold text-foreground">
+                  审批决定
                 </p>
-                <p className="aiflow-type-body mt-1 text-muted-foreground">
+                <p className="task-muted">选择处理结果，填写意见后提交。</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {configuredOutcomes.map(item => (
+                    <Button
+                      key={item.code}
+                      type="button"
+                      variant={outcome === item.code ? "default" : "outline"}
+                      aria-pressed={outcome === item.code}
+                      className="min-h-11 flex-1"
+                      onClick={() => setOutcome(item.code)}
+                    >
+                      {item.label}
+                    </Button>
+                  ))}
+                </div>
+                <label className="mt-3 grid gap-1 text-sm font-medium text-foreground">
+                  处理意见{commentRequired ? "（必填）" : "（可选）"}
+                  <textarea
+                    className="task-input task-textarea"
+                    data-task-comment=""
+                    maxLength={2000}
+                    value={comment}
+                    onChange={event => setComment(event.target.value)}
+                    placeholder={
+                      commentRequired
+                        ? "请说明拒绝原因"
+                        : decision === "abstained"
+                          ? "可说明弃权原因"
+                          : "可填写审批意见"
+                    }
+                  />
+                </label>
+                <details data-task-extra="" className="task-secondary">
+                  <summary className="cursor-pointer text-sm font-medium text-foreground">
+                    附加结果字段（可选）
+                  </summary>
+                  {additionalError && (
+                    <p
+                      role="alert"
+                      id="task-extra-error"
+                      className="text-sm text-destructive"
+                    >
+                      {additionalError.message}
+                    </p>
+                  )}
+                  <div className="mt-3 grid gap-2">
+                    {resultRows.slice(formFields.length).map((row, index) => (
+                      <div key={index} className="task-extra-row">
+                        <input
+                          className="task-input task-extra-key"
+                          aria-label="处理结果字段名称"
+                          aria-invalid={additionalError?.index === index}
+                          aria-describedby={
+                            additionalError?.index === index
+                              ? "task-extra-error"
+                              : undefined
+                          }
+                          placeholder="字段名"
+                          value={row.key}
+                          onChange={event =>
+                            updateRow(
+                              formFields.length + index,
+                              "key",
+                              event.target.value
+                            )
+                          }
+                        />
+                        <input
+                          className="task-input"
+                          aria-label="处理结果字段值"
+                          placeholder="字段值"
+                          value={row.value}
+                          onChange={event =>
+                            updateRow(
+                              formFields.length + index,
+                              "value",
+                              event.target.value
+                            )
+                          }
+                        />
+                        <button
+                          type="button"
+                          className="task-delete"
+                          onClick={() =>
+                            setResultRows(rows =>
+                              rows.filter(
+                                (_, rowIndex) =>
+                                  rowIndex !== formFields.length + index
+                              )
+                            )
+                          }
+                          aria-label="删除处理结果字段"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="w-fit text-xs font-medium text-aiflow-info hover:underline"
+                      onClick={() =>
+                        setResultRows(rows => [...rows, { key: "", value: "" }])
+                      }
+                    >
+                      + 添加处理结果字段
+                    </button>
+                  </div>
+                </details>
+              </div>
+            )}
+            {task.status === "completed" && (
+              <div>
+                <p className="task-heading task-muted">处理结果</p>
+                <div className="task-history">
+                  {resultView.outcome && (
+                    <p className="text-sm font-semibold">
+                      {resultView.outcome}
+                    </p>
+                  )}
+                  <dl className="space-y-3">
+                    {resultView.rows.map(row => (
+                      <div
+                        key={row.key}
+                        className="grid gap-1 border-b border-border/60 pb-2 last:border-0 last:pb-0"
+                      >
+                        <dt className="text-xs text-muted-foreground">
+                          {row.label}
+                        </dt>
+                        <dd className="whitespace-pre-wrap break-words text-sm text-foreground">
+                          {row.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {resultView.comment && (
+                    <div className="border-t border-border pt-3">
+                      <p className="text-xs text-muted-foreground">处理意见</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm">
+                        {resultView.comment}
+                      </p>
+                    </div>
+                  )}
+                  {!resultView.rows.length &&
+                    !resultView.outcome &&
+                    !resultView.comment && (
+                      <p className="task-muted">未记录处理结果。</p>
+                    )}
+                </div>
+              </div>
+            )}
+            {(canManage || canReassign) && (
+              <details
+                data-task-assignment=""
+                open={canReassign || undefined}
+                className="task-secondary"
+              >
+                <summary className="task-summary">
+                  {canReassign ? "重新分配任务" : "任务移交与回退"}
+                </summary>
+                <p className="task-muted">
                   {canReassign
                     ? `${task.reassignmentReason}填写原因并选择新处理人，分配后等待其办理。`
-                    : "仅显示拥有该流程运行权限的内部用户。移交变更责任人；代理同时保留被代理主体。两者都不会直接推进流程。"}
+                    : "移交变更责任人，代理保留被代理主体；两者均不推进流程。候选人须有运行权限。"}
                 </p>
                 {canReassign && (
                   <textarea
@@ -2787,7 +3061,7 @@ function TaskDrawer({
                     }
                     maxLength={500}
                     rows={3}
-                    className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="task-input task-textarea"
                   />
                 )}
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -2871,12 +3145,8 @@ function TaskDrawer({
                 )}
                 {canManage && task.approvalGroupId && (
                   <div className="mt-3 border-t border-aiflow-info-border pt-3">
-                    <p className="aiflow-type-body font-semibold text-foreground">
-                      加签与减签
-                    </p>
-                    <p className="aiflow-type-body mt-1 text-muted-foreground">
-                      成员变更使用任务组版本校验；已领取或已决定的成员不能减签。
-                    </p>
+                    <p className="task-heading">加签与减签</p>
+                    <p className="task-muted">已领取或已决定的成员不能减签。</p>
                     <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                       <Button
                         type="button"
@@ -2899,7 +3169,7 @@ function TaskDrawer({
                         onChange={event =>
                           setRemoveMemberTaskId(event.target.value)
                         }
-                        className="h-9 min-w-0 flex-1 rounded border border-border bg-card px-2 text-sm"
+                        className="task-input flex-1"
                       >
                         <option value="">选择未处理成员</option>
                         {(task.approvalMembers ?? [])
@@ -2946,232 +3216,73 @@ function TaskDrawer({
                     退回待处理
                   </Button>
                 )}
-              </div>
-            )}
-            {canManage && (
-              <div className="rounded-lg border border-aiflow-success-border bg-aiflow-success-surface/40 p-4">
-                {formFields.length > 0 && (
-                  <div className="mb-4 rounded-lg border border-border bg-card p-3">
-                    <p className="aiflow-type-section-title font-semibold text-muted-foreground">
-                      任务表单 · v{task.formSchemaVersion ?? 1}
-                    </p>
-                    <div className="mt-3 grid gap-3">
-                      {formFields.map(field => (
-                        <div
-                          key={field.key}
-                          onBlur={event => {
-                            if (
-                              !event.currentTarget.contains(event.relatedTarget)
-                            ) {
-                              setTouchedFormFields(previous =>
-                                new Set(previous).add(field.key)
-                              );
-                            }
-                          }}
-                          className="grid gap-1 text-sm font-medium text-foreground"
-                        >
-                          {field.label}
-                          {field.required ? "（必填）" : "（可选）"}
-                          <TaskFormField
-                            field={field}
-                            error={visibleErrors[field.key]}
-                            value={
-                              resultRows.find(row => row.key === field.key)
-                                ?.value ?? ""
-                            }
-                            onChange={value =>
-                              setFormFieldValue(field.key, value)
-                            }
-                          />
-                          {visibleErrors[field.key] && (
-                            <p
-                              role="alert"
-                              className="text-xs font-normal text-red-600"
-                            >
-                              {visibleErrors[field.key]}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <p className="aiflow-type-body font-semibold text-foreground">
-                  审批决定
-                </p>
-                <p className="aiflow-type-body mt-1 text-muted-foreground">
-                  仅展示当前操作合同允许的结果，提交后由服务端选择唯一后继分支。
-                </p>
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {configuredOutcomes.map(item => (
-                    <Button
-                      key={item.code}
-                      type="button"
-                      variant={outcome === item.code ? "default" : "outline"}
-                      className={`min-h-11 ${outcome === item.code ? (item.code === "approved" ? "bg-emerald-600 hover:bg-emerald-500" : item.code === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-red-600 hover:bg-red-500") : ""}`}
-                      onClick={() => setOutcome(item.code)}
-                    >
-                      {item.label}
-                    </Button>
-                  ))}
-                </div>
-                <label className="mt-3 grid gap-1 text-sm font-medium text-foreground">
-                  处理意见{commentRequired ? "（必填）" : "（可选）"}
-                  <textarea
-                    className="min-h-20 resize-y rounded border border-border bg-card px-3 py-2 text-sm font-normal outline-none focus:border-blue-400"
-                    maxLength={2000}
-                    value={comment}
-                    onChange={event => setComment(event.target.value)}
-                    placeholder={
-                      commentRequired
-                        ? "请说明拒绝原因"
-                        : decision === "abstained"
-                          ? "可说明弃权原因"
-                          : "可填写审批意见"
-                    }
-                  />
-                </label>
-                <details className="mt-3 rounded border border-border bg-card/70 p-3">
-                  <summary className="cursor-pointer text-sm font-medium text-foreground">
-                    附加结果字段（可选）
-                  </summary>
-                  <div className="mt-3 grid gap-2">
-                    {resultRows.map((row, index) => (
-                      <div
-                        key={index}
-                        className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
-                      >
-                        <input
-                          className="col-span-2 h-9 min-w-0 rounded border border-border bg-card px-2 text-sm sm:col-span-1"
-                          aria-label="处理结果字段名称"
-                          placeholder="字段名"
-                          value={row.key}
-                          onChange={event =>
-                            updateRow(index, "key", event.target.value)
-                          }
-                        />
-                        <input
-                          className="h-9 min-w-0 rounded border border-border bg-card px-2 text-sm"
-                          aria-label="处理结果字段值"
-                          placeholder="字段值"
-                          value={row.value}
-                          onChange={event =>
-                            updateRow(index, "value", event.target.value)
-                          }
-                        />
-                        <button
-                          type="button"
-                          className="min-h-11 min-w-11 rounded px-2 text-muted-foreground hover:text-red-600"
-                          onClick={() =>
-                            setResultRows(rows =>
-                              rows.filter((_, rowIndex) => rowIndex !== index)
-                            )
-                          }
-                          aria-label="删除处理结果字段"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="w-fit text-xs font-medium text-aiflow-info hover:underline"
-                      onClick={() =>
-                        setResultRows(rows => [...rows, { key: "", value: "" }])
-                      }
-                    >
-                      + 添加处理结果字段
-                    </button>
-                  </div>
-                </details>
-                {Object.keys(formErrors).length > 0 && (
-                  <p
-                    role="status"
-                    className="aiflow-type-body mt-3 text-muted-foreground"
-                  >
-                    请完成必填字段并修正格式后提交。
-                  </p>
-                )}
-                <Button
-                  className={`mt-3 min-h-11 w-full ${decision === "rejected" ? "bg-red-600 hover:bg-red-500" : decision === "abstained" ? "bg-slate-600 hover:bg-slate-500" : "bg-emerald-600 hover:bg-emerald-500"}`}
-                  disabled={
-                    busy ||
-                    Object.keys(formErrors).length > 0 ||
-                    (commentRequired && !comment.trim())
-                  }
-                  onClick={submitResult}
-                >
-                  {busy && <Loader2 className="animate-spin" size={15} />}
-                  {`提交${selectedOutcome?.label ?? task.operationName ?? "操作结果"}`}
-                </Button>
-                {task.status === "pending" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 min-h-11 w-full"
-                    disabled={busy}
-                    onClick={onClaim}
-                  >
-                    仅领取，稍后处理
-                  </Button>
-                )}
-              </div>
-            )}
-            {task.status === "completed" && (
-              <div>
-                <p className="aiflow-type-body font-semibold text-muted-foreground">
-                  处理结果
-                </p>
-                <div className="mt-2 space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-                  {resultView.outcome && (
-                    <p className="text-sm font-semibold">
-                      {resultView.outcome}
-                    </p>
-                  )}
-                  <dl className="space-y-3">
-                    {resultView.rows.map(row => (
-                      <div
-                        key={row.key}
-                        className="grid gap-1 border-b border-border/60 pb-2 last:border-0 last:pb-0"
-                      >
-                        <dt className="text-xs text-muted-foreground">
-                          {row.label}
-                        </dt>
-                        <dd className="whitespace-pre-wrap break-words text-sm text-foreground">
-                          {row.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                  {resultView.comment && (
-                    <div className="border-t border-border pt-3">
-                      <p className="text-xs text-muted-foreground">处理意见</p>
-                      <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-                        {resultView.comment}
-                      </p>
-                    </div>
-                  )}
-                  {!resultView.rows.length &&
-                    !resultView.outcome &&
-                    !resultView.comment && (
-                      <p className="text-sm text-muted-foreground">
-                        未记录处理结果。
-                      </p>
-                    )}
-                </div>
-              </div>
+              </details>
             )}
           </fieldset>
         )}
+        {canManage && (
+          <footer data-task-actions="" className="task-actions">
+            {(invalidKeys.length > 0 ||
+              additionalError ||
+              (commentRequired && !comment.trim())) && (
+              <button
+                type="button"
+                className="task-feedback"
+                disabled={busy}
+                onClick={revealErrors}
+              >
+                {invalidKeys.length
+                  ? `还有 ${invalidKeys.length} 项需要填写或修正，点击查看`
+                  : additionalError?.message || "请填写处理意见"}
+              </button>
+            )}
+            <div className="flex gap-2">
+              {task.status === "pending" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11 flex-1"
+                  disabled={busy}
+                  onClick={onClaim}
+                >
+                  仅领取，稍后处理
+                </Button>
+              )}
+              <Button
+                className="task-submit min-h-11 flex-1"
+                variant={decision === "rejected" ? "destructive" : "default"}
+                disabled={
+                  busy ||
+                  invalidKeys.length > 0 ||
+                  Boolean(additionalError) ||
+                  (commentRequired && !comment.trim())
+                }
+                onClick={submitResult}
+              >
+                {busy && <Loader2 className="animate-spin" size={15} />}
+                {`提交${selectedOutcome?.label ?? task.operationName ?? "操作结果"}`}
+              </Button>
+            </div>
+          </footer>
+        )}
       </DialogContent>
-      <AlertDialog open={Boolean(exitAction)} onOpenChange={open => { if (!open) setExitAction(null); }}>
+      <AlertDialog
+        open={Boolean(exitAction)}
+        onOpenChange={open => {
+          if (!open) setExitAction(null);
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogTitle>放弃未提交的填写？</AlertDialogTitle>
-          <AlertDialogDescription>离开会丢失尚未提交的表单、处理意见和转交设置。</AlertDialogDescription>
+          <AlertDialogDescription>
+            离开会丢失尚未提交的表单、处理意见和转交设置。
+          </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>继续填写</AlertDialogCancel>
-            <AlertDialogAction onClick={() => exitAction?.()}>放弃填写</AlertDialogAction>
+            <AlertDialogAction onClick={() => exitAction?.()}>
+              放弃填写
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

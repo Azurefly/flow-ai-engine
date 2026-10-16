@@ -2401,7 +2401,7 @@ describe("流程设计器界面回归约束", () => {
     expect(workflowEngineSource).toContain("resolveOperateOutcomeRouting");
     expect(workflowEngineSource).toContain("workflow_state_transition");
     expect(processWorkbenchSource).toContain("taskOutcomeOptions");
-    expect(processWorkbenchSource).toContain("仅展示当前操作合同允许的结果");
+    expect(processWorkbenchSource).toContain("选择处理结果，填写意见后提交。");
   });
 
   it("恢复安装包设计器的画布工具、配置状态、帮助提示与字段化配置面板", () => {
@@ -2773,7 +2773,7 @@ describe("流程设计器界面回归约束", () => {
   it("可查看但不归当前用户处理的待办只显示只读说明", () => {
     expect(p1ServiceSource).toContain("...taskActionState(user.id, task)");
     expect(p1ServiceSource).toContain("...taskActionState(user.id, row)");
-    expect(processWorkbenchSource.match(/\{canManage && \(/g)).toHaveLength(2);
+    expect(processWorkbenchSource).toMatch(/\{canManage && \(\s*<footer data-task-actions/);
     expect(processWorkbenchSource).toContain(
       "此任务仅供查看；处理操作由指定处理人完成。"
     );
