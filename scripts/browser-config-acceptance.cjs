@@ -123,6 +123,7 @@ function executable() {
 
 (async () => {
   let browser;
+  const diagnostics = [];
   try {
     await remote({
       action: "setup",
@@ -158,6 +159,14 @@ function executable() {
     const page = await context.newPage();
     page.setDefaultTimeout(15000);
     const errors = [];
+    page.on("requestfailed", request => diagnostics.push({ path: new URL(request.url()).pathname, error: request.failure()?.errorText }));
+    page.on("response", response => { const path = new URL(response.url()).pathname; if (response.status() >= 400 && path.endsWith(".js")) diagnostics.push({ asset: path, status: response.status() }); });
+    page.on("console", message => {
+      if (message.type() !== "error") return;
+      let text = message.text();
+      for (const secret of [login.password, memberLogin.password, peerLogin.password]) text = text.replaceAll(secret, "[credential]");
+      diagnostics.push({ console: text.slice(0, 1000), location: message.location().url?.split("?")[0] });
+    });
     const requests = [];
     page.on("request", request => requests.push(request.url()));
     page.on("pageerror", error => errors.push(error.message));
@@ -602,6 +611,11 @@ function executable() {
       for (const workflow of fixture.workflows.filter(flow => ["state", "control"].includes(flow.flowType))) {
         await remote({ action: "start_form_task", fixture, login, workflowId: workflow.id });
         await page.goto(`${base}#/runs/workbench`, { waitUntil: "domcontentloaded" });
+        await page.waitForFunction(() => document.querySelector("[data-workbench-view-navigation]") || document.body.textContent.includes("页面内容未能加载"));
+        if (await page.getByRole("button", { name: "刷新页面", exact: true }).count()) {
+          console.log(JSON.stringify({ stage: "workbench-load-recovery", diagnostics }));
+          await page.getByRole("button", { name: "刷新页面", exact: true }).click();
+        }
         await page.locator("[data-workbench-view-navigation]").getByRole("button", { name: "待办", exact: true }).click();
         await page.getByLabel("搜索流程、任务节点或发起人", { exact: true }).fill(workflow.name);
         const row = page.getByRole("row").filter({ hasText: workflow.name });
@@ -992,6 +1006,7 @@ function executable() {
       assert.equal(requests.some(url => /(?:\/|,)project\.list(?:\?|,|$)/.test(url)), false, "浏览器仍在读取全量项目列表");
     assert.deepEqual(errors, []);
   } catch (error) {
+    if (typeof diagnostics !== "undefined") fs.writeFileSync(path.join(directory, "browser-diagnostics.json"), JSON.stringify(diagnostics), "utf8");
     const page = browser?.contexts()[0]?.pages()[0];
     if (page) {
       await page.screenshot({ path: path.join(directory, "failure.png"), fullPage: true }).catch(() => {});
