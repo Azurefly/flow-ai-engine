@@ -50,6 +50,8 @@ import {
   type ConsoleSection,
 } from "../../../shared/console-route";
 import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-navigation";
+import { createGuardedConsoleHistory, type GuardedConsoleHistory, type ConsoleHistoryEntry } from "@shared/guarded-console-history";
+import { requestConsoleNavigation } from "@/lib/console-navigation-guard";
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
 import {
   canPublishWorkflowVersion,
@@ -184,16 +186,24 @@ type CompileCheckState = {
   message?: string;
 };
 
+function requestedConsoleRoute(entry: ConsoleHistoryEntry): RequestedConsoleRoute {
+  const editorReturn = entry.state.aiflowEditorReturn;
+  return {
+    route: parseConsoleRoute(entry.url),
+    ...((["center", "workspace", "detail", "warehouse"] as readonly unknown[]).includes(editorReturn)
+      ? { editorReturn: editorReturn as FlowEditorReturn }
+      : {}),
+  };
+}
+
+function readConsoleHistory(): ConsoleHistoryEntry {
+  return { url: window.location.hash, state: window.history.state ?? {} };
+}
+
 function readConsoleRoute(): RequestedConsoleRoute {
   if (typeof window === "undefined")
     return { route: { section: "flows", view: "center" } };
-  const editorReturn = window.history.state?.aiflowEditorReturn;
-  return {
-    route: parseConsoleRoute(window.location.hash),
-    ...(["center", "workspace", "detail", "warehouse"].includes(editorReturn)
-      ? { editorReturn }
-      : {}),
-  };
+  return requestedConsoleRoute(readConsoleHistory());
 }
 
 function decodeJson(value: unknown) {
@@ -483,7 +493,27 @@ function FlowConsole({
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
   const unsavedWorkflowId = useRef<string | null>(null);
-  const [pendingNavigation, setPendingNavigation] = useState<RequestedConsoleRoute | null>(null);
+  const [pendingNavigation, setPendingNavigation] = useState<{ proceed: () => void } | null>(null);
+  const consoleHistory = useRef<GuardedConsoleHistory | null>(null);
+  if (!consoleHistory.current && typeof window !== "undefined") {
+    consoleHistory.current = createGuardedConsoleHistory({
+      read: readConsoleHistory,
+      push: entry => window.history.pushState(entry.state, "", entry.url),
+      replace: entry => window.history.replaceState(entry.state, "", entry.url),
+      go: delta => window.history.go(delta),
+    }, (entry, proceed) => {
+      if (!requestConsoleNavigation(proceed)) return false;
+      const next = requestedConsoleRoute(entry);
+      if (shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)) {
+        setPendingNavigation({ proceed });
+        return false;
+      }
+      return true;
+    }, (entry, reason) => {
+      setRequestedRoute(requestedConsoleRoute(entry));
+      if (reason !== "traverse") window.scrollTo(0, 0);
+    });
+  }
   const discardUnsavedDraft = useCallback(() => {
     const persisted = persistedDraftSnapshot.current;
     if (persisted) {
@@ -500,24 +530,11 @@ function FlowConsole({
       route: ConsoleRoute,
       options?: { replace?: boolean; editorReturn?: FlowEditorReturn }
     ) => {
-      if (!options?.replace && shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, route)) {
-        setPendingNavigation({ route, editorReturn: options?.editorReturn });
-        return false;
-      }
-      setRequestedRoute({
-        route,
-        ...(options?.editorReturn
-          ? { editorReturn: options.editorReturn }
-          : {}),
-      });
-      if (typeof window !== "undefined")
-        window.history[options?.replace ? "replaceState" : "pushState"](
-          { aiflowEditorReturn: options?.editorReturn ?? null },
-          "",
-          formatConsoleRoute(route)
-        );
-      if (typeof window !== "undefined") window.scrollTo(0, 0);
-      return true;
+      return consoleHistory.current?.navigate(
+        formatConsoleRoute(route),
+        { aiflowEditorReturn: options?.editorReturn ?? null },
+        options?.replace
+      ) ?? false;
     },
     []
   );
@@ -584,17 +601,7 @@ function FlowConsole({
 
   useEffect(() => {
     const restoreConsoleRoute = () => {
-      const next = readConsoleRoute();
-      if (shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)) {
-        window.history.pushState(
-          { aiflowEditorReturn: requestedRoute.editorReturn ?? null },
-          "",
-          formatConsoleRoute(requestedRoute.route)
-        );
-        setPendingNavigation(next);
-        return;
-      }
-      setRequestedRoute(next);
+      consoleHistory.current?.reconcile();
     };
     window.addEventListener("popstate", restoreConsoleRoute);
     window.addEventListener("hashchange", restoreConsoleRoute);
@@ -602,7 +609,7 @@ function FlowConsole({
       window.removeEventListener("popstate", restoreConsoleRoute);
       window.removeEventListener("hashchange", restoreConsoleRoute);
     };
-  }, [requestedRoute]);
+  }, []);
 
   const [flowSearch, setFlowSearch] = useState("");
   const [flowSearchValue, setFlowSearchValue] = useState("");
@@ -714,20 +721,12 @@ function FlowConsole({
     const route = requestedRoute.route;
     const replaceWith = (safeRoute: ConsoleRoute) => {
       setRequestedRoute({ route: safeRoute });
-      window.history.replaceState(
-        { aiflowEditorReturn: null },
-        "",
-        formatConsoleRoute(safeRoute)
-      );
+      consoleHistory.current?.replaceSilently(formatConsoleRoute(safeRoute), { aiflowEditorReturn: null });
     };
     const canonicalize = () => {
       const canonical = formatConsoleRoute(route);
       if (window.location.hash !== canonical)
-        window.history.replaceState(
-          { aiflowEditorReturn: requestedRoute.editorReturn ?? null },
-          "",
-          canonical
-        );
+        consoleHistory.current?.replaceSilently(canonical, { aiflowEditorReturn: requestedRoute.editorReturn ?? null });
     };
     if (route.section === "system") {
       if (!canManageIdentity) {
@@ -1306,12 +1305,15 @@ function FlowConsole({
               const target = pendingNavigation;
               discardUnsavedDraft();
               setPendingNavigation(null);
-              navigateRoute(target.route, { editorReturn: target.editorReturn });
+              target.proceed();
             }}>丢弃修改并离开</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <a className="aiflow-skip-link" href="#aiflow-console-panel">
+      <a className="aiflow-skip-link" href="#aiflow-console-panel" onClick={event => {
+        event.preventDefault();
+        document.getElementById("aiflow-console-panel")?.focus();
+      }}>
         跳到主要工作区
       </a>
       {clientUpdateAvailable && (

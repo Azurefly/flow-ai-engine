@@ -451,8 +451,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
 
       expect(navigationStart).toBeGreaterThanOrEqual(0);
       expect(navigationEnd).toBeGreaterThan(navigationStart);
-      expect(navigationSource).toContain("window.history[");
-      expect(navigationSource).toContain("window.scrollTo(0, 0)");
+      expect(navigationSource).toContain("consoleHistory.current?.navigate(");
+      expect(homeSource).toContain('if (reason !== "traverse") window.scrollTo(0, 0)');
 
       TestResultCollector.record({
         testId: "TC-REG-ROUTE-001",

@@ -55,18 +55,19 @@ describe("分页流程缓存联动", () => {
   });
   it("浏览器历史和哈希切换取消离开时恢复当前编辑路由", () => {
     const restore = homeSource.split("const restoreConsoleRoute = () => {")[1]?.split('window.addEventListener("popstate"')[0];
-    expect(restore).toContain("shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)");
-    expect(restore).toContain("window.history.pushState(");
-    expect(restore).toContain("formatConsoleRoute(requestedRoute.route)");
-    expect(restore).toContain("setPendingNavigation(next)");
+    expect(restore).toContain("consoleHistory.current?.reconcile()");
+    expect(homeSource).toContain("shouldConfirmWorkflowNavigation(unsavedWorkflowId.current, next.route)");
+    expect(homeSource).toContain("if (!requestConsoleNavigation(proceed)) return false");
+    expect(homeSource).toContain("setPendingNavigation({ proceed })");
     expect(restore).not.toContain("window.confirm");
-    expect(restore).toContain("setRequestedRoute(next)");
+    expect(restore).not.toContain("window.history.pushState(");
   });
   it("页面内离页对话框提供安全取消与明确丢弃操作", () => {
     expect(homeSource).toContain('<Dialog open={Boolean(pendingNavigation)}');
     expect(homeSource).toContain("继续编辑</Button>");
     expect(homeSource).toContain("丢弃修改并离开</Button>");
-    expect(homeSource).toContain("navigateRoute(target.route, { editorReturn: target.editorReturn })");
+    expect(homeSource).toContain("target.proceed()");
+    expect(homeSource).toContain('document.getElementById("aiflow-console-panel")?.focus()');
   });
   it("未保存的编辑草稿在浏览器关闭或刷新时提示并释放监听", () => {
     expect(homeSource).toContain("if (!editorActive || !isDraftDirty) return;");
@@ -1500,7 +1501,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(homeSource).toContain("const navigateSection = useCallback");
     expect(homeSource).toContain(
-      'window.history[options?.replace ? "replaceState" : "pushState"]'
+      'consoleHistory.current?.navigate('
     );
     expect(homeSource).toContain(
       'window.addEventListener("popstate", restoreConsoleRoute)'
@@ -2713,6 +2714,9 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain('hasTaskDraftChanges({');
     expect(processWorkbenchSource).toContain('if (busy) return; if (isDraftDirty) setExitAction(() => action)');
     expect(processWorkbenchSource).toContain('window.addEventListener("beforeunload", warnBeforeUnload)');
+    expect(processWorkbenchSource).toContain('window.addEventListener(consoleNavigationEvent, guardNavigation)');
+    expect(processWorkbenchSource).toContain('window.removeEventListener(consoleNavigationEvent, guardNavigation)');
+    expect(processWorkbenchSource).toContain('requestExit((event as ConsoleNavigationEvent).detail.proceed)');
     expect(processWorkbenchSource).toContain("data-process-workbench-loading");
     expect(processWorkbenchSource).toContain("正在读取已启动流程");
     expect(processWorkbenchSource).toContain(

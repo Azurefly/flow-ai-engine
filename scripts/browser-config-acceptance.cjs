@@ -607,6 +607,37 @@ function executable() {
           assert((await inspector.innerText()).includes("拒绝即取消实例"));
       }
     }
+    if (verifyTaskDraft) {
+      const workflow = fixture.workflows.find(flow => flow.flowType === "state");
+      await page.goto(`${base}#/flows/workflow/${workflow.id}/editor`, { waitUntil: "domcontentloaded" });
+      await page.locator("[data-workflow-editor]").waitFor();
+      await page.getByRole("tab", { name: "已启动流程", exact: true }).click();
+      await page.locator("[data-workbench-view-navigation]").waitFor();
+      await page.evaluate(() => history.back());
+      await page.locator("[data-workflow-editor]").waitFor();
+      await page.locator('.react-flow__node[data-id="review"]').click();
+      const name = page.getByLabel("节点名称", { exact: true });
+      const original = await name.inputValue();
+      await name.fill(`${original}未保存导航校验`);
+      await page.getByRole("tab", { name: "流程设计", exact: true }).click();
+      const warning = page.getByRole("dialog", { name: "离开前保留流程修改", exact: true });
+      await warning.getByRole("button", { name: "继续编辑", exact: true }).click();
+      assert.equal(await name.inputValue(), `${original}未保存导航校验`);
+      await page.evaluate(() => history.forward());
+      await warning.waitFor();
+      await expect(page).toHaveURL(new RegExp(`/workflow/${workflow.id}/editor$`));
+      await warning.getByRole("button", { name: "继续编辑", exact: true }).click();
+      assert.equal(await name.inputValue(), `${original}未保存导航校验`);
+      await page.evaluate(() => history.forward());
+      await warning.getByRole("button", { name: "丢弃修改并离开", exact: true }).click();
+      await page.locator("[data-workbench-view-navigation]").waitFor();
+      await expect(page).toHaveURL(/#\/runs\/workbench$/);
+      await page.evaluate(() => history.back());
+      await page.locator("[data-workflow-editor]").waitFor();
+      await page.locator('.react-flow__node[data-id="review"]').click();
+      assert.equal(await name.inputValue(), original);
+      console.log(JSON.stringify({ stage: "canvas-history-browser", internalCancelPreserved: true, forwardCancelPreserved: true, discardExplicit: true, backStillWorks: true }));
+    }
     if (verifyFormPreview) {
       for (const workflow of fixture.workflows.filter(flow => ["state", "control"].includes(flow.flowType))) {
         await remote({ action: "start_form_task", fixture, login, workflowId: workflow.id });
@@ -615,6 +646,12 @@ function executable() {
         if (await page.getByRole("button", { name: "刷新页面", exact: true }).count()) {
           console.log(JSON.stringify({ stage: "workbench-load-recovery", diagnostics }));
           await page.getByRole("button", { name: "刷新页面", exact: true }).click();
+        }
+        if (verifyTaskDraft) {
+          await page.getByRole("tab", { name: "流程设计", exact: true }).click();
+          await page.locator("[data-aiflow-business-center]").waitFor();
+          await page.getByRole("tab", { name: "已启动流程", exact: true }).click();
+          await page.locator("[data-workbench-view-navigation]").waitFor();
         }
         await page.locator("[data-workbench-view-navigation]").getByRole("button", { name: "待办", exact: true }).click();
         await page.getByLabel("搜索流程、任务节点或发起人", { exact: true }).fill(workflow.name);
@@ -651,6 +688,30 @@ function executable() {
           await row.getByRole("button", { name: "详情", exact: true }).click();
           await drawer.getByLabel("订单金额", { exact: true }).waitFor();
           assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "");
+          await drawer.getByLabel("订单金额", { exact: true }).fill("1");
+          await drawer.getByRole("button", { name: "查看运行详情", exact: true }).click();
+          await warning.getByRole("button", { name: "继续填写", exact: true }).click();
+          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "1");
+          const beforeBack = await page.evaluate(() => ({ length: history.length, position: history.state.aiflowNavigationPosition }));
+          await page.evaluate(() => history.back());
+          await warning.waitFor();
+          await expect(page).toHaveURL(/#\/runs\/workbench$/);
+          await warning.getByRole("button", { name: "继续填写", exact: true }).click();
+          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "1");
+          assert.deepEqual(await page.evaluate(() => ({ length: history.length, position: history.state.aiflowNavigationPosition })), beforeBack);
+          await page.evaluate(() => history.back());
+          await warning.getByRole("button", { name: "放弃填写", exact: true }).click();
+          await page.locator("[data-aiflow-business-center]").waitFor();
+          await expect(page).toHaveURL(/#\/flows$/);
+          await page.evaluate(() => history.forward());
+          await page.locator("[data-workbench-view-navigation]").waitFor();
+          await expect(page).toHaveURL(/#\/runs\/workbench$/);
+          await page.locator("[data-workbench-view-navigation]").getByRole("button", { name: "待办", exact: true }).click();
+          await page.getByLabel("搜索流程、任务节点或发起人", { exact: true }).fill(workflow.name);
+          await row.getByRole("button", { name: "详情", exact: true }).click();
+          await drawer.getByLabel("订单金额", { exact: true }).waitFor();
+          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "");
+          console.log(JSON.stringify({ stage: "task-history-browser", flowType: workflow.flowType, runDetailCancelPreserved: true, backCancelPreserved: true, historyNotDuplicated: true, discardExplicit: true, forwardStillWorks: true }));
           console.log(JSON.stringify({ stage: "task-draft-browser", flowType: workflow.flowType, focusContained: true, escapeConfirm: true, cancelPreserved: true, discardExplicit: true, refreshProtected: true, openerFocusRestored: true }));
         }
         await drawer.getByLabel("订单金额", { exact: true }).fill("50");
@@ -677,7 +738,13 @@ function executable() {
             await page.keyboard.press("Escape");
             assert.equal(await drawer.isVisible(), true);
             assert.equal(await page.getByRole("alertdialog").count(), 0);
-            console.log(JSON.stringify({ stage: "task-submitting-browser", flowType: workflow.flowType, fieldsLocked: true, closeBlocked: true }));
+            const position = await page.evaluate(() => history.state.aiflowNavigationPosition);
+            await page.evaluate(() => history.back());
+            await page.waitForFunction(expected => location.hash === "#/runs/workbench" && JSON.stringify(history.state.aiflowNavigationPosition) === JSON.stringify(expected), position);
+            assert.equal(await drawer.isVisible(), true);
+            assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "50");
+            assert.equal(await page.getByRole("alertdialog").count(), 0);
+            console.log(JSON.stringify({ stage: "task-submitting-browser", flowType: workflow.flowType, fieldsLocked: true, closeBlocked: true, backBlocked: true }));
           } finally { releaseSubmission(); }
         } else await submit.click();
         await executed;

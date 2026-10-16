@@ -15,6 +15,7 @@ import { TaskFormField } from "./TaskFormField";
 import { taskFormViewFields } from "@shared/task-form-view";
 import { hasTaskDraftChanges } from "@shared/task-draft-dirty";
 import { restoreTaskDrawerFocus } from "./task-drawer-focus";
+import { consoleNavigationEvent, type ConsoleNavigationEvent } from "@/lib/console-navigation-guard";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "./ui/alert-dialog";
 import { visibleTaskFormErrors } from "@shared/task-form-feedback";
@@ -2558,9 +2559,17 @@ function TaskDrawer({
   };
   useEffect(() => {
     if (!isDraftDirty && !busy) return;
+    const guardNavigation = (event: Event) => {
+      event.preventDefault();
+      requestExit((event as ConsoleNavigationEvent).detail.proceed);
+    };
     const warnBeforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener(consoleNavigationEvent, guardNavigation);
     window.addEventListener("beforeunload", warnBeforeUnload);
-    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+    return () => {
+      window.removeEventListener(consoleNavigationEvent, guardNavigation);
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+    };
   }, [isDraftDirty, busy]);
   useEffect(() => {
     if (!configuredOutcomes.some(item => item.code === outcome))
@@ -3159,7 +3168,7 @@ function TaskDrawer({
       <AlertDialog open={Boolean(exitAction)} onOpenChange={open => { if (!open) setExitAction(null); }}>
         <AlertDialogContent>
           <AlertDialogTitle>放弃未提交的填写？</AlertDialogTitle>
-          <AlertDialogDescription>任务中的表单、处理意见或转交设置尚未提交，关闭后将丢失本次填写。</AlertDialogDescription>
+          <AlertDialogDescription>离开会丢失尚未提交的表单、处理意见和转交设置。</AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>继续填写</AlertDialogCancel>
             <AlertDialogAction onClick={() => exitAction?.()}>放弃填写</AlertDialogAction>
