@@ -647,12 +647,15 @@ function executable() {
         assert.equal(await submit.isEnabled(), true);
         await page.screenshot({ path: path.join(directory, `${workflow.flowType}-actual-task-form.png`), fullPage: true });
         const executed = page.waitForResponse(response => /task\.(execute|complete)/.test(response.url()) && response.request().method() === "POST" && response.status() === 200);
+        let removeSubmissionRoute = async () => {};
         if (verifyTaskDraft) {
           let releaseSubmission;
           const gate = new Promise(resolve => { releaseSubmission = resolve; });
           const pattern = /\/api\/trpc\/task\.(execute|complete)/;
-          const hold = async route => { if (route.request().method() === "POST") await gate; await route.continue(); };
+          const routeErrors = [];
+          const hold = async route => { if (route.request().method() === "POST") await gate; await route.continue().catch(error => routeErrors.push(error.message)); };
           await page.route(pattern, hold);
+          removeSubmissionRoute = async () => { await page.unroute(pattern, hold); assert.deepEqual(routeErrors, []); };
           try {
             await submit.click();
             await page.waitForFunction(() => document.querySelector("[data-task-drawer] button")?.disabled === true);
@@ -661,9 +664,10 @@ function executable() {
             assert.equal(await drawer.isVisible(), true);
             assert.equal(await page.getByRole("alertdialog").count(), 0);
             console.log(JSON.stringify({ stage: "task-submitting-browser", flowType: workflow.flowType, fieldsLocked: true, closeBlocked: true }));
-          } finally { releaseSubmission(); await page.unroute(pattern, hold); }
+          } finally { releaseSubmission(); }
         } else await submit.click();
         await executed;
+        await removeSubmissionRoute();
         await drawer.waitFor({ state: "hidden" });
         console.log((await remote({ action: "verify_form_task", fixture, login })).trim());
         console.log(JSON.stringify({ stage: "actual-task-form-browser", flowType: workflow.flowType, matchesPreview: true, boundsBlockSubmission: true, completed: true }));
