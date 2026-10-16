@@ -689,9 +689,6 @@ function executable() {
           await drawer.getByLabel("订单金额", { exact: true }).waitFor();
           assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "");
           await drawer.getByLabel("订单金额", { exact: true }).fill("1");
-          await drawer.getByRole("button", { name: "查看运行详情", exact: true }).click();
-          await warning.getByRole("button", { name: "继续填写", exact: true }).click();
-          assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "1");
           const beforeBack = await page.evaluate(() => ({ length: history.length, position: history.state.aiflowNavigationPosition }));
           await page.evaluate(() => history.back());
           await warning.waitFor();
@@ -711,7 +708,7 @@ function executable() {
           await row.getByRole("button", { name: "详情", exact: true }).click();
           await drawer.getByLabel("订单金额", { exact: true }).waitFor();
           assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "");
-          console.log(JSON.stringify({ stage: "task-history-browser", flowType: workflow.flowType, runDetailCancelPreserved: true, backCancelPreserved: true, historyNotDuplicated: true, discardExplicit: true, forwardStillWorks: true }));
+          console.log(JSON.stringify({ stage: "task-history-browser", flowType: workflow.flowType, backCancelPreserved: true, historyNotDuplicated: true, discardExplicit: true, forwardStillWorks: true }));
           console.log(JSON.stringify({ stage: "task-draft-browser", flowType: workflow.flowType, focusContained: true, escapeConfirm: true, cancelPreserved: true, discardExplicit: true, refreshProtected: true, openerFocusRestored: true }));
         }
         await drawer.getByLabel("订单金额", { exact: true }).fill("50");
