@@ -14,6 +14,7 @@ import { taskResultView } from "@shared/task-result-view";
 import { TaskFormField } from "./TaskFormField";
 import { taskFormViewFields } from "@shared/task-form-view";
 import { hasTaskDraftChanges } from "@shared/task-draft-dirty";
+import { restoreTaskDrawerFocus } from "./task-drawer-focus";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
 import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "./ui/alert-dialog";
 import { visibleTaskFormErrors } from "@shared/task-form-feedback";
@@ -2644,11 +2645,7 @@ function TaskDrawer({
       <DialogContent data-task-drawer="" showCloseButton={false}
         onCloseAutoFocus={event => {
           event.preventDefault();
-          requestAnimationFrame(() => {
-            const opener = taskOpener.current;
-            const target = opener?.isConnected && opener !== document.body ? opener : Array.from(document.querySelectorAll<HTMLElement>("[data-task-open-id]")).find(element => element.dataset.taskOpenId === taskId);
-            target?.focus({ preventScroll: true });
-          });
+          requestAnimationFrame(() => restoreTaskDrawerFocus(taskId, taskOpener.current));
         }}
         className="top-0 right-0 bottom-0 left-auto block h-dvh w-full max-w-full translate-x-0 translate-y-0 overflow-y-auto rounded-none border-l bg-card p-5 shadow-2xl sm:max-w-lg">
         <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
