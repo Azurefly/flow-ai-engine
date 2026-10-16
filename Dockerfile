@@ -3,11 +3,12 @@ FROM node:22-bookworm-slim AS build
 ENV PNPM_HOME=/pnpm
 ENV PATH=${PNPM_HOME}:${PATH}
 WORKDIR /app
+ARG BUILD_NODE_OPTIONS=--max-old-space-size=768
 
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 COPY patches ./patches
-RUN pnpm install --frozen-lockfile
+RUN NODE_OPTIONS="$BUILD_NODE_OPTIONS" pnpm install --frozen-lockfile
 
 ARG BUILD_ID=not-injected
 ARG BUILD_TIME=not-injected
@@ -15,7 +16,7 @@ ENV BUILD_ID=${BUILD_ID}
 ENV BUILD_TIME=${BUILD_TIME}
 
 COPY . .
-RUN NODE_OPTIONS=--max-old-space-size=768 pnpm build
+RUN NODE_OPTIONS="$BUILD_NODE_OPTIONS" pnpm build
 
 FROM node:22-bookworm-slim AS runtime
 

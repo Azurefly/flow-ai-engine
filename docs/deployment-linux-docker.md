@@ -18,6 +18,8 @@ sha256sum /tmp/flow-ai-engine-image.tar
 
 镜像包放在部署源码目录之外，上传后再次核对摘要，并在远程 Linux Bash 中执行：
 
+独立构建机需要代理时，可给 `docker build` 追加 `HTTP_PROXY`、`HTTPS_PROXY` 构建参数，并设置 `--build-arg 'BUILD_NODE_OPTIONS=--max-old-space-size=768 --use-env-proxy'`。该参数仅作用于构建阶段，不进入应用运行环境。
+
 ```bash
 sudo env FLOW_COMPOSE_ENV_FILE=/opt/flow-ai-engine/source/.env \
   FLOW_PREBUILT_IMAGE_TAR=/tmp/flow-ai-engine-image.tar \

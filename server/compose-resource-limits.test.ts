@@ -40,7 +40,8 @@ describe("生产 Compose 内存限制", () => {
     expect(deployScript).toContain('Prebuilt image archive SHA256 mismatch');
     expect(deployScript).toContain('"$IMAGE_BUILD_ID" == "$BUILD_ID"');
     expect(deployScript.indexOf('Prebuilt image source fingerprint mismatch')).toBeLessThan(deployScript.indexOf('compose up -d --no-deps --force-recreate'));
-    expect(dockerfile).toContain('NODE_OPTIONS=--max-old-space-size=768 pnpm build');
+    expect(dockerfile).toContain('ARG BUILD_NODE_OPTIONS=--max-old-space-size=768');
+    expect(dockerfile).toContain('NODE_OPTIONS="$BUILD_NODE_OPTIONS" pnpm build');
   });
   it("应用与 MySQL 的硬限制合计不超过 8 GiB，并禁用额外 Swap", () => {
     expect(compose).toMatch(/mysql:[\s\S]*?mem_limit:\s*1536m/);
