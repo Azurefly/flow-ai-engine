@@ -9,6 +9,7 @@ const deployScript = readFileSync(
   new URL("../scripts/deploy-app.sh", import.meta.url),
   "utf8"
 );
+const fingerprintScript = readFileSync(new URL("../scripts/source-fingerprint.sh", import.meta.url), "utf8");
 const gitIgnore = readFileSync(
   new URL("../.gitignore", import.meta.url),
   "utf8"
@@ -81,7 +82,8 @@ describe("生产 Compose 内存限制", () => {
     expect(deployScript).toContain("FLOW_SECRET_[A-Z0-9_]{2,128}");
     expect(deployScript).not.toContain('cat "$secret_path"');
     expect(deployScript).toContain("test -L");
-    expect(deployScript).toContain("-name '.env.*' ! -name .env.example");
+    expect(deployScript).toContain('bash "$SCRIPT_DIR/source-fingerprint.sh" "$ROOT"');
+    expect(fingerprintScript).toContain("-name '.env.*' ! -name .env.example");
     expect(gitIgnore).toContain(".env.*");
     expect(gitIgnore).toContain("!.env.example");
     expect(dockerIgnore).toContain(".env.*");
