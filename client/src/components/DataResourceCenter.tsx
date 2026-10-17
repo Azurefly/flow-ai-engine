@@ -9,6 +9,10 @@ import {
   dataflowResultPage,
 } from "@shared/dataflow-result-preview";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
+import {
+  acceptDataflowScheduleVersion,
+  type DataflowScheduleForm,
+} from "@shared/dataflow-schedule-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StructuredResourceForm } from "@/components/StructuredResourceForm";
@@ -228,34 +232,35 @@ export default function DataResourceCenter({
     refreshSchedules();
     toast.error(error.message);
   };
-  const acceptScheduleVersion = (result: object, workflowId: string) => {
+  const acceptScheduleVersion = (
+    result: object,
+    submitted: Pick<DataflowScheduleForm, "workflowId" | "expectedRevision">
+  ) => {
     refreshSchedules();
     if ("revision" in result && typeof result.revision === "number") {
       const revision = result.revision;
       setScheduleForm(current =>
-        current.workflowId === workflowId
-          ? { ...current, expectedRevision: revision }
-          : current
+        acceptDataflowScheduleVersion(current, submitted, revision)
       );
     }
   };
   const saveSchedule = trpc.data.saveScheduleDraft.useMutation({
     onSuccess: (result, submitted) => {
-      acceptScheduleVersion(result, submitted.workflowId);
+      acceptScheduleVersion(result, submitted);
       toast.success("调度草稿已保存；可在本页启用后台触发。 ");
     },
     onError: scheduleError,
   });
   const activateSchedule = trpc.data.activateSchedule.useMutation({
     onSuccess: (result, submitted) => {
-      acceptScheduleVersion(result, submitted.workflowId);
+      acceptScheduleVersion(result, submitted);
       toast.success("调度计划已启用。 ");
     },
     onError: scheduleError,
   });
   const pauseSchedule = trpc.data.pauseSchedule.useMutation({
     onSuccess: (result, submitted) => {
-      acceptScheduleVersion(result, submitted.workflowId);
+      acceptScheduleVersion(result, submitted);
       toast.success("调度已暂停，已发起的运行不受影响。 ");
     },
     onError: scheduleError,
@@ -1590,11 +1595,6 @@ function ResourceField({
   );
 }
 type DataflowSection = "overview" | "runs" | "schedules";
-type DataflowScheduleForm = {
-  workflowId: string;
-  cronExpression: string;
-  expectedRevision?: number;
-};
 
 function scheduleDetails(item: any) {
   return (

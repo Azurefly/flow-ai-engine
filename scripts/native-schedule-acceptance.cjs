@@ -407,16 +407,63 @@ async function poll(description, read, accept, timeout = 20000) {
     }
     assert.equal((await runs()).length, 1);
     report({ stage: "paused-next-boundary", noAdditionalRun: true });
+    schedule = await current();
+    await owner(
+      "data.saveScheduleDraft",
+      {
+        ...input,
+        cronExpression: "0 */5 * * * *",
+        expectedRevision: schedule.revision,
+      },
+      true
+    );
     const refreshed = page.waitForResponse(
       response =>
         response.url().includes("data.schedules") &&
         response.request().method() === "GET"
     );
-    await page.getByRole("button", { name: "刷新状态", exact: true }).click();
-    await refreshed;
+    await Promise.all([
+      refreshed,
+      page.getByRole("button", { name: "刷新状态", exact: true }).click(),
+    ]);
     await expect(
       page.getByRole("button", { name: "启用计划", exact: true })
     ).toBeVisible();
+    assert.equal(
+      (
+        await clickMutation(
+          page.getByRole("button", { name: "启用计划", exact: true }),
+          "activateSchedule"
+        )
+      ).status(),
+      200
+    );
+    assert.equal(
+      (
+        await clickMutation(
+          page.getByRole("button", { name: "暂停计划", exact: true }),
+          "pauseSchedule"
+        )
+      ).status(),
+      200
+    );
+    await expect(cron).toHaveValue("0 * * * * *");
+    assert.equal(
+      (
+        await clickMutation(
+          page.getByRole("button", { name: "保存调度草稿", exact: true }),
+          "saveScheduleDraft"
+        )
+      ).status(),
+      409
+    );
+    assert.equal((await current()).cronExpression, "0 */5 * * * *");
+    await expect(cron).toHaveValue("0 * * * * *");
+    report({
+      stage: "stale-form-after-row-actions",
+      staleDraftPreserved: true,
+      concurrentPlanPreserved: true,
+    });
     await page
       .getByRole("button", { name: "删除计划 " + flow.name, exact: true })
       .click();
