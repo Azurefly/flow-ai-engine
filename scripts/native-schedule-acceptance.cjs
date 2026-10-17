@@ -285,6 +285,13 @@ async function poll(description, read, accept, timeout = 20000) {
       exact: true,
     });
     const closeBox = await closeNotice.boundingBox();
+    report({
+      stage: "toast-close-target",
+      box: closeBox,
+      coarse: await page.evaluate(
+        () => matchMedia("(pointer: coarse)").matches
+      ),
+    });
     assert(closeBox && closeBox.width >= 44 && closeBox.height >= 44);
     await closeNotice.click();
     report({

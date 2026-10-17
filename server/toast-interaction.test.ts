@@ -17,4 +17,7 @@ it("操作提示不拦截正文下方点击，并保留可关闭和可交互的�
   expect(style).toMatch(
     /@media \(pointer: coarse\)[\s\S]*?\[data-close-button\]\s*\{\s*width: 44px;\s*height: 44px;/
   );
+  expect(style).toMatch(
+    /\.toaster\[data-sonner-toaster\]\s+\[data-sonner-toast\]\s+\[data-close-button\]/
+  );
 });
