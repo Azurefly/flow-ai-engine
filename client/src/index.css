@@ -1432,6 +1432,25 @@ h2 {
   }
 }
 
+/* 提示正文不阻断下方操作；关闭和消息内的动作仍可点击、键盘访问。 */
+.toaster[data-sonner-toaster],
+.toaster[data-sonner-toaster] [data-sonner-toast] {
+  pointer-events: none;
+}
+
+.toaster
+  [data-sonner-toast][data-visible="true"]:not([data-removed="true"])
+  :is(button, a, input, select, textarea, [role="button"]) {
+  pointer-events: auto;
+}
+
+@media (pointer: coarse) {
+  .toaster[data-sonner-toaster] [data-close-button] {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 /* 业务中心在 1280px 以下以卡片浏览，保证浏览器实际控件盒模型可触控。 */
 @media (max-width: 1279px) {
   [data-aiflow-business-center] button,

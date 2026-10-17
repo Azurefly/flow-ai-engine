@@ -814,7 +814,8 @@ async function prepareNativeSchedule(intent) {
 async function cleanupNativeSchedule(intent) {
   const { fixture } = intent;
   assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
-  await request("auth.login", intent.login, true);
+  if (intent.login) await request("auth.login", intent.login, true);
+  else await bootstrap();
   const project = await request("project.get", { projectId: fixture.projectId });
   assert.equal(project.ownerUserId, fixture.userId);
   assert.equal(project.code, fixture.tag.toUpperCase());

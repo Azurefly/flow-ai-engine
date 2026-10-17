@@ -171,6 +171,7 @@ async function poll(description, read, accept, timeout = 20000) {
     });
     const context = await browser.newContext({
       viewport: { width: 1440, height: 1000 },
+      hasTouch: true,
       serviceWorkers: "block",
     });
     await context.route("**/*", route =>
@@ -183,7 +184,9 @@ async function poll(description, read, accept, timeout = 20000) {
     await page.goto(base);
     await page.locator('input[autocomplete="username"]').fill(login.username);
     await page.locator('input[type="password"]').fill(login.password);
-    await page.getByRole("button", { name: "登录", exact: true }).click();
+    await page
+      .getByRole("button", { name: "登录流程引擎", exact: true })
+      .click();
     await page.locator('input[type="password"]').waitFor({ state: "hidden" });
     await page.goto(`${base}#/flows/project/${input.projectId}`);
     await page
@@ -197,22 +200,18 @@ async function poll(description, read, accept, timeout = 20000) {
       .getByRole("navigation", { name: "数据流工作区视图" })
       .getByRole("button", { name: /^调度计划/ })
       .click();
-    await page
-      .getByLabel("已发布数据流", { exact: true })
-      .selectOption(input.workflowId);
+    await page.getByLabel("已发布数据流").selectOption(input.workflowId);
     const cron = page.getByLabel("Cron 表达式（UTC）", { exact: true });
     const clickMutation = async (button, name) => {
       const response = page.waitForResponse(
         response =>
-          response.url().includes(`/api/trpc/data.${name}`) &&
+          response.url().includes(`data.${name}`) &&
           response.request().method() === "POST"
       );
-      await button.click();
-      return response;
+      const [result] = await Promise.all([response, button.click()]);
+      return result;
     };
-    await page
-      .getByLabel("快速填写计划（UTC）", { exact: true })
-      .selectOption("0 0 * * * *");
+    await page.getByLabel("快速填写计划（UTC）").selectOption("0 0 * * * *");
     await expect(cron).toHaveValue("0 0 * * * *");
     await cron.fill("0 0 25 * * *");
     assert.equal(
@@ -273,6 +272,30 @@ async function poll(description, read, accept, timeout = 20000) {
       presets: true,
       viewerDenied: true,
     });
+    const notice = page
+      .locator("[data-sonner-toast]")
+      .filter({ hasText: "调度计划已启用" });
+    await expect(notice).toBeVisible();
+    assert.equal(
+      await notice.evaluate(element => getComputedStyle(element).pointerEvents),
+      "none"
+    );
+    const closeNotice = notice.getByRole("button", {
+      name: "关闭提示",
+      exact: true,
+    });
+    const closeBox = await closeNotice.boundingBox();
+    assert(closeBox && closeBox.width >= 44 && closeBox.height >= 44);
+    await closeNotice.click();
+    report({
+      stage: "toast-interaction",
+      passiveBody: true,
+      closeAvailable: true,
+    });
+    await page.screenshot({
+      path: path.join(directory, "active-plan.png"),
+      fullPage: true,
+    });
 
     const completed = await poll(
       "real UTC worker trigger",
@@ -293,6 +316,20 @@ async function poll(description, read, accept, timeout = 20000) {
     assert.deepEqual(detail.output.terminals[0].rows, [
       { id: 1, amount: 120, status: "paid" },
     ]);
+    report({
+      stage: "run-observed-before-pause",
+      runId: detail.id,
+      status: detail.status,
+    });
+    fs.writeFileSync(
+      path.join(directory, "before-pause.txt"),
+      await page.locator("body").innerText(),
+      "utf8"
+    );
+    await page.screenshot({
+      path: path.join(directory, "before-pause.png"),
+      fullPage: true,
+    });
     assert.equal(
       (
         await clickMutation(
@@ -365,7 +402,7 @@ async function poll(description, read, accept, timeout = 20000) {
     report({ stage: "paused-next-boundary", noAdditionalRun: true });
     const refreshed = page.waitForResponse(
       response =>
-        response.url().includes("/api/trpc/data.schedules") &&
+        response.url().includes("data.schedules") &&
         response.request().method() === "GET"
     );
     await page.getByRole("button", { name: "刷新状态", exact: true }).click();
@@ -390,7 +427,7 @@ async function poll(description, read, accept, timeout = 20000) {
     );
     const backgroundRefresh = page.waitForResponse(
       response =>
-        response.url().includes("/api/trpc/data.schedules") &&
+        response.url().includes("data.schedules") &&
         response.request().method() === "GET"
     );
     await page.evaluate(() => {
@@ -403,8 +440,9 @@ async function poll(description, read, accept, timeout = 20000) {
       "deleteSchedule"
     );
     assert.equal(staleDelete.status(), 409);
+    const deleteBody = staleDelete.request().postDataJSON();
     assert.equal(
-      staleDelete.request().postDataJSON().json.expectedRevision,
+      (deleteBody.json ?? deleteBody[0].json).expectedRevision,
       schedule.revision
     );
     await expect(dialog.getByRole("alert")).toContainText("调度已被更新");
