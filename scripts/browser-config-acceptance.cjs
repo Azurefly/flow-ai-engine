@@ -682,10 +682,12 @@ function executable() {
           await expect(submit).toBeInViewport({ ratio: 1 });
           await expect(drawer.getByRole("button", { name: "关闭", exact: true })).toBeInViewport({ ratio: 1 });
           await page.setViewportSize({ width: 390, height: 844 });
+          await expect(drawer).toHaveCSS("height", "844px");
           await expect(submit).toBeInViewport({ ratio: 1 });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), true);
           await page.screenshot({ path: path.join(directory, `${workflow.flowType}-task-layout-mobile.png`), fullPage: true });
           await page.setViewportSize({ width: 1440, height: 1000 });
+          await expect(drawer).toHaveCSS("height", "1000px");
           await body.evaluate(element => { element.scrollTop = 0; });
           const first = await drawer.getByLabel("申请说明", { exact: true }).boundingBox();
           assert(first && first.y < 500, "主表单仍未进入桌面首屏上半部分");
@@ -764,11 +766,13 @@ function executable() {
           await extras.locator("summary").click();
           assert.equal(await drawer.getByLabel("订单金额", { exact: true }).inputValue(), "50");
           await page.setViewportSize({ width: 390, height: 844 });
+          await expect(drawer).toHaveCSS("height", "844px");
           await expect(submit).toBeInViewport({ ratio: 1 });
           await drawer.locator(".task-body").evaluate(element => { element.scrollTop = element.scrollHeight; });
           await expect(submit).toBeInViewport({ ratio: 1 });
           await page.screenshot({ path: path.join(directory, `${workflow.flowType}-task-ready-mobile.png`), fullPage: true });
           await page.setViewportSize({ width: 1440, height: 1000 });
+          await expect(drawer).toHaveCSS("height", "1000px");
           console.log(JSON.stringify({ stage: "task-extra-fields-browser", flowType: workflow.flowType, configuredFieldsProtected: true, duplicateBlocked: true, exactErrorFocused: true, correctionsPreserved: true, readyActionVisible: true }));
           if (workflow.flowType === "state") {
             const claimed = page.waitForResponse(response => response.url().includes("task.claim") && response.request().method() === "POST" && response.status() === 200);
