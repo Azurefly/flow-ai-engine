@@ -196,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-16).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-17).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -213,8 +213,9 @@ describe("database migration integrity", () => {
       "0037_task_execution_identity",
       "0038_project_lifecycle",
       "0039_loop_visit_facts",
+      "0040_dataflow_native_schedule",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(39);
+    expect(journal.entries.at(-1)?.idx).toBe(40);
   });
   it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
     const migration = readFileSync(new URL("../drizzle/0036_wait_execution_identity.sql", import.meta.url), "utf8");

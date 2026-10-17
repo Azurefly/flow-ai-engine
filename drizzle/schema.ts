@@ -1,5 +1,6 @@
 import {
   boolean,
+  datetime,
   foreignKey,
   index,
   int,
@@ -1453,6 +1454,10 @@ export const dataflowSchedules = mysqlTable(
       .notNull()
       .references(() => workflows.id),
     cronExpression: varchar("cronExpression", { length: 96 }).notNull(),
+    schedulerType: mysqlEnum("schedulerType", ["hosted", "internal"]).default("hosted").notNull(),
+    revision: int("revision").default(0).notNull(),
+    nextRunAt: datetime("nextRunAt", { mode: "string" }),
+    lastError: varchar("lastError", { length: 500 }),
     status: mysqlEnum("status", ["active", "paused", "deleted"])
       .default("paused")
       .notNull(),
@@ -1469,6 +1474,7 @@ export const dataflowSchedules = mysqlTable(
   },
   table => [
     unique("dataflow_schedule_workflow_unique").on(table.workflowId),
+    index("dataflow_schedule_due_idx").on(table.schedulerType, table.status, table.nextRunAt),
     unique("dataflow_schedule_task_uid_unique").on(table.scheduleCronTaskUid),
     index("dataflow_schedule_project_status_idx").on(
       table.projectId,

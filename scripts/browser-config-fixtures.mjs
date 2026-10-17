@@ -792,7 +792,44 @@ async function verifyFormTask(intent) {
   console.log(JSON.stringify({ stage: "form-task-api", typedValuesPersisted: true, invalidBoundsRejected: true, readonlyTamperingRejected: true }));
 }
 
+async function prepareNativeSchedule(intent) {
+  const fixture = intent.fixture;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  const flow = fixture.workflows.find(item => item.flowType === "data");
+  assert(flow && flow.name.endsWith(fixture.tag));
+  await bootstrap();
+  const current = await request("workflow.get", { id: flow.id });
+  assert.equal(current.ownerUserId, fixture.userId);
+  assert.equal(current.name, flow.name);
+  assert.equal(current.projectId, fixture.projectId);
+  await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "active" }, true);
+  await request("project.auditWorkflow", { projectId: fixture.projectId, workflowId: flow.id, auditStatus: "approved" }, true);
+  await request("auth.login", intent.login, true);
+  const approved = await request("workflow.get", { id: flow.id });
+  await request("workflow.publish", { id: flow.id, expectedDefinitionVersion: approved.definitionVersion }, true);
+  await request("project.grantMember", { projectId: fixture.projectId, userId: fixture.disabledUserId, role: "viewer" }, true);
+  console.log(JSON.stringify({ stage: "native-schedule-prepared", workflowId: flow.id }));
+}
+
+async function cleanupNativeSchedule(intent) {
+  const { fixture } = intent;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await request("auth.login", intent.login, true);
+  const project = await request("project.get", { projectId: fixture.projectId });
+  assert.equal(project.ownerUserId, fixture.userId);
+  assert.equal(project.code, fixture.tag.toUpperCase());
+  const schedules = await request("data.schedules", { projectId: fixture.projectId });
+  for (const schedule of schedules) {
+    assert.equal(schedule.schedulerType, "internal");
+    assert(fixture.workflows.some(flow => flow.id === schedule.workflowId && flow.name.endsWith(fixture.tag)));
+    await request("data.deleteSchedule", { projectId: fixture.projectId, workflowId: schedule.workflowId, expectedRevision: schedule.revision }, true);
+  }
+  console.log(JSON.stringify({ stage: "native-schedules-cleaned", count: schedules.length }));
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
+else if (browserFixtureIntent.action === "prepare_native_schedule") await prepareNativeSchedule(browserFixtureIntent);
+else if (browserFixtureIntent.action === "cleanup_native_schedule") await cleanupNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "start_form_task") await startFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_form_task") await verifyFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_run_controls") await verifyRunControls(browserFixtureIntent);

@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
 import { deleteHeartbeatJob, listHeartbeatJobs } from "./_core/heartbeat";
-import { activateDataflowSchedule, deleteDataflowSchedule, saveDataflowScheduleDraft } from "./p2-service";
+import { activateDataflowSchedule, deleteDataflowSchedule } from "./p2-service";
 
 const runLive = process.env.RUN_LIVE_SCHEDULE_TEST === "1" && process.env.DATABASE_URL ? it : it.skip;
 const suffix = crypto.randomUUID().slice(0, 8);
@@ -39,7 +39,7 @@ async function cleanup() {
 describe("P2 应用级隔离计划删除闭环", () => {
   afterAll(cleanup);
 
-  runLive("应用数据流计划激活后删除，同时移除平台任务且不触及生产计划", async () => {
+  runLive("历史托管计划激活后删除，同时移除平台任务且不触及生产计划", async () => {
     pool = mysql.createPool(process.env.DATABASE_URL!);
     await pool.query("INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW())", [`test:${username}`, username, "隔离计划删除验收管理员", "admin", "active", "internal"]);
     const [users] = await pool.query<mysql.RowDataPacket[]>("SELECT * FROM users WHERE username=?", [username]);
@@ -50,7 +50,8 @@ describe("P2 应用级隔离计划删除闭环", () => {
     await owner.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
     await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
 
-    await saveDataflowScheduleDraft(user, { projectId, workflowId, cronExpression: "0 59 23 31 12 *" });
+    // Seed an owned pre-migration hosted record. New UI drafts use the native scheduler.
+    await pool.query("INSERT INTO dataflow_schedule (id,projectId,workflowId,cronExpression,status,schedulerType,createdByUserId) VALUES (?,?,?,?,'paused','hosted',?)", [crypto.randomUUID(), projectId, workflowId, "0 59 23 31 12 *", user.id]);
     await expect(activateDataflowSchedule(user, { projectId, workflowId })).resolves.toMatchObject({ status: "active" });
     const [created] = await pool.query<mysql.RowDataPacket[]>("SELECT status,scheduleCronTaskUid FROM dataflow_schedule WHERE projectId=? AND workflowId=?", [projectId, workflowId]);
     expect(created[0].status).toBe("active");

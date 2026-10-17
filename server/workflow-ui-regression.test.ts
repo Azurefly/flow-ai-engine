@@ -393,8 +393,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_442 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 430 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_444 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 431 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2494,7 +2494,9 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain('onOpenResourceTab("udfs")');
     expect(dataResourceSource).toContain("运行记录与审计");
     expect(dataResourceSource).toContain("当前接口最多返回最近 30 条");
-    expect(dataResourceSource).toContain("新增调度草稿");
+    expect(dataResourceSource).toContain("配置调度计划");
+    expect(dataResourceSource).toContain("快速填写计划（UTC）");
+    expect(dataResourceSource).toContain('value="0 */5 * * * *"');
     expect(dataResourceSource).toContain("publishedFlows.length > 0 ?");
     expect(dataResourceSource).toContain("dataflow-schedule-empty");
     expect(dataResourceSource).toContain("当前没有已发布数据流");
@@ -2544,7 +2546,7 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain(
       "发布后再创建调度，不显示可保存的 Cron 输入。"
     );
-    expect(dataResourceSource).toContain("启用后会按计划真实运行数据流");
+    expect(dataResourceSource).toContain("启用后由后台按计划运行");
   });
 
   it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {

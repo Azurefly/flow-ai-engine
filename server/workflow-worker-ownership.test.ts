@@ -29,6 +29,7 @@ vi.mock("./workflow-engine", () => ({
   WorkflowExecutionInjectedCrash: class extends Error {},
 }));
 vi.mock("./p2-service", () => ({
+  queueDueNativeDataflowsOnce: async () => 0,
   runDataflowJobOnce: async () => false,
   runDataSourceTestJobOnce: async () => false,
 }));

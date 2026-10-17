@@ -240,7 +240,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         resourceCenterSource,
         "当前没有已发布数据流。发布后再创建调度"
       );
-      expectSemanticBodyForCopy(resourceCenterSource, "尚未配置托管调度。");
+      expectSemanticBodyForCopy(resourceCenterSource, "尚未配置定时调度。");
       expectSemanticBodyForCopy(
         organizationManagementSource,
         "唯一主部门用于直属上级解析。"

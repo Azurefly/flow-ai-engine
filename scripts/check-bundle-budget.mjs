@@ -19,9 +19,11 @@ const maxChunkBytes = 450 * 1024;
 // Inline loop draft validation adds about 1.07 KiB raw / 0.38 KiB gzip.
 // Task form trial preview and the shared task display contract add 2.53 KiB raw.
 // Task opener lookup after nested dialogs adds about 0.23 KiB raw.
-const maxTotalBytes = 1_442 * 1024;
+// Native schedule revisions, recovery actions and preset selection add < 1 KiB gzip.
+// The resource center stays lazy loaded; per-chunk and HTML limits remain unchanged.
+const maxTotalBytes = 1_444 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 430 * 1024;
+const maxTotalGzipBytes = 431 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

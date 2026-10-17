@@ -4,9 +4,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0039_loop_visit_facts";
-export const DATABASE_MIGRATION_EPOCH = 1791874432913;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 48;
+export const DATABASE_MIGRATION_VERSION = "0040_dataflow_native_schedule";
+export const DATABASE_MIGRATION_EPOCH = 1792236489608;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 52;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -99,6 +99,7 @@ export async function checkReadiness() {
           (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
           (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson')) OR
+          (table_name='dataflow_schedule' AND column_name IN ('schedulerType','revision','nextRunAt','lastError')) OR
           (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
           (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR
           (table_name='project_service_endpoint' AND column_name='targetEnvironment') OR
@@ -114,7 +115,7 @@ export async function checkReadiness() {
     const [indexRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(DISTINCT CONCAT(table_name,':',index_name)) AS count
          FROM information_schema.statistics
-        WHERE table_schema=DATABASE() AND non_unique=0 AND (
+        WHERE table_schema=DATABASE() AND (non_unique=0 OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')) AND (
           (table_name='workflow_run_job' AND index_name='workflow_run_job_idempotency_unique') OR
           (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique') OR
           (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_sequence_unique')
@@ -131,6 +132,7 @@ export async function checkReadiness() {
           OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_node_run_unique')
           OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_run_node_unique')
           OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
+          OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')
         )`
     );
     const [projectUnitCollationRows] = await db().query<mysql.RowDataPacket[]>(
@@ -146,7 +148,7 @@ export async function checkReadiness() {
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
       Number(tableRows[0]?.count ?? 0) === 13 &&
       Number(columnRows[0]?.count ?? 0) === DATABASE_REQUIRED_COLUMN_COUNT &&
-      Number(indexRows[0]?.count ?? 0) === 16 &&
+      Number(indexRows[0]?.count ?? 0) === 17 &&
       Number(projectUnitCollationRows[0]?.count ?? 0) === 3;
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }

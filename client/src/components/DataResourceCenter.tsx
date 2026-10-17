@@ -39,8 +39,15 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import { Children, isValidElement, useMemo, useState } from "react";
+import { Children, isValidElement, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+
+const metaClassName = "aiflow-type-meta text-muted-foreground";
+const mutedCellClassName = "px-4 py-3 text-xs text-muted-foreground";
+const nowrapCellClassName = "px-4 py-3 whitespace-nowrap";
+const resourcePanelClassName = "rounded-lg border border-border bg-card p-4";
+const resourceTitleClassName =
+  "aiflow-type-section-title font-semibold text-foreground";
 
 type Tab = "sources" | "assets" | "udfs" | "tags" | "plugins" | "flows";
 
@@ -69,7 +76,14 @@ export default function DataResourceCenter({
   const flows = trpc.data.flows.useQuery({ projectId });
   const schedules = trpc.data.schedules.useQuery(
     { projectId },
-    { enabled: tab === "flows" }
+    {
+      enabled: tab === "flows",
+      refetchInterval: query =>
+        query.state.data?.some(item => item.status === "active")
+          ? 15_000
+          : false,
+      refetchIntervalInBackground: false,
+    }
   );
   const hasActiveSchedule =
     schedules.data?.some(schedule => schedule.status === "active") ?? false;
@@ -104,7 +118,7 @@ export default function DataResourceCenter({
     pluginType: "transform" as "transform" | "connector" | "visualization",
     version: "1.0.0",
   });
-  const [scheduleForm, setScheduleForm] = useState({
+  const [scheduleForm, setScheduleForm] = useState<DataflowScheduleForm>({
     workflowId: "",
     cronExpression: "0 0 9 * * *",
   });
@@ -210,33 +224,53 @@ export default function DataResourceCenter({
     void utils.data.schedules.invalidate({ projectId });
     void utils.data.flows.invalidate({ projectId });
   };
+  const scheduleError = (error: { message: string }) => {
+    refreshSchedules();
+    toast.error(error.message);
+  };
+  const acceptScheduleVersion = (result: object, workflowId: string) => {
+    refreshSchedules();
+    if ("revision" in result && typeof result.revision === "number") {
+      const revision = result.revision;
+      setScheduleForm(current =>
+        current.workflowId === workflowId
+          ? { ...current, expectedRevision: revision }
+          : current
+      );
+    }
+  };
   const saveSchedule = trpc.data.saveScheduleDraft.useMutation({
-    onSuccess: () => {
-      refreshSchedules();
+    onSuccess: (result, submitted) => {
+      acceptScheduleVersion(result, submitted.workflowId);
       toast.success("调度草稿已保存；可在本页启用后台触发。 ");
     },
-    onError: error => toast.error(error.message),
+    onError: scheduleError,
   });
   const activateSchedule = trpc.data.activateSchedule.useMutation({
-    onSuccess: () => {
-      refreshSchedules();
-      toast.success("托管计划已启用。 ");
+    onSuccess: (result, submitted) => {
+      acceptScheduleVersion(result, submitted.workflowId);
+      toast.success("调度计划已启用。 ");
     },
-    onError: error => toast.error(error.message),
+    onError: scheduleError,
   });
   const pauseSchedule = trpc.data.pauseSchedule.useMutation({
-    onSuccess: () => {
-      refreshSchedules();
-      toast.success("托管计划已暂停。 ");
+    onSuccess: (result, submitted) => {
+      acceptScheduleVersion(result, submitted.workflowId);
+      toast.success("调度已暂停，已发起的运行不受影响。 ");
     },
-    onError: error => toast.error(error.message),
+    onError: scheduleError,
   });
   const deleteSchedule = trpc.data.deleteSchedule.useMutation({
-    onSuccess: () => {
+    onSuccess: (_, submitted) => {
       refreshSchedules();
-      toast.success("托管计划已删除。 ");
+      setScheduleForm(current =>
+        current.workflowId === submitted.workflowId
+          ? { ...current, expectedRevision: undefined }
+          : current
+      );
+      toast.success("调度计划已删除。 ");
     },
-    onError: error => toast.error(error.message),
+    onError: scheduleError,
   });
   const scheduleByWorkflow = new Map(
     (schedules.data ?? []).map((schedule: any) => [
@@ -460,15 +494,27 @@ export default function DataResourceCenter({
           }
           saveSchedulePending={saveSchedule.isPending}
           onActivateSchedule={workflowId =>
-            activateSchedule.mutate({ projectId, workflowId })
+            activateSchedule.mutate({
+              projectId,
+              workflowId,
+              expectedRevision: scheduleByWorkflow.get(workflowId)?.revision,
+            })
           }
           activateSchedulePending={activateSchedule.isPending}
           onPauseSchedule={workflowId =>
-            pauseSchedule.mutate({ projectId, workflowId })
+            pauseSchedule.mutate({
+              projectId,
+              workflowId,
+              expectedRevision: scheduleByWorkflow.get(workflowId)?.revision,
+            })
           }
           pauseSchedulePending={pauseSchedule.isPending}
           onDeleteSchedule={workflowId =>
-            deleteSchedule.mutateAsync({ projectId, workflowId })
+            deleteSchedule.mutateAsync({
+              projectId,
+              workflowId,
+              expectedRevision: scheduleByWorkflow.get(workflowId)?.revision,
+            })
           }
           deleteSchedulePending={deleteSchedule.isPending}
         />
@@ -538,13 +584,11 @@ export default function DataResourceCenter({
                 primary={source.name}
                 secondary={source.connection?.description || "连接元数据已隐藏"}
               />
-              <td className="px-4 py-3 text-xs text-muted-foreground">
-                {source.sourceType}
-              </td>
+              <td className={mutedCellClassName}>{source.sourceType}</td>
               <td className="px-4 py-3">
                 <State value={source.status} />
               </td>
-              <td className="px-4 py-3 text-xs text-muted-foreground">
+              <td className={mutedCellClassName}>
                 {source.lastTestedAt
                   ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
                   : "—"}
@@ -613,10 +657,8 @@ export default function DataResourceCenter({
                 primary={asset.name}
                 secondary={asset.sourceName || "未关联数据源"}
               />
-              <td className="px-4 py-3 text-xs text-muted-foreground">
-                {asset.assetType}
-              </td>
-              <td className="px-4 py-3 text-xs text-muted-foreground">
+              <td className={mutedCellClassName}>{asset.assetType}</td>
+              <td className={mutedCellClassName}>
                 {asset.schema?.length ?? 0} 字段 · {asset.sample?.length ?? 0}{" "}
                 行样本
               </td>
@@ -764,7 +806,7 @@ export default function DataResourceCenter({
                   primary={udf.name}
                   secondary={udf.returnType || "未声明返回类型"}
                 />
-                <td className="px-4 py-3 text-xs text-muted-foreground">
+                <td className={mutedCellClassName}>
                   {dataFunctionTypeLabel(udf.udfType, udf.artifactRef)}
                 </td>
                 <td className="max-w-[300px] px-4 py-3">
@@ -929,9 +971,7 @@ export default function DataResourceCenter({
             {(resources.data?.plugins ?? []).map((plugin: any) => (
               <tr key={plugin.id}>
                 <Cell primary={plugin.name} secondary="项目级插件" />
-                <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {plugin.pluginType}
-                </td>
+                <td className={mutedCellClassName}>{plugin.pluginType}</td>
                 <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                   {plugin.version}
                 </td>
@@ -996,9 +1036,7 @@ function DataflowOperationList({
     >
       <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="aiflow-type-section-title font-semibold text-foreground">
-            运行记录与审计
-          </h2>
+          <h2 className={resourceTitleClassName}>运行记录与审计</h2>
           <p className="aiflow-type-body mt-1 max-w-2xl text-muted-foreground">
             {projectName} · 当前接口最多返回最近 30
             条；关键词筛选仅覆盖已加载记录。
@@ -1040,34 +1078,26 @@ function DataflowOperationList({
                 </div>
                 <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3">
                   <div className="min-w-0">
-                    <dt className="aiflow-type-meta text-muted-foreground">
-                      操作 ID
-                    </dt>
+                    <dt className={metaClassName}>操作 ID</dt>
                     <dd className="aiflow-type-code mt-1 break-all font-mono text-foreground">
                       {String(run.id).slice(0, 8)}
                     </dd>
                   </div>
                   <div className="min-w-0">
-                    <dt className="aiflow-type-meta text-muted-foreground">
-                      触发方式 / 人员
-                    </dt>
+                    <dt className={metaClassName}>触发方式 / 人员</dt>
                     <dd className="aiflow-type-body mt-1 break-words text-foreground">
-                      {run.triggerType === "schedule" ? "托管调度" : "手动运行"}{" "}
+                      {run.triggerType === "schedule" ? "定时调度" : "手动运行"}{" "}
                       · {run.triggerName || "系统用户"}
                     </dd>
                   </div>
                   <div className="min-w-0">
-                    <dt className="aiflow-type-meta text-muted-foreground">
-                      启动时间
-                    </dt>
+                    <dt className={metaClassName}>启动时间</dt>
                     <dd className="aiflow-type-meta mt-1 break-words text-foreground">
                       {formatDataflowTime(run.startedAt ?? run.createdAt)}
                     </dd>
                   </div>
                   <div className="min-w-0">
-                    <dt className="aiflow-type-meta text-muted-foreground">
-                      结束时间
-                    </dt>
+                    <dt className={metaClassName}>结束时间</dt>
                     <dd className="aiflow-type-meta mt-1 break-words text-foreground">
                       {formatDataflowTime(run.finishedAt)}
                     </dd>
@@ -1096,12 +1126,12 @@ function DataflowOperationList({
             <table className="w-full min-w-[960px] text-left text-sm">
               <thead className="bg-muted text-sm font-medium text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 whitespace-nowrap">操作 ID</th>
-                  <th className="px-4 py-3 whitespace-nowrap">业务名称</th>
-                  <th className="px-4 py-3 whitespace-nowrap">流程名称</th>
-                  <th className="px-4 py-3 whitespace-nowrap">启动时间</th>
-                  <th className="px-4 py-3 whitespace-nowrap">结束时间</th>
-                  <th className="px-4 py-3 whitespace-nowrap">状态</th>
+                  <th className={nowrapCellClassName}>操作 ID</th>
+                  <th className={nowrapCellClassName}>业务名称</th>
+                  <th className={nowrapCellClassName}>流程名称</th>
+                  <th className={nowrapCellClassName}>启动时间</th>
+                  <th className={nowrapCellClassName}>结束时间</th>
+                  <th className={nowrapCellClassName}>状态</th>
                   <th className="px-4 py-3 text-right whitespace-nowrap">
                     操作
                   </th>
@@ -1125,7 +1155,7 @@ function DataflowOperationList({
                       </p>
                       <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
                         {run.triggerType === "schedule"
-                          ? "托管调度"
+                          ? "定时调度"
                           : "手动运行"}{" "}
                         · {run.triggerName || "系统用户"}
                       </p>
@@ -1305,19 +1335,19 @@ function DataflowRunOutput({ run }: { run: any }) {
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <div className="rounded-md border border-border bg-muted px-3 py-2">
-          <p className="aiflow-type-meta text-muted-foreground">执行节点</p>
+          <p className={metaClassName}>执行节点</p>
           <p className="aiflow-type-body mt-1 font-semibold text-foreground">
             {nodes.length || "—"}
           </p>
         </div>
         <div className="rounded-md border border-border bg-muted px-3 py-2">
-          <p className="aiflow-type-meta text-muted-foreground">最终结果行数</p>
+          <p className={metaClassName}>最终结果行数</p>
           <p className="aiflow-type-body mt-1 font-semibold text-foreground">
             {rowCount}
           </p>
         </div>
         <div className="col-span-2 rounded-md border border-border bg-muted px-3 py-2 sm:col-span-1">
-          <p className="aiflow-type-meta text-muted-foreground">运行状态</p>
+          <p className={metaClassName}>运行状态</p>
           <div className="mt-1">
             <State value={run.status} />
           </div>
@@ -1344,7 +1374,7 @@ function DataflowRunOutput({ run }: { run: any }) {
                 </span>
               )}
             </h3>
-            <span className="aiflow-type-meta text-muted-foreground">
+            <span className={metaClassName}>
               第 {preview.page + 1} / {preview.pageCount} 页 · 每页 10 行 · 共{" "}
               {terminalRows.length} 行
             </span>
@@ -1563,7 +1593,21 @@ type DataflowSection = "overview" | "runs" | "schedules";
 type DataflowScheduleForm = {
   workflowId: string;
   cronExpression: string;
+  expectedRevision?: number;
 };
+
+function scheduleDetails(item: any) {
+  return (
+    item.lastError ||
+    (item.activationAvailable === false
+      ? "调度服务未配置或执行器未启用"
+      : item.nextRunAt
+        ? `下次：${String(item.nextRunAt).replace("T", " ").replace("Z", " UTC")}`
+        : item.schedulerType === "internal"
+          ? "内置调度"
+          : "外部托管")
+  );
+}
 
 function DataflowWorkspace({
   projectName,
@@ -1624,6 +1668,43 @@ function DataflowWorkspace({
   onDeleteSchedule: (workflowId: string) => Promise<unknown>;
   deleteSchedulePending: boolean;
 }) {
+  const schedulePending =
+    saveSchedulePending ||
+    activateSchedulePending ||
+    pauseSchedulePending ||
+    deleteSchedulePending;
+  const scheduleActions = (item: any, name: string) => (
+    <div className="flex flex-1 justify-end gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        className="min-h-11 flex-1 text-xs sm:min-h-9"
+        disabled={
+          schedulePending ||
+          (item.activationAvailable === false &&
+            (item.status !== "active" || item.schedulerType === "hosted"))
+        }
+        onClick={() =>
+          item.status === "active"
+            ? onPauseSchedule(item.workflowId)
+            : onActivateSchedule(item.workflowId)
+        }
+      >
+        {item.status === "active" ? "暂停计划" : "启用计划"}
+      </Button>
+      <DeleteButton
+        visibleLabel="删除计划"
+        resourceName={name}
+        disabled={
+          schedulePending ||
+          (item.schedulerType === "hosted" &&
+            item.activationAvailable === false)
+        }
+        onDelete={() => onDeleteSchedule(item.workflowId)}
+      />
+    </div>
+  );
+
   const flow = flows.find(item => item.id === activeFlowId) ?? flows[0];
   const latestRun = flow
     ? runs.find(item => item.workflowId === flow.id)
@@ -1722,11 +1803,7 @@ function DataflowWorkspace({
         </div>
       </header>
 
-      <p
-        role="status"
-        aria-live="polite"
-        className="aiflow-type-meta text-muted-foreground"
-      >
+      <p role="status" aria-live="polite" className={metaClassName}>
         {autoRefreshActive
           ? "运行及调度状态自动刷新中；后台页面暂停自动刷新。"
           : "当前没有执行中的运行或已启用计划，可手动刷新状态。"}
@@ -1776,10 +1853,8 @@ function DataflowWorkspace({
         ) : (
           <div className="grid gap-3">
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-lg border border-border bg-card p-4">
-                <p className="aiflow-type-meta text-muted-foreground">
-                  当前数据流
-                </p>
+              <div className={resourcePanelClassName}>
+                <p className={metaClassName}>当前数据流</p>
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <p className="truncate text-sm font-medium text-foreground">
                     {flow?.name}
@@ -1787,10 +1862,8 @@ function DataflowWorkspace({
                   {flow && <State value={flow.status} />}
                 </div>
               </div>
-              <div className="rounded-lg border border-border bg-card p-4">
-                <p className="aiflow-type-meta text-muted-foreground">
-                  最近运行
-                </p>
+              <div className={resourcePanelClassName}>
+                <p className={metaClassName}>最近运行</p>
                 <p className="mt-2 text-sm font-medium text-foreground">
                   {latestRun ? (
                     <>
@@ -1806,10 +1879,8 @@ function DataflowWorkspace({
                   )}
                 </p>
               </div>
-              <div className="rounded-lg border border-border bg-card p-4">
-                <p className="aiflow-type-meta text-muted-foreground">
-                  托管计划
-                </p>
+              <div className={resourcePanelClassName}>
+                <p className={metaClassName}>调度计划</p>
                 <p className="mt-2 text-sm font-medium text-foreground">
                   {schedule
                     ? `${schedule.status === "active" ? "已启用" : "草稿 / 已暂停"} · ${schedule.cronExpression} UTC`
@@ -1818,12 +1889,10 @@ function DataflowWorkspace({
               </div>
             </div>
 
-            <section className="rounded-lg border border-border bg-card p-4">
+            <section className={resourcePanelClassName}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h3 className="aiflow-type-section-title font-semibold text-foreground">
-                    流程摘要
-                  </h3>
+                  <h3 className={resourceTitleClassName}>流程摘要</h3>
                   <p className="mt-1 text-sm text-foreground">{flow?.name}</p>
                 </div>
                 {flow && <State value={flow.status} />}
@@ -1847,9 +1916,7 @@ function DataflowWorkspace({
               </summary>
               <div className="grid gap-4 border-t border-border p-4 sm:grid-cols-2">
                 <div>
-                  <h4 className="aiflow-type-section-title font-semibold text-foreground">
-                    数据资源
-                  </h4>
+                  <h4 className={resourceTitleClassName}>数据资源</h4>
                   {assets.length > 0 ? (
                     <ul className="mt-2 grid gap-1">
                       {assetPreview.map((asset: any) => (
@@ -1868,7 +1935,7 @@ function DataflowWorkspace({
                   )}
                   <div className="mt-2 flex items-center gap-2">
                     {assets.length > assetPreview.length && (
-                      <span className="aiflow-type-meta text-muted-foreground">
+                      <span className={metaClassName}>
                         另有 {assets.length - assetPreview.length} 项
                       </span>
                     )}
@@ -1882,9 +1949,7 @@ function DataflowWorkspace({
                   </div>
                 </div>
                 <div>
-                  <h4 className="aiflow-type-section-title font-semibold text-foreground">
-                    函数资源
-                  </h4>
+                  <h4 className={resourceTitleClassName}>函数资源</h4>
                   {udfs.length > 0 ? (
                     <ul className="mt-2 grid gap-1">
                       {udfPreview.map((udf: any) => (
@@ -1904,7 +1969,7 @@ function DataflowWorkspace({
                   )}
                   <div className="mt-2 flex items-center gap-2">
                     {udfs.length > udfPreview.length && (
-                      <span className="aiflow-type-meta text-muted-foreground">
+                      <span className={metaClassName}>
                         另有 {udfs.length - udfPreview.length} 项
                       </span>
                     )}
@@ -1928,13 +1993,11 @@ function DataflowWorkspace({
 
       {section === "schedules" && (
         <div className="grid gap-3">
-          <section className="rounded-lg border border-border bg-card p-4">
-            <h3 className="aiflow-type-section-title font-semibold text-foreground">
-              新增调度草稿
-            </h3>
+          <section className={resourcePanelClassName}>
+            <h3 className={resourceTitleClassName}>配置调度计划</h3>
             <p className="aiflow-type-body mt-1 text-muted-foreground">
               使用六段 UTC 表达式：秒 分 时 日 月
-              星期。保存只创建草稿；启用后会按计划真实运行数据流，可能产生外部系统读写副作用。
+              星期。保存为暂停草稿；启用后由后台按计划运行。暂停不会中断已发起的运行。
             </p>
             {publishedFlows.length > 0 ? (
               <form
@@ -1949,12 +2012,16 @@ function DataflowWorkspace({
                   <select
                     className="h-11 rounded-md border border-border bg-card px-2 text-sm font-normal sm:h-9"
                     value={scheduleForm.workflowId}
-                    onChange={event =>
+                    onChange={event => {
+                      const stored = schedulesByWorkflow.get(
+                        event.target.value
+                      );
                       setScheduleForm({
-                        ...scheduleForm,
                         workflowId: event.target.value,
-                      })
-                    }
+                        cronExpression: stored?.cronExpression ?? "0 0 9 * * *",
+                        expectedRevision: stored?.revision,
+                      });
+                    }}
                     required
                   >
                     <option value="">选择数据流</option>
@@ -1984,13 +2051,63 @@ function DataflowWorkspace({
                 <Button
                   type="submit"
                   className="min-h-11 bg-blue-600 text-white hover:bg-blue-700 sm:min-h-0"
-                  disabled={saveSchedulePending}
+                  disabled={
+                    schedulePending ||
+                    schedulesByWorkflow.get(scheduleForm.workflowId)?.status ===
+                      "active"
+                  }
                 >
                   {saveSchedulePending && (
                     <Loader2 className="animate-spin" size={14} />
                   )}
                   保存调度草稿
                 </Button>
+                {scheduleForm.workflowId && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={schedulePending || refreshPending}
+                    onClick={() => {
+                      const stored = schedulesByWorkflow.get(
+                        scheduleForm.workflowId
+                      );
+                      setScheduleForm({
+                        workflowId: scheduleForm.workflowId,
+                        cronExpression: stored?.cronExpression ?? "0 0 9 * * *",
+                        expectedRevision: stored?.revision,
+                      });
+                    }}
+                  >
+                    读取最新计划并替换填写
+                  </Button>
+                )}
+                <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+                  快速填写计划（UTC）
+                  <select
+                    className="h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9"
+                    value=""
+                    disabled={schedulePending}
+                    onChange={event =>
+                      setScheduleForm({
+                        ...scheduleForm,
+                        cronExpression: event.target.value,
+                      })
+                    }
+                  >
+                    <option value="" disabled>
+                      选择后填入表达式
+                    </option>
+                    <option value="0 */5 * * * *">每 5 分钟</option>
+                    <option value="0 0 * * * *">每小时整点</option>
+                    <option value="0 0 9 * * *">每天 09:00 UTC</option>
+                  </select>
+                </label>
+                {schedulesByWorkflow.get(scheduleForm.workflowId)?.status ===
+                  "active" && (
+                  <p className="text-sm text-muted-foreground">
+                    修改前请先暂停当前计划。
+                  </p>
+                )}
               </form>
             ) : (
               <div
@@ -2007,7 +2124,7 @@ function DataflowWorkspace({
           {schedules.length > 0 ? (
             <ResourceTable
               columns={["数据流", "计划状态", "执行时间（UTC）", "操作"]}
-              empty="尚未配置托管调度。"
+              empty="尚未配置定时调度。"
               mobileCards={schedules.map((item: any) => {
                 const scheduledFlow = flows.find(
                   flowItem => flowItem.id === item.workflowId
@@ -2024,34 +2141,12 @@ function DataflowWorkspace({
                     status={<State value={item.status} />}
                     fields={[
                       { label: "执行时间（UTC）", value: item.cronExpression },
+                      { label: "触发状态", value: scheduleDetails(item) },
                     ]}
-                    actions={
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          className="min-h-11 flex-1 text-xs"
-                          disabled={
-                            item.status === "active"
-                              ? pauseSchedulePending
-                              : activateSchedulePending
-                          }
-                          onClick={() =>
-                            item.status === "active"
-                              ? onPauseSchedule(item.workflowId)
-                              : onActivateSchedule(item.workflowId)
-                          }
-                        >
-                          {item.status === "active" ? "暂停计划" : "启用计划"}
-                        </Button>
-                        <DeleteButton
-                          resourceName={scheduledFlow?.name ?? item.workflowId}
-                          disabled={deleteSchedulePending}
-                          visibleLabel="删除计划"
-                          onDelete={() => onDeleteSchedule(item.workflowId)}
-                        />
-                      </>
-                    }
+                    actions={scheduleActions(
+                      item,
+                      scheduledFlow?.name ?? item.workflowId
+                    )}
                   />
                 );
               })}
@@ -2075,37 +2170,15 @@ function DataflowWorkspace({
                     </td>
                     <td className="aiflow-type-code px-4 py-3 font-mono text-muted-foreground">
                       {item.cronExpression} UTC
+                      <p className="mt-1 whitespace-normal font-sans text-xs">
+                        {scheduleDetails(item)}
+                      </p>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      {item.status === "active" ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mr-2 h-8 text-xs"
-                          disabled={pauseSchedulePending}
-                          onClick={() => onPauseSchedule(item.workflowId)}
-                        >
-                          暂停
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="mr-2 h-8 text-xs"
-                          disabled={activateSchedulePending}
-                          onClick={() => onActivateSchedule(item.workflowId)}
-                        >
-                          启用
-                        </Button>
+                      {scheduleActions(
+                        item,
+                        scheduledFlow?.name ?? item.workflowId
                       )}
-                      <DeleteButton
-                        visibleLabel="删除计划"
-                        resourceName={scheduledFlow?.name ?? item.workflowId}
-                        disabled={deleteSchedulePending}
-                        onDelete={() => onDeleteSchedule(item.workflowId)}
-                      />
                     </td>
                   </tr>
                 );
@@ -2113,7 +2186,7 @@ function DataflowWorkspace({
             </ResourceTable>
           ) : (
             <div className="aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-5 text-center text-muted-foreground">
-              尚未配置托管调度。
+              尚未配置定时调度。
             </div>
           )}
         </div>
@@ -2273,6 +2346,7 @@ function State({ value }: { value: string }) {
     failed: "失败",
     running: "运行中",
     queued: "排队中",
+    paused: "已暂停",
   };
   return (
     <span
@@ -2296,6 +2370,7 @@ function DeleteButton({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const deleteAction = useRef(onDelete);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const label = actionLabel || visibleLabel || "删除资源";
@@ -2304,7 +2379,7 @@ function DeleteButton({
     setPending(true);
     setError("");
     try {
-      await onDelete();
+      await deleteAction.current();
       setOpen(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "删除失败，请重试。");
@@ -2314,16 +2389,18 @@ function DeleteButton({
   };
   return (
     <>
-      <button
+      <Button
         type="button"
         aria-label={`${label} ${resourceName}`}
+        variant={visibleLabel ? "outline" : "ghost"}
         className={
           visibleLabel
-            ? "aiflow-type-control inline-flex min-h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md border border-border px-3 text-aiflow-danger hover:bg-aiflow-danger-surface"
-            : "aiflow-type-control inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-aiflow-danger lg:min-h-10 lg:min-w-10"
+            ? "min-h-11 flex-1 text-aiflow-danger"
+            : "min-h-11 min-w-11 text-aiflow-danger"
         }
         disabled={disabled || pending}
         onClick={() => {
+          deleteAction.current = onDelete;
           setError("");
           setOpen(true);
         }}
@@ -2331,7 +2408,7 @@ function DeleteButton({
       >
         <Trash2 size={15} />
         {visibleLabel}
-      </button>
+      </Button>
       <Dialog
         open={open}
         onOpenChange={next => {
@@ -2479,7 +2556,7 @@ export function DataflowRunMonitor({
       )}
       {selectedRunId && (
         <section
-          className="rounded-lg border border-border bg-card p-4"
+          className={resourcePanelClassName}
           aria-label="数据流程运行详情"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">

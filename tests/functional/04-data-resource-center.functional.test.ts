@@ -94,8 +94,11 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     expect(resourceCenter).toContain('data-resource-table-desktop=""');
     expect(resourceCenter).toContain('dataflow-run-cards=""');
     expect(resourceCenter).toContain(
-      "aiflow-type-control inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-aiflow-danger lg:min-h-10 lg:min-w-10"
+      'variant={visibleLabel ? "outline" : "ghost"}'
     );
+    expect(resourceCenter).toContain("min-h-11 min-w-11 text-aiflow-danger");
+    expect(resourceCenter).toContain("deleteAction.current = onDelete;");
+    expect(resourceCenter).toContain("await deleteAction.current();");
     expect(resourceCenter).toContain(
       "aiflow-type-meta whitespace-nowrap rounded px-2 py-1"
     );

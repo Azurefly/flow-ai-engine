@@ -1117,6 +1117,7 @@ export const appRouter = router({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
           cronExpression: z.string().trim().min(9).max(96),
+          expectedRevision: z.number().int().min(0).optional(),
         })
       )
       .mutation(({ ctx, input }) => saveDataflowScheduleDraft(ctx.user, input)),
@@ -1125,6 +1126,7 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          expectedRevision: z.number().int().min(0).optional(),
         })
       )
       .mutation(({ ctx, input }) => activateDataflowSchedule(ctx.user, input)),
@@ -1133,6 +1135,7 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          expectedRevision: z.number().int().min(0).optional(),
         })
       )
       .mutation(({ ctx, input }) => pauseDataflowSchedule(ctx.user, input)),
@@ -1141,6 +1144,7 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          expectedRevision: z.number().int().min(0).optional(),
         })
       )
       .mutation(({ ctx, input }) => deleteDataflowSchedule(ctx.user, input)),

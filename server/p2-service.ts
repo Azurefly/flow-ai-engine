@@ -6,6 +6,7 @@ import { executeBuiltinDataFunction } from "./dataflow-builtin-function";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
+import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
 import { getProjectAccess, type ProjectUser } from "./project-service";
@@ -30,6 +31,16 @@ import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
 import { joinDataflowRows } from "./dataflow-join-rows";
 import { dataflowReadLimit } from "../shared/dataflow-read-limit";
 import { prepareReadOnlyDataflowSql } from "./dataflow-sql-binding";
+import {
+  advanceNativeDataflowSchedule,
+  changeNativeDataflowSchedule,
+  isTransientScheduleError,
+  lockNativeScheduleAdmission,
+  saveNativeDataflowSchedule,
+  ScheduleSupersededError,
+  validateDataflowScheduleCron,
+  type NativeScheduleAdmission,
+} from "./dataflow-schedule";
 import {
   aggregateDataflowRows,
   distinctDataflowRows,
@@ -96,7 +107,9 @@ async function requireProjectAccess(
   projectId: string,
   mode: "view" | "edit" | "run"
 ) {
-  const access = await getProjectAccess(user, projectId, { includeArchived: mode === "view" });
+  const access = await getProjectAccess(user, projectId, {
+    includeArchived: mode === "view",
+  });
   const permission =
     mode === "view"
       ? "project:view"
@@ -104,7 +117,10 @@ async function requireProjectAccess(
         ? "project:workflow:edit"
         : "project:workflow:run";
   if (!access.exists || !access.permissions.has(permission))
-    throw new Error("项目不存在或当前账号无权执行此数据资源操作。");
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "项目不存在或当前账号无权执行此数据资源操作。",
+    });
   return access;
 }
 
@@ -1980,6 +1996,8 @@ export async function runDataflow(
     triggerType?: "manual" | "schedule";
     mode?: "formal" | "test";
     scheduleBucket?: string;
+    scheduleAdmission?: NativeScheduleAdmission;
+    hostedTaskUid?: string;
   }
 ) {
   await requireProjectAccess(
@@ -2004,7 +2022,9 @@ export async function runDataflow(
     if (input.triggerType === "schedule" && workflow.status !== "published")
       throw new Error("定时调度的流程必须处于已发布状态。 ");
     if (input.mode !== "test" && workflow.status !== "published")
-      throw new Error("数据流程尚未发布，无法正式运行；请先发布，或由编辑者使用草稿测试。");
+      throw new Error(
+        "数据流程尚未发布，无法正式运行；请先发布，或由编辑者使用草稿测试。"
+      );
     const publishedPlan = parseJson(workflow.publishedExecutionPlanJson, null);
     const executionSource = resolveWorkflowExecutionSource({
       workflowStatus: String(workflow.status),
@@ -2028,6 +2048,21 @@ export async function runDataflow(
       executionPlanHash = compiled.planHash;
     }
     definition = executionPlan.definition;
+    const admission = input.scheduleAdmission
+      ? await lockNativeScheduleAdmission(
+          connection,
+          input,
+          input.scheduleAdmission,
+          user.id
+        )
+      : null;
+    if (input.hostedTaskUid) {
+      const [hosted] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM dataflow_schedule WHERE projectId=? AND workflowId=? AND schedulerType='hosted' AND status='active' AND scheduleCronTaskUid=? FOR UPDATE",
+        [input.projectId, input.workflowId, input.hostedTaskUid]
+      );
+      if (!hosted[0]) throw new ScheduleSupersededError();
+    }
     const requestId = currentRequestId() ?? null;
     await connection.query(
       "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,executionSource,definitionVersion,requestId,inputJson,triggeredByUserId) VALUES (?,?,?,?,?, 'queued',?,?,?,?,?,?,?,?)",
@@ -2036,7 +2071,7 @@ export async function runDataflow(
         input.projectId,
         input.workflowId,
         input.triggerType ?? "manual",
-        input.scheduleBucket ?? null,
+        admission?.bucket ?? input.scheduleBucket ?? null,
         JSON.stringify(definition),
         JSON.stringify(executionPlan),
         executionPlanHash,
@@ -2051,6 +2086,12 @@ export async function runDataflow(
       "INSERT INTO dataflow_run_job (id,runId,status,maxAttempts,requestId) VALUES (?,?,'queued',3,?)",
       [id(), runId, requestId]
     );
+    if (admission)
+      await advanceNativeDataflowSchedule(
+        connection,
+        admission.schedule,
+        runId
+      );
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -2058,6 +2099,8 @@ export async function runDataflow(
   } finally {
     connection.release();
   }
+  if (input.scheduleAdmission)
+    return { runId, status: "queued" as const, output: null };
   await runDataflowJobOnce(runId);
   const [runRows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT status,outputJson,errorJson FROM dataflow_run WHERE id=? LIMIT 1",
@@ -2078,6 +2121,58 @@ export async function runDataflow(
       | "success",
     output: parseJson(persisted?.outputJson, null),
   };
+}
+
+/** Only internal plans are discovered; legacy hosted rows require explicit operator changes. */
+export async function queueDueNativeDataflowsOnce() {
+  const [due] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT s.id,s.projectId,s.workflowId,s.revision,DATE_FORMAT(s.nextRunAt,'%Y-%m-%dT%H:%i:%sZ') AS dueAt,p.ownerUserId,u.role AS ownerRole FROM dataflow_schedule s JOIN flow_project p ON p.id=s.projectId JOIN users u ON u.id=p.ownerUserId WHERE s.schedulerType='internal' AND s.status='active' AND s.nextRunAt<=UTC_TIMESTAMP() ORDER BY s.nextRunAt,s.id LIMIT 10"
+  );
+  let queued = 0;
+  for (const schedule of due) {
+    try {
+      await runDataflow(
+        {
+          id: Number(schedule.ownerUserId),
+          role: schedule.ownerRole === "admin" ? "admin" : "user",
+        },
+        {
+          projectId: String(schedule.projectId),
+          workflowId: String(schedule.workflowId),
+          triggerType: "schedule",
+          scheduleAdmission: {
+            id: String(schedule.id),
+            revision: Number(schedule.revision),
+            dueAt: String(schedule.dueAt),
+          },
+        }
+      );
+      queued++;
+    } catch (error) {
+      if (error instanceof ScheduleSupersededError) continue;
+      if (isTransientScheduleError(error)) {
+        console.warn("[DataflowSchedule] Admission deferred", {
+          scheduleId: schedule.id,
+        });
+        continue;
+      }
+      await db().query(
+        "UPDATE dataflow_schedule SET status='paused',revision=revision+1,nextRunAt=NULL,lastError=?,updatedAt=NOW() WHERE id=? AND revision=? AND status='active' AND nextRunAt=? AND EXISTS (SELECT 1 FROM flow_project p WHERE p.id=dataflow_schedule.projectId AND p.ownerUserId=?)",
+        [
+          "未能发起定时运行，请检查流程发布状态和业务权限后重新启用。",
+          schedule.id,
+          schedule.revision,
+          String(schedule.dueAt).slice(0, 19).replace("T", " "),
+          schedule.ownerUserId,
+        ]
+      );
+      console.warn("[DataflowSchedule] Admission failed", {
+        scheduleId: schedule.id,
+        message: error instanceof Error ? error.message : "unknown",
+      });
+    }
+  }
+  return queued;
 }
 
 export async function listDataflowRuns(
@@ -2239,14 +2334,7 @@ export async function getDataflowRunLineage(
 }
 
 function validateScheduleCron(cronExpression: string) {
-  const parts = cronExpression.trim().split(/\s+/);
-  if (parts.length !== 6)
-    throw new Error("调度表达式必须为 6 段 UTC 格式：秒 分 时 日 月 星期。 ");
-  if (parts[0] !== "0")
-    throw new Error("数据流调度最小频率为 60 秒，秒字段必须为 0。 ");
-  if (parts.some(part => !/^[\d*/?,\-]+$/.test(part)))
-    throw new Error("调度表达式包含不支持的字符。 ");
-  return parts.join(" ");
+  return validateDataflowScheduleCron(cronExpression);
 }
 
 async function getPublishedDataflow(projectId: string, workflowId: string) {
@@ -2264,12 +2352,21 @@ export async function listDataflowSchedules(
 ) {
   await requireProjectAccess(user, projectId, "view");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT s.*,w.name AS workflowName,u.name AS creatorName FROM dataflow_schedule s JOIN workflow w ON w.id=s.workflowId LEFT JOIN users u ON u.id=s.createdByUserId WHERE s.projectId=? AND s.status<>'deleted' ORDER BY s.updatedAt DESC",
+    "SELECT s.*,DATE_FORMAT(s.nextRunAt,'%Y-%m-%dT%H:%i:%sZ') AS nextRunAt,w.name AS workflowName,u.name AS creatorName FROM dataflow_schedule s JOIN workflow w ON w.id=s.workflowId LEFT JOIN users u ON u.id=s.createdByUserId WHERE s.projectId=? AND s.status<>'deleted' ORDER BY s.updatedAt DESC",
     [projectId]
   );
   return rows.map(row => ({
     ...row,
-    taskConfigured: Boolean(row.scheduleCronTaskUid),
+    taskConfigured:
+      row.schedulerType === "internal" || Boolean(row.scheduleCronTaskUid),
+    revision: Number(row.revision ?? 0),
+    activationAvailable:
+      row.schedulerType === "internal"
+        ? process.env.WORKFLOW_WORKER_ENABLED !== "false"
+        : Boolean(
+            process.env.BUILT_IN_FORGE_API_URL &&
+              process.env.BUILT_IN_FORGE_API_KEY
+          ),
     status: String(row.status),
     scheduleCronTaskUid: undefined,
   }));
@@ -2278,7 +2375,12 @@ export async function listDataflowSchedules(
 /** Save a paused draft before deployment. It cannot create a hosted job until the callback exists on a published site. */
 export async function saveDataflowScheduleDraft(
   user: DataflowUser,
-  input: { projectId: string; workflowId: string; cronExpression: string }
+  input: {
+    projectId: string;
+    workflowId: string;
+    cronExpression: string;
+    expectedRevision?: number;
+  }
 ) {
   await requireProjectAccess(user, input.projectId, "edit");
   await getPublishedDataflow(input.projectId, input.workflowId);
@@ -2288,6 +2390,13 @@ export async function saveDataflowScheduleDraft(
     [input.workflowId]
   );
   const scheduleId = existing[0]?.id ?? id();
+  if (
+    !existing[0] ||
+    existing[0].schedulerType === "internal" ||
+    existing[0].status === "deleted" ||
+    !existing[0].scheduleCronTaskUid
+  )
+    return saveNativeDataflowSchedule(user.id, input);
   if (existing[0]?.scheduleCronTaskUid) {
     await db().query(
       "UPDATE dataflow_schedule SET cronExpression=?,status='paused',updatedAt=NOW() WHERE id=?",
@@ -2313,7 +2422,7 @@ export async function saveDataflowScheduleDraft(
 /** Call only after the current checkpoint is published; hosted service will POST by trusted task UID. */
 export async function activateDataflowSchedule(
   user: DataflowUser,
-  input: { projectId: string; workflowId: string }
+  input: { projectId: string; workflowId: string; expectedRevision?: number }
 ) {
   await requireProjectAccess(user, input.projectId, "edit");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
@@ -2322,10 +2431,14 @@ export async function activateDataflowSchedule(
   );
   const schedule = rows[0];
   if (!schedule) throw new Error("请先保存数据流调度草稿。 ");
+  if (schedule.schedulerType === "internal")
+    return changeNativeDataflowSchedule(user.id, input, "activate");
   const flow = await getPublishedDataflow(input.projectId, input.workflowId);
   const callbackPath = "/api/scheduled/dataflow";
   const description = `数据流调度：${flow.name}（${input.workflowId.slice(0, 8)}）`;
-  let taskUid = schedule.scheduleCronTaskUid ? String(schedule.scheduleCronTaskUid) : "";
+  let taskUid = schedule.scheduleCronTaskUid
+    ? String(schedule.scheduleCronTaskUid)
+    : "";
   let connection: mysql.PoolConnection | undefined;
   try {
     if (schedule.scheduleCronTaskUid) {
@@ -2361,30 +2474,48 @@ export async function activateDataflowSchedule(
     await connection.beginTransaction();
     await lockActiveProject(connection, input.projectId);
     const [workflows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id FROM workflow WHERE id=? AND projectId=? AND archivedAt IS NULL AND status='published' FOR UPDATE", [input.workflowId, input.projectId]
+      "SELECT id FROM workflow WHERE id=? AND projectId=? AND archivedAt IS NULL AND status='published' FOR UPDATE",
+      [input.workflowId, input.projectId]
     );
-    if (!workflows[0]) throw new Error("流程已归档或取消发布，调度未激活。请刷新后重新确认。");
+    if (!workflows[0])
+      throw new Error("流程已归档或取消发布，调度未激活。请刷新后重新确认。");
     const [currentSchedules] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT status,scheduleCronTaskUid,cronExpression FROM dataflow_schedule WHERE id=? AND projectId=? AND workflowId=? FOR UPDATE", [schedule.id, input.projectId, input.workflowId]
+      "SELECT status,scheduleCronTaskUid,cronExpression FROM dataflow_schedule WHERE id=? AND projectId=? AND workflowId=? FOR UPDATE",
+      [schedule.id, input.projectId, input.workflowId]
     );
-    if (!currentSchedules[0] || currentSchedules[0].status === "deleted" || currentSchedules[0].scheduleCronTaskUid !== taskUid || currentSchedules[0].cronExpression !== schedule.cronExpression)
+    if (
+      !currentSchedules[0] ||
+      currentSchedules[0].status === "deleted" ||
+      currentSchedules[0].scheduleCronTaskUid !== taskUid ||
+      currentSchedules[0].cronExpression !== schedule.cronExpression
+    )
       throw new Error("调度配置已变化，未激活本次计划，请刷新后重新确认。");
-    await connection.query("UPDATE dataflow_schedule SET status='active',updatedAt=NOW() WHERE id=? AND scheduleCronTaskUid=?", [schedule.id, taskUid]);
+    await connection.query(
+      "UPDATE dataflow_schedule SET status='active',updatedAt=NOW() WHERE id=? AND scheduleCronTaskUid=?",
+      [schedule.id, taskUid]
+    );
     await connection.commit();
   } catch (error) {
     if (connection) await connection.rollback();
     if (taskUid) {
-      try { await updateHeartbeatJob(taskUid, { enable: false }, ""); }
-      catch { throw new Error("调度未生效，且远端计划的停用尚未确认，请管理员检查调度服务。"); }
+      try {
+        await updateHeartbeatJob(taskUid, { enable: false }, "");
+      } catch {
+        throw new Error(
+          "调度未生效，且远端计划的停用尚未确认，请管理员检查调度服务。"
+        );
+      }
     }
     throw error;
-  } finally { connection?.release(); }
+  } finally {
+    connection?.release();
+  }
   return { id: schedule.id, status: "active" as const };
 }
 
 export async function pauseDataflowSchedule(
   user: DataflowUser,
-  input: { projectId: string; workflowId: string }
+  input: { projectId: string; workflowId: string; expectedRevision?: number }
 ) {
   await requireProjectAccess(user, input.projectId, "edit");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
@@ -2393,6 +2524,8 @@ export async function pauseDataflowSchedule(
   );
   const schedule = rows[0];
   if (!schedule) throw new Error("数据流调度不存在。 ");
+  if (schedule.schedulerType === "internal")
+    return changeNativeDataflowSchedule(user.id, input, "pause");
   if (schedule.scheduleCronTaskUid)
     await updateHeartbeatJob(
       String(schedule.scheduleCronTaskUid),
@@ -2408,7 +2541,7 @@ export async function pauseDataflowSchedule(
 
 export async function deleteDataflowSchedule(
   user: DataflowUser,
-  input: { projectId: string; workflowId: string }
+  input: { projectId: string; workflowId: string; expectedRevision?: number }
 ) {
   await requireProjectAccess(user, input.projectId, "edit");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
@@ -2417,6 +2550,10 @@ export async function deleteDataflowSchedule(
   );
   const schedule = rows[0];
   if (!schedule) throw new Error("数据流调度不存在。 ");
+  if (schedule.schedulerType === "internal") {
+    await changeNativeDataflowSchedule(user.id, input, "delete");
+    return true;
+  }
   if (schedule.scheduleCronTaskUid)
     await deleteHeartbeatJob(String(schedule.scheduleCronTaskUid), "");
   await db().query(
@@ -2443,7 +2580,7 @@ export async function handleDataflowScheduleCallback(
     const [rows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT s.*,p.ownerUserId,u.role AS ownerRole
          FROM dataflow_schedule s JOIN flow_project p ON p.id=s.projectId JOIN users u ON u.id=p.ownerUserId
-        WHERE s.scheduleCronTaskUid=? AND s.status='active' LIMIT 1`,
+        WHERE s.scheduleCronTaskUid=? AND s.schedulerType='hosted' AND s.status='active' LIMIT 1`,
       [cronUser.taskUid]
     );
     const schedule = rows[0];
@@ -2472,9 +2609,12 @@ export async function handleDataflowScheduleCallback(
           workflowId: String(schedule.workflowId),
           triggerType: "schedule",
           scheduleBucket,
+          hostedTaskUid: String(cronUser.taskUid),
         }
       );
     } catch (error) {
+      if (error instanceof ScheduleSupersededError)
+        return res.json({ ok: true, skipped: "orphan_or_paused" });
       const [concurrentRuns] = await db().query<mysql.RowDataPacket[]>(
         "SELECT id,status FROM dataflow_run WHERE workflowId=? AND scheduleBucket=? LIMIT 1",
         [schedule.workflowId, scheduleBucket]
@@ -2489,8 +2629,8 @@ export async function handleDataflowScheduleCallback(
       throw error;
     }
     await db().query(
-      "UPDATE dataflow_schedule SET lastTriggeredAt=NOW(),lastRunId=?,updatedAt=NOW() WHERE id=?",
-      [result.runId, schedule.id]
+      "UPDATE dataflow_schedule SET lastTriggeredAt=NOW(),lastRunId=?,updatedAt=NOW() WHERE id=? AND schedulerType='hosted' AND scheduleCronTaskUid=?",
+      [result.runId, schedule.id, cronUser.taskUid]
     );
     return res.json({ ok: true, runId: result.runId });
   } catch (error) {
