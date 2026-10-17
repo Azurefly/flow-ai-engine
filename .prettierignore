@@ -18,10 +18,16 @@ blob-report/
 allure-results/
 allure-report/
 reports/
+test-output/
+test-outputs/
+test-artifacts/
+test-results*.json
 screenshots/
 backups/
 01-test/018-测试报告/
 01-test/remote-verify-screenshots/
+01-test/016-数据库测试/aiflow_modules_SQL.md
+01-test/016-数据库测试/database_init.sql
 01-test/**/reports/
 01-test/**/screenshots/
 01-test/**/.auth/

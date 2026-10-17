@@ -19,6 +19,9 @@ tests/
 coverage/
 playwright-report/
 test-results/
+test-output/
+test-outputs/
+test-artifacts/
 blob-report/
 allure-results/
 allure-report/
@@ -31,6 +34,12 @@ backups/
 *.py[cod]
 *.tmp
 *.temp
+test-results*.json
+junit-*.xml
+*.junit.xml
+*.trace.zip
+*.orig
+*.rej
 .gitkeep
 drizzle/migrations/.gitkeep
 scripts/dev/

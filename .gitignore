@@ -129,7 +129,7 @@ test-results/
 blob-report/
 allure-results/
 allure-report/
-/reports/
+reports/
 /screenshots/
 /backups/
 /01-test/**/screenshots/
@@ -146,6 +146,10 @@ allure-report/
 /01-test/remote-verify-screenshots/
 /01-test/014-自动化脚本/**/reports/
 /01-test/016-数据库测试/pg_sql_static_review_report_*.md
+
+# Historical database test references superseded by drizzle/ (keep locally)
+/01-test/016-数据库测试/aiflow_modules_SQL.md
+/01-test/016-数据库测试/database_init.sql
 
 # Superseded generated scaffold and bundle checker (keep locally)
 /template.json
@@ -211,3 +215,14 @@ allure-report/
 *.heapsnapshot
 junit.xml
 test-results*.xml
+
+# Intermediate output from nested test projects and patch tools
+test-output/
+test-outputs/
+test-artifacts/
+test-results*.json
+junit-*.xml
+*.junit.xml
+*.trace.zip
+*.orig
+*.rej
