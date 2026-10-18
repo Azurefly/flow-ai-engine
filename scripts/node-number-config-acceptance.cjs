@@ -132,6 +132,11 @@ async function assertNoPageOverflow(page) {
 async function verifyLoginStyle(page) {
   await expect(page.locator("[data-login-card]")).toBeVisible();
   await expect(page.locator("[data-login-introduction]")).toBeVisible();
+  assert(
+    await page
+      .locator("[data-login-introduction] h2")
+      .evaluate(element => parseFloat(getComputedStyle(element).fontSize) >= 32)
+  );
   assert.equal(
     await page
       .locator("[data-login-card]")
@@ -186,11 +191,13 @@ async function verifyWorkspaceStyle(page) {
   await theme.click();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(content).toBeVisible();
+  await page.waitForTimeout(300);
   await page.screenshot({
     path: path.join(directory, "style-system-dark.png"),
   });
   await theme.click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await page.waitForTimeout(300);
   await page.screenshot({
     path: path.join(directory, "style-system-desktop.png"),
   });
@@ -203,8 +210,12 @@ async function verifyWorkspaceStyle(page) {
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await assertNoPageOverflow(page);
+    assert(
+      (await page.locator("[data-system-config-navigation]").boundingBox())
+        .height <= 90
+    );
     await page
-      .getByLabel("系统配置分类", { exact: true })
+      .getByRole("combobox", { name: "系统配置分类", exact: true })
       .selectOption("access");
     await expect(
       page.getByRole("button", { name: "打开身份与权限中心", exact: true })

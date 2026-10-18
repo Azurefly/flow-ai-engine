@@ -591,9 +591,9 @@ h2 {
   }
 
   [data-login-introduction] h2 {
-    font-size: clamp(32px, 3.2vw, 44px);
+    font-size: clamp(32px, 3.2vw, 44px) !important;
     font-weight: 650;
-    line-height: 1.35;
+    line-height: 1.35 !important;
     letter-spacing: -0.03em;
   }
 
@@ -1395,6 +1395,7 @@ h2 {
   [data-aiflow-system-config] > div {
     gap: 12px;
     min-height: calc(100dvh - 80px);
+    align-content: start;
   }
 
   [data-system-config-navigation] {
