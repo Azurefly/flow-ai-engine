@@ -728,20 +728,12 @@ h2 {
   max-width: none;
 }
 
-[data-aiflow-business-center] > div > div:first-child > p:first-child {
-  display: none;
-}
-
 [data-aiflow-business-center] > div > div:first-child {
   min-height: 48px;
   margin-bottom: 18px;
   padding: 18px 20px;
   border-radius: var(--aiflow-surface-radius);
   background-image: var(--aiflow-workspace-glow);
-}
-
-[data-aiflow-business-center] > div > div:first-child > div > div > p {
-  display: none;
 }
 
 [data-aiflow-business-center] section {
@@ -983,13 +975,6 @@ h2 {
   margin-bottom: 8px;
   border-radius: var(--radius);
   padding: 10px 12px;
-}
-
-[data-aiflow-designer]
-  [data-structured-run-input]
-  > div:first-child
-  p:last-child {
-  display: none;
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] {
@@ -1631,6 +1616,54 @@ h2 {
   [data-aiflow-business-center] textarea {
     min-height: 44px;
   }
+}
+
+/* Stable workspace chrome; large screens keep navigation beside the content. */
+[data-workspace-nav-caption] { display: none; }
+[data-workspace-search-trigger] { border-radius: 999px; }
+[data-workspace-context] { max-width: min(34vw, 480px); }
+@media (max-width: 399px) { [data-workspace-account-role] { display: none; } }
+[data-aiflow-primary-nav] button { transition-property: background-color, color, border-color; }
+@media (min-width: 1280px) {
+  [data-aiflow-console] { --workspace-rail: 216px; }
+  [data-aiflow-console][data-editor-active="true"] { --workspace-rail: 80px; }
+  [data-aiflow-console] > header > div:first-child { height: 64px; }
+  [data-aiflow-brand] { width: var(--workspace-rail); flex-shrink: 0; padding-inline: 20px; }
+  [data-editor-active="true"] [data-aiflow-brand-name] { display: none; }
+  [data-workspace-body] { margin-left: var(--workspace-rail); min-height: calc(100dvh - 64px); }
+  [data-aiflow-primary-nav] {
+    position: fixed; inset: 80px auto 16px 12px;
+    display: flex; flex-direction: column; align-items: stretch;
+    width: calc(var(--workspace-rail) - 24px); height: auto;
+    margin: 0; gap: 6px; padding: 12px 8px;
+    border: 1px solid var(--border); border-radius: 22px;
+    background: var(--card); box-shadow: var(--aiflow-surface-shadow);
+  }
+  [data-workspace-nav-caption] { display: block; padding: 10px 12px 12px; color: var(--muted-foreground); font-size: var(--aiflow-type-meta); }
+  [data-aiflow-primary-nav] button {
+    justify-content: flex-start; gap: 12px; height: 48px; flex-shrink: 0;
+    padding: 12px; border: 1px solid transparent; border-radius: 14px;
+  }
+  [data-aiflow-primary-nav] button svg { width: 18px; height: 18px; flex-shrink: 0; }
+  [data-aiflow-primary-nav] button[aria-selected="true"] { border-color: var(--aiflow-info-border); background: var(--aiflow-info-surface); color: var(--aiflow-info); }
+  [data-aiflow-primary-nav] button[aria-selected="true"] svg { color: inherit; }
+  [data-editor-active="true"] [data-aiflow-primary-nav] { left: 8px; width: 64px; padding: 8px; }
+  [data-editor-active="true"] [data-aiflow-primary-nav] button { justify-content: center; padding: 12px; }
+  [data-editor-active="true"] [data-workspace-nav-label],
+  [data-editor-active="true"] [data-workspace-nav-caption] { display: none; }
+}
+[data-access-details-target] { scroll-margin-block: 20px; border-radius: 12px; }
+[data-access-details-target]:focus { outline: 2px solid var(--aiflow-info-border); outline-offset: 6px; }
+.aiflow-access-count { font-size: var(--aiflow-type-page-title); line-height: var(--aiflow-leading-page-title); }
+.aiflow-access-trace { stroke-dasharray: 1; animation: aiflow-access-trace 420ms cubic-bezier(.2,.8,.2,1); }
+.aiflow-related-node, .aiflow-unrelated-node, .aiflow-related-edge, .aiflow-unrelated-edge { transition: opacity 180ms ease; }
+.aiflow-unrelated-node, .aiflow-unrelated-edge { opacity: .3; }
+.aiflow-related-edge .react-flow__edge-path { filter: drop-shadow(0 0 2px var(--aiflow-info-border)); }
+@keyframes aiflow-access-trace { from { stroke-dashoffset: 1; opacity: .2; } to { stroke-dashoffset: 0; opacity: 1; } }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-new(root) { z-index: 1; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: .01ms !important; }
 }
 
 /* 组织管理窄屏触控：弹窗表单、树节点和次级动作共享一致的目标尺寸。 */

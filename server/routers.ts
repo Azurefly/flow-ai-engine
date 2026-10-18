@@ -87,6 +87,7 @@ import {
   listWorkflowVersions,
   listWorkflows,
   listWorkflowPage,
+  searchWorkflowDirectory,
   restoreWorkflow,
   rollbackWorkflowVersion,
   updateNodeTemplate,
@@ -1516,6 +1517,9 @@ export const appRouter = router({
       })),
   }),
   workflow: router({
+    search: protectedProcedure
+      .input(z.object({ search: z.string().trim().min(1).max(100) }))
+      .query(({ ctx, input }) => searchWorkflowDirectory(ctx.user, input.search)),
     list: protectedProcedure.query(({ ctx }) => listWorkflows(ctx.user)),
     page: protectedProcedure
       .input(

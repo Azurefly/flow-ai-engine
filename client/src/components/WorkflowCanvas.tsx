@@ -84,6 +84,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useMotionPreference } from "@/hooks/useMotionPreference";
+import { useContextReveal } from "@/hooks/useContextReveal";
+import { traceWorkflowNeighborhood } from "@shared/workflow-neighborhood";
 import {
   syncRouterConfigTargets,
   updateLlmConnections,
@@ -2615,6 +2617,10 @@ export default function WorkflowCanvas({
   ]);
 
   const hasInspectorSelection = hasCanvasInspectorSelection(nodes, edges, selectedId, selectedEdgeId);
+  const inspectorReveal = useContextReveal<HTMLElement>(selectedId || selectedEdgeId);
+  const [highlightRelated, setHighlightRelated] = useState(false);
+  const neighborhood = useMemo(() => highlightRelated ? traceWorkflowNeighborhood(nodes.map(node => node.id), edges, selectedId) : null, [highlightRelated, nodes, edges, selectedId]);
+  const presentedNodes = useMemo(() => neighborhood ? nodes.map(node => ({ ...node, className: `${node.className ?? ""} ${neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"}` })) : nodes, [nodes, neighborhood]);
   const inspectorExpanded = hasInspectorSelection && inspectorMode !== "compact";
   useEffect(() => {
     if (!reactFlow) return;
@@ -2988,6 +2994,7 @@ export default function WorkflowCanvas({
       }),
     [edges, nodeMap, selectedEdgeId]
   );
+  const presentedEdges = useMemo(() => neighborhood ? displayedEdges.map(edge => ({ ...edge, className: `${edge.className ?? ""} ${neighborhood.edges.has(edge.id) ? "aiflow-related-edge" : "aiflow-unrelated-edge"}` })) : displayedEdges, [displayedEdges, neighborhood]);
 
   useEffect(() => {
     setInspectorTab(selectedFieldGroups[0]?.label ?? "");
@@ -3727,6 +3734,7 @@ export default function WorkflowCanvas({
         block: "center",
       });
     const clearHighlight = () => {
+      setHighlightRelated(false);
       setSelectedId(null);
       setSelectedEdgeId(null);
       setNodes(current => current.map(node => ({ ...node, selected: false })));
@@ -4151,6 +4159,7 @@ export default function WorkflowCanvas({
                   </option>
                 ))}
               </select>
+              <Button type="button" variant={neighborhood ? "secondary" : "ghost"} size="sm" aria-label="高亮节点关联" aria-pressed={Boolean(neighborhood)} disabled={!selectedId} onClick={() => setHighlightRelated(value => !value)} title="查看选中节点的静态上游与下游连接" className="h-11 gap-1 px-2 min-[1024px]:h-9"><GitBranch size={15} />关联高亮</Button>
               <select aria-label="定位并配置连线" className="aiflow-type-control h-11 min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-foreground sm:max-w-64 min-[1024px]:h-9"
                 value={selectedEdgeId ?? ""} disabled={!edges.length}
                 onChange={event => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { edgeId: event.target.value } }))}>
@@ -4484,8 +4493,8 @@ export default function WorkflowCanvas({
             </div>
           )}{" "}
           <ReactFlow<CanvasNode, Edge>
-            nodes={nodes}
-            edges={displayedEdges}
+            nodes={presentedNodes}
+            edges={presentedEdges}
             nodeTypes={nodeTypes}
             onInit={setReactFlow}
             onNodesChange={readOnly ? undefined : onNodesChange}
@@ -4532,11 +4541,13 @@ export default function WorkflowCanvas({
               showInteractive={!readOnly}
             />
           </ReactFlow>
+          {neighborhood && <p data-workflow-neighborhood="" role="status" className="aiflow-type-meta pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-5rem)] rounded-xl border border-border bg-card/95 px-3 py-2 text-muted-foreground">静态连接 · 上游 {neighborhood.upstream.size} 个 · 下游 {neighborhood.downstream.size} 个</p>}
         </div>
       </section>
       {hasInspectorSelection && (
         <aside
           data-workflow-inspector=""
+          ref={inspectorReveal}
           className={`border-t border-border bg-card lg:border-l lg:border-t-0 ${fullscreen ? "min-h-0 flex flex-col" : ""}`}
         >
           <div

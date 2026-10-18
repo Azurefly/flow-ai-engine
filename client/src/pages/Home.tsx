@@ -1,7 +1,9 @@
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
 import { useClientVersionUpdate } from "@/hooks/useClientVersionUpdate";
+import { useContextReveal } from "@/hooks/useContextReveal";
 import { AuthorizationDetailRefresh } from "@/components/AuthorizationDetailRefresh";
+import { AccessRelationshipOverview, focusAccessGroup } from "@/components/AccessRelationshipOverview";
 import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
 import { shouldResetRunRoute } from "@shared/run-route-guard";
@@ -120,6 +122,7 @@ const WorkflowRoleBindingsDialog = lazy(
   () => import("@/components/WorkflowRoleBindingsDialog")
 );
 const CustomRoleDialog = lazy(() => import("@/components/CustomRoleDialog"));
+const WorkspaceCommandDialog = lazy(() => import("@/components/WorkspaceCommandDialog"));
 const WorkflowCanvas = lazy(() => import("@/components/WorkflowCanvas"));
 const WorkflowGovernance = lazy(
   () => import("@/components/WorkflowGovernance")
@@ -400,6 +403,17 @@ function FlowConsole({
   onLogout: () => void;
 }) {
   const { theme, toggleTheme } = useTheme();
+  const [commandOpen, setCommandOpen] = useState(false);
+  useEffect(() => {
+    const openCommand = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k" || event.isComposing) return;
+      if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], dialog[open]')) return;
+      event.preventDefault();
+      setCommandOpen(true);
+    };
+    window.addEventListener("keydown", openCommand);
+    return () => window.removeEventListener("keydown", openCommand);
+  }, []);
   const utils = trpc.useUtils();
   const [initialRoute] = useState(readConsoleRoute);
   const canManageIdentity = user.canManageIdentity;
@@ -1285,12 +1299,17 @@ function FlowConsole({
         workflow => workflow.projectId === selectedProject.id
       )
     : workflowItems;
+  const workspaceReveal = useContextReveal<HTMLElement>(editorActive ? null : formatConsoleRoute(requestedRoute.route));
 
   return (
     <main
       data-aiflow-console=""
+      data-editor-active={editorActive}
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
+      {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
+        <WorkspaceCommandDialog canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />
+      </Suspense>}
       <Dialog open={Boolean(draftConflict)} onOpenChange={open => { if (!open && !reloadDraftPending) setDraftConflict(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -1387,12 +1406,25 @@ function FlowConsole({
             role="tablist"
             aria-label="流程工作台主导航"
             className="ml-3 hidden h-full items-end gap-0.5 md:flex"
+            onKeyDown={event => {
+              if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
+              const index = buttons.indexOf(event.target as HTMLButtonElement);
+              if (index < 0) return;
+              event.preventDefault();
+              const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) + buttons.length) % buttons.length;
+              buttons[next]?.focus();
+            }}
           >
+            <span data-workspace-nav-caption="" aria-hidden="true">工作空间</span>
             {nav.map(item => (
               <button
                 id={`aiflow-console-tab-${item.id}`}
                 role="tab"
+                aria-label={item.label}
+                title={editorActive ? item.label : undefined}
                 aria-selected={section === item.id}
+                tabIndex={section === item.id ? 0 : -1}
                 aria-controls="aiflow-console-panel"
                 key={item.id}
                 onClick={() => navigateSection(item.id)}
@@ -1406,18 +1438,26 @@ function FlowConsole({
                       : "text-muted-foreground"
                   }
                 />
-                {item.label}
+                <span data-workspace-nav-label="">{item.label}</span>
               </button>
             ))}
           </div>
+          <div data-workspace-context="" className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground xl:flex">
+            <span>{nav.find(item => item.id === section)?.label}</span>
+            <ChevronRight size={14} aria-hidden="true" />
+            <span className="truncate font-medium text-foreground">{section === "flows" ? (flowView === "editor" ? selectedWorkflow?.name || "流程设计器" : flowView === "workspace" ? selectedProject?.name || "业务工作区" : flowView === "detail" ? selectedWorkflow?.name || "流程详情" : "业务中心") : section === "system" ? (systemView === "identity" ? "人员与权限" : systemView === "organization" ? "组织管理" : "通用与业务配置") : section === "runs" ? "办理与运行" : "浏览与复用"}</span>
+          </div>
+          <Button data-workspace-search-trigger="" type="button" variant="outline" className="ml-auto h-10 min-w-10 gap-2 px-2 text-muted-foreground sm:px-3" onClick={() => setCommandOpen(true)} aria-label="快捷查找业务、流程或页面" aria-keyshortcuts="Control+k Meta+k">
+            <Search size={16} /><span className="hidden lg:inline">快捷查找</span><kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-xs lg:inline">Ctrl K</kbd>
+          </Button>
           <div
             data-aiflow-user-actions=""
-            className="ml-auto flex h-full items-center gap-1 px-2 text-xs min-[400px]:gap-2.5 min-[400px]:px-3.5"
+            className="flex h-full items-center gap-1 px-2 text-xs min-[400px]:gap-2.5 min-[400px]:px-3.5"
           >
             <span className="hidden text-muted-foreground lg:inline">
               {user.name || user.username || "内部用户"}
             </span>
-            <span className="shrink-0 whitespace-nowrap rounded-full border border-border/80 bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground min-[400px]:px-2.5">
+            <span data-workspace-account-role="" className="shrink-0 whitespace-nowrap rounded-full border border-border/80 bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground min-[400px]:px-2.5">
               {user.role === "admin" ? "系统管理员" : "成员"}
             </span>
             {toggleTheme && (
@@ -1535,7 +1575,7 @@ function FlowConsole({
           </span>
         </div>
       </dialog>
-      <div className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
+      <div data-workspace-body="" className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
         {section === "flows" && flowView === "editor" && (
           <aside
             id="aiflow-workflow-library"
@@ -1625,6 +1665,7 @@ function FlowConsole({
         )}
         <section
           id="aiflow-console-panel"
+          ref={workspaceReveal}
           tabIndex={-1}
           role="tabpanel"
           aria-labelledby={`aiflow-console-tab-${section}`}
@@ -5332,6 +5373,8 @@ function UserAuthorizationPanel({
   revoking: boolean;
   embedded?: boolean;
 }) {
+  const reveal = useContextReveal<HTMLDivElement>(selectedUserId);
+  const groups = useRef<(HTMLDivElement | null)[]>([]);
   const data =
     selectedUserId && Number(details.data?.user?.id) === selectedUserId
       ? details.data
@@ -5361,6 +5404,7 @@ function UserAuthorizationPanel({
         embedded={embedded}
       />
       <div
+        ref={reveal}
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
         {!selectedUserId && (
@@ -5392,6 +5436,8 @@ function UserAuthorizationPanel({
                 账号停用：不可登录、办理或接受新授权。已有角色保留。
               </p>
             )}
+            <AccessRelationshipOverview identity={selectedUserId!} label={data.user.name || data.user.username} nodes={[{ label: "直接角色", count: data.directRoles.length }, { label: "组织继承角色", count: data.inheritedRoles.length }, { label: "有效权限", count: data.effectivePermissions.length }]} onSelect={index => focusAccessGroup(groups.current[index])} />
+            <div ref={element => { groups.current[0] = element; }} tabIndex={-1} data-access-details-target="">
             <RoleDetailGroup
               title="直接角色"
               roles={data.directRoles}
@@ -5399,12 +5445,15 @@ function UserAuthorizationPanel({
               onRevoke={onRevoke}
               revoking={revoking}
             />
+            </div>
+            <div ref={element => { groups.current[1] = element; }} tabIndex={-1} data-access-details-target="">
             <RoleDetailGroup
               title="组织继承角色"
               roles={data.inheritedRoles}
               source="组织继承"
             />
-            <div>
+            </div>
+            <div ref={element => { groups.current[2] = element; }} tabIndex={-1} data-access-details-target="">
               <p className="mb-2 font-semibold text-foreground">
                 系统级有效权限（{data.effectivePermissions.length}）
               </p>
@@ -5451,6 +5500,8 @@ function RoleAuthorizationPanel({
   onManage: (mode: "edit" | "delete", role: any) => void;
   embedded?: boolean;
 }) {
+  const reveal = useContextReveal<HTMLDivElement>(selectedRole?.id);
+  const groups = useRef<(HTMLDivElement | null)[]>([]);
   const data =
     selectedRole?.id &&
     Number(details.data?.role?.id) === Number(selectedRole.id)
@@ -5523,6 +5574,7 @@ function RoleAuthorizationPanel({
         embedded={embedded}
       />
       <div
+        ref={reveal}
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
         {!selectedRole?.id && (
@@ -5554,7 +5606,8 @@ function RoleAuthorizationPanel({
                 </p>
               )}
             </div>
-            <div>
+            <AccessRelationshipOverview identity={selectedRole.id} label={data.role.name} nodes={[{ label: "权限清单", count: data.permissions.length }, { label: "直接绑定记录", count: data.directUsers.length }, { label: "组织继承记录", count: data.inheritedUsers.length }]} onSelect={index => focusAccessGroup(groups.current[index])} />
+            <div ref={element => { groups.current[0] = element; }} tabIndex={-1} data-access-details-target="">
               <p className="mb-2 font-semibold text-foreground">
                 权限清单（{data.permissions.length}）
               </p>
@@ -5574,16 +5627,20 @@ function RoleAuthorizationPanel({
                 ))}
               </div>
             </div>
+            <div ref={element => { groups.current[1] = element; }} tabIndex={-1} data-access-details-target="">
             <UserBindingGroup
               title="直接绑定用户"
               users={data.directUsers}
               source="直接授权"
             />
+            </div>
+            <div ref={element => { groups.current[2] = element; }} tabIndex={-1} data-access-details-target="">
             <UserBindingGroup
               title="组织继承用户"
               users={data.inheritedUsers}
               source="组织继承"
             />
+            </div>
             {data.organizationUnits.length > 0 && (
               <div>
                 <p className="mb-2 font-semibold text-foreground">绑定组织</p>

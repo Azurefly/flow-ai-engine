@@ -272,13 +272,14 @@ async function resolveSubflowReferences(
 }
 
 export async function listWorkflows(user: WorkflowUser, options?: {
-  limit: number; offset: number; search?: string; projectId?: string;
+  limit: number; offset: number; search?: string; projectId?: string; summaryOnly?: boolean;
 }) {
   const canViewAll =
     user.role === "admin" || (await hasSystemPermission(user, "workflow:view"));
+  const projection = options?.summaryOnly ? "w.id,w.name,w.flowType,w.status,w.updatedAt" : "w.*";
   let query = canViewAll
-      ? "SELECT DISTINCT w.* FROM workflow w WHERE w.archivedAt IS NULL"
-      : `SELECT DISTINCT w.* FROM workflow w
+      ? `SELECT DISTINCT ${projection} FROM workflow w WHERE w.archivedAt IS NULL`
+      : `SELECT DISTINCT ${projection} FROM workflow w
           LEFT JOIN flow_project fp ON fp.id=w.projectId AND fp.status='active'
           LEFT JOIN workflow_member wm ON wm.workflowId=w.id AND wm.userId=? AND wm.revokedAt IS NULL AND wm.effectiveFrom<=NOW() AND (wm.expiresAt IS NULL OR wm.expiresAt>NOW())
           LEFT JOIN flow_project_member pm ON pm.projectId=w.projectId AND pm.userId=? AND pm.revokedAt IS NULL AND pm.effectiveFrom<=NOW() AND (pm.expiresAt IS NULL OR pm.expiresAt>NOW())
@@ -308,6 +309,15 @@ export async function listWorkflows(user: WorkflowUser, options?: {
   const offset = options ? Math.max(0, Math.trunc(options.offset)) : 0;
   const [rows] = await db().query<mysql.RowDataPacket[]>(`${query} ORDER BY w.updatedAt DESC,w.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]);
   return rows.map(hydrateWorkflow);
+}
+
+/** Navigation uses the same visibility checks, without reading definitions or configuration. */
+export async function searchWorkflowDirectory(user: WorkflowUser, search: string) {
+  const rows = await listWorkflows(user, { search, limit: 5, offset: 0, summaryOnly: true });
+  return rows.map(row => {
+    const item = row as unknown as { id: string; name: string; flowType: "state" | "control" | "data"; status: string };
+    return { id: item.id, name: item.name, flowType: item.flowType, status: item.status };
+  });
 }
 
 export async function listWorkflowPage(user: WorkflowUser, input: {

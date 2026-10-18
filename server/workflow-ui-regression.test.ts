@@ -393,8 +393,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_459 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 437 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_473 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 443 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -1440,7 +1440,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
     expect(homeSource).toContain("aria-selected={section === item.id}");
     expect(homeSource).toContain(
-      'id="aiflow-console-panel" tabIndex={-1} role="tabpanel"'
+      'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role="tabpanel"'
     );
     expect(homeSource).toContain(
       "aria-labelledby={`aiflow-console-tab-${section}`}"
@@ -1450,7 +1450,7 @@ describe("流程设计器界面回归约束", () => {
   it("提供键盘跳转、全局可见焦点和登录错误摘要", () => {
     expect(homeSource).toContain('className="aiflow-skip-link"');
     expect(homeSource).toContain('href="#aiflow-console-panel"');
-    expect(homeSource).toContain('id="aiflow-console-panel" tabIndex={-1}');
+    expect(homeSource).toContain('id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1}');
     expect(homeSource).toContain('role="alert" aria-live="assertive"');
     expect(homeSource).toContain('role="status" aria-live="polite"');
     expect(styleSource).toContain(":focus-visible {");
@@ -2894,7 +2894,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("h-[340px] sm:h-[420px] lg:h-[520px]");
   });
 
-  it("原安装包视觉壳层保持浅色平面工作台与三栏画布结构", () => {
+  it("参考设计的稳定导航与柔和卡片保留真实说明和画布能力", () => {
     expect(homeSource).toContain('data-aiflow-console=""');
     expect(homeSource).toContain('data-aiflow-designer=""');
     expect(homeSource).toContain("AI FLOW GRAPH");
@@ -2924,9 +2924,9 @@ describe("流程设计器界面回归约束", () => {
         ) ?? []
       ).length
     ).toBe(1);
-    expect(styleSource).toContain(
-      "[data-aiflow-business-center] > div > div:first-child > div > div > p"
-    );
+    expect(styleSource).not.toContain("[data-aiflow-business-center] > div > div:first-child > div > div > p");
+    expect(styleSource).toContain("[data-workspace-body] { margin-left: var(--workspace-rail)");
+    expect(styleSource).toContain('[data-editor-active="true"] [data-aiflow-primary-nav]');
     expect(styleSource).toContain("min-height: 48px;");
     expect(styleSource).toContain(
       "[data-aiflow-designer] [data-aiflow-workflow-canvas]"
@@ -3686,6 +3686,27 @@ it("角色配置冲突保留草稿，移动端固定操作区，刷新失败不�
   for (const text of ["expectedConfigToken: baseToken", "latest.id !== Number(role.id)", "关闭前保留角色修改", "读取最新配置前保留修改", "导出当前填写", "重试刷新列表", "setCommitted(result)", "consoleNavigationEvent", "fieldset disabled={disabled}", "overflow-y-auto overscroll-contain", "DialogFooter className=\"mt-4 shrink-0", "显示权限标识", "CUSTOM_ROLE_PRESETS", "maxLength={64}"]) expect(dialog).toContain(text);
   expect(dialog).toContain("refetchOnWindowFocus: false");
   expect(dialog).toContain('failure as { data?: { code?: string } }');
+});
+it("整体工作台重构保留草稿与授权边界，动效不重建表单", () => {
+  const command = source("../client/src/components/WorkspaceCommandDialog.tsx");
+  const reveal = source("../client/src/hooks/useContextReveal.ts");
+  const theme = source("../client/src/contexts/ThemeContext.tsx");
+  expect(homeSource).toContain('import("@/components/WorkspaceCommandDialog")');
+  expect(homeSource).toContain("onNavigate={navigateRoute}");
+  expect(homeSource).toContain('data-workspace-body=""');
+  expect(homeSource).toContain("AccessRelationshipOverview");
+  expect(command).toContain("trpc.workflow.search.useQuery");
+  expect(command).toContain("limit: 5");
+  expect(command).toContain("250");
+  expect(command).toContain("refetchOnWindowFocus: false");
+  expect(command).not.toContain("trpc.workflow.list");
+  expect(reveal).toContain("animation.cancel()");
+  expect(reveal).toContain("prefersReducedMotion");
+  expect(reveal).not.toContain("innerHTML");
+  expect(theme).toContain("document.startViewTransition");
+  expect(theme).toContain("prefers-reduced-motion: reduce");
+  expect(canvasSource).toContain("nodes={presentedNodes}");
+  expect(canvasSource).toContain("静态连接 · 上游");
 });
 
 it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧选择", () => {

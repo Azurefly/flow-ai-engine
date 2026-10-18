@@ -6,7 +6,7 @@ vi.mock("./iam-service", () => ({
   hasSystemPermission: mocks.permission,
   recordAuthorizationAudit: vi.fn(),
 }));
-import { listWorkflowPage, listWorkflows } from "./workflow-service";
+import { listWorkflowPage, listWorkflows, searchWorkflowDirectory } from "./workflow-service";
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.query.mockResolvedValue([[]]);
@@ -55,4 +55,16 @@ it("业务代号搜索采用参数绑定并转义SQL通配符", async () => {
   expect(sql).not.toContain("ORDER_");
   expect(sql).toContain("w.processCode LIKE ? ESCAPE '!'");
   expect(params).toEqual(Array(4).fill("%ORDER!_!!!%%").concat([11, 0]));
+});
+it("快捷查找沿用授权范围，只查五项摘要且不读取或返回流程定义", async () => {
+  mocks.permission.mockResolvedValue(false);
+  mocks.query.mockResolvedValue([[{ id: "owned-flow", name: "我的流程", flowType: "state", status: "draft", definitionJson: { secret: true }, updatedAt: new Date() }]]);
+  const rows = await searchWorkflowDirectory({ id: 7, role: "user" }, "owned_%");
+  const [sql, params] = mocks.query.mock.calls[0];
+  expect(sql).toContain("SELECT DISTINCT w.id,w.name,w.flowType,w.status,w.updatedAt FROM workflow");
+  expect(sql).not.toContain("w.*");
+  expect(sql).toContain("ra.scopeId=w.id");
+  expect(params.slice(-2)).toEqual([5, 0]);
+  expect(params).toContain("%owned!_!%%");
+  expect(rows).toEqual([{ id: "owned-flow", name: "我的流程", flowType: "state", status: "draft" }]);
 });
