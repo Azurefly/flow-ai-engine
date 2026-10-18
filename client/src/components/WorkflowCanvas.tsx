@@ -11,6 +11,7 @@ import {
 } from "../../../shared/dataflow-input-fields";
 import { OperateApprovalEditor } from "./OperateApprovalEditor";
 import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
+import { NodeNumberInput } from "./NodeNumberInput";
 import { isDataflowFieldList } from "@shared/dataflow-field-list";
 import { OPERATE_CONFIG_GROUPS } from "@shared/operate-config-groups";
 import {
@@ -984,23 +985,12 @@ function ConfigFieldEditor({
     return (
       <label className="grid gap-1.5">
         {label}
-        <input
-          type="number"
+        <NodeNumberInput
+          field={field}
           className={inputClass}
-          value={draft}
-          onChange={event => {
-            setDraft(event.target.value);
-            if (event.target.validity.valid)
-              onChange(
-                event.target.value === "" ? "" : Number(event.target.value)
-              );
-          }}
+          value={value === null ? "" : effectiveValue}
+          onChange={onChange}
           disabled={disabled}
-          onBlur={event =>
-            onChange(
-              event.target.value === "" ? "" : Number(event.target.value)
-            )
-          }
         />
         <FieldHelp help={field.help} />
       </label>

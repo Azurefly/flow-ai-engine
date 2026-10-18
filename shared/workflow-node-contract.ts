@@ -6,6 +6,7 @@ import { readAggregateConfig } from "./dataflow-aggregate-config";
 import { validateDataflowFields } from "./dataflow-field-config";
 import { dataflowReadLimit } from "./dataflow-read-limit";
 import { assertTaskFormSchema } from "./task-form";
+import { parseNodeNumberDraft } from "./node-number-input";
 
 export type FlowType = "state" | "control" | "data";
 
@@ -602,6 +603,9 @@ export type NodeField = {
   label: string;
   help: string;
   required?: boolean;
+  min?: number;
+  max?: number;
+  step?: number | "any";
   kind:
     | "text"
     | "textarea"
@@ -641,6 +645,9 @@ const readLimitField: NodeField = {
   key: "maxRows",
   label: "读取行数上限",
   kind: "number",
+  min: 1,
+  max: 1000,
+  step: 1,
   help: "1 至 1000 的整数；达到上限后停止读取。",
 };
 const sourceReadFields: NodeField[] = [
@@ -771,6 +778,9 @@ const referenceHttpFields: NodeField[] = [
     label: "超时（毫秒）",
     help: "当前安全扩展，服务端限制为 1,000 至 15,000 毫秒。",
     kind: "number",
+    min: 1000,
+    max: 15000,
+    step: "any",
   },
   {
     key: "writeSafety",
@@ -794,24 +804,36 @@ const referenceHttpFields: NodeField[] = [
     label: "最大尝试次数",
     help: "范围 1 至 5；包含首次执行。",
     kind: "number",
+    min: 1,
+    max: 5,
+    step: 1,
   },
   {
     key: "retryBaseDelayMs",
     label: "重试基础延迟",
     help: "指数退避基础延迟，范围 50 至 5,000 毫秒。",
     kind: "number",
+    min: 50,
+    max: 5000,
+    step: 1,
   },
   {
     key: "circuitFailureThreshold",
     label: "熔断失败阈值",
     help: "同一并发键连续失败达到阈值后临时熔断。",
     kind: "number",
+    min: 1,
+    max: 20,
+    step: 1,
   },
   {
     key: "circuitResetMs",
     label: "熔断恢复时间",
     help: "范围 1,000 至 300,000 毫秒。",
     kind: "number",
+    min: 1000,
+    max: 300000,
+    step: 1,
   },
   {
     key: "concurrencyKey",
@@ -824,6 +846,9 @@ const referenceHttpFields: NodeField[] = [
     label: "并发上限",
     help: "单 Worker 范围 1 至 50。",
     kind: "number",
+    min: 1,
+    max: 50,
+    step: 1,
   },
 ];
 
@@ -1127,6 +1152,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "表单版本",
         help: "已有任务使用创建时的表单版本。",
         kind: "number",
+        min: 1,
+        step: 1,
         required: true,
       },
       {
@@ -1140,18 +1167,24 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "办理时限（秒）",
         help: "从任务创建时间计算；0 表示不设时限。",
         kind: "number",
+        min: 0,
+        step: 1,
       },
       {
         key: "reminderAfterSeconds",
         label: "提醒时间（秒）",
         help: "不晚于办理时限；0 表示不提醒。",
         kind: "number",
+        min: 0,
+        step: 1,
       },
       {
         key: "escalationAfterSeconds",
         label: "升级时间（秒）",
         help: "不早于提醒时间；0 表示不升级。",
         kind: "number",
+        min: 0,
+        step: 1,
       },
       {
         key: "assigneeUserId",
@@ -1164,6 +1197,9 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "主管层级",
         help: "N 级主管方式使用，范围 1 至 32。",
         kind: "number",
+        min: 1,
+        max: 32,
+        step: 1,
       },
       {
         key: "assigneeUnitIds",
@@ -1313,6 +1349,9 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         help: "范围 1 秒至 30 天；到期事实存入数据库，服务重启后仍会补触发。",
         kind: "number",
         required: true,
+        min: 1,
+        max: 2_592_000,
+        step: 1,
       },
     ],
   },
@@ -1534,14 +1573,20 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "maxTokens",
         label: "最大输出令牌",
-        help: "服务端限制为 64 至 8,192。",
+        help: "填写 64 至 8,192 的整数。",
         kind: "number",
+        min: 64,
+        max: 8192,
+        step: 1,
       },
       {
         key: "timeoutMs",
         label: "超时（毫秒）",
         help: "单个 LLM 请求超时范围为 1,000 至 120,000 毫秒。",
         kind: "number",
+        min: 1000,
+        max: 120000,
+        step: "any",
       },
       {
         key: "outputSchema",
@@ -1712,6 +1757,9 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "超时（毫秒）",
         help: "服务端限制为 1,000 至 15,000 毫秒。",
         kind: "number",
+        min: 1000,
+        max: 15000,
+        step: "any",
       },
       {
         key: "writeSafety",
@@ -1735,24 +1783,36 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "最大尝试次数",
         help: "范围 1 至 5。",
         kind: "number",
+        min: 1,
+        max: 5,
+        step: 1,
       },
       {
         key: "retryBaseDelayMs",
         label: "重试基础延迟",
         help: "范围 50 至 5,000 毫秒。",
         kind: "number",
+        min: 50,
+        max: 5000,
+        step: 1,
       },
       {
         key: "circuitFailureThreshold",
         label: "熔断失败阈值",
         help: "范围 1 至 20。",
         kind: "number",
+        min: 1,
+        max: 20,
+        step: 1,
       },
       {
         key: "circuitResetMs",
         label: "熔断恢复时间",
         help: "范围 1,000 至 300,000 毫秒。",
         kind: "number",
+        min: 1000,
+        max: 300000,
+        step: 1,
       },
       {
         key: "concurrencyKey",
@@ -1765,6 +1825,9 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "并发上限",
         help: "单 Worker 范围 1 至 50。",
         kind: "number",
+        min: 1,
+        max: 50,
+        step: 1,
       },
     ],
   },
@@ -1842,6 +1905,9 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "最大行数",
         help: "限制数据流输出行数。",
         kind: "number",
+        min: 1,
+        max: 100000,
+        step: 1,
       },
     ],
   },
@@ -2017,12 +2083,20 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
         label: "最少行数",
         help: "填写非负整数；不足则失败并隔离本次输出。",
         kind: "number",
+        required: true,
+        min: 0,
+        max: 1_000_000,
+        step: 1,
       },
       {
         key: "maxNullRate",
         label: "最大空值率",
         help: "填写 0 至 1 的数值，例如 0.05 表示允许 5% 空值。按全量数据的字段集合统计；缺失字段、null 和空字符串均计为空值。",
         kind: "number",
+        required: true,
+        min: 0,
+        max: 1,
+        step: "any",
       },
     ],
   },
@@ -2285,6 +2359,19 @@ function assertOptionalInteger(
 
 /** Validates documented properties without deleting unknown keys from an imported historical definition. */
 export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
+  for (const field of FLOW_NODE_DEFINITIONS[type].fields) {
+    if (field.kind !== "number" || config[field.key] === undefined) continue;
+    const value = config[field.key];
+    if (value === null || value === "") {
+      if (field.required) throw new Error(`${field.label}不能为空。`);
+      continue;
+    }
+    if (
+      (typeof value !== "number" && typeof value !== "string") ||
+      typeof parseNodeNumberDraft(String(value)) !== "number"
+    )
+      throw new Error(`${field.label}须填写有效数值。`);
+  }
   switch (type) {
     case "start":
       assertObject(
@@ -2714,9 +2801,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         config.prompt ?? config.userPrompt,
         "LLM 节点必须配置提示词。"
       );
-      assertOptionalNumber(
+      assertOptionalInteger(
         config.maxTokens,
-        "LLM 节点最大输出令牌必须在 64 至 8,192 之间。",
+        "LLM 节点最大输出令牌必须是 64 至 8,192 的整数。",
         64,
         8_192
       );
@@ -2853,9 +2940,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       if (!Array.isArray(config.columns))
         throw new Error("字段映射节点 columns 必须是数组。");
       readDataflowFieldNames(config.columns, "输出字段");
-      assertOptionalNumber(
+      assertOptionalInteger(
         config.limit,
-        "字段映射节点行数限制必须为正数。",
+        "字段映射节点行数限制必须为 1 至 100000 的整数。",
         1,
         100_000
       );

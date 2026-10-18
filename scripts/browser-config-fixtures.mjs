@@ -880,9 +880,41 @@ async function prepareProjectActions(intent) {
   console.log(JSON.stringify({ stage: "project-workflow-actions-prepared", workflows: 3 }));
 }
 
+async function prepareNumericNodes(intent) {
+  const { fixture } = intent;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await request("auth.login", intent.login, true);
+  for (const flow of fixture.workflows) {
+    assert(["state", "control", "data"].includes(flow.flowType) && flow.name.endsWith(fixture.tag));
+    const current = await request("workflow.get", { id: flow.id });
+    assert.equal(current.ownerUserId, fixture.userId);
+    assert.equal(current.projectId, fixture.projectId);
+    assert.equal(current.name, flow.name);
+    assert.equal(current.status, "draft");
+    const definition = structuredClone(current.definition);
+    const target = flow.flowType === "data" ? "output" : "end";
+    const edge = definition.edges.find(item => item.targetNodeId === target);
+    assert(edge);
+    const id = flow.flowType === "data" ? "numeric_quality" : "numeric_wait";
+    definition.nodes.push({ id, type: flow.flowType === "data" ? "quality_gate" : "wait", name: flow.flowType === "data" ? "质量阈值" : "等待时间", position: { x: 550, y: 280 }, config: flow.flowType === "data" ? { minRows: 1, maxNullRate: 1 } : { durationSeconds: 2 } });
+    edge.targetNodeId = id;
+    definition.edges.push({ id: "numeric-finish", sourceNodeId: id, targetNodeId: target });
+    await request("workflow.update", { id: flow.id, definition, expectedDefinitionVersion: current.definitionVersion }, true);
+  }
+  const data = fixture.workflows.find(item => item.flowType === "data");
+  const current = await request("workflow.get", { id: data.id });
+  const assetId = current.definition.nodes.find(item => item.id === "source").config.assetId;
+  const resources = await request("data.resources", { projectId: fixture.projectId });
+  const asset = resources.assets.find(item => item.id === assetId);
+  assert(asset && asset.name === "界面验收订单");
+  await request("data.updateAsset", { projectId: fixture.projectId, assetId, sample: [{ id: 1, amount: 120, status: "paid", note: null }, { id: 2, amount: 80, status: "draft", note: "ok" }] }, true);
+  console.log(JSON.stringify({ stage: "numeric-nodes-prepared", workflows: 3 }));
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_native_schedule") await prepareNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_project_actions") await prepareProjectActions(browserFixtureIntent);
+else if (browserFixtureIntent.action === "prepare_numeric_nodes") await prepareNumericNodes(browserFixtureIntent);
 else if (browserFixtureIntent.action === "cleanup_native_schedule") await cleanupNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "start_form_task") await startFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_form_task") await verifyFormTask(browserFixtureIntent);
