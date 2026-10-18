@@ -743,7 +743,7 @@ describe("流程设计器界面回归约束", () => {
       'className="aiflow-type-meta mt-0.5 text-muted-foreground"'
     );
     expect(projectWorkspaceSource).toContain(
-      "aria-label={`移除成员授权：${member.name || member.username}（${member.username}）`}"
+      "aria-label={`移除成员授权：${member.name || member.username}（${member.username}） · ${projectRoleLabel(member.role)}`}"
     );
     expect(projectWorkspaceSource).toContain(
       "aria-label={`移除部门授权：${item.unitName || item.unitCode}（${item.unitCode}）`}"
@@ -752,7 +752,7 @@ describe("流程设计器界面回归约束", () => {
       "AlertDialogTitle>确认移除项目授权</AlertDialogTitle>"
     );
     expect(projectWorkspaceSource).toContain(
-      "若该成员仍通过部门继承授权，项目访问可能继续有效。"
+      "其他角色和部门继承授权不受影响。"
     );
     expect(projectWorkspaceSource).toContain(
       "成员若仍有直接授权或其他部门授权，项目访问可能继续有效。"

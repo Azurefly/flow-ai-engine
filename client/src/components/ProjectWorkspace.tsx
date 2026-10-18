@@ -1,5 +1,6 @@
 import { roleExpiryInput } from "@shared/role-expiry";
 import { projectCapabilities } from "@shared/project-capabilities";
+import { canRevokeProjectGrant } from "@shared/project-member-grant";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { AuthorizationDetailRefresh } from "./AuthorizationDetailRefresh";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
@@ -80,7 +81,7 @@ export type ProjectMemberRole = "owner" | "designer" | "operator" | "viewer";
 const projectRoleLabel = (role: string) =>
   (
     ({
-      owner: "所有者",
+      owner: "业务管理员",
       designer: "设计者",
       operator: "运行者",
       viewer: "查看者",
@@ -1232,7 +1233,11 @@ export function ProjectWorkspace({
     projectId: project.id,
     ...filters,
   });
-  const members = trpc.project.members.useQuery({ projectId: project.id });
+  const members = trpc.project.members.useQuery(
+    { projectId: project.id },
+    { retry: false, refetchInterval: view === "members" ? 30_000 : false, refetchIntervalInBackground: false }
+  );
+  const refreshAccess = () => Promise.all([access.refetch(), members.refetch()]);
   const serviceEndpoints = trpc.project.serviceEndpoints.useQuery(
     { projectId: project.id },
     { enabled: view === "services" }
@@ -1321,7 +1326,7 @@ export function ProjectWorkspace({
         <h1 className="aiflow-type-page-title font-semibold">业务访问权限已变化</h1>
         <p className="aiflow-type-body text-muted-foreground">当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。</p>
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" disabled={access.isFetching} onClick={() => void access.refetch()}>刷新业务权限</Button>
+          <Button type="button" variant="outline" disabled={access.isFetching || members.isFetching} onClick={() => void refreshAccess()}>刷新业务权限</Button>
           <Button type="button" variant="outline" onClick={onBack}>返回业务中心</Button>
         </div>
       </section>
@@ -1391,7 +1396,7 @@ export function ProjectWorkspace({
               type="button"
               aria-current={view === item.id ? "page" : undefined}
               title={sidebarCollapsed ? item.label : undefined}
-              onClick={() => setView(item.id)}
+              onClick={() => { setView(item.id); if (item.id === "members") void members.refetch(); }}
               className={`aiflow-type-control flex min-h-11 min-w-0 items-center rounded-md px-2.5 text-left transition-colors ${sidebarCollapsed ? "justify-center" : "gap-2"} ${view === item.id ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted"}`}
             >
               <item.icon size={15} />
@@ -1402,7 +1407,7 @@ export function ProjectWorkspace({
                   </span>
                   {item.id === "members" && (
                     <span className="aiflow-type-meta shrink-0 rounded bg-card/70 px-1.5 text-muted-foreground tabular-nums">
-                      {members.data?.length ?? 0}
+                      {new Set((members.data ?? []).map(member => member.userId)).size}
                     </span>
                   )}
                 </>
@@ -1413,7 +1418,7 @@ export function ProjectWorkspace({
       </aside>
       <section className="min-w-0 flex-1 p-4 sm:p-5">
         <AuthorizationDetailRefresh
-          query={access}
+          query={{ ...access, isFetching: access.isFetching || members.isFetching, refetch: refreshAccess }}
           label="刷新业务权限"
           buttonLabel="刷新业务权限"
           disabled={false}
@@ -1423,7 +1428,7 @@ export function ProjectWorkspace({
           name="业务权限"
           loading={access.isPending}
           error={access.isError}
-          onRetry={() => void access.refetch()}
+          onRetry={() => void refreshAccess()}
         />
         {view === "process" && (
           <ProcessCenter
@@ -1501,7 +1506,7 @@ export function ProjectWorkspace({
           />
         )}
         {view === "resources" && (
-          <ResourceEditContext.Provider value={{ ...capabilities, refreshing: access.isFetching, refresh: () => void access.refetch() }}>
+          <ResourceEditContext.Provider value={{ ...capabilities, refreshing: access.isFetching || members.isFetching, refresh: () => void refreshAccess() }}>
             <Suspense fallback={<p role="status" className="aiflow-type-body py-4 text-muted-foreground">正在加载资源配置中心…</p>}>
               <DataResourceCenter projectId={project.id} onOpenWorkflow={onOpenWorkflow} />
             </Suspense>
@@ -3326,6 +3331,8 @@ function ProjectMembers({
     | {
         kind: "member";
         userId: number;
+        assignmentId: string;
+        roleLabel: string;
         displayName: string;
         username: string;
       }
@@ -3346,7 +3353,7 @@ function ProjectMembers({
   const grant = trpc.project.grantMember.useMutation({
     onSuccess: async () => {
       await refreshProjectAuthorization();
-      toast.success("可见人授权已保存。");
+      toast.success("成员角色授权已保存。");
       setForm({ userId: "", role: "viewer", hours: "" });
       setMemberSearch("");
     },
@@ -3356,10 +3363,14 @@ function ProjectMembers({
   const revokeMember = trpc.project.revokeMember.useMutation({
     onSuccess: async () => {
       await refreshProjectAuthorization();
-      toast.success("可见人权限已移除。");
+      toast.success("所选成员角色授权已移除。");
       setPermissionRevocation(null);
     },
-    onError: error => toast.error(error.message),
+    onError: error => {
+      void utils.project.members.invalidate({ projectId });
+      void utils.project.access.invalidate({ projectId });
+      toast.error(error.message);
+    },
   });
 
   const grantUnit = trpc.project.grantUnit.useMutation({
@@ -3390,8 +3401,8 @@ function ProjectMembers({
           项目权限配置与可见性中心
         </h1>
         <p className="aiflow-type-body mt-1 text-muted-foreground">
-          创建人拥有所有权；可按人员或部门授予查看、运行或设计角色。系统管理员始终拥有全局管理权限。
-          多项有效授权共同生效；移除直接授权不会移除部门继承的权限。
+          创建人保留所有权；可按人员或部门授予查看、运行或设计角色。业务管理员可管理本业务，不会获得系统管理员权限。
+          多项有效授权共同生效；移除仅影响选中的角色授权，其他角色和部门继承仍保留。
         </p>
       </div>
 
@@ -3667,7 +3678,7 @@ function ProjectMembers({
                 <option value="viewer">查看者</option>
                 <option value="operator">运行者</option>
                 <option value="designer">设计者</option>
-                <option value="owner">项目所有者</option>
+                <option value="owner">业务管理员</option>
               </select>
               <div className="grid gap-1.5">
                 <Input
@@ -3732,17 +3743,19 @@ function ProjectMembers({
               </div>
               <div className="flex items-center gap-3">
                 <span className="aiflow-type-meta rounded bg-accent px-2 py-1 font-medium text-aiflow-info">
-                  {projectRoleLabel(member.role)}
+                  {member.protectedOwner ? "创建人" : projectRoleLabel(member.role)}
                 </span>
-                {canManage && member.role !== "owner" && (
+                {canManage && canRevokeProjectGrant(member) && (
                   <button
                     type="button"
-                    aria-label={`移除成员授权：${member.name || member.username}（${member.username}）`}
+                    aria-label={`移除成员授权：${member.name || member.username}（${member.username}） · ${projectRoleLabel(member.role)}`}
                     className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
                     onClick={() =>
                       setPermissionRevocation({
                         kind: "member",
                         userId: member.userId,
+                        assignmentId: member.id,
+                        roleLabel: projectRoleLabel(member.role),
                         displayName: member.name || member.username,
                         username: member.username,
                       })
@@ -3775,7 +3788,7 @@ function ProjectMembers({
             <AlertDialogTitle>确认移除项目授权</AlertDialogTitle>
             <AlertDialogDescription className="aiflow-type-body leading-6">
               {permissionRevocation?.kind === "member"
-                ? `将移除“${permissionRevocation.displayName}”（${permissionRevocation.username}）的直接项目授权。若该成员仍通过部门继承授权，项目访问可能继续有效。`
+                ? `将移除“${permissionRevocation.displayName}”（${permissionRevocation.username}）的“${permissionRevocation.roleLabel}”角色授权。其他角色和部门继承授权不受影响。`
                 : permissionRevocation?.kind === "unit"
                   ? `将移除“${permissionRevocation.displayName}”（${permissionRevocation.unitCode}）对此项目的部门授权。成员若仍有直接授权或其他部门授权，项目访问可能继续有效。`
                   : "请确认要移除所选项目授权。"}
@@ -3797,6 +3810,7 @@ function ProjectMembers({
                   revokeMember.mutate({
                     projectId,
                     userId: permissionRevocation.userId,
+                    assignmentId: permissionRevocation.assignmentId,
                   });
                 } else if (permissionRevocation?.kind === "unit") {
                   revokeUnit.mutate({

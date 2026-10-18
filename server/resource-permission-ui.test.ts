@@ -49,6 +49,12 @@ it("工作区定期确认权限，缓存读取失败时不可沿用编辑能力"
   expect(source).not.toContain(
     'import DataResourceCenter from "./DataResourceCenter"'
   );
+  expect(source).toContain("canRevokeProjectGrant(member)");
+  expect(source).toContain("assignmentId: permissionRevocation.assignmentId");
+  expect(source).toContain('member.protectedOwner ? "创建人"');
+  expect(source).toContain(
+    "Promise.all([access.refetch(), members.refetch()])"
+  );
 });
 
 it("资源门户表单保留打开状态和草稿，权限变化只停止提交", () => {

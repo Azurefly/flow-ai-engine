@@ -304,6 +304,23 @@ async function poll(description, read, accept, timeout = 20000) {
         { projectId: input.projectId, userId: fixture.disabledUserId, role },
         true
       );
+      const assignments = await owner("project.members", {
+        projectId: input.projectId,
+      });
+      for (const assignment of assignments.filter(
+        item =>
+          Number(item.userId) === fixture.disabledUserId && item.role !== role
+      )) {
+        await owner(
+          "project.revokeMember",
+          {
+            projectId: input.projectId,
+            userId: fixture.disabledUserId,
+            assignmentId: assignment.id,
+          },
+          true
+        );
+      }
       if (refreshUI) await refresh();
     };
     await expect(
@@ -521,6 +538,13 @@ async function poll(description, read, accept, timeout = 20000) {
     await expect(
       page.getByRole("button", { name: "启用计划", exact: true })
     ).toBeVisible();
+    for (const role of ["designer", "operator"]) {
+      await owner(
+        "project.grantMember",
+        { projectId: input.projectId, userId: fixture.disabledUserId, role },
+        true
+      );
+    }
     await page
       .getByRole("button", { name: "权限配置中心", exact: false })
       .click();
@@ -531,6 +555,78 @@ async function poll(description, read, accept, timeout = 20000) {
       stage: "project-owner-capabilities",
       resourceEditAndFormalRun: true,
       memberManagementVisible: true,
+    });
+    await expect(
+      page.getByRole("button", {
+        name: new RegExp(`^移除成员授权：.*${login.username}`),
+      })
+    ).toHaveCount(0);
+    const assignments = await owner("project.members", {
+      projectId: input.projectId,
+    });
+    assert.equal(
+      Number(
+        assignments.find(
+          item =>
+            Number(item.userId) === fixture.userId && item.role === "owner"
+        ).protectedOwner
+      ),
+      1
+    );
+    const revokeFromUI = async (role, label) => {
+      const assignment = assignments.find(
+        item =>
+          Number(item.userId) === fixture.disabledUserId && item.role === role
+      );
+      assert(assignment && !assignment.protectedOwner);
+      await page
+        .getByRole("button", {
+          name: new RegExp(
+            `^移除成员授权：.*${memberLogin.username}.* · ${label}$`
+          ),
+        })
+        .click();
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog).toContainText(`“${label}”角色授权`);
+      const [response] = await Promise.all([
+        page.waitForResponse(
+          response =>
+            response.url().includes("project.revokeMember") &&
+            response.request().method() === "POST"
+        ),
+        dialog.getByRole("button", { name: "确认移除", exact: true }).click(),
+      ]);
+      assert.equal(response.status(), 200);
+      assert(response.request().postData().includes(assignment.id));
+      await expect(dialog).toHaveCount(0);
+    };
+    await revokeFromUI("designer", "设计者");
+    let remaining = await owner("project.members", {
+      projectId: input.projectId,
+    });
+    assert.deepEqual(
+      remaining
+        .filter(item => Number(item.userId) === fixture.disabledUserId)
+        .map(item => item.role)
+        .sort(),
+      ["operator", "owner"]
+    );
+    await revokeFromUI("owner", "业务管理员");
+    remaining = await owner("project.members", { projectId: input.projectId });
+    assert.deepEqual(
+      remaining
+        .filter(item => Number(item.userId) === fixture.disabledUserId)
+        .map(item => item.role),
+      ["operator"]
+    );
+    await expect(
+      page.locator('[data-project-permission-grant="department"]')
+    ).toHaveCount(0);
+    report({
+      stage: "individual-member-revocation",
+      otherRolesPreserved: true,
+      delegatedManagerRevocable: true,
+      creatorProtected: true,
     });
     await page
       .getByRole("button", { name: "资源配置中心", exact: true })

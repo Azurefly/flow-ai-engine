@@ -744,6 +744,7 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           userId: z.number().int().positive(),
+          assignmentId: z.string().min(8).max(64).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => ({
