@@ -1357,10 +1357,11 @@ export const appRouter = router({
         z.object({
           key: z.enum(["general", "approval"]),
           value: z.record(z.string(), z.unknown()),
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/, "请重新读取系统设置后重试。").optional(),
         })
       )
       .mutation(({ ctx, input }) =>
-        updateP1SystemSetting(ctx.user, input.key, input.value)
+        updateP1SystemSetting(ctx.user, input.key, input.value, input.expectedConfigToken)
       ),
     workDomains: adminProcedure.query(() => listWorkDomains()),
     createWorkDomain: adminProcedure

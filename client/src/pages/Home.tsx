@@ -1299,7 +1299,7 @@ function FlowConsole({
         workflow => workflow.projectId === selectedProject.id
       )
     : workflowItems;
-  const workspaceReveal = useContextReveal<HTMLElement>(editorActive ? null : formatConsoleRoute(requestedRoute.route));
+  const workspaceReveal = useContextReveal<HTMLElement>(editorActive ? null : formatConsoleRoute(requestedRoute.route), false);
 
   return (
     <main
@@ -1478,7 +1478,13 @@ function FlowConsole({
               variant="ghost"
               size="sm"
               className="aiflow-type-control aiflow-action-target text-muted-foreground hover:bg-accent hover:text-aiflow-info"
-              onClick={onLogout}
+              onClick={() => {
+                const proceed = () => {
+                  if (unsavedWorkflowId.current) setPendingNavigation({ proceed: onLogout });
+                  else onLogout();
+                };
+                if (requestConsoleNavigation(proceed)) proceed();
+              }}
             >
               <LogOut size={15} />
               退出

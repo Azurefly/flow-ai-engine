@@ -1,21 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { TestResultCollector } from "./helpers/test-harness";
+import { mergeSystemSettingValue } from "../../server/system-setting-config";
+import { adminProcedure, router } from "../../server/_core/trpc";
+import type { TrpcContext } from "../../server/_core/context";
 
 describe("功能测试 - 模块 6：系统配置与组织架构 (System Config & Organization)", () => {
   describe("系统配置（SystemConfigShell）配置项与权限门禁", () => {
-    it("通用设置与审批配置字段校验与管理员权限限制", () => {
+    it("通用设置与审批配置字段校验与管理员权限限制", async () => {
       const start = performance.now();
 
       // Non-admin call rejection
-      const assertAdmin = (user: { role: string }) => {
-        if (user.role !== "admin")
-          throw new Error("只有平台管理员有权修改系统级配置。");
-        return true;
-      };
-
-      expect(() => assertAdmin({ role: "user" })).toThrow("只有平台管理员有权");
-      expect(assertAdmin({ role: "admin" })).toBe(true);
+      const gate = router({ check: adminProcedure.query(() => true) });
+      const caller = (role: string) => gate.createCaller({ user: { id: 1, role } } as unknown as TrpcContext);
+      await expect(caller("user").check()).rejects.toMatchObject({ code: "FORBIDDEN" });
+      await expect(caller("admin").check()).resolves.toBe(true);
 
       // General settings validation
       const validateGeneralSettings = (settings: {
@@ -23,11 +22,7 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
         watermarkEnabled: boolean;
         watermarkText: string;
       }) => {
-        if (!settings.platformName.trim())
-          throw new Error("平台名称不可为空。");
-        if (settings.watermarkEnabled && !settings.watermarkText.trim()) {
-          throw new Error("开启水印时必须配置水印文本。");
-        }
+        mergeSystemSettingValue("general", null, settings);
         return true;
       };
 

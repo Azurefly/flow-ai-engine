@@ -393,8 +393,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_473 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 443 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_479 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 445 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2249,7 +2249,7 @@ describe("流程设计器界面回归约束", () => {
       "unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) })"
     );
     expect(projectWorkspaceSource).toContain("取消发布");
-    expect(systemConfigSource).toContain("APPROVAL CONFIGURATION");
+    expect(systemConfigSource).toContain("<SystemSettingsEditor");
     expect(systemConfigSource).toContain("WORK DOMAIN");
   });
 
@@ -2551,10 +2551,12 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("系统配置保持字段化表单，不要求管理员编辑 JSON", () => {
-    expect(systemConfigSource).toContain("平台名称");
-    expect(systemConfigSource).toContain("要求审核通过后发布");
+    const editor = source("../client/src/components/SystemSettingsEditor.tsx");
+    expect(editor).toContain("平台名称");
+    expect(editor).toContain("要求审核通过后发布");
     expect(systemConfigSource).toContain("工作域名称");
     expect(systemConfigSource).not.toContain("JSON.parse");
+    expect(editor).not.toContain("JSON.parse");
   });
 
   it("新建工作域字段始终显示标签并使用统一控件字号与操作尺寸", () => {
@@ -2571,88 +2573,22 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).not.toContain('<Input placeholder="域代号"');
   });
 
-  it("通用设置不重复展示表单值，宽屏字段对齐到同一网格", () => {
-    const generalSettingsSource = systemConfigSource.slice(
-      systemConfigSource.indexOf("function GeneralSettings()"),
-      systemConfigSource.indexOf("function ApprovalSettings()")
-    );
-    expect(generalSettingsSource).not.toContain("<ConfigCard");
-    expect(generalSettingsSource).toContain(
-      'className="mt-6 grid gap-4 rounded-lg border border-border p-5"'
-    );
-    expect(generalSettingsSource).toContain(
-      'className="grid gap-4 sm:grid-cols-2"'
-    );
-    expect(generalSettingsSource).toContain(
-      'className="grid content-start gap-3"'
-    );
-    expect(generalSettingsSource).toContain(
-      'className="flex flex-wrap items-center justify-between gap-3 sm:col-span-2"'
-    );
-    expect(
-      generalSettingsSource.match(/className="h-11 min-\[1024px\]:h-10"/g)
-    ).toHaveLength(2);
-    expect(generalSettingsSource).toContain(
-      "min-h-11 items-center gap-2 text-sm text-foreground min-[1024px]:min-h-10"
-    );
-    expect(generalSettingsSource).toContain(
-      "h-11 w-fit bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10"
-    );
-    expect(generalSettingsSource).toContain("启用系统水印");
-    expect(generalSettingsSource).toContain("水印文字");
-    expect(generalSettingsSource).toContain("保存通用设置");
-    expect(generalSettingsSource).toContain(
-      "const settingsReady = settings.isSuccess && Boolean(persistedGeneral);"
-    );
-    expect(generalSettingsSource).toContain("settings.refetch()");
-    expect(generalSettingsSource).toContain("默认值不会提交");
-    expect(generalSettingsSource).toContain("const hasChanges =");
-    expect(generalSettingsSource).toContain(
-      "disabled={!canEditSettings || update.isPending || !hasChanges}"
-    );
-    expect(generalSettingsSource).toContain(
-      "if (!canEditSettings || update.isPending || !hasChanges) return;"
-    );
-    expect(generalSettingsSource).toContain("有未保存的通用设置更改");
+  it("系统配置跨分类保留草稿，并保护读取失败和页面离开", () => {
+    const editor = source("../client/src/components/SystemSettingsEditor.tsx");
+    expect(systemConfigSource).toContain("<SystemSettingsEditor activeKey=");
+    expect(systemConfigSource).not.toContain("draft?.snapshot === settingsSnapshot");
+    for (const text of ["refetchOnWindowFocus: false", "consoleNavigationEvent", "beforeunload", "离开前保留配置修改", "当前填写已保留", "读取失败时仍保留当前草稿", "fieldset disabled={busy || Boolean(committed)}", "启用系统水印", "水印文字", "审核人隔离策略", "min-h-11"]) expect(editor).toContain(text);
+    expect(editor).toContain("settingsDraftPayload(current)");
+    expect(editor).toContain("expectedConfigToken: current.token");
+    expect(homeSource).toContain("requestConsoleNavigation(proceed)");
+    expect(homeSource).toContain("proceed: onLogout");
   });
 
-  it("审批设置分离策略说明与配置控件，并保留触控目标尺寸", () => {
-    const approvalSettingsSource = systemConfigSource.slice(
-      systemConfigSource.indexOf("function ApprovalSettings()"),
-      systemConfigSource.indexOf("function DomainSettings()")
-    );
-    expect(approvalSettingsSource).toContain(
-      'className="mt-6 grid gap-5 rounded-lg border border-border bg-card p-5 md:grid-cols-[minmax(0,1fr)_minmax(280px,0.9fr)]"'
-    );
-    expect(approvalSettingsSource).toContain(
-      'className="h-11 rounded-md border border-border bg-card px-3 text-sm min-[1024px]:h-10"'
-    );
-    expect(approvalSettingsSource).toContain(
-      "min-h-11 items-center gap-2 text-sm font-medium text-foreground min-[1024px]:min-h-10"
-    );
-    expect(approvalSettingsSource).toContain(
-      "h-11 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10"
-    );
-    expect(approvalSettingsSource).toContain(
-      "const settingsReady = settings.isSuccess && Boolean(approvalSettings);"
-    );
-    expect(approvalSettingsSource).toContain(
-      "settings.isLoading && !settings.data"
-    );
-    expect(approvalSettingsSource).toContain("settings.refetch()");
-    expect(approvalSettingsSource).toContain("默认值不会提交");
-    expect(approvalSettingsSource).toContain("const hasChanges =");
-    expect(approvalSettingsSource).toContain(
-      "disabled={!canEditSettings || update.isPending || !hasChanges}"
-    );
-    expect(approvalSettingsSource).toContain(
-      "if (!canEditSettings || update.isPending || !hasChanges) return;"
-    );
-    expect(approvalSettingsSource).toContain(
-      "requireProjectApproval: form.required"
-    );
-    expect(approvalSettingsSource).toContain("reviewerMode: form.reviewerMode");
-    expect(approvalSettingsSource).toContain("当前发布门禁由服务端强制执行");
+  it("集中改动条提供差异导出和分别保存，保存后刷新失败不重复提交", () => {
+    const editor = source("../client/src/components/SystemSettingsEditor.tsx");
+    for (const text of ["data-settings-change-bar", "查看配置改动", "settingsDraftDiff", "保存前", "本次填写", "导出填写", "放弃全部未保存修改", "保存通用设置", "保存审批规则", "setCommitted(key)", "if (!acknowledged)", "不会重复提交配置", "重试刷新"]) expect(editor).toContain(text);
+    expect(styleSource).toContain(".aiflow-settings-change-bar");
+    expect(styleSource).toContain("env(safe-area-inset-bottom)");
   });
 
   it("保留已启动流程的任务移交、退回与逐项批量处理入口", () => {

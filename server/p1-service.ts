@@ -1,4 +1,6 @@
 import { eligibleDirectoryPage } from "./eligible-directory-page";
+import { TRPCError } from "@trpc/server";
+import { DEFAULT_SYSTEM_SETTINGS as defaultSettings, assertSystemSettingConfigToken, mergeSystemSettingValue, readSystemSettingValue, systemSettingConfigToken } from "./system-setting-config";
 import {
   businessStateLabelSql,
   businessStateJoinSql,
@@ -17,7 +19,7 @@ import {
   type WorkbenchPageCursor,
 } from "./workbench-pagination";
 
-type User = { id: number; role: "user" | "admin" };
+type User = { id: number; role: "user" | "admin"; tokenVersion?: number };
 type TaskView = "todo" | "done" | "initiated" | "all";
 type JsonRecord = Record<string, unknown>;
 const db = () => getSharedPool();
@@ -1707,18 +1709,6 @@ export async function getTaskCalendar(
 
 export type ReviewerMode = "project_owner_or_admin" | "independent_reviewer";
 
-const defaultSettings = {
-  general: {
-    platformName: "Flow AI Engine",
-    watermarkEnabled: false,
-    watermarkText: "",
-  },
-  approval: {
-    requireProjectApproval: true,
-    reviewerMode: "project_owner_or_admin" as ReviewerMode,
-  },
-};
-
 export async function getP1SystemSettings() {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT * FROM system_setting WHERE `key` IN ('general','approval')"
@@ -1727,7 +1717,11 @@ export async function getP1SystemSettings() {
   rows.forEach(row => {
     settings[row.key] = parseJson(row.valueJson);
   });
-  return settings as typeof defaultSettings;
+  const values = settings as typeof defaultSettings;
+  return { ...values, configTokens: {
+    general: systemSettingConfigToken("general", values.general),
+    approval: systemSettingConfigToken("approval", values.approval),
+  } };
 }
 
 export async function getPublicGeneralSettings() {
@@ -1745,82 +1739,43 @@ export async function isProjectApprovalRequired() {
   return Boolean((await getP1SystemSettings()).approval.requireProjectApproval);
 }
 
-function stableJson(value: unknown): string {
-  const normalize = (current: unknown): unknown => {
-    if (Array.isArray(current)) return current.map(normalize);
-    if (current && typeof current === "object") {
-      return Object.fromEntries(
-        Object.entries(current)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, entry]) => [key, normalize(entry)])
-      );
-    }
-    return current;
-  };
-  return JSON.stringify(normalize(value));
-}
-
-function validateGeneralSystemSetting(value: JsonRecord): JsonRecord {
-  const platformName =
-    typeof value.platformName === "string" ? value.platformName.trim() : "";
-  if (!platformName) throw new Error("平台名称不可为空。");
-  if (platformName.length > 120) throw new Error("平台名称最多 120 个字符。");
-  if (typeof value.watermarkEnabled !== "boolean")
-    throw new Error("系统水印状态无效。");
-  if (
-    value.watermarkText !== undefined &&
-    typeof value.watermarkText !== "string"
-  )
-    throw new Error("水印文本格式无效。");
-  const watermarkText = String(value.watermarkText ?? "").trim();
-  if (watermarkText.length > 120) throw new Error("水印文本最多 120 个字符。");
-  if (value.watermarkEnabled && !watermarkText)
-    throw new Error("开启水印时必须配置水印文本。");
-  return { ...value, platformName, watermarkText };
-}
-
 export async function updateP1SystemSetting(
   user: User,
   key: "general" | "approval",
-  value: JsonRecord
+  value: JsonRecord,
+  expectedConfigToken?: string
 ) {
-  const currentSettings = await getP1SystemSettings();
-  const currentValue = currentSettings[key];
-  const currentRecord =
-    currentValue &&
-    typeof currentValue === "object" &&
-    !Array.isArray(currentValue)
-      ? (currentValue as JsonRecord)
-      : {};
-  const existing = {
-    ...(defaultSettings[key] as JsonRecord),
-    ...currentRecord,
-  };
-  let merged = { ...existing, ...value };
-  if (key === "general") merged = validateGeneralSystemSetting(merged);
-  if (key === "approval") {
-    if (typeof merged.requireProjectApproval !== "boolean")
-      throw new Error("发布审批状态无效。");
-    if (
-      !["project_owner_or_admin", "independent_reviewer"].includes(
-        String(merged.reviewerMode)
-      )
-    )
-      throw new Error("审核人模式无效。");
+  if (!expectedConfigToken) assertSystemSettingConfigToken(key, expectedConfigToken, null);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const connection = await db().getConnection();
+    let retry = false;
+    try {
+      await connection.beginTransaction();
+      const [actors] = await connection.query<mysql.RowDataPacket[]>("SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR UPDATE", [user.id]);
+      const actor = actors[0];
+      if (!actor || actor.role !== "admin" || actor.status !== "active" || (user.tokenVersion !== undefined && Number(actor.tokenVersion) !== user.tokenVersion)) throw new TRPCError({ code: "FORBIDDEN", message: "当前账号无权维护系统设置，请刷新权限后重试。" });
+      const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT valueJson FROM system_setting WHERE `key`=? FOR UPDATE", [key]);
+      const existing = readSystemSettingValue(key, parseJson(rows[0]?.valueJson));
+      assertSystemSettingConfigToken(key, expectedConfigToken, existing);
+      const merged = mergeSystemSettingValue(key, existing, value);
+      const configToken = systemSettingConfigToken(key, merged);
+      if (configToken !== expectedConfigToken) {
+        await connection.query("INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId),updatedAt=NOW()", [key, JSON.stringify(merged), user.id]);
+        await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "system_setting", resourceId: key, details: { operation: "setting_updated" } }, connection);
+      }
+      await connection.commit();
+      return { value: merged, configToken };
+    } catch (error) {
+      await connection.rollback();
+      const failure = error as { errno?: number; code?: string };
+      const deadlock = failure.errno === 1213 || failure.code === "ER_LOCK_DEADLOCK";
+      if (deadlock && attempt < 2) retry = true;
+      else if (deadlock) throw new TRPCError({ code: "CONFLICT", message: "配置正被其他操作占用，本次未保存。请稍后重试，当前填写已保留。" });
+      else throw error;
+    } finally { connection.release(); }
+    if (retry) await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 10));
   }
-  if (stableJson(existing) === stableJson(merged)) return merged;
-  await db().query(
-    "INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId),updatedAt=NOW()",
-    [key, JSON.stringify(merged), user.id]
-  );
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "system_setting",
-    resourceId: key,
-    details: { operation: "setting_updated" },
-  });
-  return merged;
+  throw new Error("系统设置保存未完成。");
 }
 
 export async function listWorkDomains() {

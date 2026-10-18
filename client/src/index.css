@@ -884,31 +884,31 @@ h2 {
   }
 }
 
-[data-aiflow-system-config] aside,
+[data-system-config-navigation],
 [data-aiflow-system-config] section {
   border-radius: var(--aiflow-surface-radius);
   box-shadow: var(--aiflow-surface-shadow);
 }
 
-[data-aiflow-system-config] aside {
+[data-system-config-navigation] {
   padding: 8px;
 }
 
-[data-aiflow-system-config] aside > div:first-child {
+[data-system-config-navigation] > div:first-child {
   padding: 12px 14px;
 }
 
-[data-aiflow-system-config] aside nav {
+[data-system-config-navigation] nav {
   gap: 4px;
   margin-top: 8px;
 }
 
-[data-aiflow-system-config] aside nav button {
+[data-system-config-navigation] nav button {
   border-radius: 10px;
   padding: 10px 12px;
 }
 
-[data-aiflow-system-config] aside nav button[class*="bg-accent"] {
+[data-system-config-navigation] nav button[class*="bg-accent"] {
   box-shadow: inset 3px 0 var(--aiflow-info);
   background: var(--accent);
 }
@@ -1622,6 +1622,18 @@ h2 {
 [data-workspace-nav-caption] { display: none; }
 [data-workspace-search-trigger] { border-radius: 999px; }
 [data-workspace-context] { max-width: min(34vw, 480px); }
+.aiflow-settings-change-bar {
+  position: fixed; bottom: max(16px, env(safe-area-inset-bottom));
+  left: calc((100% + var(--workspace-rail, 0px) + var(--settings-side-nav, 0px)) / 2); transform: translateX(-50%);
+  z-index: 40; width: min(760px, calc(100vw - var(--workspace-rail, 0px) - var(--settings-side-nav, 0px) - 40px));
+  max-height: min(45dvh, 320px); overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 24px;
+  background: var(--card); padding: 16px; box-shadow: var(--aiflow-surface-shadow-raised);
+}
+@media (min-width: 1024px) {
+  [data-aiflow-system-config] { --settings-side-nav: 236px; }
+  [data-aiflow-system-config][data-config-navigation-collapsed="true"] { --settings-side-nav: 76px; }
+}
 @media (max-width: 1279px) { [data-workspace-account-name] { display: none; } }
 @media (max-width: 399px) { [data-workspace-account-role] { display: none; } }
 [data-aiflow-primary-nav] button { transition-property: background-color, color, border-color; }

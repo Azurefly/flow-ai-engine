@@ -1035,6 +1035,15 @@ else if (browserFixtureIntent.action === "verify_lifecycle") await verifyLifecyc
 else if (browserFixtureIntent.action === "restore_owned_workflows") await restoreOwnedWorkflows(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "cycle_status")
   await cycleStatus(browserFixtureIntent.fixture);
+else if (browserFixtureIntent.action === "settings_fingerprint") {
+  const { default: mysql } = await import("mysql2/promise");
+  const { createHash } = await import("node:crypto");
+  const pool = mysql.createPool(process.env.DATABASE_URL);
+  try {
+    const [rows] = await pool.query("SELECT `key`,valueJson,updatedByUserId,updatedAt FROM system_setting WHERE `key` IN ('general','approval') ORDER BY `key`");
+    console.log(JSON.stringify({ settingsFingerprint: createHash("sha256").update(JSON.stringify(rows)).digest("hex"), settingRows: rows.length }));
+  } finally { await pool.end(); }
+}
 else if (browserFixtureIntent.action === "grant_identity")
   await grantIdentity(browserFixtureIntent.fixture);
 else if (browserFixtureIntent.action === "revoke_identity")

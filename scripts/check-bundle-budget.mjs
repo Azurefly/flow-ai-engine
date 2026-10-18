@@ -28,9 +28,10 @@ const maxChunkBytes = 450 * 1024;
 // Shared workspace styling and login introduction: 1451.33 KiB raw / 433.81 KiB gzip.
 // Role presets, conflict recovery and draft protection: 1457.82 KiB raw / 436.07 KiB gzip.
 // Workspace navigation/search, authorization relationships and context motion: 1471.83 / 441.61 KiB.
-const maxTotalBytes = 1_473 * 1024;
+// Persistent settings drafts, diff/recovery actions and navigation guards: 1477.17 / 443.97 KiB.
+const maxTotalBytes = 1_479 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 443 * 1024;
+const maxTotalGzipBytes = 445 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

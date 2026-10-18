@@ -17,6 +17,7 @@ let domainId: string | undefined;
 let projectId: string | undefined;
 let workflowId: string | undefined;
 let previousSettings: mysql.RowDataPacket[] = [];
+let capturedSettings = false;
 let approvalLock: mysql.PoolConnection | undefined;
 
 function callerFor(identity: any) {
@@ -63,21 +64,23 @@ describe("P1 系统配置与工作域", () => {
     }
     if (domainId)
       await pool.query("DELETE FROM work_domain WHERE id=?", [domainId]);
-    await pool.query(
-      "DELETE FROM system_setting WHERE `key` IN ('general','approval')"
-    );
-    for (const setting of previousSettings)
+    if (capturedSettings) {
       await pool.query(
-        "INSERT INTO system_setting (`key`,valueJson,updatedByUserId,updatedAt) VALUES (?,?,?,?)",
-        [
-          setting.key,
-          typeof setting.valueJson === "string"
-            ? setting.valueJson
-            : JSON.stringify(setting.valueJson),
-          setting.updatedByUserId,
-          setting.updatedAt,
-        ]
+        "DELETE FROM system_setting WHERE `key` IN ('general','approval')"
       );
+      for (const setting of previousSettings)
+        await pool.query(
+          "INSERT INTO system_setting (`key`,valueJson,updatedByUserId,updatedAt) VALUES (?,?,?,?)",
+          [
+            setting.key,
+            typeof setting.valueJson === "string"
+              ? setting.valueJson
+              : JSON.stringify(setting.valueJson),
+            setting.updatedByUserId,
+            setting.updatedAt,
+          ]
+        );
+    }
     await pool.query(
       "DELETE FROM authorization_audit_log WHERE actorUserId IN (?,?) OR targetUserId IN (?,?)",
       [admin?.id ?? -1, user?.id ?? -1, admin?.id ?? -1, user?.id ?? -1]
@@ -107,6 +110,7 @@ describe("P1 系统配置与工作域", () => {
         "SELECT * FROM system_setting WHERE `key` IN ('general','approval')"
       );
       previousSettings = settings;
+      capturedSettings = true;
       await pool.query(
         "INSERT INTO users (openId,username,name,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,NOW()),(?,?,?,?,?,?,NOW())",
         [
@@ -134,6 +138,8 @@ describe("P1 系统配置与工作域", () => {
       await expect(
         callerFor(admin).config.updateSetting({
           key: "general",
+          expectedConfigToken: (await callerFor(admin).config.settings())
+            .configTokens.general,
           value: {
             platformName: "P1 验收引擎",
             watermarkEnabled: true,
@@ -141,12 +147,16 @@ describe("P1 系统配置与工作域", () => {
           },
         })
       ).resolves.toMatchObject({
-        platformName: "P1 验收引擎",
-        watermarkEnabled: true,
-        watermarkText: "内部资料",
+        value: {
+          platformName: "P1 验收引擎",
+          watermarkEnabled: true,
+          watermarkText: "内部资料",
+        },
       });
       await callerFor(admin).config.updateSetting({
         key: "approval",
+        expectedConfigToken: (await callerFor(admin).config.settings())
+          .configTokens.approval,
         value: {
           requireProjectApproval: true,
           reviewerMode: "project_owner_or_admin",
@@ -198,17 +208,25 @@ describe("P1 系统配置与工作域", () => {
         })
       ).id;
       await expect(
-        callerFor(admin).workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
+        callerFor(admin).workflow.publish({
+          expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
+          id: workflowId,
+        })
       ).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
       await callerFor(admin).config.updateSetting({
         key: "approval",
+        expectedConfigToken: (await callerFor(admin).config.settings())
+          .configTokens.approval,
         value: {
           requireProjectApproval: false,
           reviewerMode: "project_owner_or_admin",
         },
       });
       await expect(
-        callerFor(admin).workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
+        callerFor(admin).workflow.publish({
+          expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
+          id: workflowId,
+        })
       ).resolves.toMatchObject({ status: "published" });
       await callerFor(admin).config.updateWorkDomain({
         id: domainId!,
