@@ -6,7 +6,7 @@ import { readAggregateConfig } from "./dataflow-aggregate-config";
 import { validateDataflowFields } from "./dataflow-field-config";
 import { dataflowReadLimit } from "./dataflow-read-limit";
 import { assertTaskFormSchema } from "./task-form";
-import { parseNodeNumberDraft } from "./node-number-input";
+import { nodeNumberDraftError, parseNodeNumberDraft } from "./node-number-input";
 
 export type FlowType = "state" | "control" | "data";
 
@@ -2355,6 +2355,20 @@ function assertOptionalInteger(
     !Number.isInteger(value)
   )
     throw new Error(message);
+}
+
+export function nodeNumberConfigError(type: FlowNodeType, config: NodeConfig) {
+  for (const field of FLOW_NODE_DEFINITIONS[type].fields) {
+    if (field.kind !== "number" || config[field.key] === undefined) continue;
+    const value = config[field.key];
+    if ((value === null || value === "") && !field.required) continue;
+    const message =
+      value !== null && typeof value !== "number" && typeof value !== "string"
+        ? `${field.label}须填写有效数值。`
+        : nodeNumberDraftError(field, value === null ? "" : String(value));
+    if (message) return { field: field.key, message };
+  }
+  return null;
 }
 
 /** Validates documented properties without deleting unknown keys from an imported historical definition. */

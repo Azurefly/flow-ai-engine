@@ -23,8 +23,8 @@ const maxChunkBytes = 450 * 1024;
 // The resource center stays lazy loaded; per-chunk and HTML limits remain unchanged.
 // Resource permission boundaries, recoverable forms and lazy loading add about 1.5 KiB gzip.
 // Business and workflow pages no longer preload the resource-center module.
-// Immediate numeric drafts, shared validation and keyboard controls add about 2.5 KiB raw / 0.9 KiB gzip.
-// Measured total: about 1449.4 KiB raw / 433.9 KiB gzip; retain roughly one KiB of headroom.
+// Numeric input and draft-save validation: measured total about 1450.6 KiB raw / 434 KiB gzip.
+// Keep the per-chunk and HTML limits unchanged, with bounded total headroom.
 const maxTotalBytes = 1_451 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
 const maxTotalGzipBytes = 435 * 1024;

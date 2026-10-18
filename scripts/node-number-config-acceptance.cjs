@@ -230,7 +230,9 @@ async function poll(description, read, accept, timeout = 20000) {
         await input.fill(raw);
         await expect(input).toHaveAttribute("aria-invalid", "true");
         await expect(page.locator("[data-workflow-draft-error]")).toBeVisible();
-        await expect(page.getByRole("button", { name: /保存画布/ })).toBeDisabled();
+        await expect(
+          page.getByRole("button", { name: /保存画布/ })
+        ).toBeDisabled();
         await page.keyboard.press("Control+s");
         const after = await owner("workflow.get", { id: flow.id });
         assert.equal(after.definitionVersion, before.definitionVersion);
@@ -239,6 +241,23 @@ async function poll(description, read, accept, timeout = 20000) {
           before.definition.nodes.find(item => item.id === nodeId).config[key]
         );
         await expect(input).toHaveValue(raw);
+        const rejected = structuredClone(before.definition);
+        rejected.nodes.find(item => item.id === nodeId).config[key] = raw;
+        await assert.rejects(
+          owner(
+            "workflow.update",
+            {
+              id: flow.id,
+              definition: rejected,
+              expectedDefinitionVersion: before.definitionVersion,
+            },
+            true
+          )
+        );
+        assert.equal(
+          (await owner("workflow.get", { id: flow.id })).definitionVersion,
+          before.definitionVersion
+        );
       };
       await rate.press("ArrowUp");
       await expect(rate).toHaveValue("0.06");

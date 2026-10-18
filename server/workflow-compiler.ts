@@ -10,6 +10,7 @@ import {
   readOperateOutcomeMode,
   readOperateOutcomes,
   validateNodeConfig,
+  nodeNumberConfigError,
   withNodeConfigDefaults,
   type FlowType,
   type FlowNodeType,
@@ -358,6 +359,16 @@ export function analyzeWorkflowDefinition(
         })
       );
       continue;
+    }
+    if (!executable) {
+      const error = nodeNumberConfigError(node.type, node.config);
+      if (error)
+        diagnostics.push(
+          diagnostic("WF_NODE_NUMBER_INVALID", error.message, {
+            ...location,
+            field: `config.${error.field}`,
+          })
+        );
     }
     if (executable) {
       if (

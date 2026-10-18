@@ -61,6 +61,7 @@ import {
 import type { Definition } from "../../../server/workflow-service";
 import { workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
 import { workflowLoopDraftError } from "../../../shared/workflow-loop-policy-draft";
+import { workflowNumberDraftError } from "@shared/workflow-number-draft";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
@@ -1112,7 +1113,7 @@ function FlowConsole({
     access.data?.permissions?.has("workflow:members:manage")
   );
   const isDraftDirty = isWorkflowDraftDirty(effectiveWorkflowId, persistedDraftSnapshot.current, draftName, draftDefinition);
-  const draftError = useMemo(() => workflowLoopDraftError(draftDefinition), [draftDefinition]);
+  const draftError = useMemo(() => workflowLoopDraftError(draftDefinition) || workflowNumberDraftError(draftDefinition), [draftDefinition]);
   unsavedWorkflowId.current = editorActive && isDraftDirty ? persistedDraftSnapshot.current?.workflowId ?? null : null;
   useEffect(() => {
     if (!editorActive || !isDraftDirty) return;
