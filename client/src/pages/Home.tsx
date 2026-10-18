@@ -298,9 +298,19 @@ function LoginScreen({
   onSubmit: () => void;
 }) {
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-background p-5 text-foreground">
-      <div className="absolute inset-x-0 top-0 h-1 bg-blue-600" />
-      <section className="relative w-full max-w-md overflow-hidden border border-border bg-card shadow-sm">
+    <main data-aiflow-login="" className="relative grid min-h-screen place-items-center overflow-hidden bg-background p-5 text-foreground">
+      <section data-login-introduction="" aria-label="平台介绍">
+        <p className="aiflow-type-control font-semibold tracking-widest">FLOW AI ENGINE</p>
+        <h2>让流程清晰，<br />让协作顺畅。</h2>
+        <p className="aiflow-type-body">从业务状态到自动化编排，再到数据处理，在一个工作空间中完成设计、协作与运行。</p>
+        <div data-login-flow-types="">
+          <span>状态流程</span><span>控制流程</span><span>数据流程</span>
+        </div>
+        <div data-login-flow-illustration="" aria-hidden="true">
+          <span>设计</span><i /><span>协作</span><i /><span>运行</span>
+        </div>
+      </section>
+      <section data-login-card="" className="relative w-full max-w-md overflow-hidden border border-border bg-card shadow-sm">
         <div className="border-b border-border px-7 py-5">
           <div className="flex items-center gap-3">
             <div

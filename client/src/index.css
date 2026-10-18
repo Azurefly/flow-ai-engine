@@ -104,7 +104,15 @@
   --chart-3: var(--color-blue-600);
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
-  --radius: 0.65rem;
+  --radius: 0.875rem;
+  --aiflow-surface-radius: 1.25rem;
+  --aiflow-surface-shadow: 0 4px 20px rgb(26 43 31 / 5%);
+  --aiflow-surface-shadow-raised: 0 12px 36px rgb(26 43 31 / 10%);
+  --aiflow-workspace-glow: radial-gradient(
+    ellipse at top left,
+    #eaf4df 0,
+    transparent 65%
+  );
   /* Shared UI type scale: meta 13, controls 14, body 16, section 18, page 24, display 28px. */
   --aiflow-font-sans:
     "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
@@ -123,28 +131,28 @@
   --aiflow-leading-section: 1.5625rem;
   --aiflow-leading-page-title: 2rem;
   --aiflow-leading-display: 2.1875rem;
-  --background: #f4f6f9;
-  --foreground: #172033;
+  --background: #f4f6f3;
+  --foreground: #1c2823;
   --card: #ffffff;
-  --card-foreground: #172033;
+  --card-foreground: #1c2823;
   --popover: #ffffff;
-  --popover-foreground: #172033;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #172033;
-  --muted: #f1f5f9;
-  --muted-foreground: #53637a;
+  --popover-foreground: #1c2823;
+  --secondary: #eef2ed;
+  --secondary-foreground: #1c2823;
+  --muted: #f0f3ef;
+  --muted-foreground: #59685f;
   --accent: #eaf1ff;
   --accent-foreground: #1d4ed8;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: #dce3ed;
-  --input: #cbd5e1;
+  --border: #dde5dd;
+  --input: #c8d3ca;
   --ring: oklch(0.623 0.214 259.815);
   --sidebar: #ffffff;
-  --sidebar-foreground: #172033;
+  --sidebar-foreground: #1c2823;
   --sidebar-accent: #eaf1ff;
   --sidebar-accent-foreground: #1d4ed8;
-  --sidebar-border: #dce3ed;
+  --sidebar-border: #dde5dd;
   --sidebar-ring: oklch(0.623 0.214 259.815);
 
   /* Flow AI Design Tokens 2.0 (v3.1) */
@@ -290,6 +298,13 @@ h2 {
 }
 
 .dark {
+  --aiflow-surface-shadow: 0 4px 20px rgb(0 0 0 / 14%);
+  --aiflow-surface-shadow-raised: 0 12px 36px rgb(0 0 0 / 25%);
+  --aiflow-workspace-glow: radial-gradient(
+    ellipse at top left,
+    #20332d 0,
+    transparent 65%
+  );
   --primary: #2563eb;
   --primary-foreground: var(--color-blue-50);
   --sidebar-primary: var(--color-blue-500);
@@ -471,6 +486,162 @@ h2 {
   }
 }
 
+/* Motion is attached to surfaces, never to the canvas viewport or form state. */
+@keyframes aiflow-surface-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+[data-slot="button"],
+[data-aiflow-console] nav button,
+[data-workbench-navigation] button,
+[data-system-config-navigation] nav button {
+  transition-property: background-color, color, border-color, box-shadow;
+  transition-duration: var(--duration-surface);
+  transition-timing-function: var(--ease-out-expo);
+}
+
+[data-slot="input"],
+[data-slot="textarea"],
+[data-slot="select-trigger"] {
+  transition:
+    border-color var(--duration-micro),
+    box-shadow var(--duration-micro);
+}
+
+[data-slot="card"],
+[data-aiflow-context-header],
+[data-login-card] {
+  box-shadow: var(--aiflow-surface-shadow);
+  border-radius: var(--aiflow-surface-radius);
+}
+
+[data-aiflow-context-header] {
+  background-image: var(--aiflow-workspace-glow);
+}
+
+[data-workflow-inspector-header] {
+  background-image: var(--aiflow-workspace-glow);
+}
+
+[data-aiflow-primary-nav] > button {
+  height: calc(100% - 8px);
+  margin-block: 4px;
+  border-color: transparent;
+  border-radius: 10px;
+  transition:
+    background-color var(--duration-surface),
+    color var(--duration-surface);
+}
+
+[data-aiflow-primary-nav] > button[aria-selected="true"] {
+  background: var(--accent);
+  color: var(--aiflow-info);
+}
+
+[data-login-card],
+[data-system-config-content],
+[data-aiflow-context-header] {
+  animation: aiflow-surface-in var(--duration-drawer) ease-out;
+}
+
+[data-aiflow-login] {
+  gap: 40px;
+  background-image: var(--aiflow-workspace-glow);
+}
+
+[data-login-introduction] {
+  display: none;
+}
+
+[data-login-card] {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  box-shadow: var(--aiflow-surface-shadow-raised);
+}
+
+[data-login-card] > div:first-child {
+  padding-top: 28px;
+  border-bottom: 0;
+}
+
+[data-login-card] form {
+  padding-top: 12px;
+}
+
+[data-login-card] > div:last-child {
+  background: var(--card);
+}
+
+@media (min-width: 1024px) {
+  [data-aiflow-login] {
+    grid-template-columns: minmax(0, 560px) minmax(0, 440px);
+    justify-content: center;
+    gap: clamp(48px, 8vw, 128px);
+    padding: 64px;
+  }
+
+  [data-login-introduction] {
+    display: grid;
+    gap: 24px;
+    max-width: 520px;
+  }
+
+  [data-login-introduction] h2 {
+    font-size: clamp(32px, 3.2vw, 44px);
+    font-weight: 650;
+    line-height: 1.35;
+    letter-spacing: -0.03em;
+  }
+
+  [data-login-introduction] > p:last-of-type {
+    max-width: 440px;
+    color: var(--muted-foreground);
+    line-height: 1.9;
+  }
+
+  [data-login-flow-types],
+  [data-login-flow-illustration] {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  [data-login-flow-types] span {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 6px 14px;
+    color: var(--muted-foreground);
+    font-size: var(--aiflow-type-control);
+  }
+
+  [data-login-flow-illustration] {
+    margin-top: 16px;
+    gap: 0;
+  }
+
+  [data-login-flow-illustration] span {
+    display: grid;
+    width: 88px;
+    height: 56px;
+    place-items: center;
+    border: 1px solid var(--aiflow-success-border);
+    border-radius: var(--radius);
+    background: var(--card);
+    color: var(--aiflow-success);
+    box-shadow: var(--aiflow-surface-shadow);
+  }
+
+  [data-login-flow-illustration] i {
+    width: 40px;
+    height: 1px;
+    background: var(--aiflow-success-border);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -504,7 +675,7 @@ h2 {
   display: none;
 }
 
-/* 原 AiFlowGraph 工作台采用白色标题栏、细灰边框和克制的直角面板；仅作用于已登录控制台。 */
+/* Workspace surfaces share the same light, soft-edged visual language. */
 [data-aiflow-console] > header {
   border-color: var(--border) !important;
   background: var(--card) !important;
@@ -533,17 +704,9 @@ h2 {
   color: var(--aiflow-info) !important;
 }
 
-[data-aiflow-console] .rounded-lg,
-[data-aiflow-console] .rounded-md,
-[data-aiflow-console] .rounded-xl {
-  border-radius: 8px;
-}
-
 [data-aiflow-console] .shadow-sm,
 [data-aiflow-console] .shadow-lg {
-  box-shadow:
-    0 1px 3px rgb(15 23 42 / 6%),
-    0 1px 2px rgb(15 23 42 / 4%);
+  box-shadow: var(--aiflow-surface-shadow);
 }
 
 [data-aiflow-console] > header .hidden.sm\:block > p:first-child {
@@ -560,7 +723,7 @@ h2 {
   line-height: 1.15;
 }
 
-/* 业务中心按原始页面保持平面筛选条与紧凑数据表，而非仪表盘卡片堆叠。 */
+/* Business lists keep a readable density within a shared rounded surface. */
 [data-aiflow-business-center] > div {
   max-width: none;
 }
@@ -571,8 +734,10 @@ h2 {
 
 [data-aiflow-business-center] > div > div:first-child {
   min-height: 48px;
-  margin-bottom: 10px;
-  padding: 6px 16px;
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border-radius: var(--aiflow-surface-radius);
+  background-image: var(--aiflow-workspace-glow);
 }
 
 [data-aiflow-business-center] > div > div:first-child > div > div > p {
@@ -581,7 +746,8 @@ h2 {
 
 [data-aiflow-business-center] section {
   border-color: var(--border);
-  box-shadow: none;
+  border-radius: var(--aiflow-surface-radius);
+  box-shadow: var(--aiflow-surface-shadow);
 }
 
 [data-aiflow-business-center] section > div:first-child {
@@ -601,7 +767,7 @@ h2 {
   padding-bottom: 10px;
 }
 
-/* 项目概览：左侧是原始模块菜单，右侧为连续工作区，不采用宽卡片栅格。 */
+/* Project navigation uses stable dimensions and a distinct active item. */
 @media (min-width: 1024px) {
   [data-aiflow-console] > div > section > div:has(> aside) > aside {
     width: 216px !important;
@@ -610,7 +776,7 @@ h2 {
   }
 
   [data-aiflow-console] > div > section > div:has(> aside) > section {
-    background: var(--card);
+    background: var(--background);
     padding: 16px 20px;
   }
 }
@@ -625,13 +791,13 @@ h2 {
 }
 
 [data-aiflow-console] > div > section > div:has(> aside) > aside nav {
-  gap: 0;
-  padding: 6px 0;
+  gap: 4px;
+  padding: 8px;
 }
 
 [data-aiflow-console] > div > section > div:has(> aside) > aside nav button {
-  border-radius: 0;
-  padding: 9px 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 [data-aiflow-console]
@@ -641,7 +807,7 @@ h2 {
   > aside
   nav
   button[class*="bg-accent"] {
-  border-left: 3px solid var(--aiflow-info);
+  box-shadow: inset 3px 0 var(--aiflow-info);
   background: var(--accent);
 }
 
@@ -650,10 +816,10 @@ h2 {
 }
 
 [data-aiflow-console] > div > section > div:has(> aside) > section .rounded-lg {
-  border-radius: 2px;
+  border-radius: var(--radius);
 }
 
-/* 原 businessOverview.html 为 216px 左侧连续菜单与右侧工作区；仅锚定项目工作区。 */
+/* Keep the project sidebar compact while separating editable work surfaces. */
 @media (min-width: 1024px) {
   [data-aiflow-project-workspace] > aside {
     width: 216px !important;
@@ -667,7 +833,7 @@ h2 {
 
   [data-aiflow-project-workspace] > section {
     padding: 16px 20px;
-    background: var(--card);
+    background: var(--background);
   }
 }
 
@@ -676,30 +842,30 @@ h2 {
 }
 
 [data-aiflow-project-workspace] > aside nav {
-  gap: 0;
-  padding: 6px 0;
+  gap: 4px;
+  padding: 8px;
 }
 
 [data-aiflow-project-workspace] > aside nav button {
-  border-radius: 0;
-  padding: 9px 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 [data-aiflow-project-workspace] > aside nav button[class*="bg-accent"] {
-  border-left: 3px solid var(--aiflow-info);
+  box-shadow: inset 3px 0 var(--aiflow-info);
   background: var(--accent);
 }
 
-/* 原 system_config.html 为连续左右分栏及单一卡片页签容器。 */
+/* System settings retain their navigation and a calm, separate content card. */
 [data-aiflow-system-config] {
-  padding: 0;
-  background: var(--card);
+  padding: 20px;
+  background: var(--background);
 }
 
 [data-aiflow-system-config] > div {
   max-width: none;
-  min-height: calc(100vh - 56px);
-  gap: 0;
+  min-height: calc(100dvh - 96px);
+  gap: 20px;
 }
 
 @media (min-width: 1024px) {
@@ -711,19 +877,29 @@ h2 {
     > div:has(> aside > div > button[title="展开配置导航"]) {
     grid-template-columns: 56px minmax(0, 1fr);
   }
+
+  [data-aiflow-system-config]
+    > div:has(> aside > div > button[title="展开配置导航"])
+    > aside {
+    padding: 0;
+  }
+
+  [data-aiflow-system-config]
+    > div:has(> aside > div > button[title="展开配置导航"])
+    > aside
+    > div:first-child {
+    padding: 12px 4px;
+  }
 }
 
 [data-aiflow-system-config] aside,
 [data-aiflow-system-config] section {
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--aiflow-surface-radius);
+  box-shadow: var(--aiflow-surface-shadow);
 }
 
 [data-aiflow-system-config] aside {
-  border-top: 0;
-  border-bottom: 0;
-  border-left: 0;
-  padding: 0;
+  padding: 8px;
 }
 
 [data-aiflow-system-config] aside > div:first-child {
@@ -731,35 +907,36 @@ h2 {
 }
 
 [data-aiflow-system-config] aside nav {
-  gap: 0;
-  margin-top: 0;
+  gap: 4px;
+  margin-top: 8px;
 }
 
 [data-aiflow-system-config] aside nav button {
-  border-radius: 0;
-  padding: 9px 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 [data-aiflow-system-config] aside nav button[class*="bg-accent"] {
-  border-left: 3px solid var(--aiflow-info);
+  box-shadow: inset 3px 0 var(--aiflow-info);
   background: var(--accent);
 }
 
 [data-aiflow-system-config] section {
-  border: 0;
+  border: 1px solid var(--border);
 }
 
 [data-aiflow-system-config] section > div:first-child {
-  min-height: 45px;
-  padding: 7px 16px 0;
-  background: var(--muted);
+  min-height: 56px;
+  padding: 16px 20px;
+  background: var(--card);
+  background-image: var(--aiflow-workspace-glow);
 }
 
 [data-aiflow-system-config] section > div:last-child {
   padding: 16px 20px;
 }
 
-/* 设计器以原始三栏画布为主，权限、运行和协作信息保持可用但降为次级紧凑区。 */
+/* The canvas and inspector remain stable while the page follows the surface scale. */
 [data-aiflow-designer] {
   display: flex;
   flex-direction: column;
@@ -794,7 +971,7 @@ h2 {
 }
 
 [data-aiflow-designer] > .mb-4.grid > div {
-  border-radius: 2px;
+  border-radius: var(--radius);
   padding: 10px 12px;
 }
 
@@ -804,7 +981,7 @@ h2 {
 
 [data-aiflow-designer] [data-structured-run-input] {
   margin-bottom: 8px;
-  border-radius: 2px;
+  border-radius: var(--radius);
   padding: 10px 12px;
 }
 
@@ -816,7 +993,7 @@ h2 {
 }
 
 [data-aiflow-designer] [data-aiflow-workflow-canvas] {
-  border-radius: 2px;
+  border-radius: var(--aiflow-surface-radius);
 }
 
 [data-aiflow-designer]
@@ -960,7 +1137,7 @@ h2 {
   > div:has(> div > aside button[aria-label="展开已启动流程导航"])
   > div {
   max-width: none;
-  gap: 0;
+  gap: 20px;
 }
 
 [data-aiflow-console]
@@ -985,8 +1162,8 @@ h2 {
   > div:has(> div > aside button[aria-label="展开已启动流程导航"])
   main
   > section {
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--aiflow-surface-radius);
+  box-shadow: var(--aiflow-surface-shadow);
 }
 
 [data-aiflow-console]
@@ -1018,8 +1195,8 @@ h2 {
   > div:has(> div > aside button[aria-label="展开已启动流程导航"])
   aside
   nav {
-  gap: 0;
-  padding: 6px 0;
+  gap: 4px;
+  padding: 8px;
 }
 
 [data-aiflow-console]
@@ -1036,8 +1213,8 @@ h2 {
   aside
   nav
   button {
-  border-radius: 0;
-  padding: 9px 14px;
+  border-radius: 10px;
+  padding: 10px 12px;
 }
 
 [data-aiflow-console]
@@ -1165,9 +1342,9 @@ h2 {
   }
 }
 
-/* 流程仓库：原始页面以树、流程列表、简介预览连续分栏承载，避免三张独立仪表盘卡片。 */
+/* Repository columns share surfaces while retaining independent scroll areas. */
 [data-aiflow-warehouse] {
-  background: var(--card);
+  background: var(--background);
 }
 
 [data-aiflow-warehouse] > div {
@@ -1188,13 +1365,13 @@ h2 {
 }
 
 [data-aiflow-warehouse] > div > .grid {
-  gap: 0;
+  gap: 16px;
 }
 
 [data-aiflow-warehouse] > div > .grid > aside,
 [data-aiflow-warehouse] > div > .grid > section {
-  border-radius: 0;
-  box-shadow: none;
+  border-radius: var(--aiflow-surface-radius);
+  box-shadow: var(--aiflow-surface-shadow);
 }
 
 [data-aiflow-warehouse] > div > .grid > aside:first-child {
@@ -1205,28 +1382,21 @@ h2 {
   border-left-color: var(--border);
 }
 
-/* 系统配置沿用原始 left-panel / nav-card-tabs 的连续双栏，不保留仪表盘式卡片间隙。 */
+/* Preserve the layout at narrow widths without overriding shared surfaces. */
 [data-aiflow-system-config] > div {
   max-width: none !important;
-  gap: 0 !important;
-}
-
-[data-aiflow-system-config] > div > aside,
-[data-aiflow-system-config] > div > section {
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-[data-aiflow-system-config] > div > aside {
-  border-right-color: var(--border) !important;
-}
-
-[data-aiflow-system-config] > div > section > div:first-child {
-  background: var(--muted) !important;
-  padding: 8px 12px 0 !important;
 }
 
 @media (max-width: 1023px) {
+  [data-aiflow-system-config] {
+    padding: 12px;
+  }
+
+  [data-aiflow-system-config] > div {
+    gap: 12px;
+    min-height: calc(100dvh - 80px);
+  }
+
   [data-system-config-navigation] {
     border: 0 !important;
     border-bottom: 1px solid var(--border) !important;
@@ -1266,10 +1436,10 @@ h2 {
   }
 }
 
-/* 原始流程详情用虚线标题段落串接引导、基本信息、画布与实例列表。 */
+/* Process details follow the same typography and surface hierarchy. */
 [data-aiflow-process-detail] {
-  border-radius: 0 !important;
-  box-shadow: none !important;
+  border-radius: var(--aiflow-surface-radius) !important;
+  box-shadow: var(--aiflow-surface-shadow) !important;
 }
 
 [data-aiflow-process-detail] > div:first-child {

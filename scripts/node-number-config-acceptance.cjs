@@ -119,6 +119,112 @@ function session() {
 const owner = session(),
   viewer = session();
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+const verifyStyle = process.env.FLOW_UI_STYLE_REFERENCE === "1";
+
+async function assertNoPageOverflow(page) {
+  assert(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth + 1
+    )
+  );
+}
+
+async function verifyLoginStyle(page) {
+  await expect(page.locator("[data-login-card]")).toBeVisible();
+  await expect(page.locator("[data-login-introduction]")).toBeVisible();
+  assert.equal(
+    await page
+      .locator("[data-login-card]")
+      .evaluate(element => getComputedStyle(element).borderRadius),
+    "20px"
+  );
+  await page.screenshot({
+    path: path.join(directory, "style-login-desktop.png"),
+  });
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect(page.locator("[data-login-introduction]")).toBeHidden();
+    await assertNoPageOverflow(page);
+    const input = page.getByLabel("用户名", { exact: true });
+    assert((await input.boundingBox()).height >= 44);
+    assert.equal(
+      await input.evaluate(element => getComputedStyle(element).fontSize),
+      "14px"
+    );
+  }
+  await page.screenshot({
+    path: path.join(directory, "style-login-mobile.png"),
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+}
+
+async function verifyWorkspaceStyle(page) {
+  const routes = [
+    ["#/flows", "[data-aiflow-business-center]"],
+    ["#/runs/workbench", "[data-workbench-layout]"],
+    ["#/system", "[data-aiflow-system-config]"],
+    ["#/system/identity", '[aria-label="内部账号与权限中心"]'],
+    ["#/system/organization", "[data-aiflow-organization-page]"],
+  ];
+  for (const [route, selector] of routes) {
+    await page.goto(base + route);
+    await expect(page.locator(selector)).toBeVisible();
+    await assertNoPageOverflow(page);
+  }
+  await page.goto(base + "#/system");
+  const content = page.locator("[data-system-config-content]");
+  await expect(content).toBeVisible();
+  const surface = page.locator("[data-aiflow-system-config] > div > section");
+  assert.equal(
+    await surface.evaluate(element => getComputedStyle(element).borderRadius),
+    "20px"
+  );
+  await page.getByRole("button", { name: "收起配置导航", exact: true }).click();
+  await assertNoPageOverflow(page);
+  await page.getByRole("button", { name: "展开配置导航", exact: true }).click();
+  const theme = page.locator("[data-aiflow-theme-toggle]");
+  await theme.click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(content).toBeVisible();
+  await page.screenshot({
+    path: path.join(directory, "style-system-dark.png"),
+  });
+  await theme.click();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+  await page.screenshot({
+    path: path.join(directory, "style-system-desktop.png"),
+  });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  assert(
+    await content.evaluate(
+      element => parseFloat(getComputedStyle(element).animationDuration) < 0.01
+    )
+  );
+  for (const width of [320, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await assertNoPageOverflow(page);
+    await page
+      .getByLabel("系统配置分类", { exact: true })
+      .selectOption("access");
+    await expect(
+      page.getByRole("button", { name: "打开身份与权限中心", exact: true })
+    ).toBeVisible();
+  }
+  await page.screenshot({
+    path: path.join(directory, "style-system-mobile.png"),
+  });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  report({
+    stage: "reference-style",
+    login: true,
+    workspaceRoutes: routes.length,
+    mobileWidths: [320, 390],
+    dark: true,
+    reducedMotion: true,
+  });
+}
+
 async function poll(description, read, accept, timeout = 20000) {
   const deadline = Date.now() + timeout;
   do {
@@ -161,12 +267,14 @@ async function poll(description, read, accept, timeout = 20000) {
     const errors = [];
     page.on("pageerror", error => errors.push(error.message));
     await page.goto(base);
+    if (verifyStyle) await verifyLoginStyle(page);
     await page.getByLabel("用户名", { exact: true }).fill(login.username);
     await page.getByLabel("密码", { exact: true }).fill(login.password);
     await page
       .getByRole("button", { name: "登录流程引擎", exact: true })
       .click();
     await page.locator('input[type="password"]').waitFor({ state: "hidden" });
+    if (verifyStyle) await verifyWorkspaceStyle(page);
     const openNode = async flow => {
       await page.goto(`${base}#/flows/workflow/${flow.id}/editor`);
       await page.locator("[data-workflow-editor]").waitFor();
@@ -375,7 +483,13 @@ async function poll(description, read, accept, timeout = 20000) {
       });
       await expect(recoveredRate).toHaveValue("0.2");
       await recoveredRate.fill("0.3");
-      await saveFocused(data, recoveredRate, "numeric_quality", "maxNullRate", 0.3);
+      await saveFocused(
+        data,
+        recoveredRate,
+        "numeric_quality",
+        "maxNullRate",
+        0.3
+      );
       await remote({ action: "prepare_native_schedule", fixture, login });
       const accepted = await runAtThreshold("success");
       assert.deepEqual(accepted.output.terminals[0].rows, [

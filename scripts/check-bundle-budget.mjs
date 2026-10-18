@@ -25,7 +25,8 @@ const maxChunkBytes = 450 * 1024;
 // Business and workflow pages no longer preload the resource-center module.
 // Numeric input and draft-save validation: measured total about 1450.6 KiB raw / 434 KiB gzip.
 // Keep the per-chunk and HTML limits unchanged, with bounded total headroom.
-const maxTotalBytes = 1_451 * 1024;
+// Shared workspace styling and login introduction: 1451.33 KiB raw / 433.81 KiB gzip.
+const maxTotalBytes = 1_452 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
 const maxTotalGzipBytes = 435 * 1024;
 const maxHtmlBytes = 20 * 1024;

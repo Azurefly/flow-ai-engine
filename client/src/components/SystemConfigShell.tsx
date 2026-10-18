@@ -148,6 +148,7 @@ export default function SystemConfigShell({
           </div>
           <div
             id="system-config-card"
+            data-system-config-content=""
             aria-labelledby="system-config-active-tab"
             className="p-5 max-w-4xl"
           >
