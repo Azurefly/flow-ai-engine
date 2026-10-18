@@ -4,7 +4,8 @@ import { TRPCError } from "@trpc/server";
 import mysql from "mysql2/promise";
 import { z } from "zod";
 import { getSharedPool } from "./db";
-import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
+import { getProjectWorkflowPermissions, hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
+import { projectWorkflowActions } from "../shared/project-workflow-actions";
 import { attachOrganizationPaths } from "./organization-service";
 import { getP1SystemSettings, type ReviewerMode } from "./p1-service";
 import {
@@ -393,7 +394,11 @@ export async function listProjectWorkflows(
     keyword?: string;
   }
 ) {
-  await requireProjectPermission(user, projectId, "project:view");
+  const access = await requireProjectPermission(
+    user,
+    projectId,
+    "project:view"
+  );
   const clauses = ["w.projectId=?", "w.archivedAt IS NULL"];
   const params: unknown[] = [projectId];
   if (filters?.flowType) {
@@ -409,18 +414,46 @@ export async function listProjectWorkflows(
     params.push(filters.status);
   }
   if (filters?.keyword?.trim()) {
-    clauses.push("(w.name LIKE ? ESCAPE '!' OR w.description LIKE ? ESCAPE '!' OR w.processCode LIKE ? ESCAPE '!' OR w.id LIKE ? ESCAPE '!')");
+    clauses.push(
+      "(w.name LIKE ? ESCAPE '!' OR w.description LIKE ? ESCAPE '!' OR w.processCode LIKE ? ESCAPE '!' OR w.id LIKE ? ESCAPE '!')"
+    );
     const keyword = `%${filters.keyword.trim().replace(/[!%_]/g, "!$&")}%`;
     params.push(keyword, keyword, keyword, keyword);
   }
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT w.*,u.username AS creatorUsername,u.name AS creatorName,(SELECT COUNT(*) FROM workflow_run wr WHERE wr.workflowId=w.id) AS runCount
-       FROM workflow w LEFT JOIN users u ON u.id=w.ownerUserId
+    `SELECT w.*,u.username AS creatorUsername,u.name AS creatorName,p.status AS projectStatus,(SELECT COUNT(*) FROM workflow_run wr WHERE wr.workflowId=w.id) AS runCount
+       FROM workflow w JOIN flow_project p ON p.id=w.projectId LEFT JOIN users u ON u.id=w.ownerUserId
       WHERE ${clauses.join(" AND ")} ORDER BY w.updatedAt DESC`,
     params
   );
+  const permissions = await getProjectWorkflowPermissions(user, {
+    projectId,
+    roles: access.roles,
+    workflows: rows.map(row => ({
+      id: String(row.id),
+      projectId: String(row.projectId),
+      ownerUserId: Number(row.ownerUserId),
+    })),
+  });
+  const reviewerMode =
+    rows.length && access.permissions.has("project:manage")
+      ? (await getP1SystemSettings()).approval.reviewerMode
+      : "independent_reviewer";
   return rows.map(row => ({
     ...row,
+    actions: projectWorkflowActions({
+      actorId: user.id,
+      workflow: {
+        status: String(row.status),
+        auditStatus: String(row.auditStatus),
+        flowType: String(row.flowType),
+        ownerUserId: Number(row.ownerUserId),
+        projectStatus: String(row.projectStatus),
+      },
+      projectPermissions: access.permissions,
+      workflowPermissions: permissions.get(String(row.id)) ?? new Set(),
+      reviewerMode,
+    }),
     definition:
       typeof row.definitionJson === "string"
         ? JSON.parse(row.definitionJson)

@@ -197,6 +197,40 @@ async function cleanup(fixture, ownerLogin) {
     assert(person.username.startsWith(fixture.tag + "_"));
   }
   const rootCookie = cookie;
+  if (fixture.projectActions) {
+    fixture.runs ??= [];
+    for (const flow of fixture.workflows) {
+      try {
+        assert(flow.name.endsWith(fixture.tag));
+        const current = await request("workflow.get", { id: flow.id });
+        assert.equal(current.ownerUserId, fixture.userId);
+        assert.equal(current.name, flow.name);
+        const runs = await request("workflow.runs", { workflowId: flow.id, limit: 200 });
+        assert(runs.length < 200);
+        for (const run of runs) {
+          assert.equal(run.workflowId, flow.id);
+          if (!fixture.runs.some(item => item.id === run.id)) fixture.runs.push({ id: run.id, workflowId: flow.id });
+        }
+      } catch (error) { failures.push(error.message); }
+    }
+  }
+  if (fixture.workflowRoleCode) {
+    try {
+      assert.equal(fixture.workflowRoleCode, "custom_" + fixture.tag);
+      const role = (await request("iam.roles", { scope: "workflow" })).find(item => item.code === fixture.workflowRoleCode);
+      if (role) {
+        assert.equal(role.name, "流程权限验收_" + fixture.tag);
+        for (const flow of fixture.workflows) {
+          const bindings = await request("workflow.customRoleAssignments", { workflowId: flow.id, page: 0, query: fixture.workflowRoleCode });
+          for (const binding of bindings.items.filter(item => item.roleCode === fixture.workflowRoleCode && !item.revokedAt)) {
+            assert.equal(Number(binding.userId), fixture.disabledUserId);
+            await request("workflow.revokeCustomRole", { workflowId: flow.id, assignmentId: binding.id }, true);
+          }
+        }
+        await request("iam.deleteCustomRole", { code: fixture.workflowRoleCode }, true);
+      }
+    } catch (error) { failures.push(error.message); }
+  }
   if (fixture.runs?.length && ownerLogin) await request("auth.login", ownerLogin, true);
   for (const run of fixture.runs ?? []) {
     try {
@@ -828,8 +862,27 @@ async function cleanupNativeSchedule(intent) {
   console.log(JSON.stringify({ stage: "native-schedules-cleaned", count: schedules.length }));
 }
 
+async function prepareProjectActions(intent) {
+  await prepareNativeSchedule(intent);
+  const { fixture } = intent;
+  for (const flow of fixture.workflows.filter(item => ["state", "control"].includes(item.flowType))) {
+    assert(flow.name.endsWith(fixture.tag));
+    await bootstrap();
+    const current = await request("workflow.get", { id: flow.id });
+    assert.equal(current.ownerUserId, fixture.userId);
+    assert.equal(current.projectId, fixture.projectId);
+    assert.equal(current.name, flow.name);
+    await request("project.auditWorkflow", { projectId: fixture.projectId, workflowId: flow.id, auditStatus: "approved" }, true);
+    await request("auth.login", intent.login, true);
+    const approved = await request("workflow.get", { id: flow.id });
+    await request("workflow.publish", { id: flow.id, expectedDefinitionVersion: approved.definitionVersion }, true);
+  }
+  console.log(JSON.stringify({ stage: "project-workflow-actions-prepared", workflows: 3 }));
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_native_schedule") await prepareNativeSchedule(browserFixtureIntent);
+else if (browserFixtureIntent.action === "prepare_project_actions") await prepareProjectActions(browserFixtureIntent);
 else if (browserFixtureIntent.action === "cleanup_native_schedule") await cleanupNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "start_form_task") await startFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_form_task") await verifyFormTask(browserFixtureIntent);

@@ -53,7 +53,7 @@ it("工作区定期确认权限，缓存读取失败时不可沿用编辑能力"
   expect(source).toContain("assignmentId: permissionRevocation.assignmentId");
   expect(source).toContain('member.protectedOwner ? "创建人"');
   expect(source).toContain(
-    "Promise.all([access.refetch(), members.refetch()])"
+    "Promise.all([access.refetch(), members.refetch(), workflows.refetch()])"
   );
 });
 

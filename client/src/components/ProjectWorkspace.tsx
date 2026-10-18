@@ -5,6 +5,7 @@ import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { AuthorizationDetailRefresh } from "./AuthorizationDetailRefresh";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
 import { PermissionListFeedback } from "./PermissionListFeedback";
+import { consoleNavigationEvent, type ConsoleNavigationEvent } from "@/lib/console-navigation-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1232,12 +1233,12 @@ export function ProjectWorkspace({
   const workflows = trpc.project.workflows.useQuery({
     projectId: project.id,
     ...filters,
-  });
+  }, authorizationQueryPolicy(view === "process"));
   const members = trpc.project.members.useQuery(
     { projectId: project.id },
     { retry: false, refetchInterval: view === "members" ? 30_000 : false, refetchIntervalInBackground: false }
   );
-  const refreshAccess = () => Promise.all([access.refetch(), members.refetch()]);
+  const refreshAccess = () => Promise.all([access.refetch(), members.refetch(), workflows.refetch()]);
   const serviceEndpoints = trpc.project.serviceEndpoints.useQuery(
     { projectId: project.id },
     { enabled: view === "services" }
@@ -1447,6 +1448,7 @@ export function ProjectWorkspace({
             }}
             refreshingWorkflows={workflows.isFetching}
             workflowLoadFailed={workflows.isError}
+            actionsReady={!workflows.isPending && !workflows.isError && capabilities.ready}
             showCreate={showCreate}
             setShowCreate={setShowCreate}
             form={form}
@@ -2048,6 +2050,7 @@ type ProcessCenterProps = {
   onRefreshWorkflows: () => void;
   refreshingWorkflows: boolean;
   workflowLoadFailed: boolean;
+  actionsReady: boolean;
   showCreate: boolean;
   setShowCreate: (value: boolean) => void;
   form: {
@@ -2137,6 +2140,7 @@ function ProcessCenter({
   onRefreshWorkflows,
   refreshingWorkflows,
   workflowLoadFailed,
+  actionsReady,
   showCreate,
   setShowCreate,
   form,
@@ -2166,6 +2170,7 @@ function ProcessCenter({
     project.workflowCount > workflows.length;
   const refreshWorkflows = () => {
     void utils.project.workflows.invalidate({ projectId: project.id });
+    void utils.project.access.invalidate({ projectId: project.id });
     void utils.workflow.list.invalidate();
     void utils.workflow.page.invalidate();
     void utils.workflow.get.invalidate();
@@ -2208,9 +2213,12 @@ function ProcessCenter({
       setLaunchWorkflow(null);
       toast.success(`流程已发起：${result.runId.slice(0, 8)}`);
     },
-    onError: error => toast.error(error.message),
+    onError: error => { refreshWorkflows(); toast.error(error.message); },
   });
+  const actionsFor = (workflow: any) => actionsReady ? workflow?.actions ?? {} : {};
+  const launchAllowed = actionsFor(workflows.find(item => item.id === launchWorkflow?.id)).canRun === true;
   const onLaunch = (workflow: any) => {
+    if (!actionsFor(workflow).canRun) return;
     if (workflow.flowType === "data") {
       startDataflow(workflow);
       return;
@@ -2243,6 +2251,17 @@ function ProcessCenter({
   useEffect(() => {
     setPage(1);
   }, [workflows]);
+
+  const renderPrimaryActions = (workflow: any, surface: "table" | "card") => {
+    const actions = actionsFor(workflow);
+    const canvasLabel = actions.canDesign ? "设计流程" : "查看画布";
+    const runLabel = workflow.flowType === "data" ? "执行数据流程" : "发起流程";
+    const sizing = surface === "card" ? "h-11 min-h-11 flex-1" : "h-9";
+    return <>
+      {actions.canViewCanvas && <Button type="button" variant={actions.canRun ? "outline" : "default"} size="sm" className={`aiflow-type-control ${sizing} px-3 font-semibold`} aria-label={`${canvasLabel}：${workflow.name}`} onClick={() => onOpenWorkflow(workflow.id)}>{canvasLabel}</Button>}
+      {actions.canRun && <Button type="button" size="sm" className={`aiflow-type-control ${sizing} px-3 font-semibold`} aria-label={`${runLabel}：${workflow.name}`} onClick={() => onLaunch(workflow)}>{runLabel}</Button>}
+    </>;
+  };
 
   const renderMoreActions = (workflow: any, surface: "table" | "card") => {
     const actionPopoverId = `${surface}:${workflow.id}`;
@@ -2377,68 +2396,18 @@ function ProcessCenter({
             >
               查看详情
             </button>
-            {workflow.status === "published" && (
-              <button
-                type="button"
-                className="aiflow-type-control min-h-11 rounded-md border border-border bg-card px-3 py-2 text-foreground hover:bg-muted sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                onClick={() => {
-                  setOpenWorkflowActionsId(null);
-                  onOpenWorkflow(workflow.id);
-                }}
-              >
-                设计
-              </button>
-            )}
-            {canManage &&
-              workflow.status === "draft" &&
-              workflow.auditStatus === "approved" && (
-                <button
-                  type="button"
-                  className="aiflow-type-control min-h-11 rounded-md border border-aiflow-success-border bg-card px-3 py-2 text-aiflow-success hover:bg-aiflow-success-surface sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                  onClick={() => {
-                    setOpenWorkflowActionsId(null);
-                    publish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) });
-                  }}
-                >
-                  发布流程
-                </button>
-              )}
-            {canManage && workflow.status === "published" && (
-              <button
-                type="button"
-                className="aiflow-type-control min-h-11 rounded-md border border-aiflow-warning-border bg-card px-3 py-2 text-aiflow-warning hover:bg-aiflow-warning-surface sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                onClick={() => {
-                  setOpenWorkflowActionsId(null);
-                  unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) });
-                }}
-              >
-                取消发布
-              </button>
-            )}
-            {canManage && workflow.auditStatus === "init" && (
-              <button
-                type="button"
-                className="aiflow-type-control min-h-11 rounded-md border border-aiflow-success-border bg-card px-3 py-2 text-aiflow-success hover:bg-aiflow-success-surface sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                onClick={() => {
-                  setOpenWorkflowActionsId(null);
-                  onAudit(workflow.id, "approved");
-                }}
-              >
-                审核通过
-              </button>
-            )}
-            {canManage && workflow.auditStatus === "init" && (
-              <button
-                type="button"
-                className="aiflow-type-control min-h-11 rounded-md border border-red-200 bg-card px-3 py-2 text-red-600 hover:bg-red-50 sm:min-h-0 sm:px-2.5 sm:py-1.5"
-                onClick={() => {
-                  setOpenWorkflowActionsId(null);
-                  onAudit(workflow.id, "rejected");
-                }}
-              >
-                审核驳回
-              </button>
-            )}
+            {[
+              { allowed: actionsFor(workflow).canPublish, label: "发布流程", tone: "success", run: () => publish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) }) },
+              { allowed: actionsFor(workflow).canUnpublish, label: "取消发布", tone: "warning", run: () => unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) }) },
+              { allowed: actionsFor(workflow).canReview, label: "审核通过", tone: "success", run: () => onAudit(workflow.id, "approved") },
+              { allowed: actionsFor(workflow).canReview, label: "审核驳回", tone: "danger", run: () => onAudit(workflow.id, "rejected") },
+            ].filter(action => action.allowed).map(action => (
+              <button key={action.label} type="button" disabled={publish.isPending || unpublish.isPending}
+                className={`aiflow-type-control min-h-11 rounded-md border bg-card px-3 py-2 sm:min-h-0 sm:px-2.5 sm:py-1.5 ${action.tone === "success" ? "border-aiflow-success-border text-aiflow-success hover:bg-aiflow-success-surface" : action.tone === "warning" ? "border-aiflow-warning-border text-aiflow-warning hover:bg-aiflow-warning-surface" : "border-red-200 text-red-600 hover:bg-red-50"}`}
+                onClick={() => { setOpenWorkflowActionsId(null); action.run(); }}
+              >{action.label}</button>
+            ))}
+            {actionsFor(workflow).reviewBlockedReason && <p role="status" className="aiflow-type-body text-muted-foreground">{actionsFor(workflow).reviewBlockedReason}</p>}
           </div>
         </PopoverContent>
       </Popover>
@@ -2532,6 +2501,7 @@ function ProcessCenter({
           )}
         </div>
       </div>
+      <PermissionListFeedback name="流程操作权限" loading={!actionsReady && !workflowLoadFailed} error={workflowLoadFailed} onRetry={onRefreshWorkflows} />
       <CreationDialog
         open={showCreate}
         onOpenChange={setShowCreate}
@@ -2766,6 +2736,7 @@ function ProcessCenter({
               {pageWorkflows.map((workflow: any) => (
                 <tr
                   key={workflow.id}
+                  data-project-workflow-row={workflow.id}
                   className="group border-t border-border align-middle hover:bg-aiflow-info-surface/40"
                 >
                   <td className="max-w-[360px] px-4 py-3">
@@ -2829,33 +2800,7 @@ function ProcessCenter({
                   </td>
                   <td className="min-w-[170px] px-3 py-3 text-right">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                      {workflow.status === "published" && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="aiflow-type-control h-9 px-3"
-                          onClick={() => onOpenWorkflow(workflow.id)}
-                        >
-                          设计
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="aiflow-type-control h-9 px-3 font-semibold"
-                        onClick={() =>
-                          workflow.status === "published"
-                            ? onLaunch(workflow)
-                            : onOpenWorkflow(workflow.id)
-                        }
-                      >
-                        {workflow.status === "published"
-                          ? workflow.flowType === "data"
-                            ? "执行"
-                            : "发起"
-                          : "设计"}
-                      </Button>
+                      {renderPrimaryActions(workflow, "table")}
                       {renderMoreActions(workflow, "table")}
                     </div>
                   </td>
@@ -2885,6 +2830,7 @@ function ProcessCenter({
           {pageWorkflows.map((workflow: any) => (
             <article
               key={workflow.id}
+              data-project-workflow-row={workflow.id}
               className="min-w-0 rounded-lg border border-border bg-card p-3.5 shadow-2xs"
             >
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -2940,32 +2886,8 @@ function ProcessCenter({
                 </span>
               </div>
               <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-                {workflow.status === "published" && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="aiflow-type-control h-11 min-h-11 flex-1 px-3 font-semibold"
-                    onClick={() => onOpenWorkflow(workflow.id)}
-                  >
-                    设计流程
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  className="aiflow-type-control h-11 min-h-11 flex-1 px-3 font-semibold"
-                  onClick={() =>
-                    workflow.status === "published"
-                      ? onLaunch(workflow)
-                      : onOpenWorkflow(workflow.id)
-                  }
-                >
-                  {workflow.status === "published"
-                    ? workflow.flowType === "data"
-                      ? "执行数据流程"
-                      : "发起流程"
-                    : "设计流程"}
-                </Button>
-                {renderMoreActions(workflow, "card")}
+                      {renderPrimaryActions(workflow, "card")}
+                      {renderMoreActions(workflow, "card")}
               </div>
             </article>
           ))}
@@ -3040,8 +2962,12 @@ function ProcessCenter({
           form={launchForm}
           setForm={setLaunchForm}
           pending={launch.isPending}
+          allowed={launchAllowed}
+          onRefresh={onRefreshWorkflows}
+          refreshing={refreshingWorkflows}
           onClose={() => setLaunchWorkflow(null)}
-          onSubmit={() =>
+          onSubmit={() => {
+            if (!launchAllowed || launch.isPending) return;
             launch.mutate({
               workflowId: launchWorkflow.id,
               input: {
@@ -3063,8 +2989,8 @@ function ProcessCenter({
                 businessInformationText:
                   launchForm.businessInformationText.trim(),
               },
-            })
-          }
+            });
+          }}
         />
       )}
       {auditWorkflowId && (
@@ -3129,6 +3055,9 @@ function ProcessLaunchDialog({
   form,
   setForm,
   pending,
+  allowed,
+  refreshing,
+  onRefresh,
   onClose,
   onSubmit,
 }: {
@@ -3152,121 +3081,175 @@ function ProcessLaunchDialog({
     businessInformationText: string;
   }) => void;
   pending: boolean;
+  allowed: boolean;
+  refreshing: boolean;
+  onRefresh: () => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  const [exitAction, setExitAction] = useState<(() => void) | null>(null);
+  const dirty = Object.entries(form).some(
+    ([key, value]) => value !== (key === "codeType" ? "UserWord" : "")
+  );
+  const requestClose = (action: () => void = onClose) => {
+    if (pending) return;
+    if (dirty) setExitAction(() => action);
+    else action();
+  };
+  useEffect(() => {
+    if (!dirty && !pending) return;
+    const guardNavigation = (event: Event) => {
+      event.preventDefault();
+      requestClose((event as ConsoleNavigationEvent).detail.proceed);
+    };
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener(consoleNavigationEvent, guardNavigation);
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => {
+      window.removeEventListener(consoleNavigationEvent, guardNavigation);
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+    };
+  }, [dirty, pending]);
   return (
-    <Dialog
-      open
-      onOpenChange={open => {
-        if (!open) onClose();
-      }}
-    >
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>发起流程</DialogTitle>
-          <DialogDescription>
-            填写原始流程发起上下文。所有字段将以受权限保护的运行输入对象提交，不需要填写
-            JSON。
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="grid gap-1.5 text-sm text-foreground">
-            发起方类型
-            <select
-              className="h-9 rounded border border-border bg-card px-2 text-sm"
-              value={form.codeType}
-              onChange={event =>
-                setForm({ ...form, codeType: event.target.value })
-              }
+    <>
+      <Dialog
+        open
+        onOpenChange={open => {
+          if (!open) requestClose();
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>发起流程</DialogTitle>
+            <DialogDescription>
+              填写原始流程发起上下文。所有字段将以受权限保护的运行输入对象提交，不需要填写
+              JSON。
+            </DialogDescription>
+          </DialogHeader>
+          {!allowed && (
+            <div
+              role="alert"
+              className="aiflow-type-body space-y-2 text-muted-foreground"
             >
-              <option value="UserWord">UserWord</option>
-              <option value="UnitWord">UnitWord</option>
-              <option value="AuthUnitWord">AuthUnitWord</option>
-            </select>
-          </label>
-          <label className="grid gap-1.5 text-sm text-foreground">
-            流程应结束时间（可选）
-            <Input
-              type="datetime-local"
-              value={form.expectedEnd}
-              onChange={event =>
-                setForm({ ...form, expectedEnd: event.target.value })
-              }
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm text-foreground sm:col-span-2">
-            发起方角色键（可选）
-            <Input
-              placeholder="多个角色键用逗号或空格分隔"
-              value={form.roleKeys}
-              onChange={event =>
-                setForm({ ...form, roleKeys: event.target.value })
-              }
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm text-foreground">
-            业务信息一
-            <Input
-              value={form.businessInformationOne}
-              onChange={event =>
-                setForm({ ...form, businessInformationOne: event.target.value })
-              }
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm text-foreground">
-            业务信息二
-            <Input
-              value={form.businessInformationTwo}
-              onChange={event =>
-                setForm({ ...form, businessInformationTwo: event.target.value })
-              }
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm text-foreground">
-            业务信息三
-            <Input
-              value={form.businessInformationThree}
-              onChange={event =>
-                setForm({
-                  ...form,
-                  businessInformationThree: event.target.value,
-                })
-              }
-            />
-          </label>
-          <label className="grid gap-1.5 text-sm text-foreground">
-            业务信息说明
-            <Input
-              value={form.businessInformationText}
-              onChange={event =>
-                setForm({
-                  ...form,
-                  businessInformationText: event.target.value,
-                })
-              }
-            />
-          </label>
-        </div>
-        <p className="aiflow-type-body text-muted-foreground">
-          当前流程：{workflow.name}
-          。实际发起人由服务端会话身份记录，不能由此表单伪造。
-        </p>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>
-            取消
-          </Button>
-          <Button
-            type="button"
-            className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
-            disabled={pending}
-            onClick={onSubmit}
+              <p>
+                此流程当前无法发起，可能是权限或发布状态已变化。填写内容已保留，可刷新后继续。
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={pending || refreshing}
+                onClick={onRefresh}
+              >
+                刷新流程权限
+              </Button>
+            </div>
+          )}
+          <fieldset
+            disabled={pending || !allowed}
+            className="grid min-w-0 gap-3 sm:grid-cols-2"
           >
-            {pending && <Loader2 className="animate-spin" size={15} />}确认发起
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <label className="grid gap-1.5 text-sm text-foreground">
+              发起方类型
+              <select
+                className="h-9 rounded border border-border bg-card px-2 text-sm"
+                value={form.codeType}
+                onChange={event =>
+                  setForm({ ...form, codeType: event.target.value })
+                }
+              >
+                <option value="UserWord">UserWord</option>
+                <option value="UnitWord">UnitWord</option>
+                <option value="AuthUnitWord">AuthUnitWord</option>
+              </select>
+            </label>
+            <label className="grid gap-1.5 text-sm text-foreground">
+              流程应结束时间（可选）
+              <Input
+                type="datetime-local"
+                value={form.expectedEnd}
+                onChange={event =>
+                  setForm({ ...form, expectedEnd: event.target.value })
+                }
+              />
+            </label>
+            <label className="grid gap-1.5 text-sm text-foreground sm:col-span-2">
+              发起方角色键（可选）
+              <Input
+                placeholder="多个角色键用逗号或空格分隔"
+                value={form.roleKeys}
+                onChange={event =>
+                  setForm({ ...form, roleKeys: event.target.value })
+                }
+              />
+            </label>
+            {([
+              ["businessInformationOne", "业务信息一"],
+              ["businessInformationTwo", "业务信息二"],
+              ["businessInformationThree", "业务信息三"],
+              ["businessInformationText", "业务信息说明"],
+            ] as const).map(([key, label]) => (
+              <label key={key} className="grid gap-1.5 text-sm text-foreground">
+                {label}
+                <Input value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
+              </label>
+            ))}
+          </fieldset>
+          <p className="aiflow-type-body text-muted-foreground">
+            当前流程：{workflow.name}
+            。实际发起人由服务端会话身份记录，不能由此表单伪造。
+          </p>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={() => requestClose()}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-2xs"
+              disabled={pending || !allowed}
+              onClick={onSubmit}
+            >
+              {pending && <Loader2 className="animate-spin" size={15} />}
+              确认发起
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <AlertDialog
+        open={Boolean(exitAction)}
+        onOpenChange={open => {
+          if (!open) setExitAction(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>放弃本次发起填写？</AlertDialogTitle>
+            <AlertDialogDescription>
+              已填写的发起信息尚未提交。可以继续填写，或确认放弃并关闭。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>继续填写</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const action = exitAction;
+                setExitAction(null);
+                action?.();
+              }}
+            >
+              放弃并关闭
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

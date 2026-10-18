@@ -175,6 +175,8 @@ async function seedIamCatalog() {
 type PermissionRow = mysql.RowDataPacket & { code: PermissionCode };
 
 type GrantedPermissionRow = PermissionRow & {
+  scopeType?: "system" | "workflow";
+  scopeId?: string | null;
   name?: string;
   description?: string;
   sourceKind?: "direct" | "organization";
@@ -186,11 +188,12 @@ type GrantedPermissionRow = PermissionRow & {
   roleName?: string;
 };
 
-async function assignedPermissionRows(userId: number, workflowId?: string, withSources = false) {
-  const scopeClause = workflowId ? "(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId=?))" : "ra.scopeType='system'";
-  const directSource = withSources ? ", 'direct' AS sourceKind,ra.id AS assignmentId,NULL AS unitId" : "";
-  const inheritedSource = withSources ? ", 'organization' AS sourceKind,NULL AS assignmentId,our.unitId" : "";
-  const metadata = withSources ? ",p.name,p.description,effective_role.sourceKind,effective_role.assignmentId,effective_role.unitId,origin_unit.name AS unitName,r.id AS roleId,r.code AS roleCode,r.name AS roleName" : "";
+async function assignedPermissionRows(userId: number, workflowId?: string | string[], withSources = false) {
+  const batch = Array.isArray(workflowId);
+  const scopeClause = workflowId ? `(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId${batch ? " IN (?)" : "=?"}))` : "ra.scopeType='system'";
+  const directSource = withSources ? ", 'direct' AS sourceKind,ra.id AS assignmentId,NULL AS unitId" : batch ? ",ra.scopeType,ra.scopeId" : "";
+  const inheritedSource = withSources ? ", 'organization' AS sourceKind,NULL AS assignmentId,our.unitId" : batch ? ", 'system' AS scopeType,NULL AS scopeId" : "";
+  const metadata = withSources ? ",p.name,p.description,effective_role.sourceKind,effective_role.assignmentId,effective_role.unitId,origin_unit.name AS unitName,r.id AS roleId,r.code AS roleCode,r.name AS roleName" : batch ? ",effective_role.scopeType,effective_role.scopeId" : "";
   const [rows] = await db().query<GrantedPermissionRow[]>(
     `WITH RECURSIVE membership_units AS (
        SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
@@ -289,6 +292,68 @@ export async function getWorkflowAccess(user: { id: number; role: "user" | "admi
 export async function hasWorkflowPermission(user: { id: number; role: "user" | "admin" }, workflowId: string, permission: WorkflowPermission) {
   const access = await getWorkflowAccess(user, workflowId);
   return access.exists && access.permissions.has(permission);
+}
+
+/** Resolve rows already loaded for one authorized project, without a request per workflow. */
+export async function getProjectWorkflowPermissions(
+  user: { id: number; role: "user" | "admin" },
+  input: {
+    projectId: string;
+    roles: ProjectMemberRole[];
+    workflows: { id: string; projectId: string; ownerUserId: number }[];
+  }
+) {
+  if (input.workflows.some(row => row.projectId !== input.projectId))
+    throw new Error("流程权限批量查询必须限定在同一业务。");
+  const permissions = new Map<string, Set<WorkflowPermission>>();
+  for (const row of input.workflows) {
+    const own = user.role === "admin" || Number(row.ownerUserId) === user.id;
+    permissions.set(
+      row.id,
+      new Set(
+        own
+          ? WORKFLOW_PERMISSIONS
+          : input.roles.flatMap(
+              role => projectMemberWorkflowPermissions[role] ?? []
+            )
+      )
+    );
+  }
+  const ids = input.workflows
+    .filter(
+      row => permissions.get(row.id)!.size !== WORKFLOW_PERMISSIONS.length
+    )
+    .map(row => row.id);
+  if (!ids.length) return permissions;
+  await ensureIamCatalog();
+  for (let offset = 0; offset < ids.length; offset += 500) {
+    const batch = ids.slice(offset, offset + 500);
+    const [members] = await db().query<mysql.RowDataPacket[]>(
+      `SELECT workflowId,role FROM workflow_member WHERE workflowId IN (?) AND userId=? AND revokedAt IS NULL
+        AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())`,
+      [batch, user.id]
+    );
+    for (const row of members)
+      memberRolePermissions[row.role as WorkflowMemberRole]?.forEach(
+        permission => permissions.get(String(row.workflowId))?.add(permission)
+      );
+    const grants = await assignedPermissionRows(user.id, batch);
+    for (const grant of grants) {
+      if (!WORKFLOW_PERMISSIONS.includes(grant.code as WorkflowPermission))
+        continue;
+      const targets =
+        grant.scopeType === "system"
+          ? batch
+          : grant.scopeType === "workflow" &&
+              batch.includes(String(grant.scopeId))
+            ? [String(grant.scopeId)]
+            : [];
+      targets.forEach(id =>
+        permissions.get(id)!.add(grant.code as WorkflowPermission)
+      );
+    }
+  }
+  return permissions;
 }
 
 export async function recordAuthorizationAudit(input: { actorUserId?: number | null; targetUserId?: number | null; action: "login_success" | "login_failed" | "logout" | "user_created" | "user_updated" | "user_disabled" | "role_assigned" | "role_revoked" | "temporary_role_assigned" | "temporary_role_revoked" | "role_created" | "role_updated" | "role_deleted"; resourceType?: string; resourceId?: string; details?: Record<string, unknown>; requestId?: string | null }, connection?: mysql.PoolConnection) {

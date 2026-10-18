@@ -544,7 +544,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(projectWorkspaceSource).toContain("workflowCode(workflow)");
     expect(projectWorkspaceSource).toContain(
-      "h-11 min-h-11 flex-1 px-3 font-semibold"
+      "h-11 min-h-11 flex-1"
     );
     expect(projectWorkspaceSource).toContain("未知审核状态（原值：${value}）");
     expect(projectWorkspaceSource).toContain("未知类型（原值：${value}）");
@@ -861,10 +861,10 @@ describe("流程设计器界面回归约束", () => {
       '{renderMoreActions(workflow, "card")}'
     );
     expect(projectWorkspaceSource).toContain(
-      'workflow.status === "published" ? onLaunch(workflow) : onOpenWorkflow(workflow.id)'
+      'onClick={() => onLaunch(workflow)}'
     );
     expect(projectWorkspaceSource).toContain(
-      'workflow.status === "published" ? workflow.flowType === "data" ? "执行" : "发起" : "设计"'
+      'workflow.flowType === "data" ? "执行数据流程" : "发起流程"'
     );
     expect(projectWorkspaceSource).not.toContain(
       '▾</span> <span aria-hidden="true">▾'
@@ -2231,7 +2231,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(projectWorkspaceSource).toContain("colSpan={6}");
     expect(projectWorkspaceSource).toContain(
-      'workflow.status === "published" ? workflow.flowType === "data" ? "执行" : "发起" : "设计"'
+      'workflow.flowType === "data" ? "执行数据流程" : "发起流程"'
     );
     expect(projectWorkspaceSource).toContain(
       "trpc.workflow.publish.useMutation"
@@ -2240,10 +2240,10 @@ describe("流程设计器界面回归约束", () => {
       "trpc.workflow.unpublish.useMutation"
     );
     expect(projectWorkspaceSource).toContain(
-      'workflow.status === "draft" && workflow.auditStatus === "approved"'
+      'actionsFor(workflow).canPublish'
     );
     expect(projectWorkspaceSource).toContain(
-      'workflow.status === "published" && ( <button'
+      'actionsFor(workflow).canUnpublish'
     );
     expect(projectWorkspaceSource).toContain(
       "unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) })"
