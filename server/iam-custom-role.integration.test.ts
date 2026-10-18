@@ -6,6 +6,7 @@ import {
   deleteCustomRole,
   revokeRoleAssignment,
   updateCustomRole,
+  getCustomRoleConfiguration,
 } from "./iam-service";
 import { createIntegrationAdmin } from "./integration-user-test-support";
 
@@ -53,6 +54,8 @@ describe("自定义角色真实数据库生命周期", () => {
       });
       await updateCustomRole({
         code: roleCode,
+        expectedConfigToken: (await getCustomRoleConfiguration(roleCode))
+          .configToken,
         name: "更新后的集成测试角色",
         permissions: ["workflow:create", "workflow:view"],
         actorUserId: actorId!,
@@ -70,13 +73,23 @@ describe("自定义角色真实数据库生命周期", () => {
       assignmentId = assignments[0]?.id;
 
       await expect(
-        deleteCustomRole({ code: roleCode, actorUserId: actorId! })
+        deleteCustomRole({
+          code: roleCode,
+          actorUserId: actorId!,
+          expectedConfigToken: (await getCustomRoleConfiguration(roleCode))
+            .configToken,
+        })
       ).rejects.toThrow("有效授权");
       await revokeRoleAssignment({
         assignmentId: assignmentId!,
         revokedByUserId: actorId!,
       });
-      await deleteCustomRole({ code: roleCode, actorUserId: actorId! });
+      await deleteCustomRole({
+        code: roleCode,
+        actorUserId: actorId!,
+        expectedConfigToken: (await getCustomRoleConfiguration(roleCode))
+          .configToken,
+      });
       const [roles] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT id FROM iam_role WHERE code=?",
         [roleCode]

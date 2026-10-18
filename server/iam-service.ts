@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { currentRequestId } from "./_core/http-security";
 import { getSharedPool } from "./db";
+import { TRPCError } from "@trpc/server";
+import { customRoleConfigToken, assertCustomRoleConfigToken } from "./custom-role-configuration";
+import { readRolePermissionCodes } from "../shared/role-permission-codes";
 
 export const WORKFLOW_PERMISSIONS = ["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage"] as const;
 
@@ -486,7 +489,7 @@ export async function assignRole(input: { userId: number; roleCode: string; scop
 
 export function validateRoleCode(code: string) {
   const normalized = code.trim().toLowerCase();
-  if (!/^custom_[a-z][a-z0-9_]{2,60}$/.test(normalized)) throw new Error("自定义角色编码必须以 custom_ 开头，且仅包含小写字母、数字或下划线。");
+  if (!/^custom_[a-z][a-z0-9_]{2,56}$/.test(normalized)) throw new Error("自定义角色编码必须为 10 至 64 个字符，以 custom_ 开头，且仅包含小写字母、数字或下划线。");
   return normalized;
 }
 
@@ -507,14 +510,49 @@ async function replaceRolePermissions(connection: mysql.PoolConnection, roleId: 
   await connection.query("INSERT INTO role_permission (roleId,permissionId) VALUES ?", [permissionRows.map(row => [roleId, row.id])]);
 }
 
-export async function createCustomRole(input: { code: string; name: string; description?: string | null; scope: "system" | "workflow"; permissions: PermissionCode[]; actorUserId: number }) {
+async function lockRoleManager(connection: mysql.PoolConnection, actorUserId: number, actorTokenVersion?: number) {
+  const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR UPDATE", [actorUserId]);
+  const actor = rows[0];
+  if (!actor || actor.status !== "active" || (actorTokenVersion !== undefined && Number(actor.tokenVersion) !== actorTokenVersion) || !(await hasSystemPermission({ id: Number(actor.id), role: actor.role }, "iam:manage", connection))) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前账号无权维护角色，请刷新权限后重试。" });
+  }
+}
+
+const roleConfigurationSelect = `SELECT r.id,r.code,r.name,r.description,r.scope,r.isSystem,
+  COALESCE((SELECT JSON_ARRAYAGG(p.code) FROM role_permission rp JOIN permission p ON p.id=rp.permissionId WHERE rp.roleId=r.id), JSON_ARRAY()) AS permissions
+  FROM iam_role r WHERE r.code=?`;
+
+export async function getCustomRoleConfiguration(code: string) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>(roleConfigurationSelect, [validateRoleCode(code)]);
+  const role = rows[0];
+  if (!role) throw new TRPCError({ code: "NOT_FOUND", message: "该角色已删除，请关闭窗口后重新选择。" });
+  if (role.isSystem) throw new TRPCError({ code: "BAD_REQUEST", message: "内置角色不可修改或删除。" });
+  return { id: Number(role.id), code: String(role.code), name: String(role.name), description: role.description == null ? null : String(role.description), scope: role.scope as "system" | "workflow", isSystem: Boolean(Number(role.isSystem)), permissions: readRolePermissionCodes(role.permissions), configToken: customRoleConfigToken(role) };
+}
+
+async function lockedRoleConfiguration(connection: mysql.PoolConnection, code: string) {
+  const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,code,scope,isSystem,name,description FROM iam_role WHERE code=? FOR UPDATE", [code]);
+  const role = rows[0];
+  if (!role || role.isSystem) throw new TRPCError({ code: "NOT_FOUND", message: "找不到可编辑或删除的自定义角色。" });
+  // Current reads are required after waiting for the role lock: the manager
+  // permission check may already have opened an older REPEATABLE READ snapshot.
+  // Lock only this role's links, avoiding locks on shared catalog entries.
+  const [links] = await connection.query<mysql.RowDataPacket[]>("SELECT permissionId FROM role_permission WHERE roleId=? ORDER BY permissionId FOR UPDATE", [role.id]);
+  const [permissions] = links.length
+    ? await connection.query<mysql.RowDataPacket[]>("SELECT code FROM permission WHERE id IN (?) ORDER BY code", [links.map(link => link.permissionId)])
+    : [[]];
+  role.permissions = permissions.map(item => item.code);
+  return role;
+}
+
+export async function createCustomRole(input: { code: string; name: string; description?: string | null; scope: "system" | "workflow"; permissions: PermissionCode[]; actorUserId: number; actorTokenVersion?: number }) {
   const code = validateRoleCode(input.code);
   const permissions = validateRolePermissions(input.scope, input.permissions);
   await ensureIamCatalog();
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("SELECT id FROM users WHERE id=? FOR UPDATE", [input.actorUserId]);
+    await lockRoleManager(connection, input.actorUserId, input.actorTokenVersion);
     const [result] = await connection.query<mysql.ResultSetHeader>("INSERT INTO iam_role (code,name,description,scope,isSystem) VALUES (?,?,?,?,0)", [code, input.name.trim(), input.description?.trim() || null, input.scope]);
     await replaceRolePermissions(connection, result.insertId, permissions);
   await recordAuthorizationAudit({
@@ -538,16 +576,15 @@ export async function createCustomRole(input: { code: string; name: string; desc
 
 }
 
-export async function updateCustomRole(input: { code: string; name?: string; description?: string | null; permissions?: PermissionCode[]; actorUserId: number }) {
+export async function updateCustomRole(input: { code: string; name?: string; description?: string | null; permissions?: PermissionCode[]; actorUserId: number; actorTokenVersion?: number; expectedConfigToken?: string }) {
   const code = validateRoleCode(input.code);
   await ensureIamCatalog();
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("SELECT id FROM users WHERE id=? FOR UPDATE", [input.actorUserId]);
-    const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,scope,isSystem,name,description FROM iam_role WHERE code=? FOR UPDATE", [code]);
-    const role = rows[0];
-    if (!role || role.isSystem) throw new Error("找不到可编辑的自定义角色。");
+    await lockRoleManager(connection, input.actorUserId, input.actorTokenVersion);
+    const role = await lockedRoleConfiguration(connection, code);
+    assertCustomRoleConfigToken(input.expectedConfigToken, role);
     const permissions = input.permissions ? validateRolePermissions(role.scope, input.permissions) : undefined;
     await connection.query("UPDATE iam_role SET name=?,description=? WHERE id=?", [input.name?.trim() || role.name, input.description === undefined ? role.description : input.description?.trim() || null, role.id]);
     if (permissions) await replaceRolePermissions(connection, role.id, permissions);
@@ -568,15 +605,15 @@ export async function updateCustomRole(input: { code: string; name?: string; des
 
 }
 
-export async function deleteCustomRole(input: { code: string; actorUserId: number }) {
+export async function deleteCustomRole(input: { code: string; actorUserId: number; actorTokenVersion?: number; expectedConfigToken?: string }) {
   const code = validateRoleCode(input.code);
+  await ensureIamCatalog();
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query("SELECT id FROM users WHERE id=? FOR UPDATE", [input.actorUserId]);
-    const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,isSystem FROM iam_role WHERE code=? FOR UPDATE", [code]);
-    const role = rows[0];
-    if (!role || role.isSystem) throw new Error("找不到可删除的自定义角色。");
+    await lockRoleManager(connection, input.actorUserId, input.actorTokenVersion);
+    const role = await lockedRoleConfiguration(connection, code);
+    assertCustomRoleConfigToken(input.expectedConfigToken, role);
     const [assignmentRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM role_assignment WHERE roleId=? AND revokedAt IS NULL AND (expiresAt IS NULL OR expiresAt>NOW()) LIMIT 1", [role.id]);
     if (assignmentRows[0]) throw new Error("该角色仍有有效授权，请先撤销所有授权。");
     const [organizationRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id FROM organization_unit_role WHERE roleId=? AND (expiresAt IS NULL OR expiresAt>NOW()) LIMIT 1", [role.id]);
@@ -652,6 +689,7 @@ export async function listRoles(scope?: "system" | "workflow") {
       ORDER BY r.scope,r.code`,
     [scope ?? null, scope ?? null]
   );
+  for (const role of rows) role.configToken = customRoleConfigToken(role);
   return rows;
 }
 

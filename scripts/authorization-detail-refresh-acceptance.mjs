@@ -5,6 +5,11 @@ import superjson from "superjson";
 const base = "http://124.223.198.84:1180";
 let cookie = "";
 async function request(path, input, mutation = false) {
+  // Sequential fixture maintenance reads current configuration; conflict tests pass their own token.
+  if (mutation && ["iam.updateCustomRole", "iam.deleteCustomRole"].includes(path) && input?.expectedConfigToken === undefined) {
+    const current = await request("iam.customRoleConfiguration", { code: input.code });
+    input = { ...input, expectedConfigToken: current.configToken };
+  }
   const json = JSON.stringify(superjson.serialize(input ?? null));
   const response = await fetch(
     `${base}/api/trpc/${path}${mutation ? "" : `?input=${encodeURIComponent(json)}`}`,

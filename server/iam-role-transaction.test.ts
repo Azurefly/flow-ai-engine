@@ -18,8 +18,24 @@ import {
   assignRole,
   createCustomRole,
   deleteCustomRole,
+  updateCustomRole,
   ensureIamCatalog,
 } from "./iam-service";
+import { customRoleConfigToken } from "./custom-role-configuration";
+const roleFixture = {
+  id: 31,
+  code: "custom_tx_test",
+  name: "测试角色",
+  description: null,
+  scope: "workflow",
+  isSystem: 0,
+  permissions: ["workflow:view"],
+};
+const expectedConfigToken = customRoleConfigToken(roleFixture);
+let changedRole = false,
+  changedPermissions = false,
+  actorDisabled = false,
+  actorVersion = 1;
 let failAudit = false;
 let disabled = false,
   duplicate = false,
@@ -43,6 +59,35 @@ beforeAll(async () => {
       ];
     if (sql.startsWith("SELECT status FROM users"))
       return [[{ status: disabled ? "disabled" : "active" }]];
+    if (sql.startsWith("SELECT id,role,status,tokenVersion FROM users"))
+      return [
+        [
+          {
+            id: 17,
+            role: "admin",
+            status: actorDisabled ? "disabled" : "active",
+            tokenVersion: actorVersion,
+          },
+        ],
+      ];
+    if (
+      sql.startsWith(
+        "SELECT id,code,scope,isSystem,name,description FROM iam_role"
+      )
+    )
+      return [
+        [
+          {
+            ...roleFixture,
+            name: changedRole ? "其他管理员的新角色" : roleFixture.name,
+            isSystem: isSystem ? 1 : 0,
+          },
+        ],
+      ];
+    if (sql.startsWith("SELECT permissionId FROM role_permission"))
+      return [[{ permissionId: changedPermissions ? 2 : 1 }]];
+    if (sql.startsWith("SELECT code FROM permission WHERE id"))
+      return [[{ code: changedPermissions ? "workflow:run" : "workflow:view" }]];
     if (sql.startsWith("SELECT id,scope FROM iam_role"))
       return [[{ id: 31, scope: "workflow" }]];
     if (sql.startsWith("SELECT id,isSystem FROM iam_role"))
@@ -69,6 +114,10 @@ beforeEach(() => {
   isSystem = false;
   failInsert = false;
   failAudit = false;
+  changedRole = false;
+  changedPermissions = false;
+  actorDisabled = false;
+  actorVersion = 1;
 });
 const input = {
   userId: 2,
@@ -119,7 +168,11 @@ it("写入错误回滚，不记录成功审计", async () => {
 it("有组织绑定时给出清楚原因，不删除角色", async () => {
   organization = true;
   await expect(
-    deleteCustomRole({ code: "custom_tx_test", actorUserId: 17 })
+    deleteCustomRole({
+      code: "custom_tx_test",
+      actorUserId: 17,
+      expectedConfigToken,
+    })
   ).rejects.toThrow("组织权限中解除绑定");
   expect(mocks.query.mock.calls.some(([sql]) => sql.startsWith("DELETE"))).toBe(
     false
@@ -129,14 +182,22 @@ it("有组织绑定时给出清楚原因，不删除角色", async () => {
 it("删除内置角色被拒绝", async () => {
   isSystem = true;
   await expect(
-    deleteCustomRole({ code: "custom_tx_test", actorUserId: 17 })
-  ).rejects.toThrow("可删除的自定义角色");
+    deleteCustomRole({
+      code: "custom_tx_test",
+      actorUserId: 17,
+      expectedConfigToken,
+    })
+  ).rejects.toThrow("自定义角色");
   expect(mocks.query.mock.calls.some(([sql]) => sql.startsWith("DELETE"))).toBe(
     false
   );
 });
 it("无有效绑定时先清理历史引用再删除自定义角色", async () => {
-  await deleteCustomRole({ code: "custom_tx_test", actorUserId: 17 });
+  await deleteCustomRole({
+    code: "custom_tx_test",
+    actorUserId: 17,
+    expectedConfigToken,
+  });
   expect(
     mocks.query.mock.calls.find(([sql]) =>
       sql.includes("SELECT id FROM role_assignment")
@@ -176,4 +237,87 @@ it("角色创建的审计写入失败时一起回滚，不返回部分成功", a
   expect(mocks.commit).not.toHaveBeenCalled();
   expect(mocks.rollback).toHaveBeenCalledTimes(1);
   expect(mocks.release).toHaveBeenCalledTimes(1);
+});
+
+it.each(["update", "delete"])(
+  "过期快照阻止 %s，保留权限并回滚",
+  async operation => {
+    changedRole = true;
+    const input = {
+      code: roleFixture.code,
+      actorUserId: 17,
+      expectedConfigToken,
+    };
+    await expect(
+      operation === "update"
+        ? updateCustomRole({ ...input, name: "旧窗口覆盖" })
+        : deleteCustomRole(input)
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(
+      mocks.query.mock.calls.some(
+        ([sql]) =>
+          sql.startsWith("UPDATE") ||
+          sql.startsWith("DELETE") ||
+          sql.startsWith("INSERT INTO authorization_audit_log")
+      )
+    ).toBe(false);
+    expect(mocks.rollback).toHaveBeenCalledOnce();
+    expect(mocks.commit).not.toHaveBeenCalled();
+  }
+);
+it.each(["update", "delete"])(
+  "缺少配置快照时 %s 不能绕过保护",
+  async operation => {
+    const input = { code: roleFixture.code, actorUserId: 17 };
+    await expect(
+      operation === "update"
+        ? updateCustomRole({ ...input, name: "未读取配置" })
+        : deleteCustomRole(input)
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(
+      mocks.query.mock.calls.some(
+        ([sql]) => sql.startsWith("UPDATE") || sql.startsWith("DELETE")
+      )
+    ).toBe(false);
+  }
+);
+it("有效快照更新的角色与审计一起提交", async () => {
+  await updateCustomRole({
+    code: roleFixture.code,
+    actorUserId: 17,
+    expectedConfigToken,
+    name: "新名称",
+    permissions: ["workflow:view", "workflow:run"],
+  });
+  expect(mocks.commit).toHaveBeenCalledOnce();
+  expect(mocks.rollback).not.toHaveBeenCalled();
+  const audit = mocks.query.mock.calls.findIndex(([sql]) =>
+    sql.startsWith("INSERT INTO authorization_audit_log")
+  );
+  expect(audit).toBeGreaterThan(-1);
+  expect(mocks.query.mock.invocationCallOrder[audit]).toBeLessThan(
+    mocks.commit.mock.invocationCallOrder[0]
+  );
+});
+it("等待角色锁后以当前读校验权限变化，且不锁共享权限目录", async () => {
+  changedPermissions = true;
+  await expect(updateCustomRole({ code: roleFixture.code, actorUserId: 17, expectedConfigToken, name: roleFixture.name })).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(mocks.query.mock.calls.some(([sql]) => sql === "SELECT permissionId FROM role_permission WHERE roleId=? ORDER BY permissionId FOR UPDATE")).toBe(true);
+  expect(mocks.query.mock.calls.some(([sql]) => sql.includes("JOIN permission") && sql.includes("FOR UPDATE"))).toBe(false);
+  expect(mocks.commit).not.toHaveBeenCalled();
+});
+it.each(["disabled", "version"])("锁内复核角色管理员的 %s 状态", async mode => {
+  if (mode === "disabled") actorDisabled = true;
+  else actorVersion = 3;
+  await expect(
+    updateCustomRole({
+      code: roleFixture.code,
+      actorUserId: 17,
+      actorTokenVersion: 1,
+      expectedConfigToken,
+      name: "无权修改",
+    })
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(mocks.query).toHaveBeenCalledOnce();
+  expect(mocks.commit).not.toHaveBeenCalled();
 });

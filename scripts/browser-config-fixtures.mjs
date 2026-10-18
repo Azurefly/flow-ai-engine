@@ -5,6 +5,11 @@ import superjson from "superjson";
 const base = "http://124.223.198.84:1180";
 let cookie = "";
 async function request(path, input, mutation = false) {
+  // Sequential fixture maintenance reads current configuration; conflict tests pass their own token.
+  if (mutation && ["iam.updateCustomRole", "iam.deleteCustomRole"].includes(path) && input?.expectedConfigToken === undefined) {
+    const current = await request("iam.customRoleConfiguration", { code: input.code });
+    input = { ...input, expectedConfigToken: current.configToken };
+  }
   const body = JSON.stringify(superjson.serialize(input ?? null));
   const response = await fetch(
     `${base}/api/trpc/${path}${mutation ? "" : `?input=${encodeURIComponent(body)}`}`,
@@ -155,6 +160,18 @@ async function cleanup(fixture, ownerLogin) {
   const people = [...(fixture.people ?? [])],
     failures = [];
   let archivedOwnProjects = 0;
+  for (const managed of fixture.managedRoles ?? []) {
+    try {
+      const ordinaryCode = "custom_edit_" + fixture.tag.slice(9);
+      assert([ordinaryCode, ordinaryCode.padEnd(64, "x")].includes(managed.code));
+      const role = (await request("iam.roles", {})).find(item => item.code === managed.code);
+      if (!role) continue;
+      assert.equal(Number(role.isSystem), 0);
+      assert.equal(role.scope, "workflow");
+      assert(role.name.startsWith("角色配置验收_") && role.name.endsWith(fixture.tag));
+      await request("iam.deleteCustomRole", { code: role.code, expectedConfigToken: role.configToken }, true);
+    } catch (error) { failures.push(error.message); }
+  }
   if (fixture.identityRoleCode) {
     try {
       await revokeIdentity(fixture);

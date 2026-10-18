@@ -36,6 +36,7 @@ import {
   createCustomRole,
   deleteCustomRole,
   getRoleAuthorizationDetails,
+  getCustomRoleConfiguration,
   listAssignableRoleUsersPage,
   getUserAuthorizationDetails,
   getWorkflowAccess,
@@ -463,10 +464,13 @@ export const appRouter = router({
         await revokeRoleAssignment({ ...input, revokedByUserId: ctx.user.id });
         return { success: true };
       }),
+    customRoleConfiguration: iamManageProcedure
+      .input(z.object({ code: z.string().min(10).max(64) }))
+      .query(({ input }) => getCustomRoleConfiguration(input.code)),
     createCustomRole: iamManageProcedure
       .input(
         z.object({
-          code: z.string().min(10).max(68),
+          code: z.string().min(10).max(64),
           name: z.string().trim().min(1).max(120),
           description: z.string().max(2000).optional(),
           scope: z.enum(["system", "workflow"]),
@@ -486,13 +490,14 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        await createCustomRole({ ...input, actorUserId: ctx.user.id });
+        await createCustomRole({ ...input, actorUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true };
       }),
     updateCustomRole: iamManageProcedure
       .input(
         z.object({
-          code: z.string().min(10).max(68),
+          code: z.string().min(10).max(64),
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/, "请重新读取角色配置后重试。").optional(),
           name: z.string().trim().min(1).max(120).optional(),
           description: z.string().max(2000).nullable().optional(),
           permissions: z
@@ -512,13 +517,13 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        await updateCustomRole({ ...input, actorUserId: ctx.user.id });
+        await updateCustomRole({ ...input, actorUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true };
       }),
     deleteCustomRole: iamManageProcedure
-      .input(z.object({ code: z.string().min(10).max(68) }))
+      .input(z.object({ code: z.string().min(10).max(64), expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/, "请重新读取角色配置后重试。").optional() }))
       .mutation(async ({ ctx, input }) => {
-        await deleteCustomRole({ ...input, actorUserId: ctx.user.id });
+        await deleteCustomRole({ ...input, actorUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true };
       }),
     authorizationAudit: iamManageProcedure

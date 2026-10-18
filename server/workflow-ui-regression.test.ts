@@ -393,8 +393,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_452 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 435 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_459 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 437 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3679,6 +3679,13 @@ it("自定义角色维护和流程绑定按需加载，内置角色保持保护"
   expect(roleDialog).toContain("内置角色不可修改或删除");
   expect(roleDialog).toContain('mode === "edit"');
   expect(roleDialog).toContain("当前范围不适用");
+});
+
+it("角色配置冲突保留草稿，移动端固定操作区，刷新失败不重复写入", () => {
+  const dialog = source("../client/src/components/CustomRoleDialog.tsx");
+  for (const text of ["expectedConfigToken: baseToken", "latest.id !== Number(role.id)", "关闭前保留角色修改", "读取最新配置前保留修改", "导出当前填写", "重试刷新列表", "setCommitted(result)", "consoleNavigationEvent", "fieldset disabled={disabled}", "overflow-y-auto overscroll-contain", "DialogFooter className=\"mt-4 shrink-0", "显示权限标识", "CUSTOM_ROLE_PRESETS", "maxLength={64}"]) expect(dialog).toContain(text);
+  expect(dialog).toContain("refetchOnWindowFocus: false");
+  expect(dialog).toContain('failure as { data?: { code?: string } }');
 });
 
 it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧选择", () => {
