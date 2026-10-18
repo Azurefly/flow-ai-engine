@@ -371,13 +371,25 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
     }
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.getByRole("button", { name: "切换主题", exact: true }).click();
-    assert.equal(
-      await page.evaluate(
-        () =>
-          document.getAnimations().filter(a => a.playState === "running").length
-      ),
-      0
-    );
+    const reducedMotion = await page.evaluate(async () => {
+      // Near-zero CSS transitions finish on the next rendering frame; querying
+      // immediately after a theme update counts pending 0.01ms transitions.
+      await new Promise(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve))
+      );
+      return {
+        enabled: matchMedia("(prefers-reduced-motion: reduce)").matches,
+        longAnimations: document
+          .getAnimations()
+          .filter(
+            animation =>
+              animation.playState === "running" &&
+              Number(animation.effect?.getTiming().duration) > 1
+          ).length,
+      };
+    });
+    assert.equal(reducedMotion.enabled, true);
+    assert.equal(reducedMotion.longAnimations, 0);
     const activeTab = nav.getByRole("tab", { selected: true });
     await activeTab.focus();
     await page.keyboard.press("ArrowUp");
