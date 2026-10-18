@@ -142,6 +142,7 @@ async function poll(description, read, accept) {
       disabledPassword: memberLogin.password,
     });
     assert(fixture?.projectId && fixture.workflows.length === 3);
+    report({ stage: "optional-number-fixture", tag });
     await remote({ action: "prepare_optional_numbers", fixture, login });
     await owner("auth.login", login, true);
     browser = await chromium.launch({
@@ -177,6 +178,11 @@ async function poll(description, read, accept) {
       await panel.waitFor();
       const tab = panel.getByRole("tab", { name: "节点配置", exact: true });
       if (await tab.count()) await tab.click();
+      if (nodeId === "optional_llm") {
+        await panel
+          .getByRole("tab", { name: "输出与失败处理", exact: true })
+          .click();
+      }
       return panel;
     };
     const saveValue = async (flow, input, nodeId, key, value) => {
@@ -270,12 +276,15 @@ async function poll(description, read, accept) {
           name: "最大行数",
           exact: true,
         });
-        await expect(limit).toHaveValue(value == null ? "" : String(value));
+        await expect(limit).toHaveValue(
+          value === undefined ? "200" : value === null ? "" : String(value)
+        );
         await expect(limit).toHaveAttribute(
           "placeholder",
           "留空保留全部输入行"
         );
-        const expected = value == null ? 400 : value;
+        const expected =
+          value === undefined ? 200 : value === null ? 400 : value;
         await publishAndRun(expected);
         report({
           stage: "optional-limit-runtime",
@@ -330,20 +339,22 @@ async function poll(description, read, accept) {
           name: "超时（毫秒）",
           exact: true,
         });
-        await expect(tokens).toHaveValue("");
+        await expect(tokens).toHaveValue("1024");
         await expect(tokens).toHaveAttribute(
           "placeholder",
           "留空使用模型服务默认值"
         );
-        await expect(timeout).toHaveValue("");
+        await expect(timeout).toHaveValue("30000");
         await expect(timeout).toHaveAttribute(
           "placeholder",
           "留空使用 30000 毫秒"
         );
-        await saveValue(flow, tokens, "optional_llm", "maxTokens", 1024);
+        await saveValue(flow, tokens, "optional_llm", "maxTokens", 512);
         await saveValue(flow, tokens, "optional_llm", "maxTokens", "");
+        await saveValue(flow, timeout, "optional_llm", "timeoutMs", "");
         await openNode(flow, "optional_llm");
         await expect(tokens).toHaveValue("");
+        await expect(timeout).toHaveValue("");
         report({
           stage: "optional-model-fields",
           flowType: flow.flowType,

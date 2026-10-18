@@ -10,6 +10,7 @@ import {
   FLOW_NODE_DEFINITIONS,
   createDefaultNodeConfig,
   validateNodeConfig,
+  withNodeConfigDefaults,
 } from "../shared/workflow-node-contract";
 
 const rows = Array.from({ length: 400 }, (_, id) => ({ id }));
@@ -100,12 +101,26 @@ describe("可选输出行数与实际配置含义", () => {
     ).toBe("留空使用 30000 毫秒");
   });
 
-  it("界面不把未配置参数伪装成新建默认值，两条运行路径共用空值处理", () => {
+  it("编译补齐未传字段的默认值，保留用户主动清空的意图", () => {
+    expect(withNodeConfigDefaults("map", { columns: [] }).limit).toBe(200);
+    expect(
+      withNodeConfigDefaults("llm", { prompt: "配置测试" }).maxTokens
+    ).toBe(1024);
+    expect(
+      withNodeConfigDefaults("llm", { prompt: "配置测试" }).timeoutMs
+    ).toBe(30000);
+    for (const limit of [null, ""])
+      expect(withNodeConfigDefaults("map", { columns: [], limit }).limit).toBe(
+        limit
+      );
+  });
+
+  it("界面保留显式空值，两条运行路径共用空值处理", () => {
     const canvas = readFileSync(
       "client/src/components/WorkflowCanvas.tsx",
       "utf8"
     );
-    expect(canvas).toContain("value === undefined && field.emptyHint");
+    expect(canvas).toContain('value={value === null ? "" : effectiveValue}');
     const runtime = readFileSync("server/p2-service.ts", "utf8");
     expect(
       runtime.match(/rows: limitDataflowOutputRows\(rows, config.limit\)/g)
