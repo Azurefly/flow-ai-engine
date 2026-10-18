@@ -979,7 +979,8 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "lg:flex-row lg:items-center lg:justify-between"
     );
-    expect(homeSource).toContain("max-w-[min(560px,calc(100vw-110px))]");
+    expect(homeSource).toContain("max-w-[560px] flex-1 shrink");
+    expect(homeSource).toContain('className="min-w-0 flex-1 truncate text-left"');
     expect(homeSource).toContain("setSelectedWorkflowId(null)");
     expect(projectWorkspaceSource).toContain('setView("process")');
     expect(projectWorkspaceSource).toContain("setFilters({})");

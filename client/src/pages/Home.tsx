@@ -1684,11 +1684,11 @@ function FlowConsole({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="aiflow-type-control h-11 min-h-11 min-w-0 w-full max-w-[min(560px,calc(100vw-110px))] justify-between gap-2 px-2 text-sm font-medium lg:w-auto min-[1280px]:h-8 min-[1280px]:min-h-8"
+                          className="aiflow-type-control h-11 min-h-11 min-w-0 w-full max-w-[560px] flex-1 shrink justify-between gap-2 px-2 text-sm font-medium lg:w-auto lg:flex-initial min-[1280px]:h-8 min-[1280px]:min-h-8"
                           aria-label="切换当前受权业务"
                           aria-expanded={projectPickerOpen}
                         >
-                          <span className="truncate text-left">
+                          <span className="min-w-0 flex-1 truncate text-left">
                             <span className="font-semibold text-foreground">
                               {selectedProject.code}
                             </span>

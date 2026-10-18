@@ -573,6 +573,21 @@ async function poll(description, read, accept, timeout = 20000) {
       ),
       1
     );
+    await assert.rejects(
+      owner(
+        "project.revokeMember",
+        {
+          projectId: input.projectId,
+          userId: fixture.userId,
+          assignmentId: assignments.find(
+            item =>
+              Number(item.userId) === fixture.userId && item.role === "owner"
+          ).id,
+        },
+        true
+      ),
+      error => error.status === 400
+    );
     const revokeFromUI = async (role, label) => {
       const assignment = assignments.find(
         item =>
@@ -641,11 +656,21 @@ async function poll(description, read, accept, timeout = 20000) {
       })
     ).toBeVisible();
     await expect(page.getByRole("button", { name: /^删除/ })).toHaveCount(0);
-    assert(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth + 1
-      )
-    );
+    for (const width of [320, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      const geometry = await page.evaluate(() => ({
+        viewport: innerWidth,
+        document: document.documentElement.scrollWidth,
+        pickerRight: document
+          .querySelector('[aria-label="切换当前受权业务"]')
+          .getBoundingClientRect().right,
+      }));
+      report({ stage: "mobile-resource-layout", ...geometry });
+      assert(
+        geometry.document <= width + 1 && geometry.pickerRight <= width,
+        JSON.stringify(geometry)
+      );
+    }
     await page.screenshot({
       path: path.join(directory, "resource-readonly-mobile.png"),
       fullPage: true,
