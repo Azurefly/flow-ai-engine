@@ -155,12 +155,17 @@ async function poll(description, read, accept, timeout = 20000) {
     const control = fixture.workflows.find(item => item.flowType === "control");
     const data = fixture.workflows.find(item => item.flowType === "data");
     const initial = await owner("project.workflows", projectInput);
-    assert(
-      initial.every(
-        item =>
-          item.actions.canReview === false && item.actions.reviewBlockedReason
-      )
-    );
+    const settings = await owner("config.settings");
+    const independent =
+      settings.approval.reviewerMode === "independent_reviewer";
+    for (const item of initial) {
+      const candidate = item.status === "draft" && item.auditStatus === "init";
+      assert.equal(item.actions.canReview, candidate && !independent);
+      assert.equal(
+        Boolean(item.actions.reviewBlockedReason),
+        candidate && independent
+      );
+    }
     browser = await chromium.launch({
       headless: true,
       executablePath: executable(),
@@ -252,14 +257,22 @@ async function poll(description, read, accept, timeout = 20000) {
     };
     await loginUI(login);
     await more(state);
-    await expect(
-      page.getByText("独立复核模式下，请由其他业务管理员审核此流程。", {
-        exact: true,
-      })
-    ).toBeVisible();
+    const stateCandidate =
+      initial.find(item => item.id === state.id).auditStatus === "init";
+    if (independent && stateCandidate)
+      await expect(
+        page.getByText("独立复核模式下，请由其他业务管理员审核此流程。", {
+          exact: true,
+        })
+      ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "审核通过", exact: true })
-    ).toHaveCount(0);
+    ).toHaveCount(!independent && stateCandidate ? 1 : 0);
+    report({
+      stage: "workflow-review-policy",
+      reviewerMode: settings.approval.reviewerMode,
+      serverAndUIAgree: true,
+    });
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: /退出/ }).click();
     await remote({ action: "prepare_project_actions", fixture, login });
@@ -280,7 +293,7 @@ async function poll(description, read, accept, timeout = 20000) {
       stage: "workflow-viewer",
       readonlyCanvasAvailable: true,
       launchHidden: true,
-      independentReviewExplained: true,
+      configuredReviewPolicyRespected: true,
     });
 
     await owner(
@@ -307,7 +320,11 @@ async function poll(description, read, accept, timeout = 20000) {
     ).toHaveCount(0);
     await owner(
       "workflow.revokeMember",
-      { workflowId: state.id, userId: fixture.disabledUserId },
+      {
+        workflowId: state.id,
+        userId: fixture.disabledUserId,
+        role: "operator",
+      },
       true
     );
     await refresh();
@@ -487,10 +504,21 @@ async function poll(description, read, accept, timeout = 20000) {
     const response = await responseWait;
     assert.equal(response.status(), 200);
     const payload = await response.json();
+    const result = Array.isArray(payload)
+      ? payload.find(item => item.result?.data?.json?.runId)
+      : payload;
+    assert(result?.result?.data?.json?.runId);
     fixture.runs = [
-      { id: payload.result.data.json.runId, workflowId: control.id },
+      { id: result.result.data.json.runId, workflowId: control.id },
     ];
     saveFixture();
+    const submitted = JSON.parse(response.request().postData());
+    const requestInput =
+      submitted.json ??
+      Object.values(submitted).find(
+        item => item?.json?.workflowId === control.id
+      )?.json;
+    assert.equal(requestInput.input.businessInformationOne, draft);
     await page.unroute("**/api/trpc/**", holdRun);
     await expect(dialog).toHaveCount(0);
     const run = await poll(
