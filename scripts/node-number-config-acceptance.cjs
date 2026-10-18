@@ -349,13 +349,34 @@ async function poll(description, read, accept, timeout = 20000) {
       const panel = await openNode(data);
       const finalRate = panel.getByRole("spinbutton", { name: /最大空值率/ });
       await finalRate.fill("0.3");
-      await saveFocused(data, finalRate, "numeric_quality", "maxNullRate", 0.3);
-      const next = await owner("workflow.get", { id: data.id });
-      await owner(
-        "workflow.publish",
-        { id: data.id, expectedDefinitionVersion: next.definitionVersion },
-        true
-      );
+      // Publishing and unpublishing through the independent API session advanced
+      // the workflow version while this browser retained its earlier draft.
+      // Exercise the same explicit conflict recovery that protects real users.
+      await finalRate.focus();
+      await page.keyboard.press("Control+s");
+      const conflict = page.getByRole("dialog", {
+        name: "流程已被更新，当前修改已保留",
+      });
+      await expect(conflict).toBeVisible();
+      await conflict
+        .getByRole("button", { name: "保留并继续编辑", exact: true })
+        .click();
+      await expect(finalRate).toHaveValue("0.3");
+      await finalRate.focus();
+      await page.keyboard.press("Control+s");
+      await expect(conflict).toBeVisible();
+      await conflict
+        .getByRole("button", { name: "读取最新版本并替换画布", exact: true })
+        .click();
+      await expect(conflict).toBeHidden();
+      const recoveredPanel = await openNode(data);
+      const recoveredRate = recoveredPanel.getByRole("spinbutton", {
+        name: /最大空值率/,
+      });
+      await expect(recoveredRate).toHaveValue("0.2");
+      await recoveredRate.fill("0.3");
+      await saveFocused(data, recoveredRate, "numeric_quality", "maxNullRate", 0.3);
+      await remote({ action: "prepare_native_schedule", fixture, login });
       const accepted = await runAtThreshold("success");
       assert.deepEqual(accepted.output.terminals[0].rows, [
         { id: 1, amount: 120, status: "paid", note: null },
@@ -363,6 +384,8 @@ async function poll(description, read, accept, timeout = 20000) {
       report({
         stage: "numeric-runtime-threshold",
         actualNullRate: 0.25,
+        conflictDraftPreserved: true,
+        latestVersionRecovered: true,
         threshold02Rejected: true,
         threshold03Accepted: true,
       });
