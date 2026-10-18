@@ -5,6 +5,16 @@ const css = readFileSync("client/src/index.css", "utf8");
 const home = readFileSync("client/src/pages/Home.tsx", "utf8");
 
 describe("统一工作空间视觉与动效", () => {
+  it("保存快捷键与当前已提交的编辑界面同步，保留忙碌和发布状态保护", () => {
+    expect(home).toMatch(/useLayoutEffect\(\(\) => \{\s*const handleKeyDown =/);
+    expect(home).toContain(
+      'if (canEdit && !savePending && workflow?.status !== "published")'
+    );
+    expect(home).toContain(
+      'window.removeEventListener("keydown", handleKeyDown)'
+    );
+  });
+
   it("内容面板使用共享圆角和主题阴影，保留清晰的字号层级", () => {
     expect(css).toContain("--aiflow-surface-radius: 1.25rem;");
     expect(css).toContain("--aiflow-type-control: 0.875rem;");

@@ -109,6 +109,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -2415,7 +2416,9 @@ function FlowDesigner({
     setUnpublishTarget({ id: workflow.id, name: workflow.name, definitionVersion: Number(workflow.definitionVersion) });
   };
 
-  useEffect(() => {
+  // Keep the shortcut callback in sync with the committed editor UI so that a
+  // rapid edit followed by Ctrl/Cmd+S cannot invoke the previous draft callback.
+  useLayoutEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();

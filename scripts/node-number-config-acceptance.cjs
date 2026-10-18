@@ -340,6 +340,9 @@ async function poll(description, read, accept, timeout = 20000) {
             ] === value
         );
       const saveFocused = async (flow, input, nodeId, key, value) => {
+        await expect(
+          page.getByRole("button", { name: /保存画布/ })
+        ).toBeEnabled();
         await input.focus();
         await page.keyboard.press("Control+s");
         await savedValue(flow, nodeId, key, value);
