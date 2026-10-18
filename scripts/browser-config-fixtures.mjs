@@ -911,10 +911,57 @@ async function prepareNumericNodes(intent) {
   console.log(JSON.stringify({ stage: "numeric-nodes-prepared", workflows: 3 }));
 }
 
+async function prepareOptionalNumbers(intent) {
+  const { fixture } = intent;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  await request("auth.login", intent.login, true);
+  for (const flow of fixture.workflows) {
+    assert(flow.name.endsWith(fixture.tag));
+    const current = await request("workflow.get", { id: flow.id });
+    assert.equal(current.ownerUserId, fixture.userId);
+    assert.equal(current.projectId, fixture.projectId);
+    assert.equal(current.status, "draft");
+    const definition = structuredClone(current.definition);
+    if (flow.flowType === "data") {
+      const assetId = definition.nodes.find(item => item.id === "source").config.assetId;
+      const resources = await request("data.resources", { projectId: fixture.projectId });
+      const asset = resources.assets.find(item => item.id === assetId);
+      assert(asset && asset.name === "界面验收订单");
+      await request("data.updateAsset", {
+        projectId: fixture.projectId, assetId,
+        sample: Array.from({ length: 200 }, (_, index) => ({ id: index + 1, amount: index + 10, status: "paid" })),
+      }, true);
+      const specs = [
+        ["start", "start", {}, "开始", 0, 0],
+        ["source_a", "source", { assetId, limit: 1000 }, "读取订单甲", 240, 0],
+        ["source_b", "source", { assetId, limit: 1000 }, "读取订单乙", 240, 180],
+        ["union_rows", "union", { mode: "all" }, "合并全部输入", 480, 80],
+        ["optional_map", "map", { columns: [], limit: 2 }, "行数配置验收", 720, 80],
+        ["output", "output", { outputName: "合并订单" }, "预览结果", 960, 80],
+        ["end", "end", {}, "结束", 1200, 80],
+      ];
+      definition.nodes = specs.map(([id, type, config, name, x, y]) => ({ id, type, config, name, position: { x, y } }));
+      definition.edges = [
+        ["start", "source_a"], ["start", "source_b"], ["source_a", "union_rows"],
+        ["source_b", "union_rows"], ["union_rows", "optional_map"], ["optional_map", "output"], ["output", "end"],
+      ].map(([sourceNodeId, targetNodeId], index) => ({ id: "optional_edge_" + index, sourceNodeId, targetNodeId }));
+    } else {
+      const edge = definition.edges.find(item => item.targetNodeId === "end");
+      assert(edge);
+      edge.targetNodeId = "optional_llm";
+      definition.nodes.push({ id: "optional_llm", type: "llm", name: "可选模型配置", position: { x: 780, y: 260 }, config: { prompt: "只验收配置，不调用模型。" } });
+      definition.edges.push({ id: "optional_llm_end", sourceNodeId: "optional_llm", targetNodeId: "end" });
+    }
+    await request("workflow.update", { id: flow.id, definition, expectedDefinitionVersion: current.definitionVersion }, true);
+  }
+  console.log(JSON.stringify({ stage: "optional-numbers-prepared", workflows: 3, mergedRows: 400 }));
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_native_schedule") await prepareNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_project_actions") await prepareProjectActions(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_numeric_nodes") await prepareNumericNodes(browserFixtureIntent);
+else if (browserFixtureIntent.action === "prepare_optional_numbers") await prepareOptionalNumbers(browserFixtureIntent);
 else if (browserFixtureIntent.action === "cleanup_native_schedule") await cleanupNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "start_form_task") await startFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_form_task") await verifyFormTask(browserFixtureIntent);

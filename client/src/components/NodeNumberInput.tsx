@@ -35,6 +35,7 @@ export function NodeNumberInput({
         type="text"
         role="spinbutton"
         inputMode="decimal"
+        placeholder={field.emptyHint}
         aria-label={field.label}
         aria-required={field.required || undefined}
         aria-valuemin={field.min}

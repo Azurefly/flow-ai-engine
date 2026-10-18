@@ -606,6 +606,7 @@ export type NodeField = {
   min?: number;
   max?: number;
   step?: number | "any";
+  emptyHint?: string;
   kind:
     | "text"
     | "textarea"
@@ -648,7 +649,8 @@ const readLimitField: NodeField = {
   min: 1,
   max: 1000,
   step: 1,
-  help: "1 至 1000 的整数；达到上限后停止读取。",
+  emptyHint: "留空读取最多 1000 行",
+  help: "留空读取最多 1000 行；可填写 1 至 1000 的整数，达到上限后停止读取。",
 };
 const sourceReadFields: NodeField[] = [
   {
@@ -657,7 +659,7 @@ const sourceReadFields: NodeField[] = [
     kind: "json",
     help: "留空读取全部字段。",
   },
-  { ...readLimitField, key: "limit", help: "默认 200，范围 1 至 1000。" },
+  { ...readLimitField, key: "limit", emptyHint: "留空读取最多 200 行", help: "留空读取最多 200 行；可填写 1 至 1000 的整数。" },
 ];
 
 const referenceHttpDefaultConfig = {
@@ -1573,7 +1575,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "maxTokens",
         label: "最大输出令牌",
-        help: "填写 64 至 8,192 的整数。",
+        help: "留空使用模型服务默认值；可填写 64 至 8,192 的整数。",
+        emptyHint: "留空使用模型服务默认值",
         kind: "number",
         min: 64,
         max: 8192,
@@ -1582,7 +1585,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "timeoutMs",
         label: "超时（毫秒）",
-        help: "单个 LLM 请求超时范围为 1,000 至 120,000 毫秒。",
+        help: "留空使用 30,000 毫秒；可填写 1,000 至 120,000 毫秒。",
+        emptyHint: "留空使用 30000 毫秒",
         kind: "number",
         min: 1000,
         max: 120000,
@@ -1903,7 +1907,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "limit",
         label: "最大行数",
-        help: "限制数据流输出行数。",
+        help: "留空保留全部输入行；可填写 1 至 100000 的整数，仍受平台数据集上限约束。",
+        emptyHint: "留空保留全部输入行",
         kind: "number",
         min: 1,
         max: 100000,

@@ -4,6 +4,7 @@ export type NodeNumberConstraints = {
   min?: number;
   max?: number;
   step?: number | "any";
+  emptyHint?: string;
 };
 
 /** Keep incomplete input as text so draft validation can block saving it. */

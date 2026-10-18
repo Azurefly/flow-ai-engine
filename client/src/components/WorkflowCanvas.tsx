@@ -988,7 +988,7 @@ function ConfigFieldEditor({
         <NodeNumberInput
           field={field}
           className={inputClass}
-          value={value === null ? "" : effectiveValue}
+          value={value === null || (value === undefined && field.emptyHint) ? "" : effectiveValue}
           onChange={onChange}
           disabled={disabled}
         />

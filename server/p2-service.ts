@@ -27,7 +27,8 @@ import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-sou
 import { probeSafeHttpEndpoint, resolveTemplates } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
-import { normalizeRows, maxDataflowDatasetRows } from "./dataflow-dataset-rows";
+import { normalizeRows } from "./dataflow-dataset-rows";
+import { limitDataflowOutputRows } from "./dataflow-output-limit";
 import { joinDataflowRows } from "./dataflow-join-rows";
 import { dataflowReadLimit } from "../shared/dataflow-read-limit";
 import { prepareReadOnlyDataflowSql } from "./dataflow-sql-binding";
@@ -1448,14 +1449,8 @@ async function runDataflowDefinition(
           rows = rows.map(row =>
             Object.fromEntries(columns.map(column => [column, row[column]]))
           );
-        const limit = config.limit == null ? rows.length : Number(config.limit);
         output = {
-          rows: rows.slice(
-            0,
-            Number.isFinite(limit)
-              ? Math.max(0, Math.min(limit, maxDataflowDatasetRows))
-              : rows.length
-          ),
+          rows: limitDataflowOutputRows(rows, config.limit),
           operation: "safe_transform",
         };
       } else if (String(node.type) === "derive") {
@@ -1568,14 +1563,8 @@ async function runDataflowDefinition(
           rows = rows.map(row =>
             Object.fromEntries(columns.map(column => [column, row[column]]))
           );
-        const limit = config.limit == null ? rows.length : Number(config.limit);
         output = {
-          rows: rows.slice(
-            0,
-            Number.isFinite(limit)
-              ? Math.max(0, Math.min(limit, maxDataflowDatasetRows))
-              : rows.length
-          ),
+          rows: limitDataflowOutputRows(rows, config.limit),
           operation: "safe_transform",
         };
       } else if (["sql", "edit_sql"].includes(String(node.type))) {
