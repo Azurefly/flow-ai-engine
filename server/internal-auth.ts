@@ -6,10 +6,18 @@ import {
 } from "node:crypto";
 import { promisify } from "node:util";
 import mysql from "mysql2/promise";
+import { TRPCError } from "@trpc/server";
 import type { User } from "../drizzle/schema";
 import { getSharedPool } from "./db";
-import { recordAuthorizationAudit } from "./iam-service";
-import { changeAccountStatus, type AccountStatusChange } from "./account-status";
+import {
+  ensureIamCatalog,
+  hasSystemPermission,
+  recordAuthorizationAudit,
+} from "./iam-service";
+import {
+  changeAccountStatus,
+  type AccountStatusChange,
+} from "./account-status";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_MAX_SECONDS = 60 * 60 * 24 * 7;
@@ -84,22 +92,50 @@ export async function login(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    const [current] = await connection.query<mysql.RowDataPacket[]>("SELECT * FROM users WHERE id=? FOR UPDATE", [user.id]);
+    const [current] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT * FROM users WHERE id=? FOR UPDATE",
+      [user.id]
+    );
     const locked = current[0] as User | undefined;
-    if (!locked || locked.status !== "active" || locked.tokenVersion !== user.tokenVersion || locked.passwordHash !== user.passwordHash) {
+    if (
+      !locked ||
+      locked.status !== "active" ||
+      locked.tokenVersion !== user.tokenVersion ||
+      locked.passwordHash !== user.passwordHash
+    ) {
       await connection.rollback();
       return null;
     }
-    await connection.query("INSERT INTO auth_session (id,userId,tokenHash,expiresAt,userAgent) VALUES (?,?,?,?,?)",
-      [id, user.id, tokenHash(token), new Date(Date.now() + SESSION_MAX_SECONDS * 1000), userAgent?.slice(0, 255) ?? null]);
-    await connection.query("UPDATE users SET lastSignedIn=NOW() WHERE id=?", [user.id]);
-    await recordAuthorizationAudit({ actorUserId: user.id, targetUserId: user.id, action: "login_success", resourceType: "auth" }, connection);
+    await connection.query(
+      "INSERT INTO auth_session (id,userId,tokenHash,expiresAt,userAgent) VALUES (?,?,?,?,?)",
+      [
+        id,
+        user.id,
+        tokenHash(token),
+        new Date(Date.now() + SESSION_MAX_SECONDS * 1000),
+        userAgent?.slice(0, 255) ?? null,
+      ]
+    );
+    await connection.query("UPDATE users SET lastSignedIn=NOW() WHERE id=?", [
+      user.id,
+    ]);
+    await recordAuthorizationAudit(
+      {
+        actorUserId: user.id,
+        targetUserId: user.id,
+        action: "login_success",
+        resourceType: "auth",
+      },
+      connection
+    );
     await connection.commit();
     return { user: locked, token };
   } catch (error) {
     await connection.rollback();
     throw error;
-  } finally { connection.release(); }
+  } finally {
+    connection.release();
+  }
 }
 
 export async function logout(token?: string, actorUserId?: number) {
@@ -152,13 +188,22 @@ export async function listUsersPage(input: {
   );
   return { items, total, offset: input.offset, limit: input.limit };
 }
-export async function createUser(values: {
-  username: string;
-  password: string;
-  name: string;
-  email?: string | null;
-  role?: "user" | "admin";
-}) {
+export type UserCreationAudit = {
+  actorUserId: number;
+  actorTokenVersion?: number;
+  details?: Record<string, unknown>;
+};
+
+export async function createUser(
+  values: {
+    username: string;
+    password: string;
+    name: string;
+    email?: string | null;
+    role?: "user" | "admin";
+  },
+  audit?: UserCreationAudit
+) {
   if (values.password.length < 12) throw new Error("密码至少需要 12 位。");
   if (!/[a-zA-Z]/.test(values.password) || !/[0-9\W_]/.test(values.password)) {
     throw new Error("密码需包含字母以及数字或特殊符号。");
@@ -167,29 +212,101 @@ export async function createUser(values: {
   if (!/^[a-z][a-z0-9._-]{2,63}$/.test(username))
     throw new Error("用户名格式无效。");
   const passwordHash = await hashPassword(values.password);
-  let result: mysql.ResultSetHeader;
-  try {
-    [result] = await db().query<mysql.ResultSetHeader>(
-      "INSERT INTO users (openId,username,passwordHash,name,email,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,'active','internal',NOW())",
-      [
-        `internal:${username}`,
-        username,
-        passwordHash,
-        values.name.trim(),
-        values.email ?? null,
-        values.role ?? "user",
-      ]
-    );
-  } catch (error) {
-    const failure = error as { code?: string; errno?: number; message?: string };
-    if (
-      (failure?.code === "ER_DUP_ENTRY" || failure?.errno === 1062) &&
-      /users_(?:username|openId)_unique/.test(failure.message ?? "")
-    )
-      throw new Error("用户名已存在，请更换用户名。", { cause: error });
-    throw error;
+  const insert = async (executor: mysql.Pool | mysql.PoolConnection) => {
+    try {
+      const [result] = await executor.query<mysql.ResultSetHeader>(
+        "INSERT INTO users (openId,username,passwordHash,name,email,role,status,loginMethod,lastSignedIn) VALUES (?,?,?,?,?,?,'active','internal',NOW())",
+        [
+          `internal:${username}`,
+          username,
+          passwordHash,
+          values.name.trim(),
+          values.email ?? null,
+          values.role ?? "user",
+        ]
+      );
+      return result.insertId;
+    } catch (error) {
+      const failure = error as {
+        code?: string;
+        errno?: number;
+        message?: string;
+      };
+      if (
+        (failure?.code === "ER_DUP_ENTRY" || failure?.errno === 1062) &&
+        /users_(?:username|openId)_unique/.test(failure.message ?? "")
+      )
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "用户名已存在，请更换用户名。",
+          cause: error,
+        });
+      throw error;
+    }
+  };
+  if (!audit) return insert(db());
+
+  // Hashing and catalog initialization finish before acquiring row locks.
+  await ensureIamCatalog();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      // The actor predates the newly inserted user. Lock it first, matching the
+      // ascending user lock order used by account-status protection.
+      const [actors] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR UPDATE",
+        [audit.actorUserId]
+      );
+      const actor = actors[0];
+      if (
+        !actor ||
+        actor.status !== "active" ||
+        (audit.actorTokenVersion !== undefined &&
+          Number(actor.tokenVersion) !== audit.actorTokenVersion) ||
+        !(await hasSystemPermission(
+          { id: Number(actor.id), role: actor.role },
+          "iam:manage",
+          connection
+        ))
+      )
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "当前账号无权创建人员，请刷新权限后重试。",
+        });
+      const userId = await insert(connection);
+      await recordAuthorizationAudit(
+        {
+          actorUserId: audit.actorUserId,
+          targetUserId: userId,
+          action: "user_created",
+          resourceType: "user",
+          resourceId: String(userId),
+          details: audit.details,
+        },
+        connection
+      );
+      await connection.commit();
+      return userId;
+    } catch (error) {
+      await connection.rollback();
+      const failure = error as { code?: string; errno?: number };
+      const deadlock =
+        failure?.code === "ER_LOCK_DEADLOCK" || failure?.errno === 1213;
+      if (!deadlock) throw error;
+      if (attempt === 2)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "人员信息正在被其他管理员更新，本次账号未创建，请稍后重试。",
+          cause: error,
+        });
+    } finally {
+      connection.release();
+    }
+    // Only a deadlock reaches here: MySQL rolled back the entire transaction.
+    await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
   }
-  return result.insertId;
+  throw new Error("账号创建事务未完成。");
 }
 export async function setUserStatus(
   userId: number,

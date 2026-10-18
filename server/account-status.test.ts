@@ -13,6 +13,7 @@ vi.mock("./db", () => ({
   getSharedPool: () => ({ getConnection: async () => connection }),
 }));
 vi.mock("./iam-service", () => ({
+  ensureIamCatalog: vi.fn(),
   hasSystemPermission: mocks.permission,
   recordAuthorizationAudit: mocks.audit,
 }));
@@ -68,6 +69,11 @@ it("状态版本、会话撤销和审计在同一事务提交，锁定所有管�
     connection
   );
   expect(mocks.commit).toHaveBeenCalledOnce();
+  expect(mocks.permission).toHaveBeenCalledWith(
+    { id: 1, role: "admin" },
+    "iam:manage",
+    connection
+  );
   expect(mocks.rollback).not.toHaveBeenCalled();
   expect(mocks.release).toHaveBeenCalledOnce();
 });

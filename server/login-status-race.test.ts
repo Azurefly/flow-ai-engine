@@ -16,7 +16,10 @@ vi.mock("./db", () => ({
     getConnection: async () => connection,
   }),
 }));
-vi.mock("./iam-service", () => ({ recordAuthorizationAudit: mocks.audit }));
+vi.mock("./iam-service", () => ({
+  recordAuthorizationAudit: mocks.audit,
+  ensureIamCatalog: vi.fn(),
+}));
 import { login } from "./internal-auth";
 const connection = {
   query: mocks.query,

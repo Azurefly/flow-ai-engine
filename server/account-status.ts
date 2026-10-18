@@ -1,7 +1,11 @@
 import mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
-import { hasSystemPermission, recordAuthorizationAudit } from "./iam-service";
+import {
+  ensureIamCatalog,
+  hasSystemPermission,
+  recordAuthorizationAudit,
+} from "./iam-service";
 
 export type AccountStatusChange = {
   userId: number;
@@ -13,6 +17,7 @@ export type AccountStatusChange = {
 
 /** Status, revision, session revocation and its audit fact commit together. */
 export async function changeAccountStatus(input: AccountStatusChange) {
+  await ensureIamCatalog();
   const connection = await getSharedPool().getConnection();
   try {
     await connection.beginTransaction();
@@ -30,7 +35,8 @@ export async function changeAccountStatus(input: AccountStatusChange) {
         actor.status !== "active" ||
         !(await hasSystemPermission(
           { id: actor.id, role: actor.role },
-          "iam:manage"
+          "iam:manage",
+          connection
         ))
       )
         throw new TRPCError({

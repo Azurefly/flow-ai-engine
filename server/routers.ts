@@ -360,14 +360,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const userId = await createUser(input);
-        await recordAuthorizationAudit({
-          actorUserId: ctx.user.id,
-          targetUserId: userId,
-          action: "user_created",
-          resourceType: "user",
-          resourceId: String(userId),
-        });
+        const userId = await createUser(input, { actorUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true, userId };
       }),
     createUsersBatch: iamManageProcedure
@@ -396,13 +389,9 @@ export const appRouter = router({
         }> = [];
         for (const account of input.users) {
           try {
-            const userId = await createUser(account);
-            await recordAuthorizationAudit({
+            const userId = await createUser(account, {
               actorUserId: ctx.user.id,
-              targetUserId: userId,
-              action: "user_created",
-              resourceType: "user",
-              resourceId: String(userId),
+              actorTokenVersion: ctx.user.tokenVersion,
               details: { source: "ai_batch_preview" },
             });
             results.push({ username: account.username, success: true, userId });

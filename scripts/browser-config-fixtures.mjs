@@ -186,7 +186,7 @@ async function cleanup(fixture, ownerLogin) {
       );
       if (!person) continue;
       assert.equal(person.name, pending.name);
-      assert.equal(person.role, "user");
+      assert.equal(person.role, pending.role ?? "user");
       if (!people.some(item => item.id === person.id))
         people.push({ id: person.id, username: person.username });
     } catch (error) {
@@ -397,12 +397,14 @@ async function grantIdentity(fixture) {
 }
 
 async function setup(intent) {
-  const fixture = { tag: intent.tag, people: [], workflows: [], projects: [] };
+  const fixture = { tag: intent.tag, people: [], pendingPeople: [], workflows: [], projects: [] };
   const progress = () => console.log(JSON.stringify({ fixture }));
   assert(/^uiconfig_[a-f0-9]{12}$/.test(intent.tag));
   assert.equal(intent.login.username, intent.tag + "_admin");
   await bootstrap();
   try {
+    fixture.pendingPeople.push({ username: intent.login.username, name: "界面隔离验收_" + intent.tag, role: "admin" });
+    progress();
     const created = await request(
       "iam.createUser",
       {
@@ -417,6 +419,8 @@ async function setup(intent) {
       id: created.userId,
       username: intent.login.username,
     });
+    progress();
+    fixture.pendingPeople.push({ username: intent.tag + "_disabled", name: "已停用处理人_" + intent.tag, role: "user" });
     progress();
     const unavailable = await request(
       "iam.createUser",
@@ -440,6 +444,7 @@ async function setup(intent) {
       true
     );
     await request("auth.login", intent.login, true);
+    if (intent.accountOnly) { progress(); return; }
     if (intent.pagination) {
       const spec = { code: intent.tag.toUpperCase() + "_DOMAIN", name: "CSV验收工作域_" + intent.tag };
       const domain = await request("config.createWorkDomain", spec, true);
@@ -957,11 +962,50 @@ async function prepareOptionalNumbers(intent) {
   console.log(JSON.stringify({ stage: "optional-numbers-prepared", workflows: 3, mergedRows: 400 }));
 }
 
+async function verifyPersonnel(intent) {
+  const { fixture } = intent;
+  assert(/^uiconfig_[a-f0-9]{12}$/.test(fixture.tag));
+  const expected = fixture.pendingPeople ?? [];
+  assert(expected.length >= 2);
+  for (const person of expected) {
+    assert(person.username.startsWith(fixture.tag + "_"));
+    assert(person.name.endsWith(fixture.tag) || person.name.includes(fixture.tag + "_"));
+  }
+  const names = [...new Set(expected.map(person => person.username))];
+  const { default: mysql } = await import("mysql2/promise");
+  const pool = mysql.createPool(process.env.DATABASE_URL);
+  try {
+    const [rows] = await pool.query("SELECT id,username,name,role,status FROM users WHERE username IN (?)", [names]);
+    assert.equal(rows.length, names.length, "创建结果与账号行数不一致");
+    const [audits] = await pool.query("SELECT actorUserId,targetUserId,detailsJson FROM authorization_audit_log WHERE action='user_created' AND targetUserId IN (?)", [rows.map(row => row.id)]);
+    for (const person of expected) {
+      const user = rows.find(row => row.username === person.username);
+      assert(user);
+      assert.equal(user.name, person.name);
+      assert.equal(user.role, person.role ?? "user");
+      const facts = audits.filter(row => row.targetUserId === user.id);
+      assert.equal(facts.length, 1, "每个账号必须恰有一条创建审计");
+      if (person.actorUserId) assert.equal(facts[0].actorUserId, person.actorUserId);
+      if (person.source) {
+        const details = typeof facts[0].detailsJson === "string" ? JSON.parse(facts[0].detailsJson) : facts[0].detailsJson;
+        assert.equal(details.source, person.source);
+      }
+    }
+    for (const username of fixture.rejectedUsernames ?? []) {
+      assert(username.startsWith(fixture.tag + "_"));
+      const [rejected] = await pool.query("SELECT id FROM users WHERE username=?", [username]);
+      assert.equal(rejected.length, 0, "未获授权的创建不能留下账号");
+    }
+    console.log(JSON.stringify({ stage: "personnel-audit-verified", accounts: rows.length, creationAudits: audits.length, missingOrDuplicateAudits: 0, rejectedAccountsAbsent: (fixture.rejectedUsernames ?? []).length }));
+  } finally { await pool.end(); }
+}
+
 if (browserFixtureIntent.action === "setup") await setup(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_native_schedule") await prepareNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_project_actions") await prepareProjectActions(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_numeric_nodes") await prepareNumericNodes(browserFixtureIntent);
 else if (browserFixtureIntent.action === "prepare_optional_numbers") await prepareOptionalNumbers(browserFixtureIntent);
+else if (browserFixtureIntent.action === "verify_personnel") await verifyPersonnel(browserFixtureIntent);
 else if (browserFixtureIntent.action === "cleanup_native_schedule") await cleanupNativeSchedule(browserFixtureIntent);
 else if (browserFixtureIntent.action === "start_form_task") await startFormTask(browserFixtureIntent);
 else if (browserFixtureIntent.action === "verify_form_task") await verifyFormTask(browserFixtureIntent);

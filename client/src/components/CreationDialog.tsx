@@ -85,7 +85,9 @@ export function CreationDialog({
                 <p className="mt-1">已保留填写内容，请检查后重新提交。</p>
               </div>
             )}
-            <div className="grid min-w-0 gap-3">{children}</div>
+            <fieldset disabled={pending} className="grid min-w-0 gap-3">
+              {children}
+            </fieldset>
           </div>
           <div className="mt-5 flex shrink-0 flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button

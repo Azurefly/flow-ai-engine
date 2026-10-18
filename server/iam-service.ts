@@ -188,13 +188,13 @@ type GrantedPermissionRow = PermissionRow & {
   roleName?: string;
 };
 
-async function assignedPermissionRows(userId: number, workflowId?: string | string[], withSources = false) {
+async function assignedPermissionRows(userId: number, workflowId?: string | string[], withSources = false, connection?: mysql.PoolConnection) {
   const batch = Array.isArray(workflowId);
   const scopeClause = workflowId ? `(ra.scopeType='system' OR (ra.scopeType='workflow' AND ra.scopeId${batch ? " IN (?)" : "=?"}))` : "ra.scopeType='system'";
   const directSource = withSources ? ", 'direct' AS sourceKind,ra.id AS assignmentId,NULL AS unitId" : batch ? ",ra.scopeType,ra.scopeId" : "";
   const inheritedSource = withSources ? ", 'organization' AS sourceKind,NULL AS assignmentId,our.unitId" : batch ? ", 'system' AS scopeType,NULL AS scopeId" : "";
   const metadata = withSources ? ",p.name,p.description,effective_role.sourceKind,effective_role.assignmentId,effective_role.unitId,origin_unit.name AS unitName,r.id AS roleId,r.code AS roleCode,r.name AS roleName" : batch ? ",effective_role.scopeType,effective_role.scopeId" : "";
-  const [rows] = await db().query<GrantedPermissionRow[]>(
+  const [rows] = await (connection ?? db()).query<GrantedPermissionRow[]>(
     `WITH RECURSIVE membership_units AS (
        SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
          FROM organization_membership om
@@ -238,14 +238,15 @@ async function assignedPermissionRows(userId: number, workflowId?: string | stri
   return rows;
 }
 
-async function assignedPermissions(userId: number, workflowId?: string) {
-  return new Set((await assignedPermissionRows(userId, workflowId)).map(row => row.code));
+async function assignedPermissions(userId: number, workflowId?: string, connection?: mysql.PoolConnection) {
+  return new Set((await assignedPermissionRows(userId, workflowId, false, connection)).map(row => row.code));
 }
 
-export async function hasSystemPermission(user: { id: number; role: "user" | "admin" }, permission: PermissionCode) {
+/** Transaction callers initialize the catalog before acquiring their connection. */
+export async function hasSystemPermission(user: { id: number; role: "user" | "admin" }, permission: PermissionCode, connection?: mysql.PoolConnection) {
   if (user.role === "admin") return true;
-  await ensureIamCatalog();
-  return (await assignedPermissions(user.id)).has(permission);
+  if (!connection) await ensureIamCatalog();
+  return (await assignedPermissions(user.id, undefined, connection)).has(permission);
 }
 
 export async function getWorkflowAccess(user: { id: number; role: "user" | "admin" }, workflowId: string) {
