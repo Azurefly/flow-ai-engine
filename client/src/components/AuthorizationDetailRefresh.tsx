@@ -5,6 +5,7 @@ export function AuthorizationDetailRefresh({
   label,
   disabled,
   embedded,
+  buttonLabel = "刷新权限来源",
 }: {
   query: {
     isFetching: boolean;
@@ -14,6 +15,7 @@ export function AuthorizationDetailRefresh({
   label: string;
   disabled: boolean;
   embedded?: boolean;
+  buttonLabel?: string;
 }) {
   const updated = query.dataUpdatedAt
     ? new Date(query.dataUpdatedAt).toLocaleTimeString("zh-CN", {
@@ -37,7 +39,7 @@ export function AuthorizationDetailRefresh({
         disabled={disabled || query.isFetching}
         onClick={() => void query.refetch()}
       >
-        {query.isFetching ? "正在刷新…" : "刷新权限来源"}
+        {query.isFetching ? "正在刷新…" : buttonLabel}
       </Button>
     </div>
   );

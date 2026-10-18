@@ -21,9 +21,11 @@ const maxChunkBytes = 450 * 1024;
 // Task opener lookup after nested dialogs adds about 0.23 KiB raw.
 // Native schedule revisions, recovery actions and preset selection add < 1 KiB gzip.
 // The resource center stays lazy loaded; per-chunk and HTML limits remain unchanged.
-const maxTotalBytes = 1_444 * 1024;
+// Resource permission boundaries, recoverable forms and lazy loading add about 1.5 KiB gzip.
+// Business and workflow pages no longer preload the resource-center module.
+const maxTotalBytes = 1_447 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 431 * 1024;
+const maxTotalGzipBytes = 433 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

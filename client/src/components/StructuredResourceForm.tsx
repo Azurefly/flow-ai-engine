@@ -1,8 +1,10 @@
 import { Button } from "@/components/ui/button";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Input } from "@/components/ui/input";
+import { ResourceEditContext } from "@/contexts/ResourceEditContext";
+import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import { Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useContext, useState } from "react";
 
 type ResourceMutation = {
   mutateAsync: (input: any) => Promise<unknown>;
@@ -39,6 +41,7 @@ export function StructuredResourceForm({
     Array<{ key: string; value: string }>
   >([]);
   const [open, setOpen] = useState(false);
+  const { canEdit } = useContext(ResourceEditContext);
   const fieldClass =
     "h-11 w-full min-w-0 rounded border border-border bg-card px-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:h-10";
   const panel =
@@ -61,6 +64,7 @@ export function StructuredResourceForm({
       )
     );
   const submit = async () => {
+    if (!canEdit) return;
     try {
       if (tab === "sources") {
         await createSource.mutateAsync({
@@ -106,6 +110,7 @@ export function StructuredResourceForm({
       /* mutation reports the error and preserves the form */
     }
   };
+  if (!canEdit && !open) return null;
   const fields =
     tab === "sources" ? (
       <>
@@ -269,8 +274,9 @@ export function StructuredResourceForm({
         description={description}
         submitLabel="保存"
         submitDisabled={
-          tab === "assets" &&
-          !schemaRows.some(row => row.name.trim() && row.type.trim())
+          !canEdit ||
+          (tab === "assets" &&
+            !schemaRows.some(row => row.name.trim() && row.type.trim()))
         }
         pending={
           tab === "sources" ? createSource.isPending : createAsset.isPending
@@ -278,7 +284,13 @@ export function StructuredResourceForm({
         onSubmit={submit}
         className="max-w-2xl"
       >
-        {fields}
+        <ResourcePermissionNotice />
+        <fieldset
+          className="grid min-w-0 gap-3"
+          disabled={!canEdit || createSource.isPending || createAsset.isPending}
+        >
+          {fields}
+        </fieldset>
       </CreationDialog>
     </div>
   );

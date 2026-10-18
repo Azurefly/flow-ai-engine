@@ -1,4 +1,8 @@
 import { roleExpiryInput } from "@shared/role-expiry";
+import { projectCapabilities } from "@shared/project-capabilities";
+import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
+import { AuthorizationDetailRefresh } from "./AuthorizationDetailRefresh";
+import { ResourceEditContext } from "@/contexts/ResourceEditContext";
 import { PermissionListFeedback } from "./PermissionListFeedback";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +55,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import DataResourceCenter from "./DataResourceCenter";
+const DataResourceCenter = lazy(() => import("./DataResourceCenter"));
 const ProjectArchiveDialog = lazy(() => import("./ProjectArchiveDialog"));
 
 export type ProjectRecord = {
@@ -1220,7 +1224,10 @@ export function ProjectWorkspace({
     setFilterForm({});
     setShowCreate(false);
   }, [project.id]);
-  const access = trpc.project.access.useQuery({ projectId: project.id });
+  const access = trpc.project.access.useQuery(
+    { projectId: project.id },
+    authorizationQueryPolicy(true)
+  );
   const workflows = trpc.project.workflows.useQuery({
     projectId: project.id,
     ...filters,
@@ -1239,10 +1246,11 @@ export function ProjectWorkspace({
         form.creationSource === "manual",
     }
   );
-  const canManage = Boolean(access.data?.permissions?.has("project:manage"));
-  const canCreate = Boolean(
-    access.data?.permissions?.has("project:workflow:create")
+  const capabilities = projectCapabilities(
+    access.data?.permissions,
+    !access.isPending && !access.isError
   );
+  const { canManage, canCreate } = capabilities;
   const createWorkflow = trpc.project.createWorkflow.useMutation({
     onSuccess: (workflow: any) => {
       void utils.project.workflows.invalidate({ projectId: project.id });
@@ -1306,6 +1314,17 @@ export function ProjectWorkspace({
           </p>
         </div>
       </div>
+    );
+  if (access.isSuccess && !capabilities.ready)
+    return (
+      <section role="alert" data-project-access-denied="" className="m-4 grid gap-3 rounded-lg border border-border bg-card p-5">
+        <h1 className="aiflow-type-page-title font-semibold">业务访问权限已变化</h1>
+        <p className="aiflow-type-body text-muted-foreground">当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。</p>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={access.isFetching} onClick={() => void access.refetch()}>刷新业务权限</Button>
+          <Button type="button" variant="outline" onClick={onBack}>返回业务中心</Button>
+        </div>
+      </section>
     );
   return (
     <div
@@ -1393,6 +1412,19 @@ export function ProjectWorkspace({
         </nav>
       </aside>
       <section className="min-w-0 flex-1 p-4 sm:p-5">
+        <AuthorizationDetailRefresh
+          query={access}
+          label="刷新业务权限"
+          buttonLabel="刷新业务权限"
+          disabled={false}
+          embedded
+        />
+        <PermissionListFeedback
+          name="业务权限"
+          loading={access.isPending}
+          error={access.isError}
+          onRetry={() => void access.refetch()}
+        />
         {view === "process" && (
           <ProcessCenter
             project={project}
@@ -1469,10 +1501,11 @@ export function ProjectWorkspace({
           />
         )}
         {view === "resources" && (
-          <DataResourceCenter
-            projectId={project.id}
-            onOpenWorkflow={onOpenWorkflow}
-          />
+          <ResourceEditContext.Provider value={{ ...capabilities, refreshing: access.isFetching, refresh: () => void access.refetch() }}>
+            <Suspense fallback={<p role="status" className="aiflow-type-body py-4 text-muted-foreground">正在加载资源配置中心…</p>}>
+              <DataResourceCenter projectId={project.id} onOpenWorkflow={onOpenWorkflow} />
+            </Suspense>
+          </ResourceEditContext.Provider>
         )}
         {view === "services" && (
           <ServiceEndpointCenter

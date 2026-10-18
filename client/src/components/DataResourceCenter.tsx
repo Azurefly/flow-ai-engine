@@ -18,6 +18,8 @@ import { Input } from "@/components/ui/input";
 import { StructuredResourceForm } from "@/components/StructuredResourceForm";
 import { CreationDialog } from "@/components/CreationDialog";
 import { ResourceDetails } from "@/components/ResourceDetails";
+import { ResourceEditContext } from "@/contexts/ResourceEditContext";
+import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import {
   Dialog,
   DialogContent,
@@ -43,7 +45,14 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import { Children, isValidElement, useMemo, useRef, useState } from "react";
+import {
+  Children,
+  isValidElement,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
 
 const metaClassName = "aiflow-type-meta text-muted-foreground";
@@ -61,13 +70,21 @@ function formatDataflowTime(value?: string | Date | null) {
     : "—";
 }
 
+type ResourceCenterProps = {
+  projectId: string;
+  onOpenWorkflow: (workflowId: string) => void;
+};
+
 export default function DataResourceCenter({
   projectId,
   onOpenWorkflow,
-}: {
-  projectId: string;
-  onOpenWorkflow: (workflowId: string) => void;
-}) {
+}: ResourceCenterProps) {
+  const {
+    canEdit,
+    canRun,
+    ready: permissionsReady,
+    refresh: refreshPermissions,
+  } = useContext(ResourceEditContext);
   const utils = trpc.useUtils();
   const project = trpc.project.get.useQuery({ projectId });
   const projectName = project.data?.name ?? "当前业务";
@@ -132,19 +149,26 @@ export default function DataResourceCenter({
     void utils.data.flows.invalidate({ projectId });
     void utils.data.runs.invalidate({ projectId });
   };
+  const reportResourceError = (error: {
+    message: string;
+    data?: { code?: string } | null;
+  }) => {
+    if (error.data?.code === "FORBIDDEN") refreshPermissions();
+    toast.error(error.message);
+  };
   const createSource = trpc.data.createSource.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success("数据源草稿已创建；请按类型校验登记或测试连接。");
     },
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const createAsset = trpc.data.createAsset.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success("资源探查结果已保存。");
     },
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const createUdf = trpc.data.createUdf.useMutation({
     onSuccess: () => {
@@ -158,7 +182,7 @@ export default function DataResourceCenter({
       invalidate();
       toast.success("函数已登记；需审核并绑定可执行实现。");
     },
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const createTag = trpc.data.createTag.useMutation({
     onSuccess: () => {
@@ -166,7 +190,7 @@ export default function DataResourceCenter({
       invalidate();
       toast.success("标签已创建。");
     },
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const createPlugin = trpc.data.createPlugin.useMutation({
     onSuccess: () => {
@@ -174,27 +198,27 @@ export default function DataResourceCenter({
       invalidate();
       toast.success("项目插件元数据已登记。");
     },
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const removeSource = trpc.data.deleteSource.useMutation({
     onSuccess: invalidate,
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const removeAsset = trpc.data.deleteAsset.useMutation({
     onSuccess: invalidate,
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const removeUdf = trpc.data.deleteUdf.useMutation({
     onSuccess: invalidate,
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const removeTag = trpc.data.deleteTag.useMutation({
     onSuccess: invalidate,
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const removePlugin = trpc.data.deletePlugin.useMutation({
     onSuccess: invalidate,
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const testSource = trpc.data.testSource.useMutation({
     onSuccess: (result: any) => {
@@ -207,7 +231,7 @@ export default function DataResourceCenter({
           : `连接测试未通过：${result.error?.message || result.errorCategory || "请查看测试证据"}`
       );
     },
-    onError: error => toast.error(error.message),
+    onError: reportResourceError,
   });
   const run = trpc.data.run.useMutation({
     onSuccess: (result, variables) => {
@@ -221,16 +245,42 @@ export default function DataResourceCenter({
     onError: error => {
       // Execution errors can arrive after a failed run has already been saved.
       invalidate();
-      toast.error(error.message);
+      reportResourceError(error);
     },
   });
+  const sourceActions = (source: any, card = false) =>
+    canEdit ? (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          className={
+            card
+              ? "aiflow-type-control min-h-11 flex-1"
+              : "aiflow-type-control mr-2 h-10"
+          }
+          disabled={testSource.isPending}
+          onClick={() => testSource.mutate({ projectId, sourceId: source.id })}
+        >
+          {source.sourceType === "inline" ? "校验登记" : "测试连接"}
+        </Button>
+        <DeleteButton
+          actionLabel="删除数据源"
+          resourceName={source.name}
+          visibleLabel={card ? "删除数据源" : undefined}
+          onDelete={() =>
+            removeSource.mutateAsync({ projectId, sourceId: source.id })
+          }
+        />
+      </>
+    ) : undefined;
   const refreshSchedules = () => {
     void utils.data.schedules.invalidate({ projectId });
     void utils.data.flows.invalidate({ projectId });
   };
   const scheduleError = (error: { message: string }) => {
     refreshSchedules();
-    toast.error(error.message);
+    reportResourceError(error);
   };
   const acceptScheduleVersion = (
     result: object,
@@ -392,6 +442,17 @@ export default function DataResourceCenter({
           管理当前业务的数据源、资源目录、函数、标签和插件。凭据只保存环境密钥引用；登记成功不代表连接或查询权限已验证。
         </p>
       </div>
+      {permissionsReady && !canEdit && (
+        <p
+          role="note"
+          data-resource-readonly=""
+          className="aiflow-type-body mb-4 rounded-lg border border-border bg-muted px-4 py-3 text-muted-foreground"
+        >
+          {canRun
+            ? "可查看资源并发起已发布的数据流程；资源编辑和调度管理需要业务设计权限。"
+            : "当前为只读访问，可查看资源、运行记录和调度计划。"}
+        </p>
+      )}
       <label
         data-resource-category-mobile=""
         className="mb-4 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 lg:hidden"
@@ -470,6 +531,7 @@ export default function DataResourceCenter({
       {!selectedQueryLoading && !selectedQueryError && tab === "flows" && (
         <DataflowWorkspace
           projectName={projectName}
+          canRun={canRun}
           resources={resources.data as any}
           flows={flowList}
           publishedFlows={publishedFlows}
@@ -554,32 +616,7 @@ export default function DataResourceCenter({
                     : "—",
                 },
               ]}
-              actions={
-                <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="aiflow-type-control min-h-11 flex-1"
-                    disabled={testSource.isPending}
-                    onClick={() =>
-                      testSource.mutate({ projectId, sourceId: source.id })
-                    }
-                  >
-                    {source.sourceType === "inline" ? "校验登记" : "测试连接"}
-                  </Button>
-                  <DeleteButton
-                    actionLabel="删除数据源"
-                    resourceName={source.name}
-                    visibleLabel="删除数据源"
-                    onDelete={() =>
-                      removeSource.mutateAsync({
-                        projectId,
-                        sourceId: source.id,
-                      })
-                    }
-                  />
-                </>
-              }
+              actions={sourceActions(source, true)}
             />
           ))}
         >
@@ -599,25 +636,7 @@ export default function DataResourceCenter({
                   : "—"}
               </td>
               <td className="px-4 py-3 text-right whitespace-nowrap">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="aiflow-type-control mr-2 h-10"
-                  disabled={testSource.isPending}
-                  onClick={() =>
-                    testSource.mutate({ projectId, sourceId: source.id })
-                  }
-                >
-                  {source.sourceType === "inline" ? "校验登记" : "测试连接"}
-                </Button>
-                <DeleteButton
-                  actionLabel="删除数据源"
-                  resourceName={source.name}
-                  onDelete={() =>
-                    removeSource.mutateAsync({ projectId, sourceId: source.id })
-                  }
-                />
+                {sourceActions(source)}
               </td>
             </tr>
           ))}
@@ -626,10 +645,12 @@ export default function DataResourceCenter({
       {!selectedQueryLoading && !selectedQueryError && tab === "assets" && (
         <ResourceTable
           columns={["资源名称", "类型 / 数据源", "结构 / 样本", "状态", "操作"]}
+          allowReadActions
           empty="尚无已探查资源。"
           mobileCards={(resources.data?.assets ?? []).map((asset: any) => (
             <ResourceTableCard
               key={asset.id}
+              allowReadActions
               primary={asset.name}
               secondary={asset.sourceName || "未关联数据源"}
               status={<State value={asset.status} />}
@@ -648,7 +669,10 @@ export default function DataResourceCenter({
                     resourceName={asset.name}
                     visibleLabel="删除资源"
                     onDelete={() =>
-                      removeAsset.mutateAsync({ projectId, assetId: asset.id })
+                      removeAsset.mutateAsync({
+                        projectId,
+                        assetId: asset.id,
+                      })
                     }
                   />
                 </>
@@ -685,7 +709,9 @@ export default function DataResourceCenter({
         </ResourceTable>
       )}
       {!selectedQueryLoading && !selectedQueryError && tab === "udfs" && (
-        <section className="grid min-w-0 gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+        <section
+          className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[350px_minmax(0,1fr)]" : ""}`}
+        >
           <ResourceForm
             title="注册函数"
             description="绑定内置实现并审核后可执行数据转换；其他类型目前仅登记元数据，尚不能执行。"
@@ -741,7 +767,10 @@ export default function DataResourceCenter({
                   className="h-9 w-full rounded border border-border bg-card px-2 text-sm"
                   value={udfForm.artifactRef}
                   onChange={event =>
-                    setUdfForm({ ...udfForm, artifactRef: event.target.value })
+                    setUdfForm({
+                      ...udfForm,
+                      artifactRef: event.target.value,
+                    })
                   }
                 >
                   {builtinDataFunctions.map(item => (
@@ -840,7 +869,9 @@ export default function DataResourceCenter({
         </section>
       )}
       {!selectedQueryLoading && !selectedQueryError && tab === "tags" && (
-        <section className="grid min-w-0 gap-4 xl:grid-cols-[330px_minmax(0,1fr)]">
+        <section
+          className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[330px_minmax(0,1fr)]" : ""}`}
+        >
           <ResourceForm
             title="新建标签"
             description="项目级数据标签用于资源分类，不会跨越项目可见范围。"
@@ -891,7 +922,9 @@ export default function DataResourceCenter({
         </section>
       )}
       {!selectedQueryLoading && !selectedQueryError && tab === "plugins" && (
-        <section className="grid min-w-0 gap-4 xl:grid-cols-[350px_minmax(0,1fr)]">
+        <section
+          className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[350px_minmax(0,1fr)]" : ""}`}
+        >
           <ResourceForm
             title="登记项目插件"
             description="仅保存已批准插件的配置元数据；插件运行仍受服务端安全策略控制。"
@@ -938,7 +971,10 @@ export default function DataResourceCenter({
                 placeholder="例如：1.0.0"
                 value={pluginForm.version}
                 onChange={event =>
-                  setPluginForm({ ...pluginForm, version: event.target.value })
+                  setPluginForm({
+                    ...pluginForm,
+                    version: event.target.value,
+                  })
                 }
                 required
               />
@@ -1541,7 +1577,9 @@ function ResourceForm({
 }) {
   if (title === "添加数据源" || title === "资源探查结果") return null;
   const [open, setOpen] = useState(false);
+  const { canEdit } = useContext(ResourceEditContext);
   const submit = async () => {
+    if (!canEdit) return;
     try {
       await onSubmit();
       setOpen(false);
@@ -1549,6 +1587,7 @@ function ResourceForm({
       /* mutation keeps the dialog open and reports its own error */
     }
   };
+  if (!canEdit && !open) return null;
   return (
     <div className="grid h-fit min-w-0 gap-3 rounded-lg border border-aiflow-info-border bg-card p-4 shadow-sm">
       <div>
@@ -1572,9 +1611,13 @@ function ResourceForm({
         description={description}
         submitLabel="保存"
         pending={pending}
+        submitDisabled={!canEdit}
         onSubmit={submit}
       >
-        {children}
+        <ResourcePermissionNotice />
+        <fieldset className="grid min-w-0 gap-3" disabled={!canEdit || pending}>
+          {children}
+        </fieldset>
       </CreationDialog>
     </div>
   );
@@ -1611,6 +1654,7 @@ function scheduleDetails(item: any) {
 
 function DataflowWorkspace({
   projectName,
+  canRun,
   resources,
   flows,
   publishedFlows,
@@ -1640,6 +1684,7 @@ function DataflowWorkspace({
   deleteSchedulePending,
 }: {
   projectName: string;
+  canRun: boolean;
   resources: any;
   flows: any[];
   publishedFlows: any[];
@@ -1668,42 +1713,44 @@ function DataflowWorkspace({
   onDeleteSchedule: (workflowId: string) => Promise<unknown>;
   deleteSchedulePending: boolean;
 }) {
+  const { canEdit } = useContext(ResourceEditContext);
   const schedulePending =
     saveSchedulePending ||
     activateSchedulePending ||
     pauseSchedulePending ||
     deleteSchedulePending;
-  const scheduleActions = (item: any, name: string) => (
-    <div className="flex flex-1 justify-end gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        className="min-h-11 flex-1 text-xs sm:min-h-9"
-        disabled={
-          schedulePending ||
-          (item.activationAvailable === false &&
-            (item.status !== "active" || item.schedulerType === "hosted"))
-        }
-        onClick={() =>
-          item.status === "active"
-            ? onPauseSchedule(item.workflowId)
-            : onActivateSchedule(item.workflowId)
-        }
-      >
-        {item.status === "active" ? "暂停计划" : "启用计划"}
-      </Button>
-      <DeleteButton
-        visibleLabel="删除计划"
-        resourceName={name}
-        disabled={
-          schedulePending ||
-          (item.schedulerType === "hosted" &&
-            item.activationAvailable === false)
-        }
-        onDelete={() => onDeleteSchedule(item.workflowId)}
-      />
-    </div>
-  );
+  const scheduleActions = (item: any, name: string) =>
+    canEdit ? (
+      <div className="flex flex-1 justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="min-h-11 flex-1 text-xs sm:min-h-9"
+          disabled={
+            schedulePending ||
+            (item.activationAvailable === false &&
+              (item.status !== "active" || item.schedulerType === "hosted"))
+          }
+          onClick={() =>
+            item.status === "active"
+              ? onPauseSchedule(item.workflowId)
+              : onActivateSchedule(item.workflowId)
+          }
+        >
+          {item.status === "active" ? "暂停计划" : "启用计划"}
+        </Button>
+        <DeleteButton
+          visibleLabel="删除计划"
+          resourceName={name}
+          disabled={
+            schedulePending ||
+            (item.schedulerType === "hosted" &&
+              item.activationAvailable === false)
+          }
+          onDelete={() => onDeleteSchedule(item.workflowId)}
+        />
+      </div>
+    ) : undefined;
 
   const flow = flows.find(item => item.id === activeFlowId) ?? flows[0];
   const latestRun = flow
@@ -1781,25 +1828,27 @@ function DataflowWorkspace({
             disabled={!flow}
             onClick={() => flow && onOpenWorkflow(flow.id)}
           >
-            打开设计器
+            打开流程
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="min-h-11 w-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 sm:h-8 sm:min-h-0 sm:w-auto"
-            disabled={!flow || flow.status !== "published" || runPending}
-            aria-describedby="dataflow-execution-warning"
-            title={
-              flow?.status === "published"
-                ? "执行真实数据流；可能读取或写入外部数据"
-                : "仅已发布数据流可运行"
-            }
-            onClick={() => flow && onRunFlow(flow.id)}
-          >
-            {runPending && <Loader2 className="animate-spin" size={14} />}
-            <Play size={14} />
-            运行数据流
-          </Button>
+          {canRun && (
+            <Button
+              type="button"
+              size="sm"
+              className="min-h-11 w-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 sm:h-8 sm:min-h-0 sm:w-auto"
+              disabled={!flow || flow.status !== "published" || runPending}
+              aria-describedby="dataflow-execution-warning"
+              title={
+                flow?.status === "published"
+                  ? "执行真实数据流；可能读取或写入外部数据"
+                  : "仅已发布数据流可运行"
+              }
+              onClick={() => flow && onRunFlow(flow.id)}
+            >
+              {runPending && <Loader2 className="animate-spin" size={14} />}
+              <Play size={14} />
+              运行数据流
+            </Button>
+          )}
         </div>
       </header>
 
@@ -1993,133 +2042,137 @@ function DataflowWorkspace({
 
       {section === "schedules" && (
         <div className="grid gap-3">
-          <section className={resourcePanelClassName}>
-            <h3 className={resourceTitleClassName}>配置调度计划</h3>
-            <p className="aiflow-type-body mt-1 text-muted-foreground">
-              使用六段 UTC 表达式：秒 分 时 日 月
-              星期。保存为暂停草稿；启用后由后台按计划运行。暂停不会中断已发起的运行。
-            </p>
-            {publishedFlows.length > 0 ? (
-              <form
-                className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)_auto] sm:items-end"
-                onSubmit={event => {
-                  event.preventDefault();
-                  onSaveSchedule();
-                }}
-              >
-                <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
-                  已发布数据流
-                  <select
-                    className="h-11 rounded-md border border-border bg-card px-2 text-sm font-normal sm:h-9"
-                    value={scheduleForm.workflowId}
-                    onChange={event => {
-                      const stored = schedulesByWorkflow.get(
-                        event.target.value
-                      );
-                      setScheduleForm({
-                        workflowId: event.target.value,
-                        cronExpression: stored?.cronExpression ?? "0 0 9 * * *",
-                        expectedRevision: stored?.revision,
-                      });
-                    }}
-                    required
-                  >
-                    <option value="">选择数据流</option>
-                    {publishedFlows.map(item => (
-                      <option key={item.id} value={item.id}>
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
-                  Cron 表达式（UTC）
-                  <Input
-                    aria-label="Cron 表达式（UTC）"
-                    className="h-11 font-mono text-xs font-normal sm:h-9"
-                    value={scheduleForm.cronExpression}
-                    onChange={event =>
-                      setScheduleForm({
-                        ...scheduleForm,
-                        cronExpression: event.target.value,
-                      })
-                    }
-                    placeholder="0 0 9 * * *"
-                    required
-                  />
-                </label>
-                <Button
-                  type="submit"
-                  className="min-h-11 bg-blue-600 text-white hover:bg-blue-700 sm:min-h-0"
-                  disabled={
-                    schedulePending ||
-                    schedulesByWorkflow.get(scheduleForm.workflowId)?.status ===
-                      "active"
-                  }
+          {canEdit && (
+            <section className={resourcePanelClassName}>
+              <h3 className={resourceTitleClassName}>配置调度计划</h3>
+              <p className="aiflow-type-body mt-1 text-muted-foreground">
+                使用六段 UTC 表达式：秒 分 时 日 月
+                星期。保存为暂停草稿；启用后由后台按计划运行。暂停不会中断已发起的运行。
+              </p>
+              {publishedFlows.length > 0 ? (
+                <form
+                  className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,1fr)_auto] sm:items-end"
+                  onSubmit={event => {
+                    event.preventDefault();
+                    onSaveSchedule();
+                  }}
                 >
-                  {saveSchedulePending && (
-                    <Loader2 className="animate-spin" size={14} />
-                  )}
-                  保存调度草稿
-                </Button>
-                {scheduleForm.workflowId && (
+                  <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+                    已发布数据流
+                    <select
+                      className="h-11 rounded-md border border-border bg-card px-2 text-sm font-normal sm:h-9"
+                      value={scheduleForm.workflowId}
+                      onChange={event => {
+                        const stored = schedulesByWorkflow.get(
+                          event.target.value
+                        );
+                        setScheduleForm({
+                          workflowId: event.target.value,
+                          cronExpression:
+                            stored?.cronExpression ?? "0 0 9 * * *",
+                          expectedRevision: stored?.revision,
+                        });
+                      }}
+                      required
+                    >
+                      <option value="">选择数据流</option>
+                      {publishedFlows.map(item => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+                    Cron 表达式（UTC）
+                    <Input
+                      aria-label="Cron 表达式（UTC）"
+                      className="h-11 font-mono text-xs font-normal sm:h-9"
+                      value={scheduleForm.cronExpression}
+                      onChange={event =>
+                        setScheduleForm({
+                          ...scheduleForm,
+                          cronExpression: event.target.value,
+                        })
+                      }
+                      placeholder="0 0 9 * * *"
+                      required
+                    />
+                  </label>
                   <Button
-                    type="button"
-                    variant="outline"
-                    disabled={schedulePending || refreshPending}
-                    onClick={() => {
-                      const stored = schedulesByWorkflow.get(
-                        scheduleForm.workflowId
-                      );
-                      setScheduleForm({
-                        workflowId: scheduleForm.workflowId,
-                        cronExpression: stored?.cronExpression ?? "0 0 9 * * *",
-                        expectedRevision: stored?.revision,
-                      });
-                    }}
-                  >
-                    读取最新计划并替换填写
-                  </Button>
-                )}
-                <label className="aiflow-type-control grid gap-1 text-muted-foreground">
-                  快速填写计划（UTC）
-                  <select
-                    className="h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9"
-                    value=""
-                    disabled={schedulePending}
-                    onChange={event =>
-                      setScheduleForm({
-                        ...scheduleForm,
-                        cronExpression: event.target.value,
-                      })
+                    type="submit"
+                    className="min-h-11 bg-blue-600 text-white hover:bg-blue-700 sm:min-h-0"
+                    disabled={
+                      schedulePending ||
+                      schedulesByWorkflow.get(scheduleForm.workflowId)
+                        ?.status === "active"
                     }
                   >
-                    <option value="" disabled>
-                      选择后填入表达式
-                    </option>
-                    <option value="0 */5 * * * *">每 5 分钟</option>
-                    <option value="0 0 * * * *">每小时整点</option>
-                    <option value="0 0 9 * * *">每天 09:00 UTC</option>
-                  </select>
-                </label>
-                {schedulesByWorkflow.get(scheduleForm.workflowId)?.status ===
-                  "active" && (
-                  <p className="text-sm text-muted-foreground">
-                    修改前请先暂停当前计划。
-                  </p>
-                )}
-              </form>
-            ) : (
-              <div
-                role="status"
-                dataflow-schedule-empty=""
-                className="aiflow-type-body mt-3 rounded-md border border-dashed border-input bg-muted px-3 py-3 text-muted-foreground"
-              >
-                当前没有已发布数据流。发布后再创建调度，不显示可保存的 Cron
-                输入。
-              </div>
-            )}
-          </section>
+                    {saveSchedulePending && (
+                      <Loader2 className="animate-spin" size={14} />
+                    )}
+                    保存调度草稿
+                  </Button>
+                  {scheduleForm.workflowId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={schedulePending || refreshPending}
+                      onClick={() => {
+                        const stored = schedulesByWorkflow.get(
+                          scheduleForm.workflowId
+                        );
+                        setScheduleForm({
+                          workflowId: scheduleForm.workflowId,
+                          cronExpression:
+                            stored?.cronExpression ?? "0 0 9 * * *",
+                          expectedRevision: stored?.revision,
+                        });
+                      }}
+                    >
+                      读取最新计划并替换填写
+                    </Button>
+                  )}
+                  <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+                    快速填写计划（UTC）
+                    <select
+                      className="h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9"
+                      value=""
+                      disabled={schedulePending}
+                      onChange={event =>
+                        setScheduleForm({
+                          ...scheduleForm,
+                          cronExpression: event.target.value,
+                        })
+                      }
+                    >
+                      <option value="" disabled>
+                        选择后填入表达式
+                      </option>
+                      <option value="0 */5 * * * *">每 5 分钟</option>
+                      <option value="0 0 * * * *">每小时整点</option>
+                      <option value="0 0 9 * * *">每天 09:00 UTC</option>
+                    </select>
+                  </label>
+                  {schedulesByWorkflow.get(scheduleForm.workflowId)?.status ===
+                    "active" && (
+                    <p className="text-sm text-muted-foreground">
+                      修改前请先暂停当前计划。
+                    </p>
+                  )}
+                </form>
+              ) : (
+                <div
+                  role="status"
+                  dataflow-schedule-empty=""
+                  className="aiflow-type-body mt-3 rounded-md border border-dashed border-input bg-muted px-3 py-3 text-muted-foreground"
+                >
+                  当前没有已发布数据流。发布后再创建调度，不显示可保存的 Cron
+                  输入。
+                </div>
+              )}
+            </section>
+          )}
 
           {schedules.length > 0 ? (
             <ResourceTable
@@ -2200,12 +2253,17 @@ function ResourceTable({
   children,
   empty,
   mobileCards,
+  allowReadActions = false,
 }: {
   columns: string[];
   children: React.ReactNode;
   empty: string;
   mobileCards?: React.ReactNode;
+  allowReadActions?: boolean;
 }) {
+  const showActions =
+    useContext(ResourceEditContext).canEdit || allowReadActions;
+  const visibleColumns = showActions ? columns : columns.slice(0, -1);
   const hasRows = Children.toArray(children).some(isValidElement);
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
@@ -2237,14 +2295,20 @@ function ResourceTable({
             <table className="w-full min-w-[620px] text-left text-sm [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-muted [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:left-0 [&_tbody_td:first-child]:z-10 [&_tbody_td:first-child]:bg-card">
               <thead className="bg-muted text-sm font-medium text-muted-foreground">
                 <tr>
-                  {columns.map(column => (
+                  {visibleColumns.map(column => (
                     <th key={column} className="whitespace-nowrap px-4 py-3">
                       {column}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody>{children}</tbody>
+              <tbody
+                className={
+                  showActions ? undefined : "[&_tr>td:last-child]:hidden"
+                }
+              >
+                {children}
+              </tbody>
             </table>
           </div>
         </>
@@ -2263,13 +2327,16 @@ function ResourceTableCard({
   status,
   fields,
   actions,
+  allowReadActions = false,
 }: {
   primary: string;
   secondary?: string;
   status?: React.ReactNode;
   fields: { label: string; value: React.ReactNode }[];
   actions?: React.ReactNode;
+  allowReadActions?: boolean;
 }) {
+  const { canEdit } = useContext(ResourceEditContext);
   return (
     <article role="listitem" className="space-y-3 p-4">
       <div className="flex min-w-0 items-start justify-between gap-3">
@@ -2297,7 +2364,7 @@ function ResourceTableCard({
           </div>
         ))}
       </dl>
-      {actions && (
+      {actions && (canEdit || allowReadActions) && (
         <div className="flex flex-wrap gap-2 border-t border-border pt-3">
           {actions}
         </div>
@@ -2370,12 +2437,13 @@ function DeleteButton({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const { canEdit } = useContext(ResourceEditContext);
   const deleteAction = useRef(onDelete);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const label = actionLabel || visibleLabel || "删除资源";
   const confirmDelete = async () => {
-    if (pending || disabled) return;
+    if (pending || disabled || !canEdit) return;
     setPending(true);
     setError("");
     try {
@@ -2387,6 +2455,7 @@ function DeleteButton({
       setPending(false);
     }
   };
+  if (!canEdit && !open) return null;
   return (
     <>
       <Button
@@ -2398,7 +2467,7 @@ function DeleteButton({
             ? "min-h-11 flex-1 text-aiflow-danger"
             : "min-h-11 min-w-11 text-aiflow-danger"
         }
-        disabled={disabled || pending}
+        disabled={disabled || pending || !canEdit}
         onClick={() => {
           deleteAction.current = onDelete;
           setError("");
@@ -2423,6 +2492,7 @@ function DeleteButton({
               ”的登记记录。此操作无法撤销；引用它的流程或计划可能需要重新配置。取消会保留当前记录。
             </DialogDescription>
           </DialogHeader>
+          <ResourcePermissionNotice />
           {error && (
             <p
               role="alert"
@@ -2445,7 +2515,7 @@ function DeleteButton({
               type="button"
               variant="destructive"
               className="min-h-11"
-              disabled={pending || disabled}
+              disabled={pending || disabled || !canEdit}
               onClick={() => void confirmDelete()}
             >
               {pending && <Loader2 size={14} className="animate-spin" />}
