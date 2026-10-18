@@ -1454,7 +1454,7 @@ function FlowConsole({
             data-aiflow-user-actions=""
             className="flex h-full items-center gap-1 px-2 text-xs min-[400px]:gap-2.5 min-[400px]:px-3.5"
           >
-            <span className="hidden text-muted-foreground lg:inline">
+            <span data-workspace-account-name="" title={user.name || user.username || "内部用户"} className="hidden text-muted-foreground lg:inline">
               {user.name || user.username || "内部用户"}
             </span>
             <span data-workspace-account-role="" className="shrink-0 whitespace-nowrap rounded-full border border-border/80 bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground min-[400px]:px-2.5">

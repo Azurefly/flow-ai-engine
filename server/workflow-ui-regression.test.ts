@@ -2879,7 +2879,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('data-aiflow-primary-nav=""');
     expect(homeSource).toContain('data-aiflow-user-actions=""');
     expect(styleSource).toContain(
-      "@media (min-width: 768px) and (max-width: 1023px)"
+      "@media (min-width: 768px) and (max-width: 1279px)"
     );
     expect(styleSource).toContain("[data-aiflow-brand] > div:first-child");
     expect(styleSource).toContain("[data-aiflow-user-actions] button");

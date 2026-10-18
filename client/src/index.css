@@ -1536,7 +1536,7 @@ h2 {
 }
 
 /* 平板：主导航使用单行滚动轨道，收起品牌长文案后为画布与账户操作留出空间。 */
-@media (min-width: 768px) and (max-width: 1023px) {
+@media (min-width: 768px) and (max-width: 1279px) {
   [data-aiflow-console] > header > div {
     min-width: 0;
     max-width: 100%;
@@ -1622,6 +1622,7 @@ h2 {
 [data-workspace-nav-caption] { display: none; }
 [data-workspace-search-trigger] { border-radius: 999px; }
 [data-workspace-context] { max-width: min(34vw, 480px); }
+@media (max-width: 1279px) { [data-workspace-account-name] { display: none; } }
 @media (max-width: 399px) { [data-workspace-account-role] { display: none; } }
 [data-aiflow-primary-nav] button { transition-property: background-color, color, border-color; }
 @media (min-width: 1280px) {
@@ -1629,6 +1630,7 @@ h2 {
   [data-aiflow-console][data-editor-active="true"] { --workspace-rail: 80px; }
   [data-aiflow-console] > header > div:first-child { height: 64px; }
   [data-aiflow-brand] { width: var(--workspace-rail); flex-shrink: 0; padding-inline: 20px; }
+  [data-workspace-account-name] { display: inline-block; max-width: 144px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   [data-editor-active="true"] [data-aiflow-brand-name] { display: none; }
   [data-workspace-body] { margin-left: var(--workspace-rail); min-height: calc(100dvh - 64px); }
   [data-aiflow-primary-nav] {
