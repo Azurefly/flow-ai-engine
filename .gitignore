@@ -226,3 +226,13 @@ junit-*.xml
 *.trace.zip
 *.orig
 *.rej
+
+# Test tool state and coverage reports at any directory level (keep locally)
+.auth/
+.last-run.json
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+screenshots/

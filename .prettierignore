@@ -24,6 +24,13 @@ test-artifacts/
 test-results*.json
 screenshots/
 backups/
+.auth/
+.last-run.json
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
 01-test/018-测试报告/
 01-test/remote-verify-screenshots/
 01-test/016-数据库测试/aiflow_modules_SQL.md

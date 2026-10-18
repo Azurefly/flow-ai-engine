@@ -40,6 +40,16 @@ junit-*.xml
 *.trace.zip
 *.orig
 *.rej
+
+# 测试登录态、覆盖率和测试环境仅留在本地
+**/.auth
+**/.last-run.json
+**/.coverage
+**/.coverage.*
+**/htmlcov
+**/.tox
+**/.nox
+**/screenshots
 .gitkeep
 drizzle/migrations/.gitkeep
 scripts/dev/
