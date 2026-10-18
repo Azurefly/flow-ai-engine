@@ -181,9 +181,17 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
     const bounds = await nav.boundingBox();
     const panel = await page.locator("#aiflow-console-panel").boundingBox();
     assert(
-      bounds.x < 24 && bounds.width >= 180 && panel.x >= bounds.x + bounds.width
+      bounds.x < 24 &&
+        bounds.width >= 180 &&
+        bounds.height >= 700 &&
+        panel.x >= bounds.x + bounds.width
     );
     assert.equal(searches.length, 0);
+    await page.screenshot({
+      path: path.join(directory, "workspace-business-center.png"),
+      fullPage: false,
+      animations: "disabled",
+    });
     await page.keyboard.press("Control+k");
     const command = page.getByRole("dialog", { name: "快捷查找", exact: true });
     const input = command.getByRole("combobox", {
@@ -248,6 +256,11 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
           0
       );
       assert.deepEqual((await readFlow(flow)).definition, before.definition);
+      await page.screenshot({
+        path: path.join(directory, `workspace-${flow.flowType}-canvas.png`),
+        fullPage: false,
+        animations: "disabled",
+      });
       const nodeName = inspector.getByRole("textbox", {
         name: "节点名称",
         exact: true,
@@ -256,7 +269,7 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
       const draft = original + "_待保存_" + tag;
       await nodeName.fill(draft);
       await expect(
-        page.getByRole("button", { name: "保存画布", exact: true })
+        page.getByRole("button", { name: /^保存画布/ })
       ).toBeEnabled();
       const element = await nodeName.elementHandle();
       await page.getByRole("button", { name: "切换主题", exact: true }).click();
@@ -276,7 +289,7 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
       await expect(nodeName).toHaveValue(draft);
       await nodeName.fill(original);
       await expect(
-        page.getByRole("button", { name: "保存画布", exact: true })
+        page.getByRole("button", { name: /^保存画布/ })
       ).toBeDisabled();
       await highlight.click();
       await expect(page.locator("[data-workflow-neighborhood]")).toHaveCount(0);
@@ -333,6 +346,7 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
         .getByRole("button", { name: "快捷查找业务、流程或页面", exact: true })
         .click();
       await expect(command).toBeVisible();
+      await expect(command).toHaveCSS("opacity", "1");
       const box = await command.boundingBox();
       assert(
         box.x >= 0 &&
@@ -340,6 +354,12 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
           box.y >= 0 &&
           box.y + box.height <= 845
       );
+      if (width < 400)
+        await page.screenshot({
+          path: path.join(directory, `workspace-command-${width}.png`),
+          fullPage: false,
+          animations: "disabled",
+        });
       await page.keyboard.press("Escape");
       await expect(command).toBeHidden();
       await expect(
@@ -376,6 +396,7 @@ const readFlow = flow => owner("workflow.get", { id: flow.id });
     await page.screenshot({
       path: path.join(directory, "workspace-role-overview.png"),
       fullPage: false,
+      animations: "disabled",
     });
 
     await owner(

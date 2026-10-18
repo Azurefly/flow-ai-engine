@@ -3694,11 +3694,13 @@ it("整体工作台重构保留草稿与授权边界，动效不重建表单", (
   expect(homeSource).toContain('import("@/components/WorkspaceCommandDialog")');
   expect(homeSource).toContain("onNavigate={navigateRoute}");
   expect(homeSource).toContain('data-workspace-body=""');
+  expect(homeSource).not.toContain("backdrop-blur-sm text-foreground shadow-2xs");
   expect(homeSource).toContain("AccessRelationshipOverview");
   expect(command).toContain("trpc.workflow.search.useQuery");
   expect(command).toContain("limit: 5");
   expect(command).toContain("250");
   expect(command).toContain("refetchOnWindowFocus: false");
+  expect(command).toContain("previousFocus.current?.isConnected");
   expect(command).not.toContain("trpc.workflow.list");
   expect(reveal).toContain("animation.cancel()");
   expect(reveal).toContain("prefersReducedMotion");

@@ -1356,7 +1356,7 @@ function FlowConsole({
           <Button variant="outline" disabled={isDraftDirty} onClick={() => window.location.reload()}>刷新工作台</Button>
         </aside>
       )}
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-card/95 backdrop-blur-sm text-foreground shadow-2xs">
+      <header className="sticky top-0 z-30 border-b border-border/80 bg-card text-foreground shadow-2xs">
         <div className="flex h-12 items-center">
           <button
             type="button"

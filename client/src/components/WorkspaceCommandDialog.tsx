@@ -41,6 +41,11 @@ export default function WorkspaceCommandDialog({
   const [search, setSearch] = useState("");
   const [settled, setSettled] = useState("");
   const navigating = useRef(false);
+  const previousFocus = useRef(
+    document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+  );
   useEffect(() => {
     const timer = setTimeout(
       () => setSettled(search.trim().slice(0, 100)),
@@ -80,7 +85,15 @@ export default function WorkspaceCommandDialog({
         data-workspace-command=""
         className="flex max-h-[min(680px,calc(100dvh-2rem))] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl"
         onCloseAutoFocus={event => {
-          if (navigating.current) event.preventDefault();
+          event.preventDefault();
+          if (!navigating.current) {
+            const target = previousFocus.current?.isConnected
+              ? previousFocus.current
+              : document.querySelector<HTMLElement>(
+                  "[data-workspace-search-trigger]"
+                );
+            target?.focus({ preventScroll: true });
+          }
         }}
       >
         <div className="px-5 pb-3 pt-5 pr-16">

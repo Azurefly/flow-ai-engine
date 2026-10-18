@@ -1631,6 +1631,9 @@ h2 {
   [data-aiflow-console] > header > div:first-child { height: 64px; }
   [data-aiflow-brand] { width: var(--workspace-rail); flex-shrink: 0; padding-inline: 20px; }
   [data-workspace-account-name] { display: inline-block; max-width: 144px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-aiflow-brand-name] { min-width: 0; }
+  [data-aiflow-brand-name] > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  [data-aiflow-brand-name] > span:last-child { display: none; }
   [data-editor-active="true"] [data-aiflow-brand-name] { display: none; }
   [data-workspace-body] { margin-left: var(--workspace-rail); min-height: calc(100dvh - 64px); }
   [data-aiflow-primary-nav] {
