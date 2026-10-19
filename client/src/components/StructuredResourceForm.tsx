@@ -4,10 +4,14 @@ import { Input } from "@/components/ui/input";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
 import { ResourceCatalogContext } from "@/contexts/ResourceCatalogContext";
 import { ResourceCatalogNotice } from "./ResourceCatalogNotice";
-import { useResourceDraft } from "./ResourceDraftGuard";
+import {
+  useResourceDraftState,
+  useResourceDraftPending,
+  useResourceDraftSummary,
+} from "./ResourceDraftSession";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import { Plus, Trash2 } from "lucide-react";
-import { useContext, useState } from "react";
+import { useContext } from "react";
 import { toast } from "sonner";
 
 type ResourceMutation = {
@@ -31,23 +35,47 @@ export function StructuredResourceForm({
   createAsset: ResourceMutation;
   active?: boolean;
 }) {
-  const [source, setSource] = useState({
-    name: "",
-    sourceType: "inline",
-    description: "",
-    endpoint: "",
-    credentialReference: "",
-  });
-  const [asset, setAsset] = useState({
+  const [source, setSource] = useResourceDraftState(
+    projectId,
+    "sources",
+    "form",
+    {
+      name: "",
+      sourceType: "inline",
+      description: "",
+      endpoint: "",
+      credentialReference: "",
+    }
+  );
+  const [asset, setAsset] = useResourceDraftState(projectId, "assets", "form", {
     name: "",
     sourceId: "",
     assetType: "dataset",
   });
-  const [schemaRows, setSchemaRows] = useState([{ name: "", type: "string" }]);
-  const [sampleRows, setSampleRows] = useState<
+  const [schemaRows, setSchemaRows] = useResourceDraftState(
+    projectId,
+    "assets",
+    "schema",
+    [{ name: "", type: "string" }]
+  );
+  const [sampleRows, setSampleRows] = useResourceDraftState<
     Array<{ key: string; value: string }>
-  >([]);
-  const [open, setOpen] = useState(false);
+  >(projectId, "assets", "sample", []);
+  const [open, setOpen] = useResourceDraftState(
+    projectId,
+    tab,
+    "open",
+    false,
+    false
+  );
+  const beginPending = useResourceDraftPending(projectId, tab);
+  const [submitError, setSubmitError] = useResourceDraftState(
+    projectId,
+    tab,
+    "submitError",
+    "",
+    false
+  );
   const { canEdit } = useContext(ResourceEditContext);
   const catalog = useContext(ResourceCatalogContext);
   const dirty =
@@ -69,8 +97,8 @@ export function StructuredResourceForm({
             sampleRows.length
         );
   const pending =
-    tab === "sources" ? createSource.isPending : createAsset.isPending;
-  useResourceDraft(tab, dirty, pending);
+    Boolean(useResourceDraftSummary(projectId).pending) ||
+    (tab === "sources" ? createSource.isPending : createAsset.isPending);
   const fieldClass =
     "h-11 w-full min-w-0 rounded border border-border bg-card px-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:h-10";
   const panel =
@@ -93,7 +121,9 @@ export function StructuredResourceForm({
       )
     );
   const submit = async () => {
-    if (!canEdit || !catalog.ready) return;
+    if (!canEdit || !catalog.ready || pending) return;
+    const finish = beginPending();
+    setSubmitError("");
     try {
       if (tab === "sources") {
         await createSource.mutateAsync({
@@ -135,8 +165,12 @@ export function StructuredResourceForm({
         setSampleRows([]);
       }
       setOpen(false);
-    } catch {
-      /* mutation reports the error and preserves the form */
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "保存失败，填写内容已保留。"
+      );
+    } finally {
+      finish();
     }
   };
   if (!canEdit && !open) return null;
@@ -320,21 +354,17 @@ export function StructuredResourceForm({
           (tab === "assets" &&
             !schemaRows.some(row => row.name.trim() && row.type.trim()))
         }
-        pending={
-          tab === "sources" ? createSource.isPending : createAsset.isPending
-        }
+        pending={pending}
         onSubmit={submit}
         errorMessage={
+          submitError ||
           (tab === "sources" ? createSource.error : createAsset.error)?.message
         }
         className="max-w-2xl"
       >
         <ResourcePermissionNotice />
         <ResourceCatalogNotice />
-        <fieldset
-          className="grid min-w-0 gap-3"
-          disabled={!canEdit || createSource.isPending || createAsset.isPending}
-        >
+        <fieldset className="grid min-w-0 gap-3" disabled={!canEdit || pending}>
           {fields}
         </fieldset>
       </CreationDialog>

@@ -21,7 +21,12 @@ import { ResourceDetails } from "@/components/ResourceDetails";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
 import { ResourceCatalogContext } from "@/contexts/ResourceCatalogContext";
 import { ResourceCatalogNotice } from "./ResourceCatalogNotice";
-import { ResourceDraftGuard, useResourceDraft } from "./ResourceDraftGuard";
+import { ResourceDraftGuard } from "./ResourceDraftGuard";
+import {
+  useResourceDraftState,
+  useResourceDraftPending,
+  useResourceDraftSummary,
+} from "./ResourceDraftSession";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import {
   Dialog,
@@ -91,7 +96,13 @@ export default function DataResourceCenter({
   const utils = trpc.useUtils();
   const project = trpc.project.get.useQuery({ projectId });
   const projectName = project.data?.name ?? "当前业务";
-  const [tab, setTab] = useState<Tab>("sources");
+  const [tab, setTab] = useResourceDraftState<Tab>(
+    projectId,
+    "workspace",
+    "category",
+    "sources",
+    false
+  );
   const [dataflowSection, setDataflowSection] = useState<
     "overview" | "runs" | "schedules"
   >("overview");
@@ -132,19 +143,34 @@ export default function DataResourceCenter({
     runs.data?.some(
       run => run.status === "queued" || run.status === "running"
     ) ?? false;
-  const [udfForm, setUdfForm] = useState({
-    name: "",
-    udfType: "javascript" as "sql" | "javascript" | "python" | "jar",
-    description: "",
-    returnType: "unknown",
-    artifactRef: "builtin:trim",
-  });
-  const [tagName, setTagName] = useState("");
-  const [pluginForm, setPluginForm] = useState({
-    name: "",
-    pluginType: "transform" as "transform" | "connector" | "visualization",
-    version: "1.0.0",
-  });
+  const [udfForm, setUdfForm] = useResourceDraftState(
+    projectId,
+    "udfs",
+    "form",
+    {
+      name: "",
+      udfType: "javascript" as "sql" | "javascript" | "python" | "jar",
+      description: "",
+      returnType: "unknown",
+      artifactRef: "builtin:trim",
+    }
+  );
+  const [tagName, setTagName] = useResourceDraftState(
+    projectId,
+    "tags",
+    "name",
+    ""
+  );
+  const [pluginForm, setPluginForm] = useResourceDraftState(
+    projectId,
+    "plugins",
+    "form",
+    {
+      name: "",
+      pluginType: "transform" as "transform" | "connector" | "visualization",
+      version: "1.0.0",
+    }
+  );
   const [scheduleForm, setScheduleForm] = useState<DataflowScheduleForm>({
     workflowId: "",
     cronExpression: "0 0 9 * * *",
@@ -450,7 +476,7 @@ export default function DataResourceCenter({
       }}
     >
       <div data-resource-center="">
-        <ResourceDraftGuard>
+        <ResourceDraftGuard projectId={projectId}>
           <div className="mb-5 border-b border-border pb-4">
             <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
               PROJECT RESOURCE CENTER
@@ -780,6 +806,8 @@ export default function DataResourceCenter({
               }
               pending={createUdf.isPending}
               errorMessage={createUdf.error?.message}
+              projectId={projectId}
+              category="udfs"
               dirty={Boolean(
                 udfForm.name ||
                   udfForm.description ||
@@ -940,6 +968,8 @@ export default function DataResourceCenter({
               }
               pending={createTag.isPending}
               errorMessage={createTag.error?.message}
+              projectId={projectId}
+              category="tags"
               dirty={Boolean(tagName)}
             >
               <ResourceField label="标签名称">
@@ -1005,6 +1035,8 @@ export default function DataResourceCenter({
               }
               pending={createPlugin.isPending}
               errorMessage={createPlugin.error?.message}
+              projectId={projectId}
+              category="plugins"
               dirty={Boolean(
                 pluginForm.name ||
                   pluginForm.pluginType !== "transform" ||
@@ -1644,9 +1676,11 @@ function ResourceForm({
   description,
   children,
   onSubmit,
-  pending,
+  pending: mutationPending,
   errorMessage,
   dirty,
+  projectId,
+  category,
 }: {
   title: string;
   description: string;
@@ -1655,18 +1689,41 @@ function ResourceForm({
   pending: boolean;
   errorMessage?: string;
   dirty: boolean;
+  projectId: string;
+  category: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useResourceDraftState(
+    projectId,
+    category,
+    "open",
+    false,
+    false
+  );
+  const beginPending = useResourceDraftPending(projectId, category);
+  const [submitError, setSubmitError] = useResourceDraftState(
+    projectId,
+    category,
+    "submitError",
+    "",
+    false
+  );
+  const pending =
+    mutationPending || Boolean(useResourceDraftSummary(projectId).pending);
   const { canEdit } = useContext(ResourceEditContext);
   const catalog = useContext(ResourceCatalogContext);
-  useResourceDraft(title, dirty, pending);
   const submit = async () => {
-    if (!canEdit || !catalog.ready) return;
+    if (!canEdit || !catalog.ready || pending) return;
+    const finish = beginPending();
+    setSubmitError("");
     try {
       await onSubmit();
       setOpen(false);
-    } catch {
-      /* mutation keeps the dialog open and reports its own error */
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : "保存失败，填写内容已保留。"
+      );
+    } finally {
+      finish();
     }
   };
   if (!canEdit && !open) return null;
@@ -1701,7 +1758,7 @@ function ResourceForm({
         description={description}
         submitLabel="保存"
         pending={pending}
-        errorMessage={errorMessage}
+        errorMessage={submitError || errorMessage}
         submitDisabled={!canEdit || !catalog.ready}
         onSubmit={submit}
       >

@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectRecord } from "@/components/ProjectWorkspace";
 import { CreationDialog } from "@/components/CreationDialog";
+import { ResourceDraftSession, ResourceDraftRecoveryNotice } from "@/components/ResourceDraftSession";
 import {
   Dialog,
   DialogContent,
@@ -277,12 +278,14 @@ export default function Home() {
       />
     );
   return (
+    <ResourceDraftSession key={me.data.id}>
     <FlowConsole
       key={me.data.id}
       user={me.data}
       general={publicGeneral}
       onLogout={() => logout.mutate()}
     />
+    </ResourceDraftSession>
   );
 }
 
@@ -1680,12 +1683,15 @@ function FlowConsole({
           {routeRestoring && (
             <div
               data-aiflow-route-restoring
-              role="status"
+              role={routeProjectQuery.isError ? "alert" : "status"}
               aria-live="polite"
               className="grid min-h-[calc(100vh-56px)] place-items-center p-8 text-sm text-muted-foreground"
             >
-              <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
-                <Loader2 className="animate-spin text-aiflow-info" size={16} />
+              <div className="grid max-w-xl gap-4">
+              <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
+                {routeProjectQuery.isError && !routeProjectQuery.isFetching
+                  ? <X className="text-aiflow-danger" size={16} aria-hidden="true" />
+                  : <Loader2 className="animate-spin text-aiflow-info" size={16} />}
                 {routeProjectUnresolved && routeProjectQuery.isError ? (
                   <>
                     <span>目标业务读取失败，请重试。</span>
@@ -1693,6 +1699,7 @@ function FlowConsole({
                       type="button"
                       variant="outline"
                       size="sm"
+                      disabled={routeProjectQuery.isFetching}
                       onClick={() => void routeProjectQuery.refetch()}
                     >
                       重试读取业务
@@ -1701,6 +1708,8 @@ function FlowConsole({
                 ) : (
                   "正在恢复受权页面…"
                 )}
+              </div>
+              <ResourceDraftRecoveryNotice />
               </div>
             </div>
           )}

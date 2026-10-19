@@ -455,7 +455,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_483 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_486 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 447 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -1046,7 +1046,8 @@ describe("流程设计器界面回归约束", () => {
       'className="min-w-0 flex-1 truncate text-left"'
     );
     expect(homeSource).toContain("setSelectedWorkflowId(null)");
-    expect(projectWorkspaceSource).toContain('setView("process")');
+    expect(projectWorkspaceSource).toContain("useResourceDraftState<WorkspaceView>");
+    expect(projectWorkspaceSource).toContain('"workspace", "view", "process", false');
     expect(projectWorkspaceSource).toContain("setFilters({})");
     expect(projectWorkspaceSource).not.toContain("detailWorkflowId");
   });
@@ -1518,7 +1519,7 @@ describe("流程设计器界面回归约束", () => {
       'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1}'
     );
     expect(homeSource).toContain('role="alert" aria-live="assertive"');
-    expect(homeSource).toContain('role="status" aria-live="polite"');
+    expect(homeSource).toContain('role={routeProjectQuery.isError ? "alert" : "status"} aria-live="polite"');
     expect(styleSource).toContain(":focus-visible {");
     expect(styleSource).toContain("outline: 3px solid #2563eb;");
     expect(styleSource).toContain(".aiflow-skip-link:focus-visible");
@@ -2570,7 +2571,7 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("{item.cronExpression} UTC");
     expect(dataResourceSource).toContain("StructuredResourceForm");
     expect(dataResourceSource).toContain("active={tab === kind}");
-    expect(dataResourceSource).toContain("<ResourceDraftGuard>");
+    expect(dataResourceSource).toContain("<ResourceDraftGuard projectId={projectId}>");
     expect(dataResourceSource).toContain("return null;");
     const resourceFormSource = dataResourceSource.slice(
       dataResourceSource.indexOf("function ResourceForm")

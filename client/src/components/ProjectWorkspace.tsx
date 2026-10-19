@@ -4,6 +4,7 @@ import { canRevokeProjectGrant } from "@shared/project-member-grant";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { AuthorizationDetailRefresh } from "./AuthorizationDetailRefresh";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
+import { useResourceDraftState, ResourceDraftRecoveryNotice } from "./ResourceDraftSession";
 import { PermissionListFeedback } from "./PermissionListFeedback";
 import { consoleNavigationEvent, requestConsoleNavigation, type ConsoleNavigationEvent } from "@/lib/console-navigation-guard";
 import { Button } from "@/components/ui/button";
@@ -1207,7 +1208,7 @@ export function ProjectWorkspace({
   onOpenWarehouse: () => void;
 }) {
   const utils = trpc.useUtils();
-  const [view, setView] = useState<WorkspaceView>("process");
+  const [view, setView] = useResourceDraftState<WorkspaceView>(project.id, "workspace", "view", "process", false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [filters, setFilters] = useState<ProcessFilters>({});
   const [filterForm, setFilterForm] = useState<ProcessFilters>({});
@@ -1221,7 +1222,6 @@ export function ProjectWorkspace({
     dataSourceId: "",
   });
   useEffect(() => {
-    setView("process");
     setFilters({});
     setFilterForm({});
     setShowCreate(false);
@@ -1326,6 +1326,7 @@ export function ProjectWorkspace({
       <section role="alert" data-project-access-denied="" className="m-4 grid gap-3 rounded-lg border border-border bg-card p-5">
         <h1 className="aiflow-type-page-title font-semibold">业务访问权限已变化</h1>
         <p className="aiflow-type-body text-muted-foreground">当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。</p>
+        <ResourceDraftRecoveryNotice />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={access.isFetching || members.isFetching} onClick={() => void refreshAccess()}>刷新业务权限</Button>
           <Button type="button" variant="outline" onClick={onBack}>返回业务中心</Button>

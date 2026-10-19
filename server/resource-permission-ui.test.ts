@@ -72,7 +72,9 @@ it("资源门户表单保留打开状态和草稿，权限变化只停止提交"
   for (const source of [structured, center]) {
     expect(source).toContain("if (!canEdit && !open) return null;");
     expect(source).toContain("<ResourcePermissionNotice />");
-    expect(source).toContain("if (!canEdit || !catalog.ready) return;");
+    expect(source).toContain(
+      "if (!canEdit || !catalog.ready || pending) return;"
+    );
   }
   expect(center).toContain('error.data?.code === "FORBIDDEN"');
   expect(center).toContain("refreshPermissions()");
@@ -106,7 +108,7 @@ it("资源读取失败保留门户表单，并提供独立读取入口；读取�
     "client/src/components/StructuredResourceForm.tsx",
     "utf8"
   );
-  expect(center).toContain("<ResourceDraftGuard>");
+  expect(center).toContain("<ResourceDraftGuard projectId={projectId}>");
   expect(center).toContain("resources.isSuccess && !resources.isFetching");
   expect(center).toContain("<ResourceCatalogNotice />");
   expect(center.match(/onError: reportResourceFormError/g)).toHaveLength(5);
@@ -123,4 +125,38 @@ it("资源读取失败保留门户表单，并提供独立读取入口；读取�
     expect(structured).toContain(`aria-label="${label}"`);
   }
   expect(structured).toContain("<ResourceCatalogNotice />");
+});
+
+it("资源填写会话按登录账号重建，整页恢复不恢复服务端权限与资源缓存", () => {
+  const home = readFileSync("client/src/pages/Home.tsx", "utf8");
+  const session = readFileSync(
+    "client/src/components/ResourceDraftSession.tsx",
+    "utf8"
+  );
+  const center = readFileSync(
+    "client/src/components/DataResourceCenter.tsx",
+    "utf8"
+  );
+  const structured = readFileSync(
+    "client/src/components/StructuredResourceForm.tsx",
+    "utf8"
+  );
+  const workspace = readFileSync(
+    "client/src/components/ProjectWorkspace.tsx",
+    "utf8"
+  );
+  expect(home).toContain("<ResourceDraftSession key={me.data.id}>");
+  expect(home).toContain("<ResourceDraftRecoveryNotice />");
+  expect(session).toContain("new ResourceDraftStore()");
+  expect(session).toContain("useSyncExternalStore");
+  expect(session).not.toMatch(/localStorage|sessionStorage/);
+  expect(session).toContain("store.stats().pending");
+  expect(workspace).toContain("useResourceDraftState<WorkspaceView>");
+  for (const source of [structured, center]) {
+    expect(source).toContain("useResourceDraftState");
+    expect(source).toContain("useResourceDraftPending");
+    expect(source).toContain("const finish = beginPending()");
+    expect(source).toContain("finish()");
+    expect(source).toContain("useResourceDraftSummary(projectId).pending");
+  }
 });
