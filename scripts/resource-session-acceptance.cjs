@@ -170,9 +170,17 @@ async function poll(description, read, accept, timeout = 20000) {
       await page
         .getByRole("button", { name: "登录流程引擎", exact: true })
         .click();
-      await expect(
-        page.getByRole("heading", { name: "业务中心", exact: true })
-      ).toBeVisible();
+      if (navigate) {
+        await expect(
+          page.getByRole("heading", { name: "业务中心", exact: true })
+        ).toBeVisible();
+      } else {
+        // Logging in without reloading restores the existing authorized route.
+        await expect(
+          page.getByRole("button", { name: "资源配置中心", exact: true })
+        ).toBeVisible();
+        assert(page.url().includes(fixture.projectId));
+      }
     };
     const enterResources = async () => {
       await page
@@ -570,7 +578,12 @@ async function poll(description, read, accept, timeout = 20000) {
       .click();
     await expect(page.getByLabel("密码", { exact: true })).toBeVisible();
     await signIn(memberLogin, false);
-    await enterResources();
+    await expect(
+      page.getByRole("tab", { name: "系统配置", exact: true })
+    ).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "资源配置中心", exact: true })
+      .click();
     const fresh = await openForm(specs[0]);
     await expect(fresh.getByLabel("数据源名称", { exact: true })).toHaveValue(
       ""
