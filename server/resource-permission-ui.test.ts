@@ -43,6 +43,7 @@ it("工作区定期确认权限，缓存读取失败时不可沿用编辑能力"
   expect(source).toContain("authorizationQueryPolicy(true)");
   expect(source).toContain("!access.isPending && !access.isError");
   expect(source).toContain("ResourceEditContext.Provider");
+  expect(source).toContain("if (requestConsoleNavigation(proceed)) proceed();");
   expect(source).toContain("...capabilities");
   expect(source).toContain('name="业务权限"');
   expect(source).toContain("access.isSuccess && !capabilities.ready");

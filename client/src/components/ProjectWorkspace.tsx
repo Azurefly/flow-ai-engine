@@ -1397,7 +1397,14 @@ export function ProjectWorkspace({
               type="button"
               aria-current={view === item.id ? "page" : undefined}
               title={sidebarCollapsed ? item.label : undefined}
-              onClick={() => { if (item.id !== view) requestConsoleNavigation(() => { setView(item.id); if (item.id === "members") void members.refetch(); }); }}
+              onClick={() => {
+                if (item.id === view) return;
+                const proceed = () => {
+                  setView(item.id);
+                  if (item.id === "members") void members.refetch();
+                };
+                if (requestConsoleNavigation(proceed)) proceed();
+              }}
               className={`aiflow-type-control flex min-h-11 min-w-0 items-center rounded-md px-2.5 text-left transition-colors ${sidebarCollapsed ? "justify-center" : "gap-2"} ${view === item.id ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted"}`}
             >
               <item.icon size={15} />
