@@ -1707,8 +1707,8 @@ function ResourceForm({
     "",
     false
   );
-  const pending =
-    mutationPending || Boolean(useResourceDraftSummary(projectId).pending);
+  const sessionPending = useResourceDraftSummary(projectId).pending;
+  const pending = mutationPending || Boolean(sessionPending);
   const { canEdit } = useContext(ResourceEditContext);
   const catalog = useContext(ResourceCatalogContext);
   const submit = async () => {

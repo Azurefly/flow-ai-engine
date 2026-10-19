@@ -159,4 +159,13 @@ it("资源填写会话按登录账号重建，整页恢复不恢复服务端权�
     expect(source).toContain("finish()");
     expect(source).toContain("useResourceDraftSummary(projectId).pending");
   }
+  expect(center).toContain(
+    "const sessionPending = useResourceDraftSummary(projectId).pending"
+  );
+  expect(center).toContain(
+    "const pending = mutationPending || Boolean(sessionPending)"
+  );
+  expect(center).not.toContain(
+    "mutationPending || Boolean(useResourceDraftSummary"
+  );
 });

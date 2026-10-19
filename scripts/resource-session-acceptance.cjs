@@ -588,6 +588,17 @@ async function poll(description, read, accept, timeout = 20000) {
     });
   } catch (error) {
     failed = true;
+    if (page) {
+      const boundary = await page
+        .locator('main[role="alert"] details p')
+        .allTextContents()
+        .catch(() => []);
+      if (boundary.length)
+        report({
+          stage: "render-boundary",
+          messages: boundary.map(text => text.slice(0, 1200)),
+        });
+    }
     console.error(
       [login.password, memberLogin.password].reduce(
         (text, secret) => text.replaceAll(secret, "[credential]"),
