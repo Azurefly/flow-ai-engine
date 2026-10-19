@@ -167,7 +167,19 @@ async function poll(description, read, accept, timeout = 20000) {
       .getByRole("button", { name: "登录流程引擎", exact: true })
       .click();
     await page.locator('input[type="password"]').waitFor({ state: "hidden" });
-    await page.goto(`${base}#/flows/project/${fixture.projectId}`);
+    // Wait for login's initial route restoration before entering through the UI.
+    await expect(
+      page.getByRole("heading", { name: "业务中心", exact: true })
+    ).toBeVisible();
+    await page
+      .getByLabel("搜索业务名称、代号或工作域", { exact: true })
+      .fill(tag);
+    await page.getByRole("button", { name: "查询", exact: true }).click();
+    await page
+      .getByRole("row")
+      .filter({ hasText: tag })
+      .getByRole("button", { name: "进入", exact: true })
+      .click();
     await page
       .getByRole("button", { name: "资源配置中心", exact: true })
       .click();
@@ -314,6 +326,10 @@ async function poll(description, read, accept, timeout = 20000) {
         name: spec.title,
         exact: true,
       });
+      const visibleToasts = page.locator(
+        '[data-sonner-toast][data-visible="true"]:not([data-removed="true"])'
+      );
+      await expect(visibleToasts).toHaveCount(0);
       const name = "列表失败保留_" + spec.key + "_" + tag;
       const field = dialog.getByLabel(spec.label, { exact: true });
       await field.fill(name);
@@ -326,7 +342,7 @@ async function poll(description, read, accept, timeout = 20000) {
           .fill("尚未提交的完整说明");
       if (spec.key === "assets") {
         await dialog
-          .getByLabel("关联数据源", { exact: true })
+          .getByRole("combobox", { name: /^关联数据源/ })
           .selectOption(sourceId);
         await dialog
           .getByPlaceholder("字段名", { exact: true })
@@ -374,10 +390,12 @@ async function poll(description, read, accept, timeout = 20000) {
       await expect(save).toBeDisabled();
       if (spec.key === "assets") {
         await expect(
-          dialog.getByLabel("关联数据源", { exact: true })
+          dialog.getByRole("combobox", { name: /^关联数据源/ })
         ).toBeDisabled();
         await expect(
-          dialog.getByLabel("关联数据源", { exact: true }).locator("option")
+          dialog
+            .getByRole("combobox", { name: /^关联数据源/ })
+            .locator("option")
         ).toHaveCount(1);
         await expect(
           dialog.getByPlaceholder("字段名", { exact: true }).first()
@@ -395,9 +413,14 @@ async function poll(description, read, accept, timeout = 20000) {
         dialog.locator("[data-resource-catalog-notice]")
       ).toHaveCount(0);
       await expect(save).toBeEnabled();
+      report({
+        stage: "resource-read-recovered",
+        category: spec.key,
+        sameInputRetained: true,
+      });
       if (spec.key === "assets")
         await expect(
-          dialog.getByLabel("关联数据源", { exact: true })
+          dialog.getByRole("combobox", { name: /^关联数据源/ })
         ).toHaveValue(sourceId);
       await dialog.getByRole("button", { name: "取消", exact: true }).click();
       await expect(dialog).toHaveCount(0);
@@ -412,7 +435,7 @@ async function poll(description, read, accept, timeout = 20000) {
           exact: true,
         });
         for (const action of [
-          page.getByRole("button", { name: "权限配置中心", exact: true }),
+          page.getByRole("button", { name: /^权限配置中心/ }),
           page.getByRole("tab", { name: "流程仓库", exact: true }),
           page.getByRole("button", { name: "退出", exact: true }),
         ]) {
@@ -456,6 +479,7 @@ async function poll(description, read, accept, timeout = 20000) {
       failMutation = spec.method;
       await save.click();
       await expect(dialog.getByRole("alert")).toContainText("测试提交失败");
+      await expect(visibleToasts).toHaveCount(0);
       await expect(field).toHaveValue(name);
       await expect(save).toBeEnabled();
       assert.equal(actualWrites.get(spec.method) ?? 0, 0);
@@ -498,9 +522,7 @@ async function poll(description, read, accept, timeout = 20000) {
         .getByLabel("标签名称", { exact: true })
         .fill("放弃的标签_" + tag);
       await dialog.getByRole("button", { name: "取消", exact: true }).click();
-      await page
-        .getByRole("button", { name: "权限配置中心", exact: true })
-        .click();
+      await page.getByRole("button", { name: /^权限配置中心/ }).click();
       const leave = page.getByRole("alertdialog", {
         name: "离开前保留资源填写",
         exact: true,

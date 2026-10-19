@@ -8,6 +8,7 @@ import { useResourceDraft } from "./ResourceDraftGuard";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import { Plus, Trash2 } from "lucide-react";
 import { useContext, useState } from "react";
+import { toast } from "sonner";
 
 type ResourceMutation = {
   mutateAsync: (input: any) => Promise<unknown>;
@@ -154,6 +155,7 @@ export function StructuredResourceForm({
         </ResourceField>
         <ResourceField label="数据源类型">
           <select
+            aria-label="数据源类型"
             className={fieldClass}
             value={source.sourceType}
             onChange={event =>
@@ -207,6 +209,7 @@ export function StructuredResourceForm({
         </ResourceField>
         <ResourceField label="关联数据源">
           <select
+            aria-label="关联数据源"
             className={fieldClass}
             disabled={!catalog.ready}
             value={asset.sourceId}
@@ -224,6 +227,7 @@ export function StructuredResourceForm({
         </ResourceField>
         <ResourceField label="资源类型">
           <select
+            aria-label="资源类型"
             className={fieldClass}
             value={asset.assetType}
             onChange={event =>
@@ -291,7 +295,10 @@ export function StructuredResourceForm({
       <Button
         type="button"
         className="h-11 w-fit bg-blue-600 text-white shadow-2xs hover:bg-blue-700 sm:h-10"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          toast.dismiss();
+          setOpen(true);
+        }}
       >
         <Plus size={14} />
         {title}

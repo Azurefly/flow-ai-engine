@@ -109,6 +109,9 @@ it("资源读取失败保留门户表单，并提供独立读取入口；读取�
   expect(center).toContain("<ResourceDraftGuard>");
   expect(center).toContain("resources.isSuccess && !resources.isFetching");
   expect(center).toContain("<ResourceCatalogNotice />");
+  expect(center.match(/onError: reportResourceFormError/g)).toHaveLength(5);
+  expect(center).toContain("toast.dismiss()");
+  expect(structured).toContain("toast.dismiss()");
   for (const key of ["udfs", "tags", "plugins"]) {
     expect(center).toContain(`hidden={tab !== "${key}"}`);
   }
@@ -116,5 +119,8 @@ it("资源读取失败保留门户表单，并提供独立读取入口；读取�
   expect(center).toContain("active={tab === kind}");
   expect(structured).toContain("hidden={!active}");
   expect(structured).toContain("disabled={!catalog.ready}");
+  for (const label of ["数据源类型", "关联数据源", "资源类型"]) {
+    expect(structured).toContain(`aria-label="${label}"`);
+  }
   expect(structured).toContain("<ResourceCatalogNotice />");
 });

@@ -162,19 +162,25 @@ export default function DataResourceCenter({
     if (error.data?.code === "FORBIDDEN") refreshPermissions();
     toast.error(error.message);
   };
+  const reportResourceFormError = (error: {
+    data?: { code?: string } | null;
+  }) => {
+    if (error.data?.code === "FORBIDDEN") refreshPermissions();
+    // Creation dialogs render mutation errors beside the retained fields.
+  };
   const createSource = trpc.data.createSource.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success("数据源草稿已创建；请按类型校验登记或测试连接。");
     },
-    onError: reportResourceError,
+    onError: reportResourceFormError,
   });
   const createAsset = trpc.data.createAsset.useMutation({
     onSuccess: () => {
       invalidate();
       toast.success("资源探查结果已保存。");
     },
-    onError: reportResourceError,
+    onError: reportResourceFormError,
   });
   const createUdf = trpc.data.createUdf.useMutation({
     onSuccess: () => {
@@ -188,7 +194,7 @@ export default function DataResourceCenter({
       invalidate();
       toast.success("函数已登记；需审核并绑定可执行实现。");
     },
-    onError: reportResourceError,
+    onError: reportResourceFormError,
   });
   const createTag = trpc.data.createTag.useMutation({
     onSuccess: () => {
@@ -196,7 +202,7 @@ export default function DataResourceCenter({
       invalidate();
       toast.success("标签已创建。");
     },
-    onError: reportResourceError,
+    onError: reportResourceFormError,
   });
   const createPlugin = trpc.data.createPlugin.useMutation({
     onSuccess: () => {
@@ -204,7 +210,7 @@ export default function DataResourceCenter({
       invalidate();
       toast.success("项目插件元数据已登记。");
     },
-    onError: reportResourceError,
+    onError: reportResourceFormError,
   });
   const removeSource = trpc.data.deleteSource.useMutation({
     onSuccess: invalidate,
@@ -1675,7 +1681,10 @@ function ResourceForm({
       <Button
         type="button"
         className="h-11 w-fit bg-blue-600 text-white shadow-2xs hover:bg-blue-700 sm:h-9"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          toast.dismiss();
+          setOpen(true);
+        }}
       >
         <Plus size={14} />
         {title}
