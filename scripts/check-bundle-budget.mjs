@@ -29,9 +29,10 @@ const maxChunkBytes = 450 * 1024;
 // Role presets, conflict recovery and draft protection: 1457.82 KiB raw / 436.07 KiB gzip.
 // Workspace navigation/search, authorization relationships and context motion: 1471.83 / 441.61 KiB.
 // Persistent settings drafts, diff/recovery actions and navigation guards: 1477.17 / 443.97 KiB.
-const maxTotalBytes = 1_479 * 1024;
+// Lazy resource forms retain drafts through read failures/categories and guard exits: 1481.17 / 445.25 KiB.
+const maxTotalBytes = 1_483 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 445 * 1024;
+const maxTotalGzipBytes = 447 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

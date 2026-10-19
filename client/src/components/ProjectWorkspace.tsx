@@ -5,7 +5,7 @@ import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { AuthorizationDetailRefresh } from "./AuthorizationDetailRefresh";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
 import { PermissionListFeedback } from "./PermissionListFeedback";
-import { consoleNavigationEvent, type ConsoleNavigationEvent } from "@/lib/console-navigation-guard";
+import { consoleNavigationEvent, requestConsoleNavigation, type ConsoleNavigationEvent } from "@/lib/console-navigation-guard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -1397,7 +1397,7 @@ export function ProjectWorkspace({
               type="button"
               aria-current={view === item.id ? "page" : undefined}
               title={sidebarCollapsed ? item.label : undefined}
-              onClick={() => { setView(item.id); if (item.id === "members") void members.refetch(); }}
+              onClick={() => { if (item.id !== view) requestConsoleNavigation(() => { setView(item.id); if (item.id === "members") void members.refetch(); }); }}
               className={`aiflow-type-control flex min-h-11 min-w-0 items-center rounded-md px-2.5 text-left transition-colors ${sidebarCollapsed ? "justify-center" : "gap-2"} ${view === item.id ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted"}`}
             >
               <item.icon size={15} />

@@ -2,6 +2,9 @@ import { Button } from "@/components/ui/button";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Input } from "@/components/ui/input";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
+import { ResourceCatalogContext } from "@/contexts/ResourceCatalogContext";
+import { ResourceCatalogNotice } from "./ResourceCatalogNotice";
+import { useResourceDraft } from "./ResourceDraftGuard";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import { Plus, Trash2 } from "lucide-react";
 import { useContext, useState } from "react";
@@ -9,6 +12,7 @@ import { useContext, useState } from "react";
 type ResourceMutation = {
   mutateAsync: (input: any) => Promise<unknown>;
   isPending: boolean;
+  error?: { message: string } | null;
 };
 
 export function StructuredResourceForm({
@@ -17,12 +21,14 @@ export function StructuredResourceForm({
   sources,
   createSource,
   createAsset,
+  active = true,
 }: {
   tab: "sources" | "assets";
   projectId: string;
   sources: any[];
   createSource: ResourceMutation;
   createAsset: ResourceMutation;
+  active?: boolean;
 }) {
   const [source, setSource] = useState({
     name: "",
@@ -42,6 +48,28 @@ export function StructuredResourceForm({
   >([]);
   const [open, setOpen] = useState(false);
   const { canEdit } = useContext(ResourceEditContext);
+  const catalog = useContext(ResourceCatalogContext);
+  const dirty =
+    tab === "sources"
+      ? Boolean(
+          source.name ||
+            source.description ||
+            source.endpoint ||
+            source.credentialReference ||
+            source.sourceType !== "inline"
+        )
+      : Boolean(
+          asset.name ||
+            asset.sourceId ||
+            asset.assetType !== "dataset" ||
+            schemaRows.length !== 1 ||
+            schemaRows[0]?.name ||
+            schemaRows[0]?.type !== "string" ||
+            sampleRows.length
+        );
+  const pending =
+    tab === "sources" ? createSource.isPending : createAsset.isPending;
+  useResourceDraft(tab, dirty, pending);
   const fieldClass =
     "h-11 w-full min-w-0 rounded border border-border bg-card px-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:h-10";
   const panel =
@@ -64,7 +92,7 @@ export function StructuredResourceForm({
       )
     );
   const submit = async () => {
-    if (!canEdit) return;
+    if (!canEdit || !catalog.ready) return;
     try {
       if (tab === "sources") {
         await createSource.mutateAsync({
@@ -180,6 +208,7 @@ export function StructuredResourceForm({
         <ResourceField label="关联数据源">
           <select
             className={fieldClass}
+            disabled={!catalog.ready}
             value={asset.sourceId}
             onChange={event =>
               setAsset({ ...asset, sourceId: event.target.value })
@@ -250,7 +279,7 @@ export function StructuredResourceForm({
       </>
     );
   return (
-    <div className={panel}>
+    <div className={panel} hidden={!active} data-resource-editor={tab}>
       <div>
         <p className="aiflow-type-card-title font-semibold text-foreground">
           {title}
@@ -267,6 +296,11 @@ export function StructuredResourceForm({
         <Plus size={14} />
         {title}
       </Button>
+      {dirty && (
+        <p className="aiflow-type-meta text-muted-foreground">
+          有未保存填写，重新打开可继续编辑。
+        </p>
+      )}
       <CreationDialog
         open={open}
         onOpenChange={setOpen}
@@ -275,6 +309,7 @@ export function StructuredResourceForm({
         submitLabel="保存"
         submitDisabled={
           !canEdit ||
+          !catalog.ready ||
           (tab === "assets" &&
             !schemaRows.some(row => row.name.trim() && row.type.trim()))
         }
@@ -282,9 +317,13 @@ export function StructuredResourceForm({
           tab === "sources" ? createSource.isPending : createAsset.isPending
         }
         onSubmit={submit}
+        errorMessage={
+          (tab === "sources" ? createSource.error : createAsset.error)?.message
+        }
         className="max-w-2xl"
       >
         <ResourcePermissionNotice />
+        <ResourceCatalogNotice />
         <fieldset
           className="grid min-w-0 gap-3"
           disabled={!canEdit || createSource.isPending || createAsset.isPending}

@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
 import { ResourceEditContext } from "../client/src/contexts/ResourceEditContext";
 import { ResourcePermissionNotice } from "../client/src/components/ResourcePermissionNotice";
+import { ResourceCatalogNotice } from "../client/src/components/ResourceCatalogNotice";
+import { ResourceCatalogContext } from "../client/src/contexts/ResourceCatalogContext";
 
 const render = (canEdit: boolean, refreshing = false) =>
   renderToStaticMarkup(
@@ -69,11 +71,49 @@ it("资源门户表单保留打开状态和草稿，权限变化只停止提交"
   for (const source of [structured, center]) {
     expect(source).toContain("if (!canEdit && !open) return null;");
     expect(source).toContain("<ResourcePermissionNotice />");
-    expect(source).toContain("if (!canEdit) return;");
+    expect(source).toContain("if (!canEdit || !catalog.ready) return;");
   }
   expect(center).toContain('error.data?.code === "FORBIDDEN"');
   expect(center).toContain("refreshPermissions()");
   expect(center).toContain("{canRun && (");
   expect(center).toContain("allowReadActions");
   expect(center).toContain("pending || disabled || !canEdit");
+});
+
+it("资源读取失败保留门户表单，并提供独立读取入口；读取中禁止重复刷新", () => {
+  const notice = (ready: boolean, refreshing: boolean) =>
+    renderToStaticMarkup(
+      createElement(
+        ResourceCatalogContext.Provider,
+        {
+          value: { ready, refreshing, refresh: () => {} },
+        },
+        createElement(ResourceCatalogNotice)
+      )
+    );
+  expect(notice(true, false)).toBe("");
+  expect(notice(false, false)).toContain('role="alert"');
+  expect(notice(false, false)).toContain("填写内容已保留");
+  expect(notice(false, false)).toContain("重新读取资源");
+  expect(notice(false, true)).toContain('role="status"');
+  expect(notice(false, true)).toContain('disabled=""');
+  const center = readFileSync(
+    "client/src/components/DataResourceCenter.tsx",
+    "utf8"
+  );
+  const structured = readFileSync(
+    "client/src/components/StructuredResourceForm.tsx",
+    "utf8"
+  );
+  expect(center).toContain("<ResourceDraftGuard>");
+  expect(center).toContain("resources.isSuccess && !resources.isFetching");
+  expect(center).toContain("<ResourceCatalogNotice />");
+  for (const key of ["udfs", "tags", "plugins"]) {
+    expect(center).toContain(`hidden={tab !== "${key}"}`);
+  }
+  expect(center).toContain("!resources.isLoading && !resources.error");
+  expect(center).toContain("active={tab === kind}");
+  expect(structured).toContain("hidden={!active}");
+  expect(structured).toContain("disabled={!catalog.ready}");
+  expect(structured).toContain("<ResourceCatalogNotice />");
 });

@@ -19,6 +19,9 @@ import { StructuredResourceForm } from "@/components/StructuredResourceForm";
 import { CreationDialog } from "@/components/CreationDialog";
 import { ResourceDetails } from "@/components/ResourceDetails";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
+import { ResourceCatalogContext } from "@/contexts/ResourceCatalogContext";
+import { ResourceCatalogNotice } from "./ResourceCatalogNotice";
+import { ResourceDraftGuard, useResourceDraft } from "./ResourceDraftGuard";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import {
   Dialog,
@@ -93,7 +96,10 @@ export default function DataResourceCenter({
     "overview" | "runs" | "schedules"
   >("overview");
   const [activeFlowId, setActiveFlowId] = useState("");
-  const resources = trpc.data.resources.useQuery({ projectId });
+  const resources = trpc.data.resources.useQuery(
+    { projectId },
+    { retry: false }
+  );
   const flows = trpc.data.flows.useQuery({ projectId });
   const schedules = trpc.data.schedules.useQuery(
     { projectId },
@@ -430,613 +436,678 @@ export default function DataResourceCenter({
   );
 
   return (
-    <div data-resource-center="">
-      <div className="mb-5 border-b border-border pb-4">
-        <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
-          PROJECT RESOURCE CENTER
-        </p>
-        <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
-          资源配置中心
-        </h1>
-        <p className="aiflow-type-body mt-1 max-w-3xl text-muted-foreground">
-          管理当前业务的数据源、资源目录、函数、标签和插件。凭据只保存环境密钥引用；登记成功不代表连接或查询权限已验证。
-        </p>
-      </div>
-      {permissionsReady && !canEdit && (
-        <p
-          role="note"
-          data-resource-readonly=""
-          className="aiflow-type-body mb-4 rounded-lg border border-border bg-muted px-4 py-3 text-muted-foreground"
-        >
-          {canRun
-            ? "可查看资源并发起已发布的数据流程；资源编辑和调度管理需要业务设计权限。"
-            : "当前为只读访问，可查看资源、运行记录和调度计划。"}
-        </p>
-      )}
-      <label
-        data-resource-category-mobile=""
-        className="mb-4 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 lg:hidden"
-      >
-        <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
-          资源类别
-        </span>
-        <select
-          data-resource-category-select=""
-          aria-label="项目资源类别"
-          value={tab}
-          onChange={event => setTab(event.target.value as Tab)}
-          className="aiflow-type-control h-11 min-w-0 rounded-md border border-border bg-card px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-        >
-          {entries.map(item => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-              {`（${item.count ?? "…"}）`}
-            </option>
-          ))}
-        </select>
-      </label>
-      <nav
-        data-resource-category-desktop=""
-        aria-label="项目资源类别"
-        className="mb-4 hidden min-w-0 gap-2 pb-1 lg:flex lg:flex-wrap"
-      >
-        {entries.map(item => (
-          <button
-            key={item.id}
-            type="button"
-            aria-current={tab === item.id ? "page" : undefined}
-            onClick={() => setTab(item.id)}
-            title={item.label}
-            className={`aiflow-type-control flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2 py-2 transition-colors sm:px-3 ${tab === item.id ? "border-aiflow-info-border bg-accent font-semibold text-aiflow-info" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}
+    <ResourceCatalogContext.Provider
+      value={{
+        ready: resources.isSuccess && !resources.isFetching,
+        refreshing: resources.isFetching,
+        refresh: () => void resources.refetch(),
+      }}
+    >
+      <div data-resource-center="">
+        <ResourceDraftGuard>
+          <div className="mb-5 border-b border-border pb-4">
+            <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
+              PROJECT RESOURCE CENTER
+            </p>
+            <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
+              资源配置中心
+            </h1>
+            <p className="aiflow-type-body mt-1 max-w-3xl text-muted-foreground">
+              管理当前业务的数据源、资源目录、函数、标签和插件。凭据只保存环境密钥引用；登记成功不代表连接或查询权限已验证。
+            </p>
+          </div>
+          {permissionsReady && !canEdit && (
+            <p
+              role="note"
+              data-resource-readonly=""
+              className="aiflow-type-body mb-4 rounded-lg border border-border bg-muted px-4 py-3 text-muted-foreground"
+            >
+              {canRun
+                ? "可查看资源并发起已发布的数据流程；资源编辑和调度管理需要业务设计权限。"
+                : "当前为只读访问，可查看资源、运行记录和调度计划。"}
+            </p>
+          )}
+          <label
+            data-resource-category-mobile=""
+            className="mb-4 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 lg:hidden"
           >
-            <item.icon className="shrink-0" size={15} />
-            <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
-              {item.label}
+            <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
+              资源类别
             </span>
-            <span className="aiflow-type-meta min-w-6 shrink-0 rounded bg-card/70 px-1.5 text-center text-muted-foreground">
-              {item.count ?? "…"}
-            </span>
-          </button>
-        ))}
-      </nav>
-      {selectedQueryLoading && (
-        <div
-          role="status"
-          data-resource-loading=""
-          className="rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground"
-        >
-          正在读取当前资源类别…
-        </div>
-      )}
-      {!selectedQueryLoading && selectedQueryError && (
-        <div
-          role="alert"
-          data-resource-error=""
-          className="flex flex-col gap-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 sm:flex-row sm:items-center sm:justify-between"
-        >
-          <p className="text-sm text-aiflow-danger">
-            当前资源未能加载，列表内容不会按空数据展示。请重试或检查服务状态。
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="w-fit border-aiflow-danger-border bg-card text-aiflow-danger"
-            onClick={retrySelectedQueries}
+            <select
+              data-resource-category-select=""
+              aria-label="项目资源类别"
+              value={tab}
+              onChange={event => setTab(event.target.value as Tab)}
+              className="aiflow-type-control h-11 min-w-0 rounded-md border border-border bg-card px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              {entries.map(item => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                  {`（${item.count ?? "…"}）`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <nav
+            data-resource-category-desktop=""
+            aria-label="项目资源类别"
+            className="mb-4 hidden min-w-0 gap-2 pb-1 lg:flex lg:flex-wrap"
           >
-            重试
-          </Button>
-        </div>
-      )}
-      {!selectedQueryLoading && !selectedQueryError && tab === "flows" && (
-        <DataflowWorkspace
-          projectName={projectName}
-          canRun={canRun}
-          resources={resources.data as any}
-          flows={flowList}
-          publishedFlows={publishedFlows}
-          runs={(runs.data ?? []) as any[]}
-          schedules={(schedules.data ?? []) as any[]}
-          schedulesByWorkflow={scheduleByWorkflow}
-          section={dataflowSection}
-          setSection={setDataflowSection}
-          activeFlowId={activeFlowId}
-          setActiveFlowId={setActiveFlowId}
-          scheduleForm={scheduleForm}
-          setScheduleForm={setScheduleForm}
-          onOpenWorkflow={onOpenWorkflow}
-          onOpenResourceTab={setTab}
-          onRunFlow={workflowId => run.mutate({ projectId, workflowId })}
-          runPending={run.isPending}
-          onRefresh={retrySelectedQueries}
-          refreshPending={
-            runs.isFetching ||
-            flows.isFetching ||
-            schedules.isFetching ||
-            resources.isFetching
-          }
-          autoRefreshActive={hasActiveRun || hasActiveSchedule}
-          onSaveSchedule={() =>
-            saveSchedule.mutate({ projectId, ...scheduleForm })
-          }
-          saveSchedulePending={saveSchedule.isPending}
-          onActivateSchedule={workflowId =>
-            activateSchedule.mutate({
-              projectId,
-              workflowId,
-              expectedRevision: scheduleByWorkflow.get(workflowId)?.revision,
-            })
-          }
-          activateSchedulePending={activateSchedule.isPending}
-          onPauseSchedule={workflowId =>
-            pauseSchedule.mutate({
-              projectId,
-              workflowId,
-              expectedRevision: scheduleByWorkflow.get(workflowId)?.revision,
-            })
-          }
-          pauseSchedulePending={pauseSchedule.isPending}
-          onDeleteSchedule={workflowId =>
-            deleteSchedule.mutateAsync({
-              projectId,
-              workflowId,
-              expectedRevision: scheduleByWorkflow.get(workflowId)?.revision,
-            })
-          }
-          deleteSchedulePending={deleteSchedule.isPending}
-        />
-      )}
-      {!selectedQueryLoading &&
-        !selectedQueryError &&
-        (tab === "sources" || tab === "assets") && (
-          <StructuredResourceForm
-            tab={tab}
-            projectId={projectId}
-            sources={(resources.data?.sources ?? []) as any[]}
-            createSource={createSource}
-            createAsset={createAsset}
-          />
-        )}
-      {!selectedQueryLoading && !selectedQueryError && tab === "sources" && (
-        <ResourceTable
-          columns={["名称", "类型", "状态", "最近校验", "操作"]}
-          empty="尚未配置数据源。"
-          mobileCards={(resources.data?.sources ?? []).map((source: any) => (
-            <ResourceTableCard
-              key={source.id}
-              primary={source.name}
-              secondary={source.connection?.description || "连接元数据已隐藏"}
-              status={<State value={source.status} />}
-              fields={[
-                { label: "类型", value: source.sourceType },
-                {
-                  label: "最近校验",
-                  value: source.lastTestedAt
-                    ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
-                    : "—",
-                },
-              ]}
-              actions={sourceActions(source, true)}
-            />
-          ))}
-        >
-          {(resources.data?.sources ?? []).map((source: any) => (
-            <tr key={source.id}>
-              <Cell
-                primary={source.name}
-                secondary={source.connection?.description || "连接元数据已隐藏"}
-              />
-              <td className={mutedCellClassName}>{source.sourceType}</td>
-              <td className="px-4 py-3">
-                <State value={source.status} />
-              </td>
-              <td className={mutedCellClassName}>
-                {source.lastTestedAt
-                  ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
-                  : "—"}
-              </td>
-              <td className="px-4 py-3 text-right whitespace-nowrap">
-                {sourceActions(source)}
-              </td>
-            </tr>
-          ))}
-        </ResourceTable>
-      )}
-      {!selectedQueryLoading && !selectedQueryError && tab === "assets" && (
-        <ResourceTable
-          columns={["资源名称", "类型 / 数据源", "结构 / 样本", "状态", "操作"]}
-          allowReadActions
-          empty="尚无已探查资源。"
-          mobileCards={(resources.data?.assets ?? []).map((asset: any) => (
-            <ResourceTableCard
-              key={asset.id}
-              allowReadActions
-              primary={asset.name}
-              secondary={asset.sourceName || "未关联数据源"}
-              status={<State value={asset.status} />}
-              fields={[
-                { label: "资源类型", value: asset.assetType },
-                {
-                  label: "结构 / 样本",
-                  value: `${asset.schema?.length ?? 0} 字段 · ${asset.sample?.length ?? 0} 行样本`,
-                },
-              ]}
-              actions={
-                <>
-                  <ResourceDetails asset={asset} />
-                  <DeleteButton
-                    actionLabel="删除资源"
-                    resourceName={asset.name}
-                    visibleLabel="删除资源"
-                    onDelete={() =>
-                      removeAsset.mutateAsync({
-                        projectId,
-                        assetId: asset.id,
-                      })
-                    }
-                  />
-                </>
+            {entries.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                aria-current={tab === item.id ? "page" : undefined}
+                onClick={() => setTab(item.id)}
+                title={item.label}
+                className={`aiflow-type-control flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2 py-2 transition-colors sm:px-3 ${tab === item.id ? "border-aiflow-info-border bg-accent font-semibold text-aiflow-info" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}
+              >
+                <item.icon className="shrink-0" size={15} />
+                <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
+                  {item.label}
+                </span>
+                <span className="aiflow-type-meta min-w-6 shrink-0 rounded bg-card/70 px-1.5 text-center text-muted-foreground">
+                  {item.count ?? "…"}
+                </span>
+              </button>
+            ))}
+          </nav>
+          {selectedQueryLoading && (
+            <div
+              role="status"
+              data-resource-loading=""
+              className="rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground"
+            >
+              正在读取当前资源类别…
+            </div>
+          )}
+          {!selectedQueryLoading && selectedQueryError && (
+            <div
+              role="alert"
+              data-resource-error=""
+              className="flex flex-col gap-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <p className="text-sm text-aiflow-danger">
+                当前资源未能加载，列表内容不会按空数据展示。请重试或检查服务状态。
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit border-aiflow-danger-border bg-card text-aiflow-danger"
+                onClick={retrySelectedQueries}
+              >
+                重试
+              </Button>
+            </div>
+          )}
+          {!selectedQueryLoading && !selectedQueryError && tab === "flows" && (
+            <DataflowWorkspace
+              projectName={projectName}
+              canRun={canRun}
+              resources={resources.data as any}
+              flows={flowList}
+              publishedFlows={publishedFlows}
+              runs={(runs.data ?? []) as any[]}
+              schedules={(schedules.data ?? []) as any[]}
+              schedulesByWorkflow={scheduleByWorkflow}
+              section={dataflowSection}
+              setSection={setDataflowSection}
+              activeFlowId={activeFlowId}
+              setActiveFlowId={setActiveFlowId}
+              scheduleForm={scheduleForm}
+              setScheduleForm={setScheduleForm}
+              onOpenWorkflow={onOpenWorkflow}
+              onOpenResourceTab={setTab}
+              onRunFlow={workflowId => run.mutate({ projectId, workflowId })}
+              runPending={run.isPending}
+              onRefresh={retrySelectedQueries}
+              refreshPending={
+                runs.isFetching ||
+                flows.isFetching ||
+                schedules.isFetching ||
+                resources.isFetching
               }
+              autoRefreshActive={hasActiveRun || hasActiveSchedule}
+              onSaveSchedule={() =>
+                saveSchedule.mutate({ projectId, ...scheduleForm })
+              }
+              saveSchedulePending={saveSchedule.isPending}
+              onActivateSchedule={workflowId =>
+                activateSchedule.mutate({
+                  projectId,
+                  workflowId,
+                  expectedRevision:
+                    scheduleByWorkflow.get(workflowId)?.revision,
+                })
+              }
+              activateSchedulePending={activateSchedule.isPending}
+              onPauseSchedule={workflowId =>
+                pauseSchedule.mutate({
+                  projectId,
+                  workflowId,
+                  expectedRevision:
+                    scheduleByWorkflow.get(workflowId)?.revision,
+                })
+              }
+              pauseSchedulePending={pauseSchedule.isPending}
+              onDeleteSchedule={workflowId =>
+                deleteSchedule.mutateAsync({
+                  projectId,
+                  workflowId,
+                  expectedRevision:
+                    scheduleByWorkflow.get(workflowId)?.revision,
+                })
+              }
+              deleteSchedulePending={deleteSchedule.isPending}
+            />
+          )}
+          {(["sources", "assets"] as const).map(kind => (
+            <StructuredResourceForm
+              key={kind}
+              tab={kind}
+              active={tab === kind}
+              projectId={projectId}
+              sources={
+                resources.isSuccess
+                  ? ((resources.data?.sources ?? []) as any[])
+                  : []
+              }
+              createSource={createSource}
+              createAsset={createAsset}
             />
           ))}
-        >
-          {(resources.data?.assets ?? []).map((asset: any) => (
-            <tr key={asset.id}>
-              <Cell
-                primary={asset.name}
-                secondary={asset.sourceName || "未关联数据源"}
-              />
-              <td className={mutedCellClassName}>{asset.assetType}</td>
-              <td className={mutedCellClassName}>
-                {asset.schema?.length ?? 0} 字段 · {asset.sample?.length ?? 0}{" "}
-                行样本
-              </td>
-              <td className="px-4 py-3">
-                <State value={asset.status} />
-              </td>
-              <td className="px-4 py-3 text-right">
-                <ResourceDetails asset={asset} />
-                <DeleteButton
-                  actionLabel="删除资源"
-                  resourceName={asset.name}
-                  onDelete={() =>
-                    removeAsset.mutateAsync({ projectId, assetId: asset.id })
+          {!selectedQueryLoading &&
+            !selectedQueryError &&
+            tab === "sources" && (
+              <ResourceTable
+                columns={["名称", "类型", "状态", "最近校验", "操作"]}
+                empty="尚未配置数据源。"
+                mobileCards={(resources.data?.sources ?? []).map(
+                  (source: any) => (
+                    <ResourceTableCard
+                      key={source.id}
+                      primary={source.name}
+                      secondary={
+                        source.connection?.description || "连接元数据已隐藏"
+                      }
+                      status={<State value={source.status} />}
+                      fields={[
+                        { label: "类型", value: source.sourceType },
+                        {
+                          label: "最近校验",
+                          value: source.lastTestedAt
+                            ? new Date(source.lastTestedAt).toLocaleString(
+                                "zh-CN"
+                              )
+                            : "—",
+                        },
+                      ]}
+                      actions={sourceActions(source, true)}
+                    />
+                  )
+                )}
+              >
+                {(resources.data?.sources ?? []).map((source: any) => (
+                  <tr key={source.id}>
+                    <Cell
+                      primary={source.name}
+                      secondary={
+                        source.connection?.description || "连接元数据已隐藏"
+                      }
+                    />
+                    <td className={mutedCellClassName}>{source.sourceType}</td>
+                    <td className="px-4 py-3">
+                      <State value={source.status} />
+                    </td>
+                    <td className={mutedCellClassName}>
+                      {source.lastTestedAt
+                        ? new Date(source.lastTestedAt).toLocaleString("zh-CN")
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {sourceActions(source)}
+                    </td>
+                  </tr>
+                ))}
+              </ResourceTable>
+            )}
+          {!selectedQueryLoading && !selectedQueryError && tab === "assets" && (
+            <ResourceTable
+              columns={[
+                "资源名称",
+                "类型 / 数据源",
+                "结构 / 样本",
+                "状态",
+                "操作",
+              ]}
+              allowReadActions
+              empty="尚无已探查资源。"
+              mobileCards={(resources.data?.assets ?? []).map((asset: any) => (
+                <ResourceTableCard
+                  key={asset.id}
+                  allowReadActions
+                  primary={asset.name}
+                  secondary={asset.sourceName || "未关联数据源"}
+                  status={<State value={asset.status} />}
+                  fields={[
+                    { label: "资源类型", value: asset.assetType },
+                    {
+                      label: "结构 / 样本",
+                      value: `${asset.schema?.length ?? 0} 字段 · ${asset.sample?.length ?? 0} 行样本`,
+                    },
+                  ]}
+                  actions={
+                    <>
+                      <ResourceDetails asset={asset} />
+                      <DeleteButton
+                        actionLabel="删除资源"
+                        resourceName={asset.name}
+                        visibleLabel="删除资源"
+                        onDelete={() =>
+                          removeAsset.mutateAsync({
+                            projectId,
+                            assetId: asset.id,
+                          })
+                        }
+                      />
+                    </>
                   }
                 />
-              </td>
-            </tr>
-          ))}
-        </ResourceTable>
-      )}
-      {!selectedQueryLoading && !selectedQueryError && tab === "udfs" && (
-        <section
-          className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[350px_minmax(0,1fr)]" : ""}`}
-        >
-          <ResourceForm
-            title="注册函数"
-            description="绑定内置实现并审核后可执行数据转换；其他类型目前仅登记元数据，尚不能执行。"
-            onSubmit={() =>
-              createUdf.mutateAsync({
-                projectId,
-                name: udfForm.name,
-                udfType: udfForm.udfType,
-                description: udfForm.description || undefined,
-                returnType:
-                  udfForm.udfType === "javascript"
-                    ? "string"
-                    : udfForm.returnType || undefined,
-                artifactRef:
-                  udfForm.udfType === "javascript"
-                    ? udfForm.artifactRef
-                    : undefined,
-              })
-            }
-            pending={createUdf.isPending}
+              ))}
+            >
+              {(resources.data?.assets ?? []).map((asset: any) => (
+                <tr key={asset.id}>
+                  <Cell
+                    primary={asset.name}
+                    secondary={asset.sourceName || "未关联数据源"}
+                  />
+                  <td className={mutedCellClassName}>{asset.assetType}</td>
+                  <td className={mutedCellClassName}>
+                    {asset.schema?.length ?? 0} 字段 ·{" "}
+                    {asset.sample?.length ?? 0} 行样本
+                  </td>
+                  <td className="px-4 py-3">
+                    <State value={asset.status} />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <ResourceDetails asset={asset} />
+                    <DeleteButton
+                      actionLabel="删除资源"
+                      resourceName={asset.name}
+                      onDelete={() =>
+                        removeAsset.mutateAsync({
+                          projectId,
+                          assetId: asset.id,
+                        })
+                      }
+                    />
+                  </td>
+                </tr>
+              ))}
+            </ResourceTable>
+          )}
+          <section
+            hidden={tab !== "udfs"}
+            data-resource-editor="udfs"
+            className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[350px_minmax(0,1fr)]" : ""}`}
           >
-            <ResourceField label="函数名称">
-              <Input
-                placeholder="例如：maskSensitivePhone"
-                value={udfForm.name}
-                onChange={event =>
-                  setUdfForm({ ...udfForm, name: event.target.value })
-                }
-                required
-              />
-            </ResourceField>
-            <ResourceField label="函数类型">
-              <select
-                className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
-                value={udfForm.udfType}
-                onChange={event =>
-                  setUdfForm({
-                    ...udfForm,
-                    udfType: event.target.value as typeof udfForm.udfType,
-                  })
-                }
-              >
-                <option value="javascript">内置文本处理</option>
-                <option value="sql">SQL（仅登记）</option>
-                <option value="python">Python（仅登记）</option>
-                <option value="jar">JAR（仅登记）</option>
-              </select>
-            </ResourceField>
-            {udfForm.udfType === "javascript" && (
-              <ResourceField label="处理实现">
+            <ResourceForm
+              title="注册函数"
+              description="绑定内置实现并审核后可执行数据转换；其他类型目前仅登记元数据，尚不能执行。"
+              onSubmit={() =>
+                createUdf.mutateAsync({
+                  projectId,
+                  name: udfForm.name,
+                  udfType: udfForm.udfType,
+                  description: udfForm.description || undefined,
+                  returnType:
+                    udfForm.udfType === "javascript"
+                      ? "string"
+                      : udfForm.returnType || undefined,
+                  artifactRef:
+                    udfForm.udfType === "javascript"
+                      ? udfForm.artifactRef
+                      : undefined,
+                })
+              }
+              pending={createUdf.isPending}
+              errorMessage={createUdf.error?.message}
+              dirty={Boolean(
+                udfForm.name ||
+                  udfForm.description ||
+                  udfForm.udfType !== "javascript" ||
+                  udfForm.returnType !== "unknown" ||
+                  udfForm.artifactRef !== "builtin:trim"
+              )}
+            >
+              <ResourceField label="函数名称">
+                <Input
+                  placeholder="例如：maskSensitivePhone"
+                  value={udfForm.name}
+                  onChange={event =>
+                    setUdfForm({ ...udfForm, name: event.target.value })
+                  }
+                  required
+                />
+              </ResourceField>
+              <ResourceField label="函数类型">
                 <select
-                  aria-label="函数处理实现"
-                  className="h-9 w-full rounded border border-border bg-card px-2 text-sm"
-                  value={udfForm.artifactRef}
+                  className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
+                  value={udfForm.udfType}
                   onChange={event =>
                     setUdfForm({
                       ...udfForm,
-                      artifactRef: event.target.value,
+                      udfType: event.target.value as typeof udfForm.udfType,
                     })
                   }
                 >
-                  {builtinDataFunctions.map(item => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
+                  <option value="javascript">内置文本处理</option>
+                  <option value="sql">SQL（仅登记）</option>
+                  <option value="python">Python（仅登记）</option>
+                  <option value="jar">JAR（仅登记）</option>
                 </select>
               </ResourceField>
-            )}
-            <ResourceField label="函数说明">
-              <Input
-                placeholder="说明函数用途和适用范围"
-                value={udfForm.description}
-                onChange={event =>
-                  setUdfForm({ ...udfForm, description: event.target.value })
-                }
-              />
-            </ResourceField>
-            <ResourceField label="返回类型">
-              <Input
-                placeholder="例如：string"
-                disabled={udfForm.udfType === "javascript"}
-                value={
-                  udfForm.udfType === "javascript"
-                    ? "string"
-                    : udfForm.returnType
-                }
-                onChange={event =>
-                  setUdfForm({ ...udfForm, returnType: event.target.value })
-                }
-              />
-            </ResourceField>
-          </ResourceForm>
-          <ResourceTable
-            columns={["函数", "类型", "描述", "状态", "操作"]}
-            empty="尚未注册函数。"
-            mobileCards={(resources.data?.udfs ?? []).map((udf: any) => (
-              <ResourceTableCard
-                key={udf.id}
-                primary={udf.name}
-                secondary={udf.returnType || "未声明返回类型"}
-                status={<State value={udf.status} />}
-                fields={[
-                  {
-                    label: "函数类型",
-                    value: dataFunctionTypeLabel(udf.udfType, udf.artifactRef),
-                  },
-                  { label: "说明", value: udf.description || "—" },
-                ]}
-                actions={
-                  <DeleteButton
-                    actionLabel="删除函数"
-                    resourceName={udf.name}
-                    visibleLabel="删除函数"
-                    onDelete={() =>
-                      removeUdf.mutateAsync({ projectId, udfId: udf.id })
+              {udfForm.udfType === "javascript" && (
+                <ResourceField label="处理实现">
+                  <select
+                    aria-label="函数处理实现"
+                    className="h-9 w-full rounded border border-border bg-card px-2 text-sm"
+                    value={udfForm.artifactRef}
+                    onChange={event =>
+                      setUdfForm({
+                        ...udfForm,
+                        artifactRef: event.target.value,
+                      })
                     }
-                  />
-                }
-              />
-            ))}
-          >
-            {(resources.data?.udfs ?? []).map((udf: any) => (
-              <tr key={udf.id}>
-                <Cell
-                  primary={udf.name}
-                  secondary={udf.returnType || "未声明返回类型"}
-                />
-                <td className={mutedCellClassName}>
-                  {dataFunctionTypeLabel(udf.udfType, udf.artifactRef)}
-                </td>
-                <td className="max-w-[300px] px-4 py-3">
-                  <p
-                    className="aiflow-type-body line-clamp-2 break-words text-muted-foreground"
-                    title={udf.description || undefined}
                   >
-                    {udf.description || "—"}
-                  </p>
-                </td>
-                <td className="px-4 py-3">
-                  <State value={udf.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <DeleteButton
-                    actionLabel="删除函数"
-                    resourceName={udf.name}
-                    onDelete={() =>
-                      removeUdf.mutateAsync({ projectId, udfId: udf.id })
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
-          </ResourceTable>
-        </section>
-      )}
-      {!selectedQueryLoading && !selectedQueryError && tab === "tags" && (
-        <section
-          className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[330px_minmax(0,1fr)]" : ""}`}
-        >
-          <ResourceForm
-            title="新建标签"
-            description="项目级数据标签用于资源分类，不会跨越项目可见范围。"
-            onSubmit={() => createTag.mutateAsync({ projectId, name: tagName })}
-            pending={createTag.isPending}
-          >
-            <ResourceField label="标签名称">
-              <Input
-                placeholder="例如：核心业务指标"
-                value={tagName}
-                onChange={event => setTagName(event.target.value)}
-                required
-              />
-            </ResourceField>
-          </ResourceForm>
-          <div className="rounded-lg border border-border bg-card p-5">
-            <div className="flex flex-wrap gap-2">
-              {(resources.data?.tags ?? []).map((tag: any) => (
-                <span
-                  key={tag.id}
-                  className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
-                  style={{
-                    backgroundColor: `${tag.color}18`,
-                    color: tag.color,
-                  }}
-                >
-                  <i
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: tag.color }}
-                  />
-                  {tag.name}
-                  <DeleteButton
-                    actionLabel="删除标签"
-                    resourceName={tag.name}
-                    onDelete={() =>
-                      removeTag.mutateAsync({ projectId, tagId: tag.id })
-                    }
-                  />
-                </span>
-              ))}
-              {!(resources.data?.tags ?? []).length && (
-                <span className="text-sm text-muted-foreground">
-                  尚未创建标签。
-                </span>
+                    {builtinDataFunctions.map(item => (
+                      <option key={item.value} value={item.value}>
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </ResourceField>
               )}
-            </div>
-          </div>
-        </section>
-      )}
-      {!selectedQueryLoading && !selectedQueryError && tab === "plugins" && (
-        <section
-          className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[350px_minmax(0,1fr)]" : ""}`}
-        >
-          <ResourceForm
-            title="登记项目插件"
-            description="仅保存已批准插件的配置元数据；插件运行仍受服务端安全策略控制。"
-            onSubmit={() =>
-              createPlugin.mutateAsync({
-                projectId,
-                name: pluginForm.name,
-                pluginType: pluginForm.pluginType,
-                version: pluginForm.version,
-                config: {},
-              })
-            }
-            pending={createPlugin.isPending}
-          >
-            <ResourceField label="插件名称">
-              <Input
-                placeholder="例如：order-transformer"
-                value={pluginForm.name}
-                onChange={event =>
-                  setPluginForm({ ...pluginForm, name: event.target.value })
-                }
-                required
-              />
-            </ResourceField>
-            <ResourceField label="插件类型">
-              <select
-                className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
-                value={pluginForm.pluginType}
-                onChange={event =>
-                  setPluginForm({
-                    ...pluginForm,
-                    pluginType: event.target
-                      .value as typeof pluginForm.pluginType,
-                  })
-                }
+              <ResourceField label="函数说明">
+                <Input
+                  placeholder="说明函数用途和适用范围"
+                  value={udfForm.description}
+                  onChange={event =>
+                    setUdfForm({ ...udfForm, description: event.target.value })
+                  }
+                />
+              </ResourceField>
+              <ResourceField label="返回类型">
+                <Input
+                  placeholder="例如：string"
+                  disabled={udfForm.udfType === "javascript"}
+                  value={
+                    udfForm.udfType === "javascript"
+                      ? "string"
+                      : udfForm.returnType
+                  }
+                  onChange={event =>
+                    setUdfForm({ ...udfForm, returnType: event.target.value })
+                  }
+                />
+              </ResourceField>
+            </ResourceForm>
+            {!resources.isLoading && !resources.error && (
+              <ResourceTable
+                columns={["函数", "类型", "描述", "状态", "操作"]}
+                empty="尚未注册函数。"
+                mobileCards={(resources.data?.udfs ?? []).map((udf: any) => (
+                  <ResourceTableCard
+                    key={udf.id}
+                    primary={udf.name}
+                    secondary={udf.returnType || "未声明返回类型"}
+                    status={<State value={udf.status} />}
+                    fields={[
+                      {
+                        label: "函数类型",
+                        value: dataFunctionTypeLabel(
+                          udf.udfType,
+                          udf.artifactRef
+                        ),
+                      },
+                      { label: "说明", value: udf.description || "—" },
+                    ]}
+                    actions={
+                      <DeleteButton
+                        actionLabel="删除函数"
+                        resourceName={udf.name}
+                        visibleLabel="删除函数"
+                        onDelete={() =>
+                          removeUdf.mutateAsync({ projectId, udfId: udf.id })
+                        }
+                      />
+                    }
+                  />
+                ))}
               >
-                <option value="transform">转换</option>
-                <option value="connector">连接器</option>
-                <option value="visualization">可视化</option>
-              </select>
-            </ResourceField>
-            <ResourceField label="版本">
-              <Input
-                placeholder="例如：1.0.0"
-                value={pluginForm.version}
-                onChange={event =>
-                  setPluginForm({
-                    ...pluginForm,
-                    version: event.target.value,
-                  })
-                }
-                required
-              />
-            </ResourceField>
-          </ResourceForm>
-          <ResourceTable
-            columns={["插件", "类型", "版本", "状态", "操作"]}
-            empty="尚未登记项目插件。"
-            mobileCards={(resources.data?.plugins ?? []).map((plugin: any) => (
-              <ResourceTableCard
-                key={plugin.id}
-                primary={plugin.name}
-                secondary="项目级插件"
-                status={<State value={plugin.status} />}
-                fields={[
-                  { label: "插件类型", value: plugin.pluginType },
-                  { label: "版本", value: plugin.version },
-                ]}
-                actions={
-                  <DeleteButton
-                    actionLabel="删除插件"
-                    resourceName={plugin.name}
-                    visibleLabel="删除插件"
-                    onDelete={() =>
-                      removePlugin.mutateAsync({
-                        projectId,
-                        pluginId: plugin.id,
-                      })
-                    }
-                  />
-                }
-              />
-            ))}
+                {(resources.data?.udfs ?? []).map((udf: any) => (
+                  <tr key={udf.id}>
+                    <Cell
+                      primary={udf.name}
+                      secondary={udf.returnType || "未声明返回类型"}
+                    />
+                    <td className={mutedCellClassName}>
+                      {dataFunctionTypeLabel(udf.udfType, udf.artifactRef)}
+                    </td>
+                    <td className="max-w-[300px] px-4 py-3">
+                      <p
+                        className="aiflow-type-body line-clamp-2 break-words text-muted-foreground"
+                        title={udf.description || undefined}
+                      >
+                        {udf.description || "—"}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <State value={udf.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <DeleteButton
+                        actionLabel="删除函数"
+                        resourceName={udf.name}
+                        onDelete={() =>
+                          removeUdf.mutateAsync({ projectId, udfId: udf.id })
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </ResourceTable>
+            )}
+          </section>
+          <section
+            hidden={tab !== "tags"}
+            data-resource-editor="tags"
+            className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[330px_minmax(0,1fr)]" : ""}`}
           >
-            {(resources.data?.plugins ?? []).map((plugin: any) => (
-              <tr key={plugin.id}>
-                <Cell primary={plugin.name} secondary="项目级插件" />
-                <td className={mutedCellClassName}>{plugin.pluginType}</td>
-                <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                  {plugin.version}
-                </td>
-                <td className="px-4 py-3">
-                  <State value={plugin.status} />
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <DeleteButton
-                    actionLabel="删除插件"
-                    resourceName={plugin.name}
-                    onDelete={() =>
-                      removePlugin.mutateAsync({
-                        projectId,
-                        pluginId: plugin.id,
-                      })
-                    }
-                  />
-                </td>
-              </tr>
-            ))}
-          </ResourceTable>
-        </section>
-      )}
-    </div>
+            <ResourceForm
+              title="新建标签"
+              description="项目级数据标签用于资源分类，不会跨越项目可见范围。"
+              onSubmit={() =>
+                createTag.mutateAsync({ projectId, name: tagName })
+              }
+              pending={createTag.isPending}
+              errorMessage={createTag.error?.message}
+              dirty={Boolean(tagName)}
+            >
+              <ResourceField label="标签名称">
+                <Input
+                  placeholder="例如：核心业务指标"
+                  value={tagName}
+                  onChange={event => setTagName(event.target.value)}
+                  required
+                />
+              </ResourceField>
+            </ResourceForm>
+            {!resources.isLoading && !resources.error && (
+              <div className="rounded-lg border border-border bg-card p-5">
+                <div className="flex flex-wrap gap-2">
+                  {(resources.data?.tags ?? []).map((tag: any) => (
+                    <span
+                      key={tag.id}
+                      className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
+                      style={{
+                        backgroundColor: `${tag.color}18`,
+                        color: tag.color,
+                      }}
+                    >
+                      <i
+                        className="h-2 w-2 rounded-full"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      {tag.name}
+                      <DeleteButton
+                        actionLabel="删除标签"
+                        resourceName={tag.name}
+                        onDelete={() =>
+                          removeTag.mutateAsync({ projectId, tagId: tag.id })
+                        }
+                      />
+                    </span>
+                  ))}
+                  {!(resources.data?.tags ?? []).length && (
+                    <span className="text-sm text-muted-foreground">
+                      尚未创建标签。
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+          <section
+            hidden={tab !== "plugins"}
+            data-resource-editor="plugins"
+            className={`grid min-w-0 gap-4 ${canEdit ? "xl:grid-cols-[350px_minmax(0,1fr)]" : ""}`}
+          >
+            <ResourceForm
+              title="登记项目插件"
+              description="仅保存已批准插件的配置元数据；插件运行仍受服务端安全策略控制。"
+              onSubmit={() =>
+                createPlugin.mutateAsync({
+                  projectId,
+                  name: pluginForm.name,
+                  pluginType: pluginForm.pluginType,
+                  version: pluginForm.version,
+                  config: {},
+                })
+              }
+              pending={createPlugin.isPending}
+              errorMessage={createPlugin.error?.message}
+              dirty={Boolean(
+                pluginForm.name ||
+                  pluginForm.pluginType !== "transform" ||
+                  pluginForm.version !== "1.0.0"
+              )}
+            >
+              <ResourceField label="插件名称">
+                <Input
+                  placeholder="例如：order-transformer"
+                  value={pluginForm.name}
+                  onChange={event =>
+                    setPluginForm({ ...pluginForm, name: event.target.value })
+                  }
+                  required
+                />
+              </ResourceField>
+              <ResourceField label="插件类型">
+                <select
+                  className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
+                  value={pluginForm.pluginType}
+                  onChange={event =>
+                    setPluginForm({
+                      ...pluginForm,
+                      pluginType: event.target
+                        .value as typeof pluginForm.pluginType,
+                    })
+                  }
+                >
+                  <option value="transform">转换</option>
+                  <option value="connector">连接器</option>
+                  <option value="visualization">可视化</option>
+                </select>
+              </ResourceField>
+              <ResourceField label="版本">
+                <Input
+                  placeholder="例如：1.0.0"
+                  value={pluginForm.version}
+                  onChange={event =>
+                    setPluginForm({
+                      ...pluginForm,
+                      version: event.target.value,
+                    })
+                  }
+                  required
+                />
+              </ResourceField>
+            </ResourceForm>
+            {!resources.isLoading && !resources.error && (
+              <ResourceTable
+                columns={["插件", "类型", "版本", "状态", "操作"]}
+                empty="尚未登记项目插件。"
+                mobileCards={(resources.data?.plugins ?? []).map(
+                  (plugin: any) => (
+                    <ResourceTableCard
+                      key={plugin.id}
+                      primary={plugin.name}
+                      secondary="项目级插件"
+                      status={<State value={plugin.status} />}
+                      fields={[
+                        { label: "插件类型", value: plugin.pluginType },
+                        { label: "版本", value: plugin.version },
+                      ]}
+                      actions={
+                        <DeleteButton
+                          actionLabel="删除插件"
+                          resourceName={plugin.name}
+                          visibleLabel="删除插件"
+                          onDelete={() =>
+                            removePlugin.mutateAsync({
+                              projectId,
+                              pluginId: plugin.id,
+                            })
+                          }
+                        />
+                      }
+                    />
+                  )
+                )}
+              >
+                {(resources.data?.plugins ?? []).map((plugin: any) => (
+                  <tr key={plugin.id}>
+                    <Cell primary={plugin.name} secondary="项目级插件" />
+                    <td className={mutedCellClassName}>{plugin.pluginType}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                      {plugin.version}
+                    </td>
+                    <td className="px-4 py-3">
+                      <State value={plugin.status} />
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <DeleteButton
+                        actionLabel="删除插件"
+                        resourceName={plugin.name}
+                        onDelete={() =>
+                          removePlugin.mutateAsync({
+                            projectId,
+                            pluginId: plugin.id,
+                          })
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </ResourceTable>
+            )}
+          </section>
+        </ResourceDraftGuard>
+      </div>
+    </ResourceCatalogContext.Provider>
   );
 }
 
@@ -1568,18 +1639,23 @@ function ResourceForm({
   children,
   onSubmit,
   pending,
+  errorMessage,
+  dirty,
 }: {
   title: string;
   description: string;
   children: React.ReactNode;
   onSubmit: () => Promise<unknown>;
   pending: boolean;
+  errorMessage?: string;
+  dirty: boolean;
 }) {
-  if (title === "添加数据源" || title === "资源探查结果") return null;
   const [open, setOpen] = useState(false);
   const { canEdit } = useContext(ResourceEditContext);
+  const catalog = useContext(ResourceCatalogContext);
+  useResourceDraft(title, dirty, pending);
   const submit = async () => {
-    if (!canEdit) return;
+    if (!canEdit || !catalog.ready) return;
     try {
       await onSubmit();
       setOpen(false);
@@ -1604,6 +1680,11 @@ function ResourceForm({
         <Plus size={14} />
         {title}
       </Button>
+      {dirty && (
+        <p className="aiflow-type-meta text-muted-foreground">
+          有未保存填写，重新打开可继续编辑。
+        </p>
+      )}
       <CreationDialog
         open={open}
         onOpenChange={setOpen}
@@ -1611,10 +1692,12 @@ function ResourceForm({
         description={description}
         submitLabel="保存"
         pending={pending}
-        submitDisabled={!canEdit}
+        errorMessage={errorMessage}
+        submitDisabled={!canEdit || !catalog.ready}
         onSubmit={submit}
       >
         <ResourcePermissionNotice />
+        <ResourceCatalogNotice />
         <fieldset className="grid min-w-0 gap-3" disabled={!canEdit || pending}>
           {children}
         </fieldset>
