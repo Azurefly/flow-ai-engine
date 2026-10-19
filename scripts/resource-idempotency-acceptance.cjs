@@ -273,6 +273,7 @@ async function verifyIdempotency(page) {
       );
   };
   for (const spec of specs) {
+    let deniedReplay = false;
     await page
       .locator("[data-resource-category-desktop]")
       .getByRole("button", { name: new RegExp("^" + spec.category) })
@@ -282,6 +283,10 @@ async function verifyIdempotency(page) {
     const name = "响应核对_" + spec.key + "_" + tag;
     const field = dialog.getByLabel(spec.label, { exact: true });
     await field.fill(name);
+    if (spec.key === "sources")
+      await dialog
+        .getByLabel("连接说明", { exact: true })
+        .fill("响应核对隔离验收");
     if (spec.key === "assets")
       await dialog
         .getByLabel("字段结构第 1 行字段名", { exact: true })
@@ -325,9 +330,16 @@ async function verifyIdempotency(page) {
         viewer(spec.method, inputs.get(spec.method), true),
         e => e.status === 403
       );
-      await dialog
-        .getByRole("button", { name: "刷新业务权限", exact: true })
-        .click();
+      if (await retry.isEnabled()) {
+        const response = page.waitForResponse(
+          response =>
+            response.url().includes(spec.method) &&
+            response.request().method() === "POST"
+        );
+        await retry.click();
+        assert.equal((await response).status(), 403);
+        deniedReplay = true;
+      }
       await expect(retry).toBeDisabled();
       await expect(field).toHaveValue(name);
       await setRole("designer");
@@ -341,7 +353,7 @@ async function verifyIdempotency(page) {
     const created = (await rows())[spec.key].filter(r => r.name === name);
     assert.equal(created.length, 1);
     assert.equal(created[0].id, evidence.find(r => r.kind === spec.kind).id);
-    assert.equal(posts.get(spec.method), 2);
+    assert.equal(posts.get(spec.method), deniedReplay ? 3 : 2);
     report({
       stage: "resource-response-loss",
       kind: spec.kind,
