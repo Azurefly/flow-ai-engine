@@ -117,8 +117,7 @@ export async function checkReadiness() {
     const [indexRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(DISTINCT CONCAT(table_name,':',index_name)) AS count
          FROM information_schema.statistics
-        WHERE table_schema=DATABASE() AND (non_unique=0 OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')
-          OR (table_name='resource_creation_request' AND index_name='resource_creation_request_identity_unique')) AND (
+        WHERE table_schema=DATABASE() AND (non_unique=0 OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')) AND (
           (table_name='workflow_run_job' AND index_name='workflow_run_job_idempotency_unique') OR
           (table_name='workflow_outbox_event' AND index_name='workflow_outbox_dedupe_unique') OR
           (table_name='workflow_state_transition' AND index_name='workflow_state_transition_run_sequence_unique')
@@ -136,6 +135,7 @@ export async function checkReadiness() {
           OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_run_node_unique')
           OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
           OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')
+          OR (table_name='resource_creation_request' AND index_name='resource_creation_request_identity_unique')
         )`
     );
     const [projectUnitCollationRows] = await db().query<mysql.RowDataPacket[]>(

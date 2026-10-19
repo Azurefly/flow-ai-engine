@@ -188,5 +188,15 @@ describe("runtime identity and readiness contract", () => {
     expect(runtimeSource).toContain(
       "seq_in_index=4 AND column_name='requestKeyHash'"
     );
+    const indexChecklist = runtimeSource.slice(
+      runtimeSource.indexOf("SELECT COUNT(DISTINCT CONCAT(table_name"),
+      runtimeSource.indexOf("const [projectUnitCollationRows]")
+    );
+    expect(indexChecklist).toContain(
+      "index_name='dataflow_schedule_due_idx')) AND ("
+    );
+    expect(indexChecklist).toContain(
+      "OR (table_name='resource_creation_request' AND index_name='resource_creation_request_identity_unique')"
+    );
   });
 });
