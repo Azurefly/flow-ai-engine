@@ -31,9 +31,10 @@ const maxChunkBytes = 450 * 1024;
 // Persistent settings drafts, diff/recovery actions and navigation guards: 1477.17 / 443.97 KiB.
 // Lazy resource forms retain drafts through read failures/categories and guard exits: 1481.17 / 445.25 KiB.
 // Account-scoped draft recovery through full-page unmounts: 1484.29 / 446.08 KiB.
-const maxTotalBytes = 1_486 * 1024;
+// Response-loss recovery and shared creation receipts: 1487.59 / 447.49 KiB.
+const maxTotalBytes = 1_489 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 447 * 1024;
+const maxTotalGzipBytes = 449 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

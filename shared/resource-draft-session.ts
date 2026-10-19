@@ -1,3 +1,17 @@
+import {
+  canonicalResourcePayload,
+  newResourceRequestKey,
+} from "./resource-creation";
+
+type CreationAttempt = {
+  projectId: string;
+  category: string;
+  key: string;
+  canonical: string;
+  payload: Record<string, unknown>;
+  uncertain: boolean;
+};
+
 type DraftEntry = {
   projectId: string;
   category: string;
@@ -10,6 +24,7 @@ type DraftEntry = {
 /** One authenticated console owns this store; no browser storage or server data. */
 export class ResourceDraftStore {
   private entries = new Map<string, DraftEntry>();
+  private creations = new Map<string, CreationAttempt>();
   private pending = new Map<string, { projectId: string; count: number }>();
   private listeners = new Set<() => void>();
   private version = 0;
@@ -69,6 +84,10 @@ export class ResourceDraftStore {
       if ((!projectId || entry.projectId === projectId) && this.dirty(entry))
         categories.add(JSON.stringify([entry.projectId, entry.category]));
     }
+    for (const attempt of Array.from(this.creations.values())) {
+      if ((!projectId || attempt.projectId === projectId) && attempt.uncertain)
+        categories.add(JSON.stringify([attempt.projectId, attempt.category]));
+    }
     const pending = Array.from(this.pending.values()).reduce(
       (total, item) =>
         total + (!projectId || item.projectId === projectId ? item.count : 0),
@@ -95,7 +114,74 @@ export class ResourceDraftStore {
   }
   clear() {
     this.entries.clear();
+    this.creations.clear();
     this.emit();
+  }
+  creation(projectId: string, category: string) {
+    return this.creations.get(this.slot(projectId, category, "creation"));
+  }
+  hasUncertainCreation(projectId?: string) {
+    return Array.from(this.creations.values()).some(
+      attempt =>
+        attempt.uncertain && (!projectId || attempt.projectId === projectId)
+    );
+  }
+  prepareCreation(projectId: string, category: string, payload: unknown) {
+    const canonical = canonicalResourcePayload(payload);
+    const snapshot = JSON.parse(canonical);
+    if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot))
+      throw new Error("保存内容格式无效，请检查填写。");
+    const current = this.creation(projectId, category);
+    if (current?.canonical === canonical) return current;
+    if (current?.uncertain)
+      throw new Error("请先核对上次保存结果，再修改填写。");
+    const attempt: CreationAttempt = {
+      projectId,
+      category,
+      key: newResourceRequestKey(),
+      canonical,
+      payload: snapshot,
+      uncertain: false,
+    };
+    this.creations.set(this.slot(projectId, category, "creation"), attempt);
+    this.emit();
+    return attempt;
+  }
+  completeCreation(projectId: string, category: string, key: string) {
+    if (this.creation(projectId, category)?.key !== key) return;
+    this.creations.delete(this.slot(projectId, category, "creation"));
+    this.emit();
+  }
+  failCreation(
+    projectId: string,
+    category: string,
+    key: string,
+    error: unknown
+  ) {
+    const current = this.creation(projectId, category);
+    if (!current || current.key !== key) return;
+    const code = (error as { data?: { code?: string } } | null)?.data?.code;
+    const knownRejection = Boolean(
+      code &&
+        [
+          "BAD_REQUEST",
+          "UNAUTHORIZED",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "CONFLICT",
+          "PRECONDITION_FAILED",
+          "UNPROCESSABLE_CONTENT",
+          "PAYLOAD_TOO_LARGE",
+          "TOO_MANY_REQUESTS",
+        ].includes(code)
+    );
+    if (!current.uncertain && !knownRejection) {
+      this.creations.set(this.slot(projectId, category, "creation"), {
+        ...current,
+        uncertain: true,
+      });
+      this.emit();
+    }
   }
   exportDrafts() {
     return Array.from(this.entries.values())

@@ -54,9 +54,9 @@ describe("runtime identity and readiness contract", () => {
     expect(info).toHaveProperty("buildTime");
     expect(info).toHaveProperty("imageId");
     expect(info.migrationVersion).toBe(DATABASE_MIGRATION_VERSION);
-    expect(DATABASE_MIGRATION_VERSION).toBe("0040_dataflow_native_schedule");
-    expect(DATABASE_MIGRATION_EPOCH).toBe(1792236489608);
-    expect(DATABASE_REQUIRED_COLUMN_COUNT).toBe(52);
+    expect(DATABASE_MIGRATION_VERSION).toBe("0041_resource_creation_requests");
+    expect(DATABASE_MIGRATION_EPOCH).toBe(1792400012322);
+    expect(DATABASE_REQUIRED_COLUMN_COUNT).toBe(60);
     expect(migrationJournal.entries.at(-1)).toMatchObject({
       tag: DATABASE_MIGRATION_VERSION,
       when: DATABASE_MIGRATION_EPOCH,
@@ -182,5 +182,11 @@ describe("runtime identity and readiness contract", () => {
 
   it("includes the data source test job table in the migration gate", () => {
     expect(runtimeSource).toContain("data_source_test_run");
+    expect(runtimeSource).toContain(
+      "resource_creation_request_identity_unique"
+    );
+    expect(runtimeSource).toContain(
+      "seq_in_index=4 AND column_name='requestKeyHash'"
+    );
   });
 });

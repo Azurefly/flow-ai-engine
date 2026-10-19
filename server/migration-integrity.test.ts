@@ -196,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-17).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-18).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -214,22 +214,31 @@ describe("database migration integrity", () => {
       "0038_project_lifecycle",
       "0039_loop_visit_facts",
       "0040_dataflow_native_schedule",
+      "0041_resource_creation_requests",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(40);
+    expect(journal.entries.at(-1)?.idx).toBe(41);
   });
   it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
-    const migration = readFileSync(new URL("../drizzle/0036_wait_execution_identity.sql", import.meta.url), "utf8");
+    const migration = readFileSync(
+      new URL("../drizzle/0036_wait_execution_identity.sql", import.meta.url),
+      "utf8"
+    );
     expect(migration).toContain("DEFAULT 'legacy' NOT NULL");
     expect(migration).toContain("UNIQUE(`runId`,`nodeId`,`executionKey`)");
     expect(migration.match(/ALTER TABLE/g)).toHaveLength(1);
     expect(migration).not.toMatch(/DELETE|TRUNCATE|DROP TABLE/i);
   });
   it("审批组与成员唯一约束包含执行身份且保留旧数据", () => {
-    const migration = readFileSync(new URL("../drizzle/0037_task_execution_identity.sql", import.meta.url), "utf8");
+    const migration = readFileSync(
+      new URL("../drizzle/0037_task_execution_identity.sql", import.meta.url),
+      "utf8"
+    );
     expect(migration.match(/ALTER TABLE/g)).toHaveLength(2);
     expect(migration.match(/DEFAULT 'legacy' NOT NULL/g)).toHaveLength(2);
     expect(migration).toContain("UNIQUE(`runId`,`nodeId`,`executionKey`)");
-    expect(migration).toContain("UNIQUE(`runId`,`nodeId`,`assignedUserId`,`executionKey`)");
+    expect(migration).toContain(
+      "UNIQUE(`runId`,`nodeId`,`assignedUserId`,`executionKey`)"
+    );
     expect(migration).not.toMatch(/DELETE|TRUNCATE|DROP TABLE/i);
   });
   it("persists timer and message waits with idempotent run-node identity", () => {
@@ -454,4 +463,18 @@ it("角色审计迁移追加新操作并保留所有历史枚举值", () => {
   ])
     expect(sql).toContain(`'${action}'`);
   expect(sql).not.toMatch(/DROP\s|DELETE\s|TRUNCATE\s/i);
+});
+
+it("资源创建回执迁移按账号、业务、资源类型和请求摘要唯一，不迁移或删除旧资源", () => {
+  const migration = readFileSync(
+    new URL("../drizzle/0041_resource_creation_requests.sql", import.meta.url),
+    "utf8"
+  );
+  expect(migration).toContain(
+    "UNIQUE (`actorUserId`,`projectId`,`resourceKind`,`requestKeyHash`)"
+  );
+  expect(migration).toContain("`payloadHash` varchar(64) NOT NULL");
+  expect(migration).toContain("`resourceId` varchar(36) NOT NULL");
+  expect(migration).not.toMatch(/DELETE FROM|TRUNCATE|DROP TABLE|ALTER TABLE/);
+  expect(migration).not.toContain("payloadJson");
 });

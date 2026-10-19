@@ -19,6 +19,7 @@ export function CreationDialog({
   pending,
   submitDisabled = false,
   errorMessage,
+  errorHint = "已保留填写内容，请检查后重新提交。",
   onSubmit,
   children,
   className = "max-w-xl",
@@ -31,6 +32,7 @@ export function CreationDialog({
   pending: boolean;
   submitDisabled?: boolean;
   errorMessage?: string;
+  errorHint?: string;
   onSubmit: () => void | Promise<unknown>;
   children: ReactNode;
   className?: string;
@@ -82,7 +84,7 @@ export function CreationDialog({
                 className="aiflow-type-body mb-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-3 text-aiflow-danger"
               >
                 <p className="break-words">{errorMessage}</p>
-                <p className="mt-1">已保留填写内容，请检查后重新提交。</p>
+                <p className="mt-1">{errorHint}</p>
               </div>
             )}
             <fieldset disabled={pending} className="grid min-w-0 gap-3">

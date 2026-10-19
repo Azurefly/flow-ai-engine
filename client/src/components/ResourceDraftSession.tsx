@@ -68,7 +68,58 @@ export function useResourceDraftPending(projectId: string, category: string) {
   );
 }
 export function useResourceDraftSummary(projectId?: string) {
-  return useStore()?.stats(projectId) ?? { count: 0, pending: 0 };
+  const store = useStore();
+  return {
+    ...(store?.stats(projectId) ?? { count: 0, pending: 0 }),
+    uncertain: store?.hasUncertainCreation(projectId) ?? false,
+  };
+}
+export function useResourceCreation<
+  TInput extends { projectId: string; requestKey?: string },
+  TResult,
+>(
+  projectId: string,
+  category: string,
+  mutation: {
+    mutateAsync: (input: TInput) => Promise<TResult>;
+    isPending: boolean;
+    error?: { message: string } | null;
+  }
+) {
+  const session = useContext(SessionContext);
+  const [fallback] = useState(() => new ResourceDraftStore());
+  const store = session ?? fallback;
+  useSyncExternalStore(store.subscribe, store.snapshot, noSnapshot);
+  const mutateAsync = useCallback(
+    async (input: TInput) => {
+      if (input.projectId !== projectId)
+        throw new Error("保存业务已变化，请重新打开表单。");
+      const previous = store.creation(projectId, category);
+      const attempt = store.prepareCreation(
+        projectId,
+        category,
+        previous?.uncertain ? previous.payload : input
+      );
+      try {
+        const result = await mutation.mutateAsync({
+          ...attempt.payload,
+          requestKey: attempt.key,
+        } as TInput);
+        store.completeCreation(projectId, category, attempt.key);
+        return result;
+      } catch (error) {
+        store.failCreation(projectId, category, attempt.key, error);
+        throw error;
+      }
+    },
+    [store, projectId, category, mutation.mutateAsync]
+  );
+  return {
+    mutateAsync,
+    isPending: mutation.isPending,
+    error: mutation.error,
+    uncertain: Boolean(store.creation(projectId, category)?.uncertain),
+  };
 }
 export function ResourceDraftSession({ children }: { children: ReactNode }) {
   const [store] = useState(() => new ResourceDraftStore());
@@ -123,6 +174,8 @@ export function ResourceDraftSession({ children }: { children: ReactNode }) {
           <AlertDialogTitle>离开前保留资源填写</AlertDialogTitle>
           <AlertDialogDescription>
             资源尚未保存。继续编辑可保留当前填写；确认离开会放弃这些内容。
+            {store.hasUncertainCreation() &&
+              " 部分保存结果尚未确认；离开不会撤销可能已经完成的创建，请先核对。"}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>继续编辑</AlertDialogCancel>

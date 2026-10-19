@@ -120,3 +120,111 @@ describe("资源填写会话", () => {
     expect(store.stats().count).toBe(0);
   });
 });
+
+describe("资源提交结果确认", () => {
+  const payload = () => ({
+    projectId: "p1",
+    name: "订单",
+    schema: [{ name: "id" }],
+  });
+  it("同一填写重试沿用原标识，调整对象字段顺序不生成新请求", () => {
+    const store = new ResourceDraftStore();
+    const first = store.prepareCreation("p1", "assets", payload());
+    expect(first.key).toMatch(/^[a-f0-9]{48}$/);
+    expect(
+      store.prepareCreation("p1", "assets", {
+        schema: [{ name: "id" }],
+        name: "订单",
+        projectId: "p1",
+      }).key
+    ).toBe(first.key);
+  });
+  it("提交快照不随原表单对象后续修改而变化", () => {
+    const store = new ResourceDraftStore(),
+      form = payload();
+    const attempt = store.prepareCreation("p1", "assets", form);
+    form.name = "已修改";
+    form.schema[0].name = "changed";
+    expect(attempt.payload.name).toBe("订单");
+    expect(attempt.payload.schema).toEqual([{ name: "id" }]);
+  });
+  it("网络错误保留快照并阻止更换内容，不依赖原表单是否仍挂载", () => {
+    const store = new ResourceDraftStore(),
+      attempt = store.prepareCreation("p1", "assets", payload());
+    store.failCreation(
+      "p1",
+      "assets",
+      attempt.key,
+      new Error("Failed to fetch")
+    );
+    expect(store.stats()).toEqual({ count: 1, pending: 0 });
+    expect(store.hasUncertainCreation("p1")).toBe(true);
+    expect(store.hasUncertainCreation("p2")).toBe(false);
+    expect(store.prepareCreation("p1", "assets", payload()).key).toBe(
+      attempt.key
+    );
+    expect(() =>
+      store.prepareCreation("p1", "assets", { ...payload(), name: "其他" })
+    ).toThrow("先核对");
+    expect(store.exportDrafts()).toEqual([]);
+  });
+  it("未知结果后权限被收回仍保留原标识，恢复权限后可核对原保存", () => {
+    const store = new ResourceDraftStore(),
+      attempt = store.prepareCreation("p1", "sources", payload());
+    store.failCreation("p1", "sources", attempt.key, {
+      data: { code: "INTERNAL_SERVER_ERROR" },
+    });
+    store.failCreation("p1", "sources", attempt.key, {
+      data: { code: "FORBIDDEN" },
+    });
+    expect(store.creation("p1", "sources")?.uncertain).toBe(true);
+    expect(store.prepareCreation("p1", "sources", payload()).key).toBe(
+      attempt.key
+    );
+    store.completeCreation("p1", "sources", attempt.key);
+    expect(store.hasUncertainCreation()).toBe(false);
+    expect(store.stats().count).toBe(0);
+  });
+  it("明确的首次参数或权限拒绝允许调整填写，调整后生成新标识", () => {
+    const store = new ResourceDraftStore(),
+      attempt = store.prepareCreation("p1", "tags", payload());
+    store.failCreation("p1", "tags", attempt.key, {
+      data: { code: "BAD_REQUEST" },
+    });
+    expect(store.creation("p1", "tags")?.uncertain).toBe(false);
+    expect(
+      store.prepareCreation("p1", "tags", { ...payload(), name: "修正" }).key
+    ).not.toBe(attempt.key);
+  });
+  it("确认成功后才结束原请求，同一内容的新建操作使用新标识", () => {
+    const store = new ResourceDraftStore(),
+      first = store.prepareCreation("p1", "plugins", payload());
+    store.completeCreation("p1", "plugins", first.key);
+    const next = store.prepareCreation("p1", "plugins", payload());
+    expect(next.key).not.toBe(first.key);
+    store.completeCreation("p1", "plugins", first.key);
+    store.failCreation("p1", "plugins", first.key, new Error("late"));
+    expect(store.creation("p1", "plugins")?.key).toBe(next.key);
+    expect(store.creation("p1", "plugins")?.uncertain).toBe(false);
+  });
+  it("业务、资源类别、账号实例各自隔离请求，放弃清空当前会话", () => {
+    const first = new ResourceDraftStore(),
+      otherAccount = new ResourceDraftStore();
+    const a = first.prepareCreation("p1", "tags", payload());
+    expect(first.prepareCreation("p2", "tags", payload()).key).not.toBe(a.key);
+    expect(first.prepareCreation("p1", "assets", payload()).key).not.toBe(
+      a.key
+    );
+    expect(otherAccount.creation("p1", "tags")).toBeUndefined();
+    first.failCreation("p1", "tags", a.key, {});
+    first.clear();
+    expect(first.creation("p1", "tags")).toBeUndefined();
+    expect(first.stats().count).toBe(0);
+  });
+  it("非法快照不建立待确认请求", () => {
+    const store = new ResourceDraftStore();
+    for (const value of [null, [], "text", new Date()])
+      expect(() => store.prepareCreation("p1", "tags", value)).toThrow();
+    expect(store.creation("p1", "tags")).toBeUndefined();
+  });
+});

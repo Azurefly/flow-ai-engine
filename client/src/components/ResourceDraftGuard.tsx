@@ -8,7 +8,7 @@ export function ResourceDraftGuard({
   projectId: string;
   children: ReactNode;
 }) {
-  const { count } = useResourceDraftSummary(projectId);
+  const { count, uncertain } = useResourceDraftSummary(projectId);
   return (
     <>
       {count > 0 && (
@@ -18,7 +18,9 @@ export function ResourceDraftGuard({
           className="aiflow-type-body mb-4 rounded-lg border border-aiflow-info-border bg-accent px-4 py-3 text-foreground"
         >
           有 {count}{" "}
-          类资源尚未保存。切换资源类别会保留填写；离开当前业务前需要确认。
+          {uncertain
+            ? "类资源需要保存或核对结果。请重新打开对应表单确认；离开不会撤销可能已完成的创建。"
+            : "类资源尚未保存。切换资源类别会保留填写；离开当前业务前需要确认。"}
         </p>
       )}
       {children}

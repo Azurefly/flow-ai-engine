@@ -1,3 +1,4 @@
+import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import {
   listWorkflowCustomRoles,
   listWorkflowRoleAssignments,
@@ -862,6 +863,7 @@ export const appRouter = router({
     createSource: protectedProcedure
       .input(
         z.object({
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
           projectId: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160),
           sourceType: z.enum(["jdbc", "api", "file", "inline"]),
@@ -903,6 +905,7 @@ export const appRouter = router({
     createAsset: protectedProcedure
       .input(
         z.object({
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
           projectId: z.string().min(8).max(64),
           sourceId: z.string().min(8).max(64).nullable().optional(),
           name: z.string().trim().min(1).max(160),
@@ -945,6 +948,7 @@ export const appRouter = router({
     createUdf: protectedProcedure
       .input(
         z.object({
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
           projectId: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160),
           udfType: z.enum(["sql", "javascript", "python", "jar"]),
@@ -985,6 +989,7 @@ export const appRouter = router({
     createTag: protectedProcedure
       .input(
         z.object({
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
           projectId: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(80),
           color: z
@@ -1009,6 +1014,7 @@ export const appRouter = router({
     createPlugin: protectedProcedure
       .input(
         z.object({
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
           projectId: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160),
           pluginType: z.enum(["transform", "connector", "visualization"]),

@@ -369,7 +369,9 @@ async function poll(description, read, accept, timeout = 20000) {
       await expect(field).toHaveValue(name);
       await expect(field).toHaveAttribute("data-draft-identity", "preserved");
       await expect(field).toBeEnabled();
-      const save = dialog.getByRole("button", { name: "保存", exact: true });
+      const save = dialog.getByRole("button", {
+        name: /^(保存|核对保存结果)$/,
+      });
       await expect(save).toBeDisabled();
       await expect(
         dialog.locator("[data-resource-catalog-notice]")
@@ -478,7 +480,10 @@ async function poll(description, read, accept, timeout = 20000) {
       });
       failMutation = spec.method;
       await save.click();
-      await expect(dialog.getByRole("alert")).toContainText("测试提交失败");
+      await expect(dialog.getByRole("alert")).toContainText(
+        "上次保存结果尚未确认"
+      );
+      await expect(field).toBeDisabled();
       await expect(visibleToasts).toHaveCount(0);
       await expect(field).toHaveValue(name);
       await expect(save).toBeEnabled();

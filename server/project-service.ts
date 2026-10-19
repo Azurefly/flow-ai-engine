@@ -16,7 +16,7 @@ import {
   type Definition,
 } from "./workflow-service";
 
-export type ProjectUser = { id: number; role: "user" | "admin" };
+export type ProjectUser = { id: number; role: "user" | "admin"; tokenVersion?: number };
 export type ProjectMemberRole = "owner" | "designer" | "operator" | "viewer";
 export type ProjectPermission =
   | "project:view"
@@ -76,10 +76,12 @@ export async function ensureProjectUnitTable() {
   projectUnitTableInitialized = true;
 }
 
-export async function getProjectAccess(user: ProjectUser, projectId: string, options?: { includeArchived?: boolean }) {
-  await ensureProjectUnitTable();
-  const [projects] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT ownerUserId,status FROM flow_project WHERE id=? LIMIT 1",
+export async function getProjectAccess(user: ProjectUser, projectId: string, options?: { includeArchived?: boolean; connection?: mysql.PoolConnection; lock?: boolean }) {
+  if (!options?.connection) await ensureProjectUnitTable();
+  const executor = options?.connection ?? db();
+  const shareLock = options?.lock ? " FOR SHARE" : "";
+  const [projects] = await executor.query<mysql.RowDataPacket[]>(
+    `SELECT ownerUserId,status FROM flow_project WHERE id=? LIMIT 1${options?.lock ? " FOR UPDATE" : ""}`,
     [projectId]
   );
   const project = projects[0];
@@ -95,15 +97,15 @@ export async function getProjectAccess(user: ProjectUser, projectId: string, opt
       permissions: new Set<ProjectPermission>(project.status === "archived" ? ["project:view"] : rolePermissions.owner),
       roles: ["owner"] as ProjectMemberRole[],
     };
-  const [members] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())",
+  const [members] = await executor.query<mysql.RowDataPacket[]>(
+    `SELECT role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())${shareLock}`,
     [projectId, user.id]
   );
-  const [unitRoles] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT DISTINCT pu.role FROM flow_project_unit pu
+  const [unitRoles] = await executor.query<mysql.RowDataPacket[]>(
+    `SELECT ${options?.lock ? "" : "DISTINCT "}pu.role FROM flow_project_unit pu
        JOIN organization_membership om ON om.unitId=pu.unitId
        JOIN organization_unit ou ON ou.id=pu.unitId AND ou.status='active'
-      WHERE pu.projectId=? AND om.userId=?`,
+      WHERE pu.projectId=? AND om.userId=?${shareLock}`,
     [projectId, user.id]
   );
   const roles = Array.from(

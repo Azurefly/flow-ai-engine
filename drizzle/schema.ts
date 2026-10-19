@@ -648,7 +648,9 @@ export const workflowTaskGroups = mysqlTable(
       .notNull()
       .references(() => workflowRuns.id),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
-    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
+    executionKey: varchar("executionKey", { length: 80 })
+      .default("legacy")
+      .notNull(),
     signMode: mysqlEnum("signMode", [
       "single",
       "orSignFor",
@@ -682,7 +684,11 @@ export const workflowTaskGroups = mysqlTable(
     completedAt: timestamp("completedAt"),
   },
   table => [
-    unique("workflow_task_group_run_node_unique").on(table.runId, table.nodeId, table.executionKey),
+    unique("workflow_task_group_run_node_unique").on(
+      table.runId,
+      table.nodeId,
+      table.executionKey
+    ),
     index("workflow_task_group_run_status_idx").on(table.runId, table.status),
   ]
 );
@@ -702,7 +708,9 @@ export const workflowTasks = mysqlTable(
       .notNull()
       .references(() => workflowRuns.id),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
-    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
+    executionKey: varchar("executionKey", { length: 80 })
+      .default("legacy")
+      .notNull(),
     nodeName: varchar("nodeName", { length: 160 }).notNull(),
     taskType: mysqlEnum("taskType", ["operate"]).default("operate").notNull(),
     status: mysqlEnum("status", [
@@ -864,7 +872,9 @@ export const workflowMilestones = mysqlTable(
       .notNull()
       .references(() => workflows.id, { onDelete: "cascade" }),
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
-    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
+    executionKey: varchar("executionKey", { length: 80 })
+      .default("legacy")
+      .notNull(),
     milestoneCode: varchar("milestoneCode", { length: 96 }).notNull(),
     displayName: varchar("displayName", { length: 160 }).notNull(),
     category: mysqlEnum("category", [
@@ -881,7 +891,11 @@ export const workflowMilestones = mysqlTable(
     occurredAt: timestamp("occurredAt").defaultNow().notNull(),
   },
   table => [
-    unique("workflow_milestone_run_node_unique").on(table.runId, table.nodeId, table.executionKey),
+    unique("workflow_milestone_run_node_unique").on(
+      table.runId,
+      table.nodeId,
+      table.executionKey
+    ),
     index("workflow_milestone_workflow_time_idx").on(
       table.workflowId,
       table.occurredAt
@@ -901,7 +915,9 @@ export const workflowWaitSubscriptions = mysqlTable(
       .notNull()
       .references(() => workflows.id),
     nodeId: varchar("nodeId", { length: 128 }).notNull(),
-    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
+    executionKey: varchar("executionKey", { length: 80 })
+      .default("legacy")
+      .notNull(),
     nodeRunId: varchar("nodeRunId", { length: 36 })
       .notNull()
       .references(() => workflowNodeRuns.id),
@@ -951,7 +967,9 @@ export const workflowStateTransitions = mysqlTable(
       .references(() => workflows.id, { onDelete: "cascade" }),
     sequenceNo: int("sequenceNo").notNull(),
     nodeId: varchar("nodeId", { length: 160 }),
-    executionKey: varchar("executionKey", { length: 80 }).default("legacy").notNull(),
+    executionKey: varchar("executionKey", { length: 80 })
+      .default("legacy")
+      .notNull(),
     fromStateCode: varchar("fromStateCode", { length: 160 }),
     toStateCode: varchar("toStateCode", { length: 160 }).notNull(),
     transitionCode: varchar("transitionCode", { length: 160 }).notNull(),
@@ -969,7 +987,11 @@ export const workflowStateTransitions = mysqlTable(
       table.runId,
       table.sequenceNo
     ),
-    unique("workflow_state_transition_run_visit_unique").on(table.runId, table.nodeId, table.executionKey),
+    unique("workflow_state_transition_run_visit_unique").on(
+      table.runId,
+      table.nodeId,
+      table.executionKey
+    ),
     index("workflow_state_transition_workflow_idx").on(
       table.workflowId,
       table.createdAt
@@ -1243,6 +1265,39 @@ export const projectPlugins = mysqlTable(
   ]
 );
 
+/** Durable creation receipts contain hashes and identifiers, never raw submitted configuration. */
+export const resourceCreationRequests = mysqlTable(
+  "resource_creation_request",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    actorUserId: int("actorUserId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    projectId: varchar("projectId", { length: 36 })
+      .notNull()
+      .references(() => flowProjects.id, { onDelete: "cascade" }),
+    resourceKind: mysqlEnum("resourceKind", [
+      "source",
+      "asset",
+      "udf",
+      "tag",
+      "plugin",
+    ]).notNull(),
+    requestKeyHash: varchar("requestKeyHash", { length: 64 }).notNull(),
+    payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+    resourceId: varchar("resourceId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    unique("resource_creation_request_identity_unique").on(
+      table.actorUserId,
+      table.projectId,
+      table.resourceKind,
+      table.requestKeyHash
+    ),
+  ]
+);
+
 /** Immutable, project-scoped dataflow run audit separate from general workflow runs. */
 export const dataflowRuns = mysqlTable(
   "dataflow_run",
@@ -1454,7 +1509,9 @@ export const dataflowSchedules = mysqlTable(
       .notNull()
       .references(() => workflows.id),
     cronExpression: varchar("cronExpression", { length: 96 }).notNull(),
-    schedulerType: mysqlEnum("schedulerType", ["hosted", "internal"]).default("hosted").notNull(),
+    schedulerType: mysqlEnum("schedulerType", ["hosted", "internal"])
+      .default("hosted")
+      .notNull(),
     revision: int("revision").default(0).notNull(),
     nextRunAt: datetime("nextRunAt", { mode: "string" }),
     lastError: varchar("lastError", { length: 500 }),
@@ -1474,7 +1531,11 @@ export const dataflowSchedules = mysqlTable(
   },
   table => [
     unique("dataflow_schedule_workflow_unique").on(table.workflowId),
-    index("dataflow_schedule_due_idx").on(table.schedulerType, table.status, table.nextRunAt),
+    index("dataflow_schedule_due_idx").on(
+      table.schedulerType,
+      table.status,
+      table.nextRunAt
+    ),
     unique("dataflow_schedule_task_uid_unique").on(table.scheduleCronTaskUid),
     index("dataflow_schedule_project_status_idx").on(
       table.projectId,

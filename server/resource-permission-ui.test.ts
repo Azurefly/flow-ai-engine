@@ -125,6 +125,11 @@ it("资源读取失败保留门户表单，并提供独立读取入口；读取�
     expect(structured).toContain(`aria-label="${label}"`);
   }
   expect(structured).toContain("<ResourceCatalogNotice />");
+  for (const source of [center, structured]) {
+    expect(source).toContain('uncertain ? "核对保存结果" : "保存"');
+    expect(source).toContain("disabled={!canEdit || pending || uncertain}");
+  }
+  expect(center.match(/useResourceCreation\(\s*projectId,/g)).toHaveLength(5);
 });
 
 it("资源填写会话按登录账号重建，整页恢复不恢复服务端权限与资源缓存", () => {

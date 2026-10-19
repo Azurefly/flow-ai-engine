@@ -26,6 +26,7 @@ import {
   useResourceDraftState,
   useResourceDraftPending,
   useResourceDraftSummary,
+  useResourceCreation,
 } from "./ResourceDraftSession";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import {
@@ -197,14 +198,14 @@ export default function DataResourceCenter({
   const createSource = trpc.data.createSource.useMutation({
     onSuccess: () => {
       invalidate();
-      toast.success("数据源草稿已创建；请按类型校验登记或测试连接。");
+      toast.success("数据源保存已确认；请按类型校验登记或测试连接。");
     },
     onError: reportResourceFormError,
   });
   const createAsset = trpc.data.createAsset.useMutation({
     onSuccess: () => {
       invalidate();
-      toast.success("资源探查结果已保存。");
+      toast.success("资源探查结果保存已确认。");
     },
     onError: reportResourceFormError,
   });
@@ -218,7 +219,7 @@ export default function DataResourceCenter({
         artifactRef: "builtin:trim",
       });
       invalidate();
-      toast.success("函数已登记；需审核并绑定可执行实现。");
+      toast.success("函数保存已确认；需审核并绑定可执行实现。");
     },
     onError: reportResourceFormError,
   });
@@ -226,7 +227,7 @@ export default function DataResourceCenter({
     onSuccess: () => {
       setTagName("");
       invalidate();
-      toast.success("标签已创建。");
+      toast.success("标签保存已确认。");
     },
     onError: reportResourceFormError,
   });
@@ -234,10 +235,23 @@ export default function DataResourceCenter({
     onSuccess: () => {
       setPluginForm({ name: "", pluginType: "transform", version: "1.0.0" });
       invalidate();
-      toast.success("项目插件元数据已登记。");
+      toast.success("项目插件保存已确认。");
     },
     onError: reportResourceFormError,
   });
+  const sourceCreation = useResourceCreation(
+    projectId,
+    "sources",
+    createSource
+  );
+  const assetCreation = useResourceCreation(projectId, "assets", createAsset);
+  const udfCreation = useResourceCreation(projectId, "udfs", createUdf);
+  const tagCreation = useResourceCreation(projectId, "tags", createTag);
+  const pluginCreation = useResourceCreation(
+    projectId,
+    "plugins",
+    createPlugin
+  );
   const removeSource = trpc.data.deleteSource.useMutation({
     onSuccess: invalidate,
     onError: reportResourceError,
@@ -646,8 +660,8 @@ export default function DataResourceCenter({
                   ? ((resources.data?.sources ?? []) as any[])
                   : []
               }
-              createSource={createSource}
-              createAsset={createAsset}
+              createSource={sourceCreation}
+              createAsset={assetCreation}
             />
           ))}
           {!selectedQueryLoading &&
@@ -789,7 +803,7 @@ export default function DataResourceCenter({
               title="注册函数"
               description="绑定内置实现并审核后可执行数据转换；其他类型目前仅登记元数据，尚不能执行。"
               onSubmit={() =>
-                createUdf.mutateAsync({
+                udfCreation.mutateAsync({
                   projectId,
                   name: udfForm.name,
                   udfType: udfForm.udfType,
@@ -806,6 +820,7 @@ export default function DataResourceCenter({
               }
               pending={createUdf.isPending}
               errorMessage={createUdf.error?.message}
+              uncertain={udfCreation.uncertain}
               projectId={projectId}
               category="udfs"
               dirty={Boolean(
@@ -964,10 +979,11 @@ export default function DataResourceCenter({
               title="新建标签"
               description="项目级数据标签用于资源分类，不会跨越项目可见范围。"
               onSubmit={() =>
-                createTag.mutateAsync({ projectId, name: tagName })
+                tagCreation.mutateAsync({ projectId, name: tagName })
               }
               pending={createTag.isPending}
               errorMessage={createTag.error?.message}
+              uncertain={tagCreation.uncertain}
               projectId={projectId}
               category="tags"
               dirty={Boolean(tagName)}
@@ -1025,7 +1041,7 @@ export default function DataResourceCenter({
               title="登记项目插件"
               description="仅保存已批准插件的配置元数据；插件运行仍受服务端安全策略控制。"
               onSubmit={() =>
-                createPlugin.mutateAsync({
+                pluginCreation.mutateAsync({
                   projectId,
                   name: pluginForm.name,
                   pluginType: pluginForm.pluginType,
@@ -1035,6 +1051,7 @@ export default function DataResourceCenter({
               }
               pending={createPlugin.isPending}
               errorMessage={createPlugin.error?.message}
+              uncertain={pluginCreation.uncertain}
               projectId={projectId}
               category="plugins"
               dirty={Boolean(
@@ -1681,6 +1698,7 @@ function ResourceForm({
   dirty,
   projectId,
   category,
+  uncertain,
 }: {
   title: string;
   description: string;
@@ -1691,6 +1709,7 @@ function ResourceForm({
   dirty: boolean;
   projectId: string;
   category: string;
+  uncertain: boolean;
 }) {
   const [open, setOpen] = useResourceDraftState(
     projectId,
@@ -1756,15 +1775,27 @@ function ResourceForm({
         onOpenChange={setOpen}
         title={title}
         description={description}
-        submitLabel="保存"
+        submitLabel={uncertain ? "核对保存结果" : "保存"}
         pending={pending}
-        errorMessage={submitError || errorMessage}
+        errorMessage={
+          uncertain
+            ? "上次保存结果尚未确认，填写内容已保留。"
+            : submitError || errorMessage
+        }
+        errorHint={
+          uncertain
+            ? "请先核对保存结果，确认前暂不可修改填写；系统不会重复创建。"
+            : undefined
+        }
         submitDisabled={!canEdit || !catalog.ready}
         onSubmit={submit}
       >
         <ResourcePermissionNotice />
         <ResourceCatalogNotice />
-        <fieldset className="grid min-w-0 gap-3" disabled={!canEdit || pending}>
+        <fieldset
+          className="grid min-w-0 gap-3"
+          disabled={!canEdit || pending || uncertain}
+        >
           {children}
         </fieldset>
       </CreationDialog>

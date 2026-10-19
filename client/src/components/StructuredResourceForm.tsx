@@ -18,6 +18,7 @@ type ResourceMutation = {
   mutateAsync: (input: any) => Promise<unknown>;
   isPending: boolean;
   error?: { message: string } | null;
+  uncertain?: boolean;
 };
 
 export function StructuredResourceForm({
@@ -99,6 +100,9 @@ export function StructuredResourceForm({
   const pending =
     Boolean(useResourceDraftSummary(projectId).pending) ||
     (tab === "sources" ? createSource.isPending : createAsset.isPending);
+  const uncertain = Boolean(
+    (tab === "sources" ? createSource : createAsset).uncertain
+  );
   const fieldClass =
     "h-11 w-full min-w-0 rounded border border-border bg-card px-2 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 sm:h-10";
   const panel =
@@ -347,24 +351,36 @@ export function StructuredResourceForm({
         onOpenChange={setOpen}
         title={title}
         description={description}
-        submitLabel="保存"
+        submitLabel={uncertain ? "核对保存结果" : "保存"}
         submitDisabled={
           !canEdit ||
           !catalog.ready ||
-          (tab === "assets" &&
+          (!uncertain &&
+            tab === "assets" &&
             !schemaRows.some(row => row.name.trim() && row.type.trim()))
         }
         pending={pending}
         onSubmit={submit}
         errorMessage={
-          submitError ||
-          (tab === "sources" ? createSource.error : createAsset.error)?.message
+          uncertain
+            ? "上次保存结果尚未确认，填写内容已保留。"
+            : submitError ||
+              (tab === "sources" ? createSource.error : createAsset.error)
+                ?.message
+        }
+        errorHint={
+          uncertain
+            ? "请先核对保存结果，确认前暂不可修改填写；系统不会重复创建。"
+            : undefined
         }
         className="max-w-2xl"
       >
         <ResourcePermissionNotice />
         <ResourceCatalogNotice />
-        <fieldset className="grid min-w-0 gap-3" disabled={!canEdit || pending}>
+        <fieldset
+          className="grid min-w-0 gap-3"
+          disabled={!canEdit || pending || uncertain}
+        >
           {fields}
         </fieldset>
       </CreationDialog>

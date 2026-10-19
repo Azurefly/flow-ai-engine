@@ -8,7 +8,7 @@ import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
-import { recordAuthorizationAudit } from "./iam-service";
+import { createProjectResource } from "./resource-create-transaction";
 import { getProjectAccess, type ProjectUser } from "./project-service";
 import { lockActiveProject } from "./project-lifecycle-lock";
 import {
@@ -137,7 +137,10 @@ function parseJson(value: unknown, fallback: unknown = {}) {
 function assertNoInlineSecret(value: unknown) {
   const serialized = JSON.stringify(value ?? {}).toLowerCase();
   if (/(password|passwd|secret|token|api[_-]?key)\s*["':=]/.test(serialized))
-    throw new Error("连接配置不得包含明文凭据；请使用凭据引用字段。 ");
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "连接配置不得包含明文凭据；请使用凭据引用字段。",
+    });
 }
 
 function cleanSource(row: mysql.RowDataPacket) {
@@ -253,35 +256,37 @@ export async function createDataSource(
     sourceType: "jdbc" | "api" | "file" | "inline";
     connection: JsonRecord;
     credentialRef?: string;
+    requestKey?: string;
   }
 ) {
-  await requireProjectAccess(user, input.projectId, "edit");
   assertNoInlineSecret(input.connection);
-  const sourceId = id();
-  await db().query(
-    "INSERT INTO data_source (id,projectId,name,sourceType,connectionJson,credentialRef,status,lastTestedAt,createdByUserId) VALUES (?,?,?,?,?,?,'draft',NULL,?)",
-    [
-      sourceId,
-      input.projectId,
-      input.name.trim(),
-      input.sourceType,
-      JSON.stringify(input.connection),
-      input.credentialRef?.trim() || null,
-      user.id,
-    ]
-  );
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "data_source",
-    resourceId: sourceId,
-    details: {
-      operation: "created",
-      projectId: input.projectId,
-      sourceType: input.sourceType,
+  const value = {
+    name: input.name.trim(),
+    sourceType: input.sourceType,
+    connection: input.connection,
+    credentialRef: input.credentialRef?.trim() || null,
+  };
+  return createProjectResource(user, {
+    projectId: input.projectId,
+    kind: "source",
+    requestKey: input.requestKey,
+    payload: value,
+    auditDetails: { sourceType: value.sourceType },
+    create: async (connection, resourceId) => {
+      await connection.query(
+        "INSERT INTO data_source (id,projectId,name,sourceType,connectionJson,credentialRef,status,lastTestedAt,createdByUserId) VALUES (?,?,?,?,?,?,'draft',NULL,?)",
+        [
+          resourceId,
+          input.projectId,
+          value.name,
+          value.sourceType,
+          JSON.stringify(value.connection),
+          value.credentialRef,
+          user.id,
+        ]
+      );
     },
   });
-  return sourceId;
 }
 
 export async function updateDataSource(
@@ -812,31 +817,48 @@ export async function createDataAsset(
     assetType: "table" | "view" | "file" | "endpoint" | "dataset";
     schema: unknown[];
     sample?: unknown[];
+    requestKey?: string;
   }
 ) {
-  await requireProjectAccess(user, input.projectId, "edit");
-  if (input.sourceId) {
-    const [sources] = await db().query<mysql.RowDataPacket[]>(
-      "SELECT id FROM data_source WHERE id=? AND projectId=? LIMIT 1",
-      [input.sourceId, input.projectId]
-    );
-    if (!sources[0]) throw new Error("关联数据源不存在或不属于当前项目。 ");
-  }
-  const assetId = id();
-  await db().query(
-    "INSERT INTO data_asset (id,projectId,sourceId,name,assetType,schemaJson,sampleJson,status,createdByUserId) VALUES (?,?,?,?,?,?,?,'active',?)",
-    [
-      assetId,
-      input.projectId,
-      input.sourceId ?? null,
-      input.name.trim(),
-      input.assetType,
-      JSON.stringify(input.schema.slice(0, 100)),
-      JSON.stringify(normalizeRows(input.sample, 200)),
-      user.id,
-    ]
-  );
-  return assetId;
+  const value = {
+    sourceId: input.sourceId ?? null,
+    name: input.name.trim(),
+    assetType: input.assetType,
+    schema: input.schema.slice(0, 100),
+    sample: normalizeRows(input.sample, 200),
+  };
+  return createProjectResource(user, {
+    projectId: input.projectId,
+    kind: "asset",
+    requestKey: input.requestKey,
+    payload: value,
+    create: async (connection, resourceId) => {
+      if (value.sourceId) {
+        const [sources] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT id FROM data_source WHERE id=? AND projectId=? FOR SHARE",
+          [value.sourceId, input.projectId]
+        );
+        if (!sources[0])
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "关联数据源不存在或不属于当前项目。",
+          });
+      }
+      await connection.query(
+        "INSERT INTO data_asset (id,projectId,sourceId,name,assetType,schemaJson,sampleJson,status,createdByUserId) VALUES (?,?,?,?,?,?,?,'active',?)",
+        [
+          resourceId,
+          input.projectId,
+          value.sourceId,
+          value.name,
+          value.assetType,
+          JSON.stringify(value.schema),
+          JSON.stringify(value.sample),
+          user.id,
+        ]
+      );
+    },
+  });
 }
 
 export async function updateDataAsset(
@@ -900,25 +922,39 @@ export async function createDataUdf(
     params?: unknown[];
     returnType?: string;
     artifactRef?: string;
+    requestKey?: string;
   }
 ) {
-  await requireProjectAccess(user, input.projectId, "edit");
-  const udfId = id();
-  await db().query(
-    "INSERT INTO data_udf (id,projectId,name,udfType,description,paramsJson,returnType,artifactRef,status,createdByUserId) VALUES (?,?,?,?,?,?,?,?, 'draft',?)",
-    [
-      udfId,
-      input.projectId,
-      input.name.trim(),
-      input.udfType,
-      input.description?.trim() || null,
-      JSON.stringify(input.params ?? []),
-      input.returnType?.trim() || null,
-      input.artifactRef?.trim() || null,
-      user.id,
-    ]
-  );
-  return udfId;
+  const value = {
+    name: input.name.trim(),
+    udfType: input.udfType,
+    description: input.description?.trim() || null,
+    params: input.params ?? [],
+    returnType: input.returnType?.trim() || null,
+    artifactRef: input.artifactRef?.trim() || null,
+  };
+  return createProjectResource(user, {
+    projectId: input.projectId,
+    kind: "udf",
+    requestKey: input.requestKey,
+    payload: value,
+    create: async (connection, resourceId) => {
+      await connection.query(
+        "INSERT INTO data_udf (id,projectId,name,udfType,description,paramsJson,returnType,artifactRef,status,createdByUserId) VALUES (?,?,?,?,?,?,?,?, 'draft',?)",
+        [
+          resourceId,
+          input.projectId,
+          value.name,
+          value.udfType,
+          value.description,
+          JSON.stringify(value.params),
+          value.returnType,
+          value.artifactRef,
+          user.id,
+        ]
+      );
+    },
+  });
 }
 
 export async function updateDataUdf(
@@ -975,21 +1011,26 @@ export async function deleteDataUdf(
 
 export async function createDataTag(
   user: DataflowUser,
-  input: { projectId: string; name: string; color?: string }
+  input: {
+    projectId: string;
+    name: string;
+    color?: string;
+    requestKey?: string;
+  }
 ) {
-  await requireProjectAccess(user, input.projectId, "edit");
-  const tagId = id();
-  await db().query(
-    "INSERT INTO data_tag (id,projectId,name,color,createdByUserId) VALUES (?,?,?,?,?)",
-    [
-      tagId,
-      input.projectId,
-      input.name.trim(),
-      input.color ?? "#2d6bea",
-      user.id,
-    ]
-  );
-  return tagId;
+  const value = { name: input.name.trim(), color: input.color ?? "#2d6bea" };
+  return createProjectResource(user, {
+    projectId: input.projectId,
+    kind: "tag",
+    requestKey: input.requestKey,
+    payload: value,
+    create: async (connection, resourceId) => {
+      await connection.query(
+        "INSERT INTO data_tag (id,projectId,name,color,createdByUserId) VALUES (?,?,?,?,?)",
+        [resourceId, input.projectId, value.name, value.color, user.id]
+      );
+    },
+  });
 }
 
 export async function deleteDataTag(
@@ -1014,24 +1055,36 @@ export async function createProjectPlugin(
     pluginType: "transform" | "connector" | "visualization";
     version: string;
     config?: JsonRecord;
+    requestKey?: string;
   }
 ) {
-  await requireProjectAccess(user, input.projectId, "edit");
   assertNoInlineSecret(input.config);
-  const pluginId = id();
-  await db().query(
-    "INSERT INTO project_plugin (id,projectId,name,pluginType,version,configJson,status,createdByUserId) VALUES (?,?,?,?,?,?,'enabled',?)",
-    [
-      pluginId,
-      input.projectId,
-      input.name.trim(),
-      input.pluginType,
-      input.version.trim(),
-      JSON.stringify(input.config ?? {}),
-      user.id,
-    ]
-  );
-  return pluginId;
+  const value = {
+    name: input.name.trim(),
+    pluginType: input.pluginType,
+    version: input.version.trim(),
+    config: input.config ?? {},
+  };
+  return createProjectResource(user, {
+    projectId: input.projectId,
+    kind: "plugin",
+    requestKey: input.requestKey,
+    payload: value,
+    create: async (connection, resourceId) => {
+      await connection.query(
+        "INSERT INTO project_plugin (id,projectId,name,pluginType,version,configJson,status,createdByUserId) VALUES (?,?,?,?,?,?,'enabled',?)",
+        [
+          resourceId,
+          input.projectId,
+          value.name,
+          value.pluginType,
+          value.version,
+          JSON.stringify(value.config),
+          user.id,
+        ]
+      );
+    },
+  });
 }
 
 export async function updateProjectPlugin(
