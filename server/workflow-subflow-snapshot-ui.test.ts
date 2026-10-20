@@ -60,3 +60,11 @@ it("切换引用时清除旧快照；更新入口以实际草稿版本保存", (
   expect(action).toContain("definition: draftDefinition");
   expect(action).not.toContain("!isDraftDirty");
 });
+it("切换已缓存流程时等待匹配基准，不在渲染过程中抛出提交错误", () => {
+  expect(home).toContain(
+    "const draftBaseVersion = readWorkflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current)"
+  );
+  expect(home).toContain("!access.data || draftBaseVersion === null");
+  expect(home).toContain("正在准备流程草稿…");
+  expect(home).not.toContain("draftBaseVersion={workflowDraftBaseVersion(");
+});

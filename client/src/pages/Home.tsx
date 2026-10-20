@@ -64,7 +64,7 @@ import {
   acknowledgeWorkflowUnpublish,
 } from "../../../shared/workflow-publish";
 import type { Definition } from "../../../server/workflow-service";
-import { workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
+import { readWorkflowDraftBaseVersion, workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
 import { workflowLoopDraftError } from "../../../shared/workflow-loop-policy-draft";
 import { workflowNumberDraftError } from "@shared/workflow-number-draft";
 import ErrorBoundary from "@/components/ErrorBoundary";
@@ -1156,6 +1156,7 @@ function FlowConsole({
     access.data?.permissions?.has("workflow:members:manage")
   );
   const isDraftDirty = isWorkflowDraftDirty(effectiveWorkflowId, persistedDraftSnapshot.current, draftName, draftDefinition);
+  const draftBaseVersion = readWorkflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current);
   const definitionChanged = isDraftDirty && (persistedDraftSnapshot.current?.name === draftName ||
     !matchesWorkflowDefinitionSnapshot(persistedDraftSnapshot.current?.definitionJson, draftDefinition));
   const publicationGate = workflowPublicationGate({
@@ -1939,7 +1940,7 @@ function FlowConsole({
             !routeRestoring &&
             flowView === "editor" &&
             selectedWorkflow && draftDefinition &&
-            (selectedId && !access.data ? (
+            (!access.data || draftBaseVersion === null ? (
               <div
                 className="m-4 rounded-lg border border-border bg-card p-5"
                 role={access.isError ? "alert" : "status"}
@@ -1948,7 +1949,7 @@ function FlowConsole({
                 <p className="aiflow-type-body text-muted-foreground">
                   {access.isError
                     ? `读取流程权限失败：${access.error.message}`
-                    : "正在读取流程权限…"}
+                    : draftBaseVersion === null && access.data ? "正在准备流程草稿…" : "正在读取流程权限…"}
                 </p>
                 {access.isError && (
                   <Button
@@ -1972,7 +1973,7 @@ function FlowConsole({
                 canPublish={canPublish}
                 canRun={canRun}
                 hasUnpublishedChanges={isDraftDirty}
-                draftBaseVersion={workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current)}
+                draftBaseVersion={draftBaseVersion}
                 publicationGate={publicationGate}
                 publicationRefreshing={access.isFetching}
                 onRefreshPublication={() => void access.refetch()}

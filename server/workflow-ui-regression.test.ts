@@ -78,7 +78,7 @@ describe("分页流程缓存联动", () => {
   });
   it("无权限或不存在的流程不挂载依赖流程对象的设计器", () => {
     expect(homeSource).toContain(
-      'flowView === "editor" && selectedWorkflow && draftDefinition && (selectedId && !access.data'
+      'flowView === "editor" && selectedWorkflow && draftDefinition && (!access.data || draftBaseVersion === null'
     );
   });
   it("保存响应只同步当前流程且不覆盖提交之后的修改", () => {
@@ -3521,7 +3521,7 @@ it("运行弹窗按流程隔离，不显示其他流程或旧运行结果", () =
 });
 
 it("设计器权限未加载时明确等待，读取失败可重试", () => {
-  expect(homeSource).toContain("selectedId && !access.data ?");
+  expect(homeSource).toContain("!access.data || draftBaseVersion === null ?");
   expect(homeSource).toContain("正在读取流程权限…");
   expect(homeSource).toContain("读取流程权限失败：");
   expect(homeSource).toContain("重新读取流程权限");
