@@ -20,7 +20,12 @@ const login = credentials("_admin"),
 const directory = path.join(__dirname, "..", ".cache", tag);
 fs.mkdirSync(directory, { recursive: true });
 const helper =
-  fs.readFileSync(path.join(__dirname, "browser-config-fixtures.mjs"), "utf8") +
+  fs
+    .readFileSync(path.join(__dirname, "browser-config-fixtures.mjs"), "utf8")
+    .replace(
+      'else throw new Error("Unknown fixture action");',
+      'else if (browserFixtureIntent.action !== "prepare_legacy_subflow") throw new Error("Unknown fixture action");'
+    ) +
   String.raw`
 if (browserFixtureIntent.action === "prepare_legacy_subflow") {
   const intent = browserFixtureIntent, fixture = intent.fixture;
@@ -266,7 +271,10 @@ async function runPublished(flow, value) {
   );
   assert.equal(detail.status, "success");
   assert.equal(detail.executionSource, "published_plan");
-  assert.equal(Number(detail.definitionVersion), Number(flow.definitionVersion));
+  assert.equal(
+    Number(detail.definitionVersion),
+    Number(flow.definitionVersion)
+  );
   const output =
     typeof detail.finalOutputJson === "string"
       ? JSON.parse(detail.finalOutputJson)
@@ -525,6 +533,32 @@ async function verify(page) {
         )
         .toBe(true);
       await expect(notice).toBeVisible();
+      await expect
+        .poll(async () => {
+          const header = await page
+            .locator("[data-aiflow-designer] > [data-aiflow-context-header]")
+            .boundingBox();
+          const panel = await notice.boundingBox();
+          return Boolean(
+            header && panel && header.y + header.height <= panel.y + 1
+          );
+        })
+        .toBe(true);
+      if (width < 640)
+        await expect
+          .poll(() =>
+            notice
+              .locator(":scope > div > div")
+              .first()
+              .evaluate(element => {
+                const region = element.closest("section");
+                return (
+                  element.getBoundingClientRect().width >=
+                  region.getBoundingClientRect().width - 50
+                );
+              })
+          )
+          .toBe(true);
       if (width === 390)
         await page.screenshot({
           path: path.join(directory, "subflow-" + type + "-mobile.png"),
@@ -586,6 +620,7 @@ async function verify(page) {
       );
       assert.equal((await get(flow.id)).status, "draft");
       await page.goto(base + "#/flows/workflow/" + flow.id + "/editor");
+      await page.reload();
       await expect(notice).toContainText("尚未保存快照");
       const migrated = page.waitForResponse(
         r =>

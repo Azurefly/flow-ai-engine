@@ -97,10 +97,10 @@ export default function WorkflowSubflowSnapshots({
       aria-label="私有子流程快照"
       className="aiflow-type-body mb-3 grid min-w-0 gap-3 rounded-xl border border-border bg-card p-3"
     >
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+      <div className="grid min-w-0 gap-3 sm:flex sm:items-center sm:justify-between">
         <div className="min-w-0 flex-1">
           <p className="aiflow-type-control flex items-center gap-2 font-semibold">
-            <FolderTree size={16} aria-hidden="true" />
+            <FolderTree size={16} className="shrink-0" aria-hidden="true" />
             子流程执行快照 · {nodes.length} 个引用
           </p>
           <p className="mt-1 break-words text-muted-foreground">
@@ -113,7 +113,7 @@ export default function WorkflowSubflowSnapshots({
           <Button
             type="button"
             variant="outline"
-            className="min-h-11 max-w-full whitespace-normal"
+            className="min-h-11 w-full max-w-full whitespace-normal sm:w-auto sm:shrink-0"
             disabled={busy || saving || Boolean(error)}
             onClick={() => void save()}
           >

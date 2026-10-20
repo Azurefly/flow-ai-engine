@@ -934,8 +934,12 @@ h2 {
   flex-direction: column;
 }
 
-[data-aiflow-designer] > .mb-4.flex {
+[data-aiflow-designer] > * {
   order: 1;
+}
+
+[data-aiflow-designer] > [data-aiflow-context-header] {
+  order: 0;
 }
 
 [data-aiflow-designer] > [data-aiflow-workflow-canvas] {
@@ -947,13 +951,8 @@ h2 {
 }
 
 [data-aiflow-designer] > .mb-4.rounded-lg {
-  order: 4;
   margin-top: 8px;
   margin-bottom: 8px;
-}
-
-[data-aiflow-designer] > :nth-child(n + 5) {
-  order: 5;
 }
 
 [data-aiflow-designer] > .mb-4.grid {
