@@ -32,6 +32,8 @@ it("更新入口防止重复提交，异常后先核对版本，保留当前填�
   expect(notice).toContain("[savedVersion]");
   expect(home).toContain("onRefreshSubflows={async () =>");
   expect(home).toContain("请先取消发布，再更新草稿快照。");
+  expect(home).toContain('key={`subflow-snapshots:${workflow.id}`}');
+  expect(home).not.toContain("<WorkflowSubflowSnapshots key={workflow.id}");
 });
 it("切换引用时清除旧快照；更新入口以实际草稿版本保存", () => {
   expect(canvas).toContain("value !== selectedConfig.subflowId");

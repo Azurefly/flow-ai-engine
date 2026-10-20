@@ -2935,7 +2935,7 @@ function FlowDesigner({
           </Button>
         </div>
       </section>}
-      <WorkflowSubflowSnapshots key={workflow.id} workflowId={workflow.id} savedVersion={draftBaseVersion} definition={definition} published={workflow.status === "published"}
+      <WorkflowSubflowSnapshots key={`subflow-snapshots:${workflow.id}`} workflowId={workflow.id} savedVersion={draftBaseVersion} definition={definition} published={workflow.status === "published"}
         canEdit={canEdit} busy={savePending || publishPending || compilePending || unpublishBusy || Boolean(draftError)}
         onSave={onRefreshSubflows} onResolve={onResolveSubflowSave} />
       {draftError && <p role="alert" data-workflow-draft-error="" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{draftError}</p>}
