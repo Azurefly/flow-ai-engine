@@ -1,3 +1,4 @@
+import { workflowReviewSnapshot } from "@shared/workflow-review-snapshot";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { projectCapabilities } from "@shared/project-capabilities";
 import { canRevokeProjectGrant } from "@shared/project-member-grant";
@@ -60,6 +61,7 @@ import {
 } from "@/components/ui/popover";
 const DataResourceCenter = lazy(() => import("./DataResourceCenter"));
 const ProjectArchiveDialog = lazy(() => import("./ProjectArchiveDialog"));
+const WorkflowReviewDialog = lazy(() => import("./WorkflowReviewDialog"));
 
 export type ProjectRecord = {
   id: string;
@@ -1275,13 +1277,6 @@ export function ProjectWorkspace({
     },
     onError: error => toast.error(error.message),
   });
-  const auditWorkflow = trpc.project.auditWorkflow.useMutation({
-    onSuccess: () => {
-      void utils.project.workflows.invalidate({ projectId: project.id });
-      toast.success("审核状态已更新。");
-    },
-    onError: error => toast.error(error.message),
-  });
   const runWorkflow = trpc.workflow.run.useMutation({
     onSuccess: result =>
       toast.success(`流程已发起：${result.runId.slice(0, 8)}`),
@@ -1485,13 +1480,6 @@ export function ProjectWorkspace({
                     : null,
               });
             }}
-            onAudit={(workflowId, auditStatus) =>
-              auditWorkflow.mutate({
-                projectId: project.id,
-                workflowId,
-                auditStatus,
-              })
-            }
             onOpenWorkflow={onOpenWorkflow}
             onOpenWarehouse={onOpenWarehouse}
             onLaunch={workflow =>
@@ -2075,7 +2063,6 @@ type ProcessCenterProps = {
   canManage: boolean;
   creating: boolean;
   onCreate: () => void;
-  onAudit: (workflowId: string, auditStatus: "approved" | "rejected") => void;
   onOpenWorkflow: (workflowId: string) => void;
   onOpenWarehouse: () => void;
   onLaunch: (workflow: any) => void;
@@ -2158,7 +2145,6 @@ function ProcessCenter({
   canManage,
   creating,
   onCreate,
-  onAudit,
   onOpenWorkflow,
   onOpenWarehouse,
   onLaunch: startDataflow,
@@ -2210,6 +2196,7 @@ function ProcessCenter({
     businessInformationThree: "",
     businessInformationText: "",
   });
+  const [review, setReview] = useState<{ workflow: any; decision: "approved" | "rejected" } | null>(null);
   const [auditWorkflowId, setAuditWorkflowId] = useState<string | null>(null);
   const [approvalSelectorOpen, setApprovalSelectorOpen] = useState(false);
   const approvalHistory = trpc.project.workflowAudit.useQuery(
@@ -2407,8 +2394,8 @@ function ProcessCenter({
             {[
               { allowed: actionsFor(workflow).canPublish, label: "发布流程", tone: "success", run: () => publish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) }) },
               { allowed: actionsFor(workflow).canUnpublish, label: "取消发布", tone: "warning", run: () => unpublish.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) }) },
-              { allowed: actionsFor(workflow).canReview, label: "审核通过", tone: "success", run: () => onAudit(workflow.id, "approved") },
-              { allowed: actionsFor(workflow).canReview, label: "审核驳回", tone: "danger", run: () => onAudit(workflow.id, "rejected") },
+              { allowed: actionsFor(workflow).canReview, label: "审核通过", tone: "success", run: () => setReview({ workflow: workflowReviewSnapshot(workflow), decision: "approved" }) },
+              { allowed: actionsFor(workflow).canReview, label: "审核驳回", tone: "danger", run: () => setReview({ workflow: workflowReviewSnapshot(workflow), decision: "rejected" }) },
             ].filter(action => action.allowed).map(action => (
               <button key={action.label} type="button" disabled={publish.isPending || unpublish.isPending}
                 className={`aiflow-type-control min-h-11 rounded-md border bg-card px-3 py-2 sm:min-h-0 sm:px-2.5 sm:py-1.5 ${action.tone === "success" ? "border-aiflow-success-border text-aiflow-success hover:bg-aiflow-success-surface" : action.tone === "warning" ? "border-aiflow-warning-border text-aiflow-warning hover:bg-aiflow-warning-surface" : "border-red-200 text-red-600 hover:bg-red-50"}`}
@@ -3001,6 +2988,14 @@ function ProcessCenter({
           }}
         />
       )}
+      {review && <Suspense fallback={<Dialog open onOpenChange={open => { if (!open) setReview(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>正在加载审核确认</DialogTitle><DialogDescription>正在准备此流程版本的复核信息…</DialogDescription></DialogHeader>
+          <Loader2 className="animate-spin" aria-hidden="true" /><Button type="button" variant="outline" onClick={() => setReview(null)}>取消</Button>
+        </DialogContent></Dialog>}>
+        <WorkflowReviewDialog projectId={project.id} initial={review.workflow} decision={review.decision}
+          onClose={() => setReview(null)} onViewDefinition={onOpenWorkflow} />
+      </Suspense>}
+
       {auditWorkflowId && (
         <Dialog
           open
@@ -3032,14 +3027,18 @@ function ProcessCenter({
                   key={entry.id}
                   className="border-l-2 border-aiflow-info bg-muted px-3 py-2.5"
                 >
-                  <p className="text-sm font-medium text-foreground">
+                  <p className="aiflow-type-body font-medium text-foreground">
                     {entry.operation === "workflow_audit_reset"
                       ? "重置审核状态"
                       : entry.details?.auditStatus === "approved"
                         ? "审核通过"
                         : "审核驳回"}
                   </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                    {Number.isSafeInteger(Number(entry.details?.definitionVersion)) && Number(entry.details?.definitionVersion) > 0
+                      ? `定义 v${Number(entry.details?.definitionVersion)}` : "旧记录未提供版本"}
+                  </p>
+                  <p className="aiflow-type-meta mt-1 text-muted-foreground">
                     {entry.actorName || entry.actorUsername || "系统"} ·{" "}
                     {formatDate(entry.createdAt)}
                   </p>

@@ -5,6 +5,10 @@ import superjson from "superjson";
 const base = "http://124.223.198.84:1180";
 let cookie = "";
 async function request(path, input, mutation = false) {
+  if (mutation && ["project.auditWorkflow", "project.resetWorkflowAudit"].includes(path) && input?.workflowId && input.expectedDefinitionVersion === undefined && input.expectedAuditStatus === undefined) {
+    const current = await request("workflow.get", { id: input.workflowId });
+    input = { ...input, expectedDefinitionVersion: Number(current.definitionVersion), expectedAuditStatus: current.auditStatus };
+  }
   // Sequential fixture maintenance reads current configuration; conflict tests pass their own token.
   if (mutation && ["iam.updateCustomRole", "iam.deleteCustomRole"].includes(path) && input?.expectedConfigToken === undefined) {
     const current = await request("iam.customRoleConfiguration", { code: input.code });

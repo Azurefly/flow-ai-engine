@@ -668,6 +668,8 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          expectedDefinitionVersion: z.number().int().min(1),
+          expectedAuditStatus: z.enum(["init", "approved", "rejected"]),
           auditStatus: z.enum(["approved", "rejected"]),
         })
       )
@@ -677,6 +679,8 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          expectedDefinitionVersion: z.number().int().min(1),
+          expectedAuditStatus: z.enum(["init", "approved", "rejected"]),
         })
       )
       .mutation(({ ctx, input }) => resetProjectWorkflowAudit(ctx.user, input)),

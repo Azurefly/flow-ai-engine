@@ -3,7 +3,7 @@ import { createUser } from "../server/internal-auth";
 import { createCustomRole, assignRole } from "../server/iam-service";
 import { assignOrganizationMember, createOrganizationUnit } from "../server/organization-service";
 import { createProject, createProjectWorkflow, grantProjectMember, setProjectWorkflowAudit } from "../server/project-service";
-import { updateWorkflow, type Definition } from "../server/workflow-service";
+import { getWorkflow, updateWorkflow, type Definition } from "../server/workflow-service";
 import { createAnnualLeaveApprovalDefinition, createReportingApprovalDefinition, createResignationApprovalDefinition } from "../shared/company-workflows";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -74,7 +74,9 @@ async function main() {
   for (const [code, name, definition] of definitions) {
     const workflow = await createProjectWorkflow(admin, { projectId: project, processCode: `${code}_${suffix.toUpperCase()}`, name, description: name, flowType: "state", definition });
     workflowIds[code] = workflow.id;
-    await setProjectWorkflowAudit(admin, { projectId: project, workflowId: workflow.id, auditStatus: "approved" });
+    const review = await getWorkflow(workflow.id, admin);
+    if (!review) throw new Error("新建流程读取失败，未提交审核。");
+    await setProjectWorkflowAudit(admin, { projectId: project, workflowId: workflow.id, auditStatus: "approved", expectedDefinitionVersion: Number(review.definitionVersion), expectedAuditStatus: review.auditStatus });
     await updateWorkflow(workflow.id, admin, { publish: true });
   }
   console.log(JSON.stringify({ suffix, projectId: project, workflowIds, roleCode, employeeCount: 11, usernames }, null, 2));

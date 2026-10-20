@@ -13,7 +13,7 @@ import {
   grantProjectMember,
   setProjectWorkflowAudit,
 } from "../server/project-service";
-import { updateWorkflow, type Definition } from "../server/workflow-service";
+import { getWorkflow, updateWorkflow, type Definition } from "../server/workflow-service";
 
 const databaseUrl = process.env.DATABASE_URL;
 const password = process.env.LEAVE_DEMO_PASSWORD;
@@ -240,10 +240,14 @@ async function main() {
     flowType: "state",
     definition: createLeaveApprovalDefinition() as Definition,
   });
+  const review = await getWorkflow(workflow.id, admin);
+  if (!review) throw new Error("新建流程读取失败，未提交审核。");
   await setProjectWorkflowAudit(admin, {
     projectId,
     workflowId: workflow.id,
     auditStatus: "approved",
+    expectedDefinitionVersion: Number(review.definitionVersion),
+    expectedAuditStatus: review.auditStatus,
   });
   await updateWorkflow(workflow.id, admin, { publish: true });
 

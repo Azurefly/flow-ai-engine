@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -24,7 +25,7 @@ function callerFor(user: any) {
 async function createWorkflow(owner: any, name: string, definition: Definition) {
   const workflow = await createProjectWorkflow(owner, { projectId: projectId!, name, flowType: "state", definition });
   workflowIds.push(workflow.id);
-  await setProjectWorkflowAudit(owner, { projectId: projectId!, workflowId: workflow.id, auditStatus: "approved" });
+  await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflow.id)), projectId: projectId!, workflowId: workflow.id, auditStatus: "approved" });
   await updateWorkflow(workflow.id, owner, { publish: true });
   return workflow.id;
 }

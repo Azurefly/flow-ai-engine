@@ -7,7 +7,13 @@ const base = "http://124.223.198.84:1180";
 let cookie = "";
 async function request(path, input, mutation = false) {
     // Fixture writes explicitly submit the revision just inspected; callers may supply an older revision to test conflicts.
-    if (["workflow.update", "workflow.publish", "workflow.unpublish"].includes(path) && input?.id && input.expectedDefinitionVersion === undefined) {
+
+    // Fixture maintenance supplies its inspected review baseline; explicit stale baselines are preserved.
+    if (["project.auditWorkflow", "project.resetWorkflowAudit"].includes(path) && input?.workflowId && input.expectedDefinitionVersion === undefined && input.expectedAuditStatus === undefined) {
+      const current = await request("workflow.get", { id: input.workflowId });
+      input = { ...input, expectedDefinitionVersion: Number(current.definitionVersion), expectedAuditStatus: current.auditStatus };
+    }
+if (["workflow.update", "workflow.publish", "workflow.unpublish"].includes(path) && input?.id && input.expectedDefinitionVersion === undefined) {
       const current = await request("workflow.get", { id: input.id });
       input = { ...input, expectedDefinitionVersion: Number(current.definitionVersion) };
     }

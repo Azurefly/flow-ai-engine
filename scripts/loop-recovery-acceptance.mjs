@@ -15,6 +15,10 @@ const pool = mysql.createPool(process.env.DATABASE_URL);
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {
+    if (mutation && ["project.auditWorkflow", "project.resetWorkflowAudit"].includes(path) && input?.workflowId && input.expectedDefinitionVersion === undefined && input.expectedAuditStatus === undefined) {
+      const current = await this.request("workflow.get", { id: input.workflowId });
+      input = { ...input, expectedDefinitionVersion: Number(current.definitionVersion), expectedAuditStatus: current.auditStatus };
+    }
     const body = JSON.stringify(superjson.serialize(input ?? null));
     const response = await fetch(`${base}/api/trpc/${path}${mutation ? "" : `?input=${encodeURIComponent(body)}`}`, { method: mutation ? "POST" : "GET", headers: { "content-type": "application/json", cookie: this.cookie }, ...(mutation ? { body } : {}), signal: AbortSignal.timeout(30000) });
     const next = response.headers.getSetCookie()[0]; if (next) this.cookie = next.split(";", 1)[0];

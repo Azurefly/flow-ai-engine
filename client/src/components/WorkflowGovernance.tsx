@@ -296,6 +296,7 @@ export default function WorkflowGovernance({
                   workflowId={workflowId}
                   auditStatus={item?.auditStatus}
                   status={item?.status}
+                  definitionVersion={Number(item?.definitionVersion)}
                 />
               </div>
             </>
@@ -871,11 +872,13 @@ function AuditResetButton({
   workflowId,
   auditStatus,
   status,
+  definitionVersion,
 }: {
   projectId?: string | null;
   workflowId: string;
   auditStatus?: string;
   status?: string;
+  definitionVersion: number;
 }) {
   const utils = trpc.useUtils();
   const access = trpc.project.access.useQuery(
@@ -916,7 +919,7 @@ function AuditResetButton({
         disabled={reset.isPending}
         onClick={() => {
           if (window.confirm("确定重置审核状态吗？流程将恢复为待审核草稿。")) {
-            reset.mutate({ projectId, workflowId });
+            reset.mutate({ projectId, workflowId, expectedDefinitionVersion: definitionVersion, expectedAuditStatus: "rejected" });
           }
         }}
       >

@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -223,7 +224,7 @@ describe("P0 原始流程类型与项目发起", () => {
         definition: executableDefinition,
       });
       workflowId = workflow.id;
-      await setProjectWorkflowAudit(owner, {
+      await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",
@@ -316,7 +317,7 @@ describe("P0 原始流程类型与项目发起", () => {
       });
       await updateWorkflow(workflowId, owner, { unpublish: true });
       await updateWorkflow(workflowId, owner, { definition: routerDefinition });
-      await setProjectWorkflowAudit(owner, {
+      await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",
@@ -382,7 +383,7 @@ describe("P0 原始流程类型与项目发起", () => {
       await updateWorkflow(workflowId, owner, {
         definition: blockedDefinition,
       });
-      await setProjectWorkflowAudit(owner, {
+      await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",

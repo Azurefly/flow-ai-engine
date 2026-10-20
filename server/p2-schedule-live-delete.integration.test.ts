@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -47,7 +48,7 @@ describe("P2 应用级隔离计划删除闭环", () => {
     const owner = callerFor(user);
     projectId = (await owner.project.create({ code: `LD${suffix.slice(0, 5).toUpperCase()}`, name: "隔离计划删除验收" })).id;
     workflowId = (await owner.project.createWorkflow({ projectId, name: "隔离删除数据流", flowType: "data", definition: { schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, settings: {}, nodes: [{ id: "start", type: "start", name: "开始", position: { x: 0, y: 0 }, config: {} }, { id: "end", type: "end", name: "结束", position: { x: 240, y: 0 }, config: {} }], edges: [{ id: "edge", sourceNodeId: "start", targetNodeId: "end" }] } })).id;
-    await owner.project.auditWorkflow({ projectId, workflowId, auditStatus: "approved" });
+    await owner.project.auditWorkflow({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId, auditStatus: "approved" });
     await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
 
     // Seed an owned pre-migration hosted record. New UI drafts use the native scheduler.

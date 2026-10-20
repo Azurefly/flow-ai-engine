@@ -15,3 +15,9 @@ it("公开写接口拒绝没有版本基准的请求，不进入流程写入", a
   for (const method of [caller.workflow.update, caller.workflow.publish, caller.workflow.unpublish])
     await expect(method({ id: "fixture-workflow" } as any)).rejects.toMatchObject({ code: "BAD_REQUEST" });
 });
+
+it("审核和重置公开接口要求显式提交读取时的版本与审核状态", async () => {
+  const caller = appRouter.createCaller({ user: { id: 1, role: "admin", status: "active" }, req: { headers: {} }, res: {} } as any);
+  await expect(caller.project.auditWorkflow({projectId:"project_review",workflowId:"workflow_review",auditStatus:"approved"} as any)).rejects.toMatchObject({code:"BAD_REQUEST"});
+  await expect(caller.project.resetWorkflowAudit({projectId:"project_review",workflowId:"workflow_review"} as any)).rejects.toMatchObject({code:"BAD_REQUEST"});
+});

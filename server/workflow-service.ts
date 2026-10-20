@@ -10,6 +10,7 @@ import {
 } from "../shared/workflow-template";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
+import { TRPCError } from "@trpc/server";
 import { lockActiveProject } from "./project-lifecycle-lock";
 import { assertWorkflowRevision } from "./workflow-revision";
 import { getSharedPool } from "./db";
@@ -560,17 +561,6 @@ export async function updateWorkflow(
   const persistedExecutionPlanHash = values.unpublish
     ? null
     : (compiled?.planHash ?? current.publishedExecutionPlanHash ?? null);
-  if (
-    values.publish &&
-    current.projectId &&
-    (await isProjectApprovalRequired()) &&
-    (current.auditStatus !== "approved" || definitionChanged)
-  )
-    throw new Error(
-      definitionChanged
-        ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
-        : "当前审批规则要求项目流程通过审核后才能发布。"
-    );
   const nextStatus = values.unpublish
     ? "draft"
     : values.publish
@@ -582,12 +572,17 @@ export async function updateWorkflow(
     await connection.beginTransaction();
     if (current.projectId) await lockActiveProject(connection, current.projectId);
     const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT archivedAt,definitionVersion,status FROM workflow WHERE id=? LIMIT 1 FOR UPDATE", [workflowId]
+      "SELECT archivedAt,definitionVersion,status,auditStatus FROM workflow WHERE id=? LIMIT 1 FOR UPDATE", [workflowId]
     );
     if (lockedRows[0] && values.expectedDefinitionVersion !== undefined)
       assertWorkflowRevision(Number(lockedRows[0].definitionVersion), values.expectedDefinitionVersion);
     if (!lockedRows[0] || lockedRows[0].archivedAt || Number(lockedRows[0].definitionVersion) !== Number(current.definitionVersion) || lockedRows[0].status !== current.status)
       throw new Error("流程状态或版本已变化，请刷新后重新确认；本次修改尚未保存。");
+    if (values.publish && current.projectId && (await isProjectApprovalRequired(connection)) &&
+      (lockedRows[0].auditStatus !== "approved" || definitionChanged))
+      throw new TRPCError({ code: "CONFLICT", message: definitionChanged
+        ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
+        : "当前审批规则要求项目流程通过审核后才能发布。审核状态可能已变化，请重新读取后确认。" });
     await connection.query(
       "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
       [

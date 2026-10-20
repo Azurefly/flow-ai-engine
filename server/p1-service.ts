@@ -1709,9 +1709,9 @@ export async function getTaskCalendar(
 
 export type ReviewerMode = "project_owner_or_admin" | "independent_reviewer";
 
-export async function getP1SystemSettings() {
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT * FROM system_setting WHERE `key` IN ('general','approval')"
+export async function getP1SystemSettings(options?: { connection?: mysql.PoolConnection; lock?: boolean }) {
+  const [rows] = await (options?.connection ?? db()).query<mysql.RowDataPacket[]>(
+    "SELECT * FROM system_setting WHERE `key` IN ('general','approval')" + (options?.lock ? " FOR SHARE" : "")
   );
   const settings: Record<string, unknown> = { ...defaultSettings };
   rows.forEach(row => {
@@ -1735,8 +1735,8 @@ export async function getPublicGeneralSettings() {
   };
 }
 
-export async function isProjectApprovalRequired() {
-  return Boolean((await getP1SystemSettings()).approval.requireProjectApproval);
+export async function isProjectApprovalRequired(connection?: mysql.PoolConnection) {
+  return Boolean((await getP1SystemSettings(connection ? { connection, lock: true } : undefined)).approval.requireProjectApproval);
 }
 
 export async function updateP1SystemSetting(

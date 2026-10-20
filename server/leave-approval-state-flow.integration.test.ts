@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -234,7 +235,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         definition: leaveDefinition,
       });
       workflowId = workflow.id;
-      await setProjectWorkflowAudit(owner, {
+      await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",

@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -137,7 +138,7 @@ async function createSigningWorkflow(
       scopeId: workflow.id,
       grantedByUserId: Number(owner.id),
     });
-  await setProjectWorkflowAudit(owner, {
+  await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflow.id)),
     projectId: projectId!,
     workflowId: workflow.id,
     auditStatus: "approved",

@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
@@ -330,7 +331,7 @@ describe("P2 项目数据资源与数据流", () => {
           definition,
         })
       ).id;
-      await owner.project.auditWorkflow({
+      await owner.project.auditWorkflow({ ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",
@@ -426,7 +427,7 @@ describe("P2 项目数据资源与数据流", () => {
           },
         })
       ).id;
-      await owner.project.auditWorkflow({
+      await owner.project.auditWorkflow({ ...(await workflowReviewForTest(joinWorkflowId)),
         projectId,
         workflowId: joinWorkflowId,
         auditStatus: "approved",
@@ -546,7 +547,7 @@ describe("P2 项目数据资源与数据流", () => {
             },
           })
         ).id;
-        await owner.project.auditWorkflow({
+        await owner.project.auditWorkflow({ ...(await workflowReviewForTest(aggregateWorkflowId)),
           projectId,
           workflowId: aggregateWorkflowId,
           auditStatus: "approved",
@@ -608,7 +609,7 @@ describe("P2 项目数据资源与数据流", () => {
           },
         })
       ).id;
-      await owner.project.auditWorkflow({
+      await owner.project.auditWorkflow({ ...(await workflowReviewForTest(sqlWorkflowId)),
         projectId,
         workflowId: sqlWorkflowId,
         auditStatus: "approved",
@@ -664,7 +665,7 @@ describe("P2 项目数据资源与数据流", () => {
           },
         })
       ).id;
-      await owner.project.auditWorkflow({
+      await owner.project.auditWorkflow({ ...(await workflowReviewForTest(jdbcReadWorkflowId)),
         projectId,
         workflowId: jdbcReadWorkflowId,
         auditStatus: "approved",
@@ -794,7 +795,7 @@ describe("P2 项目数据资源与数据流", () => {
           },
         })
       ).id;
-      await owner.project.auditWorkflow({
+      await owner.project.auditWorkflow({ ...(await workflowReviewForTest(batchWorkflowId)),
         projectId,
         workflowId: batchWorkflowId,
         auditStatus: "approved",
@@ -866,7 +867,7 @@ describe("P2 项目数据资源与数据流", () => {
           },
         })
       ).id;
-      await owner.project.auditWorkflow({
+      await owner.project.auditWorkflow({ ...(await workflowReviewForTest(failedWorkflowId)),
         projectId,
         workflowId: failedWorkflowId,
         auditStatus: "approved",

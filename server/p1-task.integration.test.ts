@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it } from "vitest";
@@ -219,7 +220,7 @@ describe("P1 人工任务与服务端续跑", () => {
         definition: manualDefinition,
       });
       workflowId = workflow.id;
-      await setProjectWorkflowAudit(owner, {
+      await setProjectWorkflowAudit(owner, { ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",

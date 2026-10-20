@@ -1,3 +1,4 @@
+import { workflowReviewForTest } from "./workflow-revision-test-support";
 import { workflowRevisionForTest } from "./workflow-revision-test-support";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
@@ -223,7 +224,7 @@ describe("原始项目工作区 P0", () => {
       await expect(
         designerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
-      await ownerCaller.project.auditWorkflow({
+      await ownerCaller.project.auditWorkflow({ ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",
@@ -305,16 +306,16 @@ describe("原始项目工作区 P0", () => {
       await expect(
         ownerCaller.workflow.run({ workflowId, input: {} })
       ).rejects.toThrow("项目流程尚未发布或未通过审核，无法发起运行");
-      await ownerCaller.project.auditWorkflow({
+      await ownerCaller.project.auditWorkflow({ ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "rejected",
       });
       await expect(
-        designerCaller.project.resetWorkflowAudit({ projectId, workflowId })
+        designerCaller.project.resetWorkflowAudit({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId })
       ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
       await expect(
-        ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })
+        ownerCaller.project.resetWorkflowAudit({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId })
       ).resolves.toBe(true);
       const afterReset = await ownerCaller.project.workflows({
         projectId,
@@ -348,7 +349,7 @@ describe("原始项目工作区 P0", () => {
         )
       ).toBe(true);
       await expect(
-        ownerCaller.project.resetWorkflowAudit({ projectId, workflowId })
+        ownerCaller.project.resetWorkflowAudit({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId })
       ).rejects.toThrow("仅可重置当前项目中未发布且已驳回的流程");
       const folder = await ownerCaller.project.createFolder({
         projectId,
@@ -423,7 +424,7 @@ describe("原始项目工作区 P0", () => {
           (entry: any) => entry.id === workflowId
         )
       ).toBe(true);
-      await ownerCaller.project.auditWorkflow({
+      await ownerCaller.project.auditWorkflow({ ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
         auditStatus: "approved",
