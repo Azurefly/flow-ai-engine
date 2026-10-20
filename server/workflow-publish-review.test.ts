@@ -136,6 +136,35 @@ describe("发布事务重新确认审核状态", () => {
     );
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
+  it("MySQL JSON 字段顺序变化不应将已审核的同一份草稿误判为变更", async () => {
+    const { validate } = await import("./workflow-service");
+    const saved = validate(definition, { flowType: "control", executable: false });
+    const reorder = (value: unknown): unknown => {
+      if (Array.isArray(value)) return value.map(reorder);
+      if (value && typeof value === "object")
+        return Object.fromEntries(Object.entries(value).reverse().map(([key, nested]) => [key, reorder(nested)]));
+      return value;
+    };
+    firstRead.definitionJson = JSON.stringify(reorder(saved));
+    await updateWorkflow(original.id, { id: 7, role: "admin" }, {
+      publish: true, definition: saved, expectedDefinitionVersion: 2,
+    });
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+    const update = mocks.query.mock.calls.find(([sql]) => sql.startsWith("UPDATE workflow SET"));
+    expect(update?.[1][4]).toBe(false);
+  });
+  it("节点实际内容变化仍拒绝沿用旧审核结果发布", async () => {
+    const { validate } = await import("./workflow-service");
+    const saved = validate(definition, { flowType: "control", executable: false });
+    firstRead.definitionJson = JSON.stringify(saved);
+    const changed = structuredClone(saved);
+    changed.nodes[1].name = "修改后的结束节点";
+    await expect(updateWorkflow(original.id, { id: 7, role: "admin" }, {
+      publish: true, definition: changed, expectedDefinitionVersion: 2,
+    })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(mocks.query.mock.calls.some(([sql]) => sql.startsWith("UPDATE"))).toBe(false);
+  });
   it("版本已变化时不执行发布或审核查询", async () => {
     lockedRead.definitionVersion = 3;
     await expect(

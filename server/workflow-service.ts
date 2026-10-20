@@ -21,6 +21,7 @@ import {
   type WorkflowPermission,
 } from "./iam-service";
 import { isProjectApprovalRequired } from "./p1-service";
+import { matchesWorkflowDefinitionSnapshot } from "../shared/workflow-publish";
 import {
   analyzeWorkflowDefinition,
   assertWorkflowExecutionPlan,
@@ -539,7 +540,7 @@ export async function updateWorkflow(
     assertProjectServiceTaskReferences(definition);
   const definitionChanged =
     values.definition !== undefined &&
-    JSON.stringify(definition) !== JSON.stringify(current.definition);
+    !matchesWorkflowDefinitionSnapshot(JSON.stringify(current.definition), definition);
   const nextName = values.name ?? current.name;
   if (
     isWorkflowUpdateNoop({

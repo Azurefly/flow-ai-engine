@@ -421,7 +421,15 @@ async function verifyPublication(page) {
       ).toBeEnabled();
       const published = responseFor("workflow.publish");
       await page.getByRole("button", { name: "发布", exact: true }).click();
-      assert.equal((await published).status(), 200);
+      const publishResponse = await published;
+      if (publishResponse.status() !== 200) {
+        fs.writeFileSync(path.join(directory, "publish-conflict.json"), JSON.stringify({
+          saved: await get(flow.id),
+          submitted: publishResponse.request().postDataJSON(),
+          response: await publishResponse.json(),
+        }, null, 2), "utf8");
+      }
+      assert.equal(publishResponse.status(), 200);
       await expect(
         page.getByRole("button", { name: "发布新版本", exact: true })
       ).toBeDisabled();
