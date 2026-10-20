@@ -46,6 +46,7 @@ export default function WorkflowReviewDialog({
         workflowId: snapshot.id,
       });
       void utils.workflow.get.invalidate({ id: snapshot.id });
+      void utils.workflow.access.invalidate({ id: snapshot.id });
       toast.success(
         `v${snapshot.definitionVersion} 的审核${decision === "approved" ? "通过" : "驳回"}结果已确认。`
       );

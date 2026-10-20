@@ -8,7 +8,7 @@ describe("统一工作空间视觉与动效", () => {
   it("保存快捷键与当前已提交的编辑界面同步，保留忙碌和发布状态保护", () => {
     expect(home).toMatch(/useLayoutEffect\(\(\) => \{\s*const handleKeyDown =/);
     expect(home).toContain(
-      'if (canEdit && !savePending && workflow?.status !== "published")'
+      'if (!unpublishTarget && !unpublishBusy && canEdit && !savePending && workflow?.status !== "published")'
     );
     expect(home).toContain(
       'window.removeEventListener("keydown", handleKeyDown)'

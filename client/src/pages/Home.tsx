@@ -56,10 +56,12 @@ import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-naviga
 import { createGuardedConsoleHistory, type GuardedConsoleHistory, type ConsoleHistoryEntry } from "@shared/guarded-console-history";
 import { requestConsoleNavigation } from "@/lib/console-navigation-guard";
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
+import { workflowPublicationGate } from "@shared/workflow-publication";
 import {
   canPublishWorkflowVersion,
   isWorkflowDraftDirty,
   matchesWorkflowDefinitionSnapshot,
+  acknowledgeWorkflowUnpublish,
 } from "../../../shared/workflow-publish";
 import type { Definition } from "../../../server/workflow-service";
 import { workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
@@ -479,6 +481,8 @@ function FlowConsole({
   );
   const [draftName, setDraftName] = useState("");
   const liveDraft = useRef<{ workflowId: string | null; name: string; definition: Definition | null }>({ workflowId: null, name: "", definition: null });
+  const consoleAlive = useRef(true);
+  useEffect(() => { consoleAlive.current = true; return () => { consoleAlive.current = false; }; }, []);
   const matchesLiveDraft = useCallback((id: string, definition: Definition) =>
     liveDraft.current.workflowId === id && matchesWorkflowDefinitionSnapshot(JSON.stringify(definition), liveDraft.current.definition), []);
   const persistedDraftSnapshot = useRef<{
@@ -487,6 +491,8 @@ function FlowConsole({
     definitionJson: string;
     definitionVersion: number;
   } | null>(null);
+  const pendingUnpublish = useRef<{ id: string; expectedDefinitionVersion: number } | null>(null);
+  const [, setDraftBaseRevision] = useState(0);
   const [draftConflict, setDraftConflict] = useState<{ id: string; message: string } | null>(null);
   const [reloadDraftPending, setReloadDraftPending] = useState(false);
   // Do not seed production runs with demo data. The designer input panel lets
@@ -930,7 +936,9 @@ function FlowConsole({
   });
   const saveFlow = trpc.workflow.update.useMutation({
     onSuccess: (workflow: any, submitted) => {
+      if (!consoleAlive.current) return;
       if (workflow) utils.workflow.get.setData({ id: submitted.id }, workflow);
+      void utils.workflow.access.invalidate({ id: submitted.id });
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
       if (workflow && liveDraft.current.workflowId === submitted.id) {
@@ -950,6 +958,8 @@ function FlowConsole({
       toast.success("流程定义已保存。");
     },
     onError: (error, submitted) => {
+      if (!consoleAlive.current) return;
+      void utils.workflow.access.invalidate({ id: submitted.id });
       if (error.data?.code === "CONFLICT" && liveDraft.current.workflowId === submitted.id)
         setDraftConflict({ id: submitted.id, message: error.message });
       toast.error(error.message);
@@ -957,7 +967,9 @@ function FlowConsole({
   });
   const publishFlow = trpc.workflow.publish.useMutation({
     onSuccess: (workflow: any, submitted) => {
+      if (!consoleAlive.current) return;
       if (workflow) utils.workflow.get.setData({ id: submitted.id }, workflow);
+      void utils.workflow.access.invalidate({ id: submitted.id });
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate();
       if (workflow && liveDraft.current.workflowId === submitted.id) {
@@ -973,6 +985,8 @@ function FlowConsole({
       toast.success("流程已发布。");
     },
     onError: (error, submitted) => {
+      if (!consoleAlive.current) return;
+      void utils.workflow.access.invalidate({ id: submitted.id });
       if (error.data?.code === "CONFLICT" && liveDraft.current.workflowId === submitted.id)
         setDraftConflict({ id: submitted.id, message: error.message });
       toast.error(error.message);
@@ -1141,6 +1155,46 @@ function FlowConsole({
     access.data?.permissions?.has("workflow:members:manage")
   );
   const isDraftDirty = isWorkflowDraftDirty(effectiveWorkflowId, persistedDraftSnapshot.current, draftName, draftDefinition);
+  const definitionChanged = isDraftDirty && (persistedDraftSnapshot.current?.name === draftName ||
+    !matchesWorkflowDefinitionSnapshot(persistedDraftSnapshot.current?.definitionJson, draftDefinition));
+  const publicationGate = workflowPublicationGate({
+    workflowId: selectedId ?? "",
+    baseVersion: persistedDraftSnapshot.current?.workflowId === selectedId ? persistedDraftSnapshot.current?.definitionVersion : null,
+    publication: access.isSuccess ? access.data?.publication : null,
+    definitionChanged,
+  });
+  const onUnpublished = (workflow: any, submitted: { id: string; expectedDefinitionVersion: number }) => {
+    if (!consoleAlive.current || !workflow) return;
+    const cached = utils.workflow.get.getData({ id: submitted.id }) as any;
+    const alreadyNewer = persistedDraftSnapshot.current?.workflowId === submitted.id && Number(persistedDraftSnapshot.current?.definitionVersion) > Number(workflow.definitionVersion);
+    const candidate = !alreadyNewer && cached?.id === submitted.id && Number(cached.definitionVersion) >= Number(workflow.definitionVersion) ? cached : workflow;
+    if (liveDraft.current.workflowId === submitted.id) {
+      const previous = persistedDraftSnapshot.current;
+      const acknowledged = acknowledgeWorkflowUnpublish(previous, submitted,
+        { ...candidate, definition: decodeJson(candidate.definition) });
+      if (acknowledged) {
+        persistedDraftSnapshot.current = acknowledged;
+        if (acknowledged.definitionVersion !== previous?.definitionVersion) setDraftBaseRevision(value => value + 1);
+      } else setDraftConflict({ id: submitted.id, message: "取消发布状态已确认，但编辑基准或流程内容已变化。本地修改已保留，请对照最新版本处理。" });
+    }
+    if (pendingUnpublish.current?.id === submitted.id && pendingUnpublish.current.expectedDefinitionVersion === submitted.expectedDefinitionVersion)
+      pendingUnpublish.current = null;
+    utils.workflow.get.setData({ id: submitted.id }, (current: any) => current && Number(current.definitionVersion) >= Number(workflow.definitionVersion) ? current : workflow);
+    void utils.workflow.access.invalidate({ id: submitted.id });
+  };
+  useEffect(() => {
+    const pending = pendingUnpublish.current;
+    if (!pending || !selectedWorkflow || selectedWorkflow.id !== pending.id || liveDraft.current.workflowId !== pending.id) return;
+    const previous = persistedDraftSnapshot.current;
+    const acknowledged = acknowledgeWorkflowUnpublish(previous, pending,
+      { ...selectedWorkflow, definition: decodeJson(selectedWorkflow.definition) });
+    if (acknowledged) {
+      persistedDraftSnapshot.current = acknowledged;
+      pendingUnpublish.current = null;
+      if (acknowledged.definitionVersion !== previous?.definitionVersion) setDraftBaseRevision(value => value + 1);
+    }
+  }, [selectedWorkflow]);
+
   const draftError = useMemo(() => workflowLoopDraftError(draftDefinition) || workflowNumberDraftError(draftDefinition), [draftDefinition]);
   unsavedWorkflowId.current = editorActive && isDraftDirty ? persistedDraftSnapshot.current?.workflowId ?? null : null;
   useEffect(() => {
@@ -1917,6 +1971,13 @@ function FlowConsole({
                 canPublish={canPublish}
                 canRun={canRun}
                 hasUnpublishedChanges={isDraftDirty}
+                publicationGate={publicationGate}
+                publicationRefreshing={access.isFetching}
+                onRefreshPublication={() => void access.refetch()}
+                onResolvePublicationVersion={() => { if (selectedId) setDraftConflict({ id: selectedId, message: publicationGate.reason ?? "流程版本已变化，请保留修改后重新核对。" }); }}
+                onUnpublished={onUnpublished}
+                onUnpublishRequested={submitted => { pendingUnpublish.current = submitted; }}
+
                 canManage={canManageMembers}
                 members={(members.data ?? []) as any[]}
                 savePending={saveFlow.isPending}
@@ -1967,6 +2028,9 @@ function FlowConsole({
                 }}
                 onPublish={() => {
                   if (!selectedId || !draftDefinition) return;
+                  if (!canPublish) { toast.error("当前账号没有流程发布权限。"); return; }
+                  if (!publicationGate.allowed) { toast.error(publicationGate.reason); return; }
+
                   if (draftError) { toast.error(draftError); return; }
                   const expectedDefinitionVersion = workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current);
                   if (
@@ -2307,6 +2371,12 @@ function FlowDesigner({
   canPublish,
   canRun,
   hasUnpublishedChanges,
+  publicationGate,
+  publicationRefreshing,
+  onRefreshPublication,
+  onResolvePublicationVersion,
+  onUnpublished,
+  onUnpublishRequested,
   canManage,
   members,
   savePending,
@@ -2349,6 +2419,12 @@ function FlowDesigner({
   canPublish: boolean;
   canRun: boolean;
   hasUnpublishedChanges: boolean;
+  publicationGate: ReturnType<typeof workflowPublicationGate>;
+  publicationRefreshing: boolean;
+  onRefreshPublication: () => void;
+  onResolvePublicationVersion: () => void;
+  onUnpublished: (workflow: any, submitted: { id: string; expectedDefinitionVersion: number }) => void;
+  onUnpublishRequested: (submitted: { id: string; expectedDefinitionVersion: number }) => void;
   canManage: boolean;
   members: any[];
   savePending: boolean;
@@ -2453,23 +2529,65 @@ function FlowDesigner({
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
   const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; name: string; definitionVersion: number } | null>(null);
   const [unpublishError, setUnpublishError] = useState("");
+  const [unpublishChecking, setUnpublishChecking] = useState(false);
+  const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const unpublishOrigin = useRef<{ workflowId: string; element: HTMLElement | null } | null>(null);
+  const unpublishCheckLock = useRef(false);
+  const unpublishWorkflowId = useRef(workflow.id);
+  unpublishWorkflowId.current = workflow.id;
   useEffect(() => { setUnpublishTarget(null); setUnpublishError(""); }, [workflow.id]);
   useEffect(() => setSubflowDialogOpen(false), [workflow.id]);
   const utils = trpc.useUtils();
   const unpublishFlow = trpc.workflow.unpublish.useMutation({
-    onSuccess: (_result, submitted) => {
+    onSuccess: (result, submitted) => {
+      onUnpublished(result, submitted);
       void utils.workflow.page.invalidate();
       void utils.workflow.get.invalidate({ id: submitted.id });
-      setUnpublishTarget(null);
-      setUnpublishError("");
-      toast.success("流程已取消发布；历史版本与运行审计已保留。");
+      if (unpublishWorkflowId.current === submitted.id) {
+        setUnpublishTarget(null);
+        setUnpublishError("");
+      }
+      toast.success("流程已取消发布；当前编辑内容、历史版本与运行审计已保留。");
     },
-    onError: error => { void utils.workflow.get.invalidate({ id: workflow.id }); setUnpublishError(error.message); toast.error(error.message); },
+    onError: (error, submitted) => {
+      void utils.workflow.get.invalidate({ id: submitted.id });
+      void utils.workflow.access.invalidate({ id: submitted.id });
+      if (unpublishWorkflowId.current === submitted.id) setUnpublishError(error.message);
+    },
   });
+  const unpublishBusy = unpublishFlow.isPending || unpublishChecking;
   const onUnpublish = () => {
-    if (!canPublish || workflow.status !== "published" || unpublishFlow.isPending) return;
+    if (!canPublish || workflow.status !== "published" || unpublishBusy) return;
     setUnpublishError("");
+    unpublishOrigin.current = { workflowId: workflow.id, element: document.activeElement instanceof HTMLElement ? document.activeElement : null };
     setUnpublishTarget({ id: workflow.id, name: workflow.name, definitionVersion: Number(workflow.definitionVersion) });
+  };
+  const reconcileUnpublish = async () => {
+    const target = unpublishTarget;
+    if (!target || unpublishFlow.isPending || unpublishCheckLock.current) return;
+    unpublishCheckLock.current = true;
+    setUnpublishChecking(true);
+    try {
+      const latest = await utils.workflow.get.fetch({ id: target.id }, { staleTime: 0 }) as any;
+      if (unpublishWorkflowId.current !== target.id) return;
+      if (!latest || latest.id !== target.id) throw new Error("当前流程不可访问，原编辑内容仍保留。");
+      if (latest.archivedAt || latest.projectStatus === "archived") throw new Error("流程或业务已归档，原编辑内容仍保留。");
+      if (latest.status === "draft") {
+        onUnpublished(latest, { id: target.id, expectedDefinitionVersion: target.definitionVersion });
+        setUnpublishTarget(null);
+        setUnpublishError("");
+        toast.success("已确认取消发布，当前编辑内容已保留。无需再次取消发布。");
+      } else if (latest.status === "published") {
+        setUnpublishTarget({ id: latest.id, name: latest.name, definitionVersion: Number(latest.definitionVersion) });
+        setUnpublishError(`当前仍为已发布 v${latest.definitionVersion}，请复核后再次确认取消发布。`);
+        void utils.workflow.access.invalidate({ id: target.id });
+      } else throw new Error("当前流程状态无法确认，原编辑内容仍保留。");
+    } catch (error) {
+      if (unpublishWorkflowId.current === target.id) setUnpublishError(error instanceof Error ? error.message : "核对失败，原编辑内容仍保留。");
+    } finally {
+      unpublishCheckLock.current = false;
+      setUnpublishChecking(false);
+    }
   };
 
   // Keep the shortcut callback in sync with the committed editor UI so that a
@@ -2478,14 +2596,14 @@ function FlowDesigner({
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (canEdit && !savePending && workflow?.status !== "published") {
+        if (!unpublishTarget && !unpublishBusy && canEdit && !savePending && workflow?.status !== "published") {
           onSave();
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canEdit, savePending, workflow?.status, onSave]);
+  }, [canEdit, savePending, workflow?.status, onSave, unpublishTarget, unpublishBusy]);
   if (!workflow || !definition)
     return (
       <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8">
@@ -2580,7 +2698,7 @@ function FlowDesigner({
 
         <div className="flex flex-wrap items-center gap-2">
           {/* 1. 存盘草稿 (支持 ⌘S) */}
-          <Button
+          <Button ref={saveButtonRef}
             type="button"
             variant="outline"
             size="sm"
@@ -2619,6 +2737,7 @@ function FlowDesigner({
             onClick={onPublish}
             disabled={
               !canPublish ||
+              !publicationGate.allowed ||
               !publishVersionAllowed ||
               Boolean(draftError) ||
               publishPending ||
@@ -2627,6 +2746,7 @@ function FlowDesigner({
             title={
               draftError || (!canPublish
                 ? "当前账号没有发布权限"
+                : !publicationGate.allowed ? publicationGate.reason ?? "发布条件尚未就绪"
                 : !publishVersionAllowed
                   ? "当前已发布版本没有未发布修改；编辑流程后才能发布新版本"
                   : workflow.status === "published"
@@ -2789,10 +2909,21 @@ function FlowDesigner({
           </DropdownMenu>
         </div>
       </div>
+      {canPublish && !publicationGate.allowed && !(workflow.status === "published" && publicationGate.kind === "draft") && <section data-workflow-publication-gate="" role={publicationGate.kind === "unavailable" || publicationGate.kind === "version" ? "alert" : "status"}
+        className="aiflow-type-body mb-3 grid gap-3 rounded-lg border border-aiflow-info-border bg-aiflow-info-surface p-3 text-foreground sm:flex sm:items-center sm:justify-between">
+        <p className="min-w-0 break-words">{publicationGate.reason}</p>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {publicationGate.kind === "version" && <Button type="button" variant="outline" className="min-h-11" onClick={onResolvePublicationVersion}>处理版本变化</Button>}
+          <Button type="button" variant="outline" className="min-h-11" disabled={publicationRefreshing || publishPending || savePending} onClick={onRefreshPublication}>
+            {publicationRefreshing ? "正在读取…" : "重新读取权限与规则"}
+          </Button>
+        </div>
+      </section>}
       {draftError && <p role="alert" data-workflow-draft-error="" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{draftError}</p>}
       {workflow.status === "published" && (
         <section
           aria-label="已发布流程编辑说明"
+          data-workflow-publication-gate={canPublish && publicationGate.kind === "draft" ? "" : undefined}
           className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-aiflow-info-border bg-aiflow-info-surface p-3"
         >
           <div className="min-w-0 flex-1">
@@ -2801,14 +2932,15 @@ function FlowDesigner({
             </p>
             <p className="aiflow-type-control mt-1 leading-6 text-foreground">
               {canModifyDefinition
-                ? "修改暂存在当前页面，需通过“发布新版本”提交。若项目要求审核，请先取消发布、保存草稿，再返回流程中心提交审核。"
+                ? publicationGate.kind === "draft" ? publicationGate.reason
+                  : "此处修改仅保留在本页。请按发布提示提交新版本；取消发布后可保存为草稿，历史运行仍使用原版本定义。"
                 : canEdit
                   ? "当前账号无法提交已发布版本的修改。请由有发布权限的人员取消发布后，再编辑并保存草稿。"
                   : "当前账号仅可查看流程配置；编辑或发布请联系流程负责人。"}
             </p>
           </div>
           {canEdit && canPublish && (
-            <Button
+            <div className="flex flex-wrap gap-2"><Button
               type="button"
               variant="outline"
               className="aiflow-type-control"
@@ -2817,6 +2949,10 @@ function FlowDesigner({
             >
               取消发布后编辑草稿
             </Button>
+              {publicationGate.kind === "draft" && <Button type="button" variant="outline" className="aiflow-type-control min-h-11" disabled={publicationRefreshing || unpublishBusy} onClick={onRefreshPublication}>
+                {publicationRefreshing ? "正在读取…" : "重新读取权限与规则"}
+              </Button>}
+            </div>
           )}
         </section>
       )}
@@ -3257,28 +3393,30 @@ function FlowDesigner({
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(unpublishTarget)} onOpenChange={open => { if (!open && !unpublishFlow.isPending) setUnpublishTarget(null); }}>
-        <DialogContent>
+      <Dialog open={Boolean(unpublishTarget)} onOpenChange={open => { if (!open && !unpublishBusy) setUnpublishTarget(null); }}>
+        <DialogContent showCloseButton={!unpublishBusy} onEscapeKeyDown={event => { if (unpublishBusy) event.preventDefault(); }} onCloseAutoFocus={event => {
+          if (document.querySelector('[role="dialog"][data-state="open"]') || unpublishOrigin.current?.workflowId !== unpublishWorkflowId.current) { event.preventDefault(); return; }
+          const save = saveButtonRef.current;
+          if (workflow.status === "draft" && hasUnpublishedChanges && save?.isConnected && !save.disabled) { event.preventDefault(); save.focus({ preventScroll: true }); }
+          else if (unpublishOrigin.current?.element?.isConnected) { event.preventDefault(); unpublishOrigin.current.element.focus({ preventScroll: true }); }
+        }}>
           <DialogHeader>
             <DialogTitle>取消发布“{unpublishTarget?.name}”</DialogTitle>
-            <DialogDescription>取消发布后无法发起新的运行，历史版本和运行记录会保留。确认后可继续编辑草稿。</DialogDescription>
+            <DialogDescription>取消发布后无法发起新的运行，历史版本和运行记录会保留。当前未保存的修改仍保留在页面，可继续保存为草稿。</DialogDescription>
           </DialogHeader>
-          {unpublishError && <p role="alert" className="text-sm text-destructive">{unpublishError}</p>}
+          <p className="aiflow-type-body">本次取消发布基于 v{unpublishTarget?.definitionVersion}。</p>
+          {unpublishError && <div role="alert" className="aiflow-type-body grid gap-2 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-3 text-aiflow-danger">
+            <p className="break-words">{unpublishError}</p><p>可先核对取消发布结果；关闭窗口不会恢复已取消的发布，也不会丢弃本地修改。</p>
+          </div>}
           <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="outline" autoFocus disabled={unpublishFlow.isPending} onClick={() => setUnpublishTarget(null)}>保持发布</Button>
-            {unpublishError && <Button variant="outline" disabled={unpublishFlow.isPending} onClick={async () => {
-              try {
-                const latest = await utils.workflow.get.fetch({ id: workflow.id }, { staleTime: 0 }) as any;
-                if (!latest || latest.status !== "published" || latest.archivedAt) throw new Error("流程已取消发布或归档，请关闭弹窗查看最新状态。");
-                setUnpublishTarget(current => current?.id === latest.id ? { id: latest.id, name: latest.name, definitionVersion: Number(latest.definitionVersion) } : current);
-                setUnpublishError("");
-                toast.info("已读取最新版本，请再次确认取消发布。");
-              } catch (error) { setUnpublishError(error instanceof Error ? error.message : "读取失败，请重试。"); }
-            }}>读取最新版本后重新确认</Button>}
-            <Button variant="destructive" disabled={!canPublish || unpublishFlow.isPending || unpublishTarget?.id !== workflow.id || workflow.status !== "published"} onClick={() => {
-              if (!unpublishTarget || !canPublish || unpublishFlow.isPending || unpublishTarget.id !== workflow.id || workflow.status !== "published") return;
+            <Button variant="outline" autoFocus disabled={unpublishBusy} onClick={() => setUnpublishTarget(null)}>{unpublishError ? "关闭并保留修改" : "保持发布"}</Button>
+            {unpublishError && <Button variant="outline" disabled={unpublishBusy} onClick={() => void reconcileUnpublish()}>{unpublishChecking ? "正在核对…" : "核对取消发布结果"}</Button>}
+            <Button variant="destructive" disabled={!canPublish || unpublishBusy || unpublishTarget?.id !== workflow.id || workflow.status !== "published"} onClick={() => {
+              if (!unpublishTarget || !canPublish || unpublishBusy || unpublishTarget.id !== workflow.id || workflow.status !== "published") return;
               setUnpublishError("");
-              unpublishFlow.mutate({ id: unpublishTarget.id, expectedDefinitionVersion: unpublishTarget.definitionVersion });
+              const submitted = { id: unpublishTarget.id, expectedDefinitionVersion: unpublishTarget.definitionVersion };
+              onUnpublishRequested(submitted);
+              unpublishFlow.mutate(submitted);
             }}>{unpublishFlow.isPending ? "正在取消发布…" : "确认取消发布"}</Button>
           </div>
         </DialogContent>

@@ -160,4 +160,15 @@ describe("发布事务重新确认审核状态", () => {
     expect(mocks.policy).not.toHaveBeenCalled();
     expect(connection.commit).toHaveBeenCalledTimes(1);
   });
+  it("取消发布不重新解析私有子流程，保留已存定义且不受引用删除阻塞", async () => {
+    const saved = { ...definition, nodes: [...definition.nodes, { id: "private", type: "subflow", name: "已保存引用", position: { x: 120, y: 0 }, config: { subflowId: "removed_private", executionMode: "sync_snapshot", resolvedSubflowDefinition: definition } }] };
+    firstRead.status = "published";
+    firstRead.definitionJson = JSON.stringify(saved);
+    lockedRead.status = "published";
+    await updateWorkflow(original.id, { id: 7, role: "admin" }, { unpublish: true, expectedDefinitionVersion: 2 });
+    expect(mocks.poolQuery.mock.calls.some(([sql]) => sql.includes("workflow_subflow"))).toBe(false);
+    const update = mocks.query.mock.calls.find(([sql]) => sql.startsWith("UPDATE workflow SET"));
+    expect(JSON.parse(update?.[1][1])).toEqual(saved);
+    expect(connection.commit).toHaveBeenCalledTimes(1);
+  });
 });

@@ -455,8 +455,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_496 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 452 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_503 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 454 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -3853,7 +3853,9 @@ it("分页外的流程保存发布后刷新详情缓存", () => {
   ]) {
     const start = homeSource.indexOf(`trpc.workflow.${mutation}.useMutation`);
     expect(start).toBeGreaterThan(-1);
-    expect(homeSource.slice(start, start + 300)).toContain(
+    const errorHandler = homeSource.indexOf("onError:", start);
+    expect(errorHandler).toBeGreaterThan(start);
+    expect(homeSource.slice(start, errorHandler)).toContain(
       "utils.workflow.get.invalidate()"
     );
   }
@@ -3885,7 +3887,9 @@ it("取消发布使用页面确认并校验当前目标，失败保留错误", (
   expect(homeSource).toContain("setUnpublishError(error.message)");
   expect(homeSource).toContain("unpublishTarget.id !== workflow.id");
   expect(homeSource).toContain("正在取消发布…");
-  expect(homeSource).toContain("保持发布</Button>");
+  expect(homeSource).toContain('unpublishError ? "关闭并保留修改" : "保持发布"');
+  expect(homeSource).toContain("核对取消发布结果");
+  expect(homeSource).toContain("onUnpublished(result, submitted)");
 });
 it("数据流正式运行拒绝草稿，显式测试要求编辑权限", () => {
   const service = source("./p2-service.ts");

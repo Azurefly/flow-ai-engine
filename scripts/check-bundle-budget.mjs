@@ -33,9 +33,10 @@ const maxChunkBytes = 450 * 1024;
 // Account-scoped draft recovery through full-page unmounts: 1484.29 / 446.08 KiB.
 // Response-loss recovery and shared creation receipts: 1487.59 / 447.49 KiB.
 // Lazy review confirmation and compact snapshots: 1494.53 / 450.65 KiB.
-const maxTotalBytes = 1_496 * 1024;
+// Publication policy guidance and retained drafts after unpublish: 1501.15 / 452.53 KiB.
+const maxTotalBytes = 1_503 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 452 * 1024;
+const maxTotalGzipBytes = 454 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

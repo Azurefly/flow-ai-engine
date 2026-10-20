@@ -526,12 +526,15 @@ export async function updateWorkflow(
           flowType: current.flowType,
           executable: false,
         });
-  const definition = await resolveSubflowReferences(
-    draftDefinition,
-    current.ownerUserId,
-    executable,
-    current.flowType
-  );
+  // Lifecycle/name-only changes preserve the saved graph, including private references.
+  const definition = values.definition === undefined && !executable
+    ? current.definition
+    : await resolveSubflowReferences(
+        draftDefinition,
+        current.ownerUserId,
+        executable,
+        current.flowType
+      );
   if (values.publish && current.projectId)
     assertProjectServiceTaskReferences(definition);
   const definitionChanged =

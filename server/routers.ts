@@ -1,4 +1,5 @@
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
+import { getWorkflowPublicationAccess } from "./workflow-publication-access";
 import {
   listWorkflowCustomRoles,
   listWorkflowRoleAssignments,
@@ -1610,7 +1611,7 @@ export const appRouter = router({
       }),
     access: protectedProcedure
       .input(z.object({ id: z.string().min(8).max(64) }))
-      .query(({ ctx, input }) => getWorkflowAccess(ctx.user, input.id)),
+      .query(({ ctx, input }) => getWorkflowPublicationAccess(ctx.user, input.id)),
     create: protectedProcedure
       .input(
         z.object({

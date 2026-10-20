@@ -120,3 +120,11 @@ it("归档业务仍可查看画布，但不显示运行或发布入口", () => {
     )
   ).toMatchObject({ canViewCanvas: true, canRun: false, canUnpublish: false });
 });
+
+it.each(["state","control","data"])("%s 关闭强制审核时仍按发布权限开放草稿",flowType=>{
+  const input={actorId:7,workflow:{projectStatus:"active",status:"draft",auditStatus:"init",flowType},projectPermissions:new Set(["project:view"]),workflowPermissions:new Set(["workflow:view","workflow:publish"]),reviewerMode:"independent_reviewer",requireProjectApproval:false};
+  expect(projectWorkflowActions(input)).toMatchObject({canPublish:true,publicationRule:{requireProjectApproval:false},publishBlockedReason:null});
+  expect(projectWorkflowActions({...input,workflowPermissions:new Set(["workflow:view"])}).canPublish).toBe(false);
+  expect(projectWorkflowActions({...input,publicationPolicyReady:false})).toMatchObject({canPublish:false,publishBlockedReason:expect.stringContaining("暂不可用")});
+  expect(projectWorkflowActions({...input,requireProjectApproval:true})).toMatchObject({canPublish:false,publishBlockedReason:expect.stringContaining("审核")});
+});

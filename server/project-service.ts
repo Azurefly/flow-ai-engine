@@ -438,10 +438,13 @@ export async function listProjectWorkflows(
       ownerUserId: Number(row.ownerUserId),
     })),
   });
-  const reviewerMode =
-    rows.length && access.permissions.has("project:manage")
-      ? (await getP1SystemSettings()).approval.reviewerMode
-      : "independent_reviewer";
+  const needsPolicy = rows.length > 0 && (access.permissions.has("project:manage") ||
+    rows.some(row => permissions.get(String(row.id))?.has("workflow:publish")));
+  let approval: Awaited<ReturnType<typeof getP1SystemSettings>>["approval"] | undefined;
+  if (needsPolicy) {
+    try { approval = (await getP1SystemSettings()).approval; } catch { /* Preserve view/run access while policy reads fail. */ }
+  }
+  const reviewerMode = approval?.reviewerMode ?? "independent_reviewer";
   return rows.map(row => ({
     ...row,
     actions: projectWorkflowActions({
@@ -456,6 +459,8 @@ export async function listProjectWorkflows(
       projectPermissions: access.permissions,
       workflowPermissions: permissions.get(String(row.id)) ?? new Set(),
       reviewerMode,
+      requireProjectApproval: approval ? Boolean(approval.requireProjectApproval) : undefined,
+      publicationPolicyReady: !needsPolicy || Boolean(approval),
     }),
     definition:
       typeof row.definitionJson === "string"

@@ -2168,6 +2168,7 @@ function ProcessCenter({
     void utils.workflow.list.invalidate();
     void utils.workflow.page.invalidate();
     void utils.workflow.get.invalidate();
+    void utils.workflow.access.invalidate();
   };
   const publish = trpc.workflow.publish.useMutation({
     onSuccess: () => {
@@ -2402,7 +2403,8 @@ function ProcessCenter({
                 onClick={() => { setOpenWorkflowActionsId(null); action.run(); }}
               >{action.label}</button>
             ))}
-            {actionsFor(workflow).reviewBlockedReason && <p role="status" className="aiflow-type-body text-muted-foreground">{actionsFor(workflow).reviewBlockedReason}</p>}
+            {(actionsFor(workflow).reviewBlockedReason || actionsFor(workflow).publishBlockedReason) && <p role="status" className="aiflow-type-body text-muted-foreground">{actionsFor(workflow).reviewBlockedReason || actionsFor(workflow).publishBlockedReason}</p>}
+            {actionsFor(workflow).canPublish && actionsFor(workflow).publicationRule?.requireProjectApproval === false && <p role="status" className="aiflow-type-body text-muted-foreground">当前规则无需审核，可直接发布此草稿。</p>}
           </div>
         </PopoverContent>
       </Popover>

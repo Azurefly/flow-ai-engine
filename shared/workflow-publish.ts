@@ -16,6 +16,24 @@ export function isWorkflowDraftDirty(
     (persisted.name !== name || !matchesWorkflowDefinitionSnapshot(persisted.definitionJson, definition)));
 }
 
+/** Advance only an acknowledged lifecycle revision; never replace local editor values. */
+export function acknowledgeWorkflowUnpublish(
+  base: { workflowId: string; name: string; definitionJson: string; definitionVersion: number } | null,
+  submitted: { id: string; expectedDefinitionVersion: number },
+  result: { id?: string; name?: string; definition?: unknown; status?: string; definitionVersion?: number } | null
+) {
+  if (!base || !result || !Number.isSafeInteger(submitted.expectedDefinitionVersion) || submitted.expectedDefinitionVersion < 1 ||
+    base.workflowId !== submitted.id || result.id !== submitted.id ||
+    result.status !== "draft" || result.definitionVersion !== submitted.expectedDefinitionVersion + 1 ||
+    !Number.isSafeInteger(result.definitionVersion))
+    return null;
+  if (base.definitionVersion > result.definitionVersion) return base;
+  if ((base.definitionVersion !== submitted.expectedDefinitionVersion && base.definitionVersion !== result.definitionVersion) ||
+    result.name !== base.name || !matchesWorkflowDefinitionSnapshot(base.definitionJson, result.definition)) return null;
+  if (base.definitionVersion === result.definitionVersion) return base;
+  return { ...base, definitionVersion: result.definitionVersion };
+}
+
 function sortJsonObjectKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
   if (value && typeof value === "object") {
