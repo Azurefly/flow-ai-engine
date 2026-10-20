@@ -378,17 +378,22 @@ async function verifyReviews() {
             width,
             height: width === 1440 ? 1000 : 844,
           });
-          const size = await dialog.evaluate(element => ({
-            scroll: element.scrollWidth,
-            client: element.clientWidth,
-            document: document.documentElement.scrollWidth,
-            viewport: innerWidth,
-          }));
-          assert(
-            size.scroll <= size.client + 1 &&
-              size.document <= size.viewport + 1,
-            JSON.stringify(size)
-          );
+          // Viewport emulation resolves before responsive layout/observers settle.
+          await expect
+            .poll(
+              async () =>
+                dialog.evaluate(element => {
+                  const bounds = element.getBoundingClientRect();
+                  return (
+                    element.scrollWidth <= element.clientWidth + 1 &&
+                    document.documentElement.scrollWidth <= innerWidth + 1 &&
+                    bounds.left >= -1 &&
+                    bounds.right <= innerWidth + 1
+                  );
+                }),
+              { timeout: 5000 }
+            )
+            .toBe(true);
           await page.keyboard.press("Tab");
           assert(
             await dialog.evaluate(element =>
