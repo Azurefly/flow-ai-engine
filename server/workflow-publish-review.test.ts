@@ -19,7 +19,7 @@ vi.mock("./iam-service", () => ({
   recordAuthorizationAudit: mocks.audit,
 }));
 vi.mock("./p1-service", () => ({ isProjectApprovalRequired: mocks.policy }));
-import { updateWorkflow } from "./workflow-service";
+import { updateWorkflow, validate } from "./workflow-service";
 
 const definition = {
   schemaVersion: 1,
@@ -68,6 +68,7 @@ describe("发布事务重新确认审核状态", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     firstRead = { ...original };
+    firstRead.definitionJson = JSON.stringify(validate(definition, { flowType: "control", executable: false }));
     lockedRead = { ...original };
     mocks.access.mockResolvedValue({
       permissions: new Set([

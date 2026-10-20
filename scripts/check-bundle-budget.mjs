@@ -34,9 +34,10 @@ const maxChunkBytes = 450 * 1024;
 // Response-loss recovery and shared creation receipts: 1487.59 / 447.49 KiB.
 // Lazy review confirmation and compact snapshots: 1494.53 / 450.65 KiB.
 // Publication policy guidance and retained drafts after unpublish: 1501.15 / 452.53 KiB.
-const maxTotalBytes = 1_503 * 1024;
+// Private subflow snapshot guidance/recovery: measured 1506.57 / 454.01 KiB.
+const maxTotalBytes = 1_508 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 454 * 1024;
+const maxTotalGzipBytes = 456 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

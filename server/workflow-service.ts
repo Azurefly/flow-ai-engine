@@ -231,7 +231,14 @@ async function resolveSubflowReferences(
     }
     if (executable && !Boolean(mapped.isEnabled))
       throw new Error("流程只能发布已启用的私有子流程引用。");
-    const mappedDefinition = parseJson(mapped.definitionJson) as Definition;
+    // Saving captures the library definition for review. Publishing validates and
+    // executes that saved snapshot instead of silently replacing it from the library.
+    const savedSnapshot = executable && node.config.resolvedSubflowId === String(mapped.id) && node.config.resolvedSubflowDefinition &&
+      typeof node.config.resolvedSubflowDefinition === "object" &&
+      !Array.isArray(node.config.resolvedSubflowDefinition)
+      ? node.config.resolvedSubflowDefinition as Definition
+      : null;
+    const mappedDefinition = savedSnapshot ?? parseJson(mapped.definitionJson) as Definition;
     if (executable) {
       try {
         validate(mappedDefinition, { flowType, executable: true, parallelRuntimeValidation: false });
@@ -255,15 +262,14 @@ async function resolveSubflowReferences(
         ...node.config,
         subflowId: String(mapped.id),
         executionMode: "sync_snapshot",
-        ...(executable
-          ? {
-              resolvedSubflowName: String(mapped.name),
-              resolvedSubflowUpdatedAt: new Date(
-                mapped.updatedAt
-              ).toISOString(),
-              resolvedSubflowDefinition: mappedDefinition,
-            }
-          : {}),
+        resolvedSubflowId: String(mapped.id),
+        resolvedSubflowName: savedSnapshot
+          ? String(node.config.resolvedSubflowName ?? mapped.name)
+          : String(mapped.name),
+        resolvedSubflowUpdatedAt: savedSnapshot
+          ? node.config.resolvedSubflowUpdatedAt ?? new Date(mapped.updatedAt).toISOString()
+          : new Date(mapped.updatedAt).toISOString(),
+        resolvedSubflowDefinition: mappedDefinition,
         zlcxz: Object.keys(legacy).length
           ? legacy
           : { id: String(mapped.id), text: String(mapped.name) },
@@ -538,9 +544,12 @@ export async function updateWorkflow(
       );
   if (values.publish && current.projectId)
     assertProjectServiceTaskReferences(definition);
+  const compiled = executable
+    ? compileWorkflowDefinition(definition, { flowType: current.flowType })
+    : null;
+  const persistedDefinition = compiled?.definition ?? definition;
   const definitionChanged =
-    values.definition !== undefined &&
-    !matchesWorkflowDefinitionSnapshot(JSON.stringify(current.definition), definition);
+    !matchesWorkflowDefinitionSnapshot(JSON.stringify(current.definition), persistedDefinition);
   const nextName = values.name ?? current.name;
   if (
     isWorkflowUpdateNoop({
@@ -552,10 +561,6 @@ export async function updateWorkflow(
     })
   )
     return current;
-  const compiled = executable
-    ? compileWorkflowDefinition(definition, { flowType: current.flowType })
-    : null;
-  const persistedDefinition = compiled?.definition ?? definition;
   const persistedExecutionPlan = values.unpublish
     ? undefined
     : (compiled?.plan ??

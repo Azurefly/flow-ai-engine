@@ -68,6 +68,7 @@ import { workflowDraftBaseVersion } from "../../../shared/workflow-draft-base";
 import { workflowLoopDraftError } from "../../../shared/workflow-loop-policy-draft";
 import { workflowNumberDraftError } from "@shared/workflow-number-draft";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import WorkflowSubflowSnapshots from "@/components/WorkflowSubflowSnapshots";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   Activity,
@@ -1971,6 +1972,7 @@ function FlowConsole({
                 canPublish={canPublish}
                 canRun={canRun}
                 hasUnpublishedChanges={isDraftDirty}
+                draftBaseVersion={workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current)}
                 publicationGate={publicationGate}
                 publicationRefreshing={access.isFetching}
                 onRefreshPublication={() => void access.refetch()}
@@ -1994,6 +1996,14 @@ function FlowConsole({
                 backLabel={flowEditorReturnLabel}
                 onBackToDesignCenter={returnFromFlowEditor}
                 onSave={saveCurrent}
+                onRefreshSubflows={async () => {
+                  if (!selectedId || !draftDefinition || !canEdit || !consoleAlive.current) throw new Error("当前流程不可编辑。");
+                  if (selectedWorkflow?.status === "published") throw new Error("请先取消发布，再更新草稿快照。");
+                  if (draftError) throw new Error(draftError);
+                  await saveFlow.mutateAsync({ id: selectedId, name: draftName.trim() || "未命名流程", definition: draftDefinition,
+                    expectedDefinitionVersion: workflowDraftBaseVersion(selectedId, persistedDraftSnapshot.current) });
+                }}
+                onResolveSubflowSave={() => { if (selectedId) setDraftConflict({ id: selectedId, message: "子流程快照保存结果尚未确认。请先导出当前修改，再核对已保存版本；读取最新版本会替换本页画布。" }); }}
                 onSaveDraftBeforeRun={saveDraftBeforeRun}
                 onValidate={() => {
                   if (!selectedId || !draftDefinition) return;
@@ -2371,6 +2381,7 @@ function FlowDesigner({
   canPublish,
   canRun,
   hasUnpublishedChanges,
+  draftBaseVersion,
   publicationGate,
   publicationRefreshing,
   onRefreshPublication,
@@ -2393,6 +2404,8 @@ function FlowDesigner({
   backLabel,
   onBackToDesignCenter,
   onSave,
+  onRefreshSubflows,
+  onResolveSubflowSave,
   onSaveDraftBeforeRun,
   onPublish,
   onValidate,
@@ -2419,6 +2432,7 @@ function FlowDesigner({
   canPublish: boolean;
   canRun: boolean;
   hasUnpublishedChanges: boolean;
+  draftBaseVersion: number;
   publicationGate: ReturnType<typeof workflowPublicationGate>;
   publicationRefreshing: boolean;
   onRefreshPublication: () => void;
@@ -2441,6 +2455,8 @@ function FlowDesigner({
   backLabel: string;
   onBackToDesignCenter: () => void;
   onSave: () => void;
+  onRefreshSubflows: () => Promise<void>;
+  onResolveSubflowSave: () => void;
   onSaveDraftBeforeRun: () => Promise<void>;
   onPublish: () => void;
   onValidate: () => void;
@@ -2919,6 +2935,9 @@ function FlowDesigner({
           </Button>
         </div>
       </section>}
+      <WorkflowSubflowSnapshots key={workflow.id} workflowId={workflow.id} savedVersion={draftBaseVersion} definition={definition} published={workflow.status === "published"}
+        canEdit={canEdit} busy={savePending || publishPending || compilePending || unpublishBusy || Boolean(draftError)}
+        onSave={onRefreshSubflows} onResolve={onResolveSubflowSave} />
       {draftError && <p role="alert" data-workflow-draft-error="" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{draftError}</p>}
       {workflow.status === "published" && (
         <section

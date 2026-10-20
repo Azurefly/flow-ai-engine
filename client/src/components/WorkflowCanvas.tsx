@@ -5026,6 +5026,12 @@ export default function WorkflowCanvas({
                               );
                               updateConfigFields({
                                 subflowId: value,
+                                ...(value !== selectedConfig.subflowId ? {
+                                  resolvedSubflowId: undefined,
+                                  resolvedSubflowName: undefined,
+                                  resolvedSubflowUpdatedAt: undefined,
+                                  resolvedSubflowDefinition: undefined,
+                                } : {}),
                                 zlcxz: selectedSubflow
                                   ? subflowSelectionConfig(
                                       selectedConfig.zlcxz,
