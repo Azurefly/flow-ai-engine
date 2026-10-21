@@ -29,6 +29,7 @@ ENV BUILD_TIME=${BUILD_TIME}
 WORKDIR /app
 
 COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/LICENSE ./LICENSE
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
