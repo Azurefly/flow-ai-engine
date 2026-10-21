@@ -146,12 +146,17 @@ describe("项目审核固定私有子流程快照", () => {
           ? [library]
           : [],
     ]);
+    connection.rollback.mockResolvedValue(undefined);
     mocks.query.mockImplementation(async (sql: string) =>
-      sql.includes("FROM flow_project")
-        ? [[{ status: "active" }]]
-        : sql.includes("FROM workflow WHERE")
-          ? [[row]]
-          : [{ affectedRows: 1 }]
+      sql.startsWith("SELECT w.*")
+        ? [[row]]
+        : sql.startsWith("SELECT id,role,status")
+          ? [[{ id: 7, role: "admin", status: "active" }]]
+          : sql.includes("FROM flow_project")
+            ? [[{ status: "active" }]]
+            : sql.includes("FROM workflow WHERE")
+              ? [[row]]
+              : [{ affectedRows: 1 }]
     );
   });
   for (const supplied of [false, true])

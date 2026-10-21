@@ -262,7 +262,8 @@ describe("流程版本发布状态", () => {
     );
     expect(homeSource).toContain("没有未保存修改");
     expect(workflowServiceSource).toContain("isWorkflowUpdateNoop({");
-    expect(workflowServiceSource).toContain("return current;");
+    expect(workflowServiceSource).toContain("if (noop)");
+    expect(workflowServiceSource).toContain("role: actor.role");
   });
 
   it("已发布定义的快照比较忽略JSON键顺序，但识别真实字段变化", () => {

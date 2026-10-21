@@ -252,9 +252,18 @@ export async function hasSystemPermission(user: { id: number; role: "user" | "ad
   return (await assignedPermissions(user.id, undefined, connection)).has(permission);
 }
 
-export async function getWorkflowAccess(user: { id: number; role: "user" | "admin" }, workflowId: string) {
-  await ensureIamCatalog();
-  const [workflowRows] = await db().query<mysql.RowDataPacket[]>("SELECT ownerUserId,projectId FROM workflow WHERE id=? LIMIT 1", [workflowId]);
+export async function getWorkflowAccess(
+  user: { id: number; role: "user" | "admin" },
+  workflowId: string,
+  options?: { connection: mysql.PoolConnection; lock?: boolean }
+) {
+  if (!options?.connection) await ensureIamCatalog();
+  const executor = options?.connection ?? db();
+  const shareLock = options?.lock ? " FOR SHARE" : "";
+  const [workflowRows] = await executor.query<mysql.RowDataPacket[]>(
+    `SELECT ownerUserId,projectId FROM workflow WHERE id=? LIMIT 1${shareLock}`,
+    [workflowId]
+  );
   const workflow = workflowRows[0];
   if (!workflow)
     return {
@@ -271,24 +280,48 @@ export async function getWorkflowAccess(user: { id: number; role: "user" | "admi
       projectRoles: [] as ProjectMemberRole[],
     };
   }
-  const [memberRows] = await db().query<mysql.RowDataPacket[]>(
+  const [memberRows] = await executor.query<mysql.RowDataPacket[]>(
     `SELECT role FROM workflow_member
       WHERE workflowId=? AND userId=? AND revokedAt IS NULL
-        AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())`,
+        AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())${shareLock}`,
     [workflowId, user.id]
   );
   const memberRoles = memberRows.map(row => row.role as WorkflowMemberRole);
   const permissions = new Set<WorkflowPermission>();
-  memberRoles.forEach(role => memberRolePermissions[role]?.forEach(permission => permissions.add(permission)));
+  memberRoles.forEach(role =>
+    memberRolePermissions[role]?.forEach(permission =>
+      permissions.add(permission)
+    )
+  );
   let projectRoles: ProjectMemberRole[] = [];
   if (workflow.projectId) {
     const { getProjectAccess } = await import("./project-service");
-    const projectAccess = await getProjectAccess(user, String(workflow.projectId), { includeArchived: true });
+    const projectAccess = await getProjectAccess(
+      user,
+      String(workflow.projectId),
+      {
+        includeArchived: true,
+        ...(options?.connection
+          ? { connection: options.connection, lock: options.lock }
+          : {}),
+      }
+    );
     projectRoles = projectAccess.roles;
-    projectRoles.forEach(role => projectMemberWorkflowPermissions[role]?.forEach(permission => permissions.add(permission)));
+    projectRoles.forEach(role =>
+      projectMemberWorkflowPermissions[role]?.forEach(permission =>
+        permissions.add(permission)
+      )
+    );
   }
-  for (const permission of Array.from(await assignedPermissions(user.id, workflowId))) {
-    if (WORKFLOW_PERMISSIONS.includes(permission as WorkflowPermission)) permissions.add(permission as WorkflowPermission);
+  const assigned =
+    options?.lock && options.connection
+      ? await (
+          await import("./iam-locked-permissions")
+        ).readLockedAssignedPermissions(options.connection, user.id, workflowId)
+      : await assignedPermissions(user.id, workflowId, options?.connection);
+  for (const permission of Array.from(assigned)) {
+    if (WORKFLOW_PERMISSIONS.includes(permission as WorkflowPermission))
+      permissions.add(permission as WorkflowPermission);
   }
   return { exists: true, permissions, memberRoles, projectRoles };
 }

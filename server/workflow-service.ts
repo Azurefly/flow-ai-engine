@@ -126,7 +126,7 @@ export function isWorkflowUpdateNoop(input: {
     input.currentName === input.nextName
   );
 }
-type WorkflowUser = { id: number; role: "user" | "admin" };
+type WorkflowUser = { id: number; role: "user" | "admin"; tokenVersion?: number };
 type VersionSource =
   | "created"
   | "updated"
@@ -521,7 +521,10 @@ export async function updateWorkflow(
   } | null;
   if (!current) return null;
   if (values.expectedDefinitionVersion !== undefined)
-    assertWorkflowRevision(Number(current.definitionVersion), values.expectedDefinitionVersion);
+    assertWorkflowRevision(
+      Number(current.definitionVersion),
+      values.expectedDefinitionVersion
+    );
   if (current.archivedAt)
     throw new Error("已归档流程必须先恢复后才能编辑或发布。");
   assertWorkflowUpdateTransition(current.status, values);
@@ -534,33 +537,33 @@ export async function updateWorkflow(
           executable: false,
         });
   // Lifecycle/name-only changes preserve the saved graph, including private references.
-  const definition = values.definition === undefined && !executable
-    ? current.definition
-    : await resolveSubflowReferences(
-        draftDefinition,
-        current.ownerUserId,
-        executable,
-        current.flowType
-      );
+  const definition =
+    values.definition === undefined && !executable
+      ? current.definition
+      : await resolveSubflowReferences(
+          draftDefinition,
+          current.ownerUserId,
+          executable,
+          current.flowType
+        );
   if (values.publish && current.projectId)
     assertProjectServiceTaskReferences(definition);
   const compiled = executable
     ? compileWorkflowDefinition(definition, { flowType: current.flowType })
     : null;
   const persistedDefinition = compiled?.definition ?? definition;
-  const definitionChanged =
-    !matchesWorkflowDefinitionSnapshot(JSON.stringify(current.definition), persistedDefinition);
+  const definitionChanged = !matchesWorkflowDefinitionSnapshot(
+    JSON.stringify(current.definition),
+    persistedDefinition
+  );
   const nextName = values.name ?? current.name;
-  if (
-    isWorkflowUpdateNoop({
-      currentName: current.name,
-      nextName,
-      definitionChanged,
-      publish: values.publish,
-      unpublish: values.unpublish,
-    })
-  )
-    return current;
+  const noop = isWorkflowUpdateNoop({
+    currentName: current.name,
+    nextName,
+    definitionChanged,
+    publish: values.publish,
+    unpublish: values.unpublish,
+  });
   const persistedExecutionPlan = values.unpublish
     ? undefined
     : (compiled?.plan ??
@@ -576,79 +579,165 @@ export async function updateWorkflow(
       ? "published"
       : current.status;
   const nextVersion = Number(current.definitionVersion) + 1;
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    if (current.projectId) await lockActiveProject(connection, current.projectId);
-    const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT archivedAt,definitionVersion,status,auditStatus FROM workflow WHERE id=? LIMIT 1 FOR UPDATE", [workflowId]
-    );
-    if (lockedRows[0] && values.expectedDefinitionVersion !== undefined)
-      assertWorkflowRevision(Number(lockedRows[0].definitionVersion), values.expectedDefinitionVersion);
-    if (!lockedRows[0] || lockedRows[0].archivedAt || Number(lockedRows[0].definitionVersion) !== Number(current.definitionVersion) || lockedRows[0].status !== current.status)
-      throw new Error("流程状态或版本已变化，请刷新后重新确认；本次修改尚未保存。");
-    if (values.publish && current.projectId && (await isProjectApprovalRequired(connection)) &&
-      (lockedRows[0].auditStatus !== "approved" || definitionChanged))
-      throw new TRPCError({ code: "CONFLICT", message: definitionChanged
-        ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
-        : "当前审批规则要求项目流程通过审核后才能发布。审核状态可能已变化，请重新读取后确认。" });
-    await connection.query(
-      "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
-      [
-        nextName,
-        JSON.stringify(persistedDefinition),
-        nextStatus,
-        nextVersion,
-        Boolean(current.projectId && definitionChanged),
-        values.unpublish
-          ? null
-          : persistedExecutionPlan === undefined
-            ? null
-            : JSON.stringify(persistedExecutionPlan),
-        persistedExecutionPlanHash,
-        Boolean(values.publish),
-        Boolean(values.unpublish),
-        Boolean(values.unpublish),
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [actors] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR UPDATE",
+        [user.id]
+      );
+      const actor = actors[0];
+      if (
+        !actor ||
+        actor.status !== "active" ||
+        !["user", "admin"].includes(actor.role) ||
+        (user.tokenVersion !== undefined &&
+          Number(actor.tokenVersion) !== user.tokenVersion)
+      )
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "登录状态已变化，请保留当前修改并重新登录后重试。",
+        });
+      if (current.projectId)
+        await lockActiveProject(connection, current.projectId);
+      const [lockedRows] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT ownerUserId,projectId,archivedAt,definitionVersion,status,auditStatus FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+        [workflowId]
+      );
+      if (lockedRows[0] && values.expectedDefinitionVersion !== undefined)
+        assertWorkflowRevision(
+          Number(lockedRows[0].definitionVersion),
+          values.expectedDefinitionVersion
+        );
+      if (
+        !lockedRows[0] ||
+        lockedRows[0].archivedAt ||
+        Number(lockedRows[0].definitionVersion) !==
+          Number(current.definitionVersion) ||
+        lockedRows[0].status !== current.status ||
+        Number(lockedRows[0].ownerUserId) !== Number(current.ownerUserId) ||
+        (lockedRows[0].projectId ?? null) !== (current.projectId ?? null)
+      )
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "流程状态、归属或版本已变化，请刷新后重新确认；本次修改尚未保存。",
+        });
+      const freshAccess = await getWorkflowAccess(
+        { id: Number(actor.id), role: actor.role },
         workflowId,
-      ]
-    );
-    await insertVersion(connection, {
-      workflowId,
-      version: nextVersion,
-      name: nextName,
-      status: nextStatus,
-      definition: persistedDefinition,
-      source: values.unpublish
-        ? "unpublished"
-        : values.publish
-          ? "published"
-          : "updated",
-      actorUserId: user.id,
-      executionPlan: persistedExecutionPlan,
-      executionPlanHash: persistedExecutionPlanHash,
-    });
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  if (values.publish || values.unpublish)
-    await recordAuthorizationAudit({
-      actorUserId: user.id,
-      action: "user_updated",
-      resourceType: "workflow",
-      resourceId: workflowId,
-      details: {
-        operation: values.unpublish
-          ? "workflow_unpublished"
-          : "workflow_published",
+        { connection, lock: true }
+      );
+      if (
+        !freshAccess.permissions.has(permission) ||
+        !freshAccess.permissions.has("workflow:view")
+      )
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message:
+            "当前流程权限已变化，本次修改未提交；请保留填写并确认授权后重试。",
+        });
+      const readResult = async () => {
+        const [rows] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT w.*,p.status AS projectStatus FROM workflow w LEFT JOIN flow_project p ON p.id=w.projectId WHERE w.id=? LIMIT 1",
+          [workflowId]
+        );
+        if (!rows[0])
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "流程结果读取失败，本次修改未提交；请保留填写后重试。",
+          });
+        return hydrateWorkflow(rows[0]);
+      };
+      if (noop) {
+        const result = await readResult();
+        await connection.commit();
+        return result;
+      }
+      if (
+        values.publish &&
+        current.projectId &&
+        (await isProjectApprovalRequired(connection)) &&
+        (lockedRows[0].auditStatus !== "approved" || definitionChanged)
+      )
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: definitionChanged
+            ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
+            : "当前审批规则要求项目流程通过审核后才能发布。审核状态可能已变化，请重新读取后确认。",
+        });
+      await connection.query(
+        "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
+        [
+          nextName,
+          JSON.stringify(persistedDefinition),
+          nextStatus,
+          nextVersion,
+          Boolean(current.projectId && definitionChanged),
+          values.unpublish
+            ? null
+            : persistedExecutionPlan === undefined
+              ? null
+              : JSON.stringify(persistedExecutionPlan),
+          persistedExecutionPlanHash,
+          Boolean(values.publish),
+          Boolean(values.unpublish),
+          Boolean(values.unpublish),
+          workflowId,
+        ]
+      );
+      await insertVersion(connection, {
+        workflowId,
         version: nextVersion,
-        preservedRunHistory: true,
-      },
-    });
-  return getWorkflow(workflowId, user);
+        name: nextName,
+        status: nextStatus,
+        definition: persistedDefinition,
+        source: values.unpublish
+          ? "unpublished"
+          : values.publish
+            ? "published"
+            : "updated",
+        actorUserId: user.id,
+        executionPlan: persistedExecutionPlan,
+        executionPlanHash: persistedExecutionPlanHash,
+      });
+      if (values.publish || values.unpublish)
+        await recordAuthorizationAudit(
+          {
+            actorUserId: user.id,
+            action: "user_updated",
+            resourceType: "workflow",
+            resourceId: workflowId,
+            details: {
+              operation: values.unpublish
+                ? "workflow_unpublished"
+                : "workflow_published",
+              version: nextVersion,
+              preservedRunHistory: true,
+            },
+          },
+          connection
+        );
+      const result = await readResult();
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback().catch(() => {});
+      const failure = error as { code?: string; errno?: number };
+      if (failure.code !== "ER_LOCK_DEADLOCK" && failure.errno !== 1213)
+        throw error;
+      if (attempt === 2)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "流程操作繁忙，本次修改未提交；请保留填写并稍后重试。",
+        });
+    } finally {
+      connection.release();
+    }
+    await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
+  }
+  throw new Error("流程修改未提交。");
 }
 
 export async function compileWorkflowDraft(
