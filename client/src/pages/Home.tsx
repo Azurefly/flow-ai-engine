@@ -902,6 +902,7 @@ function FlowConsole({
         queriedRunId: detailInput.runId,
         workflowId: route.workflowId,
         queryFailed: runDetail.isError,
+        queryErrorCode: runDetail.error?.data?.code,
         detail,
       })
     )
@@ -916,6 +917,7 @@ function FlowConsole({
     detailInput.runId,
     runDetail.data,
     runDetail.isError,
+    runDetail.error?.data?.code,
   ]);
 
   const routeRestoring = Boolean(

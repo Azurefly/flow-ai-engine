@@ -53,6 +53,7 @@ it("运行监控失权时隐藏内容并暂停读取，同一实例的操作原�
   );
   expect(home).toContain('viewAllowed={workflowContentState === "granted"}');
   expect(home).toContain("blockedContent={workflowAccessNotice}");
+  expect(home).toContain("queryErrorCode: runDetail.error?.data?.code");
   expect(monitor).toContain("if (!viewAllowed) return blockedContent ?? null;");
   expect(monitor).toContain("enabled: Boolean(viewAllowed && workflowId)");
   expect(monitor).toContain("}, [workflowId, selectedRunId]);");
