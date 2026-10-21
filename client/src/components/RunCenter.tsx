@@ -31,7 +31,7 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { RunPayloadDetails } from "./RunPayloadDetails";
 import { workflowRunControlAllowed, type WorkflowRunControlCapabilities } from "@shared/workflow-run-controls";
 
@@ -60,6 +60,8 @@ export default function RunCenter({
   onSelect,
   onClearSelection,
   onRetrySelection,
+  viewAllowed = true,
+  blockedContent,
 }: {
   projectId?: string | null;
   workflowId: string | null;
@@ -71,6 +73,8 @@ export default function RunCenter({
   onSelect: (id: string) => void;
   onClearSelection: () => void;
   onRetrySelection: () => void;
+  viewAllowed?: boolean;
+  blockedContent?: ReactNode;
 }) {
   const utils = trpc.useUtils();
   const [controlDialog, setControlDialog] = useState<{
@@ -182,7 +186,7 @@ export default function RunCenter({
       : [undefined];
   const historyCursor = historyCursorStack.at(-1);
   const metrics = trpc.workflow.runMetrics.useQuery(filter, {
-    enabled: Boolean(workflowId),
+    enabled: Boolean(viewAllowed && workflowId),
     refetchInterval: query =>
       runMonitorRefreshInterval({
         enabled: autoRefreshEnabled,
@@ -200,13 +204,13 @@ export default function RunCenter({
   const runs = trpc.workflow.runHistoryPage.useQuery(
     { ...filter, cursor: historyCursor, pageSize: 10 },
     {
-      enabled: Boolean(workflowId),
+      enabled: Boolean(viewAllowed && workflowId),
       refetchInterval: query => (query.state.error ? false : refreshInterval),
       refetchIntervalInBackground: false,
     }
   );
   const alerts = trpc.workflow.alerts.useQuery(filter, {
-    enabled: Boolean(workflowId),
+    enabled: Boolean(viewAllowed && workflowId),
     refetchInterval: query => (query.state.error ? false : refreshInterval),
     refetchIntervalInBackground: false,
   });
@@ -291,6 +295,7 @@ export default function RunCenter({
     status || range !== "all" || triggeredByInput.trim() || triggeredByQuery
   );
 
+  if (!viewAllowed) return blockedContent ?? null;
   if (!workflowId)
     return (
       <div className="aiflow-type-body grid min-h-[calc(100vh-56px)] place-items-center p-8 text-center text-muted-foreground">

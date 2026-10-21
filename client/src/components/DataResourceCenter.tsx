@@ -2715,6 +2715,8 @@ export function DataflowRunMonitor({
   selectedRunId,
   onSelect,
   onClearSelection,
+  viewAllowed = true,
+  blockedContent,
 }: {
   projectId?: string | null;
   workflowId: string | null;
@@ -2726,6 +2728,8 @@ export function DataflowRunMonitor({
   onSelect: (id: string) => void;
   onClearSelection: () => void;
   onRetrySelection?: () => void;
+  viewAllowed?: boolean;
+  blockedContent?: React.ReactNode;
 }) {
   const runs = trpc.data.runs.useQuery(
     {
@@ -2735,7 +2739,7 @@ export function DataflowRunMonitor({
       summaryOnly: true,
     },
     {
-      enabled: Boolean(projectId && workflowId),
+      enabled: Boolean(viewAllowed && projectId && workflowId),
       retry: false,
       refetchInterval: 30000,
       refetchIntervalInBackground: false,
@@ -2744,7 +2748,7 @@ export function DataflowRunMonitor({
   const detail = trpc.data.runDetail.useQuery(
     { projectId: projectId ?? "00000000", runId: selectedRunId ?? "00000000" },
     {
-      enabled: Boolean(projectId && selectedRunId),
+      enabled: Boolean(viewAllowed && projectId && selectedRunId),
       retry: false,
       refetchInterval: query =>
         runDetailRefreshInterval(
@@ -2756,6 +2760,7 @@ export function DataflowRunMonitor({
   );
   const matchingDetail =
     detail.data?.workflowId === workflowId ? detail.data : null;
+  if (!viewAllowed) return blockedContent ?? null;
   return (
     <section className="space-y-4 p-4 sm:p-5" aria-label="数据流程运行监控">
       <div className="flex flex-wrap items-center justify-between gap-3">

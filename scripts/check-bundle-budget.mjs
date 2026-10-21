@@ -35,7 +35,8 @@ const maxChunkBytes = 450 * 1024;
 // Lazy review confirmation and compact snapshots: 1494.53 / 450.65 KiB.
 // Publication policy guidance and retained drafts after unpublish: 1501.15 / 452.53 KiB.
 // Private subflow snapshot guidance/recovery: measured 1506.57 / 454.01 KiB.
-const maxTotalBytes = 1_508 * 1024;
+// Workflow view checks and retained drafts through access failures: about 1510 KiB raw / 455 KiB gzip.
+const maxTotalBytes = 1_512 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
 const maxTotalGzipBytes = 456 * 1024;
 const maxHtmlBytes = 20 * 1024;

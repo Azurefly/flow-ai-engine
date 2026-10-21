@@ -69,6 +69,8 @@ import { workflowLoopDraftError } from "../../../shared/workflow-loop-policy-dra
 import { workflowNumberDraftError } from "@shared/workflow-number-draft";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import WorkflowSubflowSnapshots from "@/components/WorkflowSubflowSnapshots";
+import WorkflowAccessNotice from "@/components/WorkflowAccessNotice";
+import { workflowViewState } from "@shared/workflow-view-access";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   Activity,
@@ -702,18 +704,30 @@ function FlowConsole({
     { enabled: Boolean(projectLookupId), retry: false }
   );
   const routeProjectUnresolved = Boolean(routeProjectId && !routeProjectQuery.isSuccess);
-  const selectedWorkflowDefinition = selectedWorkflow
-    ? (decodeJson(selectedWorkflow.definition) as Definition)
-    : null;
   const selectedId = selectedWorkflow?.id ?? null;
   liveDraft.current = { workflowId: effectiveWorkflowId, name: draftName, definition: draftDefinition };
+  const accessInput = useMemo(
+    () => ({ id: effectiveWorkflowId ?? "00000000" }),
+    [effectiveWorkflowId]
+  );
+  const access = trpc.workflow.access.useQuery(accessInput,
+    authorizationQueryPolicy(Boolean(effectiveWorkflowId && (editorActive || detailActive || (section === "runs" && runView === "monitor"))))
+  );
+  const workflowAccessState = workflowViewState({ workflowId: effectiveWorkflowId, accessWorkflowId: accessInput.id,
+    status: access.status, exists: access.data?.exists, permissions: access.data?.permissions });
+  const canViewWorkflow = workflowAccessState === "granted";
+  const mountedMonitorWorkflowId = useRef<string | null>(null);
+  if (canViewWorkflow && section === "runs" && runView === "monitor") mountedMonitorWorkflowId.current = effectiveWorkflowId;
+  const workflowContentState = canViewWorkflow && !selectedWorkflow && selectedWorkflowQuery.isError ? "unavailable" : workflowAccessState;
+  const selectedWorkflowDefinition = canViewWorkflow && selectedWorkflow
+    ? (decodeJson(selectedWorkflow.definition) as Definition) : null;
   const detailInput = useMemo(
     () => ({ runId: selectedRunId ?? "00000000-0000-0000-0000-000000000000" }),
     [selectedRunId]
   );
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, {
     enabled: Boolean(
-      selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data"
+      canViewWorkflow && selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data"
     ),
     retry: false,
     refetchInterval: query =>
@@ -725,23 +739,16 @@ function FlowConsole({
   });
   const RuntimeMonitor =
     selectedWorkflow?.flowType === "data" ? DataflowRunMonitor : RunCenter;
-  const accessInput = useMemo(
-    () => ({ id: selectedId ?? "00000000" }),
-    [selectedId]
-  );
-  const access = trpc.workflow.access.useQuery(accessInput, {
-    enabled: Boolean(selectedId),
-  });
   const members = trpc.workflow.members.useQuery(
     useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]),
-    { enabled: Boolean(editorActive && selectedId), retry: false }
+    { enabled: Boolean(editorActive && canViewWorkflow && selectedId), retry: false }
   );
   const templates = trpc.workflow.templates.useQuery(undefined, {
-    enabled: editorActive,
+    enabled: editorActive && canViewWorkflow,
     retry: false,
   });
   const subflows = trpc.workflow.subflows.useQuery(undefined, {
-    enabled: editorActive,
+    enabled: editorActive && canViewWorkflow,
     retry: false,
   });
   const roles = trpc.iam.roles.useQuery(undefined, {
@@ -1148,11 +1155,11 @@ function FlowConsole({
   });
 
   const workflowArchived = Boolean(selectedWorkflow?.archivedAt) || selectedWorkflow?.projectStatus === "archived";
-  const canEdit = !workflowArchived && Boolean(access.data?.permissions?.has("workflow:edit"));
+  const canEdit = canViewWorkflow && !workflowArchived && Boolean(access.data?.permissions?.has("workflow:edit"));
   const clientUpdateAvailable = useClientVersionUpdate(Boolean(user.id));
-  const canPublish = !workflowArchived && Boolean(access.data?.permissions?.has("workflow:publish"));
-  const canRun = !workflowArchived && Boolean(access.data?.permissions?.has("workflow:run"));
-  const canManageMembers = Boolean(
+  const canPublish = canViewWorkflow && !workflowArchived && Boolean(access.data?.permissions?.has("workflow:publish"));
+  const canRun = canViewWorkflow && !workflowArchived && Boolean(access.data?.permissions?.has("workflow:run"));
+  const canManageMembers = canViewWorkflow && Boolean(
     access.data?.permissions?.has("workflow:members:manage")
   );
   const isDraftDirty = isWorkflowDraftDirty(effectiveWorkflowId, persistedDraftSnapshot.current, draftName, draftDefinition);
@@ -1257,6 +1264,7 @@ function FlowConsole({
   ]);
 
   const exportCurrent = () => {
+    if (!canViewWorkflow) { toast.error("请先恢复当前流程的查看权限。"); return; }
     if (!selectedWorkflow || !draftDefinition) return;
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -1277,6 +1285,7 @@ function FlowConsole({
   };
 
   const reloadLatestDraft = async () => {
+    if (!canViewWorkflow) { toast.error("请先恢复当前流程的查看权限。"); return; }
     const id = draftConflict?.id;
     if (!id || reloadDraftPending) return;
     setReloadDraftPending(true);
@@ -1359,6 +1368,14 @@ function FlowConsole({
       )
     : workflowItems;
   const workspaceReveal = useContextReveal<HTMLElement>(editorActive ? null : formatConsoleRoute(requestedRoute.route), false);
+  const workflowAccessNotice = <WorkflowAccessNotice state={workflowContentState} workflowId={effectiveWorkflowId}
+    retainedDraft={Boolean(isDraftDirty && persistedDraftSnapshot.current?.workflowId === effectiveWorkflowId)} refreshing={access.isFetching}
+    onRetry={() => void (async () => {
+      const latest = await access.refetch();
+      if (consoleAlive.current && !latest.isError && latest.data?.exists && latest.data.permissions.has("workflow:view"))
+        await selectedWorkflowQuery.refetch();
+    })()}
+    onBack={() => navigateRoute({ section: "flows", view: "center" })} />;
 
   return (
     <main
@@ -1369,7 +1386,7 @@ function FlowConsole({
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
         <WorkspaceCommandDialog canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />
       </Suspense>}
-      <Dialog open={Boolean(draftConflict)} onOpenChange={open => { if (!open && !reloadDraftPending) setDraftConflict(null); }}>
+      <Dialog open={Boolean(draftConflict) && canViewWorkflow} onOpenChange={open => { if (!open && !reloadDraftPending) setDraftConflict(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>流程已被更新，当前修改已保留</DialogTitle>
@@ -1428,7 +1445,7 @@ function FlowConsole({
           >
             {mobileNavOpen ? <X size={17} /> : <Menu size={17} />}
           </button>
-          {editorActive && (
+          {editorActive && canViewWorkflow && (
             <button
               type="button"
               data-aiflow-flow-list-trigger=""
@@ -1504,7 +1521,7 @@ function FlowConsole({
           <div data-workspace-context="" className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground xl:flex">
             <span>{nav.find(item => item.id === section)?.label}</span>
             <ChevronRight size={14} aria-hidden="true" />
-            <span className="truncate font-medium text-foreground">{section === "flows" ? (flowView === "editor" ? selectedWorkflow?.name || "流程设计器" : flowView === "workspace" ? selectedProject?.name || "业务工作区" : flowView === "detail" ? selectedWorkflow?.name || "流程详情" : "业务中心") : section === "system" ? (systemView === "identity" ? "人员与权限" : systemView === "organization" ? "组织管理" : "通用与业务配置") : section === "runs" ? "办理与运行" : "浏览与复用"}</span>
+            <span className="truncate font-medium text-foreground">{section === "flows" ? (flowView === "editor" ? (canViewWorkflow ? selectedWorkflow?.name : null) || "流程设计器" : flowView === "workspace" ? selectedProject?.name || "业务工作区" : flowView === "detail" ? (canViewWorkflow ? selectedWorkflow?.name : null) || "流程详情" : "业务中心") : section === "system" ? (systemView === "identity" ? "人员与权限" : systemView === "organization" ? "组织管理" : "通用与业务配置") : section === "runs" ? "办理与运行" : "浏览与复用"}</span>
           </div>
           <Button data-workspace-search-trigger="" type="button" variant="outline" className="ml-auto h-10 min-w-10 gap-2 px-2 text-muted-foreground sm:px-3" onClick={() => setCommandOpen(true)} aria-label="快捷查找业务、流程或页面" aria-keyshortcuts="Control+k Meta+k">
             <Search size={16} /><span className="hidden lg:inline">快捷查找</span><kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-xs lg:inline">Ctrl K</kbd>
@@ -1615,7 +1632,7 @@ function FlowConsole({
               </li>
             ))}
           </ul>
-          {editorActive && (
+          {editorActive && canViewWorkflow && (
             <div className="mt-3 border-t border-border pt-3">
               <button
                 type="button"
@@ -1641,7 +1658,7 @@ function FlowConsole({
         </div>
       </dialog>
       <div data-workspace-body="" className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
-        {section === "flows" && flowView === "editor" && (
+        {section === "flows" && flowView === "editor" && canViewWorkflow && (
           <aside
             id="aiflow-workflow-library"
             data-aiflow-workflow-library=""
@@ -1683,14 +1700,14 @@ function FlowConsole({
               <Input className="mt-3" aria-label="搜索流程名称或编号" placeholder="搜索流程名称或编号" value={flowSearch} onChange={event => setFlowSearch(event.target.value.slice(0, 100))} />
             </div>
             <div className="max-h-[calc(100vh-196px)] overflow-y-auto p-2">
-              {workflows.isLoading && (
+              {workflows.isFetching && (
                 <div className="p-4 text-sm text-muted-foreground">
                   正在读取项目流程…
                 </div>
               )}
               {workflows.isError && <div role="alert" className="p-3 text-sm text-destructive">流程读取失败。<Button variant="outline" size="sm" onClick={() => void workflows.refetch()}>重试</Button></div>}
               {workflows.isSuccess && !workspaceWorkflows.length && <p className="p-3 text-sm text-muted-foreground">没有匹配的流程。</p>}
-              {workspaceWorkflows.map(workflow => {
+              {workflows.isSuccess && !workflows.isFetching && workspaceWorkflows.map(workflow => {
                 const definition = decodeJson(
                   workflow.definition
                 ) as Definition;
@@ -1916,7 +1933,8 @@ function FlowConsole({
                 />
               </div>
             )}
-          {section === "flows" && !routeRestoring && flowView === "detail" && (
+          {section === "flows" && !routeRestoring && (flowView === "detail" || flowView === "editor") && workflowContentState !== "granted" && workflowAccessNotice}
+          {section === "flows" && !routeRestoring && flowView === "detail" && workflowContentState === "granted" && (
             <WorkflowDetailPage
               workflow={selectedWorkflow}
               definition={selectedWorkflowDefinition}
@@ -1939,6 +1957,7 @@ function FlowConsole({
           {section === "flows" &&
             !routeRestoring &&
             flowView === "editor" &&
+            workflowContentState === "granted" &&
             selectedWorkflow && draftDefinition &&
             (!access.data || draftBaseVersion === null ? (
               <div
@@ -2204,10 +2223,12 @@ function FlowConsole({
               </div>
               {runView === "workbench" ? (
                 <ProcessWorkbench />
-              ) : (
+              ) : workflowContentState !== "granted" && mountedMonitorWorkflowId.current !== effectiveWorkflowId ? workflowAccessNotice : (
                 <RuntimeMonitor
+                  viewAllowed={workflowContentState === "granted"}
+                  blockedContent={workflowAccessNotice}
                   projectId={selectedWorkflow?.projectId}
-                  workflowId={selectedId}
+                  workflowId={effectiveWorkflowId}
                   workflowName={selectedWorkflow?.name}
                   selectedRunId={selectedRunId}
                   selectedRun={runDetail.data ?? null}
