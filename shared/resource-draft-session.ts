@@ -95,6 +95,14 @@ export class ResourceDraftStore {
     );
     return { count: categories.size, pending };
   }
+  hasDraftCategory(category: string, projectId?: string) {
+    return Array.from(this.entries.values()).some(
+      entry =>
+        entry.category === category &&
+        (!projectId || entry.projectId === projectId) &&
+        this.dirty(entry)
+    );
+  }
   begin(projectId: string, category: string) {
     const slot = this.slot(projectId, category, "pending");
     this.pending.set(slot, {

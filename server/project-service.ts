@@ -1,4 +1,5 @@
 import { commitProjectWorkflowReview, type WorkflowReviewInput } from "./project-review-transaction";
+import { commitProjectAuthorization } from "./project-authorization-transaction";
 import { assertRoleExpiryRange } from "../shared/role-expiry";
 import { randomBytes } from "node:crypto";
 import { TRPCError } from "@trpc/server";
@@ -128,9 +129,14 @@ async function requireProjectPermission(
   projectId: string,
   permission: ProjectPermission
 ) {
-  const access = await getProjectAccess(user, projectId, { includeArchived: permission === "project:view" });
+  const access = await getProjectAccess(user, projectId, {
+    includeArchived: permission === "project:view",
+  });
   if (!access.exists || !access.permissions.has(permission))
-    throw new Error("项目不存在或当前账号无权执行此操作。");
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "项目不存在或当前账号无权执行此操作。",
+    });
   return access;
 }
 
@@ -675,35 +681,50 @@ export async function grantProjectMember(
   assertRoleExpiryRange(input.expiresAt);
   if (input.expiresAt && input.expiresAt <= new Date())
     throw new Error("临时项目角色到期时间必须晚于当前时间。");
-  const [accounts] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id FROM users WHERE id=? AND status='active' LIMIT 1",
-    [input.userId]
-  );
-  if (!accounts[0]) throw new Error("目标用户不存在或已停用。");
-  await db().query(
-    `INSERT INTO flow_project_member (id,projectId,userId,role,effectiveFrom,expiresAt,revokedAt,grantedByUserId)
+  return commitProjectAuthorization(
+    user,
+    input.projectId,
+    input.userId,
+    async (connection, target) => {
+      if (target?.status !== "active")
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "目标用户不存在或已停用，请重新选择。",
+        });
+      if (input.expiresAt && input.expiresAt <= new Date())
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "授权有效期已过，请重新填写。",
+        });
+      await connection.query(
+        `INSERT INTO flow_project_member (id,projectId,userId,role,effectiveFrom,expiresAt,revokedAt,grantedByUserId)
      VALUES (?,?,?, ?,NOW(),?,NULL,?) ON DUPLICATE KEY UPDATE effectiveFrom=NOW(),expiresAt=VALUES(expiresAt),revokedAt=NULL,grantedByUserId=VALUES(grantedByUserId)`,
-    [
-      id(),
-      input.projectId,
-      input.userId,
-      input.role,
-      input.expiresAt ?? null,
-      user.id,
-    ]
+        [
+          id(),
+          input.projectId,
+          input.userId,
+          input.role,
+          input.expiresAt ?? null,
+          user.id,
+        ]
+      );
+      await recordAuthorizationAudit(
+        {
+          actorUserId: user.id,
+          targetUserId: input.userId,
+          action: input.expiresAt ? "temporary_role_assigned" : "role_assigned",
+          resourceType: "flow_project",
+          resourceId: input.projectId,
+          details: {
+            role: input.role,
+            expiresAt: input.expiresAt?.toISOString() ?? null,
+          },
+        },
+        connection
+      );
+      return true;
+    }
   );
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    targetUserId: input.userId,
-    action: input.expiresAt ? "temporary_role_assigned" : "role_assigned",
-    resourceType: "flow_project",
-    resourceId: input.projectId,
-    details: {
-      role: input.role,
-      expiresAt: input.expiresAt?.toISOString() ?? null,
-    },
-  });
-  return true;
 }
 
 export async function revokeProjectMember(
@@ -715,75 +736,72 @@ export async function revokeProjectMember(
   }
 ) {
   await requireProjectPermission(user, input.projectId, "project:manage");
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    const [projects] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT ownerUserId,status FROM flow_project WHERE id=? FOR UPDATE",
-      [input.projectId]
-    );
-    if (!projects[0] || projects[0].status !== "active")
-      throw new TRPCError({
-        code: "CONFLICT",
-        message: "业务状态已变化，请刷新后重新确认。",
-      });
-    const params: unknown[] = [input.projectId, input.userId];
-    if (input.assignmentId) params.push(input.assignmentId);
-    const [assignments] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT id,role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL${input.assignmentId ? " AND id=?" : ""} FOR UPDATE`,
-      params
-    );
-    if (input.assignmentId && assignments.length !== 1)
-      throw new TRPCError({
-        code: "NOT_FOUND",
-        message: "成员角色授权不存在或已移除，请刷新列表。",
-      });
-    if (
-      Number(projects[0].ownerUserId) === input.userId &&
-      assignments.some(item => item.role === "owner")
-    )
-      throw new TRPCError({
-        code: "BAD_REQUEST",
-        message: "创建人的所有权不能通过成员授权移除。",
-      });
-    const [updated] = await connection.query<mysql.ResultSetHeader>(
-      `UPDATE flow_project_member SET revokedAt=NOW() WHERE projectId=? AND userId=? AND revokedAt IS NULL${input.assignmentId ? " AND id=?" : ""}`,
-      params
-    );
-    if (updated.affectedRows !== assignments.length)
-      throw new TRPCError({
-        code: "CONFLICT",
-        message: "成员授权已变化，请刷新后重试。",
-      });
-    await recordAuthorizationAudit(
-      {
-        actorUserId: user.id,
-        targetUserId: input.userId,
-        action: "role_revoked",
-        resourceType: "flow_project",
-        resourceId: input.projectId,
-        details: {
-          assignmentId: input.assignmentId ?? null,
-          roles: assignments.map(item => item.role),
+  return commitProjectAuthorization(
+    user,
+    input.projectId,
+    input.userId,
+    async connection => {
+      const [projects] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT ownerUserId,status FROM flow_project WHERE id=? FOR UPDATE",
+        [input.projectId]
+      );
+      if (!projects[0] || projects[0].status !== "active")
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "业务状态已变化，请刷新后重新确认。",
+        });
+      const params: unknown[] = [input.projectId, input.userId];
+      if (input.assignmentId) params.push(input.assignmentId);
+      const [assignments] = await connection.query<mysql.RowDataPacket[]>(
+        `SELECT id,role FROM flow_project_member WHERE projectId=? AND userId=? AND revokedAt IS NULL${input.assignmentId ? " AND id=?" : ""} FOR UPDATE`,
+        params
+      );
+      if (input.assignmentId && assignments.length !== 1)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "成员角色授权不存在或已移除，请刷新列表。",
+        });
+      if (
+        Number(projects[0].ownerUserId) === input.userId &&
+        assignments.some(item => item.role === "owner")
+      )
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "创建人的所有权不能通过成员授权移除。",
+        });
+      const [updated] = await connection.query<mysql.ResultSetHeader>(
+        `UPDATE flow_project_member SET revokedAt=NOW() WHERE projectId=? AND userId=? AND revokedAt IS NULL${input.assignmentId ? " AND id=?" : ""}`,
+        params
+      );
+      if (updated.affectedRows !== assignments.length)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "成员授权已变化，请刷新后重试。",
+        });
+      await recordAuthorizationAudit(
+        {
+          actorUserId: user.id,
+          targetUserId: input.userId,
+          action: "role_revoked",
+          resourceType: "flow_project",
+          resourceId: input.projectId,
+          details: {
+            assignmentId: input.assignmentId ?? null,
+            roles: assignments.map(item => item.role),
+          },
         },
-      },
-      connection
-    );
-    await connection.commit();
-    return true;
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
+        connection
+      );
+      return true;
+    }
+  );
 }
 
 export async function listProjectUnits(user: ProjectUser, projectId: string) {
   await ensureProjectUnitTable();
   await requireProjectPermission(user, projectId, "project:view");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT pu.*, ou.code AS unitCode, ou.name AS unitName
+    `SELECT pu.*, ou.code AS unitCode, ou.name AS unitName, ou.status AS unitStatus
        FROM flow_project_unit pu
        JOIN organization_unit ou ON ou.id=pu.unitId
       WHERE pu.projectId=? ORDER BY pu.createdAt`,
@@ -802,29 +820,43 @@ export async function grantProjectUnit(
 ) {
   await ensureProjectUnitTable();
   await requireProjectPermission(user, input.projectId, "project:manage");
-  const [units] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id, name FROM organization_unit WHERE id=? AND status='active' LIMIT 1",
-    [input.unitId]
-  );
-  if (!units[0]) throw new Error("目标部门不存在或已停用。");
-  await db().query(
-    `INSERT INTO flow_project_unit (id, projectId, unitId, role, createdAt)
+  return commitProjectAuthorization(
+    user,
+    input.projectId,
+    undefined,
+    async connection => {
+      const [units] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id, name FROM organization_unit WHERE id=? AND status='active' LIMIT 1 FOR SHARE",
+        [input.unitId]
+      );
+      if (!units[0])
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "目标部门不存在或已停用，请重新选择。",
+        });
+      await connection.query(
+        `INSERT INTO flow_project_unit (id, projectId, unitId, role, createdAt)
      VALUES (?, ?, ?, ?, NOW())
      ON DUPLICATE KEY UPDATE role=VALUES(role)`,
-    [id(), input.projectId, input.unitId, input.role]
+        [id(), input.projectId, input.unitId, input.role]
+      );
+      await recordAuthorizationAudit(
+        {
+          actorUserId: user.id,
+          action: "role_assigned",
+          resourceType: "flow_project",
+          resourceId: input.projectId,
+          details: {
+            targetUnitId: input.unitId,
+            unitName: units[0].name,
+            role: input.role,
+          },
+        },
+        connection
+      );
+      return true;
+    }
   );
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "role_assigned",
-    resourceType: "flow_project",
-    resourceId: input.projectId,
-    details: {
-      targetUnitId: input.unitId,
-      unitName: units[0].name,
-      role: input.role,
-    },
-  });
-  return true;
 }
 
 export async function revokeProjectUnit(
@@ -836,20 +868,35 @@ export async function revokeProjectUnit(
 ) {
   await ensureProjectUnitTable();
   await requireProjectPermission(user, input.projectId, "project:manage");
-  await db().query(
-    "DELETE FROM flow_project_unit WHERE projectId=? AND unitId=?",
-    [input.projectId, input.unitId]
+  return commitProjectAuthorization(
+    user,
+    input.projectId,
+    undefined,
+    async connection => {
+      const [removed] = await connection.query<mysql.ResultSetHeader>(
+        "DELETE FROM flow_project_unit WHERE projectId=? AND unitId=?",
+        [input.projectId, input.unitId]
+      );
+      if (!removed.affectedRows)
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "部门授权已移除或不存在，请刷新列表后确认。",
+        });
+      await recordAuthorizationAudit(
+        {
+          actorUserId: user.id,
+          action: "role_revoked",
+          resourceType: "flow_project",
+          resourceId: input.projectId,
+          details: {
+            targetUnitId: input.unitId,
+          },
+        },
+        connection
+      );
+      return true;
+    }
   );
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "role_revoked",
-    resourceType: "flow_project",
-    resourceId: input.projectId,
-    details: {
-      targetUnitId: input.unitId,
-    },
-  });
-  return true;
 }
 
 async function loadActiveUnits() {

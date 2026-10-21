@@ -15,7 +15,12 @@ vi.mock("./iam-service", () => ({
   hasSystemPermission: vi.fn(),
   recordAuthorizationAudit: mocks.audit,
 }));
-import { revokeProjectMember } from "./project-service";
+import {
+  revokeProjectMember,
+  grantProjectMember,
+  grantProjectUnit,
+  revokeProjectUnit,
+} from "./project-service";
 
 const actor = { id: 7, role: "admin" as const };
 const projectId = "project-revoke";
@@ -34,9 +39,15 @@ let connection: {
   release: ReturnType<typeof vi.fn>;
 };
 let archived: boolean;
+let units: { id: string; projectId: string; unitId: string; role: string }[];
+let targetActive: boolean;
 beforeEach(() => {
   vi.clearAllMocks();
   archived = false;
+  targetActive = true;
+  units = [
+    { id: "unit-grant", projectId, unitId: "unit-target", role: "viewer" },
+  ];
   grants = [
     {
       id: "creator-owner",
@@ -61,16 +72,63 @@ beforeEach(() => {
     },
   ];
   let snapshot: typeof grants;
+  let unitSnapshot: typeof units;
   connection = {
     beginTransaction: vi.fn(async () => {
       snapshot = structuredClone(grants);
+      unitSnapshot = structuredClone(units);
     }),
     commit: vi.fn(async () => {}),
     rollback: vi.fn(async () => {
       grants = snapshot;
+      units = unitSnapshot;
     }),
     release: vi.fn(),
     query: vi.fn(async (sql: string, params: unknown[]) => {
+      if (sql.startsWith("SELECT id,role,status"))
+        return [
+          [
+            { id: 7, role: "admin", status: "active", tokenVersion: 1 },
+            {
+              id: 9,
+              role: "user",
+              status: targetActive ? "active" : "disabled",
+            },
+          ],
+        ];
+      if (sql.startsWith("SELECT id, name FROM organization_unit"))
+        return [[{ id: "unit-target", name: "验收部门" }]];
+      if (sql.startsWith("INSERT INTO flow_project_member")) {
+        grants.push({
+          id: String(params[0]),
+          projectId: String(params[1]),
+          userId: Number(params[2]),
+          role: String(params[3]),
+          revoked: false,
+        });
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.startsWith("INSERT INTO flow_project_unit")) {
+        const existing = units.find(
+          row => row.projectId === params[1] && row.unitId === params[2]
+        );
+        if (existing) existing.role = String(params[3]);
+        else
+          units.push({
+            id: String(params[0]),
+            projectId: String(params[1]),
+            unitId: String(params[2]),
+            role: String(params[3]),
+          });
+        return [{ affectedRows: 1 }];
+      }
+      if (sql.startsWith("DELETE FROM flow_project_unit")) {
+        const original = units.length;
+        units = units.filter(
+          row => row.projectId !== params[0] || row.unitId !== params[1]
+        );
+        return [{ affectedRows: original - units.length }];
+      }
       if (sql.startsWith("SELECT ownerUserId"))
         return [
           [{ ownerUserId: 7, status: archived ? "archived" : "active" }],
@@ -197,11 +255,65 @@ it("事务开始后重新检查业务状态，已归档业务不再撤销授权"
 });
 
 it("没有管理权限时不进入修改事务", async () => {
-  await expect(
-    revokeProjectMember(
-      { id: 10, role: "user" },
-      { projectId, userId: 9, assignmentId: "member-owner" }
-    )
-  ).rejects.toThrow("当前账号无权");
+  const request = revokeProjectMember(
+    { id: 10, role: "user" },
+    { projectId, userId: 9, assignmentId: "member-owner" }
+  );
+  await expect(request).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(request).rejects.toThrow("当前账号无权");
   expect(mocks.getConnection).not.toHaveBeenCalled();
+});
+for (const operation of ["grantMember", "grantUnit", "revokeUnit"] as const) {
+  const write = () =>
+    operation === "grantMember"
+      ? grantProjectMember(actor, { projectId, userId: 9, role: "viewer" })
+      : operation === "grantUnit"
+        ? grantProjectUnit(actor, {
+            projectId,
+            unitId: "unit-target",
+            role: "designer",
+          })
+        : revokeProjectUnit(actor, { projectId, unitId: "unit-target" });
+  it(`${operation} 在同一事务写入授权和审计`, async () => {
+    await write();
+    expect(mocks.audit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resourceType: "flow_project",
+        resourceId: projectId,
+      }),
+      connection
+    );
+    expect(mocks.audit.mock.invocationCallOrder[0]).toBeLessThan(
+      connection.commit.mock.invocationCallOrder[0]
+    );
+    expect(
+      mocks.poolQuery.mock.calls.some(([sql]) =>
+        /^(INSERT|UPDATE|DELETE)/.test(sql)
+      )
+    ).toBe(false);
+    expect(connection.commit).toHaveBeenCalledOnce();
+  });
+  it(`${operation} 审计失败时授权完整回滚`, async () => {
+    const original = structuredClone({ grants, units });
+    mocks.audit.mockRejectedValueOnce(new Error("audit unavailable"));
+    await expect(write()).rejects.toThrow("audit unavailable");
+    expect({ grants, units }).toEqual(original);
+    expect(connection.commit).not.toHaveBeenCalled();
+    expect(connection.rollback).toHaveBeenCalledOnce();
+  });
+}
+it("成员授权前复核目标账号，不向已停用用户写入授权", async () => {
+  targetActive = false;
+  await expect(
+    grantProjectMember(actor, { projectId, userId: 9, role: "viewer" })
+  ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  expect(mocks.audit).not.toHaveBeenCalled();
+  expect(connection.commit).not.toHaveBeenCalled();
+});
+it("已不存在的部门授权不再写入虚假的撤销审计", async () => {
+  units = [];
+  await expect(
+    revokeProjectUnit(actor, { projectId, unitId: "unit-target" })
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  expect(mocks.audit).not.toHaveBeenCalled();
 });

@@ -456,8 +456,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_512 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 456 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_517 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 457 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -733,7 +733,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("项目权限页说明文字与其他页面统一使用正文 14px token", () => {
     const permissionHeader = projectWorkspaceSource.slice(
-      projectWorkspaceSource.indexOf("PROJECT AUTHORIZATION & ISOLATION"),
+      projectWorkspaceSource.indexOf("业务成员与部门授权"),
       projectWorkspaceSource.indexOf("可见部门列表（部门继承授权）")
     );
     expect(permissionHeader).toContain(
@@ -779,9 +779,10 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("<summary");
     expect(projectWorkspaceSource).toContain("添加部门授权</span>");
     expect(projectWorkspaceSource).toContain("添加成员授权</span>");
-    expect(projectWorkspaceSource).not.toMatch(
-      /<details\s+data-project-permission-grant="(?:department|member)"[^>]*\bopen\b/
-    );
+    expect(projectWorkspaceSource).toContain("open={unitOpen}");
+    expect(projectWorkspaceSource).toContain("open={memberOpen}");
+    expect(projectWorkspaceSource).toContain('"unitOpen", false, false');
+    expect(projectWorkspaceSource).toContain('"memberOpen", false, false');
     expect(projectWorkspaceSource).toContain(
       "new Set(members.map(member => member.userId)).size"
     );

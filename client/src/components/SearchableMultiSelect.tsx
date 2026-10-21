@@ -107,7 +107,7 @@ export function SearchableMultiSelect({
   return (
     <div className="min-w-0 space-y-2">
       <Popover
-        open={open}
+        open={open && !disabled}
         onOpenChange={nextOpen => {
           setOpen(nextOpen);
           if (!nextOpen) onQueryChange("");

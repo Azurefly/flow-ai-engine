@@ -72,6 +72,8 @@ export function useResourceDraftSummary(projectId?: string) {
   return {
     ...(store?.stats(projectId) ?? { count: 0, pending: 0 }),
     uncertain: store?.hasUncertainCreation(projectId) ?? false,
+    authorization:
+      store?.hasDraftCategory("project-authorization", projectId) ?? false,
   };
 }
 export function useResourceCreation<
@@ -171,9 +173,15 @@ export function ResourceDraftSession({ children }: { children: ReactNode }) {
               origin.current.focus({ preventScroll: true });
           }}
         >
-          <AlertDialogTitle>离开前保留资源填写</AlertDialogTitle>
+          <AlertDialogTitle>
+            {store.hasDraftCategory("project-authorization")
+              ? "离开前保留授权填写"
+              : "离开前保留资源填写"}
+          </AlertDialogTitle>
           <AlertDialogDescription>
-            资源尚未保存。继续编辑可保留当前填写；确认离开会放弃这些内容。
+            {store.hasDraftCategory("project-authorization")
+              ? "授权填写尚未保存。继续编辑可保留填写；确认离开只会放弃填写，不会撤销可能已经提交的授权，请先核对列表。"
+              : "资源尚未保存。继续编辑可保留当前填写；确认离开会放弃这些内容。"}
             {store.hasUncertainCreation() &&
               " 部分保存结果尚未确认；离开不会撤销可能已经完成的创建，请先核对。"}
           </AlertDialogDescription>
@@ -208,7 +216,9 @@ export function ResourceDraftRecoveryNotice() {
     >
       <p>
         有 {summary.count}{" "}
-        类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。
+        {store.hasDraftCategory("project-authorization")
+          ? "类填写仍保留在当前账号会话中。重新读取业务后请先核对授权列表，再继续填写；也可先导出。请勿关闭页面。"
+          : "类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。"}
       </p>
       {summary.pending > 0 && (
         <p role="status">
@@ -234,12 +244,16 @@ export function ResourceDraftRecoveryNotice() {
           );
           const link = document.createElement("a");
           link.href = url;
-          link.download = "resource-drafts.json";
+          link.download = store.hasDraftCategory("project-authorization")
+            ? "authorization-drafts.json"
+            : "resource-drafts.json";
           link.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         }}
       >
-        导出资源填写
+        {store.hasDraftCategory("project-authorization")
+          ? "导出未保存填写"
+          : "导出资源填写"}
       </Button>
     </div>
   );

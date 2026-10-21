@@ -5,7 +5,7 @@ import { canRevokeProjectGrant } from "@shared/project-member-grant";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { AuthorizationDetailRefresh } from "./AuthorizationDetailRefresh";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
-import { useResourceDraftState, ResourceDraftRecoveryNotice } from "./ResourceDraftSession";
+import { useResourceDraftState, useResourceDraftPending, useResourceDraftSummary, ResourceDraftRecoveryNotice } from "./ResourceDraftSession";
 import { PermissionListFeedback } from "./PermissionListFeedback";
 import { consoleNavigationEvent, requestConsoleNavigation, type ConsoleNavigationEvent } from "@/lib/console-navigation-guard";
 import { Button } from "@/components/ui/button";
@@ -1316,11 +1316,11 @@ export function ProjectWorkspace({
         </div>
       </div>
     );
-  if (access.isSuccess && !capabilities.ready)
+  if (access.isError || (access.isSuccess && !capabilities.ready))
     return (
       <section role="alert" data-project-access-denied="" className="m-4 grid gap-3 rounded-lg border border-border bg-card p-5">
-        <h1 className="aiflow-type-page-title font-semibold">业务访问权限已变化</h1>
-        <p className="aiflow-type-body text-muted-foreground">当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。</p>
+        <h1 className="aiflow-type-page-title font-semibold">{access.isError ? "暂时无法确认业务权限" : "业务访问权限已变化"}</h1>
+        <p className="aiflow-type-body text-muted-foreground">{access.isError ? "业务权限读取失败，缓存内容暂时隐藏。当前填写仍保留在本次账号会话中，可重新读取后继续。" : "当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。"}</p>
         <ResourceDraftRecoveryNotice />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={access.isFetching || members.isFetching} onClick={() => void refreshAccess()}>刷新业务权限</Button>
@@ -1501,6 +1501,8 @@ export function ProjectWorkspace({
             membersError={members.isError}
             onRetryMembers={() => void members.refetch()}
             canManage={canManage}
+            viewAllowed={capabilities.ready}
+            onRefreshAccess={() => Promise.all([access.refetch(), members.refetch()])}
           />
         )}
         {view === "resources" && (
@@ -3269,6 +3271,8 @@ function ProjectMembers({
   membersError,
   onRetryMembers,
   canManage,
+  viewAllowed,
+  onRefreshAccess,
 }: {
   projectId: string;
   members: any[];
@@ -3276,18 +3280,40 @@ function ProjectMembers({
   membersError: boolean;
   onRetryMembers: () => void;
   canManage: boolean;
+  viewAllowed: boolean;
+  onRefreshAccess: () => Promise<unknown>;
 }) {
   const utils = trpc.useUtils();
-  const projectUnits = trpc.project.units.useQuery({ projectId });
+  const projectUnits = trpc.project.units.useQuery(
+    { projectId },
+    { ...authorizationQueryPolicy(viewAllowed) }
+  );
 
-  const [form, setForm] = useState({
-    userId: "",
-    role: "viewer" as ProjectMemberRole,
-    hours: "",
-  });
-  const [memberSearch, setMemberSearch] = useState("");
+  const [form, setForm] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "member",
+    {
+      userId: "",
+      role: "viewer" as ProjectMemberRole,
+      hours: "",
+    }
+  );
+  const [memberSearch, setMemberSearch] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "memberSearch",
+    "",
+    false
+  );
   const [debouncedMemberSearch, setDebouncedMemberSearch] = useState("");
-  const [unitSearch, setUnitSearch] = useState("");
+  const [unitSearch, setUnitSearch] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "unitSearch",
+    "",
+    false
+  );
   const [debouncedUnitSearch, setDebouncedUnitSearch] = useState("");
   useEffect(() => {
     const timer = window.setTimeout(
@@ -3315,10 +3341,103 @@ function ProjectMembers({
       enabled: canManage && debouncedUnitSearch.length > 0,
     }
   );
-  const [unitForm, setUnitForm] = useState({
-    unitId: "",
-    role: "viewer" as ProjectMemberRole,
-  });
+  const [unitForm, setUnitForm] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "unit",
+    {
+      unitId: "",
+      role: "viewer" as ProjectMemberRole,
+    }
+  );
+  type PickedOption = { value: string; label: string; keywords?: string };
+  const [memberSelection, setMemberSelection] = useResourceDraftState<
+    PickedOption[]
+  >(projectId, "project-authorization", "memberSelection", [], false);
+  const [unitSelection, setUnitSelection] = useResourceDraftState<
+    PickedOption[]
+  >(projectId, "project-authorization", "unitSelection", [], false);
+  const [memberOpen, setMemberOpen] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "memberOpen",
+    false,
+    false
+  );
+  const [unitOpen, setUnitOpen] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "unitOpen",
+    false,
+    false
+  );
+  const [failure, setFailure] = useResourceDraftState(
+    projectId,
+    "project-authorization",
+    "failure",
+    "",
+    false
+  );
+  const beginPending = useResourceDraftPending(
+    projectId,
+    "project-authorization"
+  );
+  const sessionPending = useResourceDraftSummary(projectId).pending;
+  const submitting = useRef(false);
+  const memberDirty = Boolean(
+    form.userId || form.hours || form.role !== "viewer"
+  );
+  const unitDirty = Boolean(unitForm.unitId || unitForm.role !== "viewer");
+  const memberOptions = Array.from(
+    new Map(
+      [
+        ...memberSelection,
+        ...(activeUsers.data?.items ?? []).map((user: any) => ({
+          value: String(user.id),
+          label: user.name || user.username,
+          keywords: user.username,
+        })),
+      ].map(option => [option.value, option])
+    ).values()
+  );
+  const unitOptions = Array.from(
+    new Map(
+      [
+        ...unitSelection,
+        ...(activeUnits.data?.items ?? []).map((unit: any) => ({
+          value: String(unit.id),
+          label: unit.displayPath || `${unit.name}（${unit.code}）`,
+          keywords: `${unit.name} ${unit.code} ${unit.pathName ?? ""} ${unit.pathCode ?? ""}`,
+        })),
+      ].map(option => [option.value, option])
+    ).values()
+  );
+  const failed = (error: {
+    message: string;
+    data?: { code?: string } | null;
+  }) => {
+    setFailure(
+      error.data?.code && error.data.code !== "INTERNAL_SERVER_ERROR"
+        ? error.message
+        : "暂时无法确认保存结果，填写已保留。请先重新读取授权列表核对，再决定是否重试。"
+    );
+    void utils.project.access.invalidate({ projectId });
+    toast.error("授权操作未确认，请查看提示并核对列表。");
+  };
+  const submit = async (action: () => Promise<unknown>) => {
+    if (submitting.current || !canManage) return;
+    submitting.current = true;
+    const finish = beginPending();
+    setFailure("");
+    try {
+      await action();
+    } catch {
+      /* Mutation errors retain the form and show recovery instructions. */
+    } finally {
+      submitting.current = false;
+      finish();
+    }
+  };
   const [permissionRevocation, setPermissionRevocation] = useState<
     | {
         kind: "member";
@@ -3342,60 +3461,140 @@ function ProjectMembers({
       utils.workflow.page.invalidate(),
       utils.workflow.get.invalidate(),
     ]);
+  const refreshAfterSave = () => {
+    void refreshProjectAuthorization().catch(() =>
+      setFailure("授权已提交成功，列表暂时未能刷新。请重新读取业务授权。")
+    );
+  };
   const grant = trpc.project.grantMember.useMutation({
-    onSuccess: async () => {
-      await refreshProjectAuthorization();
-      toast.success("成员角色授权已保存。");
+    onSuccess: () => {
       setForm({ userId: "", role: "viewer", hours: "" });
       setMemberSearch("");
+      setMemberSelection([]);
+      refreshAfterSave();
+      toast.success("成员角色授权已保存。");
     },
-    onError: error => toast.error(error.message),
+    onError: failed,
   });
 
   const revokeMember = trpc.project.revokeMember.useMutation({
-    onSuccess: async () => {
-      await refreshProjectAuthorization();
-      toast.success("所选成员角色授权已移除。");
+    onSuccess: () => {
       setPermissionRevocation(null);
+      refreshAfterSave();
+      toast.success("所选成员角色授权已移除。");
     },
     onError: error => {
       void utils.project.members.invalidate({ projectId });
       void utils.project.access.invalidate({ projectId });
-      toast.error(error.message);
+      failed(error);
     },
   });
 
   const grantUnit = trpc.project.grantUnit.useMutation({
-    onSuccess: async () => {
-      await refreshProjectAuthorization();
-      toast.success("可见部门授权已保存。");
+    onSuccess: () => {
       setUnitForm({ unitId: "", role: "viewer" });
+      setUnitSearch("");
+      setUnitSelection([]);
+      refreshAfterSave();
+      toast.success("可见部门授权已保存。");
     },
-    onError: error => toast.error(error.message),
+    onError: failed,
   });
 
   const revokeUnit = trpc.project.revokeUnit.useMutation({
-    onSuccess: async () => {
-      await refreshProjectAuthorization();
-      toast.success("可见部门已移除。");
+    onSuccess: () => {
       setPermissionRevocation(null);
+      refreshAfterSave();
+      toast.success("可见部门已移除。");
     },
-    onError: error => toast.error(error.message),
+    onError: failed,
   });
+  const busy = Boolean(
+    sessionPending ||
+      grant.isPending ||
+      grantUnit.isPending ||
+      revokeMember.isPending ||
+      revokeUnit.isPending
+  );
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    if (busy || refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.all([onRefreshAccess(), projectUnits.refetch()]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const discard = () => {
+    if (busy) return;
+    setForm({ userId: "", role: "viewer", hours: "" });
+    setUnitForm({ unitId: "", role: "viewer" });
+    setMemberSearch("");
+    setUnitSearch("");
+    setMemberSelection([]);
+    setUnitSelection([]);
+    setFailure("");
+  };
 
   return (
-    <div className="space-y-6">
+    <div data-project-authorizations="" aria-busy={busy} className="space-y-6">
       <div className="border-b border-border pb-4">
         <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
-          PROJECT AUTHORIZATION & ISOLATION
+          人员与权限
         </p>
         <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
-          项目权限配置与可见性中心
+          业务成员与部门授权
         </h1>
         <p className="aiflow-type-body mt-1 text-muted-foreground">
           创建人保留所有权；可按人员或部门授予查看、运行或设计角色。业务管理员可管理本业务，不会获得系统管理员权限。
           多项有效授权共同生效；移除仅影响选中的角色授权，其他角色和部门继承仍保留。
         </p>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="aiflow-type-meta text-muted-foreground">
+            {busy
+              ? "正在提交授权，请等待完成。"
+              : memberDirty || unitDirty
+                ? "本次授权填写尚未保存，离开前会提示确认。"
+                : "填写人员或部门后选择角色；授权记录每 30 秒更新。"}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11"
+            disabled={busy || refreshing}
+            onClick={() => void refresh()}
+          >
+            {refreshing ? "正在重新读取…" : "重新读取业务授权"}
+          </Button>
+          {(memberDirty || unitDirty) && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="min-h-11"
+              disabled={busy}
+              onClick={discard}
+            >
+              放弃本次授权填写
+            </Button>
+          )}
+        </div>
+        {failure && (
+          <p
+            role="alert"
+            className="aiflow-type-body mt-3 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface p-3 text-foreground"
+          >
+            {failure}
+          </p>
+        )}
+        {!canManage && (memberDirty || unitDirty) && (
+          <p
+            role="status"
+            className="aiflow-type-body mt-3 rounded-lg border border-border bg-muted p-3"
+          >
+            管理权限暂不可用，已保留本次填写。恢复授权后可重新读取并继续保存。
+          </p>
+        )}
       </div>
 
       {/* 可见部门授权管理 */}
@@ -3413,15 +3612,23 @@ function ProjectMembers({
             </span>
           </span>
           <span className="aiflow-type-body leading-5 font-normal text-muted-foreground">
-            部门成员继承此处选择的角色
+            启用部门中的成员继承此处选择的角色
           </span>
         </div>
-        {canManage && (
+        {(canManage || unitDirty) && (
           <details
             data-project-permission-grant="department"
+            open={unitOpen}
+            onToggle={event => setUnitOpen(event.currentTarget.open)}
             className="group border-b border-border"
           >
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+            <summary
+              aria-disabled={busy}
+              onClick={event => {
+                if (busy) event.preventDefault();
+              }}
+              className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden"
+            >
               <span>添加部门授权</span>
               <ChevronDown
                 size={16}
@@ -3430,80 +3637,113 @@ function ProjectMembers({
               />
             </summary>
             <form
-              className="grid gap-3 border-t border-border bg-muted p-4 sm:grid-cols-[1fr_160px_auto]"
               onSubmit={event => {
                 event.preventDefault();
-                if (unitForm.unitId) {
-                  grantUnit.mutate({
-                    projectId,
-                    unitId: unitForm.unitId,
-                    role: unitForm.role,
-                  });
+                if (
+                  unitForm.unitId &&
+                  canManage &&
+                  !projectUnits.isError &&
+                  !projectUnits.isPending
+                ) {
+                  void submit(() =>
+                    grantUnit.mutateAsync({
+                      projectId,
+                      unitId: unitForm.unitId,
+                      role: unitForm.role,
+                    })
+                  );
                 }
               }}
             >
-              <div className="grid min-w-0 gap-1.5">
-                <SearchableMultiSelect
-                  ariaLabel="选择可见部门"
-                  value={unitForm.unitId ? [unitForm.unitId] : []}
-                  options={(activeUnits.data?.items ?? []).map((unit: any) => ({
-                    value: String(unit.id),
-                    label: unit.displayPath || `${unit.name}（${unit.code}）`,
-                    keywords: `${unit.name} ${unit.code} ${unit.pathName ?? ""} ${unit.pathCode ?? ""}`,
-                  }))}
-                  query={unitSearch}
-                  onQueryChange={setUnitSearch}
-                  onChange={values =>
-                    setUnitForm({ ...unitForm, unitId: values[0] ?? "" })
-                  }
-                  placeholder="选择组织部门"
-                  searchPlaceholder="搜索部门名称、路径或代号"
-                  startSearchMessage="输入部门名称、路径或代号开始搜索。"
-                  emptyMessage="没有可用部门，请检查组织架构配置。"
-                  noResultsMessage="没有匹配的启用部门，请更换搜索词。"
-                  loading={
-                    unitSearch.trim() !== debouncedUnitSearch ||
-                    activeUnits.isFetching
-                  }
-                  error={
-                    unitSearch.trim() === debouncedUnitSearch &&
-                    activeUnits.isError
-                  }
-                  hasMore={activeUnits.data?.hasMore ?? false}
-                  requireSearch
-                  maxSelected={1}
-                />
-                {unitSearch.trim() === debouncedUnitSearch &&
-                  activeUnits.isError && (
-                    <DirectoryRetry
-                      name="部门"
-                      onRetry={() => void activeUnits.refetch()}
-                    />
-                  )}
-              </div>
-              <select
-                aria-label="部门权限角色"
-                className="h-11 rounded border border-border bg-card px-2 text-sm text-foreground sm:h-9"
-                value={unitForm.role}
-                onChange={event =>
-                  setUnitForm({
-                    ...unitForm,
-                    role: event.target.value as ProjectMemberRole,
-                  })
-                }
+              <fieldset
+                disabled={busy || !canManage}
+                className="grid min-w-0 gap-3 border-t border-border bg-muted p-4 sm:grid-cols-2"
               >
-                <option value="viewer">查看者（仅查看）</option>
-                <option value="operator">运行者（可发起/运行）</option>
-                <option value="designer">设计者（可编辑流）</option>
-              </select>
-              <Button
-                type="submit"
-                className="h-11 sm:h-9"
-                disabled={grantUnit.isPending || !unitForm.unitId}
-              >
-                <Building2 size={15} />
-                添加可见部门
-              </Button>
+                <div className="grid min-w-0 gap-1.5">
+                  <p className="aiflow-type-meta text-muted-foreground">
+                    授权部门
+                  </p>
+                  <SearchableMultiSelect
+                    ariaLabel="选择可见部门"
+                    value={unitForm.unitId ? [unitForm.unitId] : []}
+                    options={unitOptions}
+                    disabled={busy || !canManage}
+                    query={unitSearch}
+                    onQueryChange={setUnitSearch}
+                    onChange={values => {
+                      setUnitForm(previous => ({
+                        ...previous,
+                        unitId: values[0] ?? "",
+                      }));
+                      setUnitSelection(
+                        unitOptions.filter(option =>
+                          values.includes(option.value)
+                        )
+                      );
+                    }}
+                    placeholder="选择组织部门"
+                    searchPlaceholder="搜索部门名称、路径或代号"
+                    startSearchMessage="输入部门名称、路径或代号开始搜索。"
+                    emptyMessage="没有可用部门，请检查组织架构配置。"
+                    noResultsMessage="没有匹配的启用部门，请更换搜索词。"
+                    loading={
+                      unitSearch.trim() !== debouncedUnitSearch ||
+                      activeUnits.isFetching
+                    }
+                    error={
+                      unitSearch.trim() === debouncedUnitSearch &&
+                      activeUnits.isError
+                    }
+                    hasMore={activeUnits.data?.hasMore ?? false}
+                    requireSearch
+                    maxSelected={1}
+                  />
+                  {unitSearch.trim() === debouncedUnitSearch &&
+                    activeUnits.isError && (
+                      <DirectoryRetry
+                        name="部门"
+                        onRetry={() => void activeUnits.refetch()}
+                      />
+                    )}
+                </div>
+                <label className="grid min-w-0 content-start gap-1.5">
+                  <span className="aiflow-type-meta text-muted-foreground">
+                    授予的角色
+                  </span>
+                  <select
+                    aria-label="部门权限角色"
+                    className="h-11 min-w-0 rounded border border-border bg-card px-2 text-sm text-foreground"
+                    value={unitForm.role}
+                    onChange={event =>
+                      setUnitForm({
+                        ...unitForm,
+                        role: event.target.value as ProjectMemberRole,
+                      })
+                    }
+                  >
+                    <option value="viewer">查看者（仅查看）</option>
+                    <option value="operator">运行者（可发起/运行）</option>
+                    <option value="designer">设计者（可编辑流）</option>
+                  </select>
+                </label>
+                <Button
+                  type="submit"
+                  className="min-h-11 sm:col-span-2 sm:justify-self-end"
+                  disabled={
+                    busy ||
+                    !canManage ||
+                    projectUnits.isError ||
+                    projectUnits.isPending ||
+                    !unitForm.unitId
+                  }
+                >
+                  <Building2 size={15} />
+                  {grantUnit.isPending ? "正在保存…" : "保存部门授权"}
+                </Button>
+                <p className="aiflow-type-meta text-muted-foreground sm:col-span-2">
+                  同一部门只保留一个业务角色；再次保存会更新该部门的角色，其当前成员共同继承。
+                </p>
+              </fieldset>
             </form>
           </details>
         )}
@@ -3517,45 +3757,54 @@ function ProjectMembers({
             error={projectUnits.isError}
             onRetry={() => void projectUnits.refetch()}
           />
-          {(projectUnits.data ?? []).map((item: any) => (
-            <div
-              key={item.id}
-              className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="aiflow-type-body font-medium text-foreground">
-                  {item.unitName || item.unitCode}
-                </p>
-                <p className="aiflow-type-meta mt-0.5 font-mono text-muted-foreground">
-                  部门代号：{item.unitCode} · 授权时间：
-                  {formatDate(item.createdAt)}
-                </p>
+          {viewAllowed &&
+            !projectUnits.isError &&
+            !projectUnits.isPending &&
+            (projectUnits.data ?? []).map((item: any) => (
+              <div
+                key={item.id}
+                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="aiflow-type-body font-medium text-foreground">
+                    {item.unitName || item.unitCode}
+                  </p>
+                  <p className="aiflow-type-meta mt-0.5 font-mono text-muted-foreground">
+                    部门代号：{item.unitCode} · 授权时间：
+                    {formatDate(item.createdAt)}
+                  </p>
+                  {item.unitStatus === "disabled" && (
+                    <p className="aiflow-type-meta mt-1 text-aiflow-warning">
+                      部门已停用，当前不继承此授权。
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-2 py-1 font-medium text-aiflow-special">
+                    {projectRoleLabel(item.role)}
+                  </span>
+                  {canManage && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`移除部门授权：${item.unitName || item.unitCode}（${item.unitCode}）`}
+                      className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
+                      onClick={() =>
+                        setPermissionRevocation({
+                          kind: "unit",
+                          unitId: item.unitId,
+                          displayName: item.unitName || item.unitCode,
+                          unitCode: item.unitCode,
+                        })
+                      }
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                      移除部门
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-2 py-1 font-medium text-aiflow-special">
-                  {projectRoleLabel(item.role)}
-                </span>
-                {canManage && (
-                  <button
-                    type="button"
-                    aria-label={`移除部门授权：${item.unitName || item.unitCode}（${item.unitCode}）`}
-                    className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
-                    onClick={() =>
-                      setPermissionRevocation({
-                        kind: "unit",
-                        unitId: item.unitId,
-                        displayName: item.unitName || item.unitCode,
-                        unitCode: item.unitCode,
-                      })
-                    }
-                  >
-                    <Trash2 size={15} aria-hidden="true" />
-                    移除部门
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
           {!projectUnits.isPending &&
             !projectUnits.isError &&
             !(projectUnits.data ?? []).length && (
@@ -3584,12 +3833,20 @@ function ProjectMembers({
             单独授权人员清单
           </span>
         </div>
-        {canManage && (
+        {(canManage || memberDirty) && (
           <details
             data-project-permission-grant="member"
+            open={memberOpen}
+            onToggle={event => setMemberOpen(event.currentTarget.open)}
             className="group border-b border-border"
           >
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden">
+            <summary
+              aria-disabled={busy}
+              onClick={event => {
+                if (busy) event.preventDefault();
+              }}
+              className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden"
+            >
               <span>添加成员授权</span>
               <ChevronDown
                 size={16}
@@ -3598,7 +3855,6 @@ function ProjectMembers({
               />
             </summary>
             <form
-              className="grid gap-3 border-t border-border bg-muted p-4 lg:grid-cols-[minmax(220px,1fr)_160px_180px_auto]"
               onSubmit={event => {
                 event.preventDefault();
                 const expiry = roleExpiryInput(form.hours);
@@ -3607,104 +3863,136 @@ function ProjectMembers({
                   return;
                 }
                 const userId = Number(form.userId);
-                if (userId) {
-                  grant.mutate({
-                    projectId,
-                    userId,
-                    role: form.role,
-                    expiresAt: expiry.expiresAt,
-                  });
+                if (userId && canManage && !membersError && !membersLoading) {
+                  void submit(() =>
+                    grant.mutateAsync({
+                      projectId,
+                      userId,
+                      role: form.role,
+                      expiresAt: expiry.expiresAt,
+                    })
+                  );
                 }
               }}
             >
-              <div className="grid min-w-0 gap-1.5">
-                <SearchableMultiSelect
-                  ariaLabel="选择可见人账号"
-                  value={form.userId ? [form.userId] : []}
-                  options={(activeUsers.data?.items ?? []).map((user: any) => ({
-                    value: String(user.id),
-                    label: user.name || user.username,
-                    keywords: user.username,
-                  }))}
-                  query={memberSearch}
-                  onQueryChange={setMemberSearch}
-                  onChange={values =>
-                    setForm({ ...form, userId: values[0] ?? "" })
-                  }
-                  placeholder="选择项目成员"
-                  searchPlaceholder="搜索姓名或账号"
-                  startSearchMessage="输入姓名或账号开始搜索。"
-                  emptyMessage="没有可授权的有效账号。"
-                  noResultsMessage="没有匹配成员，请更换姓名或账号。"
-                  loading={
-                    memberSearch.trim() !== debouncedMemberSearch ||
-                    activeUsers.isFetching
-                  }
-                  error={
-                    memberSearch.trim() === debouncedMemberSearch &&
-                    activeUsers.isError
-                  }
-                  hasMore={activeUsers.data?.hasMore ?? false}
-                  requireSearch
-                  maxSelected={1}
-                />
-                {memberSearch.trim() === debouncedMemberSearch &&
-                  activeUsers.isError && (
-                    <DirectoryRetry
-                      name="人员"
-                      onRetry={() => void activeUsers.refetch()}
-                    />
-                  )}
-              </div>
-              <select
-                aria-label="用户权限角色"
-                className="h-11 rounded border border-border bg-card px-2 text-sm text-foreground sm:h-9"
-                value={form.role}
-                onChange={event =>
-                  setForm({
-                    ...form,
-                    role: event.target.value as ProjectMemberRole,
-                  })
-                }
+              <fieldset
+                disabled={busy || !canManage}
+                className="grid min-w-0 gap-3 border-t border-border bg-muted p-4 sm:grid-cols-2"
               >
-                <option value="viewer">查看者</option>
-                <option value="operator">运行者</option>
-                <option value="designer">设计者</option>
-                <option value="owner">业务管理员</option>
-              </select>
-              <div className="grid gap-1.5">
-                <Input
-                  aria-label="有效期小时（可选）"
-                  className="h-11 bg-card sm:h-9"
-                  type="number"
-                  min="1"
-                  step="1"
-                  aria-invalid={Boolean(expiryError)}
-                  aria-describedby="project-member-expiry-help"
-                  placeholder="有效期小时（可选）"
-                  value={form.hours}
-                  onChange={event =>
-                    setForm({ ...form, hours: event.target.value })
+                <div className="grid min-w-0 gap-1.5">
+                  <p className="aiflow-type-meta text-muted-foreground">
+                    授权人员
+                  </p>
+                  <SearchableMultiSelect
+                    ariaLabel="选择可见人账号"
+                    value={form.userId ? [form.userId] : []}
+                    options={memberOptions}
+                    disabled={busy || !canManage}
+                    query={memberSearch}
+                    onQueryChange={setMemberSearch}
+                    onChange={values => {
+                      setForm(previous => ({
+                        ...previous,
+                        userId: values[0] ?? "",
+                      }));
+                      setMemberSelection(
+                        memberOptions.filter(option =>
+                          values.includes(option.value)
+                        )
+                      );
+                    }}
+                    placeholder="选择项目成员"
+                    searchPlaceholder="搜索姓名或账号"
+                    startSearchMessage="输入姓名或账号开始搜索。"
+                    emptyMessage="没有可授权的有效账号。"
+                    noResultsMessage="没有匹配成员，请更换姓名或账号。"
+                    loading={
+                      memberSearch.trim() !== debouncedMemberSearch ||
+                      activeUsers.isFetching
+                    }
+                    error={
+                      memberSearch.trim() === debouncedMemberSearch &&
+                      activeUsers.isError
+                    }
+                    hasMore={activeUsers.data?.hasMore ?? false}
+                    requireSearch
+                    maxSelected={1}
+                  />
+                  {memberSearch.trim() === debouncedMemberSearch &&
+                    activeUsers.isError && (
+                      <DirectoryRetry
+                        name="人员"
+                        onRetry={() => void activeUsers.refetch()}
+                      />
+                    )}
+                </div>
+                <label className="grid min-w-0 content-start gap-1.5">
+                  <span className="aiflow-type-meta text-muted-foreground">
+                    授予的角色
+                  </span>
+                  <select
+                    aria-label="用户权限角色"
+                    className="h-11 min-w-0 rounded border border-border bg-card px-2 text-sm text-foreground"
+                    value={form.role}
+                    onChange={event =>
+                      setForm({
+                        ...form,
+                        role: event.target.value as ProjectMemberRole,
+                      })
+                    }
+                  >
+                    <option value="viewer">查看者</option>
+                    <option value="operator">运行者</option>
+                    <option value="designer">设计者</option>
+                    <option value="owner">业务管理员</option>
+                  </select>
+                </label>
+                <div className="grid min-w-0 gap-1.5 sm:col-span-2 sm:max-w-sm">
+                  <label
+                    htmlFor={`project-member-expiry-${projectId}`}
+                    className="aiflow-type-meta text-muted-foreground"
+                  >
+                    有效期（小时，可选）
+                  </label>
+                  <Input
+                    id={`project-member-expiry-${projectId}`}
+                    aria-label="有效期小时（可选）"
+                    className="h-11 bg-card"
+                    type="number"
+                    min="1"
+                    step="1"
+                    aria-invalid={Boolean(expiryError)}
+                    aria-describedby="project-member-expiry-help"
+                    placeholder="有效期小时（可选）"
+                    value={form.hours}
+                    onChange={event =>
+                      setForm({ ...form, hours: event.target.value })
+                    }
+                  />
+                  <p
+                    id="project-member-expiry-help"
+                    className="text-sm text-muted-foreground"
+                    role={expiryError ? "alert" : undefined}
+                  >
+                    {expiryError || "填写整数小时；留空表示长期有效。"}
+                  </p>
+                </div>
+                <Button
+                  type="submit"
+                  className="min-h-11 sm:col-span-2 sm:justify-self-end"
+                  disabled={
+                    busy ||
+                    !canManage ||
+                    membersError ||
+                    membersLoading ||
+                    !form.userId ||
+                    Boolean(expiryError)
                   }
-                />
-                <p
-                  id="project-member-expiry-help"
-                  className="text-sm text-muted-foreground"
-                  role={expiryError ? "alert" : undefined}
                 >
-                  {expiryError || "填写整数小时；留空表示长期有效。"}
-                </p>
-              </div>
-              <Button
-                type="submit"
-                className="h-11 sm:h-9"
-                disabled={
-                  grant.isPending || !form.userId || Boolean(expiryError)
-                }
-              >
-                <UsersRound size={15} />
-                添加可见人
-              </Button>
+                  <UsersRound size={15} />
+                  {grant.isPending ? "正在保存…" : "保存成员授权"}
+                </Button>
+              </fieldset>
             </form>
           </details>
         )}
@@ -3718,48 +4006,54 @@ function ProjectMembers({
             error={membersError}
             onRetry={onRetryMembers}
           />
-          {members.map(member => (
-            <div
-              key={member.id}
-              className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div>
-                <p className="aiflow-type-body font-medium text-foreground">
-                  {member.name || member.username}
-                </p>
-                <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
-                  {member.username} · 生效：{formatDate(member.effectiveFrom)} ·
-                  到期：
-                  {member.expiresAt ? formatDate(member.expiresAt) : "长期"}
-                </p>
+          {viewAllowed &&
+            !membersError &&
+            !membersLoading &&
+            members.map(member => (
+              <div
+                key={member.id}
+                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div>
+                  <p className="aiflow-type-body font-medium text-foreground">
+                    {member.name || member.username}
+                  </p>
+                  <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
+                    {member.username} · 生效：{formatDate(member.effectiveFrom)}{" "}
+                    · 到期：
+                    {member.expiresAt ? formatDate(member.expiresAt) : "长期"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="aiflow-type-meta rounded bg-accent px-2 py-1 font-medium text-aiflow-info">
+                    {member.protectedOwner
+                      ? "创建人"
+                      : projectRoleLabel(member.role)}
+                  </span>
+                  {canManage && canRevokeProjectGrant(member) && (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      aria-label={`移除成员授权：${member.name || member.username}（${member.username}） · ${projectRoleLabel(member.role)}`}
+                      className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
+                      onClick={() =>
+                        setPermissionRevocation({
+                          kind: "member",
+                          userId: member.userId,
+                          assignmentId: member.id,
+                          roleLabel: projectRoleLabel(member.role),
+                          displayName: member.name || member.username,
+                          username: member.username,
+                        })
+                      }
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                      移除
+                    </button>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                <span className="aiflow-type-meta rounded bg-accent px-2 py-1 font-medium text-aiflow-info">
-                  {member.protectedOwner ? "创建人" : projectRoleLabel(member.role)}
-                </span>
-                {canManage && canRevokeProjectGrant(member) && (
-                  <button
-                    type="button"
-                    aria-label={`移除成员授权：${member.name || member.username}（${member.username}） · ${projectRoleLabel(member.role)}`}
-                    className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
-                    onClick={() =>
-                      setPermissionRevocation({
-                        kind: "member",
-                        userId: member.userId,
-                        assignmentId: member.id,
-                        roleLabel: projectRoleLabel(member.role),
-                        displayName: member.name || member.username,
-                        username: member.username,
-                      })
-                    }
-                  >
-                    <Trash2 size={15} aria-hidden="true" />
-                    移除
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            ))}
           {!membersLoading && !membersError && !members.length && (
             <p className="aiflow-type-body p-6 text-center text-muted-foreground">
               项目尚无单独可见人员。
@@ -3768,9 +4062,9 @@ function ProjectMembers({
         </div>
       </section>
       <AlertDialog
-        open={Boolean(permissionRevocation)}
+        open={Boolean(permissionRevocation) && viewAllowed}
         onOpenChange={open => {
-          if (!open && !revokeMember.isPending && !revokeUnit.isPending) {
+          if (!open && !busy) {
             setPermissionRevocation(null);
           }
         }}
@@ -3786,29 +4080,45 @@ function ProjectMembers({
                   : "请确认要移除所选项目授权。"}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {failure && (
+            <p role="alert" className="aiflow-type-body text-destructive">
+              {failure}
+            </p>
+          )}
+          {!canManage && (
+            <p role="alert" className="aiflow-type-body text-destructive">
+              管理权限暂不可用，不能提交移除。可取消后重新读取业务权限。
+            </p>
+          )}
           <AlertDialogFooter>
             <AlertDialogCancel
-              disabled={revokeMember.isPending || revokeUnit.isPending}
+              disabled={busy}
               className="aiflow-type-control h-11 min-h-11"
             >
               取消
             </AlertDialogCancel>
             <AlertDialogAction
-              disabled={revokeMember.isPending || revokeUnit.isPending}
+              disabled={busy || !canManage}
               className="aiflow-type-control h-11 min-h-11 bg-rose-600 text-white hover:bg-rose-700"
               onClick={event => {
                 event.preventDefault();
-                if (permissionRevocation?.kind === "member") {
-                  revokeMember.mutate({
-                    projectId,
-                    userId: permissionRevocation.userId,
-                    assignmentId: permissionRevocation.assignmentId,
-                  });
-                } else if (permissionRevocation?.kind === "unit") {
-                  revokeUnit.mutate({
-                    projectId,
-                    unitId: permissionRevocation.unitId,
-                  });
+                if (busy || !canManage) return;
+                const selected = permissionRevocation;
+                if (selected?.kind === "member") {
+                  void submit(() =>
+                    revokeMember.mutateAsync({
+                      projectId,
+                      userId: selected.userId,
+                      assignmentId: selected.assignmentId,
+                    })
+                  );
+                } else if (selected?.kind === "unit") {
+                  void submit(() =>
+                    revokeUnit.mutateAsync({
+                      projectId,
+                      unitId: selected.unitId,
+                    })
+                  );
                 }
               }}
             >
