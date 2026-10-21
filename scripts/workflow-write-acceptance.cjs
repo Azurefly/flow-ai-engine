@@ -403,13 +403,15 @@ async function verify(page, reproduction) {
     const before = await snapshot(flow),
       barrier = sqlProcess("hold_project");
     await barrier.ready;
-    let response;
+    let response, revocation;
     try {
       response = page.waitForResponse(
         row =>
           row.request().method() === "POST" &&
-          row.url().includes("workflow.update")
+          row.url().includes("workflow.update"),
+        { timeout: 30000 }
       );
+      response.catch(() => {});
       await page.getByRole("button", { name: /^保存画布/ }).click();
       await poll(
         "save blocked on the isolated project row",
@@ -417,10 +419,20 @@ async function verify(page, reproduction) {
         value => value.waiting,
         12000
       );
-      await unbind(flow);
+      revocation = resultOf(unbind(flow));
+      // Revocation commits before its audit response; that audit's user foreign
+      // key can wait for the writer's account lock. Observe the committed access
+      // result before releasing the barrier, then await both HTTP responses.
+      await poll(
+        "committed edit revocation",
+        () => viewer("workflow.access", { id: flow.id }),
+        access => !has(access, "workflow:edit"),
+        12000
+      );
     } finally {
       await barrier.release();
     }
+    assert.equal((await revocation).ok, true);
     assert.equal((await response).status(), reproduction ? 200 : 403);
     if (!reproduction) {
       assert.deepEqual(await snapshot(flow), before);
@@ -477,7 +489,7 @@ async function verify(page, reproduction) {
       const original = await snapshot(flow),
         lock = sqlProcess("hold_project");
       await lock.ready;
-      let submitted;
+      let submitted, revocation;
       try {
         submitted = resultOf(
           viewer(
@@ -495,10 +507,17 @@ async function verify(page, reproduction) {
           value => value.waiting,
           12000
         );
-        await unbind(flow);
+        revocation = resultOf(unbind(flow));
+        await poll(
+          "committed publication revocation",
+          () => viewer("workflow.access", { id: flow.id }),
+          access => !has(access, "workflow:publish"),
+          12000
+        );
       } finally {
         await lock.release();
       }
+      assert.equal((await revocation).ok, true);
       const result = await submitted;
       assert.equal(result.ok, reproduction);
       if (!reproduction) {
