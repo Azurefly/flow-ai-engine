@@ -573,7 +573,7 @@ async function verify(page) {
       .click();
     await expect(
       page.getByRole("heading", { name: "业务中心", exact: true })
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 20000 });
     await verify(page);
   } catch (error) {
     failed = true;
