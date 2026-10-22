@@ -4083,4 +4083,7 @@ it("共享弹窗固定单列最小宽度，长账号标签允许收缩并保留�
   );
   expect(authorizationSource).toContain("expiresAt: currentValidity.expiresAt");
   expect(authorizationSource).toContain("<AlertDialogCancel");
+  expect(source("../client/src/components/WorkflowAccessNotice.tsx")).toContain(
+    "<ResourceDraftRecoveryNotice />"
+  );
 });

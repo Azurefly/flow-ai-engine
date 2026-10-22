@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Loader2, LockKeyhole } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ResourceDraftRecoveryNotice } from "./ResourceDraftSession";
 import type { WorkflowViewState } from "@shared/workflow-view-access";
 
 export default function WorkflowAccessNotice({
@@ -74,6 +75,7 @@ export default function WorkflowAccessNotice({
           )}
         </div>
       </div>
+      {state !== "checking" && <ResourceDraftRecoveryNotice />}
       <div className="flex min-w-0 flex-col gap-2 sm:flex-row">
         <Button
           type="button"

@@ -901,6 +901,40 @@ async function ui() {
   );
   await refresh().click();
   await expect(page.locator("[data-resource-draft-recovery]")).toBeVisible();
+  const recoveryDownload = page.waitForEvent("download");
+  await page
+    .locator("[data-resource-draft-recovery]")
+    .getByRole("button", { name: "导出未保存填写", exact: true })
+    .click();
+  const recoveredFile = await recoveryDownload;
+  const recoveredDrafts = JSON.parse(
+    fs.readFileSync(await recoveredFile.path(), "utf8")
+  );
+  assert(
+    recoveredDrafts.drafts.some(
+      item =>
+        item.category === "workflow-authorization" &&
+        item.field === wid() + ":builtin" &&
+        item.value.hours === "9"
+    )
+  );
+  await owner(
+    "workflow.grantMember",
+    { workflowId: wid(), userId: fixture.managerUserId, role: "owner" },
+    true
+  );
+  await page
+    .getByRole("button", { name: "重新检查流程权限", exact: true })
+    .click();
+  await open();
+  await expect(hours()).toHaveValue("9");
+  await owner(
+    "workflow.revokeMember",
+    { workflowId: wid(), userId: fixture.managerUserId, role: "owner" },
+    true
+  );
+  await refresh().click();
+  await expect(page.locator("[data-resource-draft-recovery]")).toBeVisible();
   await page.getByRole("button", { name: "退出", exact: true }).click();
   const globalLeave = page.getByRole("alertdialog", {
     name: "离开前保留授权填写",
