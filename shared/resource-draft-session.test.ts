@@ -228,3 +228,23 @@ describe("资源提交结果确认", () => {
     expect(store.creation("p1", "tags")).toBeUndefined();
   });
 });
+
+it("流程与业务授权草稿均使用授权退出提示，流程之间保留且互不覆盖", () => {
+  const store = new ResourceDraftStore();
+  store.set("p", "workflow-authorization", "flow-a:builtin", "", "3");
+  store.set("p", "workflow-authorization", "flow-a:custom", "", "7");
+  expect(store.hasAuthorizationDraft("p")).toBe(true);
+  expect(store.hasAuthorizationDraft("other")).toBe(false);
+  store.set("p", "workflow-authorization", "flow-a:builtin", "", "");
+  expect(store.read("p", "workflow-authorization", "flow-a:custom", "")).toBe(
+    "7"
+  );
+  expect(store.read("p", "workflow-authorization", "flow-b:custom", "")).toBe(
+    ""
+  );
+  expect(store.stats("p").count).toBe(1);
+  store.clear();
+  expect(store.hasAuthorizationDraft()).toBe(false);
+  store.set("p", "project-authorization", "member", "", "draft");
+  expect(store.hasAuthorizationDraft()).toBe(true);
+});

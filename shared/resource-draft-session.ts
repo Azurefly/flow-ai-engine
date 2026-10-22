@@ -103,6 +103,12 @@ export class ResourceDraftStore {
         this.dirty(entry)
     );
   }
+  hasAuthorizationDraft(projectId?: string) {
+    return (
+      this.hasDraftCategory("project-authorization", projectId) ||
+      this.hasDraftCategory("workflow-authorization", projectId)
+    );
+  }
   begin(projectId: string, category: string) {
     const slot = this.slot(projectId, category, "pending");
     this.pending.set(slot, {

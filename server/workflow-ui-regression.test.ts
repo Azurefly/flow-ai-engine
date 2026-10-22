@@ -8,6 +8,9 @@ import {
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+const authorizationSource = source(
+  "../client/src/components/WorkflowRoleBindingsDialog.tsx"
+);
 
 describe("分页流程缓存联动", () => {
   it("直接系统角色授予撤销和角色定义修改刷新资源权限与列表", () => {
@@ -33,17 +36,14 @@ describe("分页流程缓存联动", () => {
     );
   });
   it("自定义流程角色有效期即时校验并阻止无效提交", () => {
-    const bindings = source(
-      "../client/src/components/WorkflowRoleBindingsDialog.tsx"
+    expect(authorizationSource).toContain(
+      "const validity = roleExpiryInput(form.hours)"
     );
-    expect(bindings).toContain(
-      "const expiryError = roleExpiryInput(hours).error"
+    expect(authorizationSource).toContain(
+      "aria-invalid={Boolean(validity.error)}"
     );
-    expect(bindings).toContain("aria-invalid={Boolean(expiryError)}");
-    expect(bindings).toContain(
-      'id="workflow-custom-role-expiry-error" role="alert"'
-    );
-    expect(bindings).toContain("!validRole || Boolean(expiryError) ||");
+    expect(authorizationSource).toContain('id="workflow-expiry-error"');
+    expect(authorizationSource).toContain("Boolean(validity.error) ||");
   });
   it("预检期间修改名称也重置检查状态", () => {
     expect(homeSource).toContain(
@@ -1634,8 +1634,11 @@ describe("流程设计器界面回归约束", () => {
       "enabled: editorActive && canViewWorkflow, retry: false"
     );
     expect(homeSource).toContain("enabled: identityActive, retry: false");
-    expect(homeSource).toContain(
-      "Boolean(editorActive && canViewWorkflow && selectedId)"
+    expect(homeSource).not.toContain(
+      "const members = trpc.workflow.members.useQuery"
+    );
+    expect(authorizationSource).toContain(
+      'authorizationQueryPolicy(readable && tab === "builtin")'
     );
   });
 
@@ -3076,31 +3079,36 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("协作成员区分到期、停用、未生效与撤销，并仅在弹窗内刷新", () => {
-    expect(iamServiceSource).toContain("wm.expiresAt<=NOW() THEN 'expired'");
-    expect(iamServiceSource).toContain("wm.effectiveFrom>NOW() THEN 'pending'");
-    expect(iamServiceSource).toContain("u.status<>'active' THEN 'disabled'");
-    expect(iamServiceSource).toContain("AS authorizationStatus");
-    expect(homeSource).toContain('member.authorizationStatus === "active"');
-    expect(homeSource).toContain('disabled: "账号已停用"');
-    expect(homeSource).toContain('expired: "已到期"');
-    expect(homeSource).toContain(
-      "refetchInterval: membersDialogOpen ? 30_000 : false"
-    );
-    expect(homeSource).toContain("成员状态刷新失败，当前显示可能已过期。");
+    for (const condition of [
+      "wm.expiresAt<=NOW() THEN 'expired'",
+      "wm.effectiveFrom>NOW() THEN 'pending'",
+      "u.status<>'active' THEN 'disabled'",
+    ])
+      expect(iamServiceSource).toContain(condition);
+    for (const marker of [
+      'disabled: "账号停用"',
+      'expired: "已到期"',
+      'revoked: "已撤销"',
+      'pending: "待生效"',
+      "已隐藏旧列表",
+      'authorizationQueryPolicy(readable && tab === "builtin")',
+    ])
+      expect(authorizationSource).toContain(marker);
   });
   it("协作授权按名称搜索人员且提交失败保留表单", () => {
-    expect(homeSource).toContain('ariaLabel="待授权内部账号"');
-    expect(homeSource).toContain("query: candidateSearch");
-    expect(homeSource).toContain("await grantMember.mutateAsync");
-    expect(homeSource).toContain("await onGrant(");
-    expect(homeSource).toContain("正在授权…");
-    expect(homeSource).toContain("所选账号已停用或不可用，请重新选择。");
-    expect(homeSource).not.toContain("candidates={");
+    expect(authorizationSource).toContain('ariaLabel="待授权内部账号"');
+    expect(authorizationSource).toContain("query: debounced.user");
+    expect(authorizationSource).toContain("await grant.mutateAsync");
+    expect(authorizationSource).toContain("填写已保留");
+    expect(authorizationSource).toContain("账号已停用或不可用");
+    expect(authorizationSource).toContain("useResourceDraftState");
   });
 
   it("设计器和成员授权弹窗不请求可选 LLM 模型目录", () => {
     expect(homeSource).not.toContain("workflow.runtimeModels.useQuery");
-    expect(homeSource).toContain("权限感知设计器");
+    expect(authorizationSource).not.toContain(
+      "workflow.runtimeModels.useQuery"
+    );
     expect(homeSource).not.toContain("当前已发现 ${models.length} 个可用模型");
   });
 
@@ -3743,7 +3751,7 @@ it("自定义角色维护和流程绑定按需加载，内置角色保持保护"
   expect(homeSource).toContain("编辑角色");
   expect(homeSource).toContain("删除角色");
   expect(homeSource).toContain("!Boolean(Number(selectedRole.isSystem))");
-  expect(homeSource).toContain("管理自定义流程角色");
+  expect(authorizationSource).toContain("自定义流程角色");
   const roleDialog = source("../client/src/components/CustomRoleDialog.tsx");
   expect(roleDialog).toContain("请输入完整角色编码确认删除");
   expect(roleDialog).toContain("内置角色不可修改或删除");
@@ -3800,14 +3808,13 @@ it("整体工作台重构保留草稿与授权边界，动效不重建表单", (
 });
 
 it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧选择", () => {
-  const bindings = source(
-    "../client/src/components/WorkflowRoleBindingsDialog.tsx"
+  expect(authorizationSource).toContain("重新读取权限与列表");
+  expect(authorizationSource).toContain("!roles.isFetching");
+  expect(authorizationSource).toContain("customRole?.permissionLabels.length");
+  expect(authorizationSource).toContain("!validUser || !validRole ||");
+  expect(authorizationSource).toContain(
+    "disabled={!role.permissionLabels.length}"
   );
-  expect(bindings).toContain("刷新角色");
-  expect(bindings).toContain("!roles.isFetching");
-  expect(bindings).toContain("role.permissionLabels.length > 0");
-  expect(bindings).toContain("busy || !validUser || !validRole");
-  expect(bindings).toContain("disabled={!role.permissionLabels.length}");
 });
 
 it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
@@ -3883,15 +3890,14 @@ it("分页外的流程保存发布后刷新详情缓存", () => {
   }
 });
 it("基础流程成员有效期即时反馈并阻止无效授权", () => {
-  expect(homeSource).toContain(
-    "const memberExpiryError = roleExpiryInput(hours).error"
+  expect(authorizationSource).toContain(
+    "const validity = roleExpiryInput(form.hours)"
   );
-  expect(homeSource).toContain("aria-invalid={Boolean(memberExpiryError)}");
-  expect(homeSource).toContain(
-    'id="workflow-member-expiry-error" role="alert"'
+  expect(authorizationSource).toContain(
+    "aria-invalid={Boolean(validity.error)}"
   );
-  expect(homeSource).toContain("Boolean(memberExpiryError) ||");
-  expect(homeSource).toContain("const validity = roleExpiryInput(hours)");
+  expect(authorizationSource).toContain('id="workflow-expiry-error"');
+  expect(authorizationSource).toContain("Boolean(validity.error) ||");
 });
 it("目录简介使用页面表单，保留错误输入并刷新提交的项目", () => {
   const warehouse = source("../client/src/components/WorkflowWarehouse.tsx");
@@ -4057,15 +4063,10 @@ it("人员目录默认启用并按服务端状态筛选，切换后重置分页�
   expect(filter.slice(0, 700)).toContain("setMobileUserDetailsOpen(false)");
   expect(homeSource).toContain("默认显示启用账号；查看停用账号请切换状态。");
 });
-it("流程角色目录在绑定页打开时刷新并清除已失效选择", () => {
-  const bindings = source(
-    "../client/src/components/WorkflowRoleBindingsDialog.tsx"
-  );
-  expect(bindings).toContain("authorizationQueryPolicy(true)");
-  expect(bindings).toContain("if (!roleCode || !roles.isSuccess) return");
-  expect(bindings).toContain(
-    "role.code === roleCode && role.permissionLabels.length > 0"
-  );
-  expect(bindings).toContain("已选角色已删除或没有有效权限，请重新选择。");
-  expect(bindings).toContain('setRoleCode(event.target.value); setError("")');
+it("流程角色目录变化保留原选择但阻止失效角色提交", () => {
+  expect(authorizationSource).toContain("authorizationQueryPolicy(true)");
+  expect(authorizationSource).toContain("roles.isSuccess && !roles.isFetching");
+  expect(authorizationSource).toContain("value={form.roleCode}");
+  expect(authorizationSource).toContain("待核对");
+  expect(authorizationSource).not.toContain('setRoleCode("")');
 });

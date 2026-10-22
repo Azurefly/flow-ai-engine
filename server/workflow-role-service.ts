@@ -2,14 +2,15 @@ import mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
 import {
-  assignRole,
   getWorkflowAccess,
   listRoles,
   listPermissionCatalog,
-  revokeRoleAssignment,
-  validateRoleCode,
 } from "./iam-service";
-type Actor = { id: number; role: "user" | "admin" };
+import {
+  grantCustomWorkflowRole,
+  revokeCustomWorkflowRole,
+} from "./workflow-authorization-service";
+type Actor = { id: number; role: "user" | "admin"; tokenVersion?: number };
 async function requireManager(actor: Actor, workflowId: string) {
   const access = await getWorkflowAccess(actor, workflowId);
   if (!access.exists || !access.permissions.has("workflow:members:manage"))
@@ -86,43 +87,13 @@ export async function assignWorkflowCustomRole(
   }
 ) {
   await requireManager(actor, input.workflowId);
-  const roleCode = validateRoleCode(input.roleCode);
-  const [roles] = await getSharedPool().query<mysql.RowDataPacket[]>(
-    "SELECT id FROM iam_role WHERE code=? AND scope='workflow' AND isSystem=0 LIMIT 1",
-    [roleCode]
-  );
-  if (!roles.length)
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "请选择自定义流程角色，系统角色不能绑定到此流程。",
-    });
-  await assignRole({
-    userId: input.userId,
-    roleCode,
-    scopeType: "workflow",
-    scopeId: input.workflowId,
-    expiresAt: input.expiresAt,
-    grantedByUserId: actor.id,
-  });
-  return { success: true };
+  return grantCustomWorkflowRole(actor, input);
 }
+
 export async function revokeWorkflowCustomRole(
   actor: Actor,
   input: { workflowId: string; assignmentId: string }
 ) {
   await requireManager(actor, input.workflowId);
-  const [rows] = await getSharedPool().query<mysql.RowDataPacket[]>(
-    "SELECT ra.id FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId WHERE ra.id=? AND ra.scopeType='workflow' AND ra.scopeId=? AND r.scope='workflow' AND r.isSystem=0 LIMIT 1",
-    [input.assignmentId, input.workflowId]
-  );
-  if (!rows.length)
-    throw new TRPCError({
-      code: "BAD_REQUEST",
-      message: "未找到此流程的角色授权，不能撤销其他流程的绑定。",
-    });
-  await revokeRoleAssignment({
-    assignmentId: input.assignmentId,
-    revokedByUserId: actor.id,
-  });
-  return { success: true };
+  return revokeCustomWorkflowRole(actor, input);
 }

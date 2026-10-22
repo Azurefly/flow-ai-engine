@@ -216,11 +216,15 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "管理账号与角色，查看有效权限和授权来源。"
       );
       expectSemanticBodyForCopy(homeSource, "当前流程未提供可读取的入口字段");
-      expectSemanticBodyForCopy(homeSource, "你可编辑画布并保存版本。");
-      expectSemanticBodyForCopy(
-        homeSource,
-        "当前为只读授权；仍可查看定义与运行反馈。"
+      const memberDialogSource = readFileSync(
+        "client/src/components/WorkflowRoleBindingsDialog.tsx",
+        "utf8"
       );
+      expectSemanticBodyForCopy(
+        memberDialogSource,
+        "填写仍保留在当前账号会话中"
+      );
+      expectSemanticBodyForCopy(memberDialogSource, "已隐藏旧列表");
       expectSemanticBodyForCopy(homeSource, "取消发布会阻止后续发起");
       expectSemanticBodyForCopy(
         canvasSource,
@@ -367,8 +371,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(homeSource).toContain(
         "aiflow-type-code max-h-48 overflow-auto rounded bg-slate-950 p-3 font-mono text-emerald-200"
       );
-      expect(homeSource).toContain(
-        "aiflow-type-section-title mb-1.5 font-semibold text-blue-900"
+      expect(memberDialogSource).toContain(
+        "aiflow-type-section-title font-semibold"
       );
       expect(homeSource).not.toContain("bg-card/80 p-2 text-[11px]");
       expect(workflowTestRunSource).toContain(

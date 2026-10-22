@@ -13,12 +13,14 @@ vi.mock("./iam-service", () => ({
   listPermissionCatalog: () => [
     { code: "workflow:view", name: "查看流程", workflowAllowed: true },
   ],
-  assignRole: mocks.assign,
-  revokeRoleAssignment: mocks.revoke,
   validateRoleCode: (code: string) => {
     if (!code.startsWith("custom_")) throw new Error("非法编码");
     return code;
   },
+}));
+vi.mock("./workflow-authorization-service", () => ({
+  grantCustomWorkflowRole: mocks.assign,
+  revokeCustomWorkflowRole: mocks.revoke,
 }));
 import {
   assignWorkflowCustomRole,
@@ -67,58 +69,18 @@ it("角色目录只返回自定义流程角色", async () => {
   ]);
   expect(mocks.roles).toHaveBeenCalledWith("workflow");
 });
-it("绑定固定当前流程作用域和操作者", async () => {
-  mocks.query.mockResolvedValue([[{ id: 31 }]]);
-  await assignWorkflowCustomRole(actor, {
+it("绑定与撤销转交同一事务服务，传递完整登录会话和流程范围", async () => {
+  const authenticated = { ...actor, tokenVersion: 3 };
+  const grant = {
     workflowId: "workflow-a",
     userId: 2,
     roleCode: "custom_reader",
-  });
-  expect(mocks.assign).toHaveBeenCalledWith(
-    expect.objectContaining({
-      userId: 2,
-      roleCode: "custom_reader",
-      scopeType: "workflow",
-      scopeId: "workflow-a",
-      grantedByUserId: 17,
-    })
-  );
-});
-it("系统或不存在的角色不能绑定", async () => {
-  mocks.query.mockResolvedValue([[]]);
-  await expect(
-    assignWorkflowCustomRole(actor, {
-      workflowId: "workflow-a",
-      userId: 2,
-      roleCode: "custom_reader",
-    })
-  ).rejects.toThrow("请选择自定义流程角色");
-  expect(mocks.assign).not.toHaveBeenCalled();
-});
-it("其他流程的授权不可从当前流程撤销", async () => {
-  mocks.query.mockResolvedValue([[]]);
-  await expect(
-    revokeWorkflowCustomRole(actor, {
-      workflowId: "workflow-a",
-      assignmentId: "other-assignment",
-    })
-  ).rejects.toThrow("不能撤销其他流程");
-  expect(mocks.query.mock.calls[0][1]).toMatchObject([
-    "other-assignment",
-    "workflow-a",
-  ]);
-  expect(mocks.revoke).not.toHaveBeenCalled();
-});
-it("当前流程自定义授权可以撤销且保留审计操作者", async () => {
-  mocks.query.mockResolvedValue([[{ id: "own-assignment" }]]);
-  await revokeWorkflowCustomRole(actor, {
-    workflowId: "workflow-a",
-    assignmentId: "own-assignment",
-  });
-  expect(mocks.revoke).toHaveBeenCalledWith({
-    assignmentId: "own-assignment",
-    revokedByUserId: 17,
-  });
+  };
+  await assignWorkflowCustomRole(authenticated, grant);
+  expect(mocks.assign).toHaveBeenCalledWith(authenticated, grant);
+  const revoke = { workflowId: "workflow-a", assignmentId: "own-assignment" };
+  await revokeWorkflowCustomRole(authenticated, revoke);
+  expect(mocks.revoke).toHaveBeenCalledWith(authenticated, revoke);
 });
 it("绑定记录按当前流程查询并分页", async () => {
   mocks.query

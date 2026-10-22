@@ -739,10 +739,6 @@ function FlowConsole({
   });
   const RuntimeMonitor =
     selectedWorkflow?.flowType === "data" ? DataflowRunMonitor : RunCenter;
-  const members = trpc.workflow.members.useQuery(
-    useMemo(() => ({ workflowId: selectedId ?? "00000000" }), [selectedId]),
-    { enabled: Boolean(editorActive && canViewWorkflow && selectedId), retry: false }
-  );
   const templates = trpc.workflow.templates.useQuery(undefined, {
     enabled: editorActive && canViewWorkflow,
     retry: false,
@@ -1031,20 +1027,6 @@ function FlowConsole({
       setDraftDefinition(null);
       returnFromFlowEditor();
       toast.success("流程已归档，可在流程仓库恢复。");
-    },
-    onError: error => toast.error(error.message),
-  });
-  const grantMember = trpc.workflow.grantMember.useMutation({
-    onSuccess: () => {
-      void utils.workflow.members.invalidate();
-      toast.success("流程成员授权已更新。");
-    },
-    onError: error => toast.error(error.message),
-  });
-  const revokeMember = trpc.workflow.revokeMember.useMutation({
-    onSuccess: () => {
-      void utils.workflow.members.invalidate();
-      toast.success("流程成员授权已撤销。");
     },
     onError: error => toast.error(error.message),
   });
@@ -2003,7 +1985,6 @@ function FlowConsole({
                 onUnpublishRequested={submitted => { pendingUnpublish.current = submitted; }}
 
                 canManage={canManageMembers}
-                members={(members.data ?? []) as any[]}
                 savePending={saveFlow.isPending}
                 publishPending={publishFlow.isPending}
                 compilePending={compileFlow.isPending}
@@ -2166,25 +2147,7 @@ function FlowConsole({
                   updateSubflow.mutate({ id: subflow.id, isEnabled })
                 }
                 onDeleteSubflow={id => deleteSubflow.mutate({ id })}
-                onGrant={async (userId, role, hours) => {
-                  if (selectedId)
-                    await grantMember.mutateAsync({
-                      workflowId: selectedId,
-                      userId,
-                      role,
-                      expiresAt: hours
-                        ? new Date(Date.now() + hours * 60 * 60 * 1000)
-                        : undefined,
-                    });
-                }}
-                onRevoke={(userId, role) => {
-                  if (selectedId)
-                    revokeMember.mutate({
-                      workflowId: selectedId,
-                      userId,
-                      role,
-                    });
-                }}
+
               />
             ))}
           {section === "runs" && !routeRestoring && (
@@ -2413,7 +2376,6 @@ function FlowDesigner({
   onUnpublished,
   onUnpublishRequested,
   canManage,
-  members,
   savePending,
   publishPending,
   compilePending,
@@ -2444,8 +2406,6 @@ function FlowDesigner({
   onDeleteTemplate,
   onToggleSubflow,
   onDeleteSubflow,
-  onGrant,
-  onRevoke,
 }: {
   workflow: any;
   draftError: string | null;
@@ -2464,7 +2424,6 @@ function FlowDesigner({
   onUnpublished: (workflow: any, submitted: { id: string; expectedDefinitionVersion: number }) => void;
   onUnpublishRequested: (submitted: { id: string; expectedDefinitionVersion: number }) => void;
   canManage: boolean;
-  members: any[];
   savePending: boolean;
   publishPending: boolean;
   compilePending: boolean;
@@ -2495,27 +2454,8 @@ function FlowDesigner({
   onDeleteTemplate: (id: string) => void;
   onToggleSubflow: (subflow: any, isEnabled: boolean) => void;
   onDeleteSubflow: (id: string) => void;
-  onGrant: (
-    userId: number,
-    role: "owner" | "editor" | "operator" | "viewer",
-    hours?: number
-  ) => Promise<void>;
-  onRevoke: (
-    userId: number,
-    role: "owner" | "editor" | "operator" | "viewer"
-  ) => void;
+
 }) {
-  const [candidateId, setCandidateId] = useState("");
-  const [candidateQuery, setCandidateQuery] = useState("");
-  const [candidateSearch, setCandidateSearch] = useState("");
-  const [grantPending, setGrantPending] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(
-      () => setCandidateSearch(candidateQuery.trim().slice(0, 100)),
-      250
-    );
-    return () => clearTimeout(timer);
-  }, [candidateQuery]);
   const titleRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const field = titleRef.current;
@@ -2534,37 +2474,8 @@ function FlowDesigner({
     observer.observe(field);
     return () => observer.disconnect();
   }, [name]);
-  const [memberRole, setMemberRole] = useState<
-    "owner" | "editor" | "operator" | "viewer"
-  >("viewer");
-  const [hours, setHours] = useState("");
-  const memberExpiryError = roleExpiryInput(hours).error;
   const [runDialogOpen, setRunDialogOpen] = useState(false);
-  const [customBindingsOpen, setCustomBindingsOpen] = useState(false);
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
-  const candidateDirectory = trpc.workflow.memberCandidates.useQuery(
-    {
-      workflowId: workflow?.id ?? "00000000",
-      query: candidateSearch,
-      selectedIds: candidateId ? [Number(candidateId)] : [],
-    },
-    {
-      enabled: Boolean(membersDialogOpen && canManage && workflow?.id),
-      retry: false,
-      refetchInterval: membersDialogOpen ? 30_000 : false,
-      refetchIntervalInBackground: false,
-    }
-  );
-  const liveMembers = trpc.workflow.members.useQuery(
-    { workflowId: workflow?.id ?? "00000000" },
-    {
-      enabled: Boolean(membersDialogOpen && workflow?.id),
-      refetchInterval: membersDialogOpen ? 30_000 : false,
-      refetchIntervalInBackground: false,
-      retry: false,
-    }
-  );
-  const displayedMembers = liveMembers.data ?? members;
   const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
   const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; name: string; definitionVersion: number } | null>(null);
@@ -2868,10 +2779,8 @@ function FlowDesigner({
                 onClick={() => setMembersDialogOpen(true)}
               >
                 <UsersRound size={13} className="mr-2 text-muted-foreground" />
-                <span>协作成员</span>
-                <span className="aiflow-type-meta ml-auto rounded-full bg-muted px-1.5 py-0.5 text-muted-foreground">
-                  {members.length}
-                </span>
+                <span>成员与权限</span>
+
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="aiflow-type-control"
@@ -3148,251 +3057,14 @@ function FlowDesigner({
         }
       />
 
-      {customBindingsOpen && (
-        <ErrorBoundary>
-          <Suspense fallback={<p role="status">正在加载流程角色绑定…</p>}>
-            <WorkflowRoleBindingsDialog
-              key={workflow.id}
-              workflowId={workflow.id}
-              workflowName={workflow.name}
-              onClose={() => setCustomBindingsOpen(false)}
-            />
-          </Suspense>
-        </ErrorBoundary>
+      {membersDialogOpen && (
+        <ErrorBoundary><Suspense fallback={<p role="status">正在加载成员与权限…</p>}>
+          <WorkflowRoleBindingsDialog key={workflow.id} workflowId={workflow.id} workflowName={workflow.name}
+            projectId={workflow.projectId} initialTab="builtin"
+            archived={Boolean(workflow.archivedAt || workflow.projectStatus === "archived")}
+            onClose={() => setMembersDialogOpen(false)} />
+        </Suspense></ErrorBoundary>
       )}
-      <Dialog open={membersDialogOpen} onOpenChange={setMembersDialogOpen}>
-        <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>流程权限与协作成员</DialogTitle>
-            {canManage && (
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setMembersDialogOpen(false);
-                  setCustomBindingsOpen(true);
-                }}
-              >
-                管理自定义流程角色
-              </Button>
-            )}
-            <DialogDescription>
-              管理流程有效协作人员、到期时间与角色授权。
-            </DialogDescription>
-          </DialogHeader>
-          <div className="min-w-0 rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-4 py-3 text-sm text-blue-950">
-            <div className="flex items-center gap-2 font-semibold">
-              <LockKeyhole size={15} />
-              权限感知设计器
-            </div>
-            <p className="aiflow-type-body mt-1 text-aiflow-info">
-              {workflow?.archivedAt || workflow?.projectStatus === "archived"
-                ? "业务或流程已归档，可查看定义与历史运行；恢复后再继续编辑。"
-                : canEdit
-                ? "你可编辑画布并保存版本。"
-                : "当前为只读授权；仍可查看定义与运行反馈。"}
-            </p>
-            <div className="aiflow-type-body mt-3 min-w-0 rounded border border-aiflow-info-border bg-card/80 p-2">
-              <p className="aiflow-type-section-title mb-1.5 font-semibold text-blue-900">
-                协作成员与有效期（{displayedMembers.length}）
-              </p>
-              <div className="mt-2 grid min-w-0 gap-1.5">
-                {displayedMembers.map(member => (
-                  <div
-                    key={member.id}
-                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded border border-aiflow-info-border bg-card px-2 py-1.5"
-                  >
-                    <div className="min-w-0">
-                      <span className="break-words font-medium">
-                        {member.name ||
-                          member.username ||
-                          `用户 ${member.userId}`}
-                      </span>
-                      <span className="aiflow-type-control ml-2 text-aiflow-info">
-                        {(
-                          {
-                            owner: "所有者",
-                            editor: "编辑者",
-                            operator: "运行者",
-                            viewer: "查看者",
-                          } as Record<string, string>
-                        )[member.role] ?? member.role}
-                      </span>
-                      <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
-                        生效：{formatTime(member.effectiveFrom)} · 到期：
-                        {member.expiresAt
-                          ? formatTime(member.expiresAt)
-                          : "长期"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span
-                        className={`aiflow-type-meta rounded px-1.5 py-0.5 ${member.authorizationStatus === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-slate-200 text-muted-foreground"}`}
-                      >
-                        {(
-                          {
-                            active: "有效",
-                            revoked: "已撤销",
-                            disabled: "账号已停用",
-                            pending: "尚未生效",
-                            expired: "已到期",
-                          } as Record<string, string>
-                        )[member.authorizationStatus] ?? "状态待确认"}
-                      </span>
-                      {canManage && !member.revokedAt && (
-                        <button
-                          type="button"
-                          className="aiflow-type-control min-h-9 px-2 text-red-600 hover:underline"
-                          onClick={() => onRevoke(member.userId, member.role)}
-                        >
-                          撤销
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {!displayedMembers.length && (
-                  <span className="text-blue-500">暂无可见协作成员。</span>
-                )}
-              </div>
-              {liveMembers.isError && (
-                <p role="alert" className="aiflow-type-body mt-2 text-red-600">
-                  成员状态刷新失败，当前显示可能已过期。
-                  <button
-                    type="button"
-                    className="ml-2 underline"
-                    onClick={() => void liveMembers.refetch()}
-                  >
-                    重试
-                  </button>
-                </p>
-              )}
-            </div>
-            {canManage && (
-              <form
-                className="aiflow-type-body mt-3 grid min-w-0 gap-2 rounded border border-dashed border-blue-300 bg-card p-2"
-                onSubmit={async event => {
-                  event.preventDefault();
-                  const userId = Number(candidateId);
-                  if (!userId || grantPending) return;
-                  const validity = roleExpiryInput(hours);
-                  if (validity.error) {
-                    toast.error(validity.error);
-                    return;
-                  }
-                  setGrantPending(true);
-                  try {
-                    await onGrant(
-                      userId,
-                      memberRole,
-                      hours ? Number(hours) : undefined
-                    );
-                    setCandidateId("");
-                    setHours("");
-                  } catch {
-                    // The mutation reports its error; retain the user's form values.
-                    void candidateDirectory.refetch();
-                  } finally {
-                    setGrantPending(false);
-                  }
-                }}
-              >
-                <p className="aiflow-type-section-title font-semibold text-blue-900">
-                  授予流程成员
-                </p>
-                <SearchableMultiSelect
-                  ariaLabel="待授权内部账号"
-                  value={candidateId ? [candidateId] : []}
-                  options={(candidateDirectory.data ?? []).map(candidate => ({
-                    value: String(candidate.id),
-                    label: `${candidate.name || candidate.username}（${candidate.username}）`,
-                  }))}
-                  query={candidateQuery}
-                  onQueryChange={value =>
-                    setCandidateQuery(value.slice(0, 100))
-                  }
-                  onChange={ids => setCandidateId(ids[0] ?? "")}
-                  placeholder="请选择待授权账号"
-                  searchPlaceholder="搜索姓名或账号"
-                  emptyMessage="没有可用账号。"
-                  requireSearch
-                  maxSelected={1}
-                  loading={
-                    candidateDirectory.isFetching ||
-                    candidateQuery.trim() !== candidateSearch
-                  }
-                  error={candidateDirectory.isError}
-                  disabled={grantPending}
-                />
-                {candidateDirectory.isError && (
-                  <button
-                    type="button"
-                    className="aiflow-type-control text-aiflow-info underline"
-                    onClick={() => void candidateDirectory.refetch()}
-                  >
-                    重新搜索
-                  </button>
-                )}
-                {candidateId &&
-                  candidateDirectory.isSuccess &&
-                  !candidateDirectory.data.some(
-                    row => String(row.id) === candidateId
-                  ) && (
-                    <p role="alert" className="aiflow-type-body text-red-600">
-                      所选账号已停用或不可用，请重新选择。
-                    </p>
-                  )}
-                <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-                  <select
-                    className="h-8 min-w-0 rounded border border-border bg-card px-2"
-                    value={memberRole}
-                    aria-label="协作角色"
-                    disabled={grantPending}
-                    onChange={event =>
-                      setMemberRole(event.target.value as typeof memberRole)
-                    }
-                  >
-                    <option value="viewer">查看者</option>
-                    <option value="operator">运行者</option>
-                    <option value="editor">编辑者</option>
-                    <option value="owner">所有者</option>
-                  </select>
-                  <input
-                    className="h-8 min-w-0 rounded border border-border px-2"
-                    type="number"
-                    min="1"
-                    placeholder="有效期小时（可选）"
-                    aria-label="授权有效期（小时）"
-                    aria-invalid={Boolean(memberExpiryError)}
-                    aria-describedby={memberExpiryError ? "workflow-member-expiry-error" : undefined}
-                    disabled={grantPending}
-                    value={hours}
-                    onChange={event => setHours(event.target.value)}
-                  />
-                </div>
-                {memberExpiryError && (
-                  <p id="workflow-member-expiry-error" role="alert" className="text-sm text-destructive">
-                    {memberExpiryError}
-                  </p>
-                )}
-                <Button
-                  className="h-8 bg-blue-600 text-xs hover:bg-blue-500"
-                  type="submit"
-                  disabled={
-                    grantPending ||
-                    Boolean(memberExpiryError) ||
-                    candidateDirectory.isFetching ||
-                    !candidateDirectory.data?.some(
-                      row => String(row.id) === candidateId
-                    )
-                  }
-                >
-                  {grantPending ? "正在授权…" : "授予成员"}
-                </Button>
-              </form>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={governanceDialogOpen}

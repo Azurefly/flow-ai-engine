@@ -397,62 +397,27 @@ export async function recordAuthorizationAudit(input: { actorUserId?: number | n
   await (connection ?? db()).query("INSERT INTO authorization_audit_log (id,actorUserId,targetUserId,action,resourceType,resourceId,detailsJson,requestId) VALUES (?,?,?,?,?,?,?,?)", [randomUUID(), input.actorUserId ?? null, input.targetUserId ?? null, input.action, input.resourceType ?? null, input.resourceId ?? null, input.details ? JSON.stringify(input.details) : null, input.requestId ?? currentRequestId() ?? null]);
 }
 
-export async function grantWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; grantedByUserId: number; expiresAt?: Date | null }) {
-  assertRoleExpiryRange(input.expiresAt);
-  if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
-  const [userRows] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM users WHERE id=? AND status='active' LIMIT 1", [input.userId]);
-  if (!userRows[0]) throw new Error("目标用户不存在或已停用。");
-  await db().query(
-    `INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,expiresAt,revokedAt,grantedByUserId)
-     VALUES (?,?,?,?,NOW(),?,NULL,?)
-     ON DUPLICATE KEY UPDATE effectiveFrom=NOW(),expiresAt=VALUES(expiresAt),revokedAt=NULL,grantedByUserId=VALUES(grantedByUserId)`,
-    [randomUUID(), input.workflowId, input.userId, input.role, input.expiresAt ?? null, input.grantedByUserId]
-  );
-  await recordAuthorizationAudit({
-    actorUserId: input.grantedByUserId,
-    targetUserId: input.userId,
-    action: input.expiresAt ? "temporary_role_assigned" : "role_assigned",
-    resourceType: "workflow",
-    resourceId: input.workflowId,
-    details: {
-      role: input.role,
-      expiresAt: input.expiresAt?.toISOString() ?? null,
-    },
-  });
+export async function grantWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; grantedByUserId: number; actorTokenVersion?: number; expiresAt?: Date | null }) {
+  const { grantBuiltinWorkflowRole } = await import("./workflow-authorization-service");
+  return grantBuiltinWorkflowRole({ id: input.grantedByUserId, tokenVersion: input.actorTokenVersion }, input);
 }
 
-export async function revokeWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; revokedByUserId: number }) {
-  if (input.role === "owner") {
-    const [owners] = await db().query<mysql.RowDataPacket[]>(
-      `SELECT id FROM workflow_member
-        WHERE workflowId=? AND role='owner' AND revokedAt IS NULL
-          AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())`,
-      [input.workflowId]
-    );
-    if (owners.length <= 1) throw new Error("流程必须保留至少一位有效所有者。");
-  }
-  const [result] = await db().query<mysql.ResultSetHeader>("UPDATE workflow_member SET revokedAt=NOW() WHERE workflowId=? AND userId=? AND role=? AND revokedAt IS NULL", [input.workflowId, input.userId, input.role]);
-  if (!result.affectedRows) throw new Error("未找到可撤销的流程成员授权。");
-  await recordAuthorizationAudit({
-    actorUserId: input.revokedByUserId,
-    targetUserId: input.userId,
-    action: "role_revoked",
-    resourceType: "workflow",
-    resourceId: input.workflowId,
-    details: { role: input.role },
-  });
+export async function revokeWorkflowMember(input: { workflowId: string; userId: number; role: WorkflowMemberRole; revokedByUserId: number; actorTokenVersion?: number }) {
+  const { revokeBuiltinWorkflowRole } = await import("./workflow-authorization-service");
+  return revokeBuiltinWorkflowRole({ id: input.revokedByUserId, tokenVersion: input.actorTokenVersion }, input);
 }
 
 export async function listWorkflowMembers(workflowId: string) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT wm.id,wm.workflowId,wm.userId,wm.role,wm.effectiveFrom,wm.expiresAt,wm.revokedAt,wm.grantedByUserId,
             u.username,u.name,u.email,u.status AS userStatus,
+            (wm.role='owner' AND wm.userId=w.ownerUserId) AS protectedOwner,
             CASE WHEN wm.revokedAt IS NOT NULL THEN 'revoked'
                  WHEN u.status<>'active' THEN 'disabled'
                  WHEN wm.effectiveFrom>NOW() THEN 'pending'
                  WHEN wm.expiresAt IS NOT NULL AND wm.expiresAt<=NOW() THEN 'expired'
                  ELSE 'active' END AS authorizationStatus
-       FROM workflow_member wm JOIN users u ON u.id=wm.userId
+       FROM workflow_member wm JOIN users u ON u.id=wm.userId JOIN workflow w ON w.id=wm.workflowId
       WHERE wm.workflowId=? ORDER BY wm.role,wm.createdAt`,
     [workflowId]
   );

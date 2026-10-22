@@ -1825,23 +1825,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (
-          !(await hasWorkflowPermission(
-            ctx.user,
-            input.workflowId,
-            "workflow:members:manage"
-          ))
-        )
-          throw new Error("无权管理流程成员。");
-        try {
-          await grantWorkflowMember({ ...input, grantedByUserId: ctx.user.id });
-        } catch (error) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message:
-              error instanceof Error ? error.message : "成员授权参数无效。",
-          });
-        }
+        await grantWorkflowMember({ ...input, grantedByUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true };
       }),
     revokeMember: protectedProcedure
@@ -1853,15 +1837,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (
-          !(await hasWorkflowPermission(
-            ctx.user,
-            input.workflowId,
-            "workflow:members:manage"
-          ))
-        )
-          throw new Error("无权管理流程成员。");
-        await revokeWorkflowMember({ ...input, revokedByUserId: ctx.user.id });
+        await revokeWorkflowMember({ ...input, revokedByUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true };
       }),
     runtimeModels: protectedProcedure.query(async () => getRuntimeModels()),

@@ -199,7 +199,25 @@ export default defineConfig(({ command }) => {
       outDir: path.resolve(import.meta.dirname, "dist/public"),
       emptyOutDir: true,
       minify: "terser",
-      terserOptions: { maxWorkers: 2, compress: { passes: 3 } },
+      terserOptions: {
+        maxWorkers: 2,
+        ecma: 2020,
+        compress: { passes: 3, ecma: 2020 },
+      },
+      rollupOptions: {
+        output: {
+          onlyExplicitManualChunks: true,
+          // Low-frequency management dialogs stay lazy and share repeated UI code.
+          manualChunks(id) {
+            if (
+              /\/components\/(CustomRoleDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
+                id.replace(/\\/g, "/")
+              )
+            )
+              return "management-dialogs";
+          },
+        },
+      },
     },
     server: {
       host: true,
