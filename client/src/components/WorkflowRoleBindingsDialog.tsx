@@ -284,10 +284,11 @@ export default function WorkflowRoleBindingsDialog({
     }
   }
   async function submit() {
+    const currentValidity = roleExpiryInput(form.hours);
     if (
       !validUser ||
       !validRole ||
-      validity.error ||
+      currentValidity.error ||
       !listReady ||
       query.trim() !== debounced.user
     )
@@ -300,14 +301,14 @@ export default function WorkflowRoleBindingsDialog({
           workflowId,
           userId: Number(form.userId),
           role: form.role,
-          expiresAt: validity.expiresAt,
+          expiresAt: currentValidity.expiresAt,
         });
       else
         await bind.mutateAsync({
           workflowId,
           userId: Number(form.userId),
           roleCode: form.roleCode,
-          expiresAt: validity.expiresAt,
+          expiresAt: currentValidity.expiresAt,
         });
       setForm(emptyForm);
       setQuery("");

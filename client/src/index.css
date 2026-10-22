@@ -1620,6 +1620,7 @@ h2 {
 [data-slot="dialog-description"],
 [data-slot="alert-dialog-description"] {
   line-height: var(--aiflow-leading-body);
+  overflow-wrap: anywhere;
 }
 
 /* Single-line fields align with shared action buttons, including legacy native fields. */

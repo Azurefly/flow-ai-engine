@@ -204,9 +204,9 @@ export function SearchableMultiSelect({
             <span
               key={option.value}
               role="listitem"
-              className="inline-flex max-w-full items-center rounded-md border border-aiflow-info-border bg-aiflow-info-surface pl-2 text-xs text-aiflow-info"
+              className="inline-flex min-w-0 max-w-full items-center rounded-md border border-aiflow-info-border bg-aiflow-info-surface pl-2 text-xs text-aiflow-info"
             >
-              <span className="max-w-64 truncate">{option.label}</span>
+              <span className="min-w-0 max-w-64 truncate">{option.label}</span>
               <button
                 type="button"
                 aria-label={`移除${option.label}`}

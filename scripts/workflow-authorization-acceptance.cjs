@@ -17,7 +17,6 @@ const credentials = suffix => ({
 });
 const login = credentials("_admin"),
   memberLogin = credentials("_disabled");
-const recipientLogin = credentials("_recipient");
 const directory = path.join(__dirname, "..", ".cache", tag);
 fs.mkdirSync(directory, { recursive: true });
 const helper = fs.readFileSync(
@@ -470,9 +469,9 @@ let browser, page, fingerprint;
     );
     await manager("auth.login", managerLogin, true);
     await viewer("auth.login", memberLogin, true);
-    await operations();
+    if (process.env.FLOW_UI_AUTH_UI_ONLY !== "1") await operations();
     if (process.env.FLOW_UI_AUTH_BASELINE !== "1") {
-      await races();
+      if (process.env.FLOW_UI_AUTH_UI_ONLY !== "1") await races();
       await ui();
     }
     assert.equal(
@@ -482,9 +481,19 @@ let browser, page, fingerprint;
     report({
       acceptance: "workflow-authorization",
       baseline: process.env.FLOW_UI_AUTH_BASELINE === "1",
+      uiOnly: process.env.FLOW_UI_AUTH_UI_ONLY === "1",
+      layoutProbe: process.env.FLOW_UI_AUTH_LAYOUT_PROBE === "1",
       passed: true,
       tag,
     });
+  } catch (error) {
+    if (page && !page.isClosed())
+      await page
+        .screenshot({
+          path: path.join(directory, "workflow-authorization-failure.png"),
+        })
+        .catch(() => {});
+    throw error;
   } finally {
     await browser?.close();
     if (fixture?.workflowRoleCode && fixture?.managerUserId)
@@ -527,6 +536,9 @@ async function ui() {
   page.on("pageerror", error => errors.push(error.message));
   const dialog = () => page.locator("[data-workflow-authorization]");
   async function signIn(credentials) {
+    await page.evaluate(() => {
+      location.hash = "#/flows";
+    });
     await page.getByLabel("用户名", { exact: true }).fill(credentials.username);
     await page.getByLabel("密码", { exact: true }).fill(credentials.password);
     await page
@@ -599,9 +611,29 @@ async function ui() {
   await expect(role()).toHaveValue("editor");
   for (const width of [320, 390, 1024, 1920]) {
     await page.setViewportSize({ width, height: 1000 });
+    await page.screenshot({
+      path: path.join(directory, "workflow-members-before-" + width + ".png"),
+    });
+    report({
+      overflowProbe: width,
+      items: await dialog().evaluate(root =>
+        [root, ...root.querySelectorAll("*")]
+          .filter(el => el.clientWidth && el.scrollWidth > el.clientWidth + 1)
+          .slice(0, 12)
+          .map(el => ({
+            tag: el.tagName,
+            classes: el.className,
+            client: el.clientWidth,
+            scroll: el.scrollWidth,
+            text: el.textContent.slice(0, 100),
+          }))
+      ),
+    });
+    if (process.env.FLOW_UI_AUTH_LAYOUT_PROBE === "1") return;
     await expect
       .poll(() => dialog().evaluate(el => el.scrollWidth <= el.clientWidth + 1))
       .toBe(true);
+    await expect(dialog().locator('[aria-label^="移除"]').first()).toBeInViewport();
     const measured = await dialog().evaluate(el => ({
       width: el.getBoundingClientRect().width,
       title: parseFloat(
@@ -681,7 +713,7 @@ async function ui() {
     await expect(
       dialog().getByRole("button", { name: "关闭", exact: true })
     ).toBeDisabled();
-    assert.equal(writeCount, 1);
+    await expect.poll(() => writeCount).toBe(1);
     releaseWrite();
     await expect(hours()).toBeEnabled();
     await expect(hours()).toHaveValue("");
@@ -804,6 +836,14 @@ async function ui() {
     .getByRole("button", { name: "放弃填写并关闭", exact: true })
     .click();
   await expect(dialog()).not.toBeVisible();
+  await page.getByRole("button", { name: "切换主题", exact: true }).click();
+  await open();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.screenshot({
+    path: path.join(directory, "workflow-members-dark.png"),
+  });
+  await dialog().getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("button", { name: "切换主题", exact: true }).click();
   // The same on-demand entry works in each of the three editors.
   for (const flow of fixture.workflows.slice(1)) {
     await open(flow.id);

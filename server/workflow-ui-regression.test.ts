@@ -4070,3 +4070,16 @@ it("流程角色目录变化保留原选择但阻止失效角色提交", () => {
   expect(authorizationSource).toContain("待核对");
   expect(authorizationSource).not.toContain('setRoleCode("")');
 });
+
+it("共享弹窗固定单列最小宽度，长账号标签允许收缩并保留移除按钮", () => {
+  expect(source("../client/src/components/ui/dialog.tsx")).toContain(
+    "grid grid-cols-1 w-full"
+  );
+  expect(
+    source("../client/src/components/SearchableMultiSelect.tsx")
+  ).toContain('className="min-w-0 max-w-64 truncate"');
+  expect(authorizationSource).toContain(
+    "const currentValidity = roleExpiryInput(form.hours)"
+  );
+  expect(authorizationSource).toContain("expiresAt: currentValidity.expiresAt");
+});
