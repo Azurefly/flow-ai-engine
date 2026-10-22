@@ -216,7 +216,9 @@ const poll = async (read, accept, label) => {
     await page
       .getByRole("button", { name: "登录流程引擎", exact: true })
       .click();
-    await expect(page.locator("[data-aiflow-business-center]")).toBeVisible();
+    await expect(page.locator("[data-aiflow-business-center]")).toBeVisible({
+      timeout: 20000,
+    });
     await page.evaluate(
       hash => {
         location.hash = hash;
@@ -296,6 +298,23 @@ const poll = async (read, accept, label) => {
         Boolean,
         "isolated legacy task"
       );
+      if (decision === "rejected")
+        await assert.rejects(
+          owner(
+            task.status === "claimed" ? "task.complete" : "task.execute",
+            {
+              taskId: task.id,
+              result: {
+                decision,
+                outcome: decision,
+                reason: "历史出口兼容验收",
+                amount: 50,
+              },
+            },
+            true
+          ),
+          /必须填写处理意见/
+        );
       await owner(
         task.status === "claimed" ? "task.complete" : "task.execute",
         {
@@ -304,6 +323,10 @@ const poll = async (read, accept, label) => {
             decision,
             outcome: decision,
             reason: "历史出口兼容验收",
+            comment:
+              decision === "rejected"
+                ? "隔离验收：资料不符合要求。"
+                : "隔离验收：核对通过。",
             amount: 50,
           },
         },

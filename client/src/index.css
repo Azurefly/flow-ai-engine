@@ -1633,3 +1633,10 @@ select {
     min-height: 44px;
   }
 }
+
+/* Explicit desktop columns must share a row despite the mobile-first DOM order. */
+@media (min-width: 1024px) {
+  [data-iam-audit-row] > div:first-child > * {
+    grid-row: 1;
+  }
+}

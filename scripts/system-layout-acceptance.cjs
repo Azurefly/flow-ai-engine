@@ -159,6 +159,24 @@ const visible = async locator => await expect(locator.first()).toBeVisible();
     await visible(page.locator("[data-aiflow-business-center]"));
     async function measure(key, width = 1440) {
       await page.setViewportSize({ width, height: 1000 });
+      if (!baseline)
+        await expect
+          .poll(() =>
+            page.evaluate(() => ({
+              width: innerWidth,
+              pageTitle: getComputedStyle(document.documentElement)
+                .getPropertyValue("--aiflow-type-page-title")
+                .trim(),
+              gutter: getComputedStyle(document.documentElement)
+                .getPropertyValue("--aiflow-page-gutter")
+                .trim(),
+            }))
+          )
+          .toEqual({
+            width,
+            pageTitle: width < 768 ? "1.25rem" : "1.375rem",
+            gutter: width < 768 ? "1rem" : "1.5rem",
+          });
       await expect
         .poll(() => page.evaluate(() => document.documentElement.scrollWidth), {
           timeout: 6000,
@@ -388,6 +406,12 @@ const visible = async locator => await expect(locator.first()).toBeVisible();
         .click();
     }
     await go("#/system/identity", "[data-iam-account-create-menu]");
+    await page
+      .getByRole("textbox", { name: "搜索用户", exact: true })
+      .fill(tag);
+    await expect(
+      page.getByText(login.username, { exact: true }).first()
+    ).toBeVisible({ timeout: 20000 });
     await measure("identity");
     for (const [name, key] of [
       ["角色与权限", "roles"],
@@ -397,6 +421,42 @@ const visible = async locator => await expect(locator.first()).toBeVisible();
       await expect(
         page.getByRole("tab", { name, exact: true })
       ).toHaveAttribute("aria-selected", "true");
+      if (key === "roles") {
+        await page
+          .getByRole("textbox", { name: "搜索角色", exact: true })
+          .fill("workflow_creator");
+        await expect(
+          page.getByText("workflow_creator", { exact: true }).first()
+        ).toBeVisible({ timeout: 20000 });
+      } else {
+        await page
+          .getByRole("textbox", { name: "搜索授权审计", exact: true })
+          .fill(tag);
+        const auditRow = page
+          .locator("[data-iam-audit-row]")
+          .filter({ hasText: login.username })
+          .first();
+        await expect(auditRow).toBeVisible({ timeout: 20000 });
+        if (!baseline) {
+          const centers = await auditRow
+            .locator(":scope > div:first-child > *")
+            .evaluateAll(items =>
+              items.map(item => {
+                const bounds = item.getBoundingClientRect();
+                return bounds.top + bounds.height / 2;
+              })
+            );
+          assert.equal(
+            centers.length,
+            6,
+            "Audit row must display all six columns"
+          );
+          assert(
+            Math.max(...centers) - Math.min(...centers) <= 1,
+            "Desktop audit cells must align on one row"
+          );
+        }
+      }
       await measure("identity-" + key);
     }
     await page.getByRole("tab", { name: "用户账号", exact: true }).click();

@@ -46,3 +46,9 @@ it("创建、普通与确认弹窗使用相同的18px标题层级", () => {
       "aiflow-type-dialog-title"
     );
 });
+
+it("桌面审计记录的六个单元格固定在同一行，避免状态列让后续字段换行", () => {
+  expect(css).toMatch(
+    /@media \(min-width: 1024px\)\s*\{\s*\[data-iam-audit-row\] > div:first-child > \*\s*\{\s*grid-row: 1;/
+  );
+});
