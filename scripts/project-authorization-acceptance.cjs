@@ -521,10 +521,35 @@ async function verifyUi(page, reproduction) {
   let overflowObserved = false;
   for (const width of [320, 390, 1024, 1440]) {
     await page.setViewportSize({ width, height: 1000 });
+    if (!reproduction)
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth), {
+          message: `Authorization layout must settle within ${width}px`,
+          timeout: 5000,
+        })
+        .toBeLessThanOrEqual(width + 1);
     const dimensions = await page.evaluate(() => ({
       viewport: innerWidth,
       document: document.documentElement.scrollWidth,
+      overflowing: Array.from(document.querySelectorAll("body *"))
+        .map(element => {
+          const bounds = element.getBoundingClientRect();
+          return {
+            tag: element.tagName,
+            classes: element.className,
+            text: element.textContent?.trim().slice(0, 90),
+            left: bounds.left,
+            right: bounds.right,
+            width: bounds.width,
+          };
+        })
+        .filter(item => item.width > 0 && item.right > innerWidth + 1),
     }));
+    fs.writeFileSync(
+      path.join(directory, "authorization-layout-" + width + ".json"),
+      JSON.stringify(dimensions, null, 2),
+      "utf8"
+    );
     if (reproduction) overflowObserved ||= dimensions.document > width + 1;
     else
       assert(
@@ -1045,6 +1070,15 @@ async function cleanupUnits() {
     });
     remember();
     await recipient("auth.login", recipientLogin, true);
+    await owner(
+      "project.grantMember",
+      {
+        projectId: fixture.projectId,
+        userId: fixture.recipientUserId,
+        role: "viewer",
+      },
+      true
+    );
     fixture.authorizationUnits = [];
     remember();
     for (const kind of ["source", "target"]) {
