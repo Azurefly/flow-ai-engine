@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
+  AlertDialogCancel,
   AlertDialogContent,
   AlertDialogTitle,
   AlertDialogDescription,
@@ -552,7 +553,7 @@ export default function WorkflowRoleBindingsDialog({
                               value={role.code}
                               disabled={!role.permissionLabels.length}
                             >
-                              {role.name}
+                              {role.name}（{role.code}）
                             </option>
                           ))}
                       </>
@@ -755,13 +756,12 @@ export default function WorkflowRoleBindingsDialog({
             <p role="status">管理权限待确认，撤销已暂停；请重新读取权限。</p>
           )}
           <AlertDialogFooter>
-            <Button
-              variant="outline"
+            <AlertDialogCancel
               disabled={busy}
               onClick={() => setRevoking(null)}
             >
               保留授权
-            </Button>
+            </AlertDialogCancel>
             <Button
               variant="destructive"
               disabled={busy || !manageable}
@@ -790,9 +790,9 @@ export default function WorkflowRoleBindingsDialog({
             填写尚未提交，可继续编辑或先导出；放弃填写不会撤销已提交的授权。
           </AlertDialogDescription>
           <AlertDialogFooter>
-            <Button variant="outline" onClick={() => setLeaving(false)}>
+            <AlertDialogCancel onClick={() => setLeaving(false)}>
               继续编辑
-            </Button>
+            </AlertDialogCancel>
             <Button variant="outline" onClick={exportForm}>
               导出填写
             </Button>

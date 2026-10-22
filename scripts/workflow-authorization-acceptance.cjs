@@ -633,7 +633,9 @@ async function ui() {
     await expect
       .poll(() => dialog().evaluate(el => el.scrollWidth <= el.clientWidth + 1))
       .toBe(true);
-    await expect(dialog().locator('[aria-label^="移除"]').first()).toBeInViewport();
+    await expect(
+      dialog().locator('[aria-label^="移除"]').first()
+    ).toBeInViewport();
     const measured = await dialog().evaluate(el => ({
       width: el.getBoundingClientRect().width,
       title: parseFloat(
@@ -660,6 +662,9 @@ async function ui() {
     exact: true,
   });
   await expect(leaving).toBeVisible();
+  await expect(
+    leaving.getByRole("button", { name: "继续编辑", exact: true })
+  ).toBeFocused();
   await leaving.getByRole("button", { name: "继续编辑", exact: true }).click();
   await expect(hours()).toHaveValue("3");
   const download = page.waitForEvent("download");
@@ -760,6 +765,9 @@ async function ui() {
     exact: true,
   });
   await expect(confirm).toContainText(memberLogin.username);
+  await expect(
+    confirm.getByRole("button", { name: "保留授权", exact: true })
+  ).toBeFocused();
   await expect(confirm).toContainText(fixture.workflows[0].name);
   await confirm.getByRole("button", { name: "保留授权", exact: true }).click();
   await expect(revokeButton).toBeFocused();
