@@ -2290,8 +2290,8 @@ function FlowConsole({
           {section === "system" &&
             canManageIdentity &&
             systemView === "identity" && (
-              <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
-                <div>
+              <div data-aiflow-identity-page="" className="aiflow-page-frame bg-background">
+                <div className="aiflow-page-content">
                   <button
                     className="aiflow-type-control aiflow-action-target mb-4 inline-flex items-center rounded px-3 text-aiflow-info hover:bg-accent hover:underline"
                     onClick={() =>
@@ -4253,8 +4253,8 @@ function IamCenter({
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-bold tracking-[.18em] text-aiflow-info">
-            IDENTITY & AUTHORIZATION
+          <p className="aiflow-type-meta font-medium text-muted-foreground">
+            系统管理
           </p>
           <h1
             data-aiflow-page-title=""

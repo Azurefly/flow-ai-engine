@@ -177,7 +177,7 @@ function DialogTitle({
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
-      className={cn("text-lg leading-none font-semibold", className)}
+      className={cn("aiflow-type-dialog-title font-semibold", className)}
       {...props}
     />
   );

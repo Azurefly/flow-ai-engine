@@ -398,7 +398,7 @@ export default function WorkflowTestRunModal({
                 {isStateflow ? <Compass size={17} /> : <Play size={17} />}
               </div>
               <div className="min-w-0">
-                <DialogTitle className="aiflow-type-section-title flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground">
+                <DialogTitle className="aiflow-type-dialog-title flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground">
                   <span>
                     {isStateflow
                       ? "状态流程运行"

@@ -1,4 +1,5 @@
 import { availableWorkflowReuseResources } from "@shared/workflow-reuse-resources";
+import { readCanvasSourceHandles as sourceHandles } from "./workflow-canvas-handles";
 import {
   isTemplateNodeType,
   type TemplateNodeType,
@@ -249,37 +250,6 @@ function assessNodeConfig(
   }
 }
 
-function sourceHandles(kind: NodeKind, config: NodeConfig) {
-  if (kind === "end") return [];
-  if (kind === "condition")
-    return Array.from(new Set(readConditionHandles(config)));
-  if (kind === "router") {
-    const configured = normalizeReferenceRouterConfig(config).rules.map(
-      rule => rule.handle
-    );
-    return Array.from(
-      new Set(
-        [
-          String(config.defaultRoute ?? "default").trim() || "default",
-          ...configured,
-        ].filter(Boolean)
-      )
-    );
-  }
-  if (kind === "llm") {
-    const failureHandle = String(config.failureHandle ?? "").trim();
-    return failureHandle ? ["default", failureHandle] : ["default"];
-  }
-  if (
-    ["http", "rest", "method"].includes(kind) &&
-    config.writeSafety === "compensated"
-  )
-    return ["default", "compensation"];
-  if (kind === "operate" && readOperateOutcomeMode(config) === "explicit")
-    return readOperateOutcomes(config).map(outcome => outcome.sourceHandle);
-  return ["default"];
-}
-
 function FlowNodeCard({ id, data, selected }: NodeProps) {
   const nodeData = data as unknown as FlowNodeData;
   const canvasEdges = useStore(state =>
@@ -291,7 +261,22 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
   const appearance = nodeAppearance[nodeData.kind];
   const configAssessment = assessNodeConfig(nodeData.kind, nodeData.config);
   const configState = configAssessment.state;
-  const handles = sourceHandles(nodeData.kind, nodeData.config);
+  const legacyHandles = useStore(state =>
+    nodeData.kind === "operate" &&
+    readOperateOutcomeMode(nodeData.config) === "legacy_cancel"
+      ? JSON.stringify(
+          state.edges
+            .filter(edge => edge.source === id)
+            .map(edge => edge.sourceHandle ?? "default")
+            .sort()
+        )
+      : "[]"
+  );
+  const handles = sourceHandles(
+    nodeData.kind,
+    nodeData.config,
+    JSON.parse(legacyHandles)
+  );
   const updateNodeInternals = useUpdateNodeInternals();
   const handleSignature = JSON.stringify(handles);
   useEffect(() => {
@@ -450,19 +435,23 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
               backgroundColor: handleColor,
             }}
             title={
-              ((nodeData.kind === "operate"
-                ? readOperateOutcomes(nodeData.config).find(
-                    outcome => outcome.sourceHandle === id
-                  )?.label
-                : routeItems.find(route => route.handle === id)
-                    ?.label) as string) ||
-              (
-                {
-                  default: "默认出口",
-                  compensation: "补偿出口",
-                } as Record<string, string>
-              )[id] ||
-              id
+              nodeData.kind === "operate" &&
+              readOperateOutcomeMode(nodeData.config) === "legacy_cancel" &&
+              id !== "default"
+                ? `继续执行（历史出口：${id}）`
+                : ((nodeData.kind === "operate"
+                    ? readOperateOutcomes(nodeData.config).find(
+                        outcome => outcome.sourceHandle === id
+                      )?.label
+                    : routeItems.find(route => route.handle === id)
+                        ?.label) as string) ||
+                  (
+                    {
+                      default: "默认出口",
+                      compensation: "补偿出口",
+                    } as Record<string, string>
+                  )[id] ||
+                  id
             }
           />
         );

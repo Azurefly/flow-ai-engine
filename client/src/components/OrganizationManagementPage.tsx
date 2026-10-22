@@ -753,9 +753,9 @@ export default function OrganizationManagementPage({
   return (
     <div
       data-aiflow-organization-page=""
-      className="min-h-[calc(100vh-56px)] bg-background p-3 sm:p-5"
+      className="aiflow-page-frame bg-background"
     >
-      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className="aiflow-page-content overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <header className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <button
@@ -766,8 +766,8 @@ export default function OrganizationManagementPage({
               <ArrowLeft size={15} />
               返回系统配置
             </button>
-            <p className="text-[10px] font-bold tracking-[.18em] text-muted-foreground">
-              ORGANIZATION MANAGEMENT
+            <p className="aiflow-type-meta font-medium text-muted-foreground">
+              人员与权限
             </p>
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               组织架构管理

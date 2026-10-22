@@ -510,10 +510,11 @@ export default function ProcessWorkbench() {
   };
 
   return (
-    <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+    <div data-aiflow-workbench-page="" className="aiflow-page-frame bg-background">
       <div
         data-workbench-layout=""
-        className={`grid gap-4 ${sidebarCollapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[230px_minmax(0,1fr)]"}`}
+        data-navigation-collapsed={sidebarCollapsed}
+        className="aiflow-page-content aiflow-split-layout grid gap-4"
       >
         <aside
           data-workbench-navigation=""
@@ -524,8 +525,8 @@ export default function ProcessWorkbench() {
             className={`hidden border-b border-border px-3 py-3 lg:flex ${sidebarCollapsed ? "justify-center" : ""}`}
           >
             <div className={sidebarCollapsed ? "hidden" : ""}>
-              <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
-                INITIATED PROCESS
+              <p className="aiflow-type-meta font-medium text-muted-foreground">
+                运行视图
               </p>
               <h2 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
                 已启动流程

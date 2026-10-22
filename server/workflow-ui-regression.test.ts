@@ -522,7 +522,7 @@ describe("流程设计器界面回归约束", () => {
       "overflow-y-auto overscroll-contain"
     );
     expect(creationDialogSource).toContain(
-      "aiflow-type-section-title font-semibold leading-6"
+      "aiflow-type-dialog-title font-semibold"
     );
     expect(creationDialogSource).toContain("aiflow-type-body mt-1 leading-5");
     expect(creationDialogSource).toContain("void onSubmit()");
@@ -615,17 +615,17 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("--aiflow-type-meta: 0.8125rem;");
     expect(styleSource).toContain("--aiflow-type-control: 0.875rem;");
     expect(styleSource).toContain("--aiflow-type-code: 0.875rem;");
-    expect(styleSource).toContain("--aiflow-type-body: 1rem;");
+    expect(styleSource).toContain("--aiflow-type-body: 0.875rem;");
     expect(styleSource).toContain("--aiflow-leading-code: 1.3125rem;");
-    expect(styleSource).toContain("--aiflow-type-section: 1.125rem;");
-    expect(styleSource).toContain("--aiflow-type-page-title: 1.5rem;");
-    expect(styleSource).toContain("--aiflow-type-display: 1.75rem;");
+    expect(styleSource).toContain("--aiflow-type-section: 1rem;");
+    expect(styleSource).toContain("--aiflow-type-page-title: 1.375rem;");
+    expect(styleSource).toContain("--aiflow-type-display: 1.5rem;");
     expect(styleSource).toContain("--aiflow-leading-meta: 1.125rem;");
     expect(styleSource).toContain("--aiflow-leading-control: 1.25rem;");
-    expect(styleSource).toContain("--aiflow-leading-body: 1.5rem;");
-    expect(styleSource).toContain("--aiflow-leading-section: 1.5625rem;");
-    expect(styleSource).toContain("--aiflow-leading-page-title: 2rem;");
-    expect(styleSource).toContain("--aiflow-leading-display: 2.1875rem;");
+    expect(styleSource).toContain("--aiflow-leading-body: 1.375rem;");
+    expect(styleSource).toContain("--aiflow-leading-section: 1.5rem;");
+    expect(styleSource).toContain("--aiflow-leading-page-title: 1.875rem;");
+    expect(styleSource).toContain("--aiflow-leading-display: 2rem;");
     expect(styleSource).toContain(
       "font-size: var(--aiflow-type-control) !important;"
     );
@@ -648,17 +648,17 @@ describe("流程设计器界面回归约束", () => {
       "font-size: var(--aiflow-type-section) !important;"
     );
     expect(styleSource).toContain("@media (max-width: 639px)");
-    expect(styleSource).not.toContain("--aiflow-type-page-title: 1.25rem;");
+    expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem;");
     expect(homeSource).toContain('data-aiflow-page-title=""');
-    expect(styleSource).toContain('class*="text-[9px]"');
-    expect(styleSource).toContain('class*="text-[11px]"');
+    expect(styleSource).toContain('class~="text-[9px]"');
+    expect(styleSource).toContain('class~="text-[11px]"');
     expect(styleSource).toContain(
       "font-size: var(--aiflow-type-meta) !important;"
     );
     expect(styleSource).toContain(
       "line-height: var(--aiflow-leading-meta) !important;"
     );
-    expect(styleSource).toContain('class*="text-[13px]"');
+    expect(styleSource).toContain('class~="text-[13px]"');
     expect(styleSource).toContain(
       "font-size: var(--aiflow-type-body) !important;"
     );
@@ -792,9 +792,9 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("项目权限成员列表使用统一字号并对授权撤销显示对象和影响范围确认", () => {
-    expect(styleSource).toContain("--aiflow-type-body: 1rem;");
+    expect(styleSource).toContain("--aiflow-type-body: 0.875rem;");
     expect(styleSource).toContain("--aiflow-type-meta: 0.8125rem;");
-    expect(styleSource).toContain("--aiflow-type-section: 1.125rem;");
+    expect(styleSource).toContain("--aiflow-type-section: 1rem;");
     expect(projectWorkspaceSource).toContain(
       'className="aiflow-type-page-title mt-1 font-semibold text-foreground"'
     );
@@ -1048,8 +1048,12 @@ describe("流程设计器界面回归约束", () => {
       'className="min-w-0 flex-1 truncate text-left"'
     );
     expect(homeSource).toContain("setSelectedWorkflowId(null)");
-    expect(projectWorkspaceSource).toContain("useResourceDraftState<WorkspaceView>");
-    expect(projectWorkspaceSource).toContain('"workspace", "view", "process", false');
+    expect(projectWorkspaceSource).toContain(
+      "useResourceDraftState<WorkspaceView>"
+    );
+    expect(projectWorkspaceSource).toContain(
+      '"workspace", "view", "process", false'
+    );
     expect(projectWorkspaceSource).toContain("setFilters({})");
     expect(projectWorkspaceSource).not.toContain("detailWorkflowId");
   });
@@ -1521,7 +1525,9 @@ describe("流程设计器界面回归约束", () => {
       'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1}'
     );
     expect(homeSource).toContain('role="alert" aria-live="assertive"');
-    expect(homeSource).toContain('role={routeProjectQuery.isError ? "alert" : "status"} aria-live="polite"');
+    expect(homeSource).toContain(
+      'role={routeProjectQuery.isError ? "alert" : "status"} aria-live="polite"'
+    );
     expect(styleSource).toContain(":focus-visible {");
     expect(styleSource).toContain("outline: 3px solid #2563eb;");
     expect(styleSource).toContain(".aiflow-skip-link:focus-visible");
@@ -1624,9 +1630,13 @@ describe("流程设计器界面回归约束", () => {
       "trpc.workflow.subflows.useQuery(undefined, { enabled: editorActive"
     );
     expect(homeSource).not.toContain("workflow.runtimeModels.useQuery");
-    expect(homeSource).toContain("enabled: editorActive && canViewWorkflow, retry: false");
+    expect(homeSource).toContain(
+      "enabled: editorActive && canViewWorkflow, retry: false"
+    );
     expect(homeSource).toContain("enabled: identityActive, retry: false");
-    expect(homeSource).toContain("Boolean(editorActive && canViewWorkflow && selectedId)");
+    expect(homeSource).toContain(
+      "Boolean(editorActive && canViewWorkflow && selectedId)"
+    );
   });
 
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
@@ -2228,7 +2238,7 @@ describe("流程设计器界面回归约束", () => {
     expect(systemConfigSource).toContain('data-aiflow-system-config=""');
     expect(styleSource).toContain("[data-aiflow-system-config] > div");
     expect(styleSource).toContain(
-      "grid-template-columns: 216px minmax(0, 1fr)"
+      "grid-template-columns: var(--aiflow-subnav-width) minmax(0, 1fr)"
     );
     expect(projectWorkspaceSource).toContain("状态流程");
     expect(projectWorkspaceSource).toContain("控制流程");
@@ -2258,7 +2268,7 @@ describe("流程设计器界面回归约束", () => {
       'data-aiflow-project-workspace=""'
     );
     expect(styleSource).toContain("[data-aiflow-project-workspace] > aside");
-    expect(styleSource).toContain("width: 216px !important");
+    expect(styleSource).toContain("width: var(--aiflow-subnav-width)");
     expect(projectWorkspaceSource).toContain("创建时间开始");
     expect(projectWorkspaceSource).toContain("创建时间结束");
     expect(projectWorkspaceSource).toContain("同步 BDP 配置");
@@ -2321,7 +2331,7 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("保留树形仓库、只读画布预览、批量 JSON 导出和原始流程节点分类", () => {
-    expect(warehouseSource).toContain("PROCESS WAREHOUSE");
+    expect(warehouseSource).toContain("流程与版本");
     expect(warehouseSource).toContain(
       "勾选后可批量导出；点击流程可查看简介和只读画布。"
     );
@@ -2573,7 +2583,9 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("{item.cronExpression} UTC");
     expect(dataResourceSource).toContain("StructuredResourceForm");
     expect(dataResourceSource).toContain("active={tab === kind}");
-    expect(dataResourceSource).toContain("<ResourceDraftGuard projectId={projectId}>");
+    expect(dataResourceSource).toContain(
+      "<ResourceDraftGuard projectId={projectId}>"
+    );
     expect(dataResourceSource).toContain("return null;");
     const resourceFormSource = dataResourceSource.slice(
       dataResourceSource.indexOf("function ResourceForm")
@@ -2734,7 +2746,9 @@ describe("流程设计器界面回归约束", () => {
       "trpc.workflow.previewParticipants.useMutation"
     );
     expect(canvasSource).toContain("预览候选人");
-    expect(canvasSource).toContain('["default", "compensation"]');
+    expect(
+      source("../client/src/components/workflow-canvas-handles.ts")
+    ).toContain('["default", "compensation"]');
     expect(processWorkbenchSource).toContain("onComplete(payload)");
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");
@@ -2781,7 +2795,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toMatch(
       /setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);\s*invalidate\(\);/
     );
-    expect(styleSource).toContain("min-height: 46px;");
+    expect(styleSource).toContain("--aiflow-section-gap: 1.25rem;");
     expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
     expect(processWorkbenchRunTabSource).toContain(
@@ -2831,7 +2845,7 @@ describe("流程设计器界面回归约束", () => {
       '"请由指定处理人完成当前人工操作。"'
     );
     expect(processWorkbenchSource).toContain(
-      '<p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">'
+      '<p className="text-sm font-medium text-muted-foreground">'
     );
     expect(processWorkbenchSource).toContain("{taskInstructionLabel}");
     expect(processWorkbenchSource).toContain("task.canViewRun === true");
@@ -2999,30 +3013,34 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).not.toContain(
       'div:has(> aside button[title="收起配置导航"])'
     );
-    expect(styleSource).toContain('button[aria-label="收起已启动流程导航"]');
-    expect(styleSource).toContain('button[aria-label="展开已启动流程导航"]');
+    expect(styleSource).toContain(
+      '.aiflow-split-layout[data-navigation-collapsed="true"]'
+    );
+    expect(processWorkbenchSource).toContain(
+      "data-navigation-collapsed={sidebarCollapsed}"
+    );
   });
 
   it("统一字号层级覆盖设计器画布标签和导出的 SVG", () => {
     expect(styleSource).toContain("--aiflow-type-meta: 0.8125rem;");
     expect(styleSource).toContain("--aiflow-type-control: 0.875rem;");
-    expect(styleSource).toContain("--aiflow-type-body: 1rem;");
-    expect(styleSource).toContain("--aiflow-type-section: 1.125rem;");
-    expect(styleSource).toContain("--aiflow-type-page-title: 1.5rem;");
-    expect(styleSource).toContain("--aiflow-type-display: 1.75rem;");
+    expect(styleSource).toContain("--aiflow-type-body: 0.875rem;");
+    expect(styleSource).toContain("--aiflow-type-section: 1rem;");
+    expect(styleSource).toContain("--aiflow-type-page-title: 1.375rem;");
+    expect(styleSource).toContain("--aiflow-type-display: 1.5rem;");
     expect(styleSource).toContain("font-family: var(--aiflow-font-sans);");
     expect(styleSource).toContain(
       "font-size: var(--aiflow-type-control) !important;"
     );
-    expect(styleSource).toContain('[class*="text-[9px]"]');
-    expect(styleSource).toContain('[class*="text-xs"]');
-    expect(styleSource).toContain('[class*="text-[13px]"]');
-    expect(styleSource).toContain('[class*="text-sm"]');
-    expect(styleSource).toContain('[class*="text-base"]');
-    expect(styleSource).toContain(':where([class*="text-lg"])');
-    expect(styleSource).toContain(':where([class*="text-xl"])');
+    expect(styleSource).toContain('[class~="text-[9px]"]');
+    expect(styleSource).toContain('[class~="text-xs"]');
+    expect(styleSource).toContain('[class~="text-[13px]"]');
+    expect(styleSource).toContain('[class~="text-sm"]');
+    expect(styleSource).toContain('[class~="text-base"]');
+    expect(styleSource).toContain(':where([class~="text-lg"])');
+    expect(styleSource).toContain(':where([class~="text-xl"])');
     expect(styleSource).toContain(
-      '[class*="text-2xl"], [class*="text-3xl"], [class*="text-4xl"], [class*="text-5xl"], [class*="text-6xl"], [class*="text-7xl"], [class*="text-8xl"], [class*="text-9xl"]'
+      '[class~="text-2xl"], [class~="text-3xl"], [class~="text-4xl"], [class~="text-5xl"], [class~="text-6xl"], [class~="text-7xl"], [class~="text-8xl"], [class~="text-9xl"]'
     );
     expect(styleSource).toContain(
       "line-height: var(--aiflow-leading-page-title) !important;"
@@ -3033,7 +3051,7 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain(
       "line-height: var(--aiflow-leading-control) !important;"
     );
-    expect(styleSource).not.toContain("--aiflow-type-page-title: 1.25rem;");
+    expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem;");
     expect(canvasSource).toContain(
       'font-size="14" font-family="Arial, sans-serif"'
     );
@@ -3052,7 +3070,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).not.toContain("text-[10px]");
     expect(canvasSource).not.toContain("text-[11px]");
     expect(styleSource).toContain("font-size: var(--aiflow-type-page-title);");
-    expect(styleSource).toContain("font-size: var(--aiflow-type-section);");
+    expect(styleSource).toContain(
+      "font-size: var(--aiflow-type-section) !important;"
+    );
   });
 
   it("协作成员区分到期、停用、未生效与撤销，并仅在弹窗内刷新", () => {
@@ -3889,7 +3909,9 @@ it("取消发布使用页面确认并校验当前目标，失败保留错误", (
   expect(homeSource).toContain("setUnpublishError(error.message)");
   expect(homeSource).toContain("unpublishTarget.id !== workflow.id");
   expect(homeSource).toContain("正在取消发布…");
-  expect(homeSource).toContain('unpublishError ? "关闭并保留修改" : "保持发布"');
+  expect(homeSource).toContain(
+    'unpublishError ? "关闭并保留修改" : "保持发布"'
+  );
   expect(homeSource).toContain("核对取消发布结果");
   expect(homeSource).toContain("onUnpublished(result, submitted)");
 });

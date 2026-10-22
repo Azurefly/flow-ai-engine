@@ -23,7 +23,7 @@ function expectSemanticBodyForCopy(source: string, copy: string) {
 
 describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (UI & Motion Regression)", () => {
   describe("TC-REG-TYPO-001: 全局统一的可读字号层级", () => {
-    it("将页面与弹窗文字统一到 13/14/16/18/24/28px 六档字号", () => {
+    it("页面正文与控件使用14px，标题和辅助信息按统一层级呈现", () => {
       const start = performance.now();
       const styleSource = readFileSync("client/src/index.css", "utf8");
       const canvasSource = readFileSync(
@@ -112,17 +112,17 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(styleSource).toContain("--aiflow-type-meta: 0.8125rem");
       expect(styleSource).toContain("--aiflow-type-control: 0.875rem");
       expect(styleSource).toContain("--aiflow-type-code: 0.875rem");
-      expect(styleSource).toContain("--aiflow-type-body: 1rem");
+      expect(styleSource).toContain("--aiflow-type-body: 0.875rem");
       expect(styleSource).toContain("--aiflow-leading-meta: 1.125rem");
       expect(styleSource).toContain("--aiflow-leading-control: 1.25rem");
       expect(styleSource).toContain("--aiflow-leading-code: 1.3125rem");
-      expect(styleSource).toContain("--aiflow-leading-body: 1.5rem");
-      expect(styleSource).toContain("--aiflow-leading-section: 1.5625rem");
-      expect(styleSource).toContain("--aiflow-leading-page-title: 2rem");
-      expect(styleSource).toContain("--aiflow-leading-display: 2.1875rem");
+      expect(styleSource).toContain("--aiflow-leading-body: 1.375rem");
+      expect(styleSource).toContain("--aiflow-leading-section: 1.5rem");
+      expect(styleSource).toContain("--aiflow-leading-page-title: 1.875rem");
+      expect(styleSource).toContain("--aiflow-leading-display: 2rem");
       const legacyTypographyRules = styleSource.slice(
         styleSource.indexOf("/* Legacy utility compatibility"),
-        styleSource.indexOf("/* Keep visible controls")
+        styleSource.indexOf("/* Native select appearance")
       );
       expect(legacyTypographyRules).toContain(
         "line-height: var(--aiflow-leading-body) !important"
@@ -152,9 +152,9 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(semanticHeadingRules).toContain(
         "line-height: var(--aiflow-leading-body) !important"
       );
-      expect(styleSource).toContain("--aiflow-type-section: 1.125rem");
-      expect(styleSource).toContain("--aiflow-type-page-title: 1.5rem");
-      expect(styleSource).toContain("--aiflow-type-display: 1.75rem");
+      expect(styleSource).toContain("--aiflow-type-section: 1rem");
+      expect(styleSource).toContain("--aiflow-type-page-title: 1.375rem");
+      expect(styleSource).toContain("--aiflow-type-display: 1.5rem");
       expect(notFoundSource).toContain(
         'className="aiflow-type-display mb-2 font-bold text-foreground"'
       );
@@ -177,7 +177,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "line-height: var(--aiflow-leading-code) !important"
       );
       expect(styleSource).toContain("--aiflow-font-sans:");
-      expect(styleSource).not.toContain("--aiflow-type-page-title: 1.25rem");
+      expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem");
+      expect(styleSource).toContain("--aiflow-type-dialog-title: 1.125rem");
       expect(runCenterSource).toContain('data-aiflow-page-title=""');
       expect(processWorkbenchSource).toContain('data-aiflow-page-title=""');
       expect(homeSource).toContain('data-aiflow-page-title=""');
@@ -210,7 +211,10 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "aiflow-type-control truncate rounded bg-aiflow-info-surface"
       );
       expect(processWorkbenchSource).not.toContain("text-[9px]");
-      expectSemanticBodyForCopy(homeSource, "管理账号与角色，查看有效权限和授权来源。");
+      expectSemanticBodyForCopy(
+        homeSource,
+        "管理账号与角色，查看有效权限和授权来源。"
+      );
       expectSemanticBodyForCopy(homeSource, "当前流程未提供可读取的入口字段");
       expectSemanticBodyForCopy(homeSource, "你可编辑画布并保存版本。");
       expectSemanticBodyForCopy(
@@ -223,8 +227,12 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "当前为兼容分支：同意后继续，拒绝即取消实例。"
       );
       expect(canvasSource).toContain('"预览候选人"');
-      expect(readFileSync("client/src/components/ui/button.tsx", "utf8")).toContain("aiflow-button");
-      expect(styleSource).toMatch(/\.aiflow-button\s*\{[^}]*font-size: var\(--aiflow-type-control\)/);
+      expect(
+        readFileSync("client/src/components/ui/button.tsx", "utf8")
+      ).toContain("aiflow-button");
+      expect(styleSource).toMatch(
+        /\.aiflow-button\s*\{[^}]*font-size: var\(--aiflow-type-control\)/
+      );
       expectSemanticBodyForCopy(
         canvasSource,
         "从选中节点保存模板，或在设计器顶部"
@@ -380,9 +388,13 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(
         readFileSync("client/src/components/DataResourceCenter.tsx", "utf8")
       ).toContain("aiflow-type-code my-2 max-h-72 max-w-full overflow-auto");
-      expect(processWorkbenchSource).toContain("taskResultView(task?.payload?.config, task?.result)");
+      expect(processWorkbenchSource).toContain(
+        "taskResultView(task?.payload?.config, task?.result)"
+      );
       expect(processWorkbenchSource).toContain("resultView.rows.map");
-      expect(processWorkbenchSource).toContain("whitespace-pre-wrap break-words text-sm text-foreground");
+      expect(processWorkbenchSource).toContain(
+        "whitespace-pre-wrap break-words text-sm text-foreground"
+      );
       expect(workflowTestRunSource).toContain(
         "aiflow-type-body font-semibold text-foreground"
       );
@@ -392,29 +404,29 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(resourceCenterSource).toContain(
         "aiflow-type-section-title font-semibold text-foreground"
       );
-      expect(styleSource).toContain('[class*="text-[9px]"]');
-      expect(styleSource).toContain('[class*="text-[10px]"]');
-      expect(styleSource).toContain('[class*="text-[11px]"]');
-      expect(styleSource).toContain('[class*="text-[12px]"]');
-      expect(styleSource).toContain('[class*="text-[13px]"]');
-      expect(styleSource).toContain('[class*="text-[0.8rem]"]');
+      expect(styleSource).toContain('[class~="text-[9px]"]');
+      expect(styleSource).toContain('[class~="text-[10px]"]');
+      expect(styleSource).toContain('[class~="text-[11px]"]');
+      expect(styleSource).toContain('[class~="text-[12px]"]');
+      expect(styleSource).toContain('[class~="text-[13px]"]');
+      expect(styleSource).toContain('[class~="text-[0.8rem]"]');
       const legacy13pxRule = styleSource
         .split("::where(")
-        .find(rule => rule.includes('[class*="text-[13px]"]'));
+        .find(rule => rule.includes('[class~="text-[13px]"]'));
       expect(legacy13pxRule).toContain(
         "font-size: var(--aiflow-type-meta) !important"
       );
       expect(
         [...rawFontSizes].filter(size => !approvedLegacyRawSizes.has(size))
       ).toEqual([]);
-      expect(styleSource).toContain('[class*="text-xs"]');
-      expect(styleSource).toContain('[class*="text-sm"]');
-      expect(styleSource).toContain('[class*="text-base"]');
-      expect(styleSource).toContain('[class*="text-lg"]');
-      expect(styleSource).toContain('[class*="text-xl"]');
-      expect(styleSource).toContain('[class*="text-2xl"]');
-      expect(styleSource).toContain('[class*="text-3xl"]');
-      expect(styleSource).toContain('[class*="text-4xl"]');
+      expect(styleSource).toContain('[class~="text-xs"]');
+      expect(styleSource).toContain('[class~="text-sm"]');
+      expect(styleSource).toContain('[class~="text-base"]');
+      expect(styleSource).toContain('[class~="text-lg"]');
+      expect(styleSource).toContain('[class~="text-xl"]');
+      expect(styleSource).toContain('[class~="text-2xl"]');
+      expect(styleSource).toContain('[class~="text-3xl"]');
+      expect(styleSource).toContain('[class~="text-4xl"]');
       expect(styleSource).toContain("font-family: var(--aiflow-font-sans)");
       expect(canvasSource).not.toContain("fontSize: 11");
       expect(canvasSource).not.toContain("fontSize: 12");
@@ -452,7 +464,9 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(navigationStart).toBeGreaterThanOrEqual(0);
       expect(navigationEnd).toBeGreaterThan(navigationStart);
       expect(navigationSource).toContain("consoleHistory.current?.navigate(");
-      expect(homeSource).toContain('if (reason !== "traverse") window.scrollTo(0, 0)');
+      expect(homeSource).toContain(
+        'if (reason !== "traverse") window.scrollTo(0, 0)'
+      );
 
       TestResultCollector.record({
         testId: "TC-REG-ROUTE-001",
@@ -649,7 +663,10 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
 
     it("业务列表绑定服务端分页响应，翻页与查询不依赖客户端全量切片", () => {
       const start = performance.now();
-      const source = readFileSync("client/src/components/ProjectWorkspace.tsx", "utf8");
+      const source = readFileSync(
+        "client/src/components/ProjectWorkspace.tsx",
+        "utf8"
+      );
       expect(source).toContain("trpc.project.page.useQuery(pageInput)");
       expect(source).toContain("const [pageSize, setPageSize] = useState(10)");
       expect(source).toContain("total={projects.data?.total ?? 0}");
@@ -657,7 +674,9 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(source).toContain("onPageChange={setPage}");
       expect(source).toContain("setPageSize(value); setPage(1)");
       expect(source).toContain("setPage(1); setAppliedFilters");
-      expect(source).toContain("queryState.refreshing || currentPage >= totalPages");
+      expect(source).toContain(
+        "queryState.refreshing || currentPage >= totalPages"
+      );
       expect(source).not.toContain("projects.slice(");
       for (const size of [10, 25, 50])
         expect(source).toContain(`<option value={${size}}>${size} 条</option>`);
@@ -1162,9 +1181,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(processWorkbenchSrc).toContain(
         'className="task-heading task-muted"'
       );
-      expect(processWorkbenchSrc).toContain(
-        'className="task-caption"'
-      );
+      expect(processWorkbenchSrc).toContain('className="task-caption"');
 
       // WorkflowDetailPage
       expect(detailSrc).toContain('data-aiflow-process-detail-page=""');

@@ -59,7 +59,7 @@ export function CreationDialog({
         >
           <DialogHeader className="flex shrink-0 flex-row items-start justify-between gap-3 text-left">
             <div className="min-w-0">
-              <DialogTitle className="aiflow-type-section-title font-semibold leading-6 text-foreground">
+              <DialogTitle className="aiflow-type-dialog-title font-semibold text-foreground">
                 {title}
               </DialogTitle>
               <DialogDescription className="aiflow-type-body mt-1 leading-5 text-muted-foreground">

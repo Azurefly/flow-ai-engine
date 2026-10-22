@@ -457,13 +457,13 @@ export default function WorkflowWarehouse({
   return (
     <div
       data-aiflow-warehouse=""
-      className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6"
+      className="aiflow-page-frame bg-background"
     >
-      <div>
+      <div className="aiflow-page-content">
         <div className="mb-4 flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
-              PROCESS WAREHOUSE
+            <p className="aiflow-type-meta font-medium text-muted-foreground">
+              流程与版本
             </p>
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               流程仓库

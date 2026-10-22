@@ -51,10 +51,11 @@ export default function SystemConfigShell({
     <div
       data-aiflow-system-config=""
       data-config-navigation-collapsed={collapsed}
-      className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6"
+      className="aiflow-page-frame bg-background"
     >
       <div
-        className={`grid gap-4 ${collapsed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]"}`}
+        data-navigation-collapsed={collapsed}
+        className="aiflow-page-content aiflow-split-layout grid gap-4"
       >
         <aside
           data-system-config-navigation=""
@@ -65,8 +66,8 @@ export default function SystemConfigShell({
             className={`hidden items-start border-b border-border px-3 py-3 lg:flex ${collapsed ? "justify-center" : "justify-between"}`}
           >
             <div className={collapsed ? "hidden" : "block"}>
-              <p className="text-[10px] font-bold tracking-[.16em] text-muted-foreground">
-                SYSTEM CONFIGURATION
+              <p className="aiflow-type-meta font-medium text-muted-foreground">
+                管理工作空间
               </p>
               <h2 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
                 系统配置
@@ -141,7 +142,7 @@ export default function SystemConfigShell({
               <span className="text-muted-foreground">系统配置 /</span>
               <h2
                 id="system-config-active-tab"
-                className="inline-flex items-center gap-1.5 font-semibold text-foreground"
+                className="aiflow-type-control inline-flex items-center gap-1.5 font-semibold text-foreground"
               >
                 <active.icon size={13} className="text-foreground" />
                 {active.label}
@@ -152,7 +153,7 @@ export default function SystemConfigShell({
             id="system-config-card"
             data-system-config-content=""
             aria-labelledby="system-config-active-tab"
-            className="p-5 max-w-4xl"
+            className="w-full min-w-0 p-5"
           >
             <SystemSettingsEditor activeKey={tab === "general" || tab === "approval" ? tab : null} onSelectKey={setTab} />
             {tab === "domain" && <DomainSettings />}

@@ -105,7 +105,7 @@
   --chart-4: var(--color-blue-700);
   --chart-5: var(--color-blue-800);
   --radius: 0.875rem;
-  --aiflow-surface-radius: 1.25rem;
+  --aiflow-surface-radius: 1rem;
   --aiflow-surface-shadow: 0 4px 20px rgb(26 43 31 / 5%);
   --aiflow-surface-shadow-raised: 0 12px 36px rgb(26 43 31 / 10%);
   --aiflow-workspace-glow: radial-gradient(
@@ -113,24 +113,31 @@
     #eaf4df 0,
     transparent 65%
   );
-  /* Shared UI type scale: meta 13, controls 14, body 16, section 18, page 24, display 28px. */
+  /* Console type scale: meta 13, body/controls 14, section 16, dialog 18, page 22, display 24px. */
   --aiflow-font-sans:
     "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
     system-ui, sans-serif;
-  --aiflow-type-body: 1rem;
+  --aiflow-type-body: 0.875rem;
   --aiflow-type-meta: 0.8125rem;
   --aiflow-type-control: 0.875rem;
   --aiflow-type-code: 0.875rem;
-  --aiflow-type-section: 1.125rem;
-  --aiflow-type-page-title: 1.5rem;
-  --aiflow-type-display: 1.75rem;
+  --aiflow-type-section: 1rem;
+  --aiflow-type-dialog-title: 1.125rem;
+  --aiflow-type-page-title: 1.375rem;
+  --aiflow-type-display: 1.5rem;
   --aiflow-leading-meta: 1.125rem;
   --aiflow-leading-control: 1.25rem;
   --aiflow-leading-code: 1.3125rem;
-  --aiflow-leading-body: 1.5rem;
-  --aiflow-leading-section: 1.5625rem;
-  --aiflow-leading-page-title: 2rem;
-  --aiflow-leading-display: 2.1875rem;
+  --aiflow-leading-body: 1.375rem;
+  --aiflow-leading-section: 1.5rem;
+  --aiflow-leading-dialog-title: 1.625rem;
+  --aiflow-leading-page-title: 1.875rem;
+  --aiflow-leading-display: 2rem;
+  --aiflow-page-gutter: 1.5rem;
+  --aiflow-content-max: 1440px;
+  --aiflow-section-gap: 1.25rem;
+  --aiflow-subnav-width: 200px;
+  --workspace-header-height: 56px;
   --background: #f4f6f3;
   --foreground: #1c2823;
   --card: #ffffff;
@@ -190,42 +197,42 @@
 
 /* Legacy utility compatibility only; new UI should use the semantic aiflow-type-* classes. */
 :where(
-  [class*="text-[9px]"],
-  [class*="text-[10px]"],
-  [class*="text-[11px]"],
-  [class*="text-[12px]"],
-  [class*="text-[13px]"],
-  [class*="text-[0.8rem]"],
-  [class*="text-xs"]
+  [class~="text-[9px]"],
+  [class~="text-[10px]"],
+  [class~="text-[11px]"],
+  [class~="text-[12px]"],
+  [class~="text-[13px]"],
+  [class~="text-[0.8rem]"],
+  [class~="text-xs"]
 ) {
   font-size: var(--aiflow-type-meta) !important;
   line-height: var(--aiflow-leading-meta) !important;
 }
 
-:where([class*="text-sm"], [class*="text-base"]) {
+:where([class~="text-sm"], [class~="text-base"]) {
   font-size: var(--aiflow-type-body) !important;
   line-height: var(--aiflow-leading-body) !important;
 }
 
-:where([class*="text-lg"]) {
+:where([class~="text-lg"]) {
   font-size: var(--aiflow-type-section) !important;
   line-height: var(--aiflow-leading-section) !important;
 }
 
-:where([class*="text-xl"]) {
+:where([class~="text-xl"]) {
   font-size: var(--aiflow-type-page-title) !important;
   line-height: var(--aiflow-leading-page-title) !important;
 }
 
 :where(
-  [class*="text-2xl"],
-  [class*="text-3xl"],
-  [class*="text-4xl"],
-  [class*="text-5xl"],
-  [class*="text-6xl"],
-  [class*="text-7xl"],
-  [class*="text-8xl"],
-  [class*="text-9xl"]
+  [class~="text-2xl"],
+  [class~="text-3xl"],
+  [class~="text-4xl"],
+  [class~="text-5xl"],
+  [class~="text-6xl"],
+  [class~="text-7xl"],
+  [class~="text-8xl"],
+  [class~="text-9xl"]
 ) {
   font-size: var(--aiflow-type-display) !important;
   line-height: var(--aiflow-leading-display) !important;
@@ -244,25 +251,6 @@ select[size="1"]:not([multiple]) {
   background-position: right 0.5rem center;
   background-size: 1rem;
   padding-inline-end: 2rem;
-}
-
-/* Keep visible controls at a consistent 14px control size despite legacy text classes. */
-:is(
-  button,
-  [role="button"],
-  input:not([type="checkbox"]):not([type="radio"]):not(
-      [data-aiflow-page-title]
-    ),
-  select,
-  textarea:not([data-aiflow-page-title])
-) {
-  font-size: var(--aiflow-type-control) !important;
-  line-height: var(--aiflow-leading-control);
-}
-
-label:not([class*="aiflow-type-"]) {
-  font-size: var(--aiflow-type-control) !important;
-  line-height: var(--aiflow-leading-control);
 }
 
 th:not([class*="aiflow-type-"]) {
@@ -393,6 +381,10 @@ h2 {
 }
 
 @layer utilities {
+  .aiflow-type-dialog-title {
+    font-size: var(--aiflow-type-dialog-title) !important;
+    line-height: var(--aiflow-leading-dialog-title) !important;
+  }
   .aiflow-type-display {
     font-size: var(--aiflow-type-display) !important;
     line-height: var(--aiflow-leading-display) !important;
@@ -454,17 +446,6 @@ h2 {
   .aiflow-type-meta {
     font-size: var(--aiflow-type-meta) !important;
     line-height: var(--aiflow-leading-meta) !important;
-  }
-
-  /* Keep the business landing page compact and readable without tiny labels. */
-  [data-aiflow-business-center] .aiflow-type-body {
-    font-size: 0.9375rem !important;
-    line-height: 1.4375rem !important;
-  }
-
-  [data-aiflow-business-center] .aiflow-type-meta {
-    font-size: 0.875rem !important;
-    line-height: 1.25rem !important;
   }
 
   :is(
@@ -591,7 +572,7 @@ h2 {
   }
 
   [data-login-introduction] h2 {
-    font-size: clamp(32px, 3.2vw, 44px) !important;
+    font-size: 2rem !important;
     font-weight: 650;
     line-height: 1.35 !important;
     letter-spacing: -0.03em;
@@ -725,7 +706,7 @@ h2 {
 
 /* Business lists keep a readable density within a shared rounded surface. */
 [data-aiflow-business-center] > div {
-  max-width: none;
+  max-width: var(--aiflow-content-max);
 }
 
 [data-aiflow-business-center] > div > div:first-child {
@@ -759,125 +740,88 @@ h2 {
   padding-bottom: 10px;
 }
 
-/* Project navigation uses stable dimensions and a distinct active item. */
-@media (min-width: 1024px) {
-  [data-aiflow-console] > div > section > div:has(> aside) > aside {
-    width: 216px !important;
-    border-color: var(--border);
-    box-shadow: none;
-  }
-
-  [data-aiflow-console] > div > section > div:has(> aside) > section {
-    background: var(--background);
-    padding: 16px 20px;
-  }
+/* Shared page frames keep content aligned across lists, configuration and workbenches. */
+.aiflow-page-frame {
+  min-width: 0;
+  min-height: calc(100dvh - var(--workspace-header-height));
+  padding: var(--aiflow-page-gutter);
 }
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> aside)
-  > aside
-  > div:first-child {
-  padding: 12px 14px;
+.aiflow-page-content {
+  width: 100%;
+  min-width: 0;
+  max-width: var(--aiflow-content-max);
+  margin-inline: auto;
 }
-
-[data-aiflow-console] > div > section > div:has(> aside) > aside nav {
-  gap: 4px;
-  padding: 8px;
+.aiflow-split-layout {
+  align-items: start;
 }
-
-[data-aiflow-console] > div > section > div:has(> aside) > aside nav button {
-  border-radius: 10px;
-  padding: 10px 12px;
+[data-aiflow-console] > header > div:first-child {
+  height: var(--workspace-header-height);
 }
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> aside)
-  > aside
-  nav
-  button[class*="bg-accent"] {
-  box-shadow: inset 3px 0 var(--aiflow-info);
-  background: var(--accent);
+[data-aiflow-workbench-page] {
+  min-height: calc(100dvh - var(--workspace-header-height) - 48px);
 }
-
-[data-aiflow-console] > div > section > div:has(> aside) > section h1 {
-  font-size: var(--aiflow-type-page-title);
+[data-aiflow-project-workspace] {
+  min-height: calc(100dvh - var(--workspace-header-height));
 }
-
-[data-aiflow-console] > div > section > div:has(> aside) > section .rounded-lg {
-  border-radius: var(--radius);
+[data-aiflow-project-workspace] > section {
+  padding: var(--aiflow-page-gutter);
+  background: var(--background);
 }
-
-/* Keep the project sidebar compact while separating editable work surfaces. */
-@media (min-width: 1024px) {
-  [data-aiflow-project-workspace] > aside {
-    width: 216px !important;
-    border-color: var(--border);
-    box-shadow: none;
-  }
-
-  [data-aiflow-project-workspace] > aside.lg\:w-16 {
-    width: 64px !important;
-  }
-
-  [data-aiflow-project-workspace] > section {
-    padding: 16px 20px;
-    background: var(--background);
-  }
+[data-aiflow-project-workspace] > section > div {
+  max-width: var(--aiflow-content-max);
+  margin-inline: auto;
 }
-
 [data-aiflow-project-workspace] > aside > div:first-child {
-  padding: 12px 14px;
+  padding: 16px 12px;
 }
-
 [data-aiflow-project-workspace] > aside nav {
   gap: 4px;
   padding: 8px;
 }
-
 [data-aiflow-project-workspace] > aside nav button {
-  border-radius: 10px;
+  border-radius: 8px;
   padding: 10px 12px;
 }
-
-[data-aiflow-project-workspace] > aside nav button[class*="bg-accent"] {
-  box-shadow: inset 3px 0 var(--aiflow-info);
-  background: var(--accent);
+@media (min-width: 1024px) {
+  [data-aiflow-project-workspace] > aside {
+    width: var(--aiflow-subnav-width);
+    border-color: var(--border);
+  }
+  [data-aiflow-project-workspace][data-navigation-collapsed="true"] > aside {
+    width: 56px;
+  }
 }
 
 /* System settings retain their navigation and a calm, separate content card. */
 [data-aiflow-system-config] {
-  padding: 20px;
+  padding: var(--aiflow-page-gutter);
   background: var(--background);
 }
 
 [data-aiflow-system-config] > div {
-  max-width: none;
-  min-height: calc(100dvh - 96px);
-  gap: 20px;
+  max-width: var(--aiflow-content-max);
+  min-height: calc(
+    100dvh - var(--workspace-header-height) - 2 * var(--aiflow-page-gutter)
+  );
+  gap: var(--aiflow-section-gap);
 }
 
 @media (min-width: 1024px) {
   [data-aiflow-system-config] > div {
-    grid-template-columns: 216px minmax(0, 1fr);
+    grid-template-columns: var(--aiflow-subnav-width) minmax(0, 1fr);
   }
 
-  [data-aiflow-system-config]
-    > div:has(> aside > div > button[title="展开配置导航"]) {
+  [data-aiflow-system-config] > div[data-navigation-collapsed="true"] {
     grid-template-columns: 56px minmax(0, 1fr);
   }
 
-  [data-aiflow-system-config]
-    > div:has(> aside > div > button[title="展开配置导航"])
-    > aside {
+  [data-aiflow-system-config] > div[data-navigation-collapsed="true"] > aside {
     padding: 0;
   }
 
   [data-aiflow-system-config]
-    > div:has(> aside > div > button[title="展开配置导航"])
+    > div[data-navigation-collapsed="true"]
     > aside
     > div:first-child {
     padding: 12px 4px;
@@ -1097,212 +1041,28 @@ h2 {
   }
 }
 
-/* 已启动流程：以稳定的导航 aria 标记锚定连续双栏，避免泛化 aside 选择器影响其他工作区。 */
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"]),
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"]) {
-  padding: 0;
-  background: var(--card);
+/* The same secondary-navigation grid is shared by settings and the run workbench. */
+[data-workbench-layout] {
+  gap: var(--aiflow-section-gap);
 }
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  > div,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  > div {
-  max-width: none;
-  gap: 20px;
-}
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  aside,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  main
-  > section,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  aside,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  main
-  > section {
+[data-workbench-navigation] {
+  align-self: start;
   border-radius: var(--aiflow-surface-radius);
   box-shadow: var(--aiflow-surface-shadow);
 }
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  aside,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  aside {
-  border-color: var(--border);
-  border-top: 0;
-  border-bottom: 0;
-  border-left: 0;
-  padding: 0;
-}
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  aside
-  nav,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  aside
-  nav {
+[data-workbench-navigation] nav {
   gap: 4px;
-  padding: 8px;
 }
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  aside
-  nav
-  button,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  aside
-  nav
-  button {
-  border-radius: 10px;
-  padding: 10px 12px;
+[data-workbench-navigation] nav button {
+  border-radius: 8px;
 }
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  main
-  > section,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  main
-  > section {
-  border: 0;
-}
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  main
-  > section
-  > header,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  main
-  > section
-  > header {
-  min-height: 46px;
-  padding: 7px 16px;
-}
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  main
-  > section
-  > header
-  > div
-  > p:first-child,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  main
-  > section
-  > header
-  > div
-  > p:first-child,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  main
-  > section
-  > header
-  > div
-  > p:last-child,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  main
-  > section
-  > header
-  > div
-  > p:last-child,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  aside
-  > div.mt-4,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  aside
-  > div.mt-4 {
-  display: none;
-}
-
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="收起已启动流程导航"])
-  main
-  > section
-  > header
-  h2,
-[data-aiflow-console]
-  > div
-  > section
-  > div:has(> div > aside button[aria-label="展开已启动流程导航"])
-  main
-  > section
-  > header
-  h2 {
-  margin-top: 0;
-  font-size: var(--aiflow-type-section);
+@media (min-width: 1024px) {
+  .aiflow-split-layout {
+    grid-template-columns: var(--aiflow-subnav-width) minmax(0, 1fr);
+  }
+  .aiflow-split-layout[data-navigation-collapsed="true"] {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
 }
 
 /* 窄屏工作台将六个视图压缩为三列两行，给任务和统计留出更多首屏空间。 */
@@ -1332,7 +1092,7 @@ h2 {
 }
 
 [data-aiflow-warehouse] > div {
-  max-width: none;
+  max-width: var(--aiflow-content-max);
 }
 
 [data-aiflow-warehouse] > div > div:first-child {
@@ -1366,19 +1126,17 @@ h2 {
   border-left-color: var(--border);
 }
 
-/* Preserve the layout at narrow widths without overriding shared surfaces. */
-[data-aiflow-system-config] > div {
-  max-width: none !important;
-}
-
+/* Narrow settings pages use the same gutters as the rest of the console. */
 @media (max-width: 1023px) {
   [data-aiflow-system-config] {
-    padding: 12px;
+    padding: var(--aiflow-page-gutter);
   }
 
   [data-aiflow-system-config] > div {
-    gap: 12px;
-    min-height: calc(100dvh - 80px);
+    gap: var(--aiflow-section-gap);
+    min-height: calc(
+      100dvh - var(--workspace-header-height) - 2 * var(--aiflow-page-gutter)
+    );
     align-content: start;
   }
 
@@ -1618,68 +1376,212 @@ h2 {
 }
 
 /* Stable workspace chrome; large screens keep navigation beside the content. */
-[data-workspace-nav-caption] { display: none; }
-[data-workspace-search-trigger] { border-radius: 999px; }
-[data-workspace-context] { max-width: min(34vw, 480px); }
+[data-workspace-nav-caption] {
+  display: none;
+}
+[data-workspace-search-trigger] {
+  border-radius: 999px;
+}
+[data-workspace-context] {
+  max-width: min(34vw, 480px);
+}
 .aiflow-settings-change-bar {
-  position: fixed; bottom: max(16px, env(safe-area-inset-bottom));
-  left: calc((100% + var(--workspace-rail, 0px) + var(--settings-side-nav, 0px)) / 2); transform: translateX(-50%);
-  z-index: 40; width: min(760px, calc(100vw - var(--workspace-rail, 0px) - var(--settings-side-nav, 0px) - 40px));
-  max-height: min(45dvh, 320px); overflow-y: auto;
-  border: 1px solid var(--border); border-radius: 24px;
-  background: var(--card); padding: 16px; box-shadow: var(--aiflow-surface-shadow-raised);
+  position: fixed;
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: calc(
+    (100% + var(--workspace-rail, 0px) + var(--settings-side-nav, 0px)) / 2
+  );
+  transform: translateX(-50%);
+  z-index: 40;
+  width: min(
+    760px,
+    calc(
+      100vw - var(--workspace-rail, 0px) - var(--settings-side-nav, 0px) - 40px
+    )
+  );
+  max-height: min(45dvh, 320px);
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background: var(--card);
+  padding: 16px;
+  box-shadow: var(--aiflow-surface-shadow-raised);
 }
 @media (min-width: 1024px) {
-  [data-aiflow-system-config] { --settings-side-nav: 236px; }
-  [data-aiflow-system-config][data-config-navigation-collapsed="true"] { --settings-side-nav: 76px; }
+  [data-aiflow-system-config] {
+    --settings-side-nav: calc(
+      var(--aiflow-subnav-width) + var(--aiflow-section-gap)
+    );
+  }
+  [data-aiflow-system-config][data-config-navigation-collapsed="true"] {
+    --settings-side-nav: 76px;
+  }
 }
-@media (max-width: 1279px) { [data-workspace-account-name] { display: none; } }
-@media (max-width: 399px) { [data-workspace-account-role] { display: none; } }
-[data-aiflow-primary-nav] button { transition-property: background-color, color, border-color; }
+@media (max-width: 1279px) {
+  [data-workspace-account-name] {
+    display: none;
+  }
+}
+@media (max-width: 399px) {
+  [data-workspace-account-role] {
+    display: none;
+  }
+}
+[data-aiflow-primary-nav] button {
+  transition-property: background-color, color, border-color;
+}
 @media (min-width: 1280px) {
-  [data-aiflow-console] { --workspace-rail: 216px; }
-  [data-aiflow-console][data-editor-active="true"] { --workspace-rail: 80px; }
-  [data-aiflow-console] > header > div:first-child { height: 64px; }
-  [data-aiflow-brand] { width: var(--workspace-rail); flex-shrink: 0; padding-inline: 20px; }
-  [data-workspace-account-name] { display: inline-block; max-width: 144px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  [data-aiflow-brand-name] { min-width: 0; }
-  [data-aiflow-brand-name] > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  [data-aiflow-brand-name] > span:last-child { display: none; }
-  [data-editor-active="true"] [data-aiflow-brand-name] { display: none; }
-  [data-workspace-body] { margin-left: var(--workspace-rail); min-height: calc(100dvh - 64px); }
+  [data-aiflow-console] {
+    --workspace-rail: 200px;
+    --workspace-header-height: 64px;
+  }
+  [data-aiflow-console][data-editor-active="true"] {
+    --workspace-rail: 80px;
+  }
+  [data-aiflow-console] > header > div:first-child {
+    height: 64px;
+  }
+  [data-aiflow-brand] {
+    width: var(--workspace-rail);
+    flex-shrink: 0;
+    padding-inline: 20px;
+  }
+  [data-workspace-account-name] {
+    display: inline-block;
+    max-width: 144px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  [data-aiflow-brand-name] {
+    min-width: 0;
+  }
+  [data-aiflow-brand-name] > span:first-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  [data-aiflow-brand-name] > span:last-child {
+    display: none;
+  }
+  [data-editor-active="true"] [data-aiflow-brand-name] {
+    display: none;
+  }
+  [data-workspace-body] {
+    margin-left: var(--workspace-rail);
+    min-height: calc(100dvh - 64px);
+  }
   [data-aiflow-primary-nav] {
-    position: fixed; inset: 80px auto 16px 12px;
-    display: flex; flex-direction: column; align-items: stretch;
-    width: calc(var(--workspace-rail) - 24px); height: auto;
-    margin: 0; gap: 6px; padding: 12px 8px;
-    border: 1px solid var(--border); border-radius: 22px;
-    background: var(--card); box-shadow: var(--aiflow-surface-shadow);
+    position: fixed;
+    inset: 80px auto 16px 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: calc(var(--workspace-rail) - 24px);
+    height: auto;
+    margin: 0;
+    gap: 6px;
+    padding: 12px 8px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--card);
+    box-shadow: var(--aiflow-surface-shadow);
   }
-  [data-workspace-nav-caption] { display: block; padding: 10px 12px 12px; color: var(--muted-foreground); font-size: var(--aiflow-type-meta); }
+  [data-workspace-nav-caption] {
+    display: block;
+    padding: 10px 12px 12px;
+    color: var(--muted-foreground);
+    font-size: var(--aiflow-type-meta);
+  }
   [data-aiflow-primary-nav] button {
-    justify-content: flex-start; gap: 12px; height: 48px; flex-shrink: 0;
-    padding: 12px; border: 1px solid transparent; border-radius: 14px;
+    justify-content: flex-start;
+    gap: 12px;
+    height: 48px;
+    flex-shrink: 0;
+    padding: 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
   }
-  [data-aiflow-primary-nav] button svg { width: 18px; height: 18px; flex-shrink: 0; }
-  [data-aiflow-primary-nav] button[aria-selected="true"] { border-color: var(--aiflow-info-border); background: var(--aiflow-info-surface); color: var(--aiflow-info); }
-  [data-aiflow-primary-nav] button[aria-selected="true"] svg { color: inherit; }
-  [data-editor-active="true"] [data-aiflow-primary-nav] { left: 8px; width: 64px; padding: 8px; }
-  [data-editor-active="true"] [data-aiflow-primary-nav] button { justify-content: center; padding: 12px; }
+  [data-aiflow-primary-nav] button svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  [data-aiflow-primary-nav] button[aria-selected="true"] {
+    border-color: var(--aiflow-info-border);
+    background: var(--aiflow-info-surface);
+    color: var(--aiflow-info);
+  }
+  [data-aiflow-primary-nav] button[aria-selected="true"] svg {
+    color: inherit;
+  }
+  [data-editor-active="true"] [data-aiflow-primary-nav] {
+    left: 8px;
+    width: 64px;
+    padding: 8px;
+  }
+  [data-editor-active="true"] [data-aiflow-primary-nav] button {
+    justify-content: center;
+    padding: 12px;
+  }
   [data-editor-active="true"] [data-workspace-nav-label],
-  [data-editor-active="true"] [data-workspace-nav-caption] { display: none; }
+  [data-editor-active="true"] [data-workspace-nav-caption] {
+    display: none;
+  }
 }
-[data-access-details-target] { scroll-margin-block: 20px; border-radius: 12px; }
-[data-access-details-target]:focus { outline: 2px solid var(--aiflow-info-border); outline-offset: 6px; }
-.aiflow-access-count { font-size: var(--aiflow-type-page-title); line-height: var(--aiflow-leading-page-title); }
-.aiflow-access-trace { stroke-dasharray: 1; animation: aiflow-access-trace 420ms cubic-bezier(.2,.8,.2,1); }
-.aiflow-related-node, .aiflow-unrelated-node, .aiflow-related-edge, .aiflow-unrelated-edge { transition: opacity 180ms ease; }
-.aiflow-unrelated-node, .aiflow-unrelated-edge { opacity: .3; }
-.aiflow-related-edge .react-flow__edge-path { filter: drop-shadow(0 0 2px var(--aiflow-info-border)); }
-@keyframes aiflow-access-trace { from { stroke-dashoffset: 1; opacity: .2; } to { stroke-dashoffset: 0; opacity: 1; } }
-::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
-::view-transition-new(root) { z-index: 1; }
+[data-access-details-target] {
+  scroll-margin-block: 20px;
+  border-radius: 12px;
+}
+[data-access-details-target]:focus {
+  outline: 2px solid var(--aiflow-info-border);
+  outline-offset: 6px;
+}
+.aiflow-access-count {
+  font-size: var(--aiflow-type-page-title);
+  line-height: var(--aiflow-leading-page-title);
+}
+.aiflow-access-trace {
+  stroke-dasharray: 1;
+  animation: aiflow-access-trace 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.aiflow-related-node,
+.aiflow-unrelated-node,
+.aiflow-related-edge,
+.aiflow-unrelated-edge {
+  transition: opacity 180ms ease;
+}
+.aiflow-unrelated-node,
+.aiflow-unrelated-edge {
+  opacity: 0.3;
+}
+.aiflow-related-edge .react-flow__edge-path {
+  filter: drop-shadow(0 0 2px var(--aiflow-info-border));
+}
+@keyframes aiflow-access-trace {
+  from {
+    stroke-dashoffset: 1;
+    opacity: 0.2;
+  }
+  to {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  z-index: 1;
+}
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation-duration: .01ms !important; }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /* 组织管理窄屏触控：弹窗表单、树节点和次级动作共享一致的目标尺寸。 */
@@ -1695,5 +1597,39 @@ h2 {
     width: 20px;
     height: 20px;
     flex-shrink: 0;
+  }
+}
+
+/* Compact screens retain readable type and touch targets without oversized page titles. */
+@media (max-width: 767px) {
+  :root {
+    --aiflow-page-gutter: 1rem;
+    --aiflow-section-gap: 1rem;
+    --aiflow-type-page-title: 1.25rem;
+    --aiflow-leading-page-title: 1.75rem;
+  }
+}
+[data-slot="dialog-content"]:has(> [data-slot="dialog-close"])
+  > [data-slot="dialog-header"] {
+  padding-inline-end: 2rem;
+}
+[data-slot="dialog-title"],
+[data-slot="alert-dialog-title"] {
+  overflow-wrap: anywhere;
+}
+[data-slot="dialog-description"],
+[data-slot="alert-dialog-description"] {
+  line-height: var(--aiflow-leading-body);
+}
+
+/* Single-line fields align with shared action buttons, including legacy native fields. */
+input:not([type="checkbox"]):not([type="radio"]),
+select {
+  min-height: 40px;
+}
+@media (max-width: 1023px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select {
+    min-height: 44px;
   }
 }

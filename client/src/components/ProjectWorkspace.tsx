@@ -661,9 +661,9 @@ function BusinessCenterView({
   return (
     <div
       data-aiflow-business-center=""
-      className="min-h-[calc(100dvh-48px)] min-w-0 bg-background p-3 sm:p-5"
+      className="aiflow-page-frame min-w-0 bg-background"
     >
-      <div className="mx-auto w-full max-w-[1600px] min-w-0">
+      <div className="aiflow-page-content">
         <header className="mb-4 flex flex-col gap-3 border-b border-border/80 pb-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <p className="aiflow-type-meta mb-0.5 text-muted-foreground">
@@ -1331,6 +1331,7 @@ export function ProjectWorkspace({
   return (
     <div
       data-aiflow-project-workspace=""
+      data-navigation-collapsed={sidebarCollapsed}
       className="flex min-h-[calc(100vh-48px)] flex-col bg-background lg:flex-row"
     >
       <aside

@@ -131,7 +131,7 @@ export default function WorkflowReviewDialog({
         }}
       >
         <DialogHeader className="shrink-0 pr-6 text-left">
-          <DialogTitle className="aiflow-type-section-title">
+          <DialogTitle className="aiflow-type-dialog-title">
             {decision === "approved" ? "确认审核通过" : "确认审核驳回"}
           </DialogTitle>
           <DialogDescription className="aiflow-type-body">
