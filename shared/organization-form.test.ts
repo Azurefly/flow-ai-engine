@@ -95,3 +95,21 @@ it("编辑成员保留账号和岗位快照，迁移合并默认需要确认", (
     initialOrganizationDraft({ kind: "move", unit, member }).fields.confirmMerge
   ).toBe(false);
 });
+
+it("归属冲突合并同步未编辑的岗位，保留迁移目标与本次输入", () => {
+  const base = { title: "旧岗位", makePrimary: true, toUnitId: "" };
+  expect(
+    mergeOrganizationFields(
+      base,
+      { ...base, toUnitId: "b" },
+      { ...base, title: "新岗位" }
+    )
+  ).toEqual({ title: "新岗位", makePrimary: true, toUnitId: "b" });
+  expect(
+    mergeOrganizationFields(
+      base,
+      { ...base, title: "本次岗位", toUnitId: "b" },
+      { ...base, title: "新岗位" }
+    )
+  ).toEqual({ title: "本次岗位", makePrimary: true, toUnitId: "b" });
+});

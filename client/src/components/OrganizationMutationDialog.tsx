@@ -291,6 +291,27 @@ export default function OrganizationMutationDialog({
         ...(needsMember && memberId ? [member.refetch()] : []),
       ]);
   }
+  function rebaseMember() {
+    let base = draft.base;
+    if (currentMember && (editingMember || target.kind === "move"))
+      base = {
+        ...base,
+        title: currentMember.title || "",
+        [target.kind === "move" ? "makePrimary" : "isPrimary"]: Boolean(
+          currentMember.isPrimary
+        ),
+      };
+    setDraft(old => ({
+      ...old,
+      membershipToken: member.data!.membershipToken,
+      base,
+      fields: {
+        ...mergeOrganizationFields(old.base, old.fields, base),
+        ...(target.kind === "move" ? { confirmMerge: false } : {}),
+      },
+    }));
+    setError("");
+  }
   function rebaseUnit() {
     if (!current) return;
     if (editing) {
@@ -710,13 +731,7 @@ export default function OrganizationMutationDialog({
                   type="button"
                   variant="outline"
                   className="mt-2"
-                  onClick={() => {
-                    setDraft(old => ({
-                      ...old,
-                      membershipToken: member.data!.membershipToken,
-                    }));
-                    setError("");
-                  }}
+                  onClick={rebaseMember}
                 >
                   确认使用当前成员归属
                 </Button>

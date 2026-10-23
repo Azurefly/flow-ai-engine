@@ -26,7 +26,7 @@ const helper = fs.readFileSync(
 let fixture;
 const report = value => console.log(JSON.stringify(value));
 
-function remote(intent) {
+function remote(intent, attempt = 0) {
   return new Promise((resolve, reject) => {
     const child = spawn(
       "ssh",
@@ -66,11 +66,21 @@ function remote(intent) {
       stderr += chunk.toString("utf8");
     });
     child.on("error", reject);
-    child.on("close", code =>
-      code === 0
-        ? resolve(stdout)
-        : reject(new Error(`Fixture operation failed (${code}): ${stderr}`))
-    );
+    child.on("close", code => {
+      if (
+        code === 255 &&
+        attempt < 2 &&
+        ["settings_fingerprint", "revoke_identity", "cleanup"].includes(
+          intent.action
+        )
+      ) {
+        setTimeout(
+          () => remote(intent, attempt + 1).then(resolve, reject),
+          500 * (attempt + 1)
+        );
+      } else if (code === 0) resolve(stdout);
+      else reject(new Error(`Fixture operation failed (${code}): ${stderr}`));
+    });
     child.stdin.end(
       "const browserFixtureIntent = " + JSON.stringify(intent) + ";\n" + helper
     );
@@ -781,7 +791,7 @@ async function memberEditingAndMerge() {
   const person = fixture.people.find(
     row => row.username === personLogin.username
   );
-  const more = page.getByLabel(/^更多成员操作：/);
+  const more = page.getByLabel(/^更多成员操作：/).filter({ visible: true });
   let item = page.getByRole("button", { name: /^编辑岗位：/ });
   if (!(await item.isVisible())) await more.click();
   await item.click();
@@ -815,11 +825,31 @@ async function memberEditingAndMerge() {
   await expect(
     moving.getByRole("button", { name: "确认迁移", exact: true })
   ).toBeDisabled();
+  snapshot = await owner("config.organizationMemberConfiguration", {
+    userId: person.id,
+  });
+  await api("assignOrganizationMember", {
+    unitId: a,
+    userId: person.id,
+    title: "其他管理员岗位_" + tag,
+    isPrimary: true,
+    expectedMembershipToken: snapshot.membershipToken,
+  });
+  await moving
+    .getByRole("button", { name: "重新读取组织与权限", exact: true })
+    .click();
   const confirm = moving.getByRole("button", {
     name: "确认使用当前成员归属",
     exact: true,
   });
-  if (await confirm.isVisible()) await confirm.click();
+  await expect(confirm).toBeVisible();
+  await confirm.click();
+  await expect(
+    moving.getByLabel("迁移后岗位/职务", { exact: true })
+  ).toHaveValue("其他管理员岗位_" + tag);
+  await moving
+    .getByLabel("迁移后岗位/职务", { exact: true })
+    .fill("迁移填写_" + tag);
   await moving
     .getByLabel("已核对，允许合并到现有部门关系", { exact: true })
     .check();
@@ -830,7 +860,7 @@ async function memberEditingAndMerge() {
   });
   assert.equal(snapshot.memberships.length, 1);
   assert.equal(snapshot.memberships[0].unitId, b);
-  assert.equal(snapshot.memberships[0].title, "修改岗位_" + tag);
+  assert.equal(snapshot.memberships[0].title, "迁移填写_" + tag);
   assert.equal(Boolean(snapshot.memberships[0].isPrimary), true);
   report({
     editPositionWithoutRemoval: true,
