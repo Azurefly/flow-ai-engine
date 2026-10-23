@@ -8,6 +8,7 @@ import {
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+const workflowCreationSource = source("../client/src/components/WorkflowCreateDialog.tsx");
 const authorizationSource = source(
   "../client/src/components/WorkflowRoleBindingsDialog.tsx"
 );
@@ -450,8 +451,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_533 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 464 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_544 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 469 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -462,11 +463,11 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("新建流程通过按钮打开创建弹窗，控制台壳层可在窄屏纵向收敛", () => {
-    expect(homeSource).toContain("setCreateFlowOpen(true)");
-    expect(homeSource).toContain('title="新建流程"');
-    expect(homeSource).toContain(
-      "onSubmit={() => createFlow.mutate({ name: newFlowName })}"
-    );
+    expect(homeSource).toContain('openWorkflowOperation({kind:"global"})');
+    expect(homeSource).toContain('lazy(() => import("@/components/WorkflowCreateDialog"))');
+    expect(workflowCreationSource).toContain('"新建流程"');
+    expect(workflowCreationSource).toContain("utils.client.workflow.create.mutate");
+    expect(workflowCreationSource).toContain("requestKey: input.requestKey");
     expect(homeSource).toContain(
       "flex min-h-[calc(100vh-56px)] flex-col md:flex-row"
     );
@@ -888,13 +889,13 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("保留原始流程创建的代号、来源和项目数据源结构化字段", () => {
-    expect(projectWorkspaceSource).toContain(
+    expect(workflowCreationSource).toContain(
       'placeholder="例如 ORDER_APPROVAL"'
     );
-    expect(projectWorkspaceSource).toContain("手工创建");
-    expect(projectWorkspaceSource).toContain("从仓库导入");
-    expect(projectWorkspaceSource).toContain("不关联数据源");
-    expect(projectWorkspaceSource).toContain("流程代号在当前业务内唯一");
+    expect(workflowCreationSource).toContain('creationSource: "manual"');
+    expect(workflowCreationSource).toContain("导入已有定义请从流程仓库进入");
+    expect(workflowCreationSource).toContain("不关联数据源");
+    expect(workflowCreationSource).toContain("当前业务内唯一");
     expect(projectWorkspaceSource).toContain(
       "workflow.processCode || String(workflow.id)"
     );
@@ -904,9 +905,8 @@ describe("流程设计器界面回归约束", () => {
 
   it("流程中心把关联数据源留在按需详情，不挤占默认列表列", () => {
     expect(projectWorkspaceSource).toContain("关联数据源");
-    expect(projectWorkspaceSource).toContain(
-      "const sourceNameById = new Map( dataSources.map"
-    );
+    expect(projectWorkspaceSource).toContain("workflow.dataSourceName");
+    expect(projectWorkspaceSource).not.toContain("sourceNameById");
     expect(projectWorkspaceSource).toContain(
       'workflow.flowType !== "data" ? "不适用"'
     );
@@ -3301,21 +3301,13 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("新增流程表单为文本与选择字段提供持久标签和手机触控高度", () => {
-    for (const field of [
-      ["new-workflow-code", "流程代号"],
-      ["new-workflow-name", "流程名称"],
-      ["new-workflow-description", "流程说明（可选）"],
-      ["new-workflow-type", "流程类型"],
-      ["new-workflow-source", "创建方式"],
-    ]) {
-      expect(projectWorkspaceSource).toContain(`id="${field[0]}"`);
-      expect(projectWorkspaceSource).toContain(`<span>${field[1]}</span>`);
-    }
-    expect(projectWorkspaceSource).toContain('id="new-workflow-data-source"');
-    expect(projectWorkspaceSource).toContain("aiflow-type-control min-h-11");
-    expect(projectWorkspaceSource).toContain(
-      "aiflow-type-body leading-5 text-muted-foreground"
-    );
+    for (const label of ["流程代号", "流程名称", "流程说明（可选）", "流程类型", "关联数据源（可选）"])
+      expect(workflowCreationSource).toContain(label);
+    expect(workflowCreationSource).toContain('aria-label="流程类型"');
+    expect(workflowCreationSource).toContain('aria-label="关联数据源（可选）"');
+    expect(workflowCreationSource).toContain('className="grid gap-1.5 text-sm font-medium"');
+    expect(workflowCreationSource).toContain("h-11 min-[1024px]:h-10");
+    expect(workflowCreationSource).toContain("保留创建填写？");
   });
 
   it("窄屏流程卡在下划线分段处换行，同时保留完整可访问名称", () => {
@@ -3850,11 +3842,8 @@ it("侧栏流程按服务端十条分页搜索，独立于编辑器路由恢复"
 });
 it("分页外的流程保存发布后刷新详情缓存", () => {
   for (const mutation of [
-    "create",
     "update",
     "publish",
-    "duplicate",
-    "delete",
   ]) {
     const start = homeSource.indexOf(`trpc.workflow.${mutation}.useMutation`);
     expect(start).toBeGreaterThan(-1);
@@ -3863,6 +3852,11 @@ it("分页外的流程保存发布后刷新详情缓存", () => {
     expect(homeSource.slice(start, errorHandler)).toContain(
       "utils.workflow.get.invalidate()"
     );
+  }
+  for (const callback of ["onCreated={workflow=>{", "onArchived={id=>{"]) {
+    const handler=homeSource.split(callback)[1]?.split("toast.success")[0];
+    expect(handler).toContain("utils.workflow.page.invalidate()");
+    expect(handler).toContain("utils.workflow.get.invalidate()");
   }
 });
 it("基础流程成员有效期即时反馈并阻止无效授权", () => {

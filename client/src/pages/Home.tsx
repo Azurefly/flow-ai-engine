@@ -1,3 +1,4 @@
+import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
 import { useClientVersionUpdate } from "@/hooks/useClientVersionUpdate";
@@ -130,6 +131,8 @@ const WorkflowRoleBindingsDialog = lazy(
 );
 const CustomRoleDialog = lazy(() => import("@/components/CustomRoleDialog"));
 const WorkspaceCommandDialog = lazy(() => import("@/components/WorkspaceCommandDialog"));
+const WorkflowCreateDialog = lazy(() => import("@/components/WorkflowCreateDialog"));
+const WorkflowArchiveDialog = lazy(() => import("@/components/WorkflowArchiveDialog"));
 const WorkflowCanvas = lazy(() => import("@/components/WorkflowCanvas"));
 const WorkflowGovernance = lazy(
   () => import("@/components/WorkflowGovernance")
@@ -514,8 +517,14 @@ function FlowConsole({
       ? initialRoute.route.view
       : "workbench"
   );
-  const [newFlowName, setNewFlowName] = useState("");
-  const [createFlowOpen, setCreateFlowOpen] = useState(false);
+  const [workflowOperation,setWorkflowOperation]=useResourceDraftState<WorkflowOperationTarget|null>("workflow-operations","context","target",null,false);
+  const operationOpening=useRef(Boolean(workflowOperation));
+  operationOpening.current=Boolean(workflowOperation);
+  const openWorkflowOperation=(target:WorkflowOperationTarget)=>{
+    if(operationOpening.current || resourceDrafts.pending)return;
+    operationOpening.current=true;setWorkflowOperation(structuredClone(target));
+  };
+  const closeWorkflowOperation=()=>{operationOpening.current=false;setWorkflowOperation(null);};
   const [userForm, setUserForm] = useState({
     username: "",
     name: "",
@@ -927,18 +936,9 @@ function FlowConsole({
         Boolean(projectLookupId && routeProjectQuery.isPending))
   );
 
-  const createFlow = trpc.workflow.create.useMutation({
-    onSuccess: (workflow: any) => {
-      void utils.workflow.page.invalidate();
-      void utils.workflow.get.invalidate();
-      setCreateFlowOpen(false);
-      if (workflow?.id)
-        openFlowEditor(workflow.id, selectedProject ? "workspace" : "center");
-      setNewFlowName("");
-      toast.success("已新建草稿流程。");
-    },
-    onError: error => toast.error(error.message),
-  });
+  const globalCreationAccess=trpc.workflow.operationAccess.useQuery({},authorizationQueryPolicy(true));
+  const operationAccess=trpc.workflow.operationAccess.useQuery({workflowId:selectedId || "00000000"},authorizationQueryPolicy(Boolean(selectedId && requestedRoute.route.section==="flows" && requestedRoute.route.view==="editor")));
+  const operationReady=operationAccess.isSuccess && !operationAccess.isError && !operationAccess.isFetching;
   const saveFlow = trpc.workflow.update.useMutation({
     onSuccess: (workflow: any, submitted) => {
       if (!consoleAlive.current) return;
@@ -1008,27 +1008,6 @@ function FlowConsole({
     setCompileDiagnostics([]);
     setCompileCheck({ status: "idle" });
   }, [draftDefinition, draftName, selectedId]);
-  const duplicateFlow = trpc.workflow.duplicate.useMutation({
-    onSuccess: (workflow: any) => {
-      void utils.workflow.page.invalidate();
-      void utils.workflow.get.invalidate();
-      if (workflow?.id) openFlowEditor(workflow.id, flowEditorReturn);
-      toast.success("已创建流程副本。");
-    },
-    onError: error => toast.error(error.message),
-  });
-  const deleteFlow = trpc.workflow.delete.useMutation({
-    onSuccess: () => {
-      void utils.workflow.page.invalidate();
-      void utils.workflow.get.invalidate();
-      void utils.project.invalidate();
-      setSelectedWorkflowId(null);
-      setDraftDefinition(null);
-      returnFromFlowEditor();
-      toast.success("流程已归档，可在流程仓库恢复。");
-    },
-    onError: error => toast.error(error.message),
-  });
   const runFlow = trpc.workflow.run.useMutation({
     onSuccess: result => {
       void utils.workflow.runs.invalidate();
@@ -1667,17 +1646,7 @@ function FlowConsole({
                   >
                     <X size={17} />
                   </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    aria-label="新建流程"
-                    onClick={() => {
-                      setNewFlowName("新流程");
-                      setCreateFlowOpen(true);
-                    }}
-                  >
-                    <Plus size={17} />
-                  </Button>
+                  {globalCreationAccess.isSuccess && !globalCreationAccess.isError && globalCreationAccess.data.canCreate && <Button size="icon" variant="ghost" aria-label="新建流程" disabled={Boolean(resourceDrafts.pending) || globalCreationAccess.isFetching} onClick={()=>openWorkflowOperation({kind:"global"})}><Plus size={17}/></Button>}
                 </div>
               </div>
               <Input className="mt-3" aria-label="搜索流程名称或编号" placeholder="搜索流程名称或编号" value={flowSearch} onChange={event => setFlowSearch(event.target.value.slice(0, 100))} />
@@ -1896,6 +1865,7 @@ function FlowConsole({
                   </span>
                 </div>
                 <ProjectWorkspace
+                  onCreateWorkflow={project=>openWorkflowOperation({kind:"project",projectId:project.id,projectName:project.name})}
                   project={selectedProject}
                   onBack={() =>
                     navigateRoute({ section: "flows", view: "center" })
@@ -1984,6 +1954,9 @@ function FlowConsole({
                 onUnpublishRequested={submitted => { pendingUnpublish.current = submitted; }}
 
                 canManage={canManageMembers}
+                canCopy={operationReady && operationAccess.data?.canCopy === true}
+                canArchive={operationReady && operationAccess.data?.canArchive === true}
+                operationPending={Boolean(resourceDrafts.pending)}
                 savePending={saveFlow.isPending}
                 publishPending={publishFlow.isPending}
                 compilePending={compileFlow.isPending}
@@ -2107,23 +2080,8 @@ function FlowConsole({
                 onRun={startRun}
                 onExport={exportCurrent}
                 onImport={() => importRef.current?.click()}
-                onDuplicate={() => {
-                  if (selectedId)
-                    duplicateFlow.mutate({
-                      id: selectedId,
-                      name: `${draftName} · 副本`,
-                      expectedDefinitionVersion: Number(selectedWorkflow?.definitionVersion),
-                    });
-                }}
-                onDelete={() => {
-                  if (
-                    selectedId &&
-                    window.confirm(
-                      `确认归档“${draftName}”吗？版本、运行、任务、成员授权和审计记录均会保留，之后可在流程仓库恢复。`
-                    )
-                  )
-                    deleteFlow.mutate({ id: selectedId, expectedDefinitionVersion: Number(selectedWorkflow?.definitionVersion) });
-                }}
+                onDuplicate={()=>{if(operationReady && operationAccess.data.canCopy && operationAccess.data.source) openWorkflowOperation({kind:"copy",source:operationAccess.data.source});}}
+                onDelete={()=>{if(operationReady && operationAccess.data.canArchive && operationAccess.data.source) openWorkflowOperation({kind:"archive",source:operationAccess.data.source,unsavedChanges:isDraftDirty});}}
                 onSaveAsSubflow={async subflowName => {
                   if (!draftDefinition || createSubflow.isPending) return false;
                   const subflowFlowType = selectedWorkflow?.flowType ?? "state";
@@ -2329,23 +2287,19 @@ function FlowConsole({
         className="hidden"
         onChange={importDefinition}
       />
-      <CreationDialog
-        open={createFlowOpen}
-        onOpenChange={setCreateFlowOpen}
-        title="新建流程"
-        description="填写流程名称后调用真实创建接口；取消不会创建草稿。"
-        submitLabel="新建并打开"
-        pending={createFlow.isPending}
-        onSubmit={() => createFlow.mutate({ name: newFlowName })}
-      >
-        <Input
-          autoFocus
-          value={newFlowName}
-          onChange={event => setNewFlowName(event.target.value)}
-          placeholder="流程名称"
-          required
-        />
-      </CreationDialog>
+      {workflowOperation && <Suspense fallback={<div role="status" className="fixed inset-0 z-50 grid place-items-center bg-background/90">正在读取流程操作窗口…</div>}>
+        {workflowOperation.kind==="archive" ? <WorkflowArchiveDialog target={workflowOperation} onTargetChange={setWorkflowOperation} onClose={closeWorkflowOperation} onArchived={id=>{
+          if(!consoleAlive.current)return;
+          void Promise.allSettled([utils.workflow.page.invalidate(),utils.workflow.get.invalidate(),utils.workflow.operationAccess.invalidate(),utils.project.invalidate()]);
+          if(liveDraft.current.workflowId===id){setSelectedWorkflowId(null);setDraftDefinition(null);returnFromFlowEditor();}
+          toast.success("流程已归档，可在流程仓库恢复。");
+        }}/> : <WorkflowCreateDialog target={workflowOperation} onTargetChange={setWorkflowOperation} onClose={closeWorkflowOperation} onCreated={workflow=>{
+          if(!consoleAlive.current)return;
+          void Promise.allSettled([utils.workflow.page.invalidate(),utils.workflow.get.invalidate(),utils.project.invalidate()]);
+          toast.success("流程草稿已创建。");
+          if(workflow?.id)openFlowEditor(workflow.id,workflow.projectId ? "workspace" : "center");
+        }}/>}
+      </Suspense>}
       {general.watermarkEnabled && general.watermarkText && (
         <div
           aria-hidden="true"
@@ -2378,6 +2332,9 @@ function FlowDesigner({
   onUnpublished,
   onUnpublishRequested,
   canManage,
+  canCopy,
+  canArchive,
+  operationPending,
   savePending,
   publishPending,
   compilePending,
@@ -2426,6 +2383,9 @@ function FlowDesigner({
   onUnpublished: (workflow: any, submitted: { id: string; expectedDefinitionVersion: number }) => void;
   onUnpublishRequested: (submitted: { id: string; expectedDefinitionVersion: number }) => void;
   canManage: boolean;
+  canCopy: boolean;
+  canArchive: boolean;
+  operationPending: boolean;
   savePending: boolean;
   publishPending: boolean;
   compilePending: boolean;
@@ -2807,9 +2767,10 @@ function FlowDesigner({
                 <Download size={13} className="mr-2 text-muted-foreground" />
                 <span>导出备份 (JSON)</span>
               </DropdownMenuItem>
-              {(canManage || canEdit) && <DropdownMenuSeparator />}
-              {canManage && (
+              {(canCopy || canArchive || canManage || canEdit) && <DropdownMenuSeparator />}
+              {canCopy && (
                 <DropdownMenuItem
+                  disabled={operationPending}
                   className="aiflow-type-control"
                   onClick={onDuplicate}
                 >
@@ -2844,10 +2805,11 @@ function FlowDesigner({
                   </DropdownMenuItem>
                 </>
               )}
-              {canManage && (
+              {canArchive && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
+                    disabled={operationPending}
                     onClick={onDelete}
                     className="aiflow-type-control text-red-600 focus:text-red-600"
                   >

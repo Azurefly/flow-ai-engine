@@ -1,3 +1,5 @@
+import { workflowCopyName } from "../shared/workflow-creation-form";
+import { assertWorkflowCreationAccess, assertWorkflowConfigurationToken, prepareWorkflowCreationRequest, replayWorkflowCreationRequest, saveWorkflowCreationRequest, type WorkflowCreationRequest } from "./workflow-creation-request";
 import { commitWorkflowMutation, lockWorkflowMutation, type WorkflowMutationSnapshot } from "./workflow-mutation-transaction";
 import { diagnoseSynchronousSubflowNodes, locateSubflowDiagnostics } from "./subflow-diagnostics";
 import {
@@ -201,12 +203,13 @@ async function resolveSubflowReferences(
   definition: Definition,
   ownerUserId: number,
   executable: boolean,
-  flowType: "state" | "control" | "data"
+  flowType: "state" | "control" | "data",
+  connection?: mysql.PoolConnection
 ) {
   const subflowNodes = definition.nodes.filter(node => node.type === "subflow");
   if (!subflowNodes.length) return definition;
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,name,definitionJson,isEnabled,updatedAt FROM workflow_subflow WHERE ownerUserId=?",
+  const [rows] = await (connection ?? db()).query<mysql.RowDataPacket[]>(
+    "SELECT id,name,definitionJson,isEnabled,updatedAt FROM workflow_subflow WHERE ownerUserId=?" + (connection ? " FOR SHARE" : ""),
     [ownerUserId]
   );
   const byId = new Map(rows.map(row => [String(row.id), row]));
@@ -440,6 +443,9 @@ export async function createWorkflow(
     definition?: unknown;
     copySource?: WorkflowMutationSnapshot & { id: string };
     expectedSourceVersion?: number;
+    expectedSourceConfigurationToken?: string;
+    requestKey?: string;
+    creationRequest?: WorkflowCreationRequest;
   },
 ) {
   if (!options?.projectId && !(await canCreateWorkflow(user)))
@@ -449,32 +455,13 @@ export async function createWorkflow(
     });
   const workflowId = id();
   const flowType = options?.flowType ?? "state";
-  const definition =
-    options?.definition === undefined
-      ? emptyDefinition()
-      : await resolveSubflowReferences(
-          validate(options.definition, { flowType, executable: false }),
-          user.id,
-          false,
-          flowType,
-        );
+  const request = options?.creationRequest ?? prepareWorkflowCreationRequest(options?.requestKey,"global",{name,description:description ?? null,flowType});
+  const draftDefinition = options?.definition === undefined ? emptyDefinition() : validate(options.definition,{flowType,executable:false});
   return commitWorkflowMutation(user, async (connection, actor) => {
+    const replay = await replayWorkflowCreationRequest(connection,actor,request);
+    if (replay) return hydrateWorkflow(replay);
+    await assertWorkflowCreationAccess(connection,actor,options?.projectId);
     if (options?.projectId) {
-      const { getProjectAccess } = await import("./project-service");
-      const access = await getProjectAccess(actor, options.projectId, {
-        connection,
-        lock: true,
-      });
-      if (!access.exists)
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "业务已归档或不存在，请重新读取后创建流程。",
-        });
-      if (!access.permissions.has("project:workflow:create"))
-        throw new TRPCError({
-          code: "FORBIDDEN",
-          message: "业务流程创建权限已变化，请保留填写并确认权限。",
-        });
       if (options.processCode) {
         const [existing] = await connection.query<mysql.RowDataPacket[]>(
           "SELECT id FROM workflow WHERE projectId=? AND processCode=? LIMIT 1 FOR UPDATE",
@@ -508,13 +495,7 @@ export async function createWorkflow(
             message: "所选数据源不存在、不属于当前业务或已停用。",
           });
       }
-    } else if (
-      !(await hasSystemPermission(actor, "workflow:create", connection))
-    )
-      throw new TRPCError({
-        code: "FORBIDDEN",
-        message: "流程创建权限已变化，请保留填写并确认权限。",
-      });
+    }
     if (options?.copySource) {
       await lockWorkflowMutation(
         connection,
@@ -522,8 +503,15 @@ export async function createWorkflow(
         options.copySource.id,
         options.copySource,
         ["workflow:view"],
-        { expectedDefinitionVersion: options.expectedSourceVersion },
+        { expectedDefinitionVersion: options.expectedSourceVersion, expectedConfigurationToken:options.expectedSourceConfigurationToken },
       );
+    }
+    let definition: Definition;
+    try { definition = await resolveSubflowReferences(draftDefinition,actor.id,false,flowType,connection); }
+    catch(error) {
+      if(error instanceof Error && error.message === "流程只能引用流程所有者创建的私有子流程。")
+        throw new TRPCError({code:"BAD_REQUEST",message:"源流程引用了其他创建人的私有子流程，副本尚未创建。请先调整引用或联系创建人。",cause:error});
+      throw error;
     }
     await connection.query(
       "INSERT INTO workflow (id,ownerUserId,projectId,folderId,processCode,name,description,flowType,creationSource,dataSourceId,auditStatus,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'draft',1)",
@@ -555,6 +543,7 @@ export async function createWorkflow(
       source: "created",
       actorUserId: actor.id,
     });
+    const creationRequestId = await saveWorkflowCreationRequest(connection,actor,workflowId,options?.projectId ?? null,request);
     await recordAuthorizationAudit(
       {
         actorUserId: actor.id,
@@ -567,6 +556,7 @@ export async function createWorkflow(
             : options?.projectId
               ? "project_workflow_created"
               : "workflow_created",
+          creationRequestId,
           projectId: options?.projectId ?? null,
           processCode: options?.processCode ?? null,
           flowType,
@@ -1309,18 +1299,34 @@ export async function duplicateWorkflow(
   user: WorkflowUser,
   name?: string,
   expectedDefinitionVersion?: number,
+  requestKey?: string,
+  expectedConfigurationToken?: string,
 ) {
+  const request = prepareWorkflowCreationRequest(requestKey,"duplicate",{id:workflowId,name:name?.trim() || null,expectedDefinitionVersion:expectedDefinitionVersion ?? null,expectedConfigurationToken:expectedConfigurationToken ?? null});
+  if (request) {
+    const [existing] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM workflow_creation_request WHERE actorUserId=? AND requestKeyHash=? LIMIT 1",[user.id,request.keyHash]);
+    if (existing[0]) return commitWorkflowMutation(user,async(connection,actor)=>{
+      const replay=await replayWorkflowCreationRequest(connection,actor,request);
+      if (!replay) throw new TRPCError({code:"CONFLICT",message:"创建回执已变化，请核对列表后重试。"});
+      return hydrateWorkflow(replay);
+    });
+  }
   const source = await getWorkflow(workflowId, user);
   if (!source) throw new TRPCError({code:"FORBIDDEN",message:"流程不存在或当前账号没有查看和复制权限。"});
+  assertWorkflowConfigurationToken(expectedConfigurationToken,source);
   if (source.archivedAt) throw new TRPCError({code:"CONFLICT",message:"已归档流程须先恢复后才能复制。"});
   if (expectedDefinitionVersion !== undefined) assertWorkflowRevision(Number(source.definitionVersion),expectedDefinitionVersion);
   return createWorkflow(
     user,
-    name?.trim() || `${source.name} · 副本`,
+    name?.trim() || workflowCopyName(source.name),
     source.description ?? undefined,
     {
       projectId: source.projectId,
       flowType: source.flowType,
+      folderId: source.folderId ?? null,
+      dataSourceId: source.dataSourceId ?? null,
+      processCode: source.projectId ? `CPY_${id().toUpperCase()}` : null,
+      creationRequest: request,
       definition: source.definition,
       copySource: {
         id: workflowId,
@@ -1332,6 +1338,7 @@ export async function duplicateWorkflow(
         updatedAt: source.updatedAt,
       },
       expectedSourceVersion: expectedDefinitionVersion,
+      expectedSourceConfigurationToken:expectedConfigurationToken,
     },
   );
 }
@@ -1429,6 +1436,7 @@ export async function archiveWorkflow(
   workflowId: string,
   user: WorkflowUser,
   expectedDefinitionVersion?: number,
+  expectedConfigurationToken?: string,
 ) {
   if (
     !(await hasWorkflowPermission(user, workflowId, "workflow:members:manage"))
@@ -1436,6 +1444,7 @@ export async function archiveWorkflow(
     throw new TRPCError({ code: "FORBIDDEN", message: "没有归档流程的权限。" });
   const current = await getWorkflow(workflowId, user);
   if (!current) return false;
+  assertWorkflowConfigurationToken(expectedConfigurationToken,current);
   return commitWorkflowMutation(user, async (connection, actor) => {
     const locked = await lockWorkflowMutation(
       connection,

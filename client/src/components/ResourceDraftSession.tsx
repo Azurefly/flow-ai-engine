@@ -67,6 +67,13 @@ export function useResourceDraftPending(projectId: string, category: string) {
     [store, projectId, category]
   );
 }
+export function useResourceDraftReset(projectId: string, category: string) {
+  const store = useContext(SessionContext);
+  return useCallback(
+    () => store?.clearCategory(projectId, category),
+    [store, projectId, category]
+  );
+}
 export function useResourceDraftSummary(projectId?: string) {
   const store = useStore();
   return {
@@ -77,6 +84,7 @@ export function useResourceDraftSummary(projectId?: string) {
       store?.hasDraftCategory("system-authorization", projectId) ?? false,
     organization:
       store?.hasDraftCategory("organization-configuration", projectId) ?? false,
+    workflow: store?.hasWorkflowDraft(projectId) ?? false,
   };
 }
 export function useResourceCreation<
@@ -124,6 +132,7 @@ export function useResourceCreation<
     isPending: mutation.isPending,
     error: mutation.error,
     uncertain: Boolean(store.creation(projectId, category)?.uncertain),
+    requestKey: store.creation(projectId, category)?.key,
   };
 }
 export function ResourceDraftSession({ children }: { children: ReactNode }) {
@@ -179,12 +188,16 @@ export function ResourceDraftSession({ children }: { children: ReactNode }) {
           <AlertDialogTitle>
             {store.hasAuthorizationDraft()
               ? "离开前保留授权填写"
-              : "离开前保留资源填写"}
+              : store.hasWorkflowDraft()
+                ? "离开前保留流程填写"
+                : "离开前保留资源填写"}
           </AlertDialogTitle>
           <AlertDialogDescription>
             {store.hasAuthorizationDraft()
               ? "授权填写尚未保存。继续编辑可保留填写；确认离开只会放弃填写，不会撤销可能已经提交的授权，请先核对列表。"
-              : "资源尚未保存。继续编辑可保留当前填写；确认离开会放弃这些内容。"}
+              : store.hasWorkflowDraft()
+                ? "流程填写尚未保存。继续编辑可保留当前内容；确认离开会放弃填写，请先导出或核对创建结果。"
+                : "资源尚未保存。继续编辑可保留当前填写；确认离开会放弃这些内容。"}
             {store.hasUncertainCreation() &&
               " 部分保存结果尚未确认；离开不会撤销可能已经完成的创建，请先核对。"}
           </AlertDialogDescription>
@@ -225,7 +238,9 @@ export function ResourceDraftRecoveryNotice({
             有 {summary.count}{" "}
             {store.hasAuthorizationDraft()
               ? "类填写仍保留在当前账号会话中。重新读取对应页面后请先核对授权列表，再继续填写；也可先导出。请勿关闭页面。"
-              : "类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。"}
+              : store.hasWorkflowDraft()
+                ? "类流程填写仍保留在当前账号会话中。请核对创建窗口与流程列表，再继续填写；也可先导出。请勿关闭页面。"
+                : "类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。"}
           </>
         ) : (
           "正在等待保存结果，请勿重复提交。"
@@ -268,12 +283,16 @@ export function ResourceDraftRecoveryNotice({
           link.href = url;
           link.download = store.hasAuthorizationDraft()
             ? "authorization-drafts.json"
-            : "resource-drafts.json";
+            : store.hasWorkflowDraft()
+              ? "workflow-drafts.json"
+              : "resource-drafts.json";
           link.click();
           setTimeout(() => URL.revokeObjectURL(url), 1000);
         }}
       >
-        {store.hasAuthorizationDraft() ? "导出未保存填写" : "导出资源填写"}
+        {store.hasAuthorizationDraft() || store.hasWorkflowDraft()
+          ? "导出未保存填写"
+          : "导出资源填写"}
       </Button>
     </div>
   );

@@ -196,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-18).map(item => item.tag)).toEqual([
+    expect(journal.entries.slice(-19).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -215,8 +215,9 @@ describe("database migration integrity", () => {
       "0039_loop_visit_facts",
       "0040_dataflow_native_schedule",
       "0041_resource_creation_requests",
+      "0042_workflow_creation_requests",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(41);
+    expect(journal.entries.at(-1)?.idx).toBe(42);
   });
   it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
     const migration = readFileSync(
@@ -477,4 +478,15 @@ it("资源创建回执迁移按账号、业务、资源类型和请求摘要唯�
   expect(migration).toContain("`resourceId` varchar(36) NOT NULL");
   expect(migration).not.toMatch(/DELETE FROM|TRUNCATE|DROP TABLE|ALTER TABLE/);
   expect(migration).not.toContain("payloadJson");
+});
+
+it("流程创建回执只新增表，不重建已有资源或业务记录",()=>{
+  const migration=readFileSync(new URL("../drizzle/0042_workflow_creation_requests.sql",import.meta.url),"utf8");
+  expect(migration).toContain("CREATE TABLE `workflow_creation_request`");
+  expect(migration).not.toContain("CREATE TABLE `resource_creation_request`");
+  expect(migration).not.toMatch(/(?:^|\n)\s*(?:DROP|TRUNCATE|DELETE|UPDATE|ALTER)\b/i);
+  expect(migration).toContain("UNIQUE (`actorUserId`,`requestKeyHash`)");
+  expect(migration).toContain("REFERENCES `users`");
+  expect(migration).not.toContain("REFERENCES `workflow`");
+  expect(migration).not.toContain("REFERENCES `flow_project`");
 });

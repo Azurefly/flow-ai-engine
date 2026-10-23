@@ -1,3 +1,4 @@
+import { prepareWorkflowCreationRequest } from "./workflow-creation-request";
 import { commitProjectWorkflowReview, type WorkflowReviewInput } from "./project-review-transaction";
 import { commitProjectAuthorization } from "./project-authorization-transaction";
 import { assertRoleExpiryRange } from "../shared/role-expiry";
@@ -430,8 +431,8 @@ export async function listProjectWorkflows(
     params.push(keyword, keyword, keyword, keyword);
   }
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT w.*,u.username AS creatorUsername,u.name AS creatorName,p.status AS projectStatus,(SELECT COUNT(*) FROM workflow_run wr WHERE wr.workflowId=w.id) AS runCount
-       FROM workflow w JOIN flow_project p ON p.id=w.projectId LEFT JOIN users u ON u.id=w.ownerUserId
+    `SELECT w.*,u.username AS creatorUsername,u.name AS creatorName,ds.name AS dataSourceName,p.status AS projectStatus,(SELECT COUNT(*) FROM workflow_run wr WHERE wr.workflowId=w.id) AS runCount
+       FROM workflow w JOIN flow_project p ON p.id=w.projectId LEFT JOIN users u ON u.id=w.ownerUserId LEFT JOIN data_source ds ON ds.id=w.dataSourceId AND ds.projectId=w.projectId
       WHERE ${clauses.join(" AND ")} ORDER BY w.updatedAt DESC`,
     params
   );
@@ -479,6 +480,7 @@ export async function createProjectWorkflow(
   user: ProjectUser,
   input: {
     projectId: string;
+    requestKey?: string;
     processCode?: string;
     name: string;
     description?: string;
@@ -507,28 +509,8 @@ export async function createProjectWorkflow(
     throw new Error(
       "流程代号须以字母开头，且仅包含大写字母、数字、下划线或连字符。"
     );
-  const [existingCodes] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id FROM workflow WHERE projectId=? AND processCode=? LIMIT 1",
-    [input.projectId, processCode]
-  );
-  if (existingCodes[0]) throw new Error("当前业务下已存在相同流程代号。");
   if (input.dataSourceId && input.flowType !== "data")
-    throw new Error("仅数据流程可以关联项目数据源。");
-  if (input.dataSourceId) {
-    const [sources] = await db().query<mysql.RowDataPacket[]>(
-      "SELECT id FROM data_source WHERE id=? AND projectId=? AND status<>'disabled' LIMIT 1",
-      [input.dataSourceId, input.projectId]
-    );
-    if (!sources[0])
-      throw new Error("所选数据源不存在、不属于当前业务或已停用。");
-  }
-  if (input.folderId) {
-    const [folders] = await db().query<mysql.RowDataPacket[]>(
-      "SELECT id FROM workflow_folder WHERE id=? AND projectId=? LIMIT 1",
-      [input.folderId, input.projectId]
-    );
-    if (!folders[0]) throw new Error("目标仓库目录不存在或不属于当前项目。");
-  }
+    throw new TRPCError({code:"BAD_REQUEST",message:"仅数据流程可以关联项目数据源。"});
   // Reject an invalid imported/template definition before inserting a draft.
   const definition = input.definition
     ? validate(input.definition, {
@@ -545,6 +527,7 @@ export async function createProjectWorkflow(
     dataSourceId: input.dataSourceId ?? null,
     auditStatus: "init",
     definition,
+    creationRequest: prepareWorkflowCreationRequest(input.requestKey,"project",{...input,requestKey:undefined,processCode:input.processCode?.trim().toUpperCase() || null,creationSource}),
   });
 }
 

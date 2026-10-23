@@ -1,3 +1,4 @@
+import { assertWorkflowConfigurationToken } from "./workflow-creation-request";
 import type mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
@@ -102,6 +103,7 @@ export async function lockWorkflowMutation(
     allowArchived?: boolean;
     activeProject?: boolean;
     expectedDefinitionVersion?: number;
+    expectedConfigurationToken?: string;
   } = {}
 ) {
   if (snapshot.projectId) {
@@ -138,6 +140,7 @@ export async function lockWorkflowMutation(
       code: "CONFLICT",
       message: "流程状态或归属已变化，请重新读取后确认；本次操作未提交。",
     });
+  assertWorkflowConfigurationToken(options.expectedConfigurationToken,workflow);
   assertWorkflowRevision(
     Number(workflow.definitionVersion),
     options.expectedDefinitionVersion ?? Number(snapshot.definitionVersion)

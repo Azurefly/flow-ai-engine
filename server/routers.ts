@@ -1,3 +1,4 @@
+import { workflowConfigurationToken } from "./workflow-creation-request";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import { getWorkflowPublicationAccess } from "./workflow-publication-access";
 import {
@@ -652,6 +653,7 @@ export const appRouter = router({
       .input(
         z.object({
           projectId: z.string().min(8).max(64),
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
           processCode: z.string().trim().min(2).max(64).optional(),
           name: z.string().trim().min(1).max(160),
           description: z.string().trim().max(1200).optional(),
@@ -1551,6 +1553,16 @@ export const appRouter = router({
       })),
   }),
   workflow: router({
+    operationAccess: protectedProcedure.input(z.object({workflowId:z.string().min(8).max(64).optional(),projectId:z.string().min(8).max(64).optional()}).optional()).query(async({ctx,input})=>{
+      const workflow=input?.workflowId ? await getWorkflow(input.workflowId,ctx.user) : null;
+      if(input?.workflowId && !workflow) return {canView:false,canCreate:false,canCopy:false,canArchive:false,source:null};
+      const projectId=workflow?.projectId ?? input?.projectId;
+      const projectAccess=projectId ? await getProjectAccess(ctx.user,projectId) : null;
+      const canCreate=projectId ? Boolean(projectAccess?.permissions.has("project:workflow:create")) : await hasSystemPermission(ctx.user,"workflow:create");
+      const access=workflow ? await getWorkflowAccess(ctx.user,workflow.id) : null;
+      return {canView:workflow ? Boolean(access?.permissions.has("workflow:view")) : projectId ? Boolean(projectAccess?.permissions.has("project:view")) : true,canCreate,canCopy:Boolean(workflow && !workflow.archivedAt && canCreate),canArchive:Boolean(workflow && !workflow.archivedAt && access?.permissions.has("workflow:members:manage")),source:workflow ? {id:workflow.id,name:workflow.name,description:workflow.description,flowType:workflow.flowType,projectId:workflow.projectId ?? null,definitionVersion:workflow.definitionVersion,status:workflow.status,archivedAt:workflow.archivedAt,folderId:workflow.folderId ?? null,dataSourceId:workflow.dataSourceId ?? null,configurationToken:workflowConfigurationToken(workflow)} : null};
+    }),
+
     search: protectedProcedure
       .input(z.object({ search: z.string().trim().min(1).max(100) }))
       .query(({ ctx, input }) => searchWorkflowDirectory(ctx.user, input.search)),
@@ -1638,11 +1650,13 @@ export const appRouter = router({
       .input(
         z.object({
           name: z.string().trim().min(1).max(160),
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
+          flowType: z.enum(["state","control"]).optional(),
           description: z.string().max(1200).optional(),
         })
       )
       .mutation(async ({ ctx, input }) =>
-        createWorkflow(ctx.user, input.name, input.description)
+        createWorkflow(ctx.user, input.name, input.description,{requestKey:input.requestKey,flowType:input.flowType})
       ),
     update: protectedProcedure
       .input(
@@ -1691,6 +1705,8 @@ export const appRouter = router({
       .input(
         z.object({
           id: z.string().min(8).max(64),
+          requestKey: z.string().regex(resourceRequestKeyPattern).optional(),
+          expectedConfigurationToken:z.string().regex(/^[a-f0-9]{64}$/).optional(),
           name: z.string().trim().min(1).max(160).optional(),
           expectedDefinitionVersion: z.number().int().positive().optional(),
         })
@@ -1700,15 +1716,17 @@ export const appRouter = router({
           input.id,
           ctx.user,
           input.name,
-          input.expectedDefinitionVersion
+          input.expectedDefinitionVersion,
+          input.requestKey,
+          input.expectedConfigurationToken
         );
         if (!workflow) throw new Error("流程不存在或无查看权限。");
         return workflow;
       }),
     delete: protectedProcedure
-      .input(z.object({ id: z.string().min(8).max(64), expectedDefinitionVersion: z.number().int().positive().optional() }))
+      .input(z.object({ id: z.string().min(8).max(64), expectedDefinitionVersion: z.number().int().positive().optional(), expectedConfigurationToken:z.string().regex(/^[a-f0-9]{64}$/).optional() }))
       .mutation(async ({ ctx, input }) => {
-        const archived = await archiveWorkflow(input.id, ctx.user, input.expectedDefinitionVersion);
+        const archived = await archiveWorkflow(input.id, ctx.user, input.expectedDefinitionVersion,input.expectedConfigurationToken);
         if (!archived) throw new Error("流程不存在或无归档权限。");
         return { success: true, archived: true };
       }),

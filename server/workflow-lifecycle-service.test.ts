@@ -253,3 +253,22 @@ it("复制前失去查看权限返回403且不创建空副本",async()=>{
   await expect(duplicateWorkflow(row.id,user,"副本",4)).rejects.toMatchObject({code:"FORBIDDEN"});
   expect(mocks.getConnection).not.toHaveBeenCalled();
 });
+
+it.each(["state","control","data"])("%s 副本保留目录和有效数据源，并分配独立合法代号",async flowType=>{
+ row.flowType=flowType;row.folderId="folder-a";row.dataSourceId=flowType==="data"?"data-a":null;
+ const original=tx.query.getMockImplementation();
+ tx.query.mockImplementation(async(sql:string,values:any[])=>sql.includes("FROM workflow_folder")||sql.includes("FROM data_source")?[[{id:values[0]}]]:original(sql,values));
+ await duplicateWorkflow(row.id,user,undefined,4);
+ const insert=tx.query.mock.calls.find(([sql]:[string])=>sql.startsWith("INSERT INTO workflow ("))[1];
+ expect(insert[2]).toBe("project-a");expect(insert[3]).toBe("folder-a");expect(insert[4]).toMatch(/^CPY_[A-Z0-9_-]+$/);expect(insert[7]).toBe(flowType);expect(insert[9]).toBe(flowType==="data"?"data-a":null);
+});
+
+it("创建回执与审计使用相同事务，审计失败不会提交回执",async()=>{
+ const original=tx.query.getMockImplementation();
+ tx.query.mockImplementation(async(sql:string,values:any[])=>sql.includes("FROM workflow_creation_request")?[[]]:original(sql,values));
+ mocks.audit.mockRejectedValue(new Error("audit fixture failure"));
+ await expect(createWorkflow(user,"回执创建",undefined,{requestKey:"abcdef0123456789abcdef0123456789"})).rejects.toMatchObject({code:"INTERNAL_SERVER_ERROR"});
+ expect(tx.query.mock.calls.filter(([sql]:[string])=>sql.startsWith("INSERT INTO workflow_creation_request"))).toHaveLength(1);
+ expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({details:expect.objectContaining({creationRequestId:expect.any(String)})}),tx);
+ expect(tx.commit).not.toHaveBeenCalled();expect(tx.rollback).toHaveBeenCalledOnce();
+});

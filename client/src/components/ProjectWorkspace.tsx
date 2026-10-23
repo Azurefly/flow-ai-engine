@@ -1202,31 +1202,23 @@ export function ProjectWorkspace({
   onOpenWorkflow,
   onOpenDetail,
   onOpenWarehouse,
+  onCreateWorkflow,
 }: {
   project: ProjectRecord;
   onBack: () => void;
   onOpenWorkflow: (workflowId: string) => void;
   onOpenDetail: (workflowId: string) => void;
   onOpenWarehouse: () => void;
+  onCreateWorkflow: (project:ProjectRecord) => void;
 }) {
   const utils = trpc.useUtils();
   const [view, setView] = useResourceDraftState<WorkspaceView>(project.id, "workspace", "view", "process", false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [filters, setFilters] = useState<ProcessFilters>({});
   const [filterForm, setFilterForm] = useState<ProcessFilters>({});
-  const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({
-    processCode: "",
-    name: "",
-    description: "",
-    flowType: "state" as "state" | "control" | "data",
-    creationSource: "manual" as "manual" | "warehouse",
-    dataSourceId: "",
-  });
   useEffect(() => {
     setFilters({});
     setFilterForm({});
-    setShowCreate(false);
   }, [project.id]);
   const access = trpc.project.access.useQuery(
     { projectId: project.id },
@@ -1245,38 +1237,11 @@ export function ProjectWorkspace({
     { projectId: project.id },
     { enabled: view === "services" }
   );
-  const createResources = trpc.data.resources.useQuery(
-    { projectId: project.id },
-    {
-      enabled:
-        showCreate &&
-        form.flowType === "data" &&
-        form.creationSource === "manual",
-    }
-  );
   const capabilities = projectCapabilities(
     access.data?.permissions,
     !access.isPending && !access.isError
   );
   const { canManage, canCreate } = capabilities;
-  const createWorkflow = trpc.project.createWorkflow.useMutation({
-    onSuccess: (workflow: any) => {
-      void utils.project.workflows.invalidate({ projectId: project.id });
-      void utils.project.invalidate();
-      setShowCreate(false);
-      setForm({
-        processCode: "",
-        name: "",
-        description: "",
-        flowType: "state",
-        creationSource: "manual",
-        dataSourceId: "",
-      });
-      toast.success("项目流程已创建，待审核后可发布。");
-      if (workflow?.id) onOpenWorkflow(workflow.id);
-    },
-    onError: error => toast.error(error.message),
-  });
   const runWorkflow = trpc.workflow.run.useMutation({
     onSuccess: result =>
       toast.success(`流程已发起：${result.runId.slice(0, 8)}`),
@@ -1453,34 +1418,9 @@ export function ProjectWorkspace({
             refreshingWorkflows={workflows.isFetching}
             workflowLoadFailed={workflows.isError}
             actionsReady={!workflows.isPending && !workflows.isError && capabilities.ready}
-            showCreate={showCreate}
-            setShowCreate={setShowCreate}
-            form={form}
-            setForm={setForm}
-            dataSources={(createResources.data?.sources ?? []) as any[]}
+            onOpenCreate={()=>onCreateWorkflow(project)}
             canCreate={canCreate}
             canManage={canManage}
-            creating={createWorkflow.isPending}
-            onCreate={() => {
-              if (form.creationSource === "warehouse") {
-                setShowCreate(false);
-                toast.message("请在流程仓库上传并导入流程定义。");
-                onOpenWarehouse();
-                return;
-              }
-              createWorkflow.mutate({
-                projectId: project.id,
-                processCode: form.processCode,
-                name: form.name,
-                description: form.description || undefined,
-                flowType: form.flowType,
-                creationSource: "manual",
-                dataSourceId:
-                  form.flowType === "data" && form.dataSourceId
-                    ? form.dataSourceId
-                    : null,
-              });
-            }}
             onOpenWorkflow={onOpenWorkflow}
             onOpenWarehouse={onOpenWarehouse}
             onLaunch={workflow =>
@@ -2050,22 +1990,9 @@ type ProcessCenterProps = {
   refreshingWorkflows: boolean;
   workflowLoadFailed: boolean;
   actionsReady: boolean;
-  showCreate: boolean;
-  setShowCreate: (value: boolean) => void;
-  form: {
-    processCode: string;
-    name: string;
-    description: string;
-    flowType: "state" | "control" | "data";
-    creationSource: "manual" | "warehouse";
-    dataSourceId: string;
-  };
-  setForm: (value: any) => void;
-  dataSources: any[];
+  onOpenCreate: () => void;
   canCreate: boolean;
   canManage: boolean;
-  creating: boolean;
-  onCreate: () => void;
   onOpenWorkflow: (workflowId: string) => void;
   onOpenWarehouse: () => void;
   onLaunch: (workflow: any) => void;
@@ -2139,15 +2066,9 @@ function ProcessCenter({
   refreshingWorkflows,
   workflowLoadFailed,
   actionsReady,
-  showCreate,
-  setShowCreate,
-  form,
-  setForm,
-  dataSources,
+  onOpenCreate,
   canCreate,
   canManage,
-  creating,
-  onCreate,
   onOpenWorkflow,
   onOpenWarehouse,
   onLaunch: startDataflow,
@@ -2233,9 +2154,6 @@ function ProcessCenter({
     });
     setLaunchWorkflow(workflow);
   };
-  const sourceNameById = new Map(
-    dataSources.map(source => [source.id, source.name])
-  );
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const totalPages = Math.max(1, Math.ceil(workflows.length / pageSize));
@@ -2331,7 +2249,7 @@ function ProcessCenter({
                   {workflow.flowType !== "data"
                     ? "不适用"
                     : workflow.dataSourceId
-                      ? sourceNameById.get(workflow.dataSourceId) ||
+                      ? workflow.dataSourceName ||
                         "已关联数据源"
                       : "未关联"}
                 </dd>
@@ -2493,7 +2411,7 @@ function ProcessCenter({
               type="button"
               size="sm"
               className="aiflow-type-control h-11 gap-1 bg-slate-900 px-2 font-medium text-white shadow-2xs hover:bg-slate-800 sm:h-8"
-              onClick={() => setShowCreate(true)}
+              onClick={onOpenCreate}
             >
               <Plus size={14} className="hidden sm:block" />
               新增流程
@@ -2502,120 +2420,7 @@ function ProcessCenter({
         </div>
       </div>
       <PermissionListFeedback name="流程操作权限" loading={!actionsReady && !workflowLoadFailed} error={workflowLoadFailed} onRetry={onRefreshWorkflows} />
-      <CreationDialog
-        open={showCreate}
-        onOpenChange={setShowCreate}
-        title="新增流程"
-        description="创建当前业务的流程草稿；从仓库导入将转到仓库页面。"
-        submitLabel={
-          form.creationSource === "warehouse" ? "前往流程仓库" : "创建并设计"
-        }
-        pending={creating}
-        onSubmit={onCreate}
-      >
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
-          <span>流程代号</span>
-          <Input
-            id="new-workflow-code"
-            className="aiflow-type-control min-h-11 min-[1024px]:min-h-9"
-            placeholder="例如 ORDER_APPROVAL"
-            value={form.processCode}
-            onChange={event =>
-              setForm({
-                ...form,
-                processCode: event.target.value.toUpperCase(),
-              })
-            }
-            required
-          />
-        </label>
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
-          <span>流程名称</span>
-          <Input
-            id="new-workflow-name"
-            className="aiflow-type-control min-h-11 min-[1024px]:min-h-9"
-            placeholder="例如 采购审批"
-            value={form.name}
-            onChange={event => setForm({ ...form, name: event.target.value })}
-            required
-          />
-        </label>
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
-          <span>流程说明（可选）</span>
-          <Input
-            id="new-workflow-description"
-            className="aiflow-type-control min-h-11 min-[1024px]:min-h-9"
-            placeholder="说明流程用途，便于列表筛选和协作"
-            value={form.description}
-            onChange={event =>
-              setForm({ ...form, description: event.target.value })
-            }
-          />
-        </label>
-        <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
-          <span>流程类型</span>
-          <select
-            id="new-workflow-type"
-            className="aiflow-type-control min-h-11 rounded-md border border-border bg-card px-2 min-[1024px]:min-h-9"
-            value={form.flowType}
-            onChange={event =>
-              setForm({
-                ...form,
-                flowType: event.target.value as typeof form.flowType,
-                dataSourceId:
-                  event.target.value === "data" ? form.dataSourceId : "",
-              })
-            }
-          >
-            <option value="state">状态流程</option>
-            <option value="control">控制流程</option>
-            <option value="data">数据流程</option>
-          </select>
-        </label>
-        <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
-          <span>创建方式</span>
-          <select
-            id="new-workflow-source"
-            className="aiflow-type-control min-h-11 rounded-md border border-border bg-card px-2 min-[1024px]:min-h-9"
-            value={form.creationSource}
-            onChange={event =>
-              setForm({
-                ...form,
-                creationSource: event.target
-                  .value as typeof form.creationSource,
-              })
-            }
-          >
-            <option value="manual">手工创建</option>
-            <option value="warehouse">从仓库导入</option>
-          </select>
-        </label>
-        {form.creationSource === "manual" && form.flowType === "data" && (
-          <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
-            <span>关联数据源（可选）</span>
-            <select
-              id="new-workflow-data-source"
-              className="aiflow-type-control min-h-11 rounded-md border border-border bg-card px-2 min-[1024px]:min-h-9"
-              value={form.dataSourceId}
-              onChange={event =>
-                setForm({ ...form, dataSourceId: event.target.value })
-              }
-            >
-              <option value="">不关联数据源</option>
-              {dataSources
-                .filter(source => source.status !== "disabled")
-                .map(source => (
-                  <option key={source.id} value={source.id}>
-                    {source.name} · {source.sourceType}
-                  </option>
-                ))}
-            </select>
-          </label>
-        )}
-        <p className="aiflow-type-body leading-5 text-muted-foreground">
-          流程代号在当前业务内唯一。数据流程可选择当前业务未停用的数据源。
-        </p>
-      </CreationDialog>
+
       <div className="mb-4 rounded-lg border border-border bg-card shadow-2xs">
         <div className="grid grid-cols-2 gap-2 p-3 sm:grid-cols-[minmax(0,1fr)_180px_auto_auto]">
           <Input

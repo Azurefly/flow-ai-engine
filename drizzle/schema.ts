@@ -1266,16 +1266,35 @@ export const projectPlugins = mysqlTable(
 );
 
 /** Durable creation receipts contain hashes and identifiers, never raw submitted configuration. */
+export const workflowCreationRequests = mysqlTable(
+  "workflow_creation_request",
+  {
+    id: varchar("id", { length: 36 }).primaryKey(),
+    actorUserId: int("actorUserId").notNull(),
+    // Keep the original scope and result identifiers after archival/deletion.
+    // A replay must report the previous result's state, never create a new one.
+    projectId: varchar("projectId", { length: 36 }),
+    requestKind: mysqlEnum("requestKind", ["global", "project", "duplicate"]).notNull(),
+    requestKeyHash: varchar("requestKeyHash", { length: 64 }).notNull(),
+    payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+    workflowId: varchar("workflowId", { length: 36 }).notNull(),
+    createdAt: timestamp("createdAt").defaultNow().notNull(),
+  },
+  table => [
+    foreignKey({name:"workflow_creation_request_actor_fk",columns:[table.actorUserId],foreignColumns:[users.id]}).onDelete("cascade"),
+    unique("workflow_creation_request_identity_unique").on(
+      table.actorUserId,
+      table.requestKeyHash
+    ),
+  ]
+);
+
 export const resourceCreationRequests = mysqlTable(
   "resource_creation_request",
   {
     id: varchar("id", { length: 36 }).primaryKey(),
-    actorUserId: int("actorUserId")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    projectId: varchar("projectId", { length: 36 })
-      .notNull()
-      .references(() => flowProjects.id, { onDelete: "cascade" }),
+    actorUserId: int("actorUserId").notNull(),
+    projectId: varchar("projectId", { length: 36 }).notNull(),
     resourceKind: mysqlEnum("resourceKind", [
       "source",
       "asset",
@@ -1289,6 +1308,8 @@ export const resourceCreationRequests = mysqlTable(
     createdAt: timestamp("createdAt").defaultNow().notNull(),
   },
   table => [
+    foreignKey({name:"resource_creation_request_actor_fk",columns:[table.actorUserId],foreignColumns:[users.id]}).onDelete("cascade"),
+    foreignKey({name:"resource_creation_request_project_fk",columns:[table.projectId],foreignColumns:[flowProjects.id]}).onDelete("cascade"),
     unique("resource_creation_request_identity_unique").on(
       table.actorUserId,
       table.projectId,

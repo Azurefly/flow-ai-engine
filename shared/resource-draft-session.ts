@@ -111,6 +111,27 @@ export class ResourceDraftStore {
       this.hasDraftCategory("organization-configuration", projectId)
     );
   }
+  hasWorkflowDraft(projectId?: string) {
+    const matches = (scope: string, category: string) =>
+      (!projectId || scope === projectId) &&
+      (category === "workflow-create" || category.startsWith("workflow-copy:"));
+    return (
+      Array.from(this.entries.values()).some(
+        entry => matches(entry.projectId, entry.category) && this.dirty(entry)
+      ) ||
+      Array.from(this.creations.values()).some(
+        attempt =>
+          matches(attempt.projectId, attempt.category) && attempt.uncertain
+      )
+    );
+  }
+  clearCategory(projectId: string, category: string) {
+    for (const [slot, entry] of Array.from(this.entries.entries()))
+      if (entry.projectId === projectId && entry.category === category)
+        this.entries.delete(slot);
+    this.creations.delete(this.slot(projectId, category, "creation"));
+    this.emit();
+  }
   begin(projectId: string, category: string) {
     const slot = this.slot(projectId, category, "pending");
     this.pending.set(slot, {
@@ -200,7 +221,12 @@ export class ResourceDraftStore {
     }
   }
   exportDrafts() {
-    return Array.from(this.entries.values())
+    const drafts: Array<{
+      projectId: string;
+      category: string;
+      field: string;
+      value: unknown;
+    }> = Array.from(this.entries.values())
       .filter(entry => this.dirty(entry))
       .map(entry => ({
         projectId: entry.projectId,
@@ -221,5 +247,40 @@ export class ResourceDraftStore {
               }
             : entry.value,
       }));
+    for (const attempt of Array.from(this.creations.values())) {
+      if (
+        !attempt.uncertain ||
+        !(
+          attempt.category === "workflow-create" ||
+          attempt.category.startsWith("workflow-copy:")
+        )
+      )
+        continue;
+      drafts.push({
+        projectId: attempt.projectId,
+        category: attempt.category,
+        field: "unconfirmed-creation",
+        value: {
+          requestKey: attempt.key,
+          uncertain: true,
+          payload: Object.fromEntries(
+            Object.entries(attempt.payload).filter(([key]) =>
+              [
+                "projectId",
+                "name",
+                "id",
+                "processCode",
+                "description",
+                "flowType",
+                "dataSourceId",
+                "expectedDefinitionVersion",
+                "expectedConfigurationToken",
+              ].includes(key)
+            )
+          ),
+        },
+      });
+    }
+    return drafts;
   }
 }
