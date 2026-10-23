@@ -162,7 +162,12 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         'className="aiflow-type-body mb-8 text-muted-foreground"'
       );
       expect(styleSource).toContain('label:not([class*="aiflow-type-"])');
-      expect(homeSource).toContain("aiflow-type-control grid min-w-0 gap-1.5");
+      expect(
+        readFileSync(
+          "client/src/components/SystemRoleAssignmentDialog.tsx",
+          "utf8"
+        )
+      ).toContain("grid gap-1.5 aiflow-type-control");
       expect(projectWorkspaceSource).toContain(
         "aiflow-type-control block space-y-1"
       );

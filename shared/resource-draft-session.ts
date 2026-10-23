@@ -106,7 +106,8 @@ export class ResourceDraftStore {
   hasAuthorizationDraft(projectId?: string) {
     return (
       this.hasDraftCategory("project-authorization", projectId) ||
-      this.hasDraftCategory("workflow-authorization", projectId)
+      this.hasDraftCategory("workflow-authorization", projectId) ||
+      this.hasDraftCategory("system-authorization", projectId)
     );
   }
   begin(projectId: string, category: string) {

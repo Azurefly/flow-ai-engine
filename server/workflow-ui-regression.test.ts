@@ -14,16 +14,12 @@ const authorizationSource = source(
 
 describe("分页流程缓存联动", () => {
   it("直接系统角色授予撤销和角色定义修改刷新资源权限与列表", () => {
-    for (const marker of [
-      "const assignSystemRole =",
-      "const revokeRole =",
-      "onSaved={async code => {",
-    ]) {
+    for (const marker of ["const revokeRole =", "onSaved={async code => {"]) {
       const callback = homeSource.split(marker)[1]?.split("toast.success")[0];
       expect(callback).toContain("refreshRoleQueries()");
       const refresh = homeSource
         .split("const refreshRoleQueries =")[1]
-        ?.split("const assignSystemRole")[0];
+        ?.split("const revokeRole")[0];
       for (const query of ["workflow", "project"])
         expect(refresh).toContain(`utils.${query}.invalidate()`);
     }
@@ -456,7 +452,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_517 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_522 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 457 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -1403,18 +1399,18 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1 text-center min-[640px]:gap-2 min-[640px]:px-3 min-[1024px]:h-10"
     );
-    expect(homeSource).toContain(
-      "aiflow-type-control h-11 min-h-11 min-w-0 rounded-md border border-border bg-card px-2 min-[1024px]:h-10 min-[1024px]:min-h-0"
-    );
-    expect(homeSource).toContain(
-      'className="aiflow-type-body font-normal text-muted-foreground"'
-    );
-    expect(homeSource).toContain(
-      'className="aiflow-type-control ml-2 inline-flex min-h-11 items-center px-1 underline min-[1024px]:min-h-0"'
-    );
-    expect(homeSource).toContain(
-      'className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground"'
-    );
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("min-h-11 w-full min-w-0 rounded-md");
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("aiflow-type-body");
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("重新读取角色与账号");
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("useResourceDraftState");
     expect(homeSource).toContain('aria-label="搜索用户"');
     expect(homeSource).toContain('aria-label="搜索角色"');
     expect(homeSource).toContain(
@@ -1426,13 +1422,19 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "filteredRoles.some(role => Number(role.id) === selectedRoleId)"
     );
-    expect(homeSource).toContain("assignSystemRole.useMutation");
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("assignSystemRole.useMutation");
     expect(homeSource).toContain("revokeRoleAssignment.useMutation");
-    expect(homeSource).toContain("为用户绑定角色");
-    expect(homeSource).toContain("为角色绑定用户");
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("为用户绑定角色");
+    expect(
+      source("../client/src/components/SystemRoleAssignmentDialog.tsx")
+    ).toContain("为角色绑定用户");
     expect(homeSource).toContain("min-[640px]:hidden");
     expect(homeSource).toContain("hidden min-[640px]:inline");
-    expect(iamServiceSource).toContain("请勿重复绑定");
+    expect(source("./iam-assignment-service.ts")).toContain("请勿重复绑定");
     expect(routerSource).toContain("previewUserBatch: iamManageProcedure");
     expect(routerSource).toContain("createUsersBatch: iamManageProcedure");
     expect(routerSource).toContain(

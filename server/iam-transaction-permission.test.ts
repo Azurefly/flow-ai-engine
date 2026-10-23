@@ -11,7 +11,15 @@ beforeEach(() => {
   });
 });
 it("委派管理员的权限在已有事务连接查询，避免连接池互相等待", async () => {
-  mocks.query.mockResolvedValueOnce([[{ code: "iam:manage" }], []]);
+  mocks.query.mockImplementation(async (sql: string) => {
+    if (sql.includes("FROM role_assignment"))
+      return [[{ roleId: 2, scopeType: "system" }]];
+    if (sql.includes("FROM organization_membership")) return [[]];
+    if (sql.includes("FROM iam_role")) return [[{ id: 2, code: "custom_iam" }]];
+    if (sql.includes("FROM role_permission")) return [[{ permissionId: 3 }]];
+    if (sql.includes("FROM permission")) return [[{ code: "iam:manage" }]];
+    throw new Error("Unexpected current read");
+  });
   expect(
     await hasSystemPermission(
       { id: 17, role: "user" },
@@ -20,13 +28,12 @@ it("委派管理员的权限在已有事务连接查询，避免连接池互相�
     )
   ).toBe(true);
   expect(mocks.pool).not.toHaveBeenCalled();
-  expect(mocks.query).toHaveBeenCalledOnce();
-  expect(mocks.query.mock.calls[0][0]).toContain(
-    "WITH RECURSIVE membership_units"
-  );
+  expect(mocks.query).toHaveBeenCalledTimes(5);
+  for (const [sql] of mocks.query.mock.calls)
+    expect(sql).toContain("FOR SHARE");
 });
 it("已撤销的事务权限不会使用之前的目录结果", async () => {
-  mocks.query.mockResolvedValueOnce([[], []]);
+  mocks.query.mockResolvedValue([[]]);
   expect(
     await hasSystemPermission(
       { id: 17, role: "user" },

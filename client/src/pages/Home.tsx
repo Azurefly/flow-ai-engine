@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ProjectRecord } from "@/components/ProjectWorkspace";
 import { CreationDialog } from "@/components/CreationDialog";
-import { ResourceDraftSession, ResourceDraftRecoveryNotice } from "@/components/ResourceDraftSession";
+import { ResourceDraftSession, ResourceDraftRecoveryNotice, useResourceDraftState, useResourceDraftPending, useResourceDraftSummary } from "@/components/ResourceDraftSession";
 import {
   Dialog,
   DialogContent,
@@ -124,6 +124,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+const SystemRoleAssignmentDialog = lazy(() => import("@/components/SystemRoleAssignmentDialog"));
 const WorkflowRoleBindingsDialog = lazy(
   () => import("@/components/WorkflowRoleBindingsDialog")
 );
@@ -424,6 +425,7 @@ function FlowConsole({
   }, []);
   const utils = trpc.useUtils();
   const [initialRoute] = useState(readConsoleRoute);
+  const resourceDrafts = useResourceDraftSummary();
   const canManageIdentity = user.canManageIdentity;
   const systemRootView = user.role === "admin" ? "config" : "identity";
   const [requestedRoute, setRequestedRoute] =
@@ -747,10 +749,7 @@ function FlowConsole({
     enabled: editorActive && canViewWorkflow,
     retry: false,
   });
-  const roles = trpc.iam.roles.useQuery(undefined, {
-    enabled: identityActive,
-    retry: false,
-  });
+  const roles = trpc.iam.roles.useQuery(undefined, authorizationQueryPolicy(identityActive));
   const audit = trpc.iam.authorizationAudit.useQuery(
     { limit: 20 },
     { enabled: identityActive, retry: false }
@@ -1774,7 +1773,7 @@ function FlowConsole({
             flowView === "center" &&
             !routeRestoring &&
             (
-                <BusinessCenter
+                <><ResourceDraftRecoveryNotice onRetry={()=>void (async()=>{const account=await utils.auth.me.fetch();if(account?.canManageIdentity&&resourceDrafts.systemAuthorization){const route:ConsoleRoute={section:"system",view:"identity"};setRequestedRoute({route});consoleHistory.current?.replaceSilently(formatConsoleRoute(route),{aiflowEditorReturn:null});}})()}/>                <BusinessCenter
                   status={businessStatus} onStatusChange={setBusinessStatus}
                   canCreate={
                     user.role === "admin" ||
@@ -1787,7 +1786,7 @@ function FlowConsole({
                       projectId: project.id,
                     })
                   }
-                />
+                /></>
             )}
           {section === "flows" &&
             !routeRestoring &&
@@ -2264,6 +2263,7 @@ function FlowConsole({
                     ← {user.role === "admin" ? "返回系统配置" : "返回工作区"}
                   </button>
                   <Button className="ml-2 mb-4 min-h-11" variant="outline" onClick={() => navigateRoute({ section: "system", view: "organization" })}>组织架构</Button>
+                  {roles.isError ? <section role="alert" className="grid gap-3 rounded-xl border border-border bg-card p-4"><p>身份目录暂不可用，已隐藏缓存。请重新读取当前权限与目录。</p><ResourceDraftRecoveryNotice/><Button variant="outline" onClick={()=>void Promise.allSettled([roles.refetch(),utils.auth.me.invalidate()])}>重新读取权限与目录</Button></section> : (
                   <IamCenter
                     currentUserId={user.id}
                     changingStatus={updateUserStatus.isPending}
@@ -2315,6 +2315,7 @@ function FlowConsole({
                       });
                     }}
                   />
+                  )}
                 </div>
               </div>
             )}
@@ -3588,8 +3589,6 @@ function IamCenter({
   const [userPage, setUserPage] = useState(0);
   const [rolePage, setRolePage] = useState(0);
   const [auditPage, setAuditPage] = useState(0);
-  const [roleCandidateSearch, setRoleCandidateSearch] = useState("");
-  const [roleCandidatePage, setRoleCandidatePage] = useState(0);
   const [roleSearch, setRoleSearch] = useState("");
   const [auditSearch, setAuditSearch] = useState("");
   const [auditCategory, setAuditCategory] = useState("all");
@@ -3598,16 +3597,12 @@ function IamCenter({
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
   const [mobileUserDetailsOpen, setMobileUserDetailsOpen] = useState(false);
   const [mobileRoleDetailsOpen, setMobileRoleDetailsOpen] = useState(false);
-  const [pendingRevokeRoleId, setPendingRevokeRoleId] = useState<string | null>(
-    null
-  );
-  const [assignmentDialog, setAssignmentDialog] = useState<{
-    mode: "user" | "role";
-    userId: string;
-    roleCode: string;
-  } | null>(null);
-  const [assignmentHours, setAssignmentHours] = useState("");
-  const [assignmentNote, setAssignmentNote] = useState("");
+  const [revokeTarget,setRevokeTarget]=useState<{id:string;userId:number;userLabel:string;roleName:string;scopeLabel:string}|null>(null);
+  const pendingRevokeRoleId=revokeTarget?.id??null;
+  const [revokeError,setRevokeError]=useState("");
+  const roleWriteLock=useRef(false);
+  const beginRoleWrite=useResourceDraftPending("iam","system-authorization");
+  const [assignmentTarget,setAssignmentTarget]=useResourceDraftState<import("@/components/SystemRoleAssignmentDialog").SystemRoleTarget|null>("iam","system-authorization","dialog",null,false);
   const [selectedPreviewUsers, setSelectedPreviewUsers] = useState<Set<string>>(
     new Set()
   );
@@ -3625,22 +3620,6 @@ function IamCenter({
     },
     { enabled: tab === "users", retry: false }
   );
-  const roleAssignmentUsers = trpc.iam.roleAssignableUsers.useQuery(
-    {
-      roleId: selectedRoleId ?? 1,
-      search: roleCandidateSearch.trim(),
-      offset: roleCandidatePage * userPageSize,
-      limit: userPageSize,
-    },
-    authorizationQueryPolicy(
-      assignmentDialog?.mode === "role" && selectedRoleId !== null
-    )
-  );
-  const roleCandidateTotal = roleAssignmentUsers.data?.total ?? 0;
-  const roleCandidatePageCount = Math.max(
-    1,
-    Math.ceil(roleCandidateTotal / userPageSize)
-  );
   const filteredUsers = userDirectory.data?.items ?? [];
   const userTotal = userDirectory.data?.total ?? 0;
   const userPageCount = Math.max(1, Math.ceil(userTotal / userPageSize));
@@ -3653,30 +3632,27 @@ function IamCenter({
     { roleId: selectedRoleId ?? 1 },
     authorizationQueryPolicy(tab === "roles" && selectedRoleId !== null)
   );
-  const roleCandidateUsers = roleAssignmentUsers.data?.items ?? [];
   const refreshRoleQueries = () => Promise.all([
     utils.iam.invalidate(), utils.auth.me.invalidate(),
     utils.workflow.invalidate(),
     utils.project.invalidate(),
   ]);
-  const assignSystemRole = trpc.iam.assignSystemRole.useMutation({
-    onSuccess: async () => {
-      await refreshRoleQueries();
-      setAssignmentDialog(null);
-      setAssignmentHours("");
-      setAssignmentNote("");
-      toast.success("角色绑定已生效。");
-    },
-    onError: error => toast.error(error.message),
-  });
   const revokeRole = trpc.iam.revokeRoleAssignment.useMutation({
-    onSuccess: async () => {
-      await refreshRoleQueries();
-      setPendingRevokeRoleId(null);
-      toast.success("直接角色授权已撤销。");
-    },
-    onError: error => toast.error(error.message),
+    onSuccess: () => { setRevokeTarget(null); setRevokeError(""); void refreshRoleQueries(); toast.success("直接角色授权已撤销。"); },
+    onError: error => {setRevokeError(`${error.message} 请先读取列表核对结果。`);void utils.iam.roles.invalidate();},
   });
+  const requestRoleRevoke = (id:string|null) => {
+    if(roleWriteLock.current)return;
+    if(!id){setRevokeTarget(null);return;}
+    const role=userDetails.data?.directRoles.find((row:any)=>row.assignmentId===id);
+    if(!role||!selectedUserId||!userDetails.data)return;
+    setRevokeError("");setRevokeTarget({id,userId:selectedUserId,userLabel:userDetails.data.user.name||userDetails.data.user.username,roleName:role.roleName,scopeLabel:role.scopeType==="system"?"系统范围":role.scopeName||role.scopeId});
+  };
+  const confirmRoleRevoke = async () => {
+    if(!revokeTarget||roleWriteLock.current)return;
+    roleWriteLock.current=true;const finish=beginRoleWrite();setRevokeError("");
+    try{await revokeRole.mutateAsync({assignmentId:revokeTarget.id});}catch{}finally{roleWriteLock.current=false;finish();}
+  };
 
   const filteredRoles = useMemo(() => {
     const keyword = roleSearch.trim().toLowerCase();
@@ -3740,14 +3716,7 @@ function IamCenter({
     auditPage * auditPageSize,
     (auditPage + 1) * auditPageSize
   );
-  const systemRoles = useMemo(
-    () => roles.filter(role => role.scope === "system"),
-    [roles]
-  );
   const selectedRole = roles.find(role => Number(role.id) === selectedRoleId);
-  const pendingRevokeRole = userDetails.data?.directRoles.find(
-    (role: any) => role.assignmentId === pendingRevokeRoleId
-  );
 
   useEffect(() => {
     if (!userDirectory.isSuccess) return;
@@ -3775,19 +3744,6 @@ function IamCenter({
     userPageCount,
   ]);
 
-  useEffect(() => {
-    if (
-      assignmentDialog?.mode === "role" &&
-      roleAssignmentUsers.isSuccess &&
-      roleCandidatePage >= roleCandidatePageCount
-    )
-      setRoleCandidatePage(roleCandidatePageCount - 1);
-  }, [
-    assignmentDialog?.mode,
-    roleAssignmentUsers.isSuccess,
-    roleCandidatePage,
-    roleCandidatePageCount,
-  ]);
   useEffect(() => {
     if (!filteredRoles.length) {
       if (selectedRoleId !== null) setSelectedRoleId(null);
@@ -3853,48 +3809,8 @@ function IamCenter({
     setAiPreview(null);
   };
 
-  const openUserAssignment = () => {
-    if (!selectedUserId) return;
-    const assignedCodes = new Set(
-      (userDetails.data?.directRoles ?? []).map((role: any) => role.roleCode)
-    );
-    const firstAvailableRole = systemRoles.find(
-      role => !assignedCodes.has(role.code)
-    );
-    setMobileUserDetailsOpen(false);
-    setAssignmentDialog({
-      mode: "user",
-      userId: String(selectedUserId),
-      roleCode: firstAvailableRole?.code ?? "",
-    });
-  };
-
-  const openRoleAssignment = () => {
-    if (!selectedRole || selectedRole.scope !== "system") return;
-    setMobileRoleDetailsOpen(false);
-    setRoleCandidateSearch("");
-    setRoleCandidatePage(0);
-    setAssignmentDialog({
-      mode: "role",
-      userId: "",
-      roleCode: selectedRole.code,
-    });
-  };
-
-  const submitRoleAssignment = () => {
-    if (!assignmentDialog?.userId || !assignmentDialog.roleCode) return;
-    const expiry = roleExpiryInput(assignmentHours);
-    if (expiry.error) {
-      toast.error(expiry.error);
-      return;
-    }
-    assignSystemRole.mutate({
-      userId: Number(assignmentDialog.userId),
-      roleCode: assignmentDialog.roleCode,
-      expiresAt: expiry.expiresAt,
-      note: assignmentNote.trim() || undefined,
-    });
-  };
+  const openUserAssignment=()=>{if(!selectedUserId||!userDetails.data)return;setMobileUserDetailsOpen(false);setAssignmentTarget({mode:"user",userId:String(selectedUserId),userLabel:`${userDetails.data.user.name||userDetails.data.user.username}（${userDetails.data.user.username}）`});};
+  const openRoleAssignment=()=>{if(!selectedRole||selectedRole.scope!=="system")return;setMobileRoleDetailsOpen(false);setAssignmentTarget({mode:"role",roleCode:selectedRole.code,roleName:selectedRole.name,configToken:selectedRole.configToken});};
 
   return (
     <div className="space-y-5 p-4 lg:p-6 [&_input]:h-11 [&_select]:h-11 [&_button]:min-h-11 min-[1024px]:[&_input]:h-10 min-[1024px]:[&_select]:h-10 min-[1024px]:[&_button]:min-h-10">
@@ -4213,230 +4129,8 @@ function IamCenter({
         )}
       </CreationDialog>
 
-      <CreationDialog
-        open={assignmentDialog !== null}
-        onOpenChange={open => {
-          if (!open) setAssignmentDialog(null);
-        }}
-        title={
-          assignmentDialog?.mode === "role"
-            ? "为角色绑定用户"
-            : "为用户绑定角色"
-        }
-        description="在当前主从工作台中完成直接系统角色授权；组织继承角色仍在组织架构中维护。"
-        submitLabel="确认绑定"
-        pending={assignSystemRole.isPending}
-        submitDisabled={
-          !assignmentDialog?.userId ||
-          !assignmentDialog.roleCode ||
-          Boolean(roleExpiryInput(assignmentHours).error)
-        }
-        onSubmit={submitRoleAssignment}
-      >
-        {assignmentDialog?.mode === "user" ? (
-          <>
-            <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-              当前用户
-              <Input
-                className="aiflow-type-control h-11 min-h-11 min-w-0 min-[1024px]:h-10 min-[1024px]:min-h-0"
-                value={
-                  userDetails.data?.user.name ||
-                  userDetails.data?.user.username ||
-                  ""
-                }
-                disabled
-              />
-            </label>
-            <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-              系统角色
-              <select
-                className="aiflow-type-control h-11 min-h-11 min-w-0 rounded-md border border-border bg-card px-2 min-[1024px]:h-10 min-[1024px]:min-h-0"
-                value={assignmentDialog.roleCode}
-                onChange={event =>
-                  setAssignmentDialog({
-                    ...assignmentDialog,
-                    roleCode: event.target.value,
-                  })
-                }
-                required
-              >
-                <option value="">暂无可绑定角色</option>
-                {systemRoles
-                  .filter(
-                    role =>
-                      !(userDetails.data?.directRoles ?? []).some(
-                        (assigned: any) => assigned.roleCode === role.code
-                      )
-                  )
-                  .map(role => (
-                    <option key={role.id} value={role.code}>
-                      {role.name}（{role.code}）
-                    </option>
-                  ))}
-              </select>
-            </label>
-          </>
-        ) : (
-          <>
-            <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-              当前角色
-              <Input
-                className="aiflow-type-control h-11 min-h-11 min-w-0 min-[1024px]:h-10 min-[1024px]:min-h-0"
-                value={
-                  selectedRole
-                    ? `${selectedRole.name}（${selectedRole.code}）`
-                    : ""
-                }
-                disabled
-              />
-            </label>
-            <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-              搜索内部用户
-              <Input
-                className="aiflow-type-control h-11 min-h-11 min-w-0 min-[1024px]:h-10 min-[1024px]:min-h-0"
-                value={roleCandidateSearch}
-                maxLength={160}
-                placeholder="按姓名、用户名或邮箱搜索"
-                onChange={event => {
-                  setRoleCandidateSearch(event.target.value);
-                  setRoleCandidatePage(0);
-                  setAssignmentDialog(current =>
-                    current?.mode === "role"
-                      ? { ...current, userId: "" }
-                      : current
-                  );
-                }}
-              />
-            </label>
-            <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-              选择内部用户
-              <select
-                className="aiflow-type-control h-11 min-h-11 min-w-0 rounded-md border border-border bg-card px-2 min-[1024px]:h-10 min-[1024px]:min-h-0"
-                value={assignmentDialog?.userId ?? ""}
-                disabled={
-                  roleAssignmentUsers.isPending || roleAssignmentUsers.isError
-                }
-                onChange={event =>
-                  assignmentDialog &&
-                  setAssignmentDialog({
-                    ...assignmentDialog,
-                    userId: event.target.value,
-                  })
-                }
-                required
-              >
-                <option value="">
-                  {roleAssignmentUsers.isPending
-                    ? "正在读取用户…"
-                    : roleCandidateUsers.length
-                      ? "请选择用户"
-                      : "当前页无可绑定用户"}
-                </option>
-                {roleCandidateUsers.map(account => (
-                  <option key={account.id} value={account.id}>
-                    {account.name || account.username}（{account.username}）
-                  </option>
-                ))}
-              </select>
-              {roleAssignmentUsers.isSuccess && (
-                <span className="aiflow-type-body font-normal text-muted-foreground">
-                  可绑定用户 {roleCandidateTotal} 条，当前页{" "}
-                  {roleCandidateUsers.length}{" "}
-                  条；已停用或已绑定账号已从结果中排除。
-                </span>
-              )}
-              {roleAssignmentUsers.isError && (
-                <span className="aiflow-type-body text-aiflow-danger">
-                  用户候选读取失败：{roleAssignmentUsers.error.message}
-                  <button
-                    type="button"
-                    className="aiflow-type-control ml-2 inline-flex min-h-11 items-center px-1 underline min-[1024px]:min-h-0"
-                    onClick={() => void roleAssignmentUsers.refetch()}
-                  >
-                    重试
-                  </button>
-                </span>
-              )}
-            </label>
-            {roleAssignmentUsers.isSuccess &&
-              roleCandidateTotal > userPageSize && (
-                <div className="aiflow-type-body flex items-center justify-between gap-2 text-muted-foreground">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-11 min-[1024px]:h-10"
-                    disabled={roleCandidatePage === 0}
-                    onClick={() => {
-                      setRoleCandidatePage(page => page - 1);
-                      setAssignmentDialog(current =>
-                        current?.mode === "role"
-                          ? { ...current, userId: "" }
-                          : current
-                      );
-                    }}
-                  >
-                    上一页
-                  </Button>
-                  <span aria-live="polite">
-                    {roleCandidatePage + 1} / {roleCandidatePageCount}
-                  </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-11 min-[1024px]:h-10"
-                    disabled={roleCandidatePage + 1 >= roleCandidatePageCount}
-                    onClick={() => {
-                      setRoleCandidatePage(page => page + 1);
-                      setAssignmentDialog(current =>
-                        current?.mode === "role"
-                          ? { ...current, userId: "" }
-                          : current
-                      );
-                    }}
-                  >
-                    下一页
-                  </Button>
-                </div>
-              )}
-          </>
-        )}
-        <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-          有效期小时（可选）
-          <Input
-            className="aiflow-type-control h-11 min-h-11 min-w-0 min-[1024px]:h-10 min-[1024px]:min-h-0"
-            type="number"
-            min={1}
-            step={1}
-            aria-invalid={Boolean(roleExpiryInput(assignmentHours).error)}
-            aria-describedby="role-expiry-description"
-            placeholder="留空表示长期有效"
-            value={assignmentHours}
-            onChange={event => setAssignmentHours(event.target.value)}
-          />
-        </label>
-        <p
-          id="role-expiry-description"
-          role="status"
-          className={`text-sm ${roleExpiryInput(assignmentHours).error ? "text-aiflow-danger" : "text-muted-foreground"}`}
-        >
-          {roleExpiryInput(assignmentHours).error ||
-            (assignmentHours.trim()
-              ? "临时授权将在指定小时数后自动失效。"
-              : "长期授权持续有效，直到主动撤销。")}
-        </p>
-        <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
-          授权备注（可选）
-          <Input
-            className="aiflow-type-control h-11 min-h-11 min-w-0 min-[1024px]:h-10 min-[1024px]:min-h-0"
-            maxLength={320}
-            placeholder="记录授权原因，最多 320 字"
-            value={assignmentNote}
-            onChange={event => setAssignmentNote(event.target.value)}
-          />
-        </label>
-      </CreationDialog>
+      {assignmentTarget && <Suspense fallback={<p role="status">正在加载角色授权表单…</p>}><SystemRoleAssignmentDialog key={`${assignmentTarget.mode}:${assignmentTarget.userId||assignmentTarget.roleCode}`} target={assignmentTarget} onClose={()=>setAssignmentTarget(null)}/></Suspense>}
+
 
       <div
         role="tablist"
@@ -4680,7 +4374,7 @@ function IamCenter({
               selectedUserId={selectedUserId}
               details={userDetails}
               onAssign={openUserAssignment}
-              onRevoke={setPendingRevokeRoleId}
+              onRevoke={requestRoleRevoke}
               revoking={revokeRole.isPending}
             />
           </section>
@@ -4700,7 +4394,7 @@ function IamCenter({
                   selectedUserId={selectedUserId}
                   details={userDetails}
                   onAssign={openUserAssignment}
-                  onRevoke={setPendingRevokeRoleId}
+                  onRevoke={requestRoleRevoke}
                   revoking={revokeRole.isPending}
                   embedded
                 />
@@ -4710,27 +4404,21 @@ function IamCenter({
           <Dialog
             open={pendingRevokeRoleId !== null}
             onOpenChange={open => {
-              if (!open && !revokeRole.isPending) setPendingRevokeRoleId(null);
+              if (!open && !revokeRole.isPending) requestRoleRevoke(null);
             }}
           >
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>撤销直接角色授权</DialogTitle>
-                <DialogDescription>
-                  将从“
-                  {userDetails.data?.user.name ||
-                    userDetails.data?.user.username ||
-                    "当前用户"}
-                  ”移除“{pendingRevokeRole?.roleName || "所选角色"}
-                  ”的直接授权。依赖此角色的权限会立即失效，组织继承角色不受影响。
-                </DialogDescription>
+                <DialogDescription>将从“{revokeTarget?.userLabel}”移除“{revokeTarget?.roleName}”在“{revokeTarget?.scopeLabel}”的直接授权；其他授权来源继续生效。</DialogDescription>
               </DialogHeader>
+              {revokeError&&<p role="alert" className="aiflow-type-body text-destructive">{revokeError}</p>}
               <div className="flex justify-end gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   disabled={revokeRole.isPending}
-                  onClick={() => setPendingRevokeRoleId(null)}
+                  onClick={() => requestRoleRevoke(null)}
                 >
                   取消
                 </Button>
@@ -4738,10 +4426,7 @@ function IamCenter({
                   type="button"
                   variant="destructive"
                   disabled={!pendingRevokeRoleId || revokeRole.isPending}
-                  onClick={() =>
-                    pendingRevokeRoleId &&
-                    revokeRole.mutate({ assignmentId: pendingRevokeRoleId })
-                  }
+                  onClick={() => void confirmRoleRevoke()}
                 >
                   {revokeRole.isPending ? "正在撤销…" : "确认撤销"}
                 </Button>

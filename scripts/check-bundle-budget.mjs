@@ -37,7 +37,8 @@ const maxChunkBytes = 450 * 1024;
 // Private subflow snapshot guidance/recovery: measured 1506.57 / 454.01 KiB.
 // Workflow view checks and retained drafts through access failures: about 1510 KiB raw / 455 KiB gzip.
 // Project authorization drafts and submission protection: measured 1515.75 / 456.70 KiB.
-const maxTotalBytes = 1_517 * 1024;
+// Lazy system-role forms add draft/configuration conflict protection; transfer cap stays 457 KiB.
+const maxTotalBytes = 1_522 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
 const maxTotalGzipBytes = 457 * 1024;
 const maxHtmlBytes = 20 * 1024;

@@ -136,3 +136,10 @@ it("组织层级遇到停用父级或循环时停止，最长只读取 32 层祖
     )
   ).toHaveLength(1);
 });
+
+it("系统管理复核只读系统直接授权，使用真实行当前锁", async () => {
+  const { query, connection } = setup();
+  await readLockedAssignedPermissions(connection, 7);
+  expect(query.mock.calls[0][0]).toContain("AND scopeType='system' FOR SHARE");
+  expect(query.mock.calls[0][1]).toEqual([7]);
+});

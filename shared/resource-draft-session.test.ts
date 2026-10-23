@@ -248,3 +248,17 @@ it("流程与业务授权草稿均使用授权退出提示，流程之间保留�
   store.set("p", "project-authorization", "member", "", "draft");
   expect(store.hasAuthorizationDraft()).toBe(true);
 });
+
+it("系统角色授权草稿可跨管理页面卸载保留，同账号恢复后再提交", () => {
+  const store = new ResourceDraftStore();
+  store.set(
+    "iam",
+    "system-authorization",
+    "user:7",
+    { hours: "" },
+    { hours: "7" }
+  );
+  expect(store.hasAuthorizationDraft("iam")).toBe(true);
+  expect(store.exportDrafts()[0].field).toBe("user:7");
+  expect(new ResourceDraftStore().hasAuthorizationDraft()).toBe(false);
+});

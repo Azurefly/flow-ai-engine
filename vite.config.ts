@@ -210,7 +210,7 @@ export default defineConfig(({ command }) => {
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
             if (
-              /\/components\/(CustomRoleDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
+              /\/components\/(CustomRoleDialog|SystemRoleAssignmentDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
                 id.replace(/\\/g, "/")
               )
             )

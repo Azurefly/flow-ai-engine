@@ -448,6 +448,10 @@ export const appRouter = router({
           roleCode: z.string().min(1).max(64),
           expiresAt: z.date().optional(),
           note: z.string().max(320).optional(),
+          expectedConfigToken: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -456,6 +460,8 @@ export const appRouter = router({
           roleCode: input.roleCode,
           scopeType: "system",
           grantedByUserId: ctx.user.id,
+          actorTokenVersion: ctx.user.tokenVersion,
+          expectedConfigToken: input.expectedConfigToken,
           expiresAt: input.expiresAt,
           note: input.note,
         });
@@ -464,7 +470,11 @@ export const appRouter = router({
     revokeRoleAssignment: iamManageProcedure
       .input(z.object({ assignmentId: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => {
-        await revokeRoleAssignment({ ...input, revokedByUserId: ctx.user.id });
+        await revokeRoleAssignment({
+          ...input,
+          revokedByUserId: ctx.user.id,
+          actorTokenVersion: ctx.user.tokenVersion,
+        });
         return { success: true };
       }),
     customRoleConfiguration: iamManageProcedure

@@ -52,6 +52,7 @@ const connection = {
 };
 beforeAll(async () => {
   mocks.getConnection.mockResolvedValue(connection);
+  mocks.rollback.mockResolvedValue(undefined);
   mocks.query.mockImplementation(async (sql: string, params: any[]) => {
     if (sql.startsWith("SELECT id,code FROM"))
       return [
@@ -67,6 +68,12 @@ beforeAll(async () => {
             role: "admin",
             status: actorDisabled ? "disabled" : "active",
             tokenVersion: actorVersion,
+          },
+          {
+            id: 2,
+            role: "user",
+            status: disabled ? "disabled" : "active",
+            tokenVersion: 1,
           },
         ],
       ];
@@ -87,7 +94,15 @@ beforeAll(async () => {
     if (sql.startsWith("SELECT permissionId FROM role_permission"))
       return [[{ permissionId: changedPermissions ? 2 : 1 }]];
     if (sql.startsWith("SELECT code FROM permission WHERE id"))
-      return [[{ code: changedPermissions ? "workflow:run" : "workflow:view" }]];
+      return [
+        [{ code: changedPermissions ? "workflow:run" : "workflow:view" }],
+      ];
+    if (
+      sql.startsWith(
+        "SELECT id,code,name,description,scope,isSystem FROM iam_role"
+      )
+    )
+      return [[roleFixture]];
     if (sql.startsWith("SELECT id,scope FROM iam_role"))
       return [[{ id: 31, scope: "workflow" }]];
     if (sql.startsWith("SELECT id,isSystem FROM iam_role"))
@@ -126,10 +141,12 @@ const input = {
   scopeId: "workflow-a",
   grantedByUserId: 17,
 };
-it("绑定在事务内按用户、角色顺序加锁，并在提交后记录审计", async () => {
+it("绑定锁定账号和角色，业务与审计在同一事务提交", async () => {
   await assignRole(input);
   expect(mocks.begin).toHaveBeenCalledTimes(1);
-  expect(mocks.query.mock.calls[0][0]).toContain("users WHERE id=? FOR UPDATE");
+  expect(mocks.query.mock.calls[0][0]).toContain(
+    "users WHERE id IN (?) ORDER BY id FOR UPDATE"
+  );
   expect(mocks.query.mock.calls[1][0]).toContain(
     "iam_role WHERE code=? LIMIT 1 FOR UPDATE"
   );
@@ -138,7 +155,13 @@ it("绑定在事务内按用户、角色顺序加锁，并在提交后记录审�
   expect(mocks.commit).toHaveBeenCalledTimes(1);
   expect(mocks.rollback).not.toHaveBeenCalled();
   expect(mocks.release).toHaveBeenCalledTimes(1);
-  expect(mocks.audit).toHaveBeenCalledTimes(1);
+  expect(mocks.audit).not.toHaveBeenCalled();
+  const auditIndex = mocks.query.mock.calls.findIndex(([sql]) =>
+    sql.startsWith("INSERT INTO authorization_audit_log")
+  );
+  expect(mocks.query.mock.invocationCallOrder[auditIndex]).toBeLessThan(
+    mocks.commit.mock.invocationCallOrder[0]
+  );
 });
 it("重复绑定不写入，回滚并释放连接", async () => {
   duplicate = true;
@@ -160,7 +183,10 @@ it("停用账号在角色检查之前拒绝", async () => {
 });
 it("写入错误回滚，不记录成功审计", async () => {
   failInsert = true;
-  await expect(assignRole(input)).rejects.toThrow("write failed");
+  await expect(assignRole(input)).rejects.toMatchObject({
+    code: "INTERNAL_SERVER_ERROR",
+    cause: expect.objectContaining({ message: "write failed" }),
+  });
   expect(mocks.commit).not.toHaveBeenCalled();
   expect(mocks.rollback).toHaveBeenCalledTimes(1);
   expect(mocks.audit).not.toHaveBeenCalled();
@@ -301,9 +327,26 @@ it("有效快照更新的角色与审计一起提交", async () => {
 });
 it("等待角色锁后以当前读校验权限变化，且不锁共享权限目录", async () => {
   changedPermissions = true;
-  await expect(updateCustomRole({ code: roleFixture.code, actorUserId: 17, expectedConfigToken, name: roleFixture.name })).rejects.toMatchObject({ code: "CONFLICT" });
-  expect(mocks.query.mock.calls.some(([sql]) => sql === "SELECT permissionId FROM role_permission WHERE roleId=? ORDER BY permissionId FOR UPDATE")).toBe(true);
-  expect(mocks.query.mock.calls.some(([sql]) => sql.includes("JOIN permission") && sql.includes("FOR UPDATE"))).toBe(false);
+  await expect(
+    updateCustomRole({
+      code: roleFixture.code,
+      actorUserId: 17,
+      expectedConfigToken,
+      name: roleFixture.name,
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(
+    mocks.query.mock.calls.some(
+      ([sql]) =>
+        sql ===
+        "SELECT permissionId FROM role_permission WHERE roleId=? ORDER BY permissionId FOR UPDATE"
+    )
+  ).toBe(true);
+  expect(
+    mocks.query.mock.calls.some(
+      ([sql]) => sql.includes("JOIN permission") && sql.includes("FOR UPDATE")
+    )
+  ).toBe(false);
   expect(mocks.commit).not.toHaveBeenCalled();
 });
 it.each(["disabled", "version"])("锁内复核角色管理员的 %s 状态", async mode => {

@@ -6,13 +6,13 @@ import type mysql from "mysql2/promise";
 export async function readLockedAssignedPermissions(
   connection: mysql.PoolConnection,
   userId: number,
-  workflowId: string
+  workflowId?: string
 ): Promise<Set<string>> {
   const [direct] = await connection.query<mysql.RowDataPacket[]>(
     `SELECT roleId,scopeType FROM role_assignment WHERE userId=?
        AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW())
-       AND (scopeType='system' OR (scopeType='workflow' AND scopeId=?)) FOR SHARE`,
-    [userId, workflowId]
+       AND ${workflowId ? "(scopeType='system' OR (scopeType='workflow' AND scopeId=?))" : "scopeType='system'"} FOR SHARE`,
+    workflowId ? [userId, workflowId] : [userId]
   );
   const [memberships] = await connection.query<mysql.RowDataPacket[]>(
     `SELECT ou.id,ou.parentUnitId FROM organization_membership om

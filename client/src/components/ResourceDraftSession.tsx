@@ -73,6 +73,8 @@ export function useResourceDraftSummary(projectId?: string) {
     ...(store?.stats(projectId) ?? { count: 0, pending: 0 }),
     uncertain: store?.hasUncertainCreation(projectId) ?? false,
     authorization: store?.hasAuthorizationDraft(projectId) ?? false,
+    systemAuthorization:
+      store?.hasDraftCategory("system-authorization", projectId) ?? false,
   };
 }
 export function useResourceCreation<
@@ -204,7 +206,9 @@ export function ResourceDraftSession({ children }: { children: ReactNode }) {
     </SessionContext.Provider>
   );
 }
-export function ResourceDraftRecoveryNotice() {
+export function ResourceDraftRecoveryNotice({
+  onRetry,
+}: { onRetry?: () => void } = {}) {
   const store = useStore();
   const summary = store?.stats();
   if (!store || !summary?.count) return null;
@@ -219,6 +223,17 @@ export function ResourceDraftRecoveryNotice() {
           ? "类填写仍保留在当前账号会话中。重新读取业务或流程后请先核对授权列表，再继续填写；也可先导出。请勿关闭页面。"
           : "类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。"}
       </p>
+      {onRetry && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-fit min-h-11"
+          disabled={Boolean(summary.pending)}
+          onClick={onRetry}
+        >
+          重新读取当前权限
+        </Button>
+      )}
       {summary.pending > 0 && (
         <p role="status">
           正在等待保存结果。重新读取业务后会继续确认，请勿重复保存。

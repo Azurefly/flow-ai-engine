@@ -246,10 +246,22 @@ async function assignedPermissions(userId: number, workflowId?: string, connecti
 }
 
 /** Transaction callers initialize the catalog before acquiring their connection. */
-export async function hasSystemPermission(user: { id: number; role: "user" | "admin" }, permission: PermissionCode, connection?: mysql.PoolConnection) {
+export async function hasSystemPermission(
+  user: { id: number; role: "user" | "admin" },
+  permission: PermissionCode,
+  connection?: mysql.PoolConnection
+) {
   if (user.role === "admin") return true;
   if (!connection) await ensureIamCatalog();
-  return (await assignedPermissions(user.id, undefined, connection)).has(permission);
+  if (connection)
+    return (
+      await (
+        await import("./iam-locked-permissions")
+      ).readLockedAssignedPermissions(connection, user.id)
+    ).has(permission);
+  return (await assignedPermissions(user.id, undefined, connection)).has(
+    permission
+  );
 }
 
 export async function getWorkflowAccess(
@@ -440,49 +452,10 @@ export async function listActiveUsersForWorkflowAssignment(input?: { query: stri
   return rows;
 }
 
-export async function assignRole(input: { userId: number; roleCode: string; scopeType: "system" | "workflow"; scopeId?: string | null; grantedByUserId: number; expiresAt?: Date | null; note?: string | null }) {
-  if (input.scopeType === "system" && input.scopeId) throw new Error("系统角色不能绑定资源 ID。");
-  if (input.scopeType === "workflow" && !input.scopeId) throw new Error("流程角色必须绑定流程 ID。");
-  assertRoleExpiryRange(input.expiresAt);
-  if (input.expiresAt && input.expiresAt <= new Date()) throw new Error("临时授权到期时间必须晚于当前时间。");
-  await ensureIamCatalog();
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    const [userRows] = await connection.query<mysql.RowDataPacket[]>("SELECT status FROM users WHERE id=? FOR UPDATE", [input.userId]);
-    if (userRows[0]?.status !== "active") throw new Error("只能为启用中的用户绑定角色。");
-    const [roleRows] = await connection.query<mysql.RowDataPacket[]>("SELECT id,scope FROM iam_role WHERE code=? LIMIT 1 FOR UPDATE", [input.roleCode]);
-    const role = roleRows[0];
-    if (!role || role.scope !== input.scopeType) throw new Error("角色不存在或授权范围不匹配。");
-    const [existingRows] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT id FROM role_assignment WHERE userId=? AND roleId=? AND scopeType=? AND scopeId <=> ?
-        AND revokedAt IS NULL AND effectiveFrom<=NOW() AND (expiresAt IS NULL OR expiresAt>NOW()) LIMIT 1 FOR UPDATE`,
-      [input.userId, role.id, input.scopeType, input.scopeId ?? null]
-    );
-    if (existingRows[0]) throw new Error("用户已拥有该作用域下的有效直接角色，请勿重复绑定。");
-    await connection.query(
-      `INSERT INTO role_assignment (id,userId,roleId,scopeType,scopeId,effectiveFrom,expiresAt,revokedAt,grantedByUserId,note)
-       VALUES (?,?,?,?,?,NOW(),?,NULL,?,?)`,
-      [randomUUID(), input.userId, role.id, input.scopeType, input.scopeId ?? null, input.expiresAt ?? null, input.grantedByUserId, input.note ?? null]
-    );
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  await recordAuthorizationAudit({
-    actorUserId: input.grantedByUserId,
-    targetUserId: input.userId,
-    action: input.expiresAt ? "temporary_role_assigned" : "role_assigned",
-    resourceType: input.scopeType,
-    resourceId: input.scopeId ?? undefined,
-    details: {
-      roleCode: input.roleCode,
-      expiresAt: input.expiresAt?.toISOString() ?? null,
-    },
-  });
+export async function assignRole(
+  input: import("./iam-assignment-service").RoleAssignmentInput
+) {
+  return (await import("./iam-assignment-service")).assignDirectRole(input);
 }
 
 export function validateRoleCode(code: string) {
@@ -637,42 +610,12 @@ export async function deleteCustomRole(input: { code: string; actorUserId: numbe
 
 }
 
-export async function revokeRoleAssignment(input: { assignmentId: string; revokedByUserId: number }) {
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    const [rows] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT ra.id,ra.userId,ra.scopeType,ra.scopeId,r.code
-         FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
-        WHERE ra.id=? AND ra.revokedAt IS NULL FOR UPDATE`,
-      [input.assignmentId]
-    );
-    const assignment = rows[0];
-    if (!assignment) throw new Error("未找到可撤销的角色授权。");
-    if (assignment.code === "system_admin" && assignment.scopeType === "system") {
-      const [adminRows] = await connection.query<mysql.RowDataPacket[]>(
-        `SELECT ra.id FROM role_assignment ra JOIN iam_role r ON r.id=ra.roleId
-          WHERE r.code='system_admin' AND ra.scopeType='system' AND ra.revokedAt IS NULL
-            AND ra.effectiveFrom<=NOW() AND (ra.expiresAt IS NULL OR ra.expiresAt>NOW())`
-      );
-      if (adminRows.length <= 1) throw new Error("系统必须保留至少一位有效系统管理员。");
-    }
-    await connection.query("UPDATE role_assignment SET revokedAt=NOW(),revokedByUserId=? WHERE id=?", [input.revokedByUserId, input.assignmentId]);
-    await connection.commit();
-    await recordAuthorizationAudit({
-      actorUserId: input.revokedByUserId,
-      targetUserId: assignment.userId,
-      action: "role_revoked",
-      resourceType: assignment.scopeType,
-      resourceId: assignment.scopeId ?? undefined,
-      details: { assignmentId: input.assignmentId, roleCode: assignment.code },
-    });
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
+export async function revokeRoleAssignment(input: {
+  assignmentId: string;
+  revokedByUserId: number;
+  actorTokenVersion?: number;
+}) {
+  return (await import("./iam-assignment-service")).revokeDirectRole(input);
 }
 
 export async function listRoles(scope?: "system" | "workflow") {
