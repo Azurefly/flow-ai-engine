@@ -3304,6 +3304,8 @@ describe("流程设计器界面回归约束", () => {
     for (const label of ["流程代号", "流程名称", "流程说明（可选）", "流程类型", "关联数据源（可选）"])
       expect(workflowCreationSource).toContain(label);
     expect(workflowCreationSource).toContain('aria-label="流程类型"');
+    expect(workflowCreationSource).toContain('aria-label="流程代号"');
+    expect(workflowCreationSource).toContain('aria-describedby="workflow-code-help"');
     expect(workflowCreationSource).toContain('aria-label="关联数据源（可选）"');
     expect(workflowCreationSource).toContain('className="grid gap-1.5 text-sm font-medium"');
     expect(workflowCreationSource).toContain("h-11 min-[1024px]:h-10");

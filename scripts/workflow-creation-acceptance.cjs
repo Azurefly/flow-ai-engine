@@ -426,8 +426,8 @@ async function receiptScenarios() {
     true
   );
   await grant();
-  await member("auth.login", memberLogin, true);
-  const capability = await member("workflow.operationAccess", {
+  await viewer("auth.login", memberLogin, true);
+  const capability = await viewer("workflow.operationAccess", {
     workflowId: sample.id,
   });
   assert.equal(capability.canCopy, true);
@@ -437,11 +437,11 @@ async function receiptScenarios() {
     name: "设计者副本_" + tag,
     requestKey: randomBytes(24).toString("hex"),
   };
-  const copy = await member("workflow.duplicate", payload, true);
+  const copy = await viewer("workflow.duplicate", payload, true);
   assert.equal(copy.ownerUserId, fixture.disabledUserId);
   await revoke();
   await assert.rejects(
-    member("workflow.duplicate", payload, true),
+    viewer("workflow.duplicate", payload, true),
     error => error.status === 403
   );
   report({
@@ -638,12 +638,57 @@ async function creationUi(page, form) {
     copied.name
   );
   await page.getByRole("button", { name: "更多操作", exact: true }).click();
-  await page.getByRole("menuitem", { name: "归档至流程仓库", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "归档至流程仓库", exact: true })
+    .click();
   const archive = page.getByRole("dialog", { name: "归档流程", exact: true });
   await expect(
     archive.getByRole("button", { name: "确认归档", exact: true })
   ).toBeEnabled();
+  let archivedOnServer = false,
+    releaseArchive,
+    archivePosts = 0;
+  const archiveGate = new Promise(resolve => (releaseArchive = resolve));
+  const loseArchiveAck = async route => {
+    if (
+      !route.request().url().includes("workflow.delete") ||
+      route.request().method() !== "POST"
+    )
+      return route.continue();
+    archivePosts++;
+    const response = await route.fetch();
+    assert(response.ok());
+    archivedOnServer = true;
+    await archiveGate;
+    await route.abort("failed");
+  };
+  await page.route("**/api/trpc/**", loseArchiveAck);
   await archive.getByRole("button", { name: "确认归档", exact: true }).click();
+  try {
+    await expect.poll(() => archivedOnServer).toBe(true);
+    await expect(
+      archive.getByRole("button", { name: "取消", exact: true })
+    ).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await expect(archive).toBeVisible();
+    assert.equal(archivePosts, 1);
+  } finally {
+    releaseArchive();
+  }
+  await expect(
+    archive.getByRole("button", { name: "重新读取权限与归档结果", exact: true })
+  ).toBeEnabled();
+  await page.unroute("**/api/trpc/**", loseArchiveAck);
+  await archive
+    .getByRole("button", { name: "重新读取权限与归档结果", exact: true })
+    .click();
+  await expect(
+    archive.getByRole("button", { name: "已核对，完成归档", exact: true })
+  ).toBeEnabled();
+  await archive
+    .getByRole("button", { name: "已核对，完成归档", exact: true })
+    .click();
+  assert.equal(archivePosts, 1);
   await expect(archive).toBeHidden();
   assert((await owner("workflow.get", { id: copied.id })).archivedAt);
   assert.deepEqual(errors, []);
@@ -652,8 +697,80 @@ async function creationUi(page, form) {
     sourceChangeRequiresConfirmation: true,
     customCopyNamePreserved: true,
     archiveCompleted: true,
+    archiveResponseLossRecoveredWithoutSecondWrite: true,
     browserErrors: 0,
   });
+}
+async function designerUi(browser) {
+  await grant();
+  const context = await browser.newContext({
+    viewport: { width: 1024, height: 900 },
+    serviceWorkers: "block",
+  });
+  await context.route("**/*", route =>
+    route.request().url().startsWith(base) ? route.continue() : route.abort()
+  );
+  const page = await context.newPage();
+  page.setDefaultTimeout(20000);
+  try {
+    const sample = fixture.workflows.find(row => row.flowType === "control");
+    await page.goto(base + "#/flows");
+    await page.getByLabel("用户名", { exact: true }).fill(memberLogin.username);
+    await page.getByLabel("密码", { exact: true }).fill(memberLogin.password);
+    await page
+      .getByRole("button", { name: "登录流程引擎", exact: true })
+      .click();
+    await expect(page.locator("[data-aiflow-business-center]")).toBeVisible();
+    await page.goto(base + "#/flows/workflow/" + sample.id + "/editor");
+    await expect(page.locator("[data-workflow-editor]")).toBeVisible();
+    await page.getByRole("button", { name: "更多操作", exact: true }).click();
+    await expect(
+      page.getByRole("menuitem", { name: "归档至流程仓库", exact: true })
+    ).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "创建副本", exact: true }).click();
+    const form = page.getByRole("dialog", {
+      name: "创建流程副本",
+      exact: true,
+    });
+    await expect(
+      form.getByRole("button", { name: "创建副本", exact: true })
+    ).toBeEnabled();
+    await form.getByLabel("流程名称", { exact: true }).fill("权限保留_" + tag);
+    await revoke();
+    await form
+      .getByRole("button", { name: "重新读取权限与来源", exact: true })
+      .click();
+    await expect(form.getByLabel("流程名称", { exact: true })).toBeHidden();
+    await expect(
+      form.getByRole("button", { name: "创建副本", exact: true })
+    ).toBeDisabled();
+    await expect(form.getByText(/复制来源：/)).toHaveCount(0);
+    await grant();
+    await form
+      .getByRole("button", { name: "重新读取权限与来源", exact: true })
+      .click();
+    await expect(form.getByLabel("流程名称", { exact: true })).toHaveValue(
+      "权限保留_" + tag
+    );
+    await expect(
+      form.getByRole("button", { name: "创建副本", exact: true })
+    ).toBeEnabled();
+    await form.getByRole("button", { name: "取消", exact: true }).click();
+    await page
+      .getByRole("alertdialog")
+      .getByRole("button", { name: "已核对，放弃填写", exact: true })
+      .click();
+    report({
+      stage: "designer-copy-ui",
+      copyVisibleWithoutManagePermission: true,
+      archiveHidden: true,
+      viewLossHidesSourceCache: true,
+      typedNameRestoredAfterPermissionRecovery: true,
+    });
+  } finally {
+    await context.close();
+    await revoke();
+  }
 }
 (async () => {
   let browser,
@@ -786,6 +903,7 @@ async function creationUi(page, form) {
     } else {
       await creationUi(page, form);
       await receiptScenarios();
+      await designerUi(browser);
     }
     report({ workflowCreation: true, baseline, passed: true, tag });
   } catch (error) {

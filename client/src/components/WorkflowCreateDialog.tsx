@@ -391,6 +391,8 @@ export default function WorkflowCreateDialog({
               <label className="grid gap-1.5 text-sm font-medium">
                 流程代号
                 <Input
+                  aria-label="流程代号"
+                  aria-describedby="workflow-code-help"
                   className="h-11 min-[1024px]:h-10"
                   required
                   minLength={2}
@@ -402,7 +404,10 @@ export default function WorkflowCreateDialog({
                     update({ processCode: event.target.value.toUpperCase() })
                   }
                 />
-                <span className="text-[13px] font-normal text-muted-foreground">
+                <span
+                  id="workflow-code-help"
+                  className="text-[13px] font-normal text-muted-foreground"
+                >
                   当前业务内唯一；以大写字母开头，可使用字母、数字、下划线和短横线。
                 </span>
               </label>
