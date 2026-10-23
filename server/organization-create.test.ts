@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   unlock: vi.fn(),
   release: vi.fn(),
   destroy: vi.fn(),
+  access: vi.fn(),
 }));
 vi.mock("./db", () => ({
   getSharedPool: () => ({
@@ -16,13 +17,22 @@ vi.mock("./db", () => ({
           ? mocks.acquire()
           : sql.includes("RELEASE_LOCK")
             ? mocks.unlock()
-            : mocks.query(sql, params),
+            : sql.startsWith("SELECT id,role,status,tokenVersion FROM users")
+              ? [[{ id: 1, role: "admin", status: "active", tokenVersion: 0 }]]
+              : mocks.query(sql, params),
+      beginTransaction: vi.fn(),
+      commit: vi.fn(),
+      rollback: vi.fn().mockResolvedValue(undefined),
       release: mocks.release,
       destroy: mocks.destroy,
     }),
   }),
 }));
-vi.mock("./iam-service", () => ({ recordAuthorizationAudit: mocks.audit }));
+vi.mock("./iam-service", () => ({
+  ensureIamCatalog: vi.fn(),
+  hasSystemPermission: mocks.access,
+  recordAuthorizationAudit: mocks.audit,
+}));
 import {
   createOrganizationUnit,
   updateOrganizationUnit,
@@ -37,6 +47,7 @@ const duplicate = {
 };
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.access.mockResolvedValue(true);
   mocks.acquire.mockResolvedValue([[{ acquired: 1 }], []]);
   mocks.unlock.mockResolvedValue([[{ released: 1 }], []]);
 });
@@ -65,7 +76,10 @@ it("并发重复创建均保留数据库唯一约束的错误处理", async () =
 it("其他数据库错误不伪装成部门编码冲突", async () => {
   const other = { ...duplicate, message: "Duplicate entry for key 'PRIMARY'" };
   mocks.query.mockRejectedValueOnce(other);
-  await expect(createOrganizationUnit(user, input)).rejects.toBe(other);
+  await expect(createOrganizationUnit(user, input)).rejects.toMatchObject({
+    code: "INTERNAL_SERVER_ERROR",
+    cause: other,
+  });
 });
 it("创建成功继续规范编码并记录审计", async () => {
   mocks.query.mockResolvedValueOnce([{}, []]);
@@ -75,14 +89,15 @@ it("创建成功继续规范编码并记录审计", async () => {
     expect.objectContaining({
       resourceId: id,
       details: { operation: "organization_unit_created", code: "TEAM" },
-    })
+    }),
+    expect.anything()
   );
 });
 
 it("上级已有循环时提前拒绝，不执行更新", async () => {
   mocks.query.mockImplementation(async (sql: string, params: string[]) => {
-    if (sql.startsWith("SELECT *")) return [[{ id: "moving" }], []];
-    if (sql.includes("status='active'")) return [[{ id: "a" }], []];
+    if (sql.startsWith("SELECT *"))
+      return [[{ id: params[0], status: "active" }], []];
     return [[{ parentUnitId: params[0] === "a" ? "b" : "a" }], []];
   });
   await expect(
@@ -95,8 +110,8 @@ it("上级已有循环时提前拒绝，不执行更新", async () => {
 });
 it("遍历32层仍未到根节点时拒绝保存，不能漏检更深循环", async () => {
   mocks.query.mockImplementation(async (sql: string, params: string[]) => {
-    if (sql.startsWith("SELECT *")) return [[{ id: "moving" }], []];
-    if (sql.includes("status='active'")) return [[{ id: "0" }], []];
+    if (sql.startsWith("SELECT *"))
+      return [[{ id: params[0], status: "active" }], []];
     return [[{ parentUnitId: String(Number(params[0]) + 1) }], []];
   });
   await expect(
@@ -109,8 +124,7 @@ it("遍历32层仍未到根节点时拒绝保存，不能漏检更深循环", as
 it("正常根部门路径仍可迁移保存", async () => {
   mocks.query.mockImplementation(async (sql: string) => {
     if (sql.startsWith("SELECT *"))
-      return [[{ id: "moving", name: "部门" }], []];
-    if (sql.includes("status='active'")) return [[{ id: "root" }], []];
+      return [[{ id: "moving", name: "部门", status: "active" }], []];
     if (sql.startsWith("SELECT parentUnitId"))
       return [[{ parentUnitId: null }], []];
     return [{}, []];
@@ -135,7 +149,7 @@ it("锁等待超时不更新组织，连接正常归还且不释放他人的锁"
 it("加锁响应失败销毁连接，避免未知锁状态进入连接池", async () => {
   mocks.acquire.mockRejectedValueOnce(new Error("connection interrupted"));
   await expect(updateOrganizationUnit(user, { id: "moving" })).rejects.toThrow(
-    "connection interrupted"
+    "暂时无法确认组织保存结果"
   );
   expect(mocks.release).not.toHaveBeenCalled();
   expect(mocks.destroy).toHaveBeenCalledTimes(1);
