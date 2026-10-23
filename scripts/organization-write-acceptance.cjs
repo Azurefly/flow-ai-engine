@@ -631,6 +631,29 @@ async function ui() {
         )
       )
       .toBe(true);
+    await expect
+      .poll(() =>
+        dialog.evaluate(el => {
+          const r = el.getBoundingClientRect(),
+            title = el
+              .querySelector('[data-slot="dialog-title"]')
+              .getBoundingClientRect();
+          const save = Array.from(el.querySelectorAll("button"))
+            .find(button => button.textContent === "保存部门")
+            .getBoundingClientRect();
+          return (
+          getComputedStyle(el).transitionProperty === "opacity" &&
+          Math.abs(
+              parseFloat(getComputedStyle(el).maxHeight) - (innerHeight - 16)
+            ) < 1 &&
+            r.y >= 0 &&
+            r.bottom <= innerHeight &&
+            title.y >= 0 &&
+            save.bottom <= innerHeight
+          );
+        })
+      )
+      .toBe(true);
     await page.screenshot({
       path: path.join(directory, "organization-" + width + ".png"),
     });

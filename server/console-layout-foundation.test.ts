@@ -52,3 +52,13 @@ it("桌面审计记录的六个单元格固定在同一行，避免状态列让�
     /@media \(min-width: 1024px\)\s*\{\s*\[data-iam-audit-row\] > div:first-child > \*\s*\{\s*grid-row: 1;/
   );
 });
+it("dialog motion never interpolates responsive width or viewport height", () => {
+  for (const name of ["dialog", "alert-dialog"]) {
+    const source = readFileSync(
+      new URL(`../client/src/components/ui/${name}.tsx`, import.meta.url),
+      "utf8"
+    );
+    expect(source).toContain("transition-opacity duration-200");
+    expect(source).not.toContain("transition-all");
+  }
+});
