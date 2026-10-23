@@ -1692,28 +1692,30 @@ export const appRouter = router({
         z.object({
           id: z.string().min(8).max(64),
           name: z.string().trim().min(1).max(160).optional(),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const workflow = await duplicateWorkflow(
           input.id,
           ctx.user,
-          input.name
+          input.name,
+          input.expectedDefinitionVersion
         );
         if (!workflow) throw new Error("流程不存在或无查看权限。");
         return workflow;
       }),
     delete: protectedProcedure
-      .input(z.object({ id: z.string().min(8).max(64) }))
+      .input(z.object({ id: z.string().min(8).max(64), expectedDefinitionVersion: z.number().int().positive().optional() }))
       .mutation(async ({ ctx, input }) => {
-        const archived = await archiveWorkflow(input.id, ctx.user);
+        const archived = await archiveWorkflow(input.id, ctx.user, input.expectedDefinitionVersion);
         if (!archived) throw new Error("流程不存在或无归档权限。");
         return { success: true, archived: true };
       }),
     restore: protectedProcedure
-      .input(z.object({ id: z.string().min(8).max(64) }))
+      .input(z.object({ id: z.string().min(8).max(64), expectedDefinitionVersion: z.number().int().positive().optional() }))
       .mutation(async ({ ctx, input }) => {
-        const restored = await restoreWorkflow(input.id, ctx.user);
+        const restored = await restoreWorkflow(input.id, ctx.user, input.expectedDefinitionVersion);
         if (!restored) throw new Error("流程不存在、未归档或无恢复权限。");
         return { success: true };
       }),
@@ -1747,13 +1749,17 @@ export const appRouter = router({
         z.object({
           workflowId: z.string().min(8).max(64),
           targetVersion: z.number().int().positive(),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
+          restoreAsDraft: z.boolean().optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
         const workflow = await rollbackWorkflowVersion(
           input.workflowId,
           input.targetVersion,
-          ctx.user
+          ctx.user,
+          input.expectedDefinitionVersion,
+          input.restoreAsDraft
         );
         if (!workflow) throw new Error("流程版本不存在或无恢复权限。");
         return workflow;

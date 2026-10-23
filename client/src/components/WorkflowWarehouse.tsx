@@ -405,7 +405,7 @@ export default function WorkflowWarehouse({
         projectId: activeProjectId,
         folderId: deleteTarget.folder.id,
       });
-    else deleteWorkflow.mutate({ id: deleteTarget.workflow.id });
+    else deleteWorkflow.mutate({ id: deleteTarget.workflow.id, expectedDefinitionVersion: Number(deleteTarget.workflow.definitionVersion) });
   };
 
   if (projectsLoading && !projects.length)
@@ -697,7 +697,7 @@ export default function WorkflowWarehouse({
                         size="sm"
                         disabled={restoreWorkflow.isPending}
                         onClick={() =>
-                          restoreWorkflow.mutate({ id: workflow.id })
+                          restoreWorkflow.mutate({ id: workflow.id, expectedDefinitionVersion: Number(workflow.definitionVersion) })
                         }
                       >
                         <ArchiveRestore size={14} />

@@ -40,9 +40,10 @@ const maxChunkBytes = 450 * 1024;
 // Lazy system-role forms add draft/configuration conflict protection; transfer cap stays 457 KiB.
 // Organization snapshots/drafts and nonblocking recovery stay in lazy form code.
 // The directory module shrinks from 51.87 to about 33 KiB; bounded total growth is < 5 KiB gzip.
-const maxTotalBytes = 1_529 * 1024;
+// Lazy version restore confirmation with draft/publish choice: 1532.82 / 463.07 KiB.
+const maxTotalBytes = 1_533 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 462 * 1024;
+const maxTotalGzipBytes = 464 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

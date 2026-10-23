@@ -2112,6 +2112,7 @@ function FlowConsole({
                     duplicateFlow.mutate({
                       id: selectedId,
                       name: `${draftName} · 副本`,
+                      expectedDefinitionVersion: Number(selectedWorkflow?.definitionVersion),
                     });
                 }}
                 onDelete={() => {
@@ -2121,7 +2122,7 @@ function FlowConsole({
                       `确认归档“${draftName}”吗？版本、运行、任务、成员授权和审计记录均会保留，之后可在流程仓库恢复。`
                     )
                   )
-                    deleteFlow.mutate({ id: selectedId });
+                    deleteFlow.mutate({ id: selectedId, expectedDefinitionVersion: Number(selectedWorkflow?.definitionVersion) });
                 }}
                 onSaveAsSubflow={async subflowName => {
                   if (!draftDefinition || createSubflow.isPending) return false;

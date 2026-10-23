@@ -150,15 +150,13 @@ describe("分页流程缓存联动", () => {
     expect(
       content.match(/utils\.workflow\.page\.invalidate\(\)/g)
     ).toHaveLength(2);
-    for (const mutation of ["rollbackVersion", "updateWorkflowInfo"]) {
-      const callback = content
-        .split(`${mutation}.useMutation({`)[1]
-        ?.split("onError:")[0];
-      expect(callback).toContain("utils.workflow.page.invalidate()");
-      expect(callback).toContain(
-        "utils.workflow.get.invalidate({ id: workflowId })"
-      );
-    }
+    const callback = content.split("updateWorkflowInfo.useMutation({")[1]?.split("onError:")[0];
+    expect(callback).toContain("utils.workflow.page.invalidate()");
+    expect(callback).toContain("utils.workflow.get.invalidate({ id: workflowId })");
+    const restored = content.split("onSaved={() =>")[1] ?? content.split("onSaved={()=>")[1];
+    expect(restored).toContain("restoreTarget.workflowId");
+    expect(restored).toContain("utils.workflow.page.invalidate()");
+    expect(restored).toMatch(/utils\.workflow\.get\.invalidate\(\{\s*id\s*\}\)/);
   });
 });
 const runModalSource = source(
@@ -452,8 +450,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_529 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 462 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_533 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 464 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -1678,7 +1676,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留版本差异与可审计回滚入口", () => {
     expect(governanceSource).toContain("workflow.versionDiff.useQuery");
-    expect(governanceSource).toContain("workflow.rollbackVersion.useMutation");
+    expect(source("../client/src/components/WorkflowVersionRestoreDialog.tsx")).toContain("utils.client.workflow.rollbackVersion.mutate");
     expect(governanceSource).toContain("恢复此版本");
     expect(governanceSource).toContain("基本信息");
     expect(governanceSource).toContain('activeSection === "versions"');
@@ -4096,4 +4094,18 @@ it("组织冲突确认在重新读取期间锁定并刷新完整成员快照", (
   expect(organizationManagementSource).toContain(
     "utils.config.organizationMemberConfiguration.invalidate()"
   );
+});
+
+it("历史恢复默认草稿、固定目标与版本，提交先锁再清理并保留失败选择",()=>{
+  const dialog=source("../client/src/components/WorkflowVersionRestoreDialog.tsx");
+  expect(dialog).toContain("useState(false)");
+  expect(dialog).toContain("restoreAsDraft: !publish");
+  expect(dialog).toContain("expectedDefinitionVersion: target.currentVersion");
+  expect(dialog).toContain("lock.current = true");
+  expect(dialog).toContain("const end = begin()");
+  expect(dialog).toContain("setError(");
+  expect(dialog).not.toContain("await onSaved");
+  expect(dialog).not.toContain("window.confirm");
+  expect(governanceSource).toMatch(/lazy\(\s*\(\) => import\("\.\/WorkflowVersionRestoreDialog"\)/);
+  expect(governanceSource).toContain("versions.isError ? []");
 });

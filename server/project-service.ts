@@ -536,7 +536,7 @@ export async function createProjectWorkflow(
         executable: false,
       })
     : undefined;
-  const workflow = await createWorkflow(user, input.name, input.description, {
+  return createWorkflow(user, input.name, input.description, {
     projectId: input.projectId,
     folderId: input.folderId ?? null,
     processCode,
@@ -544,27 +544,8 @@ export async function createProjectWorkflow(
     creationSource,
     dataSourceId: input.dataSourceId ?? null,
     auditStatus: "init",
-    projectCreationAuthorized: true,
+    definition,
   });
-  if (definition && workflow)
-    await updateWorkflow((workflow as any).id, user, {
-      definition,
-    });
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "workflow",
-    resourceId: String((workflow as any)?.id ?? ""),
-    details: {
-      operation: "project_workflow_created",
-      projectId: input.projectId,
-      processCode,
-      flowType: input.flowType,
-      creationSource,
-      dataSourceId: input.dataSourceId ?? null,
-    },
-  });
-  return workflow;
 }
 
 export async function updateProjectWorkflowInfo(

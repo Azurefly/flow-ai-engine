@@ -20,9 +20,21 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
+import type { WorkflowVersionRestoreTarget } from "./WorkflowVersionRestoreDialog";
 import { toast } from "sonner";
 import { RunDetailDialog } from "./WorkflowGovernanceRunDetail";
+
+const WorkflowVersionRestoreDialog = lazy(
+  () => import("./WorkflowVersionRestoreDialog")
+);
 
 export type WorkflowGovernanceSection = "overview" | "runs" | "versions";
 
@@ -98,6 +110,8 @@ export default function WorkflowGovernance({
   }>({ filterKey: "", cursors: [undefined] });
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [editingInfo, setEditingInfo] = useState(false);
+  const [restoreTarget, setRestoreTarget] =
+    useState<WorkflowVersionRestoreTarget | null>(null);
   const [infoName, setInfoName] = useState("");
   const [infoDescription, setInfoDescription] = useState("");
   const item = workflow.data as any;
@@ -128,7 +142,7 @@ export default function WorkflowGovernance({
       refetchIntervalInBackground: false,
     }
   );
-  const versionItems = (versions.data ?? []) as any[];
+  const versionItems = (versions.isError ? [] : (versions.data ?? [])) as any[];
 
   useEffect(() => {
     const timeout = window.setTimeout(
@@ -139,6 +153,7 @@ export default function WorkflowGovernance({
   }, [runKeyword]);
 
   useEffect(() => {
+    setRestoreTarget(null);
     setFromVersion(null);
     setToVersion(null);
     setRunKeyword("");
@@ -174,17 +189,6 @@ export default function WorkflowGovernance({
       activeSection === "versions" &&
       Boolean(fromVersion && toVersion && fromVersion !== toVersion),
     retry: false,
-  });
-  const rollback = trpc.workflow.rollbackVersion.useMutation({
-    onSuccess: () => {
-      void utils.workflow.list.invalidate();
-      void utils.workflow.page.invalidate();
-      void utils.workflow.get.invalidate({ id: workflowId });
-      void utils.workflow.versions.invalidate({ workflowId });
-      void utils.workflow.versionDiff.invalidate();
-      toast.success("已恢复目标版本，并生成新的可审计快照。");
-    },
-    onError: error => toast.error(error.message),
   });
 
   const projectAccess = trpc.project.access.useQuery(
@@ -574,6 +578,26 @@ export default function WorkflowGovernance({
               {canEdit ? "可恢复版本" : "只读版本历史"}
             </span>
           </div>
+          {(versions.isError || workflow.isError) && (
+            <div
+              role="alert"
+              className="m-4 grid gap-2 rounded-lg border border-aiflow-warning-border p-3 text-sm"
+            >
+              版本或流程读取失败，已暂停恢复操作。请重新读取后确认。
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  void Promise.allSettled([
+                    versions.refetch(),
+                    workflow.refetch(),
+                  ])
+                }
+              >
+                重试读取版本历史
+              </Button>
+            </div>
+          )}
           <div className="grid gap-4 p-4 xl:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]">
             <section aria-label="版本快照列表">
               <h3 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
@@ -634,29 +658,27 @@ export default function WorkflowGovernance({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="mt-3 h-8 text-xs"
+                          className="aiflow-type-control mt-3 h-11 sm:h-9"
                           disabled={
-                            rollback.isPending ||
-                            (version.status === "published" && !canPublish)
+                            Boolean(restoreTarget) ||
+                            !item?.definitionVersion ||
+                            workflow.isError ||
+                            workflow.isFetching ||
+                            versions.isFetching ||
+                            (item?.status === "published" && !canPublish)
                           }
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `将流程恢复到 v${version.version} 吗？系统会新建一个可审计版本。`
-                              )
-                            ) {
-                              rollback.mutate({
-                                workflowId,
-                                targetVersion: Number(version.version),
-                              });
-                            }
-                          }}
+                          onClick={() =>
+                            setRestoreTarget({
+                              workflowId,
+                              currentVersion: Number(item.definitionVersion),
+                              currentStatus: item.status,
+                              version: Number(version.version),
+                              name: String(version.name),
+                              status: String(version.status),
+                            })
+                          }
                         >
-                          {rollback.isPending ? (
-                            <Loader2 className="animate-spin" size={13} />
-                          ) : (
-                            <RotateCcw size={13} />
-                          )}
+                          <RotateCcw size={13} />
                           恢复此版本
                         </Button>
                       )}
@@ -850,6 +872,36 @@ export default function WorkflowGovernance({
           </DialogContent>
         </Dialog>
       )}
+      {restoreTarget && (
+        <Suspense fallback={<p role="status">正在读取版本恢复窗口…</p>}>
+          <WorkflowVersionRestoreDialog
+            target={restoreTarget}
+            canPublish={canPublish}
+            canEdit={canEdit && !workflow.isError && !versions.isError}
+            onClose={() => setRestoreTarget(null)}
+            onRead={() => {
+              void Promise.allSettled([
+                utils.workflow.get.invalidate({ id: restoreTarget.workflowId }),
+                utils.workflow.versions.invalidate({
+                  workflowId: restoreTarget.workflowId,
+                }),
+              ]);
+            }}
+            onSaved={() => {
+              const id = restoreTarget.workflowId;
+              void Promise.allSettled([
+                utils.workflow.list.invalidate(),
+                utils.workflow.page.invalidate(),
+                utils.workflow.get.invalidate({ id }),
+                utils.workflow.versions.invalidate({ workflowId: id }),
+                utils.workflow.versionDiff.invalidate(),
+                utils.project.invalidate(),
+              ]);
+              toast.success("已恢复目标版本，并生成新的可审计快照。");
+            }}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }
@@ -919,7 +971,12 @@ function AuditResetButton({
         disabled={reset.isPending}
         onClick={() => {
           if (window.confirm("确定重置审核状态吗？流程将恢复为待审核草稿。")) {
-            reset.mutate({ projectId, workflowId, expectedDefinitionVersion: definitionVersion, expectedAuditStatus: "rejected" });
+            reset.mutate({
+              projectId,
+              workflowId,
+              expectedDefinitionVersion: definitionVersion,
+              expectedAuditStatus: "rejected",
+            });
           }
         }}
       >

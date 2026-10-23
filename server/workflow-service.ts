@@ -1,3 +1,4 @@
+import { commitWorkflowMutation, lockWorkflowMutation, type WorkflowMutationSnapshot } from "./workflow-mutation-transaction";
 import { diagnoseSynchronousSubflowNodes, locateSubflowDiagnostics } from "./subflow-diagnostics";
 import {
   readSubflowFlowType,
@@ -149,9 +150,16 @@ function assertJsonObject(value: unknown, message: string) {
   return value as Record<string, unknown>;
 }
 
-function hydrateWorkflow(row: mysql.RowDataPacket) {
-  const definition = parseJson(row.definitionJson);
-  return { ...row, definition };
+type StoredWorkflow = WorkflowMutationSnapshot & {
+  id: string;
+  name: string;
+  description: string | null;
+  flowType: "state" | "control" | "data";
+  definition: Definition;
+  [key: string]: any;
+};
+function hydrateWorkflow(row: mysql.RowDataPacket): StoredWorkflow {
+  return { ...row, definition: parseJson(row.definitionJson) } as StoredWorkflow;
 }
 
 async function insertVersion(
@@ -429,37 +437,114 @@ export async function createWorkflow(
     creationSource?: "manual" | "warehouse";
     dataSourceId?: string | null;
     auditStatus?: "init" | "approved" | "rejected";
-    projectCreationAuthorized?: boolean;
-  }
+    definition?: unknown;
+    copySource?: WorkflowMutationSnapshot & { id: string };
+    expectedSourceVersion?: number;
+  },
 ) {
-  if (!options?.projectCreationAuthorized && !(await canCreateWorkflow(user)))
-    throw new TRPCError({ code: "FORBIDDEN", message: "当前账号没有创建流程的权限。" });
+  if (!options?.projectId && !(await canCreateWorkflow(user)))
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "当前账号没有创建流程的权限。",
+    });
   const workflowId = id();
-  const definition = emptyDefinition();
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    if (options?.projectId) await lockActiveProject(connection, options.projectId);
+  const flowType = options?.flowType ?? "state";
+  const definition =
+    options?.definition === undefined
+      ? emptyDefinition()
+      : await resolveSubflowReferences(
+          validate(options.definition, { flowType, executable: false }),
+          user.id,
+          false,
+          flowType,
+        );
+  return commitWorkflowMutation(user, async (connection, actor) => {
+    if (options?.projectId) {
+      const { getProjectAccess } = await import("./project-service");
+      const access = await getProjectAccess(actor, options.projectId, {
+        connection,
+        lock: true,
+      });
+      if (!access.exists)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "业务已归档或不存在，请重新读取后创建流程。",
+        });
+      if (!access.permissions.has("project:workflow:create"))
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "业务流程创建权限已变化，请保留填写并确认权限。",
+        });
+      if (options.processCode) {
+        const [existing] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT id FROM workflow WHERE projectId=? AND processCode=? LIMIT 1 FOR UPDATE",
+          [options.projectId, options.processCode],
+        );
+        if (existing[0])
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "当前业务下已存在相同流程代号。",
+          });
+      }
+      if (options.folderId) {
+        const [folders] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT id FROM workflow_folder WHERE id=? AND projectId=? LIMIT 1 FOR SHARE",
+          [options.folderId, options.projectId],
+        );
+        if (!folders[0])
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "目标仓库目录不存在或不属于当前业务。",
+          });
+      }
+      if (options.dataSourceId) {
+        const [sources] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT id FROM data_source WHERE id=? AND projectId=? AND status<>'disabled' LIMIT 1 FOR SHARE",
+          [options.dataSourceId, options.projectId],
+        );
+        if (flowType !== "data" || !sources[0])
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "所选数据源不存在、不属于当前业务或已停用。",
+          });
+      }
+    } else if (
+      !(await hasSystemPermission(actor, "workflow:create", connection))
+    )
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "流程创建权限已变化，请保留填写并确认权限。",
+      });
+    if (options?.copySource) {
+      await lockWorkflowMutation(
+        connection,
+        actor,
+        options.copySource.id,
+        options.copySource,
+        ["workflow:view"],
+        { expectedDefinitionVersion: options.expectedSourceVersion },
+      );
+    }
     await connection.query(
       "INSERT INTO workflow (id,ownerUserId,projectId,folderId,processCode,name,description,flowType,creationSource,dataSourceId,auditStatus,definitionJson,status,definitionVersion) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,'draft',1)",
       [
         workflowId,
-        user.id,
+        actor.id,
         options?.projectId ?? null,
         options?.folderId ?? null,
         options?.processCode ?? null,
         name,
         description ?? null,
-        options?.flowType ?? "state",
+        flowType,
         options?.creationSource ?? "manual",
         options?.dataSourceId ?? null,
-        options?.auditStatus ?? "approved",
+        options?.auditStatus ?? (options?.projectId ? "init" : "approved"),
         JSON.stringify(definition),
-      ]
+      ],
     );
     await connection.query(
       "INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)",
-      [randomBytes(18).toString("hex"), workflowId, user.id, user.id]
+      [randomBytes(18).toString("hex"), workflowId, actor.id, actor.id],
     );
     await insertVersion(connection, {
       workflowId,
@@ -468,16 +553,38 @@ export async function createWorkflow(
       status: "draft",
       definition,
       source: "created",
-      actorUserId: user.id,
+      actorUserId: actor.id,
     });
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  return getWorkflow(workflowId, user);
+    await recordAuthorizationAudit(
+      {
+        actorUserId: actor.id,
+        action: "user_updated",
+        resourceType: "workflow",
+        resourceId: workflowId,
+        details: {
+          operation: options?.copySource
+            ? "workflow_duplicated"
+            : options?.projectId
+              ? "project_workflow_created"
+              : "workflow_created",
+          projectId: options?.projectId ?? null,
+          processCode: options?.processCode ?? null,
+          flowType,
+          creationSource: options?.creationSource ?? "manual",
+          dataSourceId: options?.dataSourceId ?? null,
+          sourceWorkflowId: options?.copySource?.id,
+          sourceVersion: options?.copySource?.definitionVersion,
+        },
+      },
+      connection,
+    );
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT w.*,p.status AS projectStatus FROM workflow w LEFT JOIN flow_project p ON p.id=w.projectId WHERE w.id=? LIMIT 1",
+      [workflowId],
+    );
+    if (!rows[0]) throw new Error("流程结果读取失败。");
+    return hydrateWorkflow(rows[0]);
+  });
 }
 
 export async function hasWorkflowPermission(
@@ -809,7 +916,7 @@ export async function getWorkflowVersion(
   );
   const row = rows[0];
   return row
-    ? { ...row, definition: parseJson(row.definitionJson) as Definition }
+    ? { ...row, definition: parseJson(row.definitionJson) as Definition } as {name:string;status:"draft"|"published";definition:Definition;executionPlanJson?:unknown;executionPlanHash?:string|null}
     : null;
 }
 
@@ -870,110 +977,142 @@ export async function diffWorkflowVersions(
 export async function rollbackWorkflowVersion(
   workflowId: string,
   targetVersion: number,
-  user: WorkflowUser
+  user: WorkflowUser,
+  expectedDefinitionVersion?: number,
+  restoreAsDraft = false,
 ) {
   if (!(await hasWorkflowPermission(user, workflowId, "workflow:edit")))
-    return null;
-  const target = (await getWorkflowVersion(
-    workflowId,
-    targetVersion,
-    user
-  )) as {
-    name: string;
-    status: "draft" | "published";
-    definition: Definition;
-    executionPlanJson?: unknown;
-    executionPlanHash?: string | null;
-  } | null;
-  if (!target) return null;
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "没有恢复流程版本的权限。",
+    });
+  const target = await getWorkflowVersion(workflowId, targetVersion, user);
+  const current = await getWorkflow(workflowId, user);
+  if (!target || !current) return null;
+  if (expectedDefinitionVersion !== undefined)
+    assertWorkflowRevision(
+      Number(current.definitionVersion),
+      expectedDefinitionVersion,
+    );
+  const restoredStatus = restoreAsDraft ? "draft" : target.status;
+  const requiresPublish =
+    restoredStatus === "published" || current.status === "published";
   if (
-    target.status === "published" &&
+    requiresPublish &&
     !(await hasWorkflowPermission(user, workflowId, "workflow:publish"))
   )
-    throw new Error("恢复已发布版本需要发布权限。");
-  const current = (await getWorkflow(workflowId, user)) as {
-    ownerUserId: number;
-    name: string;
-    definitionVersion: number;
-    flowType: "state" | "control" | "data";
-  } | null;
-  if (!current) return null;
-  let restoredDefinition = target.definition;
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "恢复涉及发布状态的版本需要发布权限。",
+    });
+  let restoredDefinition = validate(target.definition, {
+    flowType: current.flowType,
+    executable: false,
+  });
   let restoredPlan: WorkflowExecutionPlan | undefined;
   let restoredPlanHash: string | null = null;
-  if (target.status === "published") {
+  if (restoredStatus === "published") {
     const storedPlan = parseJson(target.executionPlanJson);
     if (storedPlan && target.executionPlanHash) {
       restoredPlan = assertWorkflowExecutionPlan(
         storedPlan,
         String(target.executionPlanHash),
-        current.flowType
+        current.flowType,
       );
       restoredPlanHash = String(target.executionPlanHash);
     } else {
-      const resolvedDefinition = await resolveSubflowReferences(
+      const resolved = await resolveSubflowReferences(
         target.definition,
         current.ownerUserId,
         true,
-        current.flowType
+        current.flowType,
       );
-      const compiled = compileWorkflowDefinition(resolvedDefinition, {
+      const compiled = compileWorkflowDefinition(resolved, {
         flowType: current.flowType,
       });
       restoredPlan = compiled.plan;
       restoredPlanHash = compiled.planHash;
     }
     restoredDefinition = restoredPlan.definition;
+    if (current.projectId)
+      assertProjectServiceTaskReferences(restoredDefinition);
   }
-  const nextVersion = Number(current.definitionVersion) + 1;
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
+  const definitionChanged = !matchesWorkflowDefinitionSnapshot(
+    JSON.stringify(current.definition),
+    restoredDefinition,
+  );
+  return commitWorkflowMutation(user, async (connection, actor) => {
+    const locked = await lockWorkflowMutation(
+      connection,
+      actor,
+      workflowId,
+      current,
+      requiresPublish
+        ? ["workflow:edit", "workflow:publish"]
+        : ["workflow:edit"],
+      { expectedDefinitionVersion },
+    );
+    if (
+      restoredStatus === "published" &&
+      current.projectId &&
+      (await isProjectApprovalRequired(connection)) &&
+      (locked.auditStatus !== "approved" || definitionChanged)
+    )
+      throw new TRPCError({
+        code: "CONFLICT",
+        message:
+          "当前审批规则要求变更后的流程重新审核。请先恢复为草稿并完成审核，再发布。",
+      });
+    const nextVersion = Number(locked.definitionVersion) + 1;
     await connection.query(
-      "UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,publishedExecutionPlanJson=?,publishedExecutionPlanHash=?,publishedAt=?,unpublishedAt=?,updatedAt=NOW() WHERE id=?",
+      "UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END,publishedExecutionPlanJson=?,publishedExecutionPlanHash=?,publishedAt=?,unpublishedAt=?,updatedAt=NOW() WHERE id=?",
       [
         target.name,
         JSON.stringify(restoredDefinition),
-        target.status,
+        restoredStatus,
         nextVersion,
+        Boolean(current.projectId && definitionChanged),
         restoredPlan ? JSON.stringify(restoredPlan) : null,
         restoredPlanHash,
-        target.status === "published" ? new Date() : null,
-        target.status === "draft" ? new Date() : null,
+        restoredStatus === "published" ? new Date() : null,
+        restoredStatus === "draft" ? new Date() : null,
         workflowId,
-      ]
+      ],
     );
     await insertVersion(connection, {
       workflowId,
       version: nextVersion,
       name: target.name,
-      status: target.status,
+      status: restoredStatus,
       definition: restoredDefinition,
       source: "rolled_back",
-      actorUserId: user.id,
+      actorUserId: actor.id,
       restoredFromVersion: targetVersion,
       executionPlan: restoredPlan,
       executionPlanHash: restoredPlanHash,
     });
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "workflow",
-    resourceId: workflowId,
-    details: {
-      operation: "version_rolled_back",
-      restoredFromVersion: targetVersion,
-      createdVersion: nextVersion,
-    },
+    await recordAuthorizationAudit(
+      {
+        actorUserId: actor.id,
+        action: "user_updated",
+        resourceType: "workflow",
+        resourceId: workflowId,
+        details: {
+          operation: "version_rolled_back",
+          restoredFromVersion: targetVersion,
+          createdVersion: nextVersion,
+          restoredStatus,
+        },
+      },
+      connection,
+    );
+    const [rows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT w.*,p.status AS projectStatus FROM workflow w LEFT JOIN flow_project p ON p.id=w.projectId WHERE w.id=? LIMIT 1",
+      [workflowId],
+    );
+    if (!rows[0]) throw new Error("流程结果读取失败。");
+    return hydrateWorkflow(rows[0]);
   });
-  return getWorkflow(workflowId, user);
 }
 
 export async function listNodeTemplates(user: WorkflowUser) {
@@ -1168,30 +1307,33 @@ export async function deleteSubflow(user: WorkflowUser, subflowId: string) {
 export async function duplicateWorkflow(
   workflowId: string,
   user: WorkflowUser,
-  name?: string
+  name?: string,
+  expectedDefinitionVersion?: number,
 ) {
-  const source = (await getWorkflow(workflowId, user)) as {
-    name: string;
-    description?: string | null;
-    definition: Definition;
-    projectId?: string | null;
-    flowType?: "state" | "control" | "data";
-  } | null;
-  if (!source) return null;
-  const duplicated = await createWorkflow(
+  const source = await getWorkflow(workflowId, user);
+  if (!source) throw new TRPCError({code:"FORBIDDEN",message:"流程不存在或当前账号没有查看和复制权限。"});
+  if (source.archivedAt) throw new TRPCError({code:"CONFLICT",message:"已归档流程须先恢复后才能复制。"});
+  if (expectedDefinitionVersion !== undefined) assertWorkflowRevision(Number(source.definitionVersion),expectedDefinitionVersion);
+  return createWorkflow(
     user,
     name?.trim() || `${source.name} · 副本`,
     source.description ?? undefined,
     {
       projectId: source.projectId,
       flowType: source.flowType,
-      projectCreationAuthorized: Boolean(source.projectId),
-    }
+      definition: source.definition,
+      copySource: {
+        id: workflowId,
+        ownerUserId: Number(source.ownerUserId),
+        projectId: source.projectId,
+        definitionVersion: Number(source.definitionVersion),
+        status: source.status,
+        archivedAt: source.archivedAt,
+        updatedAt: source.updatedAt,
+      },
+      expectedSourceVersion: expectedDefinitionVersion,
+    },
   );
-  if (!duplicated) return null;
-  return updateWorkflow((duplicated as any).id, user, {
-    definition: source.definition,
-  });
 }
 
 export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
@@ -1199,35 +1341,57 @@ export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
     !(await hasWorkflowPermission(user, workflowId, "workflow:members:manage"))
   )
     return false;
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
+  const current = await getWorkflow(workflowId, user);
+  if (!current) return false;
+  return commitWorkflowMutation(user, async (connection, actor) => {
+    await lockWorkflowMutation(
+      connection,
+      actor,
+      workflowId,
+      current,
+      ["workflow:members:manage"],
+      { allowArchived: true, activeProject: false },
+    );
     const [runRows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_run WHERE workflowId=? LIMIT 1 FOR UPDATE",
-      [workflowId]
+      [workflowId],
     );
     if (runRows.length)
-      throw new Error(
-        "流程已有运行历史，禁止物理删除；请取消发布并保留任务、运行和审计记录。"
-      );
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "流程已有运行历史，禁止物理删除；请保留运行和审计记录。",
+      });
+    const [dataHistory] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM dataflow_run WHERE workflowId=? LIMIT 1 FOR UPDATE",
+      [workflowId],
+    );
+    const [schedules] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM dataflow_schedule WHERE workflowId=? LIMIT 1 FOR UPDATE",
+      [workflowId],
+    );
+    if (dataHistory.length || schedules.length)
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "流程已有数据运行或调度记录，请使用归档保留历史。",
+      });
     await connection.query(
       "DELETE FROM workflow_run_alert WHERE workflowId=?",
-      [workflowId]
+      [workflowId],
     );
     await connection.query("DELETE FROM workflow_task WHERE workflowId=?", [
       workflowId,
     ]);
     await connection.query(
       "DELETE FROM workflow_participant_state WHERE workflowId=?",
-      [workflowId]
+      [workflowId],
     );
     await connection.query(
       "DELETE FROM workflow_task_group WHERE workflowId=?",
-      [workflowId]
+      [workflowId],
     );
     await connection.query(
       "DELETE nr FROM workflow_node_run nr JOIN workflow_run r ON r.id=nr.runId WHERE r.workflowId=?",
-      [workflowId]
+      [workflowId],
     );
     await connection.query("DELETE FROM workflow_run WHERE workflowId=?", [
       workflowId,
@@ -1240,113 +1404,139 @@ export async function deleteWorkflow(workflowId: string, user: WorkflowUser) {
     ]);
     await connection.query(
       "UPDATE role_assignment SET revokedAt=NOW(),revokedByUserId=? WHERE scopeType='workflow' AND scopeId=? AND revokedAt IS NULL",
-      [user.id, workflowId]
+      [user.id, workflowId],
     );
     const [result] = await connection.query<mysql.ResultSetHeader>(
       "DELETE FROM workflow WHERE id=?",
-      [workflowId]
+      [workflowId],
     );
     if (!result.affectedRows) throw new Error("流程不存在或已被删除。");
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "workflow",
-    resourceId: workflowId,
-    details: { operation: "workflow_deleted" },
+    await recordAuthorizationAudit(
+      {
+        actorUserId: actor.id,
+        action: "user_updated",
+        resourceType: "workflow",
+        resourceId: workflowId,
+        details: { operation: "workflow_deleted" },
+      },
+      connection,
+    );
+    return true;
   });
-  return true;
 }
 
-export async function archiveWorkflow(workflowId: string, user: WorkflowUser) {
+export async function archiveWorkflow(
+  workflowId: string,
+  user: WorkflowUser,
+  expectedDefinitionVersion?: number,
+) {
   if (
     !(await hasWorkflowPermission(user, workflowId, "workflow:members:manage"))
   )
-    return false;
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    const [workflowRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id,archivedAt FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
-      [workflowId]
+    throw new TRPCError({ code: "FORBIDDEN", message: "没有归档流程的权限。" });
+  const current = await getWorkflow(workflowId, user);
+  if (!current) return false;
+  return commitWorkflowMutation(user, async (connection, actor) => {
+    const locked = await lockWorkflowMutation(
+      connection,
+      actor,
+      workflowId,
+      current,
+      ["workflow:members:manage"],
+      { allowArchived: true, activeProject: false, expectedDefinitionVersion },
     );
-    if (!workflowRows[0]) throw new Error("流程不存在。");
-    if (workflowRows[0].archivedAt) {
-      await connection.commit();
-      return true;
-    }
+    if (locked.archivedAt) return true;
     const [activeRuns] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_run WHERE workflowId=? AND status IN ('queued','running','waiting','blocked') LIMIT 1 FOR UPDATE",
-      [workflowId]
+      [workflowId],
     );
     if (activeRuns.length)
-      throw new Error(
-        "流程存在排队、运行、等待人工处理或暂停中的实例，禁止归档；请先完成、恢复处理或取消活动运行。"
-      );
+      throw new TRPCError({
+        code: "CONFLICT",
+        message:
+          "流程存在排队、运行、等待人工处理或暂停中的实例，禁止归档；请先完成、恢复处理或取消活动运行。",
+      });
     const [activeTasks] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_task WHERE workflowId=? AND status IN ('pending','claimed') LIMIT 1 FOR UPDATE",
-      [workflowId]
+      [workflowId],
     );
     if (activeTasks.length)
-      throw new Error("流程仍有未结束的人工任务，禁止归档。 ");
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "流程仍有未结束的人工任务，禁止归档。 ",
+      });
     const [activeDataflowRuns] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM dataflow_run WHERE workflowId=? AND status IN ('queued','running') LIMIT 1 FOR UPDATE",
-      [workflowId]
+      [workflowId],
     );
     if (activeDataflowRuns.length)
-      throw new Error(
-        "数据流程存在排队中或运行中的实例，禁止归档；请等待活动运行结束。"
-      );
+      throw new TRPCError({
+        code: "CONFLICT",
+        message:
+          "数据流程存在排队中或运行中的实例，禁止归档；请等待活动运行结束。",
+      });
     const [activeSchedules] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM dataflow_schedule WHERE workflowId=? AND status='active' LIMIT 1 FOR UPDATE",
-      [workflowId]
+      [workflowId],
     );
     if (activeSchedules.length)
-      throw new Error("数据流程仍有启用中的调度，请先暂停调度后再归档。");
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "数据流程仍有启用中的调度，请先暂停调度后再归档。",
+      });
     await connection.query(
       "UPDATE workflow SET archivedAt=NOW(),archivedByUserId=?,status='draft',unpublishedAt=NOW(),updatedAt=NOW() WHERE id=?",
-      [user.id, workflowId]
+      [user.id, workflowId],
     );
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    throw error;
-  } finally {
-    connection.release();
-  }
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "workflow",
-    resourceId: workflowId,
-    details: { operation: "workflow_archived", recoverable: true },
+    await recordAuthorizationAudit(
+      {
+        actorUserId: actor.id,
+        action: "user_updated",
+        resourceType: "workflow",
+        resourceId: workflowId,
+        details: { operation: "workflow_archived", recoverable: true },
+      },
+      connection,
+    );
+    return true;
   });
-  return true;
 }
 
-export async function restoreWorkflow(workflowId: string, user: WorkflowUser) {
+export async function restoreWorkflow(
+  workflowId: string,
+  user: WorkflowUser,
+  expectedDefinitionVersion?: number,
+) {
   if (
     !(await hasWorkflowPermission(user, workflowId, "workflow:members:manage"))
   )
-    return false;
-  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT projectId FROM workflow WHERE id=? LIMIT 1", [workflowId]);
-  if (!rows[0]) return false;
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    if (rows[0].projectId) await lockActiveProject(connection, String(rows[0].projectId));
-    const [result] = await connection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow SET archivedAt=NULL,archivedByUserId=NULL,updatedAt=NOW() WHERE id=? AND archivedAt IS NOT NULL", [workflowId]
+    throw new TRPCError({ code: "FORBIDDEN", message: "没有恢复流程的权限。" });
+  const current = await getWorkflow(workflowId, user);
+  if (!current) return false;
+  return commitWorkflowMutation(user, async (connection, actor) => {
+    const locked = await lockWorkflowMutation(
+      connection,
+      actor,
+      workflowId,
+      current,
+      ["workflow:members:manage"],
+      { allowArchived: true, expectedDefinitionVersion },
     );
-    if (result.affectedRows) await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "workflow", resourceId: workflowId, details: { operation: "workflow_restored" } }, connection);
-    await connection.commit();
-    return Boolean(result.affectedRows);
-  } catch (error) { await connection.rollback(); throw error; }
-  finally { connection.release(); }
+    if (!locked.archivedAt) return true;
+    await connection.query(
+      "UPDATE workflow SET archivedAt=NULL,archivedByUserId=NULL,updatedAt=NOW() WHERE id=?",
+      [workflowId],
+    );
+    await recordAuthorizationAudit(
+      {
+        actorUserId: actor.id,
+        action: "user_updated",
+        resourceType: "workflow",
+        resourceId: workflowId,
+        details: { operation: "workflow_restored" },
+      },
+      connection,
+    );
+    return true;
+  });
 }
