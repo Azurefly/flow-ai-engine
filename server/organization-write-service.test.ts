@@ -263,6 +263,15 @@ it("destroys a connection if the lock was not actually released", async () => {
   await operations[1][1]();
   expect(conn.destroy).toHaveBeenCalledOnce();
 });
+it("destroys a connection when rollback cannot confirm transaction cleanup", async () => {
+  mocks.audit.mockRejectedValue(new Error("audit failed"));
+  conn.rollback.mockRejectedValue(new Error("rollback connection lost"));
+  await expect(operations[1][1]()).rejects.toMatchObject({
+    code: "INTERNAL_SERVER_ERROR",
+  });
+  expect(conn.destroy).toHaveBeenCalledOnce();
+  expect(conn.release).not.toHaveBeenCalled();
+});
 it("retries deadlocks at most three times, releasing each connection", async () => {
   mocks.audit.mockRejectedValue({ code: "ER_LOCK_DEADLOCK", errno: 1213 });
   await expect(operations[1][1]()).rejects.toMatchObject({ code: "CONFLICT" });

@@ -433,7 +433,7 @@ export async function createWorkflow(
   }
 ) {
   if (!options?.projectCreationAuthorized && !(await canCreateWorkflow(user)))
-    throw new Error("当前账号没有创建流程的权限。");
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前账号没有创建流程的权限。" });
   const workflowId = id();
   const definition = emptyDefinition();
   const connection = await db().getConnection();

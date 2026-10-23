@@ -89,7 +89,9 @@ async function changeOrganization<T>(
       await connection.commit();
       return result;
     } catch (error) {
-      await connection.rollback().catch(() => {});
+      await connection.rollback().catch(() => {
+        reusable = false;
+      });
       const failure = error as { code?: string; errno?: number };
       if (failure?.code === "ER_LOCK_DEADLOCK" || failure?.errno === 1213) {
         if (attempt === 2)
