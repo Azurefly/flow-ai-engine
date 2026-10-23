@@ -381,9 +381,13 @@ async function prepareActor() {
   await owner("iam.updateUserStatus",{userId:fixture.disabledUserId,status:"active"},true);
   await grant("designer");
   for(const flow of fixture.workflows.filter(row=>["state","control","data"].includes(row.flowType))) {
-    await owner("workflow.assignCustomRole",{workflowId:flow.id,userId:fixture.disabledUserId,roleCode:fixture.workflowRoleCode},true);
+    const assignments=await owner("workflow.customRoleAssignments",{workflowId:flow.id,page:0,query:fixture.workflowRoleCode});
+    if(!assignments.items.some(row=>Number(row.userId)===fixture.disabledUserId && row.roleCode===fixture.workflowRoleCode && !row.revokedAt))
+      await owner("workflow.assignCustomRole",{workflowId:flow.id,userId:fixture.disabledUserId,roleCode:fixture.workflowRoleCode},true);
   }
-  await owner("iam.assignSystemRole",{userId:fixture.disabledUserId,roleCode:fixture.systemRoleCode},true);
+  const details=await owner("iam.userAuthorizationDetails",{userId:fixture.disabledUserId});
+  if(!details.directRoles.some(row=>row.roleCode===fixture.systemRoleCode))
+    await owner("iam.assignSystemRole",{userId:fixture.disabledUserId,roleCode:fixture.systemRoleCode},true);
   await viewer("auth.login",memberLogin,true);
 }
 const resultOf=promise=>promise.then(data=>({ok:true,data}),error=>({ok:false,status:error.status,message:error.message}));
@@ -395,9 +399,9 @@ async function raceCases() {
   const flow=fixture.workflows.find(row=>row.flowType==="control");
   for(const mode of ["permission","session","disable"]) for(const operation of ["archive","restore","rollback","projectCreate","duplicate","globalCreate"]) {
     let value=await owner("workflow.get",{id:flow.id});
-    if(operation==="restore" && !value.archivedAt) await owner("workflow.delete",{id:flow.id},true);
-    if(operation!=="restore" && value.archivedAt) await owner("workflow.restore",{id:flow.id},true);
+    if(value.archivedAt) await owner("workflow.restore",{id:flow.id},true);
     await prepareActor();
+    if(operation==="restore") await owner("workflow.delete",{id:flow.id},true);
     value=await owner("workflow.get",{id:flow.id});
     const before=await snapshot(flow),beforeFlows=(await sql("own_flows")).flows;
     const barrier=sqlProcess("hold_actor",{identityChange:mode});await barrier.ready;
@@ -444,6 +448,7 @@ async function publicationCases() {
   await viewer("project.auditWorkflow",{projectId:fixture.projectId,workflowId:flow.id,auditStatus:"approved",expectedDefinitionVersion:value.definitionVersion,expectedAuditStatus:value.auditStatus},true);
   value=await owner("workflow.publish",{id:flow.id,expectedDefinitionVersion:value.definitionVersion},true);
   fixture.lifecyclePublishedVersion=value.definitionVersion;remember();
+  await revoke();
   await grant("viewer");
   let role=await owner("iam.customRoleConfiguration",{code:fixture.workflowRoleCode});
   await owner("iam.updateCustomRole",{code:fixture.workflowRoleCode,permissions:["workflow:view","workflow:edit","workflow:members:manage"],expectedConfigToken:role.configToken},true);
@@ -549,6 +554,13 @@ async function browserCases() {
           if(!fixture.workflows.some(row=>row.id===flow.id)) fixture.workflows.push(flow);
         }
         remember();
+        // Authorization writes intentionally reject archived flows. Restore only
+        // this fixture's archived flows before the shared role cleanup archives them again.
+        if(fixture.workflowRoleCode) for(const flow of fixture.workflows) {
+          const value=await owner("workflow.get",{id:flow.id});
+          assert.equal(Number(value.ownerUserId),fixture.userId);assert.equal(value.name,flow.name);assert(value.name.endsWith(tag));
+          if(value.archivedAt) await owner("workflow.restore",{id:flow.id},true);
+        }
         if(fixture.systemRoleCode) {
           const details=await owner("iam.userAuthorizationDetails",{userId:fixture.disabledUserId});
           for(const assignment of details.directRoles.filter(row=>row.roleCode===fixture.systemRoleCode)) await owner("iam.revokeRoleAssignment",{assignmentId:assignment.assignmentId},true);

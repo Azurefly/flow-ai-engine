@@ -56,7 +56,7 @@ try {
       emit({barrierReady:true}); await release;
       if(action === "hold_actor") {
         if(identityChange === "permission") {
-          await connection.query("UPDATE flow_project_member SET revokedAt=NOW(),revokedByUserId=? WHERE projectId=? AND userId=? AND revokedAt IS NULL",[fixture.userId,fixture.projectId,fixture.disabledUserId]);
+          await connection.query("UPDATE flow_project_member SET revokedAt=NOW() WHERE projectId=? AND userId=? AND revokedAt IS NULL",[fixture.projectId,fixture.disabledUserId]);
           await connection.query("UPDATE role_assignment ra JOIN iam_role r ON r.id=ra.roleId SET ra.revokedAt=NOW(),ra.revokedByUserId=? WHERE ra.userId=? AND ra.revokedAt IS NULL AND ((ra.scopeType='workflow' AND ra.scopeId IN (?)) OR (ra.scopeType='system' AND r.code=?))",[fixture.userId,fixture.disabledUserId,fixture.workflows.map(row=>row.id),"custom_life_system_"+fixture.tag.slice(9)]);
         } else if(identityChange === "session") await connection.query("UPDATE users SET tokenVersion=tokenVersion+1 WHERE id=?",[fixture.disabledUserId]);
         else await connection.query("UPDATE users SET status='disabled',tokenVersion=tokenVersion+1 WHERE id=?",[fixture.disabledUserId]);
