@@ -1,3 +1,9 @@
+import {
+  organizationUnitToken,
+  organizationMembershipToken,
+  organizationBindingToken,
+} from "./organization-configuration";
+import { customRoleConfigToken } from "./custom-role-configuration";
 import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   connection: vi.fn(),
@@ -19,7 +25,9 @@ let conn: any,
   target: any,
   units: any[],
   role: any,
-  blockers: any[];
+  blockers: any[],
+  memberships: any[],
+  binding: any;
 beforeEach(() => {
   vi.resetAllMocks();
   current = { id: 7, role: "user", status: "active", tokenVersion: 1 };
@@ -37,6 +45,18 @@ beforeEach(() => {
   ];
   role = { id: 10, code: "custom_reader", scope: "system" };
   blockers = [];
+  memberships = [
+    { id: "member-a", unitId: "a", userId: 9, title: "岗位", isPrimary: true },
+  ];
+  binding = {
+    id: "binding",
+    unitId: "a",
+    roleId: 10,
+    includeDescendants: 1,
+    effectiveFrom: new Date("2026-10-20T00:00:00Z"),
+    expiresAt: null,
+    createdByUserId: 7,
+  };
   mocks.access.mockResolvedValue(true);
   conn = {
     beginTransaction: vi.fn(),
@@ -49,6 +69,13 @@ beforeEach(() => {
       if (sql.includes("RELEASE_LOCK")) return [[{ released: 1 }]];
       if (sql.includes("FROM users WHERE"))
         return [[current, target].filter(Boolean)];
+      if (sql.startsWith("SELECT * FROM organization_unit_role"))
+        return [[binding]];
+      if (sql.startsWith("SELECT id,unitId,userId,title,isPrimary"))
+        return [memberships];
+      if (sql.startsWith("SELECT permissionId")) return [[{ permissionId: 5 }]];
+      if (sql.startsWith("SELECT code FROM permission"))
+        return [[{ code: "workflow:create" }]];
       if (sql.startsWith("SELECT * FROM organization_unit"))
         return [units.filter(row => row.id === params[0])];
       if (sql.startsWith("SELECT parentUnitId"))
@@ -278,4 +305,107 @@ it("retries deadlocks at most three times, releasing each connection", async () 
   expect(conn.rollback).toHaveBeenCalledTimes(3);
   expect(conn.release).toHaveBeenCalledTimes(3);
   expect(conn.commit).not.toHaveBeenCalled();
+});
+
+it.each(["update", "delete"])(
+  "%s rejects a stale department token before writing",
+  async name => {
+    const input = {
+      id: "a",
+      expectedConfigToken: organizationUnitToken({
+        ...units[0],
+        name: "旧名称",
+      }),
+    };
+    await expect(
+      name === "update"
+        ? organization.updateOrganizationUnit(actor, { ...input, name: "覆盖" })
+        : organization.deleteOrganizationUnit(actor, input)
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(
+      conn.query.mock.calls.some(([sql]: string[]) =>
+        /^(INSERT|UPDATE|DELETE)/.test(sql)
+      )
+    ).toBe(false);
+  }
+);
+it.each(["assign", "remove", "primary", "move"])(
+  "%s compares the whole current membership set",
+  async name => {
+    const token = organizationMembershipToken(9, memberships);
+    memberships.push({
+      id: "another",
+      unitId: "b",
+      userId: 9,
+      title: "新岗位",
+      isPrimary: false,
+    });
+    const input = { unitId: "a", userId: 9, expectedMembershipToken: token };
+    const run =
+      name === "assign"
+        ? organization.assignOrganizationMember(actor, input)
+        : name === "remove"
+          ? organization.removeOrganizationMember(actor, input)
+          : name === "primary"
+            ? organization.setPrimaryOrganizationMembership(actor, input)
+            : organization.moveOrganizationMember(actor, {
+                ...input,
+                fromUnitId: "a",
+                toUnitId: "b",
+              });
+    await expect(run).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(
+      conn.query.mock.calls.some(([sql]: string[]) =>
+        /^(INSERT|UPDATE|DELETE)/.test(sql)
+      )
+    ).toBe(false);
+  }
+);
+it("new UI assignment does not overwrite an existing membership", async () => {
+  await expect(
+    organization.assignOrganizationMember(actor, {
+      unitId: "a",
+      userId: 9,
+      onlyIfAbsent: true,
+      expectedMembershipToken: organizationMembershipToken(9, memberships),
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(mocks.audit).not.toHaveBeenCalled();
+});
+it("new UI binding does not overwrite an existing scope or expiry", async () => {
+  await expect(
+    organization.bindOrganizationRole(actor, {
+      unitId: "a",
+      roleId: 10,
+      onlyIfAbsent: true,
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(mocks.audit).not.toHaveBeenCalled();
+});
+it("role configuration is checked after acquiring its row lock", async () => {
+  const token = customRoleConfigToken({
+    ...role,
+    permissions: ["workflow:create"],
+  });
+  role.description = "new description";
+  await expect(
+    organization.bindOrganizationRole(actor, {
+      unitId: "a",
+      roleId: 10,
+      expectedRoleConfigToken: token,
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(mocks.audit).not.toHaveBeenCalled();
+});
+it("unbind checks the current binding scope and expiry", async () => {
+  const token = organizationBindingToken(binding);
+  binding.includeDescendants = 0;
+  await expect(
+    organization.unbindOrganizationRole(actor, {
+      unitId: "a",
+      roleId: 10,
+      expectedConfigToken: token,
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(mocks.audit).not.toHaveBeenCalled();
 });

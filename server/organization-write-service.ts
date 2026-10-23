@@ -1,3 +1,10 @@
+import {
+  organizationUnitToken,
+  organizationMembershipToken,
+  organizationBindingToken,
+  assertOrganizationToken,
+} from "./organization-configuration";
+import { assertCustomRoleConfigToken } from "./custom-role-configuration";
 import { randomUUID } from "node:crypto";
 import type mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
@@ -261,11 +268,16 @@ export async function createOrganizationUnit(
 
 export async function updateOrganizationUnit(
   actor: Actor,
-  input: { id: string } & OrganizationUnitFields
+  input: { id: string; expectedConfigToken?: string } & OrganizationUnitFields
 ) {
   return changeOrganization(actor, [input.managerUserId], async context => {
     const { connection, accounts, recheck } = context;
     const current = await unit(connection, input.id);
+    assertOrganizationToken(
+      input.expectedConfigToken,
+      organizationUnitToken(current),
+      "部门配置"
+    );
     if (input.parentUnitId === input.id) reject("组织单元不能把自身设为上级。");
     if (input.parentUnitId) {
       await unit(connection, input.parentUnitId, true);
@@ -329,13 +341,40 @@ export async function updateOrganizationUnit(
   });
 }
 
+async function assertMembershipSnapshot(
+  context: Context,
+  input: {
+    userId: number;
+    unitId?: string;
+    expectedMembershipToken?: string;
+    onlyIfAbsent?: boolean;
+  }
+) {
+  if (!input.expectedMembershipToken && !input.onlyIfAbsent) return;
+  const [rows] = await context.connection.query<mysql.RowDataPacket[]>(
+    "SELECT id,unitId,userId,title,isPrimary FROM organization_membership WHERE userId=? ORDER BY id FOR UPDATE",
+    [input.userId]
+  );
+  assertOrganizationToken(
+    input.expectedMembershipToken,
+    organizationMembershipToken(input.userId, rows),
+    "成员归属"
+  );
+  if (input.onlyIfAbsent && rows.some(row => row.unitId === input.unitId))
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "该账号已加入此部门，请先读取成员列表核对，不会覆盖现有岗位。",
+    });
+}
+
 export async function assignOrganizationMember(
   actor: Actor,
-  input: { unitId: string; userId: number; title?: string; isPrimary?: boolean }
+  input: { unitId: string; userId: number; title?: string; isPrimary?: boolean; expectedMembershipToken?: string; onlyIfAbsent?: boolean }
 ) {
   return changeOrganization(actor, [input.userId], async context => {
     const { connection, accounts, recheck } = context;
     account(accounts, input.userId, "组织成员", true);
+    await assertMembershipSnapshot(context, input);
     await unit(connection, input.unitId, true);
     await recheck();
     if (input.isPrimary)
@@ -369,10 +408,11 @@ export async function assignOrganizationMember(
 }
 export async function removeOrganizationMember(
   actor: Actor,
-  input: { unitId: string; userId: number }
+  input: { unitId: string; userId: number; expectedMembershipToken?: string }
 ) {
   return changeOrganization(actor, [input.userId], async context => {
     account(context.accounts, input.userId, "组织成员");
+    await assertMembershipSnapshot(context, input);
     await unit(context.connection, input.unitId);
     await membership(context.connection, input.unitId, input.userId);
     await context.recheck();
@@ -393,11 +433,12 @@ export async function removeOrganizationMember(
 }
 export async function setPrimaryOrganizationMembership(
   actor: Actor,
-  input: { unitId: string; userId: number }
+  input: { unitId: string; userId: number; expectedMembershipToken?: string }
 ) {
   return changeOrganization(actor, [input.userId], async context => {
     const { connection, accounts, recheck } = context;
     account(accounts, input.userId, "组织成员");
+    await assertMembershipSnapshot(context, input);
     await unit(connection, input.unitId, true);
     await membership(connection, input.unitId, input.userId);
     await recheck();
@@ -428,6 +469,7 @@ export async function moveOrganizationMember(
     userId: number;
     title?: string;
     makePrimary?: boolean;
+    expectedMembershipToken?: string;
   }
 ) {
   if (input.fromUnitId === input.toUnitId)
@@ -435,6 +477,7 @@ export async function moveOrganizationMember(
   return changeOrganization(actor, [input.userId], async context => {
     const { connection, accounts, recheck } = context;
     account(accounts, input.userId, "组织成员");
+    await assertMembershipSnapshot(context, input);
     await unit(connection, input.toUnitId, true);
     await unit(connection, input.fromUnitId);
     const source = await membership(connection, input.fromUnitId, input.userId);
@@ -477,11 +520,16 @@ export async function moveOrganizationMember(
 }
 export async function deleteOrganizationUnit(
   actor: Actor,
-  input: { id: string }
+  input: { id: string; expectedConfigToken?: string }
 ) {
   return changeOrganization(actor, [], async context => {
     const { connection, recheck } = context;
     const current = await unit(connection, input.id);
+    assertOrganizationToken(
+      input.expectedConfigToken,
+      organizationUnitToken(current),
+      "部门配置"
+    );
     const blockers: string[] = [];
     for (const [table, column, label, suffix] of [
       ["organization_unit", "parentUnitId", "子部门", "个"],
@@ -516,18 +564,48 @@ export async function bindOrganizationRole(
     includeDescendants?: boolean;
     effectiveFrom?: Date;
     expiresAt?: Date | null;
+    expectedRoleConfigToken?: string;
+    onlyIfAbsent?: boolean;
   }
 ) {
   return changeOrganization(actor, [], async context => {
     const { connection, recheck } = context;
     await unit(connection, input.unitId, true);
     const [roles] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id,code,scope FROM iam_role WHERE id=? LIMIT 1 FOR UPDATE",
+      "SELECT id,code,name,description,scope,isSystem FROM iam_role WHERE id=? LIMIT 1 FOR UPDATE",
       [input.roleId]
     );
     const role = roles[0];
     if (!role || role.scope !== "system" || role.code === "system_admin")
       reject("仅可绑定系统范围且非系统管理员的权限组。");
+    if (input.expectedRoleConfigToken) {
+      const [links] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT permissionId FROM role_permission WHERE roleId=? ORDER BY permissionId FOR SHARE",
+        [input.roleId]
+      );
+      const [permissions] = links.length
+        ? await connection.query<mysql.RowDataPacket[]>(
+            "SELECT code FROM permission WHERE id IN (?) ORDER BY code FOR SHARE",
+            [links.map(row => row.permissionId)]
+          )
+        : [[]];
+      assertCustomRoleConfigToken(input.expectedRoleConfigToken, {
+        ...role,
+        permissions: permissions.map(row => row.code),
+      });
+    }
+    if (input.onlyIfAbsent) {
+      const [existing] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM organization_unit_role WHERE unitId=? AND roleId=? FOR UPDATE",
+        [input.unitId, input.roleId]
+      );
+      if (existing.length)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "此部门已绑定该权限组，请先读取列表核对，不会覆盖现有范围和有效期。",
+        });
+    }
     const effectiveFrom = input.effectiveFrom ?? new Date();
     if (input.expiresAt && input.expiresAt <= effectiveFrom)
       reject("部门权限绑定到期时间必须晚于生效时间。");
@@ -565,15 +643,20 @@ export async function bindOrganizationRole(
 }
 export async function unbindOrganizationRole(
   actor: Actor,
-  input: { unitId: string; roleId: number }
+  input: { unitId: string; roleId: number; expectedConfigToken?: string }
 ) {
   return changeOrganization(actor, [], async context => {
     await unit(context.connection, input.unitId);
     const [rows] = await context.connection.query<mysql.RowDataPacket[]>(
-      "SELECT id FROM organization_unit_role WHERE unitId=? AND roleId=? FOR UPDATE",
+      "SELECT * FROM organization_unit_role WHERE unitId=? AND roleId=? FOR UPDATE",
       [input.unitId, input.roleId]
     );
     if (!rows[0]) reject("部门权限组绑定不存在。");
+    assertOrganizationToken(
+      input.expectedConfigToken,
+      organizationBindingToken(rows[0]),
+      "部门权限绑定"
+    );
     await context.recheck();
     await context.connection.query(
       "DELETE FROM organization_unit_role WHERE unitId=? AND roleId=?",

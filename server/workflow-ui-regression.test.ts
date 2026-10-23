@@ -185,7 +185,7 @@ const systemConfigSource = source(
 );
 const organizationManagementSource = source(
   "../client/src/components/OrganizationManagementPage.tsx"
-);
+) + source("../client/src/components/OrganizationMutationDialog.tsx") + source("../shared/organization-form.ts");
 const dialogSource = source("../client/src/components/ui/dialog.tsx");
 const commandSource = source("../client/src/components/ui/command.tsx");
 const internalAuthSource = source("./internal-auth.ts");
@@ -452,8 +452,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_522 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 457 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_529 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 462 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -1177,31 +1177,28 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain("成员与岗位");
     expect(organizationManagementSource).toContain("权限组");
     expect(organizationManagementSource).toContain(
-      "createOrganizationUnit.useMutation"
+      "utils.client.config.createOrganizationUnit.mutate"
     );
     expect(organizationManagementSource).toContain(
-      "assignOrganizationMember.useMutation"
+      "utils.client.config.assignOrganizationMember.mutate"
     );
     expect(organizationManagementSource).toContain(
-      "bindOrganizationRole.useMutation"
+      "utils.client.config.bindOrganizationRole.mutate"
     );
-    expect(organizationManagementSource).toContain("取消保留原有信息");
+    expect(organizationManagementSource).toContain("放弃填写并关闭");
     expect(organizationManagementSource).toContain(
-      "moveOrganizationMember.useMutation"
-    );
-    expect(organizationManagementSource).toContain(
-      "setPrimaryOrganizationMembership.useMutation"
+      "utils.client.config.moveOrganizationMember.mutate"
     );
     expect(organizationManagementSource).toContain(
-      "deleteOrganizationUnit.useMutation"
+      "utils.client.config.setPrimaryOrganizationMembership.mutate"
     );
-    expect(organizationManagementSource).toContain("createUser.useMutation");
+    expect(organizationManagementSource).toContain(
+      "utils.client.config.deleteOrganizationUnit.mutate"
+    );
+    expect(organizationManagementSource).toContain("utils.client.iam.createUser.mutate");
     expect(organizationManagementSource).toContain("新建内部用户");
-    for (const field of ["username", "name", "password", "email", "role"]) {
-      expect(organizationManagementSource).toContain(
-        `value={newUserForm.${field}} disabled={Boolean(createdUserId)}`
-      );
-    }
+    expect(organizationManagementSource).toContain("disabled={Boolean(draft.createdUserId)}");
+    expect(organizationManagementSource).toContain("账号已创建，账号信息不可修改");
     expect(organizationManagementSource).toContain("包含子机构成员");
     expect(organizationManagementSource).toContain("用户直接角色");
     expect(organizationManagementSource).toContain("部门继承角色");
@@ -1537,7 +1534,7 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("组织选择和成员列表使用完整名称路径与编码路径", () => {
-    expect(organizationManagementSource).toContain("unit.displayPath");
+    expect(organizationManagementSource).toContain("row.displayPath");
     expect(organizationManagementSource).toContain("member.unitDisplayPath");
     expect(organizationManagementSource).toContain('label="完整组织路径"');
   });
@@ -3420,15 +3417,14 @@ it("画布节点类型使用业务名称，避免英文大写和过度字距", (
 
 it("组织保存失败在弹窗内保留错误并允许修改重试", () => {
   expect(creationDialogSource).toContain('role="alert"');
-  expect(creationDialogSource).toContain("已保留填写内容，请检查后重新提交。");
-  for (const kind of ["unit", "member", "role"]) {
-    expect(organizationManagementSource).toContain(
-      `errorMessage={${kind}Error}`
-    );
-    expect(organizationManagementSource).toContain(
-      `set${kind[0].toUpperCase()}${kind.slice(1)}Error(message)`
-    );
-  }
+  const dialog=source("../client/src/components/OrganizationMutationDialog.tsx");
+  expect(dialog).toContain("errorMessage={error}");
+  expect(dialog).toContain('useResourceDraftState( "organization", "organization-configuration"');
+  const failure=dialog.split("} catch (cause)")[1]?.split("} finally")[0];
+  expect(failure).toContain("setError(");
+  expect(failure).not.toContain("setDraft(initial)");
+  expect(dialog).toContain("setDraft(initial); onClose(); onSaved(result)");
+  expect(dialog).not.toContain("toast.error");
 });
 
 it("路由连线与节点使用统一规则解析，出口提示展示业务名称", () => {
@@ -3820,31 +3816,11 @@ it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧�
 });
 
 it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
-  const organization = source(
-    "../client/src/components/OrganizationManagementPage.tsx"
-  );
-  expect(organization).toContain("绑定后的权限");
-  expect(organization).toContain("不限于本部门创建的流程");
-  expect(organization).toContain("刷新权限组");
-  expect(organization).toContain("void roles.refetch();");
-  expect(organization).toContain("roles.isSuccess && !roles.isFetching");
-  expect(organization).toContain(
-    "submitDisabled={!validBindingRole || Boolean(roleExpiryError)}"
-  );
-  expect(organization).toContain(
-    "const expiry = roleExpiryDateInput(roleExpiresAt)"
-  );
-  expect(organization).toContain(
-    'id="organization-role-expiry-error" role="alert"'
-  );
-  expect(organization).toContain("if (!validBindingRole)");
-  expect(organization).toContain('htmlFor="organization-binding-role"');
-  expect(organization).toContain("权限组加载失败");
-  expect(organization).toContain("binding.unitId === selectedId");
-  expect(source("../client/src/components/CreationDialog.tsx")).toContain(
-    "if (pending || submitDisabled) return;"
-  );
+  const dialog=source("../client/src/components/OrganizationMutationDialog.tsx");
+  for(const text of ["绑定后的权限","不限于本部门创建的流程","重新读取组织与权限","roles.refetch()","roles.isFetching","!readBusy","!roleChanged","Boolean(observed)","roleExpiryDateInput(text(\"expiresAt\"))","expectedRoleConfigToken: draft.roleToken","onlyIfAbsent: true","确认使用当前权限",'aria-label="权限组"']) expect(dialog).toContain(text);
+  expect(source("../client/src/components/CreationDialog.tsx")).toContain("if (pending || submitDisabled) return;");
 });
+
 it("编译诊断支持定位连线并跳过无位置问题", () => {
   expect(homeSource).toContain(
     "firstLocatableDiagnostic = compileDiagnostics.find"

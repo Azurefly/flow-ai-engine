@@ -1,3 +1,9 @@
+import {
+  organizationUnitToken,
+  organizationMembershipToken,
+  organizationMembershipTokens,
+  organizationBindingToken,
+} from "./organization-configuration";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
@@ -130,10 +136,15 @@ export async function listOrganization() {
   const unitPaths = new Map(
     unitsWithPaths.map(unit => [String(unit.id), unit])
   );
+  const membershipTokens = organizationMembershipTokens(members);
   return {
-    units: unitsWithPaths,
+    units: unitsWithPaths.map(unit => ({
+      ...unit,
+      configToken: organizationUnitToken(unit),
+    })),
     members: members.map(member => ({
       ...member,
+      membershipToken: membershipTokens.get(Number(member.userId))!,
       unitCode: unitPaths.get(String(member.unitId))?.code,
       unitPathName: unitPaths.get(String(member.unitId))?.pathName,
       unitPathCode: unitPaths.get(String(member.unitId))?.pathCode,
@@ -149,6 +160,7 @@ export async function listOrganization() {
     })),
     roleBindings: roleBindings.map(binding => ({
       ...binding,
+      configToken: organizationBindingToken(binding),
       unitCode: unitPaths.get(String(binding.unitId))?.code,
       unitDisplayPath: unitPaths.get(String(binding.unitId))?.displayPath,
     })),
@@ -184,6 +196,7 @@ export async function listOrganizationDirectory() {
   return {
     units: unitsWithPaths.map(unit => ({
       ...unit,
+      configToken: organizationUnitToken(unit),
       memberCount: memberCountByUnit.get(String(unit.id)) ?? 0,
     })),
     unassignedActiveUserCount: Number(
@@ -191,6 +204,7 @@ export async function listOrganizationDirectory() {
     ),
     roleBindings: roleBindings.map(binding => ({
       ...binding,
+      configToken: organizationBindingToken(binding),
       unitCode: unitPaths.get(String(binding.unitId))?.code,
       unitDisplayPath: unitPaths.get(String(binding.unitId))?.displayPath,
     })),
@@ -229,7 +243,9 @@ export async function listOrganizationMembersPage(input: {
   const total = Number(countRows[0]?.total ?? 0);
   const page = organizationMemberPageWindow(input.page, input.pageSize, total);
   const [memberRows] = await db().query<mysql.RowDataPacket[]>(
-    `${unitScopeCte} SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId WHERE ${where} ORDER BY ou.code,om.isPrimary DESC,u.name,u.username,u.id,om.id LIMIT ? OFFSET ?`,
+    `${unitScopeCte} SELECT om.*,u.name,u.username,u.status AS userStatus,ou.name AS unitName,
+      (SELECT JSON_ARRAYAGG(JSON_OBJECT('id',allm.id,'unitId',allm.unitId,'userId',allm.userId,'title',allm.title,'isPrimary',allm.isPrimary)) FROM organization_membership allm WHERE allm.userId=om.userId) AS membershipState
+      FROM organization_membership om JOIN users u ON u.id=om.userId JOIN organization_unit ou ON ou.id=om.unitId WHERE ${where} ORDER BY ou.code,om.isPrimary DESC,u.name,u.username,u.id,om.id LIMIT ? OFFSET ?`,
     [...baseValues, page.pageSize, page.offset]
   );
   const userIds = Array.from(
@@ -305,6 +321,13 @@ export async function listOrganizationMembersPage(input: {
   return {
     items: memberRows.map(member => ({
       ...member,
+      membershipState: undefined,
+      membershipToken: organizationMembershipToken(
+        Number(member.userId),
+        typeof member.membershipState === "string"
+          ? JSON.parse(member.membershipState)
+          : (member.membershipState ?? [])
+      ),
       unitCode: unitPaths.get(String(member.unitId))?.code,
       unitPathName: unitPaths.get(String(member.unitId))?.pathName,
       unitPathCode: unitPaths.get(String(member.unitId))?.pathCode,
@@ -323,6 +346,32 @@ export async function listOrganizationMembersPage(input: {
     unitId: input.unitId,
     includeDescendants: input.includeDescendants,
     search: input.search.trim(),
+  };
+}
+
+export async function organizationMemberConfiguration(userId: number) {
+  // A single statement keeps the displayed memberships and their token in one snapshot.
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT u.id,u.name,u.username,u.status,(SELECT JSON_ARRAYAGG(JSON_OBJECT('id',om.id,'unitId',om.unitId,'userId',om.userId,'title',om.title,'isPrimary',om.isPrimary,'unitName',ou.name,'unitCode',ou.code,'unitStatus',ou.status)) FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId WHERE om.userId=u.id) AS membershipState FROM users u WHERE u.id=? LIMIT 1",
+    [userId]
+  );
+  const user = rows[0];
+  const memberships = user
+    ? typeof user.membershipState === "string"
+      ? JSON.parse(user.membershipState)
+      : (user.membershipState ?? [])
+    : [];
+  return {
+    user: user
+      ? {
+          id: Number(user.id),
+          name: user.name,
+          username: user.username,
+          status: user.status,
+        }
+      : null,
+    memberships: memberships as Array<Record<string, any>>,
+    membershipToken: organizationMembershipToken(userId, memberships),
   };
 }
 

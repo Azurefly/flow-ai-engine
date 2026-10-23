@@ -170,6 +170,7 @@ import {
   listOrganization,
   listOrganizationDirectory,
   listOrganizationMembersPage,
+  organizationMemberConfiguration,
   moveOrganizationMember,
   removeOrganizationMember,
   setPrimaryOrganizationMembership,
@@ -1421,10 +1422,11 @@ export const appRouter = router({
           page: z.number().int().min(1).max(100_000).default(1),
           pageSize: z
             .union([z.literal(10), z.literal(20), z.literal(50)])
-            .default(20),
+            .default(10),
         })
       )
       .query(({ input }) => listOrganizationMembersPage(input)),
+    organizationMemberConfiguration: iamManageProcedure.input(z.object({userId:z.number().int().positive()})).query(({input})=>organizationMemberConfiguration(input.userId)),
     createOrganizationUnit: iamManageProcedure
       .input(
         z.object({
@@ -1447,6 +1449,7 @@ export const appRouter = router({
     updateOrganizationUnit: iamManageProcedure
       .input(
         z.object({
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           id: z.string().uuid(),
           name: z.string().trim().min(1).max(160).optional(),
           parentUnitId: z.string().uuid().nullable().optional(),
@@ -1467,6 +1470,8 @@ export const appRouter = router({
     assignOrganizationMember: iamManageProcedure
       .input(
         z.object({
+          onlyIfAbsent: z.boolean().optional(),
+          expectedMembershipToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           unitId: z.string().uuid(),
           userId: z.number().int().positive(),
           title: z.string().trim().max(160).optional(),
@@ -1479,6 +1484,7 @@ export const appRouter = router({
     removeOrganizationMember: iamManageProcedure
       .input(
         z.object({
+          expectedMembershipToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           unitId: z.string().uuid(),
           userId: z.number().int().positive(),
         })
@@ -1489,6 +1495,7 @@ export const appRouter = router({
     setPrimaryOrganizationMembership: iamManageProcedure
       .input(
         z.object({
+          expectedMembershipToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           unitId: z.string().uuid(),
           userId: z.number().int().positive(),
         })
@@ -1499,6 +1506,7 @@ export const appRouter = router({
     moveOrganizationMember: iamManageProcedure
       .input(
         z.object({
+          expectedMembershipToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           fromUnitId: z.string().uuid(),
           toUnitId: z.string().uuid(),
           userId: z.number().int().positive(),
@@ -1510,13 +1518,16 @@ export const appRouter = router({
         success: await moveOrganizationMember(ctx.user, input),
       })),
     deleteOrganizationUnit: iamManageProcedure
-      .input(z.object({ id: z.string().uuid() }))
+      .input(z.object({
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(), id: z.string().uuid() }))
       .mutation(async ({ ctx, input }) => ({
         success: await deleteOrganizationUnit(ctx.user, input),
       })),
     bindOrganizationRole: iamManageProcedure
       .input(
         z.object({
+          onlyIfAbsent: z.boolean().optional(),
+          expectedRoleConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           unitId: z.string().uuid(),
           roleId: z.number().int().positive(),
           includeDescendants: z.boolean().default(true),
@@ -1530,6 +1541,7 @@ export const appRouter = router({
     unbindOrganizationRole: iamManageProcedure
       .input(
         z.object({
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           unitId: z.string().uuid(),
           roleId: z.number().int().positive(),
         })

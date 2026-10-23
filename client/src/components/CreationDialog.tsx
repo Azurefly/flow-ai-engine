@@ -23,6 +23,7 @@ export function CreationDialog({
   onSubmit,
   children,
   className = "max-w-xl",
+  destructive = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -36,6 +37,7 @@ export function CreationDialog({
   onSubmit: () => void | Promise<unknown>;
   children: ReactNode;
   className?: string;
+  destructive?: boolean;
 }) {
   return (
     <Dialog
@@ -103,7 +105,8 @@ export function CreationDialog({
             </Button>
             <Button
               type="submit"
-              className="h-11 bg-blue-600 font-medium text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10"
+              variant={destructive ? "destructive" : "default"}
+              className={`h-11 font-medium shadow-2xs min-[1024px]:h-10 ${destructive ? "" : "bg-blue-600 text-white hover:bg-blue-700"}`}
               disabled={pending || submitDisabled}
             >
               {pending && <Loader2 className="animate-spin" size={14} />}

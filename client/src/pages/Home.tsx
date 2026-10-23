@@ -1773,7 +1773,7 @@ function FlowConsole({
             flowView === "center" &&
             !routeRestoring &&
             (
-                <><ResourceDraftRecoveryNotice onRetry={()=>void (async()=>{const account=await utils.auth.me.fetch();if(account?.canManageIdentity&&resourceDrafts.systemAuthorization){const route:ConsoleRoute={section:"system",view:"identity"};setRequestedRoute({route});consoleHistory.current?.replaceSilently(formatConsoleRoute(route),{aiflowEditorReturn:null});}})()}/>                <BusinessCenter
+                <><ResourceDraftRecoveryNotice onRetry={()=>void (async()=>{const account=await utils.auth.me.fetch();if(account?.canManageIdentity&&(resourceDrafts.systemAuthorization||resourceDrafts.organization)){const route:ConsoleRoute={section:"system",view:resourceDrafts.organization?"organization":"identity"};setRequestedRoute({route});consoleHistory.current?.replaceSilently(formatConsoleRoute(route),{aiflowEditorReturn:null});}})()}/>                <BusinessCenter
                   status={businessStatus} onStatusChange={setBusinessStatus}
                   canCreate={
                     user.role === "admin" ||

@@ -262,3 +262,20 @@ it("系统角色授权草稿可跨管理页面卸载保留，同账号恢复后�
   expect(store.exportDrafts()[0].field).toBe("user:7");
   expect(new ResourceDraftStore().hasAuthorizationDraft()).toBe(false);
 });
+
+it("organization drafts are recoverable authorization input and exports omit the initial password", () => {
+  const store = new ResourceDraftStore();
+  store.set(
+    "organization",
+    "organization-configuration",
+    "new-user",
+    { fields: { username: "", password: "" } },
+    { fields: { username: "draft-user", password: "not-for-export" } }
+  );
+  expect(store.hasAuthorizationDraft()).toBe(true);
+  expect(store.hasDraftCategory("organization-configuration")).toBe(true);
+  expect(JSON.stringify(store.exportDrafts())).not.toContain("not-for-export");
+  expect(
+    store.read("organization", "organization-configuration", "new-user", null)
+  ).toMatchObject({ fields: { password: "not-for-export" } });
+});

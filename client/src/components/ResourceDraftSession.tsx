@@ -75,6 +75,8 @@ export function useResourceDraftSummary(projectId?: string) {
     authorization: store?.hasAuthorizationDraft(projectId) ?? false,
     systemAuthorization:
       store?.hasDraftCategory("system-authorization", projectId) ?? false,
+    organization:
+      store?.hasDraftCategory("organization-configuration", projectId) ?? false,
   };
 }
 export function useResourceCreation<
@@ -211,17 +213,23 @@ export function ResourceDraftRecoveryNotice({
 }: { onRetry?: () => void } = {}) {
   const store = useStore();
   const summary = store?.stats();
-  if (!store || !summary?.count) return null;
+  if (!store || (!summary?.count && !summary?.pending)) return null;
   return (
     <div
       data-resource-draft-recovery=""
       className="aiflow-type-body grid gap-3 rounded-lg border border-border bg-card p-4 text-foreground"
     >
       <p>
-        有 {summary.count}{" "}
-        {store.hasAuthorizationDraft()
-          ? "类填写仍保留在当前账号会话中。重新读取业务或流程后请先核对授权列表，再继续填写；也可先导出。请勿关闭页面。"
-          : "类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。"}
+        {summary.count ? (
+          <>
+            有 {summary.count}{" "}
+            {store.hasAuthorizationDraft()
+              ? "类填写仍保留在当前账号会话中。重新读取对应页面后请先核对授权列表，再继续填写；也可先导出。请勿关闭页面。"
+              : "类资源的填写仍保留在当前账号会话中。重新读取业务后可继续编辑；也可先导出填写。请勿关闭页面。"}
+          </>
+        ) : (
+          "正在等待保存结果，请勿重复提交。"
+        )}
       </p>
       {onRetry && (
         <Button

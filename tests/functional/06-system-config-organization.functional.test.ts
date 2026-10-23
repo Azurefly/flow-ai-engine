@@ -12,8 +12,11 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
 
       // Non-admin call rejection
       const gate = router({ check: adminProcedure.query(() => true) });
-      const caller = (role: string) => gate.createCaller({ user: { id: 1, role } } as unknown as TrpcContext);
-      await expect(caller("user").check()).rejects.toMatchObject({ code: "FORBIDDEN" });
+      const caller = (role: string) =>
+        gate.createCaller({ user: { id: 1, role } } as unknown as TrpcContext);
+      await expect(caller("user").check()).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
       await expect(caller("admin").check()).resolves.toBe(true);
 
       // General settings validation
@@ -152,12 +155,25 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
         "utf8"
       );
 
+      const form = readFileSync(
+        new URL(
+          "../../client/src/components/OrganizationMutationDialog.tsx",
+          import.meta.url
+        ),
+        "utf8"
+      );
       expect(source).not.toContain("window.confirm");
-      expect(source).toContain('kind: "remove-member"');
-      expect(source).toContain('kind: "unbind-role"');
-      expect(source).toContain("不会删除账号");
-      expect(source).toContain("继承权限将立即失效");
-      expect(source).toContain("confirmOrganizationAction");
+      expect(source).toContain('kind: "remove"');
+      expect(source).toContain('kind: "unbind"');
+      expect(form).toContain("不会删除账号");
+      expect(form).toContain("相应权限立即失效");
+      expect(form).toContain(
+        "utils.client.config.removeOrganizationMember.mutate"
+      );
+      expect(form).toContain(
+        "utils.client.config.unbindOrganizationRole.mutate"
+      );
+      expect(form).toContain("destructive={");
 
       TestResultCollector.record({
         testId: "TC-MOD6-ORG-010",

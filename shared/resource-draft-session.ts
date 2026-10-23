@@ -107,7 +107,8 @@ export class ResourceDraftStore {
     return (
       this.hasDraftCategory("project-authorization", projectId) ||
       this.hasDraftCategory("workflow-authorization", projectId) ||
-      this.hasDraftCategory("system-authorization", projectId)
+      this.hasDraftCategory("system-authorization", projectId) ||
+      this.hasDraftCategory("organization-configuration", projectId)
     );
   }
   begin(projectId: string, category: string) {
@@ -205,7 +206,20 @@ export class ResourceDraftStore {
         projectId: entry.projectId,
         category: entry.category,
         field: entry.key,
-        value: entry.value,
+        value:
+          entry.category === "organization-configuration" &&
+          entry.value &&
+          typeof entry.value === "object"
+            ? {
+                ...entry.value,
+                fields: Object.fromEntries(
+                  Object.entries(
+                    (entry.value as { fields?: Record<string, unknown> })
+                      .fields ?? {}
+                  ).filter(([key]) => key !== "password")
+                ),
+              }
+            : entry.value,
       }));
   }
 }
