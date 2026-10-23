@@ -200,7 +200,8 @@ export default function OrganizationMutationDialog({
       draft.configToken !== binding.configToken
   );
   const expiry = roleExpiryDateInput(text("expiresAt"));
-  const readBusy =
+  const reviewBusy =
+    busy ||
     reading ||
     (roleMode && roles.isFetching) ||
     (needsMember && Boolean(memberId) && member.isFetching);
@@ -247,7 +248,7 @@ export default function OrganizationMutationDialog({
   const valid =
     !unavailable &&
     !inactive &&
-    !readBusy &&
+    !reviewBusy &&
     loadedMember &&
     roleValid &&
     memberValid &&
@@ -292,6 +293,7 @@ export default function OrganizationMutationDialog({
       ]);
   }
   function rebaseMember() {
+    if (reviewBusy || !member.isSuccess || member.isError) return;
     let base = draft.base;
     if (currentMember && (editingMember || target.kind === "move"))
       base = {
@@ -313,7 +315,7 @@ export default function OrganizationMutationDialog({
     setError("");
   }
   function rebaseUnit() {
-    if (!current) return;
+    if (reviewBusy || !current) return;
     if (editing) {
       const latest = organizationUnitFields(current);
       setDraft(old => ({
@@ -643,7 +645,7 @@ export default function OrganizationMutationDialog({
           <Button
             type="button"
             variant="outline"
-            disabled={busy || readBusy}
+            disabled={reviewBusy}
             onClick={read}
           >
             重新读取组织与权限
@@ -701,7 +703,12 @@ export default function OrganizationMutationDialog({
                     )}
                   </p>
                 ))}
-            <Button type="button" variant="outline" onClick={rebaseUnit}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={reviewBusy}
+              onClick={rebaseUnit}
+            >
               {editing ? "合并最新配置并保留本次修改" : "确认使用当前部门信息"}
             </Button>
           </div>
@@ -731,6 +738,7 @@ export default function OrganizationMutationDialog({
                   type="button"
                   variant="outline"
                   className="mt-2"
+                  disabled={reviewBusy}
                   onClick={rebaseMember}
                 >
                   确认使用当前成员归属
@@ -770,6 +778,7 @@ export default function OrganizationMutationDialog({
             <Button
               type="button"
               variant="outline"
+              disabled={reviewBusy}
               onClick={() =>
                 setDraft(old => ({ ...old, configToken: binding.configToken }))
               }
@@ -1035,6 +1044,7 @@ export default function OrganizationMutationDialog({
                   <Button
                     type="button"
                     variant="outline"
+                    disabled={reviewBusy}
                     onClick={() =>
                       setDraft(old => ({
                         ...old,

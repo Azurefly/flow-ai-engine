@@ -226,6 +226,7 @@ export default function OrganizationManagementPage({
     Promise.allSettled([
       utils.config.organizationDirectory.invalidate(),
       utils.config.organizationMembersPage.invalidate(),
+      utils.config.organizationMemberConfiguration.invalidate(),
       utils.iam.invalidate(),
       utils.auth.me.invalidate(),
       utils.workflow.access.invalidate(),

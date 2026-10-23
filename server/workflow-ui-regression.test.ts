@@ -3817,7 +3817,7 @@ it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧�
 
 it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
   const dialog=source("../client/src/components/OrganizationMutationDialog.tsx");
-  for(const text of ["绑定后的权限","不限于本部门创建的流程","重新读取组织与权限","roles.refetch()","roles.isFetching","!readBusy","!roleChanged","Boolean(observed)","roleExpiryDateInput(text(\"expiresAt\"))","expectedRoleConfigToken: draft.roleToken","onlyIfAbsent: true","确认使用当前权限",'aria-label="权限组"']) expect(dialog).toContain(text);
+  for(const text of ["绑定后的权限","不限于本部门创建的流程","重新读取组织与权限","roles.refetch()","roles.isFetching","!reviewBusy","!roleChanged","Boolean(observed)","roleExpiryDateInput(text(\"expiresAt\"))","expectedRoleConfigToken: draft.roleToken","onlyIfAbsent: true","确认使用当前权限",'aria-label="权限组"']) expect(dialog).toContain(text);
   expect(source("../client/src/components/CreationDialog.tsx")).toContain("if (pending || submitDisabled) return;");
 });
 
@@ -4075,4 +4075,25 @@ it("系统角色表单的草稿订阅始终调用，写锁不能短路React Hook
   );
   expect(dialog).not.toMatch(/(?:\|\||&&)\s*use[A-Z]/);
   expect(dialog).toContain("const busy = writing || pending > 0");
+});
+
+it("组织冲突确认在重新读取期间锁定并刷新完整成员快照", () => {
+  const dialog = source(
+    "../client/src/components/OrganizationMutationDialog.tsx"
+  );
+  for (const handler of ["rebaseMember", "rebaseUnit"]) {
+    expect(dialog).toMatch(
+      new RegExp(
+        "function " + handler + "\\(\\) \\{\\s+if \\(reviewBusy"
+      )
+    );
+    expect(dialog).toMatch(
+      new RegExp(
+        "disabled=\\{reviewBusy\\}\\s+onClick=\\{" + handler + "\\}"
+      )
+    );
+  }
+  expect(organizationManagementSource).toContain(
+    "utils.config.organizationMemberConfiguration.invalidate()"
+  );
 });

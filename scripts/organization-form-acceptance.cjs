@@ -835,15 +835,40 @@ async function memberEditingAndMerge() {
     isPrimary: true,
     expectedMembershipToken: snapshot.membershipToken,
   });
-  await moving
-    .getByRole("button", { name: "重新读取组织与权限", exact: true })
-    .click();
   const confirm = moving.getByRole("button", {
     name: "确认使用当前成员归属",
     exact: true,
   });
-  await expect(confirm).toBeVisible();
-  await confirm.click();
+  let releaseMemberRead, heldMemberRead;
+  const memberReadGate = new Promise(resolve => (releaseMemberRead = resolve));
+  const memberReadHeld = new Promise(resolve => (heldMemberRead = resolve));
+  const memberRoute = "**/api/trpc/**";
+  const memberHandler = async route => {
+    if (route.request().method() === "GET" &&
+        route.request().url().includes("config.organizationMemberConfiguration")) {
+      heldMemberRead();
+      await memberReadGate;
+    }
+    await route.continue().catch(error => {
+      if (!/already handled|Target.*closed|Invalid InterceptionId/i.test(error.message))
+        errors.push(error.message);
+    });
+  };
+  await page.route(memberRoute, memberHandler);
+  try {
+    await moving.getByRole("button", { name: "重新读取组织与权限", exact: true }).click();
+    await memberReadHeld;
+    // Cached conflict controls must not confirm an old snapshot during the read.
+    if (await confirm.isVisible()) await expect(confirm).toBeDisabled();
+    await expect(moving.getByRole("button", { name: "确认迁移", exact: true })).toBeDisabled();
+    releaseMemberRead();
+    await expect(moving.getByText(new RegExp("其他管理员岗位_" + tag))).toBeVisible();
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+  } finally {
+    releaseMemberRead();
+    await page.unroute(memberRoute, memberHandler);
+  }
   await expect(
     moving.getByLabel("迁移后岗位/职务", { exact: true })
   ).toHaveValue("其他管理员岗位_" + tag);
