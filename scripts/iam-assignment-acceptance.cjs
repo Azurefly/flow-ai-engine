@@ -417,9 +417,9 @@ let browser, page, fingerprint;
     );
     await manager("auth.login", memberLogin, true);
     await viewer("auth.login", recipientLogin, true);
-    await audits();
+    if (process.env.FLOW_UI_IAM_UI_ONLY !== "1") await audits();
     if (process.env.FLOW_UI_IAM_BASELINE !== "1") {
-      await races();
+      if (process.env.FLOW_UI_IAM_UI_ONLY !== "1") await races();
       await owner(
         "iam.assignSystemRole",
         { userId: fixture.recipientUserId, roleCode: "system_admin" },
@@ -451,6 +451,7 @@ let browser, page, fingerprint;
     report({
       iamAssignment: true,
       baseline: process.env.FLOW_UI_IAM_BASELINE === "1",
+      uiOnly: process.env.FLOW_UI_IAM_UI_ONLY === "1",
       passed: true,
       tag,
     });
@@ -570,7 +571,10 @@ async function ui() {
   page = await context.newPage();
   page.setDefaultTimeout(20000);
   const errors = [];
-  page.on("pageerror", error => errors.push(error.message));
+  page.on("pageerror", error => {
+    errors.push(error.message);
+    report({ browserError: error.message });
+  });
   async function signIn(credentials) {
     await page.evaluate(() => (location.hash = "#/flows"));
     await page.getByLabel("用户名", { exact: true }).fill(credentials.username);
@@ -632,8 +636,8 @@ async function ui() {
     .selectOption(fixture.assignmentRoleCode);
   await hours().fill("6");
   await note().fill("保留角色授权填写_" + tag);
-  for (const width of [320, 390, 1024, 1920]) {
-    await page.setViewportSize({ width, height: 1000 });
+  for (const [width,height] of [[320,640],[390,844],[1024,1000],[1920,1080]]) {
+    await page.setViewportSize({ width, height });
     await expect
       .poll(() => dialog().evaluate(el => el.scrollWidth <= el.clientWidth + 1))
       .toBe(true);

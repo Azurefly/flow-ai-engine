@@ -4089,3 +4089,14 @@ it("共享弹窗固定单列最小宽度，长账号标签允许收缩并保留�
     "<ResourceDraftRecoveryNotice />"
   );
 });
+
+it("系统角色表单的草稿订阅始终调用，写锁不能短路React Hook", () => {
+  const dialog = source(
+    "../client/src/components/SystemRoleAssignmentDialog.tsx"
+  );
+  expect(dialog).toContain(
+    'const pending = useResourceDraftSummary("iam").pending'
+  );
+  expect(dialog).not.toMatch(/(?:\|\||&&)\s*use[A-Z]/);
+  expect(dialog).toContain("const busy = writing || pending > 0");
+});

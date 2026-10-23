@@ -46,7 +46,7 @@ export function CreationDialog({
     >
       <DialogContent
         showCloseButton={false}
-        className={`flex w-full min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 shadow-2xl max-h-[calc(100vh-1rem)] supports-[height:100dvh]:max-h-[calc(100dvh-1rem)] sm:p-5 ${className}`}
+        className={`flex w-[calc(100%-2rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 shadow-2xl max-h-[calc(100vh-1rem)] supports-[height:100dvh]:max-h-[calc(100dvh-1rem)] sm:p-5 ${className}`}
       >
         <form
           className="flex min-h-0 min-w-0 flex-1 flex-col"

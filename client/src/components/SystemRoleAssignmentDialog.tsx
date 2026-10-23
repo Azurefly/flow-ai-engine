@@ -56,7 +56,8 @@ export default function SystemRoleAssignmentDialog({
   const [page, setPage] = useState(0);
   const [leaving, setLeaving] = useState(false);
   const [writing, setBusy] = useState(false);
-  const busy = writing || useResourceDraftSummary("iam").pending > 0;
+  const pending = useResourceDraftSummary("iam").pending;
+  const busy = writing || pending > 0;
   const [error, setError] = useState("");
   const lock = useRef(false);
   const origin = useRef<HTMLElement | null>(null);
@@ -220,10 +221,12 @@ export default function SystemRoleAssignmentDialog({
           <fieldset disabled={busy || !allowed} className="min-w-0 space-y-3">
             {target.mode === "user" ? (
               <>
-                <label className="grid gap-1.5 aiflow-type-control">
+                <div className="grid gap-1.5 aiflow-type-control">
                   当前用户
-                  <Input value={form.userLabel} disabled />
-                </label>
+                  <span className="break-all font-medium">
+                    {form.userLabel}
+                  </span>
+                </div>
                 <label className="grid gap-1.5 aiflow-type-control">
                   系统角色
                   <select
@@ -259,13 +262,12 @@ export default function SystemRoleAssignmentDialog({
               </>
             ) : (
               <>
-                <label className="grid gap-1.5 aiflow-type-control">
+                <div className="grid gap-1.5 aiflow-type-control">
                   当前角色
-                  <Input
-                    value={form.roleName || target.roleName || form.roleCode}
-                    disabled
-                  />
-                </label>
+                  <span className="break-all font-medium">
+                    {form.roleName || target.roleName}（{form.roleCode}）
+                  </span>
+                </div>
                 <label className="grid gap-1.5 aiflow-type-control">
                   搜索内部用户
                   <Input
@@ -361,7 +363,7 @@ export default function SystemRoleAssignmentDialog({
             </p>
             {changed && (
               <div role="alert" className="aiflow-type-body space-y-2">
-                <p>角色配置已变化，原选择保留。请核对当前权限后再继续。</p>
+                <p>角色配置已变化，请核对当前权限。</p>
                 <Button
                   type="button"
                   variant="outline"
