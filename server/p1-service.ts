@@ -537,24 +537,39 @@ export async function getWorkflowTask(user: User, taskId: string) {
 
 export async function claimWorkflowTask(user: User, taskId: string) {
   const task: any = await getWorkflowTask(user, taskId);
-  if (!task) throw new Error("人工任务不存在或无访问权限。 ");
+  if (!task)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "人工任务不存在或无访问权限。",
+    });
   if (!(await canAccessTask(user, task, true)))
-    throw new Error("无权领取该人工任务。 ");
+    throw new TRPCError({ code: "FORBIDDEN", message: "无权领取该人工任务。" });
   if (task.assignedUserId && Number(task.assignedUserId) !== user.id)
-    throw new Error("该人工任务已指定其他处理人。 ");
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "该人工任务已指定其他处理人。",
+    });
   if (task.approvalGroupId && task.signMode === "sequentialSignFor") {
     const [prior] = await db().query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_task WHERE approvalGroupId=? AND approvalOrder<? AND status IN ('pending','claimed') LIMIT 1",
       [task.approvalGroupId, Number(task.approvalOrder ?? 0)]
     );
-    if (prior[0]) throw new Error("顺序会签尚未轮到当前审批人。 ");
+    if (prior[0])
+      throw new TRPCError({
+        code: "CONFLICT",
+        message: "顺序会签尚未轮到当前审批人。",
+      });
   }
   await assertCurrentTaskOperation(user, task);
   const [result] = await db().query<mysql.ResultSetHeader>(
     "UPDATE workflow_task SET status='claimed',claimedByUserId=?,claimedAt=NOW(),ownerVersion=ownerVersion+1 WHERE id=? AND status='pending' AND ownerVersion=?",
     [user.id, taskId, Number(task.ownerVersion ?? 0)]
   );
-  if (!result.affectedRows) throw new Error("人工任务已被领取或已结束。 ");
+  if (!result.affectedRows)
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "人工任务已被领取或已结束。",
+    });
   await recordAuthorizationAudit({
     actorUserId: user.id,
     action: "user_updated",
@@ -571,14 +586,21 @@ export async function executeWorkflowTask(
   result: JsonRecord
 ) {
   const task: any = await getWorkflowTask(user, taskId);
-  if (!task) throw new Error("人工任务不存在或无访问权限。");
-  if (task.status !== "pending" && (
-    task.status !== "claimed" ||
-    Number(task.claimedByUserId) !== user.id
-  ))
-    throw new Error("当前操作不可执行，请刷新任务状态。");
+  if (!task)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "人工任务不存在或无访问权限。",
+    });
+  if (
+    task.status !== "pending" &&
+    (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id)
+  )
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "当前操作不可执行，请刷新任务状态。",
+    });
   if (!(await canAccessTask(user, task, true)))
-    throw new Error("无权执行该人工任务。");
+    throw new TRPCError({ code: "FORBIDDEN", message: "无权执行该人工任务。" });
   await assertCurrentTaskOperation(user, task);
   validateWorkflowTaskSubmission(task, result);
   if (task.status === "pending") await claimWorkflowTask(user, taskId);
@@ -591,11 +613,18 @@ export async function completeWorkflowTask(
   result: JsonRecord
 ) {
   const task: any = await getWorkflowTask(user, taskId);
-  if (!task) throw new Error("人工任务不存在或无访问权限。 ");
+  if (!task)
+    throw new TRPCError({
+      code: "NOT_FOUND",
+      message: "人工任务不存在或无访问权限。",
+    });
   if (!(await canAccessTask(user, task, true)))
-    throw new Error("无权完成该人工任务。 ");
+    throw new TRPCError({ code: "FORBIDDEN", message: "无权完成该人工任务。" });
   if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id)
-    throw new Error("仅当前领取人可完成已领取的人工任务。 ");
+    throw new TRPCError({
+      code: "CONFLICT",
+      message: "仅当前领取人可完成已领取的人工任务。",
+    });
   await assertCurrentTaskOperation(user, task);
   const resumed = await resumeWorkflowTask({
     taskId,
