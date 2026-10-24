@@ -123,6 +123,13 @@ function command(id, code) {
   assert(c, "Missing source command " + id + "/" + code);
   return c;
 }
+// Legacy command numbers are local to each source flow, not global decisions.
+function decisionFor(flowId, commandCode) {
+  return (flowId === "667" && commandCode === "05") ||
+    (flowId === "666" && commandCode === "07")
+    ? "rejected"
+    : "approved";
+}
 function specs(template) {
   const S = (id, level, kind, flow, codes, status = "3") => ({
     id,
@@ -219,10 +226,12 @@ function definition(template, mode) {
       bdcz: { hqhqsz: mode, hqtgbfb: 100 },
       outcomeMode: "explicit",
       outcomes: cs.map(c => ({
-        code: "cmd" + c.code,
+        code: decisionFor(stage.flow, c.code),
         label: c.name,
         sourceHandle: "cmd" + c.code,
-        ...(["05", "07"].includes(c.code) ? { requireComment: true } : {}),
+        ...(decisionFor(stage.flow, c.code) === "rejected"
+          ? { requireComment: true }
+          : {}),
       })),
       formSchema: {
         fields: [
@@ -347,6 +356,8 @@ function definition(template, mode) {
       sourceDocuments: sources.map(x => ({ id: x.id, sha256: x.sourceSha256 })),
       hierarchyLevels: levels,
       legacyAdaptation: "finite_three_level",
+      signingOutcomeMapping:
+        "667/05,666/07=rejected; all other commands=approved",
       legacyReturn53: "下级处置反馈完成",
       legacyReturn88: "同级警种协同完成",
     },
@@ -399,12 +410,43 @@ async function browserComplete(actor, task, stage, code, caseId) {
   await page.screenshot({
     path: path.join(out, "browser-" + stage.level + ".png"),
   });
+  const responsePromise = page
+    .waitForResponse(
+      response =>
+        response.request().method() === "POST" &&
+        /api\/trpc\/[^?]*task\.(execute|complete)/.test(response.url()),
+      { timeout: 5000 }
+    )
+    .catch(() => null);
   await drawer
     .getByRole("button", {
       name: "提交" + command(stage.flow, code).name,
       exact: true,
     })
     .click();
+  const submittedResponse = await responsePromise;
+  const notices = await page.locator("[data-sonner-toast]").allTextContents();
+  const reply = submittedResponse ? await submittedResponse.json() : null;
+  const entries = Array.isArray(reply) ? reply : reply ? [reply] : [];
+  const submittedError = entries.find(item => item.error)?.error;
+  const evidence = {
+    httpStatus: submittedResponse?.status(),
+    error: submittedError?.json?.message || submittedError?.message,
+    notices,
+  };
+  fs.writeFileSync(
+    path.join(out, "browser-submit-" + stage.level + ".json"),
+    JSON.stringify(evidence, null, 2),
+    "utf8"
+  );
+  assert(
+    submittedResponse,
+    "No task submission request: " + notices.join("; ")
+  );
+  assert(
+    submittedResponse.ok() && !submittedError,
+    "Task submission failed: " + JSON.stringify(evidence)
+  );
   await poll(
     "browser task complete",
     () => actor.session.api("task.get", { taskId: task.id }),
@@ -448,6 +490,8 @@ async function runScenario(flow, scenario, useBrowser = false) {
     groupsSeen = new Set(),
     visits = new Map(),
     acted = new Map();
+  const browserLevels = new Set(),
+    actorsByLevel = new Map();
   let badAudit = false,
     badAssess = false,
     browserUsed = false,
@@ -505,7 +549,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
           taskId: active[0].id,
           result: {
             decision: "approved",
-            outcome: "cmd" + stage.codes[0],
+            outcome: decisionFor(stage.flow, stage.codes[0]),
             reference: caseId,
             phase: stage.id,
             level: levels[stage.level],
@@ -525,7 +569,17 @@ async function runScenario(flow, scenario, useBrowser = false) {
       await assert.rejects(
         wrong.session.api(
           "task.complete",
-          { taskId: active[0].id, result: {} },
+          {
+            taskId: active[0].id,
+            result: {
+              decision: "approved",
+              outcome: decisionFor(stage.flow, stage.codes[0]),
+              reference: caseId,
+              phase: stage.id,
+              level: levels[stage.level],
+              reportNote: "无权办理验证",
+            },
+          },
           true
         ),
         e => e.status === 403
@@ -544,7 +598,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
       code = "07";
       badAssess = true;
     }
-    const reject = ["05", "07"].includes(code);
+    const reject = decisionFor(stage.flow, code) === "rejected";
     const role = stage.level + ":" + stage.kind,
       index = acted.get(role) || 0;
     acted.set(role, index + 1);
@@ -556,9 +610,10 @@ async function runScenario(flow, scenario, useBrowser = false) {
       const actor = selected[a],
         task = active.find(x => Number(x.assignedUserId) === actor.id);
       assert(task);
-      if (useBrowser && !browserUsed) {
+      if (useBrowser && !browserLevels.has(stage.level)) {
         await browserComplete(actor, task, stage, code, caseId);
         browserUsed = true;
+        browserLevels.add(stage.level);
       } else {
         await actor.session.api("task.claim", { taskId: task.id }, true);
         await actor.session.api(
@@ -567,7 +622,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
             taskId: task.id,
             result: {
               decision: reject ? "rejected" : "approved",
-              outcome: "cmd" + code,
+              outcome: decisionFor(stage.flow, code),
               reference: caseId,
               phase: stage.id,
               level: levels[stage.level],
@@ -614,6 +669,12 @@ async function runScenario(flow, scenario, useBrowser = false) {
         )
     );
     const decided = finalGroup.filter(x => x.approvalGroupId === group);
+    const actors = actorsByLevel.get(stage.level) || new Set();
+    for (const row of decided.filter(x => x.status === "completed")) {
+      assert.equal(Number(row.completedByUserId), Number(row.assignedUserId));
+      actors.add(Number(row.completedByUserId));
+    }
+    actorsByLevel.set(stage.level, actors);
     assert.equal(
       decided.filter(x => x.status === "completed").length,
       selected.length
@@ -631,7 +692,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
           taskId: task.id,
           result: {
             decision: "approved",
-            outcome: "cmd" + code,
+            outcome: decisionFor(stage.flow, code),
             reference: caseId,
             phase: stage.id,
             level: levels[stage.level],
@@ -656,6 +717,9 @@ async function runScenario(flow, scenario, useBrowser = false) {
     1
   );
   assert(stages.every(x => visits.has(x.id)));
+  for (let level = 0; level < 3; level++)
+    assert((actorsByLevel.get(level)?.size || 0) >= 2);
+  if (useBrowser) assert.equal(browserLevels.size, 3);
   assert(
     run.nodeRuns.some(
       x => x.nodeId === "return53_branch" && x.status === "success"
@@ -703,6 +767,10 @@ async function runScenario(flow, scenario, useBrowser = false) {
     reworkVerified: scenario === "rework",
     endExecutions: 1,
     browserUsed,
+    browserLevels: [...browserLevels].map(level => levels[level]),
+    actorsByLevel: Object.fromEntries(
+      [...actorsByLevel].map(([level, ids]) => [levels[level], [...ids]])
+    ),
   };
   results.push(result);
   fs.writeFileSync(
