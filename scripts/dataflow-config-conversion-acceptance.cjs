@@ -397,7 +397,7 @@ async function poll(description, read, accept) {
     await apply(dialog);
     // A later edit must not be overwritten by the conversion's quick undo.
     await page.setViewportSize({ width: 1440, height: 1000 });
-    await page.locator('.react-flow__node[data-id="agg"]').dblclick();
+    await page.locator('.react-flow__node[data-id="agg"]').click();
     const nodeName = page.getByLabel("节点名称", { exact: true });
     await nodeName.fill("汇总核对");
     await expect(
@@ -472,7 +472,7 @@ async function poll(description, read, accept) {
     const published = await owner("workflow.get", { id: data.id });
     assert.equal(published.status, "published");
     assert.equal(result.definitionVersion, Number(published.definitionVersion));
-    assert.equal(result.executionSource, "published");
+    assert.equal(result.executionSource, "published_plan");
     report({
       stage: "conversion-runtime",
       runSucceeded: true,
@@ -551,7 +551,7 @@ async function poll(description, read, accept) {
     faultPage.setDefaultTimeout(20000);
     await faultPage.goto(`${base}#/flows/workflow/${conflict.id}/editor`);
     await faultPage.locator("[data-workflow-editor]").waitFor();
-    await faultPage.locator('.react-flow__node[data-id="agg"]').dblclick();
+    await faultPage.locator('.react-flow__node[data-id="agg"]').click();
     await faultPage
       .getByLabel("节点名称", { exact: true })
       .fill("未保存的窗口故障核对");
