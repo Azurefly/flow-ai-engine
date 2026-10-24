@@ -279,3 +279,28 @@ it("organization drafts are recoverable authorization input and exports omit the
     store.read("organization", "organization-configuration", "new-user", null)
   ).toMatchObject({ fields: { password: "not-for-export" } });
 });
+it("流程基本信息草稿按业务和流程隔离，单独清理不会影响其他流程填写", () => {
+  const store = new ResourceDraftStore();
+  store.set(
+    "p",
+    "workflow-info:a",
+    "fields",
+    { name: "原名" },
+    { name: "待保存" }
+  );
+  store.set(
+    "p",
+    "workflow-info:b",
+    "fields",
+    { name: "另一流程" },
+    { name: "另一修改" }
+  );
+  expect(store.hasWorkflowDraft("p")).toBe(true);
+  expect(store.hasWorkflowDraft("other")).toBe(false);
+  store.clearCategory("p", "workflow-info:a");
+  expect(store.read("p", "workflow-info:b", "fields", null)).toEqual({
+    name: "另一修改",
+  });
+  expect(store.hasWorkflowDraft("p")).toBe(true);
+  expect(new ResourceDraftStore().hasWorkflowDraft("p")).toBe(false);
+});

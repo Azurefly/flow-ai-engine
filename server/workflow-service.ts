@@ -1,3 +1,4 @@
+import { workflowInfoToken } from "./workflow-info-token";
 import { workflowCopyName } from "../shared/workflow-creation-form";
 import { assertDataflowResourcesReady } from "./dataflow-resource-readiness";
 import { assertWorkflowCreationAccess, assertWorkflowConfigurationToken, prepareWorkflowCreationRequest, replayWorkflowCreationRequest, saveWorkflowCreationRequest, type WorkflowCreationRequest } from "./workflow-creation-request";
@@ -154,6 +155,8 @@ function assertJsonObject(value: unknown, message: string) {
 }
 
 type StoredWorkflow = WorkflowMutationSnapshot & {
+  folderId?: string | null;
+  dataSourceId?: string | null;
   id: string;
   name: string;
   description: string | null;
@@ -422,7 +425,7 @@ export async function getWorkflow(idValue: string, user: WorkflowUser) {
     [idValue]
   );
   const row = rows[0];
-  return row ? hydrateWorkflow(row) : null;
+  return row ? { ...hydrateWorkflow(row), infoConfigToken: workflowInfoToken(row) } : null;
 }
 
 export async function canCreateWorkflow(user: WorkflowUser) {

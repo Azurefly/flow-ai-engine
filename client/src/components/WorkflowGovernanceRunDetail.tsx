@@ -1,3 +1,4 @@
+import "./workflow-governance.css";
 import { Button } from "@/components/ui/button";
 import { ChevronDown, Clock3, Flag, Loader2 } from "lucide-react";
 import { RunPayloadDetails } from "./RunPayloadDetails";
@@ -85,12 +86,12 @@ function DetailFields({ title, value }: { title: string; value: unknown }) {
           {rows.map((row, index) => (
             <div
               key={`${row.field}-${index}`}
-              className="aiflow-type-body grid min-w-0 gap-1 px-3 py-2 sm:grid-cols-[minmax(120px,0.35fr)_minmax(0,1fr)]"
+              className="aiflow-type-body gov-field"
             >
               <dt className="aiflow-type-meta break-all font-mono text-muted-foreground">
                 {row.field}
               </dt>
-              <dd className="aiflow-type-body min-w-0 whitespace-pre-wrap break-words text-foreground">
+              <dd className="aiflow-type-body gov-field-value">
                 {row.value}
               </dd>
             </div>
@@ -168,7 +169,7 @@ export function RunDetailContent({ run }: { run: any }) {
                 里程碑是不可变执行标记，不会改变业务状态或参与人权限。
               </p>
             </div>
-            <span className="aiflow-type-meta rounded-full bg-teal-50 px-2.5 py-1 text-teal-700">
+            <span className="aiflow-type-meta gov-state-badge">
               {(run.milestones ?? []).length} 个
             </span>
           </div>
@@ -195,7 +196,7 @@ export function RunDetailContent({ run }: { run: any }) {
               </article>
             ))}
             {!(run.milestones ?? []).length && (
-              <p className="aiflow-type-body rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground sm:col-span-2 xl:col-span-3">
+              <p className="aiflow-type-body gov-wide-empty">
                 当前控制流程尚未产生里程碑。
               </p>
             )}
@@ -213,7 +214,7 @@ export function RunDetailContent({ run }: { run: any }) {
                 以服务端不可变迁移事实为准，不从任务状态反向推断。
               </p>
             </div>
-            <span className="aiflow-type-meta rounded-full bg-aiflow-info-surface px-2.5 py-1 text-aiflow-info">
+            <span className="aiflow-type-meta gov-node-badge">
               {(run.stateTransitions ?? []).length} 次迁移
             </span>
           </div>
@@ -221,7 +222,7 @@ export function RunDetailContent({ run }: { run: any }) {
             {(run.stateTransitions ?? []).map((transition: any) => (
               <article
                 key={transition.id}
-                className="grid min-w-0 gap-2 rounded-lg border border-border bg-muted p-3 sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_150px] sm:items-center"
+                className="gov-node-row"
               >
                 <span className="aiflow-type-meta font-mono font-semibold text-aiflow-info">
                   #{transition.sequenceNo}
@@ -229,7 +230,7 @@ export function RunDetailContent({ run }: { run: any }) {
                 <span className="aiflow-type-body min-w-0 break-words text-muted-foreground">
                   {transition.fromStateCode || "流程启动"}
                 </span>
-                <span className="aiflow-type-body min-w-0 break-words font-semibold text-foreground">
+                <span className="aiflow-type-body gov-node-title">
                   → {transition.toStateCode}
                 </span>
                 <span className="aiflow-type-meta text-muted-foreground">
@@ -238,7 +239,7 @@ export function RunDetailContent({ run }: { run: any }) {
               </article>
             ))}
             {!(run.stateTransitions ?? []).length && (
-              <p className="aiflow-type-body rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground">
+              <p className="aiflow-type-body gov-empty">
                 当前实例尚未写入状态迁移事实。
               </p>
             )}
@@ -255,7 +256,7 @@ export function RunDetailContent({ run }: { run: any }) {
               默认仅展示必要字段，并按操作时间倒序排列。
             </p>
           </div>
-          <span className="aiflow-type-meta rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+          <span className="aiflow-type-meta gov-stage-badge">
             {actions.length} 条
           </span>
         </div>
@@ -265,8 +266,8 @@ export function RunDetailContent({ run }: { run: any }) {
               key={node.id}
               className="min-w-0 rounded-lg border border-border bg-card shadow-sm"
             >
-              <div className="grid min-w-0 gap-3 p-3 sm:grid-cols-[150px_minmax(0,1fr)_90px_90px] sm:items-center">
-                <div className="aiflow-type-meta flex min-w-0 items-center gap-2 text-muted-foreground">
+              <div className="gov-event-row">
+                <div className="aiflow-type-meta gov-event-label">
                   <Clock3 size={13} className="shrink-0" />
                   <span className="break-words">
                     {formatTime(operationTime(node))}
@@ -276,7 +277,7 @@ export function RunDetailContent({ run }: { run: any }) {
                   <p className="aiflow-type-body break-words font-medium text-foreground">
                     {node.nodeName || "未命名操作"}
                   </p>
-                  <p className="aiflow-type-meta mt-0.5 break-all font-mono text-muted-foreground">
+                  <p className="aiflow-type-meta font-mono gov-event-id">
                     {node.nodeType || "unknown"}
                   </p>
                 </div>
@@ -290,7 +291,7 @@ export function RunDetailContent({ run }: { run: any }) {
                 </span>
               </div>
               <details className="group border-t border-border">
-                <summary className="aiflow-type-control flex cursor-pointer list-none items-center justify-center gap-1 px-3 py-2 font-medium text-aiflow-info hover:bg-aiflow-info-surface">
+                <summary className="aiflow-type-control gov-expand">
                   查看详情
                   <ChevronDown
                     size={13}
@@ -315,7 +316,7 @@ export function RunDetailContent({ run }: { run: any }) {
                     kind="error"
                   />
                   <details className="overflow-hidden rounded-md border border-border bg-card">
-                    <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
+                    <summary className="aiflow-type-control gov-summary">
                       节点技术信息（内部标识与时间）
                       <span className="aiflow-type-meta font-normal text-muted-foreground">
                         展开
@@ -344,7 +345,7 @@ export function RunDetailContent({ run }: { run: any }) {
             </article>
           ))}
           {!actions.length && (
-            <p className="aiflow-type-body rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground">
+            <p className="aiflow-type-body gov-empty-large">
               该实例尚无节点操作记录。
             </p>
           )}
@@ -445,12 +446,12 @@ export function RunDetailDialog({
 }) {
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 sm:items-center"
+      className="gov-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="流程实例详情"
     >
-      <section className="max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-card shadow-2xl">
+      <section className="gov-modal">
         <header className="flex items-start justify-between border-b border-border p-5">
           <div className="min-w-0">
             <p className="aiflow-type-meta font-bold tracking-[.18em] text-aiflow-info">

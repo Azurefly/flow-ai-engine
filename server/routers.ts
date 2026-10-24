@@ -670,6 +670,7 @@ export const appRouter = router({
         z.object({
           projectId: z.string().min(8).max(64),
           workflowId: z.string().min(8).max(64),
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           name: z.string().trim().min(1).max(160),
           description: z.string().trim().max(1200).nullable().optional(),
         })

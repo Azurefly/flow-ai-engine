@@ -207,6 +207,8 @@ export default defineConfig(({ command }) => {
       rollupOptions: {
         output: {
           onlyExplicitManualChunks: true,
+          // Merge tiny shared dependency chunks to reduce request/import overhead.
+          experimentalMinChunkSize: 4 * 1024,
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
             if (

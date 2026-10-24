@@ -184,6 +184,7 @@ describe("原始项目工作区 P0", () => {
       });
       await expect(
         outsiderCaller.project.updateWorkflowInfo({
+          expectedConfigToken: (await designerCaller.workflow.get({ id: workflowId }))?.infoConfigToken,
           projectId,
           workflowId,
           name: "越权更新",
@@ -192,6 +193,7 @@ describe("原始项目工作区 P0", () => {
       ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
       await expect(
         designerCaller.project.updateWorkflowInfo({
+          expectedConfigToken: (await designerCaller.workflow.get({ id: workflowId }))?.infoConfigToken,
           projectId,
           workflowId,
           name: "控制流程基本信息已更新",
@@ -411,6 +413,7 @@ describe("原始项目工作区 P0", () => {
       ).rejects.toThrow("已归档流程不能发起运行");
       await expect(
         designerCaller.project.updateWorkflowInfo({
+          expectedConfigToken: (await designerCaller.workflow.get({ id: workflowId }))?.infoConfigToken,
           projectId,
           workflowId,
           name: "归档不应更新",

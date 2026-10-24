@@ -14,6 +14,9 @@ const editorCommandSource = source(
 const workflowCreationSource = source(
   "../client/src/components/WorkflowCreateDialog.tsx"
 );
+const governanceStyles = source("../client/src/components/workflow-governance.css");
+const infoDialogSource = source("../client/src/components/WorkflowInfoDialog.tsx");
+const infoTransactionSource = source("./project-workflow-info.ts");
 const authorizationSource = source(
   "../client/src/components/WorkflowRoleBindingsDialog.tsx"
 );
@@ -156,13 +159,9 @@ describe("分页流程缓存联动", () => {
     expect(
       content.match(/utils\.workflow\.page\.invalidate\(\)/g)
     ).toHaveLength(2);
-    const callback = content
-      .split("updateWorkflowInfo.useMutation({")[1]
-      ?.split("onError:")[0];
+    const callback = content.split("function infoSaved(")[1]?.split("const visibleRuns")[0];
     expect(callback).toContain("utils.workflow.page.invalidate()");
-    expect(callback).toContain(
-      "utils.workflow.get.invalidate({ id: workflowId })"
-    );
+    expect(callback).toContain("utils.workflow.get.invalidate({ id: target.id })");
     const restored =
       content.split("onSaved={() =>")[1] ?? content.split("onSaved={()=>")[1];
     expect(restored).toContain("restoreTarget.workflowId");
@@ -1758,22 +1757,22 @@ describe("流程设计器界面回归约束", () => {
 
   it("恢复原始流程详情的基本信息字段化编辑，并与项目流程编辑权限一致", () => {
     expect(governanceSource).toContain("编辑基本信息");
-    expect(governanceSource).toContain("编辑流程基本信息");
-    expect(governanceSource).toContain("流程名称");
-    expect(governanceSource).toContain("流程说明");
-    expect(governanceSource).toContain(
+    expect(infoDialogSource).toContain("编辑流程基本信息");
+    expect(infoDialogSource).toContain("流程名称");
+    expect(infoDialogSource).toContain("流程说明");
+    expect(infoDialogSource).toContain(
       "trpc.project.updateWorkflowInfo.useMutation"
     );
     expect(governanceSource).toContain(
       'projectAccess.data?.permissions?.has("project:workflow:edit")'
     );
-    expect(governanceSource).toContain(
+    expect(infoDialogSource).toContain(
       "不会修改流程定义、审核状态、发布状态或运行记录"
     );
-    expect(governanceSource).toContain("<Input value={infoName}");
-    expect(governanceSource).toContain("<Textarea value={infoDescription}");
-    expect(governanceSource).not.toContain("基本信息 JSON");
-    expect(governanceSource).not.toContain("JSON.parse");
+    expect(infoDialogSource).toContain("<Input value={fields.name}");
+    expect(infoDialogSource).toContain("<Textarea value={fields.description}");
+    expect(infoDialogSource).not.toContain("基本信息 JSON");
+    expect(infoDialogSource).not.toContain("JSON.parse");
     expect(projectWorkspaceSource).not.toContain("WorkflowDetailDialog");
     expect(projectWorkspaceSource).not.toContain(
       "trpc.project.updateWorkflowInfo.useMutation"
@@ -1784,13 +1783,13 @@ describe("流程设计器界面回归约束", () => {
     expect(routerSource).toMatch(
       /description:\s*z\.string\(\)\.trim\(\)\.max\(1200\)\.nullable\(\)\.optional\(\)/
     );
-    expect(projectServiceSource).toContain(
-      'input.projectId, "project:workflow:edit"'
-    );
-    expect(projectServiceSource).toContain(
-      "WHERE id=? AND projectId=? LIMIT 1"
-    );
-    expect(projectServiceSource).toContain("project_workflow_info_updated");
+    expect(projectServiceSource).toContain("commitProjectWorkflowInfo(user, input)");
+    expect(infoTransactionSource).toContain('permissions.has("project:workflow:edit")');
+    expect(infoTransactionSource).toContain("WHERE id=? AND projectId=? FOR UPDATE");
+    expect(infoTransactionSource).toContain("project_workflow_info_updated");
+    expect(infoDialogSource).toContain("expectedConfigToken: fields.token");
+    expect(infoDialogSource).toContain("useResourceDraftPending");
+    expect(infoDialogSource).toContain("已核对，保留填写并以当前信息为准");
   });
 
   it("将原始流程详情承载为可关闭的受权详情视图，并保留只读画布和设计器返回路径", () => {
@@ -2095,7 +2094,8 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("新增治理、运行分析与复用资产面板在窄屏保持可访问结构", () => {
-    expect(governanceSource).toContain("flex flex-col gap-3");
+    expect(governanceSource).toContain('className="gov-toolbar"');
+    expect(governanceStyles).toContain(".gov-toolbar { @apply flex flex-col gap-3");
     expect(governanceSource).toContain(
       "xl:grid-cols-[minmax(240px,320px)_minmax(0,1fr)]"
     );
@@ -3185,9 +3185,8 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).toContain(
       'className="aiflow-type-meta font-medium text-muted-foreground"'
     );
-    expect(instanceDetailSource).toContain(
-      'className="aiflow-type-control flex min-h-11 cursor-pointer items-center justify-between'
-    );
+    expect(instanceDetailSource).toContain('className="aiflow-type-control gov-summary"');
+    expect(governanceStyles).toContain(".gov-summary { @apply flex min-h-11 cursor-pointer items-center justify-between");
     expect(instanceDetailSource).not.toContain("text-[10px]");
     expect(instanceDetailSource).not.toContain("text-xs");
     expect(instanceDetailSource).not.toContain("text-sm");

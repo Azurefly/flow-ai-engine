@@ -1,0 +1,139 @@
+@reference "../index.css";
+/* Scoped governance primitives retain the existing utilities and semantic type roles. */
+.gov-panel {
+  @apply overflow-hidden rounded-lg border border-border bg-card shadow-sm;
+}
+.gov-preview {
+  @apply rounded-lg border border-border bg-muted p-5 text-muted-foreground;
+}
+.gov-toolbar {
+  @apply flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between;
+}
+.gov-search-icon {
+  @apply pointer-events-none absolute left-2.5 top-2.5 text-muted-foreground;
+}
+.gov-search {
+  @apply h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 outline-none focus-visible:ring-2 focus-visible:ring-blue-500;
+}
+.gov-run-id {
+  @apply min-w-0 truncate font-semibold text-foreground;
+}
+.gov-code-cell {
+  @apply whitespace-nowrap px-4 py-3 text-muted-foreground;
+}
+.gov-time-cell {
+  @apply whitespace-nowrap px-4 py-3 text-muted-foreground;
+}
+.gov-footer {
+  @apply flex flex-col gap-2 border-t border-border px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between;
+}
+.gov-header {
+  @apply flex flex-wrap items-center justify-between gap-3 border-b border-border p-4;
+}
+.gov-heading {
+  @apply flex items-center gap-2 font-semibold text-foreground;
+}
+.gov-counter {
+  @apply inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground;
+}
+.gov-warning {
+  @apply m-4 grid gap-2 rounded-lg border border-aiflow-warning-border p-3;
+}
+.gov-version-list {
+  @apply max-h-[520px] overflow-y-auto rounded-md border border-border bg-muted p-2;
+}
+.gov-version-link {
+  @apply font-semibold text-indigo-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500;
+}
+.gov-tag {
+  @apply rounded bg-muted px-2 py-1 text-muted-foreground;
+}
+.gov-filter {
+  @apply flex items-center gap-2 text-muted-foreground;
+}
+.gov-select {
+  @apply h-9 max-w-36 rounded border border-border bg-card px-2;
+}
+.gov-hint {
+  @apply mt-4 rounded-md bg-muted p-4 text-muted-foreground;
+}
+.gov-reset-note {
+  @apply mx-4 mb-4 flex flex-col gap-2 rounded-md border border-aiflow-warning-border bg-aiflow-warning-surface p-3 sm:flex-row sm:items-center sm:justify-between;
+}
+.gov-th {
+  @apply whitespace-nowrap px-4 py-3 font-medium;
+}
+.gov-field {
+  @apply grid min-w-0 gap-1 px-3 py-2 sm:grid-cols-[minmax(120px,0.35fr)_minmax(0,1fr)];
+}
+.gov-field-value {
+  @apply min-w-0 whitespace-pre-wrap break-words text-foreground;
+}
+.gov-state-badge {
+  @apply rounded-full bg-teal-50 px-2.5 py-1 text-teal-700;
+}
+.gov-wide-empty {
+  @apply rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground sm:col-span-2 xl:col-span-3;
+}
+.gov-node-badge {
+  @apply rounded-full bg-aiflow-info-surface px-2.5 py-1 text-aiflow-info;
+}
+.gov-node-row {
+  @apply grid min-w-0 gap-2 rounded-lg border border-border bg-muted p-3 sm:grid-cols-[56px_minmax(0,1fr)_minmax(0,1fr)_150px] sm:items-center;
+}
+.gov-node-title {
+  @apply min-w-0 break-words font-semibold text-foreground;
+}
+.gov-empty {
+  @apply rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground;
+}
+.gov-stage-badge {
+  @apply rounded-full bg-muted px-2.5 py-1 text-muted-foreground;
+}
+.gov-event-row {
+  @apply grid min-w-0 gap-3 p-3 sm:grid-cols-[150px_minmax(0,1fr)_90px_90px] sm:items-center;
+}
+.gov-event-label {
+  @apply flex min-w-0 items-center gap-2 text-muted-foreground;
+}
+.gov-event-id {
+  @apply mt-0.5 break-all text-muted-foreground;
+}
+.gov-expand {
+  @apply flex cursor-pointer list-none items-center justify-center gap-1 px-3 py-2 font-medium text-aiflow-info hover:bg-aiflow-info-surface;
+}
+.gov-summary {
+  @apply flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500;
+}
+.gov-empty-large {
+  @apply rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground;
+}
+.gov-overlay {
+  @apply fixed inset-0 z-50 flex items-end justify-center bg-slate-950/35 p-3 sm:items-center;
+}
+.gov-modal {
+  @apply max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-card shadow-2xl;
+}
+
+.workflow-info-status {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--aiflow-warning-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--aiflow-warning-surface);
+  font-size: var(--aiflow-type-body);
+  line-height: var(--aiflow-leading-body);
+}
+.workflow-info-values {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.workflow-info-values dt {
+  font-weight: 600;
+}
+.workflow-info-values dd {
+  white-space: pre-wrap;
+}

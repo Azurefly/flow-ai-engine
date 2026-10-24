@@ -1,14 +1,5 @@
+import "./workflow-governance.css";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { normalizeWorkflowRunSearchQuery } from "@shared/workflow-run-search";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
@@ -28,6 +19,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import WorkflowInfoDialog, {
+  type WorkflowInfoTarget,
+} from "./WorkflowInfoDialog";
 import type { WorkflowVersionRestoreTarget } from "./WorkflowVersionRestoreDialog";
 import { toast } from "sonner";
 import { RunDetailDialog } from "./WorkflowGovernanceRunDetail";
@@ -112,8 +106,6 @@ export default function WorkflowGovernance({
   const [editingInfo, setEditingInfo] = useState(false);
   const [restoreTarget, setRestoreTarget] =
     useState<WorkflowVersionRestoreTarget | null>(null);
-  const [infoName, setInfoName] = useState("");
-  const [infoDescription, setInfoDescription] = useState("");
   const item = workflow.data as any;
   const runHistoryFilterKey = JSON.stringify([workflowId, runSearchQuery]);
   const runHistoryCursorStack =
@@ -201,36 +193,24 @@ export default function WorkflowGovernance({
   const canEditInfo = Boolean(
     projectAccess.data?.permissions?.has("project:workflow:edit")
   );
-  const updateInfo = trpc.project.updateWorkflowInfo.useMutation({
-    onSuccess: () => {
-      if (item?.projectId) {
-        void utils.project.workflows.invalidate({ projectId: item.projectId });
-        void utils.project.access.invalidate({ projectId: item.projectId });
-      }
-      void utils.workflow.get.invalidate({ id: workflowId });
-      void utils.workflow.list.invalidate();
-      void utils.workflow.page.invalidate();
-      setEditingInfo(false);
-      toast.success("流程基本信息已更新，并已写入项目审计。");
-    },
-    onError: error => toast.error(error.message),
-  });
-
-  useEffect(() => {
-    if (!item || editingInfo) return;
-    setInfoName(String(item.name ?? ""));
-    setInfoDescription(String(item.description ?? ""));
-  }, [editingInfo, item?.description, item?.name]);
+  function infoSaved(target: WorkflowInfoTarget) {
+    void Promise.allSettled([
+      utils.project.workflows.invalidate({ projectId: target.projectId }),
+      utils.project.access.invalidate({ projectId: target.projectId }),
+      utils.workflow.get.invalidate({ id: target.id }),
+      utils.workflow.list.invalidate(),
+      utils.workflow.page.invalidate(),
+    ]);
+    setEditingInfo(false);
+    toast.success("流程基本信息已确认保存。");
+  }
 
   const visibleRuns = runs.data?.items ?? [];
 
   return (
     <div className="min-w-0">
       {activeSection === "overview" && (
-        <section
-          data-aiflow-process-detail=""
-          className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
-        >
+        <section data-aiflow-process-detail="" className="gov-panel">
           {workflow.isError ? (
             <div className="p-6 text-center" role="alert">
               <p className="text-sm font-medium text-foreground">
@@ -250,9 +230,7 @@ export default function WorkflowGovernance({
             <>
               <div className="p-3 sm:p-4">
                 {canvas ?? (
-                  <div className="rounded-lg border border-border bg-muted p-5 text-sm text-muted-foreground">
-                    流程图只读预览
-                  </div>
+                  <div className="text-sm gov-preview">流程图只读预览</div>
                 )}
               </div>
 
@@ -271,7 +249,12 @@ export default function WorkflowGovernance({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-8 text-xs"
+                      className="min-h-11"
+                      disabled={
+                        workflow.isFetching ||
+                        projectAccess.isFetching ||
+                        !item?.infoConfigToken
+                      }
                       onClick={() => setEditingInfo(true)}
                     >
                       编辑基本信息
@@ -309,11 +292,8 @@ export default function WorkflowGovernance({
       )}
 
       {activeSection === "runs" && (
-        <section
-          data-aiflow-process-runs=""
-          className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
-        >
-          <div className="flex flex-col gap-3 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <section data-aiflow-process-runs="" className="gov-panel">
+          <div className="gov-toolbar">
             <div>
               <h2 className="text-sm font-semibold text-foreground">
                 运行记录
@@ -325,13 +305,13 @@ export default function WorkflowGovernance({
             <label className="relative block w-full sm:max-w-xs">
               <Search
                 size={14}
-                className="pointer-events-none absolute left-2.5 top-2.5 text-muted-foreground"
+                className="gov-search-icon"
                 aria-hidden="true"
               />
               <input
                 type="search"
                 aria-label="搜索运行编号、发起人或状态"
-                className="h-9 w-full rounded-md border border-border bg-card pl-8 pr-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                className="text-sm gov-search"
                 value={runKeyword}
                 onChange={event => setRunKeyword(event.target.value)}
                 placeholder="搜索编号、发起人或状态"
@@ -381,7 +361,7 @@ export default function WorkflowGovernance({
                     >
                       <div className="flex min-w-0 items-start justify-between gap-3">
                         <code
-                          className="aiflow-type-body min-w-0 truncate font-mono font-semibold text-foreground"
+                          className="aiflow-type-body font-mono gov-run-id"
                           title={runId}
                         >
                           {runId.slice(0, 8)}
@@ -436,21 +416,11 @@ export default function WorkflowGovernance({
                 <table className="w-full min-w-[720px] text-left text-sm">
                   <thead className="bg-muted text-sm text-muted-foreground">
                     <tr>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">
-                        运行编号
-                      </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">
-                        发起人
-                      </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">
-                        开始时间
-                      </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">
-                        结束时间
-                      </th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">
-                        状态
-                      </th>
+                      <th className="gov-th">运行编号</th>
+                      <th className="gov-th">发起人</th>
+                      <th className="gov-th">开始时间</th>
+                      <th className="gov-th">结束时间</th>
+                      <th className="gov-th">状态</th>
                       <th className="px-4 py-3 text-right font-medium">操作</th>
                     </tr>
                   </thead>
@@ -462,7 +432,7 @@ export default function WorkflowGovernance({
                       return (
                         <tr key={run.id} className="border-t border-border">
                           <td
-                            className="aiflow-type-code whitespace-nowrap px-4 py-3 font-mono text-muted-foreground"
+                            className="aiflow-type-code font-mono gov-code-cell"
                             title={runId}
                           >
                             {runId.slice(0, 8)}
@@ -470,10 +440,10 @@ export default function WorkflowGovernance({
                           <td className="max-w-48 truncate px-4 py-3 text-foreground">
                             {run.triggeredByName || run.username || "—"}
                           </td>
-                          <td className="aiflow-type-meta whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          <td className="aiflow-type-meta gov-time-cell">
                             {formatTime(run.startedAt ?? run.createdAt)}
                           </td>
-                          <td className="aiflow-type-meta whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          <td className="aiflow-type-meta gov-time-cell">
                             {formatTime(run.finishedAt)}
                           </td>
                           <td className="px-4 py-3">
@@ -509,7 +479,7 @@ export default function WorkflowGovernance({
                 : "该流程尚无运行记录。"}
             </div>
           )}
-          <div className="aiflow-type-meta flex flex-col gap-2 border-t border-border px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="aiflow-type-meta gov-footer">
             <span aria-live="polite">
               第 {runHistoryCursorStack.length} 页 · 本页 {visibleRuns.length}{" "}
               条
@@ -559,13 +529,10 @@ export default function WorkflowGovernance({
       )}
 
       {activeSection === "versions" && (
-        <section
-          data-aiflow-process-versions=""
-          className="overflow-hidden rounded-lg border border-border bg-card shadow-sm"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
+        <section data-aiflow-process-versions="" className="gov-panel">
+          <div className="gov-header">
             <div>
-              <h2 className="aiflow-type-section-title flex items-center gap-2 font-semibold text-foreground">
+              <h2 className="aiflow-type-section-title gov-heading">
                 <History size={16} className="text-indigo-600" />
                 版本历史
               </h2>
@@ -573,16 +540,13 @@ export default function WorkflowGovernance({
                 查看快照差异；恢复操作会生成新的可审计版本。
               </p>
             </div>
-            <span className="aiflow-type-meta inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground">
+            <span className="aiflow-type-meta gov-counter">
               <ShieldCheck size={13} aria-hidden="true" />
               {canEdit ? "可恢复版本" : "只读版本历史"}
             </span>
           </div>
           {(versions.isError || workflow.isError) && (
-            <div
-              role="alert"
-              className="m-4 grid gap-2 rounded-lg border border-aiflow-warning-border p-3 text-sm"
-            >
+            <div role="alert" className="text-sm gov-warning">
               版本或流程读取失败，已暂停恢复操作。请重新读取后确认。
               <Button
                 type="button"
@@ -603,7 +567,7 @@ export default function WorkflowGovernance({
               <h3 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
                 版本快照
               </h3>
-              <div className="max-h-[520px] overflow-y-auto rounded-md border border-border bg-muted p-2">
+              <div className="gov-version-list">
                 {versions.isError ? (
                   <div className="p-4 text-center" role="alert">
                     <p className="aiflow-type-body text-aiflow-danger">
@@ -632,12 +596,12 @@ export default function WorkflowGovernance({
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <button
                           type="button"
-                          className="font-mono text-sm font-semibold text-indigo-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                          className="text-sm font-mono gov-version-link"
                           onClick={() => setToVersion(Number(version.version))}
                         >
                           v{version.version}
                         </button>
-                        <span className="aiflow-type-meta rounded bg-muted px-2 py-1 text-muted-foreground">
+                        <span className="aiflow-type-meta gov-tag">
                           {version.changeSource}
                         </span>
                       </div>
@@ -705,11 +669,11 @@ export default function WorkflowGovernance({
                 <h3 className="aiflow-type-section-title mr-auto font-semibold text-foreground">
                   版本差异
                 </h3>
-                <label className="aiflow-type-control flex items-center gap-2 text-muted-foreground">
+                <label className="aiflow-type-control gov-filter">
                   <span>基准</span>
                   <select
                     aria-label="基准版本"
-                    className="aiflow-type-control h-9 max-w-36 rounded border border-border bg-card px-2"
+                    className="aiflow-type-control gov-select"
                     value={fromVersion ?? ""}
                     onChange={event =>
                       setFromVersion(Number(event.target.value))
@@ -729,11 +693,11 @@ export default function WorkflowGovernance({
                 <span aria-hidden="true" className="text-muted-foreground">
                   →
                 </span>
-                <label className="aiflow-type-control flex items-center gap-2 text-muted-foreground">
+                <label className="aiflow-type-control gov-filter">
                   <span>比较</span>
                   <select
                     aria-label="比较版本"
-                    className="aiflow-type-control h-9 max-w-36 rounded border border-border bg-card px-2"
+                    className="aiflow-type-control gov-select"
                     value={toVersion ?? ""}
                     onChange={event => setToVersion(Number(event.target.value))}
                     disabled={!versionItems.length}
@@ -800,7 +764,7 @@ export default function WorkflowGovernance({
                   />
                 </div>
               ) : (
-                <div className="mt-4 rounded-md bg-muted p-4 text-sm leading-6 text-muted-foreground">
+                <div className="text-sm leading-6 gov-hint">
                   {versionItems.length < 2
                     ? "至少需要两个版本快照才能比较。"
                     : fromVersion === toVersion
@@ -813,64 +777,13 @@ export default function WorkflowGovernance({
         </section>
       )}
 
-      {activeSection === "overview" && editingInfo && (
-        <Dialog open={editingInfo} onOpenChange={setEditingInfo}>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>编辑流程基本信息</DialogTitle>
-              <DialogDescription>
-                仅更新流程名称和说明，不会修改流程定义、审核状态、发布状态或运行记录。
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3">
-              <label className="aiflow-type-control grid gap-1.5 font-medium text-foreground">
-                流程名称
-                <Input
-                  value={infoName}
-                  maxLength={160}
-                  onChange={event => setInfoName(event.target.value)}
-                />
-              </label>
-              <label className="aiflow-type-control grid gap-1.5 font-medium text-foreground">
-                流程说明
-                <Textarea
-                  value={infoDescription}
-                  maxLength={1200}
-                  rows={4}
-                  onChange={event => setInfoDescription(event.target.value)}
-                />
-              </label>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditingInfo(false)}
-              >
-                取消
-              </Button>
-              <Button
-                type="button"
-                disabled={
-                  updateInfo.isPending || !infoName.trim() || !item?.projectId
-                }
-                onClick={() =>
-                  updateInfo.mutate({
-                    projectId: item.projectId,
-                    workflowId,
-                    name: infoName,
-                    description: infoDescription || null,
-                  })
-                }
-              >
-                {updateInfo.isPending && (
-                  <Loader2 className="animate-spin" size={14} />
-                )}
-                保存基本信息
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+      {activeSection === "overview" && editingInfo && item?.projectId && (
+        <WorkflowInfoDialog
+          key={workflowId}
+          target={item}
+          onClose={() => setEditingInfo(false)}
+          onSaved={infoSaved}
+        />
       )}
       {restoreTarget && (
         <Suspense fallback={<p role="status">正在读取版本恢复窗口…</p>}>
@@ -959,7 +872,7 @@ function AuditResetButton({
   }
 
   return (
-    <div className="mx-4 mb-4 flex flex-col gap-2 rounded-md border border-aiflow-warning-border bg-aiflow-warning-surface p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="gov-reset-note">
       <p className="aiflow-type-body text-amber-900">
         该流程已被驳回。重置后回到待审核草稿，不会自动发布或改变定义。
       </p>

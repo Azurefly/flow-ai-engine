@@ -114,7 +114,9 @@ export class ResourceDraftStore {
   hasWorkflowDraft(projectId?: string) {
     const matches = (scope: string, category: string) =>
       (!projectId || scope === projectId) &&
-      (category === "workflow-create" || category.startsWith("workflow-copy:"));
+      (category === "workflow-create" ||
+        category.startsWith("workflow-copy:") ||
+        category.startsWith("workflow-info:"));
     return (
       Array.from(this.entries.values()).some(
         entry => matches(entry.projectId, entry.category) && this.dirty(entry)
