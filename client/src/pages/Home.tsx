@@ -7,6 +7,7 @@ import { AuthorizationDetailRefresh } from "@/components/AuthorizationDetailRefr
 import { AccessRelationshipOverview, focusAccessGroup } from "@/components/AccessRelationshipOverview";
 import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
+import { canApplyDataflowConfigConversion } from "@shared/dataflow-config-conversion-guard";
 import { shouldResetRunRoute } from "@shared/run-route-guard";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
@@ -126,6 +127,7 @@ import {
 import { toast } from "sonner";
 
 const SystemRoleAssignmentDialog = lazy(() => import("@/components/SystemRoleAssignmentDialog"));
+const DataflowConfigConversionDialog = lazy(() => import("@/components/DataflowConfigConversionDialog"));
 const WorkflowRoleBindingsDialog = lazy(
   () => import("@/components/WorkflowRoleBindingsDialog")
 );
@@ -2440,6 +2442,21 @@ function FlowDesigner({
   const [membersDialogOpen, setMembersDialogOpen] = useState(false);
   const [governanceDialogOpen, setGovernanceDialogOpen] = useState(false);
   const [subflowDialogOpen, setSubflowDialogOpen] = useState(false);
+  const [conversionTarget, setConversionTarget] = useState<{
+    id: string;
+    name: string;
+    version: number;
+    definition: Definition;
+  } | null>(null);
+  const [conversionUndo, setConversionUndo] = useState<{
+    id: string;
+    before: Definition;
+    after: Definition;
+  } | null>(null);
+  useEffect(() => {
+    setConversionTarget(null);
+    setConversionUndo(null);
+  }, [workflow?.id, workflow?.definitionVersion]);
   const [unpublishTarget, setUnpublishTarget] = useState<{ id: string; name: string; definitionVersion: number } | null>(null);
   const [unpublishError, setUnpublishError] = useState("");
   const [unpublishChecking, setUnpublishChecking] = useState(false);
@@ -2767,6 +2784,30 @@ function FlowDesigner({
                 <Download size={13} className="mr-2 text-muted-foreground" />
                 <span>导出备份 (JSON)</span>
               </DropdownMenuItem>
+              {workflow.flowType === "data" && (
+                <DropdownMenuItem
+                  className="aiflow-type-control"
+                  disabled={
+                    savePending ||
+                    publishPending ||
+                    compilePending ||
+                    runPending ||
+                    unpublishBusy ||
+                    operationPending
+                  }
+                  onClick={() =>
+                    setConversionTarget({
+                      id: workflow.id,
+                      name,
+                      version: Number(workflow.definitionVersion),
+                      definition: structuredClone(definition),
+                    })
+                  }
+                >
+                  <FileJson size={13} className="mr-2 text-muted-foreground" />
+                  <span>检查存量数据配置</span>
+                </DropdownMenuItem>
+              )}
               {(canCopy || canArchive || canManage || canEdit) && <DropdownMenuSeparator />}
               {canCopy && (
                 <DropdownMenuItem
@@ -2870,6 +2911,52 @@ function FlowDesigner({
               </Button>}
             </div>
           )}
+        </section>
+      )}
+      {conversionUndo && conversionUndo.id === workflow.id && (
+        <section
+          role="status"
+          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-aiflow-info-border bg-aiflow-info-surface p-3 text-sm"
+        >
+          <p>
+            配置转换已应用到本页，尚未保存或发布。请预检并用样例核对结果。
+            {JSON.stringify(definition) !==
+              JSON.stringify(conversionUndo.after) &&
+              " 后续已有修改，快速撤销已暂停，避免覆盖填写。"}
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={
+              !canModifyDefinition ||
+              savePending ||
+              publishPending ||
+              compilePending ||
+              runPending ||
+              unpublishBusy ||
+              operationPending ||
+              JSON.stringify(definition) !== JSON.stringify(conversionUndo.after)
+            }
+            onClick={() => {
+              if (
+                !conversionUndo ||
+                !canModifyDefinition ||
+                savePending ||
+                publishPending ||
+                compilePending ||
+                runPending ||
+                unpublishBusy ||
+                operationPending ||
+                JSON.stringify(definition) !==
+                  JSON.stringify(conversionUndo.after)
+              )
+                return;
+              onDefinitionChange(conversionUndo.before);
+              setConversionUndo(null);
+            }}
+          >
+            撤销本次转换
+          </Button>
         </section>
       )}
       {compileCheck.status !== "idle" && (
@@ -3100,6 +3187,100 @@ function FlowDesigner({
           </div>
         </DialogContent>
       </Dialog>
+      {conversionTarget && (
+        <ErrorBoundary
+          fallback={
+            <CreationDialog
+              open
+              title="配置检查未能加载"
+                description="当前填写仍保留，可以关闭检查窗口继续编辑。若需刷新重试，请先导出备份。"
+              submitLabel="关闭检查"
+              pending={false}
+              onOpenChange={(open) => {
+                if (!open) setConversionTarget(null);
+              }}
+              onSubmit={() => setConversionTarget(null)}
+            >
+              <p role="alert" className="text-sm">
+                请检查网络后重试，本次没有转换、保存或发布流程。
+              </p>
+            </CreationDialog>
+          }
+        >
+          <Suspense
+            fallback={
+              <CreationDialog
+                open
+                title="正在读取配置检查"
+                description="当前填写仍保留，可以关闭此窗口。"
+                submitLabel="正在加载…"
+                pending={false}
+                submitDisabled
+                onOpenChange={(open) => {
+                  if (!open) setConversionTarget(null);
+                }}
+                onSubmit={() => {}}
+              >
+                <p role="status" className="text-sm">
+                  正在加载检查规则…
+                </p>
+              </CreationDialog>
+            }
+          >
+            <DataflowConfigConversionDialog
+              target={conversionTarget}
+              canApply={canApplyDataflowConfigConversion(
+                {
+                  id: workflow.id,
+                  version: Number(workflow.definitionVersion),
+                  definition,
+                  canEdit: canModifyDefinition,
+                  busy:
+                    savePending ||
+                    publishPending ||
+                    compilePending ||
+                    runPending ||
+                    unpublishBusy ||
+                    operationPending,
+                },
+                conversionTarget,
+              )}
+              onClose={() => setConversionTarget(null)}
+              onApply={(candidate) => {
+                if (
+                  !canApplyDataflowConfigConversion(
+                    {
+                      id: workflow.id,
+                      version: Number(workflow.definitionVersion),
+                      definition,
+                      canEdit: canModifyDefinition,
+                      busy:
+                        savePending ||
+                        publishPending ||
+                        compilePending ||
+                        runPending ||
+                        unpublishBusy ||
+                        operationPending,
+                    },
+                    conversionTarget,
+                  )
+                )
+                  throw new Error(
+                    "流程、权限或填写已变化，本次转换未应用。请重新检查。",
+                  );
+                setConversionUndo({
+                  id: workflow.id,
+                  before: conversionTarget.definition,
+                  after: candidate,
+                });
+                onDefinitionChange(candidate);
+                setConversionTarget(null);
+                toast.info("已转换当前填写；尚未保存或发布，请核对样例结果。");
+              }}
+            />
+          </Suspense>
+        </ErrorBoundary>
+      )}
       {subflowDialogOpen && (
         <CanvasNameDialog
           title="保存当前定义为子流程"

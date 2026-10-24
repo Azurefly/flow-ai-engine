@@ -43,9 +43,11 @@ const maxChunkBytes = 450 * 1024;
 // Lazy version restore confirmation with draft/publish choice: 1532.82 / 463.07 KiB.
 // Creation/copy/archive dialogs load on demand; complete response-loss recovery adds ~4.96 KiB gzip.
 // Measured 1542.35 / 468.03 KiB; retain one-KiB headroom and fixed per-chunk/HTML limits.
-const maxTotalBytes = 1_544 * 1024;
+// Explicit dataflow conversion preview stays lazy: measured 1551.63 / 471.99 KiB.
+// Keep bounded total headroom; individual chunks and the HTML shell retain their limits.
+const maxTotalBytes = 1_553 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 469 * 1024;
+const maxTotalGzipBytes = 473 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

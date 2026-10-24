@@ -4,6 +4,7 @@ import { Component, ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
+  fallback?: ReactNode;
 }
 
 interface State {
@@ -23,6 +24,7 @@ class ErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
       const message = this.state.error?.message ?? "";
       const assetLoadFailure =
         /failed to fetch dynamically imported module|importing a module script failed|loading chunk [^\s]* failed/i.test(
