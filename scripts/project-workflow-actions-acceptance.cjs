@@ -360,7 +360,7 @@ async function poll(description, read, accept, timeout = 20000) {
       {
         workflowId: control.id,
         userId: fixture.disabledUserId,
-        roleCode: fixture.workflowRoleCode,
+        roleCode: fixture.workflowRoleCode, expectedConfigToken: await roleSnapshotToken(),
       },
       true
     );
@@ -599,3 +599,8 @@ async function poll(description, read, accept, timeout = 20000) {
     process.exitCode = failed ? 1 : 0;
   }
 })();
+
+// Fixture setup confirms the role immediately before a sequential grant; UI conflict tests submit captured tokens.
+async function roleSnapshotToken() {
+  return (await owner("iam.customRoleConfiguration", { code: fixture.workflowRoleCode })).configToken;
+}

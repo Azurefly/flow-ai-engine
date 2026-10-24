@@ -159,7 +159,7 @@ if (stage === "prepare" || apiOnly) {
       userId: meta.userId,
       workflowId: meta.workflowId,
       siblingId: meta.siblingId,
-      roleCode: meta.roleCode,
+      roleCode: meta.roleCode, expectedConfigToken: (await admin("iam.customRoleConfiguration", { code: meta.roleCode })).configToken,
       roleName: meta.roleName,
       description: meta.description,
       editorUrl: `${base}/#/flows/workflow/${meta.workflowId}/editor`,
@@ -191,7 +191,7 @@ if (stage === "prepare" || apiOnly) {
       {
         workflowId: meta.workflowId,
         userId: meta.userId,
-        roleCode: meta.roleCode,
+        roleCode: meta.roleCode, expectedConfigToken: (await admin("iam.customRoleConfiguration", { code: meta.roleCode })).configToken,
       },
       true
     );
@@ -322,7 +322,7 @@ if (stage !== "prepare") {
         {
           workflowId: meta.workflowId,
           userId: meta.userId,
-          roleCode: meta.roleCode,
+          roleCode: meta.roleCode, expectedConfigToken: (await admin("iam.customRoleConfiguration", { code: meta.roleCode })).configToken,
         },
         true
       ),
@@ -349,13 +349,13 @@ if (stage !== "prepare") {
     );
     assert(!(await targetAccess()).permissions.has("workflow:view"));
     const concurrent = await Promise.allSettled(
-      [1, 2].map(() =>
+      [1, 2].map(async () =>
         admin(
           "workflow.assignCustomRole",
           {
             workflowId: meta.workflowId,
             userId: meta.userId,
-            roleCode: meta.roleCode,
+            roleCode: meta.roleCode, expectedConfigToken: (await admin("iam.customRoleConfiguration", { code: meta.roleCode })).configToken,
           },
           true
         )
@@ -382,7 +382,7 @@ if (stage !== "prepare") {
       {
         workflowId: meta.workflowId,
         userId: meta.userId,
-        roleCode: meta.roleCode,
+        roleCode: meta.roleCode, expectedConfigToken: (await admin("iam.customRoleConfiguration", { code: meta.roleCode })).configToken,
         expiresAt: new Date(Date.now() + 8000),
       },
       true

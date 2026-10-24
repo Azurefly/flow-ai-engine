@@ -54,6 +54,11 @@ const emptyForm = {
   role: "viewer" as Role,
   roleCode: "",
   hours: "",
+  roleSnapshot: null as {
+    token: string;
+    name: string;
+    labels: string[];
+  } | null,
 };
 type Revoke = { id: string; userId: number; role?: Role; label: string };
 
@@ -172,11 +177,27 @@ export default function WorkflowRoleBindingsDialog({
     manageable && !roles.isError
       ? roles.data?.find(row => row.code === form.roleCode)
       : undefined;
+  const roleConfirmed = Boolean(
+    customForm.roleSnapshot?.token &&
+      customRole &&
+      customForm.roleSnapshot.token === customRole.configToken
+  );
+  const confirmRole = () => {
+    if (busy || !manageable || roles.isFetching || !customRole) return;
+    change({
+      roleSnapshot: {
+        token: customRole.configToken,
+        name: customRole.name,
+        labels: customRole.permissionLabels,
+      },
+    });
+  };
   const validity = roleExpiryInput(form.hours);
   const validRole =
     tab === "builtin" ||
     Boolean(
-      customRole?.permissionLabels.length &&
+      roleConfirmed &&
+        customRole?.permissionLabels.length &&
         roles.isSuccess &&
         !roles.isFetching
     );
@@ -278,6 +299,7 @@ export default function WorkflowRoleBindingsDialog({
         `${cause instanceof Error ? cause.message : "请求失败。"} 请先读取列表核对结果；填写已保留。`
       );
       void access.refetch();
+      if (tab === "custom") void roles.refetch();
     } finally {
       lock.current = false;
       setBusy(false);
@@ -309,6 +331,7 @@ export default function WorkflowRoleBindingsDialog({
           workflowId,
           userId: Number(form.userId),
           roleCode: form.roleCode,
+          expectedConfigToken: form.roleSnapshot?.token,
           expiresAt: currentValidity.expiresAt,
         });
       setForm(emptyForm);
@@ -380,7 +403,7 @@ export default function WorkflowRoleBindingsDialog({
       >
         <DialogContent
           data-workflow-authorization=""
-          className="max-h-[90dvh] overflow-y-auto sm:max-w-3xl"
+          className="auth-dialog"
           onEscapeKeyDown={event => {
             if (lock.current || revoking || leaving) event.preventDefault();
           }}
@@ -392,12 +415,8 @@ export default function WorkflowRoleBindingsDialog({
               仅对当前流程生效，各项权限叠加。撤销一项不会移除其他来源的权限。
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div
-              role="tablist"
-              aria-label="流程授权类别"
-              className="flex min-w-0 flex-wrap gap-1 rounded-lg bg-muted p-1"
-            >
+          <div className="auth-row">
+            <div role="tablist" aria-label="流程授权类别" className="auth-tabs">
               {(["builtin", "custom"] as const).map(value => (
                 <Button
                   key={value}
@@ -425,10 +444,7 @@ export default function WorkflowRoleBindingsDialog({
             </Button>
           </div>
           {!manageable && (
-            <p
-              role="status"
-              className="aiflow-type-body rounded-lg border border-border bg-muted p-3"
-            >
+            <p role="status" className="auth-info">
               {archived
                 ? "流程或所属业务已归档，当前只能查看。"
                 : access.isError
@@ -440,13 +456,13 @@ export default function WorkflowRoleBindingsDialog({
             </p>
           )}
           <form
-            className="space-y-4 rounded-xl border border-border bg-card p-4"
+            className="auth-form"
             onSubmit={event => {
               event.preventDefault();
               void submit();
             }}
           >
-            <h3 className="aiflow-type-section-title font-semibold">
+            <h3 className="auth-title">
               {tab === "builtin" ? "授予协作角色" : "绑定自定义角色"}
             </h3>
             <fieldset
@@ -514,22 +530,34 @@ export default function WorkflowRoleBindingsDialog({
                     </p>
                   )}
               </div>
-              <div className="grid min-w-0 gap-4 sm:grid-cols-2">
+              <div className="auth-grid">
                 <div className="min-w-0 space-y-2">
                   <Label htmlFor="workflow-role">
                     {tab === "builtin" ? "协作角色" : "自定义流程角色"}
                   </Label>
                   <select
                     id="workflow-role"
-                    className="aiflow-type-control min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-3"
+                    className="auth-select"
                     value={tab === "builtin" ? form.role : form.roleCode}
-                    onChange={event =>
-                      change(
-                        tab === "builtin"
-                          ? { role: event.target.value as Role }
-                          : { roleCode: event.target.value }
-                      )
-                    }
+                    onChange={event => {
+                      if (tab === "builtin")
+                        change({ role: event.target.value as Role });
+                      else {
+                        const role = roles.data?.find(
+                          row => row.code === event.target.value
+                        );
+                        change({
+                          roleCode: event.target.value,
+                          roleSnapshot: role
+                            ? {
+                                token: role.configToken,
+                                name: role.name,
+                                labels: role.permissionLabels,
+                              }
+                            : null,
+                        });
+                      }
+                    }}
                   >
                     {tab === "builtin" ? (
                       Object.entries(roleNames).map(([value, label]) => (
@@ -575,13 +603,54 @@ export default function WorkflowRoleBindingsDialog({
                   />
                 </div>
               </div>
-              <p className="aiflow-type-body break-words text-muted-foreground">
-                {tab === "builtin"
-                  ? roleDetails[form.role]
-                  : customRole
-                    ? `角色权限：${customRole.permissionLabels.join("、")}`
-                    : "请选择有效角色；由身份与权限管理员维护。"}
-              </p>
+              {tab === "builtin" ? (
+                <p className="auth-muted">{roleDetails[form.role]}</p>
+              ) : (
+                <section
+                  data-workflow-role-preview=""
+                  className="workflow-role-preview"
+                  aria-label="本次绑定的角色权限"
+                >
+                  <p>
+                    {manageable && customForm.roleSnapshot
+                      ? `${roleConfirmed ? "本次确认" : "上次确认"}：${customForm.roleSnapshot.name}`
+                      : manageable
+                        ? "请选择并确认角色权限"
+                        : "目录待确认"}
+                  </p>
+                  {manageable && customForm.roleSnapshot && (
+                    <p className="text-muted-foreground">
+                      {customForm.roleSnapshot.labels.join("、")}
+                    </p>
+                  )}
+                  {form.roleCode && !roleConfirmed && (
+                    <div role="alert">
+                      <p>角色待确认，提交已暂停；人员与有效期保留。</p>
+                      {customRole && (
+                        <>
+                          <p>
+                            当前目录：{customRole.name} ·{" "}
+                            {customRole.permissionLabels.join("、")}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={
+                              busy ||
+                              roles.isFetching ||
+                              !customRole.permissionLabels.length
+                            }
+                            onClick={confirmRole}
+                          >
+                            确认使用当前角色权限
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  <p className="auth-meta">后续修改角色权限将影响已有绑定。</p>
+                </section>
+              )}
               {tab === "custom" && roles.isError && (
                 <p role="alert">
                   角色目录读取失败，请重新读取权限与列表；已选角色编码保留。
@@ -591,12 +660,12 @@ export default function WorkflowRoleBindingsDialog({
                 <p
                   id="workflow-expiry-error"
                   role="alert"
-                  className="aiflow-type-body text-destructive"
+                  className="auth-error"
                 >
                   {validity.error}
                 </p>
               )}
-              <p className="aiflow-type-meta text-muted-foreground">
+              <p className="auth-meta">
                 {tab === "builtin"
                   ? "同一账号可拥有多个角色；重授相同角色会更新有效期。"
                   : "有效绑定不可重复提交；调整有效期请先撤销原绑定。"}
@@ -622,24 +691,22 @@ export default function WorkflowRoleBindingsDialog({
               </Button>
             </fieldset>
             {error && (
-              <p role="alert" className="aiflow-type-body text-destructive">
+              <p role="alert" className="auth-error">
                 {error}
               </p>
             )}
             {notice && (
-              <p role="status" className="aiflow-type-body">
+              <p role="status" className="auth-body">
                 {notice}
               </p>
             )}
           </form>
           <section className="space-y-3" aria-label="流程授权记录">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="aiflow-type-section-title font-semibold">
+            <div className="auth-row">
+              <h3 className="auth-title">
                 授权记录{listReady ? `（${total}）` : ""}
               </h3>
-              <p className="aiflow-type-meta text-muted-foreground">
-                每页 10 条 · 包含到期及撤销记录
-              </p>
+              <p className="auth-meta">每页 10 条 · 包含到期及撤销记录</p>
             </div>
             <Input
               aria-label="搜索流程授权记录"
@@ -652,25 +719,23 @@ export default function WorkflowRoleBindingsDialog({
               }}
             />
             {!listReady ? (
-              <p role="status" className="aiflow-type-body">
+              <p role="status" className="auth-body">
                 记录读取失败或权限待确认，已隐藏旧列表。
               </p>
             ) : visibleRows.length === 0 ? (
-              <p className="aiflow-type-body text-muted-foreground">
-                没有匹配的授权记录。
-              </p>
+              <p className="auth-muted">没有匹配的授权记录。</p>
             ) : (
               visibleRows.map(row => (
                 <div
                   data-workflow-grant={row.id}
                   key={row.id}
-                  className="flex min-w-0 flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
+                  className="auth-item"
                 >
                   <div className="min-w-0 flex-1 space-y-1">
-                    <p className="aiflow-type-body break-words font-medium">
+                    <p className="auth-name">
                       {row.label} · {row.roleName}
                     </p>
-                    <p className="aiflow-type-meta text-muted-foreground">
+                    <p className="auth-meta">
                       {statusNames[row.status] || "待核对"} ·{" "}
                       {row.expiresAt
                         ? `有效至 ${time(row.expiresAt)}`
@@ -699,7 +764,7 @@ export default function WorkflowRoleBindingsDialog({
                 </div>
               ))
             )}
-            <div className="flex items-center justify-between gap-2">
+            <div className="auth-row">
               <Button
                 variant="outline"
                 disabled={!listReady || page === 0 || busy}
@@ -717,7 +782,7 @@ export default function WorkflowRoleBindingsDialog({
               </Button>
             </div>
           </section>
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="auth-actions">
             <Button variant="outline" disabled={busy} onClick={exportForm}>
               导出填写
             </Button>
@@ -748,7 +813,7 @@ export default function WorkflowRoleBindingsDialog({
             ”。确认后仅撤销这项直接授权，其他来源的权限继续生效。
           </AlertDialogDescription>
           {revokeError && (
-            <p role="alert" className="aiflow-type-body text-destructive">
+            <p role="alert" className="auth-error">
               {revokeError}
             </p>
           )}

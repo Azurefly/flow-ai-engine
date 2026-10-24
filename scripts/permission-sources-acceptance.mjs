@@ -187,7 +187,7 @@ try {
   workflows.push(workflow.id);
   await admin.request(
     "workflow.assignCustomRole",
-    { workflowId: workflow.id, userId: person.id, roleCode: scoped.code },
+    { workflowId: workflow.id, userId: person.id, roleCode: scoped.code, expectedConfigToken: (await admin.request("iam.customRoleConfiguration", { code: scoped.code })).configToken },
     true
   );
   const scopedOnly = await snapshot("workflow_grant_not_global", []);

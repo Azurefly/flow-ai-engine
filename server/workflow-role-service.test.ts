@@ -62,10 +62,22 @@ it.each(["list", "assign", "revoke"])(
 it("角色目录只返回自定义流程角色", async () => {
   mocks.roles.mockResolvedValue([
     { code: "viewer", isSystem: 1 },
-    { code: "custom_reader", isSystem: 0, permissions: ["workflow:view"] },
+    {
+      id: 19,
+      code: "custom_reader",
+      name: "流程阅读",
+      scope: "workflow",
+      isSystem: 0,
+      permissions: ["workflow:view"],
+    },
   ]);
   expect(await listWorkflowCustomRoles(actor, "workflow-a")).toMatchObject([
-    { code: "custom_reader", isSystem: 0, permissions: ["workflow:view"] },
+    {
+      code: "custom_reader",
+      isSystem: 0,
+      permissions: ["workflow:view"],
+      configToken: expect.stringMatching(/^[a-f0-9]{64}$/),
+    },
   ]);
   expect(mocks.roles).toHaveBeenCalledWith("workflow");
 });
@@ -75,6 +87,7 @@ it("绑定与撤销转交同一事务服务，传递完整登录会话和流程�
     workflowId: "workflow-a",
     userId: 2,
     roleCode: "custom_reader",
+    expectedConfigToken: "a".repeat(64),
   };
   await assignWorkflowCustomRole(authenticated, grant);
   expect(mocks.assign).toHaveBeenCalledWith(authenticated, grant);

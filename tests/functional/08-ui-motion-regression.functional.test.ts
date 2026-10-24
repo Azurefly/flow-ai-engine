@@ -167,7 +167,10 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
           "client/src/components/SystemRoleAssignmentDialog.tsx",
           "utf8"
         )
-      ).toContain("grid gap-1.5 aiflow-type-control");
+      ).toContain('className="auth-label"');
+      expect(styleSource).toContain(
+        ".auth-label {display:grid; gap:6px; font-size:var(--aiflow-type-control)"
+      );
       expect(projectWorkspaceSource).toContain(
         "aiflow-type-control block space-y-1"
       );
@@ -225,11 +228,19 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "client/src/components/WorkflowRoleBindingsDialog.tsx",
         "utf8"
       );
-      expectSemanticBodyForCopy(
+      expectSemanticRoleForCopy(
         memberDialogSource,
-        "填写仍保留在当前账号会话中"
+        "填写仍保留在当前账号会话中",
+        "auth-info"
       );
-      expectSemanticBodyForCopy(memberDialogSource, "已隐藏旧列表");
+      expectSemanticRoleForCopy(
+        memberDialogSource,
+        "已隐藏旧列表",
+        "auth-body"
+      );
+      expect(styleSource).toContain(
+        ".auth-body,.auth-muted,.auth-error,.auth-info,.auth-name {font-size:var(--aiflow-type-body)"
+      );
       expectSemanticBodyForCopy(homeSource, "取消发布会阻止后续发起");
       expectSemanticBodyForCopy(
         canvasSource,
@@ -376,8 +387,9 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(homeSource).toContain(
         "aiflow-type-code max-h-48 overflow-auto rounded bg-slate-950 p-3 font-mono text-emerald-200"
       );
-      expect(memberDialogSource).toContain(
-        "aiflow-type-section-title font-semibold"
+      expect(memberDialogSource).toContain('className="auth-title"');
+      expect(styleSource).toContain(
+        ".auth-title {font-size:var(--aiflow-type-section)"
       );
       expect(homeSource).not.toContain("bg-card/80 p-2 text-[11px]");
       expect(workflowTestRunSource).toContain(

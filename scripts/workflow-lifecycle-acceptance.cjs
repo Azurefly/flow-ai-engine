@@ -383,7 +383,7 @@ async function prepareActor() {
   for(const flow of fixture.workflows.filter(row=>["state","control","data"].includes(row.flowType))) {
     const assignments=await owner("workflow.customRoleAssignments",{workflowId:flow.id,page:0,query:fixture.workflowRoleCode});
     if(!assignments.items.some(row=>Number(row.userId)===fixture.disabledUserId && row.roleCode===fixture.workflowRoleCode && !row.revokedAt))
-      await owner("workflow.assignCustomRole",{workflowId:flow.id,userId:fixture.disabledUserId,roleCode:fixture.workflowRoleCode},true);
+      await owner("workflow.assignCustomRole",{workflowId:flow.id,userId:fixture.disabledUserId,roleCode:fixture.workflowRoleCode,expectedConfigToken:await roleSnapshotToken()},true);
   }
   const details=await owner("iam.userAuthorizationDetails",{userId:fixture.disabledUserId});
   if(!details.directRoles.some(row=>row.roleCode===fixture.systemRoleCode))
@@ -575,3 +575,8 @@ async function browserCases() {
     process.exitCode=failed?1:0;
   }
 })();
+
+// Fixture setup confirms the role immediately before a sequential grant; UI conflict tests submit captured tokens.
+async function roleSnapshotToken() {
+  return (await owner("iam.customRoleConfiguration", { code: fixture.workflowRoleCode })).configToken;
+}

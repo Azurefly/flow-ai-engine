@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { customRoleConfigToken } from "./custom-role-configuration";
 import type mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
 import { assertRoleExpiryRange } from "../shared/role-expiry";
@@ -154,6 +155,7 @@ export async function grantCustomWorkflowRole(
     workflowId: string;
     userId: number;
     roleCode: string;
+    expectedConfigToken?: string;
     expiresAt?: Date | null;
   }
 ) {
@@ -173,13 +175,40 @@ export async function grantCustomWorkflowRole(
     async ({ connection, target, recheck }) => {
       active(target);
       const [roles] = await connection.query<mysql.RowDataPacket[]>(
-        "SELECT id FROM iam_role WHERE code=? AND scope='workflow' AND isSystem=0 LIMIT 1 FOR SHARE",
+        "SELECT id,code,name,description,scope,isSystem FROM iam_role WHERE code=? LIMIT 1 FOR SHARE",
         [roleCode]
       );
-      if (!roles.length)
+      const role = roles[0];
+      if (!role || role.scope !== "workflow" || Number(role.isSystem))
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "请选择自定义流程角色，系统角色不能绑定到此流程。",
+          message: "请选择自定义流程角色，内置或系统级角色不能绑定到此流程。",
+        });
+      // Current locking reads avoid an older REPEATABLE READ snapshot after lock waits.
+      // Role updates acquire this same role row exclusively before replacing its links.
+      const [links] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT permissionId FROM role_permission WHERE roleId=? ORDER BY permissionId FOR SHARE",
+        [role.id]
+      );
+      const [permissions] = links.length
+        ? await connection.query<mysql.RowDataPacket[]>(
+            "SELECT code FROM permission WHERE id IN (?) ORDER BY code FOR SHARE",
+            [links.map(link => link.permissionId)]
+          )
+        : [[]];
+      role.permissions = permissions.map(permission => permission.code);
+      const configToken = customRoleConfigToken(role);
+      if (!input.expectedConfigToken)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "角色权限尚未确认，请先导出填写并刷新页面，再选择角色进行绑定。",
+        });
+      if (input.expectedConfigToken !== configToken)
+        throw new TRPCError({
+          code: "CONFLICT",
+          message:
+            "角色配置已变化，本次未授权。请重新读取并确认当前角色权限；填写已保留。",
         });
       const [existing] = await connection.query<mysql.RowDataPacket[]>(
         `SELECT id FROM role_assignment WHERE userId=? AND roleId=? AND scopeType='workflow' AND scopeId=?
@@ -214,6 +243,8 @@ export async function grantCustomWorkflowRole(
           resourceId: input.workflowId,
           details: {
             roleCode,
+            roleConfigToken: configToken,
+            permissionCodes: role.permissions,
             expiresAt: input.expiresAt?.toISOString() ?? null,
           },
         },

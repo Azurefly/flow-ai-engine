@@ -214,23 +214,23 @@ export default function SystemRoleAssignmentDialog({
             </Button>
           </div>
           {!allowed && (
-            <p role="status" className="aiflow-type-body">
+            <p role="status" className="auth-body">
               当前管理权限或目录尚未确认，已暂停提交并保留填写。
             </p>
           )}
           <fieldset disabled={busy || !allowed} className="min-w-0 space-y-3">
             {target.mode === "user" ? (
               <>
-                <div className="grid gap-1.5 aiflow-type-control">
+                <div className="auth-label">
                   当前用户
                   <span className="break-all font-medium">
                     {form.userLabel}
                   </span>
                 </div>
-                <label className="grid gap-1.5 aiflow-type-control">
+                <label className="auth-label">
                   系统角色
                   <select
-                    className="min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-3"
+                    className="auth-select"
                     value={form.roleCode}
                     onChange={event => {
                       const role = roles.data?.find(
@@ -262,13 +262,13 @@ export default function SystemRoleAssignmentDialog({
               </>
             ) : (
               <>
-                <div className="grid gap-1.5 aiflow-type-control">
+                <div className="auth-label">
                   当前角色
                   <span className="break-all font-medium">
                     {form.roleName || target.roleName}（{form.roleCode}）
                   </span>
                 </div>
-                <label className="grid gap-1.5 aiflow-type-control">
+                <label className="auth-label">
                   搜索内部用户
                   <Input
                     maxLength={160}
@@ -280,10 +280,10 @@ export default function SystemRoleAssignmentDialog({
                     }}
                   />
                 </label>
-                <label className="grid gap-1.5 aiflow-type-control">
+                <label className="auth-label">
                   选择内部用户
                   <select
-                    className="min-h-11 w-full min-w-0 rounded-md border border-border bg-background px-3"
+                    className="auth-select"
                     value={form.userId}
                     disabled={candidates.isPending || candidates.isError}
                     onChange={event => {
@@ -316,7 +316,7 @@ export default function SystemRoleAssignmentDialog({
                       ))}
                   </select>
                 </label>
-                <div className="flex items-center justify-between gap-2">
+                <div className="auth-row">
                   <Button
                     type="button"
                     variant="outline"
@@ -347,7 +347,7 @@ export default function SystemRoleAssignmentDialog({
                 )}
               </>
             )}
-            <p className="aiflow-type-body break-words text-muted-foreground">
+            <p className="auth-muted">
               当前角色权限：
               {currentRole
                 ? catalog.data
@@ -379,7 +379,7 @@ export default function SystemRoleAssignmentDialog({
               </div>
             )}
             {assigned && (
-              <p role="status" className="aiflow-type-body">
+              <p role="status" className="auth-body">
                 此账号已有效绑定该角色，请先核对列表；填写仍保留。
               </p>
             )}
@@ -388,7 +388,7 @@ export default function SystemRoleAssignmentDialog({
               details.data.user.status !== "active" && (
                 <p role="alert">此账号已停用，不能绑定角色。</p>
               )}
-            <label className="grid gap-1.5 aiflow-type-control">
+            <label className="auth-label">
               有效期小时（可选）
               <Input
                 type="number"
@@ -400,13 +400,10 @@ export default function SystemRoleAssignmentDialog({
                 placeholder="留空表示长期有效"
               />
             </label>
-            <p
-              role={expiry.error ? "alert" : "status"}
-              className="aiflow-type-body text-muted-foreground"
-            >
+            <p role={expiry.error ? "alert" : "status"} className="auth-muted">
               {expiry.error || "留空表示长期有效；填写整数小时后自动到期。"}
             </p>
-            <label className="grid gap-1.5 aiflow-type-control">
+            <label className="auth-label">
               授权备注（可选）
               <Input
                 maxLength={320}

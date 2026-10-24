@@ -1,4 +1,6 @@
 import mysql from "mysql2/promise";
+import { customRoleConfigToken } from "./custom-role-configuration";
+import { readRolePermissionCodes } from "../shared/role-permission-codes";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
 import {
@@ -28,10 +30,7 @@ export async function listWorkflowCustomRoles(
   return (await listRoles("workflow"))
     .filter(role => !Number(role.isSystem))
     .map(role => {
-      const codes =
-        typeof role.permissions === "string"
-          ? JSON.parse(role.permissions)
-          : role.permissions;
+      const codes = readRolePermissionCodes(role.permissions);
       return {
         id: Number(role.id),
         code: String(role.code),
@@ -40,6 +39,7 @@ export async function listWorkflowCustomRoles(
         scope: "workflow" as const,
         isSystem: Number(role.isSystem),
         permissions: codes,
+        configToken: customRoleConfigToken(role),
         permissionLabels: catalog
           .filter(
             item =>
@@ -83,6 +83,7 @@ export async function assignWorkflowCustomRole(
     workflowId: string;
     userId: number;
     roleCode: string;
+    expectedConfigToken?: string;
     expiresAt?: Date | null;
   }
 ) {

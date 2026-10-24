@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
+import { customRoleConfigToken } from "./custom-role-configuration";
 const mocks = vi.hoisted(() => ({ commit: vi.fn(), audit: vi.fn() }));
 vi.mock("./workflow-authorization-transaction", () => ({
   commitWorkflowAuthorization: mocks.commit,
@@ -56,22 +57,129 @@ it.each([
   );
   expect(context.recheck).toHaveBeenCalledOnce();
 });
-it("自定义绑定锁定角色、排除重复、审计同连接", async () => {
-  context.connection.query
-    .mockResolvedValueOnce([[{ id: 19 }]])
-    .mockResolvedValueOnce([[]])
-    .mockResolvedValue([{}]);
-  await grantCustomWorkflowRole(actor, input);
+const selectedRole = {
+  id: 19,
+  code: "custom_reader",
+  name: "流程阅读",
+  description: null,
+  scope: "workflow",
+  isSystem: 0,
+  permissions: ["workflow:view"],
+};
+function roleQueries(current = selectedRole, duplicate = false) {
+  context.connection.query.mockImplementation(async (sql: string) => {
+    if (sql.includes("FROM iam_role WHERE code=")) return [[{ ...current }]];
+    if (sql.includes("FROM role_permission"))
+      return [
+        current.permissions.map((_, index) => ({ permissionId: index + 1 })),
+      ];
+    if (sql.includes("SELECT code FROM permission"))
+      return [current.permissions.map(code => ({ code }))];
+    if (sql.includes("SELECT id FROM role_assignment"))
+      return [duplicate ? [{ id: "existing" }] : []];
+    return [{}];
+  });
+}
+it("自定义绑定按确认快照锁定角色和权限，审计与业务使用同一连接", async () => {
+  roleQueries();
+  const token = customRoleConfigToken(selectedRole);
+  await grantCustomWorkflowRole(actor, {
+    ...input,
+    expectedConfigToken: token,
+  });
   expect(context.connection.query).toHaveBeenCalledWith(
-    expect.stringContaining("FOR SHARE"),
+    expect.stringContaining("FROM iam_role WHERE code=? LIMIT 1 FOR SHARE"),
     ["custom_reader"]
+  );
+  expect(context.connection.query).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "FROM role_permission WHERE roleId=? ORDER BY permissionId FOR SHARE"
+    ),
+    [19]
+  );
+  expect(context.connection.query).toHaveBeenCalledWith(
+    expect.stringContaining(
+      "SELECT code FROM permission WHERE id IN (?) ORDER BY code FOR SHARE"
+    ),
+    [[1]]
   );
   expect(mocks.audit).toHaveBeenCalledWith(
     expect.objectContaining({
-      details: { roleCode: "custom_reader", expiresAt: null },
+      details: {
+        roleCode: "custom_reader",
+        roleConfigToken: token,
+        permissionCodes: ["workflow:view"],
+        expiresAt: null,
+      },
     }),
     context.connection
   );
+});
+it.each([
+  { id: 20 },
+  { name: "已更名" },
+  { description: "已更新说明" },
+  { permissions: ["workflow:run"] },
+])("角色实际配置变化时拒绝旧快照且不写入绑定或审计 %s", async changes => {
+  roleQueries({ ...selectedRole, ...changes });
+  await expect(
+    grantCustomWorkflowRole(actor, {
+      ...input,
+      expectedConfigToken: customRoleConfigToken(selectedRole),
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(
+    context.connection.query.mock.calls.some(([sql]: [string]) =>
+      sql.startsWith("INSERT")
+    )
+  ).toBe(false);
+  expect(mocks.audit).not.toHaveBeenCalled();
+});
+it("缺少确认快照时拒绝授权，不能以角色编码绕过所见配置确认", async () => {
+  roleQueries();
+  await expect(grantCustomWorkflowRole(actor, input)).rejects.toMatchObject({
+    code: "CONFLICT",
+  });
+  expect(
+    context.connection.query.mock.calls.some(([sql]: [string]) =>
+      sql.startsWith("INSERT")
+    )
+  ).toBe(false);
+  expect(mocks.audit).not.toHaveBeenCalled();
+});
+it.each([{ scope: "system" }, { isSystem: 1 }])(
+  "不能绑定系统级或内置角色 %s",
+  async changes => {
+    roleQueries({ ...selectedRole, ...changes });
+    await expect(
+      grantCustomWorkflowRole(actor, {
+        ...input,
+        expectedConfigToken: customRoleConfigToken(selectedRole),
+      })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(mocks.audit).not.toHaveBeenCalled();
+  }
+);
+it("确认配置后仍拒绝重复绑定和等待后失权", async () => {
+  roleQueries(selectedRole, true);
+  const submitted = {
+    ...input,
+    expectedConfigToken: customRoleConfigToken(selectedRole),
+  };
+  await expect(grantCustomWorkflowRole(actor, submitted)).rejects.toMatchObject(
+    { code: "CONFLICT" }
+  );
+  roleQueries();
+  context.recheck.mockRejectedValueOnce(new Error("lost"));
+  await expect(grantCustomWorkflowRole(actor, submitted)).rejects.toThrow(
+    "lost"
+  );
+  expect(
+    context.connection.query.mock.calls.some(([sql]: [string]) =>
+      sql.startsWith("INSERT")
+    )
+  ).toBe(false);
+  expect(mocks.audit).not.toHaveBeenCalled();
 });
 it.each([grantBuiltinWorkflowRole, grantCustomWorkflowRole])(
   "停用目标不可授权 %s",

@@ -1686,3 +1686,29 @@ select {
     grid-row: 1;
   }
 }
+
+/* Permission previews distinguish the selected snapshot from the current role catalog. */
+.workflow-role-preview {display:grid; gap:8px; min-width:0; overflow-wrap:anywhere; border:1px solid var(--border); border-radius:8px; padding:12px; font-size:var(--aiflow-type-body);}
+.workflow-role-preview > div {display:grid; gap:8px; color:var(--aiflow-warning);}
+.role-classification {display:flex; flex-shrink:0; flex-wrap:wrap; justify-content:flex-end; gap:4px; font-size:var(--aiflow-type-meta); color:var(--muted-foreground);}
+.role-classification > span {border-radius:999px; background:var(--card); padding:2px 6px;}
+
+/* Shared authorization form primitives keep both assignment paths visually consistent. */
+.auth-body,.auth-muted,.auth-error,.auth-info,.auth-name {font-size:var(--aiflow-type-body); line-height:var(--aiflow-leading-body);}
+.auth-meta {font-size:var(--aiflow-type-meta); line-height:var(--aiflow-leading-meta); color:var(--muted-foreground);}
+.auth-muted {color:var(--muted-foreground); overflow-wrap:anywhere;}
+.auth-error {color:var(--destructive);}
+.auth-title {font-size:var(--aiflow-type-section); line-height:var(--aiflow-leading-section); font-weight:600;}
+.auth-name {font-weight:500; overflow-wrap:anywhere;}
+.auth-row {display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px;}
+.auth-select {min-height:44px; width:100%; min-width:0; border:1px solid var(--border); border-radius:6px; background:var(--background); padding-inline:12px; font-size:var(--aiflow-type-control);}
+.auth-item {display:flex; min-width:0; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--border); border-radius:8px; padding:12px;}
+.auth-info {border:1px solid var(--border); border-radius:8px; background:var(--muted); padding:12px;}
+.auth-form {border:1px solid var(--border); border-radius:12px; background:var(--card); padding:16px;}
+.auth-form > * + * {margin-top:16px;}
+.auth-tabs {display:flex; min-width:0; flex-wrap:wrap; gap:4px; border-radius:8px; background:var(--muted); padding:4px;}
+.auth-dialog {max-height:90dvh; overflow-y:auto;}
+.auth-grid {display:grid; min-width:0; gap:16px;}
+.auth-label {display:grid; gap:6px; font-size:var(--aiflow-type-control); line-height:var(--aiflow-leading-control);}
+.auth-actions {display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px;}
+@media (min-width:640px) {.auth-dialog {max-width:48rem;} .auth-grid {grid-template-columns:repeat(2,minmax(0,1fr));}}

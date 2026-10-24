@@ -1413,17 +1413,17 @@ describe("流程设计器界面回归约束", () => {
       "aiflow-type-body min-w-0 break-words font-semibold text-foreground"
     );
     expect(homeSource).toContain(
-      "aiflow-type-meta shrink-0 rounded-full bg-card px-1.5 py-0.5 text-muted-foreground"
+      'data-role-origin={Number(role.isSystem) ? "builtin" : "custom"}'
     );
     expect(homeSource).toContain(
       "aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1 text-center min-[640px]:gap-2 min-[640px]:px-3 min-[1024px]:h-10"
     );
     expect(
       source("../client/src/components/SystemRoleAssignmentDialog.tsx")
-    ).toContain("min-h-11 w-full min-w-0 rounded-md");
+    ).toContain('className="auth-select"');
     expect(
       source("../client/src/components/SystemRoleAssignmentDialog.tsx")
-    ).toContain("aiflow-type-body");
+    ).toContain('className="auth-body"');
     expect(
       source("../client/src/components/SystemRoleAssignmentDialog.tsx")
     ).toContain("重新读取角色与账号");

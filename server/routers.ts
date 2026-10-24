@@ -729,6 +729,7 @@ export const appRouter = router({
           workflowId: z.string().min(8).max(64),
           userId: z.number().int().positive(),
           roleCode: z.string().min(10).max(68),
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           expiresAt: z.date().nullable().optional(),
         })
       )
@@ -1849,6 +1850,7 @@ export const appRouter = router({
           workflowId: z.string().min(8).max(64),
           userId: z.number().int().positive(),
           roleCode: z.string().min(10).max(68),
+          expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/).optional(),
           expiresAt: z.date().nullable().optional(),
         })
       )

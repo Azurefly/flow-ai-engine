@@ -294,7 +294,7 @@ async function makeCustom() {
     {
       workflowId: wid(),
       userId: fixture.disabledUserId,
-      roleCode: fixture.workflowRoleCode,
+      roleCode: fixture.workflowRoleCode, expectedConfigToken: await roleSnapshotToken(),
     },
     true
   );
@@ -314,7 +314,7 @@ async function operations() {
       userId: fixture.disabledUserId,
       ...(operation.includes("Custom")
         ? operation === "assignCustomRole"
-          ? { roleCode: fixture.workflowRoleCode }
+          ? { roleCode: fixture.workflowRoleCode, expectedConfigToken: await roleSnapshotToken() }
           : { assignmentId: current.id }
         : { role: operation === "grantMember" ? "operator" : "viewer" }),
     };
@@ -381,7 +381,7 @@ async function races() {
       userId: fixture.disabledUserId,
       ...(operation.includes("Custom")
         ? operation === "assignCustomRole"
-          ? { roleCode: fixture.workflowRoleCode }
+          ? { roleCode: fixture.workflowRoleCode, expectedConfigToken: await roleSnapshotToken() }
           : { assignmentId: current.id }
         : { role: operation === "grantMember" ? "editor" : "viewer" }),
     };
@@ -968,4 +968,9 @@ async function ui() {
     accountIsolation: true,
     browserErrors: errors.length,
   });
+}
+
+// Fixture setup confirms the role immediately before a sequential grant; UI conflict tests submit captured tokens.
+async function roleSnapshotToken() {
+  return (await owner("iam.customRoleConfiguration", { code: fixture.workflowRoleCode })).configToken;
 }

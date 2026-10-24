@@ -4645,12 +4645,9 @@ function IamCenter({
                       >
                         {role.name}
                       </p>
-                      <span className="aiflow-type-meta shrink-0 rounded-full bg-card px-1.5 py-0.5 text-muted-foreground">
-                        {role.scope === "system"
-                          ? "系统角色"
-                          : role.scope === "workflow"
-                            ? "流程角色"
-                            : role.scope}
+                      <span className="role-classification">
+                        <span data-role-scope={role.scope}>{role.scope === "system" ? "系统级" : role.scope === "workflow" ? "流程级" : role.scope}</span>
+                        <span data-role-origin={Number(role.isSystem) ? "builtin" : "custom"}>{Number(role.isSystem) ? "内置" : "自定义"}</span>
                       </span>
                     </div>
                     <p
