@@ -45,9 +45,10 @@ const maxChunkBytes = 450 * 1024;
 // Measured 1542.35 / 468.03 KiB; retain one-KiB headroom and fixed per-chunk/HTML limits.
 // Explicit dataflow conversion preview stays lazy: measured 1551.63 / 471.99 KiB.
 // Keep bounded total headroom; individual chunks and the HTML shell retain their limits.
-const maxTotalBytes = 1_553 * 1024;
+// Source capability hints and disabled resource choices: 1555.44 / 473.43 KiB.
+const maxTotalBytes = 1_557 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 473 * 1024;
+const maxTotalGzipBytes = 475 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

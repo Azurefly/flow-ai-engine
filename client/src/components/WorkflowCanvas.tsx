@@ -774,7 +774,7 @@ function ConfigFieldEditor({
   value: unknown;
   fallback: unknown;
   disabled: boolean;
-  runtimeOptions?: Array<{ value: string; label: string; disabled?: boolean }>;
+  runtimeOptions?: Array<{ value: string; label: string; disabled?: boolean; reason?: string }>;
   fieldSuggestions?: string[];
   runtimePlaceholder?: string;
   runtimeError?: string;
@@ -849,6 +849,8 @@ function ConfigFieldEditor({
     );
   if (runtimeOptions) {
     const current = String(effectiveValue ?? "");
+    const selectedOption=runtimeOptions.find(option=>option.value===current);
+    const availabilityError=runtimeError || (selectedOption?.disabled ? selectedOption.reason || "当前选择尚不可执行，请选择可用资源。" : undefined);
     const currentAvailable = runtimeOptions.some(
       option => option.value === current
     );
@@ -858,6 +860,8 @@ function ConfigFieldEditor({
           {label}
           <select
             className={inputClass}
+            aria-invalid={Boolean(availabilityError) || undefined}
+            aria-describedby={availabilityError ? `${suggestionId}-availability` : undefined}
             disabled={disabled}
             value={current}
             onChange={event => onChange(event.target.value)}
@@ -878,12 +882,12 @@ function ConfigFieldEditor({
           </select>
         </label>
         <FieldHelp help={field.help} />
-        {runtimeError && (
-          <p role="alert" className="aiflow-type-body text-red-600">
-            {runtimeError}
+        {availabilityError && (
+          <p id={`${suggestionId}-availability`} role="alert" className="aiflow-type-body text-red-600">
+            {availabilityError}
           </p>
         )}
-        {runtimeError && onRetryOptions && (
+        {availabilityError && onRetryOptions && (
           <Button
             type="button"
             variant="outline"
@@ -2806,6 +2810,8 @@ export default function WorkflowCanvas({
         : selectedResourceKey === "udfId"
           ? resourceOptions.data?.udfs
           : undefined;
+  const selectedResourceChoice=resourceChoices?.find(option=>option.value===selectedConfig[selectedResourceKey ?? ""]);
+  const selectedResourceReason=selectedResourceChoice && "reason" in selectedResourceChoice ? String(selectedResourceChoice.reason) : "";
   useEffect(() => {
     participantPreview.reset();
   }, [selectedId]);
@@ -2840,7 +2846,7 @@ export default function WorkflowCanvas({
           ? {
               state: "partial" as const,
               error:
-                "请选择当前项目的可用资源；资源可能已删除、停用或尚未通过审核。",
+                selectedResourceReason || "请选择当前项目的可用资源；资源可能已删除、停用或尚未通过审核。",
             }
           : assessNodeConfig(selected.data.kind, selectedConfig)
     : null;
@@ -4900,7 +4906,7 @@ export default function WorkflowCanvas({
                                         ? "按名称选择已通过连接验证的 MySQL 数据源；请先在业务项目的数据源页面登记并测试连接。"
                                         : selectedResourceKey === "udfId"
                                           ? "选择已审核且绑定内置处理实现的函数；标记“尚不可执行”的函数不能选用。"
-                                          : "选择已启用资源；在项目“数据资源”中登记。",
+                                          : "选择可读取的登记样本或已验证MySQL表；仅登记的API、文件等资源不可用于当前流程读取。",
                                   }
                                 : field.key === "endpointRef" && projectId
                                   ? {

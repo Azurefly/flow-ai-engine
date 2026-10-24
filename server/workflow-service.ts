@@ -1,4 +1,5 @@
 import { workflowCopyName } from "../shared/workflow-creation-form";
+import { assertDataflowResourcesReady } from "./dataflow-resource-readiness";
 import { assertWorkflowCreationAccess, assertWorkflowConfigurationToken, prepareWorkflowCreationRequest, replayWorkflowCreationRequest, saveWorkflowCreationRequest, type WorkflowCreationRequest } from "./workflow-creation-request";
 import { commitWorkflowMutation, lockWorkflowMutation, type WorkflowMutationSnapshot } from "./workflow-mutation-transaction";
 import { diagnoseSynchronousSubflowNodes, locateSubflowDiagnostics } from "./subflow-diagnostics";
@@ -764,6 +765,8 @@ export async function updateWorkflow(
             ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
             : "当前审批规则要求项目流程通过审核后才能发布。审核状态可能已变化，请重新读取后确认。",
         });
+      if(values.publish && current.flowType === "data" && current.projectId)
+        await assertDataflowResourcesReady(connection,current.projectId,persistedDefinition,true);
       await connection.query(
         "UPDATE workflow SET name=?, definitionJson=?, status=?, definitionVersion=?, auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END, publishedExecutionPlanJson=?, publishedExecutionPlanHash=?, publishedAt=CASE WHEN ? THEN NOW() WHEN ? THEN NULL ELSE publishedAt END, unpublishedAt=CASE WHEN ? THEN NOW() ELSE unpublishedAt END, updatedAt=NOW() WHERE id=?",
         [
@@ -846,6 +849,7 @@ export async function compileWorkflowDraft(
     return null;
   const current = (await getWorkflow(workflowId, user)) as {
     ownerUserId: number;
+    projectId?: string | null;
     archivedAt?: Date | string | null;
     definition: Definition;
     flowType: "state" | "control" | "data";
@@ -866,6 +870,8 @@ export async function compileWorkflowDraft(
       true,
       current.flowType
     );
+    if(current.flowType === "data" && current.projectId)
+      await assertDataflowResourcesReady(db(),current.projectId,resolved);
     return compileWorkflowDefinition(resolved, {
       flowType: current.flowType,
     });
@@ -1053,6 +1059,8 @@ export async function rollbackWorkflowVersion(
         message:
           "当前审批规则要求变更后的流程重新审核。请先恢复为草稿并完成审核，再发布。",
       });
+    if(restoredStatus === "published" && current.flowType === "data" && current.projectId)
+      await assertDataflowResourcesReady(connection,current.projectId,restoredDefinition,true);
     const nextVersion = Number(locked.definitionVersion) + 1;
     await connection.query(
       "UPDATE workflow SET name=?,definitionJson=?,status=?,definitionVersion=?,auditStatus=CASE WHEN ? THEN 'init' ELSE auditStatus END,publishedExecutionPlanJson=?,publishedExecutionPlanHash=?,publishedAt=?,unpublishedAt=?,updatedAt=NOW() WHERE id=?",

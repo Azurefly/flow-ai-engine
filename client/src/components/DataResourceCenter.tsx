@@ -1,4 +1,5 @@
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
+import { canProbeDataSource, dataSourceCapability, dataSourceReadiness } from "@shared/data-source-capabilities";
 import {
   builtinDataFunctions,
   dataFunctionTypeLabel,
@@ -179,6 +180,7 @@ export default function DataResourceCenter({
 
   const invalidate = () => {
     void utils.data.resources.invalidate({ projectId });
+    void utils.data.resourceOptions.invalidate({ projectId });
     void utils.data.flows.invalidate({ projectId });
     void utils.data.runs.invalidate({ projectId });
   };
@@ -273,13 +275,15 @@ export default function DataResourceCenter({
     onError: reportResourceError,
   });
   const testSource = trpc.data.testSource.useMutation({
-    onSuccess: (result: any) => {
+    onSuccess: (result: any, variables) => {
       invalidate();
       toast[result.status === "success" ? "success" : "error"](
         result.status === "success"
           ? result.evidence?.probe === "inline_metadata"
             ? "内联数据源登记信息已校验；未连接外部系统。"
-            : "数据源连接测试通过。"
+            : resources.data?.sources?.some((source:any)=>source.id===variables.sourceId && source.sourceType === "api")
+              ? "API连通测试通过；当前尚不支持流程读取。"
+              : "数据源连接测试通过；实际读取权限仍以执行时为准。"
           : `连接测试未通过：${result.error?.message || result.errorCategory || "请查看测试证据"}`
       );
     },
@@ -311,10 +315,11 @@ export default function DataResourceCenter({
               ? "aiflow-type-control min-h-11 flex-1"
               : "aiflow-type-control mr-2 h-10"
           }
-          disabled={testSource.isPending}
+          disabled={testSource.isPending || !canProbeDataSource(source)}
+          title={source.status === "disabled" ? "数据源已停用，请先恢复配置" : dataSourceCapability(source.sourceType).description}
           onClick={() => testSource.mutate({ projectId, sourceId: source.id })}
         >
-          {source.sourceType === "inline" ? "校验登记" : "测试连接"}
+          {dataSourceCapability(source.sourceType).probeLabel}
         </Button>
         <DeleteButton
           actionLabel="删除数据源"
@@ -668,7 +673,7 @@ export default function DataResourceCenter({
             !selectedQueryError &&
             tab === "sources" && (
               <ResourceTable
-                columns={["名称", "类型", "状态", "最近校验", "操作"]}
+                columns={["名称", "类型 / 读取能力", "状态", "最近校验", "操作"]}
                 empty="尚未配置数据源。"
                 mobileCards={(resources.data?.sources ?? []).map(
                   (source: any) => (
@@ -680,7 +685,8 @@ export default function DataResourceCenter({
                       }
                       status={<State value={source.status} />}
                       fields={[
-                        { label: "类型", value: source.sourceType },
+                        { label: "类型", value: dataSourceCapability(source.sourceType).label },
+                        { label: "流程读取", value: dataSourceReadiness(source).message },
                         {
                           label: "最近校验",
                           value: source.lastTestedAt
@@ -703,7 +709,7 @@ export default function DataResourceCenter({
                         source.connection?.description || "连接元数据已隐藏"
                       }
                     />
-                    <td className={mutedCellClassName}>{source.sourceType}</td>
+                    <td className={mutedCellClassName}><p>{dataSourceCapability(source.sourceType).label}</p><p className="mt-1 max-w-xs whitespace-normal text-sm leading-5">{dataSourceReadiness(source).message}</p></td>
                     <td className="px-4 py-3">
                       <State value={source.status} />
                     </td>

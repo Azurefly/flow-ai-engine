@@ -1,4 +1,6 @@
 import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
+import { dataAssetReadiness, dataSourceReadiness } from "../shared/data-source-capabilities";
+import { assertDataflowResourcesReady } from "./dataflow-resource-readiness";
 import { builtinDataFunctionChoice } from "../shared/builtin-data-functions";
 import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { checkDataflowQuality } from "./dataflow-quality";
@@ -167,7 +169,7 @@ export async function listDataResourceOptions(
   await requireProjectAccess(user, projectId, "view");
   const [assets, sources, udfs] = await Promise.all([
     db().query<mysql.RowDataPacket[]>(
-      "SELECT id,name,schemaJson FROM data_asset WHERE projectId=? AND status='active' ORDER BY name,id",
+      "SELECT a.id,a.name,a.schemaJson,a.sourceId,a.status,s.id AS matchedSourceId,s.sourceType,s.status AS sourceStatus,s.connectionJson FROM data_asset a LEFT JOIN data_source s ON s.id=a.sourceId AND s.projectId=a.projectId WHERE a.projectId=? AND a.status='active' ORDER BY a.name,a.id",
       [projectId]
     ),
     db().query<mysql.RowDataPacket[]>(
@@ -185,10 +187,26 @@ export async function listDataResourceOptions(
       label: `${String(row.name)}（${String(row.id).slice(0, 8)}）`,
     }));
   return {
-    assets: assets[0].map(row => ({
-      ...options([row])[0],
-      fields: dataflowSchemaFields(parseJson(row.schemaJson, [])),
-    })),
+    assets: assets[0].map(row => {
+      const readiness = dataAssetReadiness(
+        { name: row.name, sourceId: row.sourceId, status: row.status },
+        row.matchedSourceId
+          ? {
+              sourceType: row.sourceType,
+              status: row.sourceStatus,
+              connection: parseJson(row.connectionJson, {}) as JsonRecord,
+            }
+          : undefined
+      );
+      const option = options([row])[0];
+      return {
+        ...option,
+        label: option.label + (readiness.ready ? "" : " · 暂不可读取"),
+        fields: dataflowSchemaFields(parseJson(row.schemaJson, [])),
+        disabled: !readiness.ready,
+        ...(!readiness.ready ? { reason: readiness.message } : {}),
+      };
+    }),
     sources: options(sources[0]),
     udfs: udfs[0].map(row =>
       builtinDataFunctionChoice({
@@ -546,6 +564,7 @@ type ClaimedDataSourceTest = {
   projectId: string;
   sourceId: string;
   sourceType: string;
+  sourceStatus: string;
   connection: JsonRecord;
   credentialRef: string | null;
   configHash: string;
@@ -582,7 +601,7 @@ async function claimDataSourceTest(
     }
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
       `SELECT t.id,t.projectId,t.sourceId,t.sourceType,t.configHash,t.attempt,t.maxAttempts,t.requestId,
-              t.status,s.connectionJson,s.credentialRef
+              t.status,s.connectionJson,s.credentialRef,s.status AS sourceStatus
          FROM data_source_test_run t JOIN data_source s ON s.id=t.sourceId AND s.projectId=t.projectId
         WHERE ${where.join(" AND ")}
         ORDER BY t.availableAt,t.createdAt LIMIT 1 FOR UPDATE SKIP LOCKED`,
@@ -609,6 +628,7 @@ async function claimDataSourceTest(
       projectId: String(row.projectId),
       sourceId: String(row.sourceId),
       sourceType: String(row.sourceType),
+      sourceStatus: String(row.sourceStatus),
       connection: parseJson(row.connectionJson, {}) as JsonRecord,
       credentialRef: row.credentialRef ? String(row.credentialRef) : null,
       configHash: String(row.configHash),
@@ -628,12 +648,17 @@ async function claimDataSourceTest(
 async function processDataSourceTest(job: ClaimedDataSourceTest) {
   const startedAt = Date.now();
   try {
+    if (job.sourceStatus === "disabled")
+      throw new DataSourceTestFailure(
+        "stale_configuration",
+        "数据源已停用，本次连接测试不会恢复启用状态。"
+      );
     const result = await executeDataSourceProbe(job);
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
       const [sourceRows] = await connection.query<mysql.RowDataPacket[]>(
-        "SELECT connectionJson,credentialRef,sourceType FROM data_source WHERE id=? AND projectId=? LIMIT 1 FOR UPDATE",
+        "SELECT connectionJson,credentialRef,sourceType,status FROM data_source WHERE id=? AND projectId=? LIMIT 1 FOR UPDATE",
         [job.sourceId, job.projectId]
       );
       const source = sourceRows[0];
@@ -644,10 +669,14 @@ async function processDataSourceTest(job: ClaimedDataSourceTest) {
             source.credentialRef
           )
         : "";
-      if (!source || currentHash !== job.configHash)
+      if (
+        !source ||
+        source.status === "disabled" ||
+        currentHash !== job.configHash
+      )
         throw new DataSourceTestFailure(
           "stale_configuration",
-          "数据源配置在测试期间发生变化。",
+          "数据源配置或启用状态在测试期间发生变化，本次结果不改变数据源状态。",
           { configChanged: true }
         );
       const [updated] = await connection.query<mysql.ResultSetHeader>(
@@ -720,11 +749,12 @@ export async function testDataSource(
 ) {
   await requireProjectAccess(user, input.projectId, "edit");
   const [sources] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,projectId,sourceType,connectionJson,credentialRef FROM data_source WHERE id=? AND projectId=? LIMIT 1",
+    "SELECT id,projectId,sourceType,status,connectionJson,credentialRef FROM data_source WHERE id=? AND projectId=? LIMIT 1",
     [input.sourceId, input.projectId]
   );
   const source = sources[0];
   if (!source) throw new Error("数据源不存在或不属于当前项目。");
+  if(source.status === "disabled") throw new TRPCError({code:"BAD_REQUEST",message:"数据源已停用，请先恢复配置后再测试；连接测试不会启用数据源。"});
   const configHash = sourceConfigHash(
     source.sourceType,
     parseJson(source.connectionJson, {}),
@@ -1161,9 +1191,17 @@ async function loadVerifiedConnector(projectId: string, sourceId: string) {
   );
   const source = rows[0];
   if (!source) throw new Error("数据源不存在或不属于当前项目。 ");
+  if (source.status === "disabled")
+    throw new Error("数据源已停用，禁止执行读取。 ");
   if (source.sourceType !== "inline" && source.status !== "verified")
     throw new Error("数据源尚未通过连接测试，禁止执行读取。 ");
   const connection = parseJson(source.connectionJson, {}) as JsonRecord;
+  const readiness = dataSourceReadiness({
+    sourceType: source.sourceType,
+    status: source.status,
+    connection,
+  });
+  if (!readiness.ready) throw new Error(readiness.message);
   return {
     sourceType: String(source.sourceType),
     status: String(source.status),
@@ -2090,6 +2128,7 @@ export async function runDataflow(
       executionPlanHash = compiled.planHash;
     }
     definition = executionPlan.definition;
+    await assertDataflowResourcesReady(connection,input.projectId,definition,true);
     const admission = input.scheduleAdmission
       ? await lockNativeScheduleAdmission(
           connection,

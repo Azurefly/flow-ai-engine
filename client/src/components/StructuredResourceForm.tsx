@@ -1,4 +1,9 @@
 import { Button } from "@/components/ui/button";
+import {
+  dataSourceTypes,
+  dataSourceCapability,
+  dataAssetReadiness,
+} from "@shared/data-source-capabilities";
 import { CreationDialog } from "@/components/CreationDialog";
 import { Input } from "@/components/ui/input";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
@@ -200,12 +205,19 @@ export function StructuredResourceForm({
               setSource({ ...source, sourceType: event.target.value })
             }
           >
-            <option value="inline">内联样本</option>
-            <option value="file">文件</option>
-            <option value="api">API</option>
-            <option value="jdbc">JDBC</option>
+            {dataSourceTypes.map(type => (
+              <option key={type.value} value={type.value}>
+                {type.label}
+              </option>
+            ))}
           </select>
         </ResourceField>
+        <p
+          role="note"
+          className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-6"
+        >
+          {dataSourceCapability(source.sourceType).description}
+        </p>
         <ResourceField label="连接说明">
           <Input
             placeholder="说明用途和访问范围，例如：只读查询订单"
@@ -218,7 +230,13 @@ export function StructuredResourceForm({
         </ResourceField>
         <ResourceField label="服务地址或文件位置（可选）">
           <Input
-            placeholder="填写 URL 或文件位置"
+            placeholder={
+              source.sourceType === "jdbc"
+                ? "mysql://主机:3306/数据库（不包含密码）"
+                : source.sourceType === "file"
+                  ? "文件位置仅作登记说明"
+                  : "填写 URL 或文件位置"
+            }
             value={source.endpoint}
             onChange={event =>
               setSource({ ...source, endpoint: event.target.value })
@@ -263,6 +281,17 @@ export function StructuredResourceForm({
             ))}
           </select>
         </ResourceField>
+        <p
+          role="note"
+          className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-6"
+        >
+          {
+            dataAssetReadiness(
+              { name: asset.name, sourceId: asset.sourceId },
+              sources.find(item => item.id === asset.sourceId)
+            ).message
+          }
+        </p>
         <ResourceField label="资源类型">
           <select
             aria-label="资源类型"
@@ -302,7 +331,7 @@ export function StructuredResourceForm({
         />
         <RowEditor
           title="一行样本"
-          helpText="样本行可选；不需要样本时保持空白。"
+          helpText="样本行可选。内联资源在执行时读取样本；外部资源的样本仅供说明，不会替代实际读取。"
           emptyMessage="未添加样本行。"
           rows={sampleRows}
           onAdd={() => setSampleRows(rows => [...rows, { key: "", value: "" }])}

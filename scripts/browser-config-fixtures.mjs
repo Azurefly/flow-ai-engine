@@ -864,6 +864,10 @@ async function prepareNativeSchedule(intent) {
   assert.equal(current.projectId, fixture.projectId);
   await request("iam.updateUserStatus", { userId: fixture.disabledUserId, status: "active" }, true);
   await request("project.auditWorkflow", { projectId: fixture.projectId, workflowId: flow.id, auditStatus: "approved" }, true);
+  if(intent.reviewOnly === true) {
+    console.log(JSON.stringify({stage:"owned-dataflow-reviewed",workflowId:flow.id}));
+    return;
+  }
   await request("auth.login", intent.login, true);
   const approved = await request("workflow.get", { id: flow.id });
   await request("workflow.publish", { id: flow.id, expectedDefinitionVersion: approved.definitionVersion }, true);

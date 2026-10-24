@@ -54,7 +54,8 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     );
     expect(structuredForm).toContain("requiredFields");
     expect(structuredForm).toContain("minimumRows={1}");
-    expect(structuredForm).toContain("样本行可选；不需要样本时保持空白。");
+    expect(structuredForm).toContain("样本行可选");
+    expect(structuredForm).toContain("外部资源的样本仅供说明，不会替代实际读取");
     for (const field of [
       "函数名称",
       "函数类型",

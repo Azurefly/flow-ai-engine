@@ -231,6 +231,7 @@ describe("P2 项目数据资源与数据流", () => {
           value: assetId,
           label: `订单样本（${assetId.slice(0, 8)}）`,
           fields: ["orderId", "amount"],
+          disabled: false,
         },
       ]);
       expect(choices.sources.map(option => option.value)).toEqual([
