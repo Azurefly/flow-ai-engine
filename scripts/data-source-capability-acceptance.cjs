@@ -475,7 +475,7 @@ async function poll(description, read, accept) {
     await expect(resourceSelect).toHaveValue(originalAssetId);
     await expect(
       resourceSelect.locator(`option[value="${originalAssetId}"]`)
-    ).toBeDisabled();
+    ).toHaveJSProperty("disabled", true);
     await expect(
       panel.getByRole("alert").filter({ hasText: "停用" })
     ).toBeVisible();
@@ -484,7 +484,7 @@ async function poll(description, read, accept) {
     ))
       await expect(
         resourceSelect.locator(`option[value="${item.assetId}"]`)
-      ).toBeDisabled();
+      ).toHaveJSProperty("disabled", true);
     await resourceSelect.selectOption(ready.id);
     await expect(resourceSelect).not.toHaveAttribute("aria-invalid", "true");
     assert.equal(
