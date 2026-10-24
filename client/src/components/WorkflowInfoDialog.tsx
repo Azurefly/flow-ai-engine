@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { CreationDialog } from "./CreationDialog";
@@ -36,6 +36,7 @@ export default function WorkflowInfoDialog({
   onClose: () => void;
   onSaved: (target: WorkflowInfoTarget) => void;
 }) {
+  const fieldId = useId();
   const initial = useRef({
     name: target.name,
     description: target.description || "",
@@ -275,10 +276,11 @@ export default function WorkflowInfoDialog({
             )}
           </section>
         )}
-        <label className="auth-label">
-          流程名称
+        <div className="auth-label">
+          <label htmlFor={fieldId + "-name"}>流程名称</label>
           <Input
             value={fields.name}
+            id={fieldId + "-name"}
             maxLength={160}
             required
             disabled={uncertain}
@@ -287,11 +289,12 @@ export default function WorkflowInfoDialog({
                 setFields(old => ({ ...old, name: event.target.value }));
             }}
           />
-        </label>
-        <label className="auth-label">
-          流程说明
+        </div>
+        <div className="auth-label">
+          <label htmlFor={fieldId + "-description"}>流程说明</label>
           <Textarea
             value={fields.description}
+            id={fieldId + "-description"}
             maxLength={1200}
             rows={4}
             disabled={uncertain}
@@ -300,7 +303,7 @@ export default function WorkflowInfoDialog({
                 setFields(old => ({ ...old, description: event.target.value }));
             }}
           />
-        </label>
+        </div>
       </CreationDialog>
       <AlertDialog open={leaving} onOpenChange={setLeaving}>
         <AlertDialogContent
