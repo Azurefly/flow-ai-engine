@@ -1,41 +1,95 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-/* Desktop editor uses one bounded workspace; only the inspector scrolls. */
+/* The main editor fits the measured space below its command bar and notices. */
 @media (min-width: 1024px) {
-  [data-workflow-editor]:not(:fullscreen) {
-    height: max(520px, calc(100dvh - 200px));
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) {
+    height: var(--aiflow-editor-height, max(360px, calc(100dvh - 240px)));
     min-height: 0;
     grid-template-rows: minmax(0, 1fr);
   }
-  [data-workflow-editor] > section {
-    min-height: 0;
+  [data-workflow-editor][data-editor-viewport="true"][data-inspector-mode="compact"]:not(:fullscreen) {
+    grid-template-rows: minmax(0, 1fr) auto;
   }
-  [data-workflow-editor] [data-flow-canvas-toolbar] {
-    flex-shrink: 0;
-  }
-  [data-workflow-editor] [data-flow-canvas-toolbar] + div {
-    flex: 1;
-    height: auto;
-    min-height: 0;
-  }
-  [data-workflow-editor]:not(:fullscreen) [data-workflow-inspector] {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-  }
-  [data-workflow-editor] [data-workflow-inspector-header] {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--card);
-  }
-  [data-workflow-editor]:not(:fullscreen) [data-workflow-inspector-content] {
-    max-height: none;
-    overflow: visible;
-  }
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) > section {min-height: 0;}
+  [data-workflow-editor] [data-flow-canvas-toolbar] {flex-shrink: 0;}
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-flow-canvas-viewport] {flex: 1; height: auto; min-height: 0;}
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector] {display: flex; min-height: 0; flex-direction: column; overflow: hidden;}
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector-header] {flex-shrink: 0; background: var(--card);}
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector-content] {min-height: 0; max-height: none; flex: 1; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable;}
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector-footer] {flex-shrink: 0; max-height: 25vh; overflow-y: auto;}
 }
+[data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector-heading] {
+  scroll-margin-top: calc(var(--workspace-header-height,56px) + var(--aiflow-command-height,0px) + 24px);
+}
+@media (max-width: 1023px) {
+  [data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector-content] {max-height: none; overflow: visible;}
+}
+[data-editor-publication-details] summary::-webkit-details-marker {display: none;}
+[data-editor-publication-details][open] summary > svg:last-child {transform: rotate(180deg);}
+
+/* Shared editor chrome keeps layout rules in one place for all flow types. */
+.editor-command-bar {
+  position: sticky;
+  top: calc(var(--workspace-header-height, 56px) + 0.5rem);
+  z-index: 20;
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--card);
+  padding: 0.75rem;
+}
+.editor-back {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  color: var(--muted-foreground);
+}
+.editor-back:hover {background: var(--muted); color: var(--foreground);}
+.editor-back:focus-visible {outline: 2px solid var(--color-blue-500); outline-offset: 2px;}
+.editor-primary-actions {display: grid; min-width: 0; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px;}
+.editor-primary-actions > button {height: 44px; min-height: 44px; min-width: 0; gap: 6px; padding-inline: 8px; font-size: var(--aiflow-type-control);}
+.editor-primary-actions > [data-editor-publish] {background: var(--color-blue-600); color: white;}
+.editor-primary-actions > [data-editor-publish]:hover {background: var(--color-blue-700);}
+.editor-primary-actions > [data-editor-more] {width: 100%; padding: 0;}
+@media (max-width: 639px) {
+  .editor-primary-actions > button:not([data-editor-more]) > svg {display: none;}
+}
+@media (min-width: 640px) {
+  .editor-primary-actions {display: flex; flex-wrap: wrap; align-items: center; gap: 8px;}
+  .editor-primary-actions > [data-editor-more] {width: 44px;}
+}
+@media (min-width: 1024px) {
+  .editor-command-bar {grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 1rem;}
+  .editor-back {height: 40px; width: 40px;}
+  .editor-primary-actions {flex-wrap: nowrap;}
+  .editor-primary-actions > button {height: 40px; min-height: 40px;}
+  .editor-primary-actions > [data-editor-more] {width: 40px;}
+}
+
+[data-canvas-icon] {height:44px; width:44px; flex-shrink:0; padding:0; color:var(--muted-foreground);}
+[data-canvas-icon]:hover {background:var(--muted); color:var(--foreground);}
+[data-canvas-palette-trigger] {display:inline-flex; align-items:center; height:44px; gap:8px; padding-inline:12px; border:1px solid var(--border); border-radius:6px; background:var(--card); color:var(--foreground); font-size:var(--aiflow-type-control); font-weight:500; cursor:pointer;}
+[data-canvas-palette-trigger]:hover {background:var(--muted);}
+[data-canvas-palette-trigger]:focus-visible {outline:2px solid var(--color-blue-500); outline-offset:2px;}
+[data-node-palette-popup] {max-height:min(65dvh,var(--radix-popover-content-available-height)); width:min(720px,calc(100vw - 24px)); overflow-y:auto; border:1px solid var(--border); border-radius:8px; background:var(--card); padding:12px; box-shadow:var(--shadow-xl);}
+.editor-notice {margin-bottom:8px; border:1px solid var(--aiflow-info-border); border-radius:8px; background:var(--aiflow-info-surface); font-size:var(--aiflow-type-body);}
+.editor-notice > summary {display:flex; align-items:center; min-height:44px; gap:8px; padding:8px 12px; cursor:pointer; list-style:none;}
+.editor-notice > summary::-webkit-details-marker {display:none;}
+.editor-notice > summary > span:first-child {flex-shrink:0; font-weight:500; color:var(--aiflow-info);}
+.editor-notice > summary > span:nth-child(2) {min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.editor-notice > summary > svg {flex-shrink:0;}
+.editor-notice[open] > summary > svg {transform:rotate(180deg);}
+.editor-notice > div {display:grid; gap:12px; border-top:1px solid var(--aiflow-info-border); padding:12px;}
+@media (min-width:640px) {.editor-notice > div {display:flex; align-items:center; justify-content:space-between;}}
+@media (min-width:1024px) {[data-canvas-icon] {height:36px; width:36px;} [data-canvas-palette-trigger] {height:36px;}}
 
 @custom-variant dark (&:is(.dark *));
 
@@ -932,11 +986,6 @@ h2 {
   border-color: var(--border);
 }
 
-[data-aiflow-designer] [data-aiflow-workflow-canvas] [data-flow-node-palette] {
-  min-height: 48px;
-  padding: 0 10px;
-}
-
 [data-aiflow-designer]
   [data-aiflow-workflow-canvas]
   [data-flow-node-palette]
@@ -953,10 +1002,6 @@ h2 {
   .react-flow__node-workflowNode
   > div {
   border-radius: 16px;
-}
-
-[data-aiflow-designer] [data-aiflow-workflow-canvas] > section > .relative {
-  height: max(620px, calc(100vh - 210px));
 }
 
 @media (max-width: 639px) {

@@ -1,3 +1,4 @@
+import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
 import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
@@ -2461,6 +2462,7 @@ function FlowDesigner({
   const [unpublishError, setUnpublishError] = useState("");
   const [unpublishChecking, setUnpublishChecking] = useState(false);
   const saveButtonRef = useRef<HTMLButtonElement>(null);
+  const moreActionsRef = useRef<HTMLButtonElement>(null);
   const unpublishOrigin = useRef<{ workflowId: string; element: HTMLElement | null } | null>(null);
   const unpublishCheckLock = useRef(false);
   const unpublishWorkflowId = useRef(workflow.id);
@@ -2486,10 +2488,11 @@ function FlowDesigner({
     },
   });
   const unpublishBusy = unpublishFlow.isPending || unpublishChecking;
+  const editorBusy = savePending || publishPending || compilePending || runPending || unpublishBusy || operationPending;
   const onUnpublish = () => {
-    if (!canPublish || workflow.status !== "published" || unpublishBusy) return;
+    if (!canPublish || workflow.status !== "published" || editorBusy) return;
     setUnpublishError("");
-    unpublishOrigin.current = { workflowId: workflow.id, element: document.activeElement instanceof HTMLElement ? document.activeElement : null };
+    unpublishOrigin.current = { workflowId: workflow.id, element: document.activeElement instanceof HTMLElement ? document.activeElement.closest('[role="menuitem"]') ? moreActionsRef.current : document.activeElement : null };
     setUnpublishTarget({ id: workflow.id, name: workflow.name, definitionVersion: Number(workflow.definitionVersion) });
   };
   const reconcileUnpublish = async () => {
@@ -2526,14 +2529,14 @@ function FlowDesigner({
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        if (!unpublishTarget && !unpublishBusy && canEdit && !savePending && workflow?.status !== "published") {
+        if (!unpublishTarget && !editorBusy && canEdit && workflow?.status !== "published") {
           onSave();
         }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canEdit, savePending, workflow?.status, onSave, unpublishTarget, unpublishBusy]);
+  }, [canEdit, editorBusy, workflow?.status, onSave, unpublishTarget]);
   if (!workflow || !definition)
     return (
       <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8">
@@ -2559,359 +2562,363 @@ function FlowDesigner({
   return (
     <div
       data-aiflow-designer=""
-      className="min-w-0 max-w-full overflow-x-hidden p-3 sm:p-4 lg:p-5"
+      className="min-w-0 max-w-full overflow-x-clip p-3 sm:p-4 lg:p-5"
     >
-      <div
-        data-aiflow-context-header
-        className="mb-4 flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-3.5 shadow-sm sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
-      >
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <button
-              type="button"
-              className="aiflow-action-target inline-flex items-center gap-1 rounded px-2 font-medium text-aiflow-info hover:underline min-[1024px]:px-0"
-              aria-label={backLabel}
-              title={backLabel}
-              onClick={onBackToDesignCenter}
-            >
-              <ChevronLeft size={14} />
-              {backLabel}
-            </button>
-            <span className="text-slate-300">/</span>
+      <EditorCommandBar
+        backLabel={backLabel}
+        onBack={onBackToDesignCenter}
+        title={
+          <textarea
+            aria-label="流程名称"
+            data-aiflow-page-title=""
+            className="aiflow-type-page-title min-h-11 max-h-24 w-full min-w-0 resize-none overflow-y-auto whitespace-pre-wrap rounded border border-transparent px-1.5 py-1 font-semibold text-foreground shadow-none transition-colors hover:border-border hover:bg-muted/70 focus-visible:border-blue-400 focus-visible:bg-card focus-visible:outline-none focus-visible:ring-0 disabled:opacity-100 [overflow-wrap:anywhere] min-[1024px]:min-h-9"
+            rows={1}
+            value={name}
+            disabled={!canModifyDefinition}
+            onChange={event => {
+              setName(event.currentTarget.value.replace(/[\r\n]+/g, " "));
+            }}
+            onKeyDown={event => {
+              if (event.key === "Enter") event.preventDefault();
+            }}
+            ref={titleRef}
+            title={name || "双击或聚焦以编辑流程名称"}
+          />
+        }
+        context={
+          <>
             <span
-              className="inline-flex items-center gap-1 text-muted-foreground"
-              aria-label={`当前流程类型：${flowProfile.label}`}
               title={flowProfile.description}
+              aria-label={`当前流程类型：${flowProfile.label}`}
+              className="inline-flex items-center gap-1"
             >
               {flowProfile.type === "data" ? (
-                <Table2 size={13} aria-hidden="true" />
+                <Table2 size={14} />
               ) : flowProfile.type === "state" ? (
-                <Activity size={13} aria-hidden="true" />
+                <Activity size={14} />
               ) : (
-                <FolderKanban size={13} aria-hidden="true" />
-              )}
+                <FolderKanban size={14} />
+              )}{" "}
               {flowProfile.label}
-              <ChevronRight size={13} />
-              设计器
             </span>
             <span
-              className={`ml-1 aiflow-type-meta rounded px-2 py-0.5 font-semibold border ${
-                workflow.status === "published"
-                  ? "bg-aiflow-success-surface text-aiflow-success border-aiflow-success-border"
-                  : "bg-aiflow-warning-surface text-aiflow-warning border-aiflow-warning-border"
-              }`}
+              className={`aiflow-type-meta rounded border px-2 py-0.5 ${workflow.status === "published" ? "border-aiflow-success-border bg-aiflow-success-surface text-aiflow-success" : "border-aiflow-warning-border bg-aiflow-warning-surface text-aiflow-warning"}`}
             >
               {workflow.status === "published"
-                ? `● 已发布 v${workflow.definitionVersion || 1}`
-                : "● 草稿状态"}
+                ? `已发布 v${workflow.definitionVersion || 1}`
+                : "草稿"}
             </span>
-          </div>
-          <div className="mt-1.5 flex w-full min-w-0 items-center gap-1">
-            <textarea
-              aria-label="流程名称"
-              data-aiflow-page-title=""
-              className="aiflow-type-page-title min-h-11 max-h-24 w-full min-w-0 resize-none overflow-y-auto whitespace-pre-wrap rounded border border-transparent px-1.5 py-1 font-bold text-foreground shadow-none transition-colors hover:border-border hover:bg-muted/70 focus-visible:border-blue-400 focus-visible:bg-card focus-visible:outline-none focus-visible:ring-0 disabled:opacity-100 [overflow-wrap:anywhere] min-[1024px]:min-h-9"
-              rows={1}
-              value={name}
-              disabled={!canModifyDefinition}
-              onChange={event => {
-                setName(event.currentTarget.value.replace(/[\r\n]+/g, " "));
-              }}
-              onKeyDown={event => {
-                if (event.key === "Enter") event.preventDefault();
-              }}
-              ref={titleRef}
-              title={name || "双击或聚焦以编辑流程名称"}
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {/* 1. 存盘草稿 (支持 ⌘S) */}
-          <Button ref={saveButtonRef}
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-11 min-h-11 gap-1.5 px-2.5 text-xs text-foreground hover:bg-muted border-border shadow-2xs min-[1024px]:h-9 min-[1024px]:min-h-0"
-            onClick={onSave}
-            disabled={
-              !canEdit ||
-              !hasUnpublishedChanges ||
-              Boolean(draftError) ||
-              savePending ||
-              workflow.status === "published"
-            }
-            title={
-              draftError || (workflow.status === "published"
-                ? "修改后使用“发布新版本”；需要保存草稿时，请先取消发布"
-                : hasUnpublishedChanges
-                  ? "保存当前画布草稿 (Ctrl+S / ⌘S)"
-                  : "没有未保存修改")
-            }
-          >
-            {savePending ? (
-              <Loader2 className="animate-spin text-aiflow-info" size={13} />
-            ) : (
-              <Save size={13} className="text-muted-foreground" />
+            {hasUnpublishedChanges && (
+              <span role="status" className="text-sm text-aiflow-warning">
+                有未保存修改
+              </span>
             )}
-            <span>保存画布</span>
-            <kbd className="aiflow-type-meta hidden rounded bg-muted px-1 font-mono text-muted-foreground sm:inline-block">
-              Ctrl/⌘+S
-            </kbd>
-          </Button>
+            {!canModifyDefinition && <span className="text-sm">只读查看</span>}
+          </>
+        }
+      >
+        {/* 1. 存盘草稿 (支持 ⌘S) */}
+        <Button
+          ref={saveButtonRef}
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label="保存画布"
+          onClick={onSave}
+          disabled={
+            !canEdit ||
+            !hasUnpublishedChanges ||
+            Boolean(draftError) ||
+            editorBusy ||
+            workflow.status === "published"
+          }
+          title={
+            draftError ||
+            (workflow.status === "published"
+              ? "修改后使用“发布新版本”；需要保存草稿时，请先取消发布"
+              : hasUnpublishedChanges
+                ? "保存当前画布草稿 (Ctrl+S / ⌘S)"
+                : "没有未保存修改")
+          }
+        >
+          {savePending ? (
+            <Loader2 className="animate-spin text-aiflow-info" size={13} />
+          ) : (
+            <Save size={13} className="text-muted-foreground" />
+          )}
+          <span className="sm:hidden">保存</span>
+          <span className="hidden sm:inline">保存画布</span>
+        </Button>
 
-          {/* 发布前自动预检，避免在紧凑工具栏重复放置检查按钮 */}
-          <Button
-            size="sm"
-            className="h-11 min-h-11 px-3 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs min-[1024px]:h-9 min-[1024px]:min-h-0"
-            onClick={onPublish}
-            disabled={
-              !canPublish ||
-              !publicationGate.allowed ||
-              !publishVersionAllowed ||
-              Boolean(draftError) ||
-              publishPending ||
-              compilePending
-            }
-            title={
-              draftError || (!canPublish
-                ? "当前账号没有发布权限"
-                : !publicationGate.allowed ? publicationGate.reason ?? "发布条件尚未就绪"
+        <Button
+          type="button"
+          variant="outline"
+          aria-label="预检流程"
+          onClick={onValidate}
+          disabled={!canPublish || editorBusy}
+          title="仅检查拓扑与配置，不会发布或运行"
+        >
+          <CheckCircle2 size={15} />
+          <span>预检</span>
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          aria-label={
+            workflow.flowType === "data"
+              ? "执行数据流程"
+              : workflow.flowType === "state"
+                ? "运行状态流程"
+                : "运行控制流程"
+          }
+          onClick={() => setRunDialogOpen(true)}
+          disabled={
+            Boolean(draftError) ||
+            editorBusy ||
+            (workflow.flowType !== "data" && !canRun)
+          }
+          title="打开运行配置与影响确认"
+        >
+          <Play size={15} />
+          <span>运行</span>
+        </Button>
+
+        <Button
+          size="sm"
+          aria-label={workflow.status === "published" ? "发布新版本" : "发布"}
+          data-editor-publish=""
+          onClick={onPublish}
+          disabled={
+            !canPublish ||
+            !publicationGate.allowed ||
+            !publishVersionAllowed ||
+            Boolean(draftError) ||
+            editorBusy
+          }
+          title={
+            draftError ||
+            (!canPublish
+              ? "当前账号没有发布权限"
+              : !publicationGate.allowed
+                ? (publicationGate.reason ?? "发布条件尚未就绪")
                 : !publishVersionAllowed
                   ? "当前已发布版本没有未发布修改；编辑流程后才能发布新版本"
                   : workflow.status === "published"
                     ? "发布前会自动检查拓扑与语法，并创建新版本"
                     : "发布前会自动检查拓扑与语法")
-            }
-          >
-            {publishPending && (
-              <Loader2 className="animate-spin mr-1" size={12} />
-            )}
+          }
+        >
+          {publishPending && <Loader2 className="animate-spin mr-1" size={12} />}
+          <span className="sm:hidden">发布</span>
+          <span className="hidden sm:inline">
             {workflow.status === "published" ? "发布新版本" : "发布"}
-          </Button>
+          </span>
+        </Button>
 
-          {/* 3. 更多操作与低频流程命令收纳菜单 (···) */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                className="ml-auto h-11 min-h-11 min-w-11 p-0 text-foreground hover:bg-muted border-border min-[1024px]:h-9 min-[1024px]:min-h-0 min-[1024px]:min-w-0"
-                title="更多操作"
-              >
-                <MoreHorizontal size={15} />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="w-56 max-w-[calc(100vw-2rem)]"
+        {/* 3. 更多操作与低频流程命令收纳菜单 (···) */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              ref={moreActionsRef}
+              aria-label="更多操作"
+              data-editor-more=""
+              title="更多操作"
             >
-              <DropdownMenuLabel className="aiflow-type-control text-muted-foreground">
-                流程操作
-              </DropdownMenuLabel>
+              <MoreHorizontal size={15} />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="w-56 max-w-[calc(100vw-2rem)]"
+          >
+            <DropdownMenuLabel className="aiflow-type-control text-muted-foreground">
+              其他操作
+            </DropdownMenuLabel>
+            <DropdownMenuItem
+              className="aiflow-type-control"
+              onClick={() => setMembersDialogOpen(true)}
+            >
+              <UsersRound size={13} className="mr-2 text-muted-foreground" />
+              <span>成员与权限</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="aiflow-type-control"
+              onClick={() => setGovernanceDialogOpen(true)}
+            >
+              <ShieldCheck size={13} className="mr-2 text-muted-foreground" />
+              <span>版本治理与快照</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="aiflow-type-control"
+              onClick={onImport}
+              disabled={!canModifyDefinition}
+            >
+              <Upload size={13} className="mr-2 text-muted-foreground" />
+              <span>导入定义 (JSON)</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className="aiflow-type-control" onClick={onExport}>
+              <Download size={13} className="mr-2 text-muted-foreground" />
+              <span>导出备份 (JSON)</span>
+            </DropdownMenuItem>
+            {workflow.flowType === "data" && (
               <DropdownMenuItem
                 className="aiflow-type-control"
-                onClick={() => setRunDialogOpen(true)}
-                disabled={Boolean(draftError) || (workflow.flowType !== "data" && !canRun)}
-                title={
-                  workflow.flowType === "state"
-                    ? "会推进流程状态或创建待办；提交前可查看运行影响。"
-                    : workflow.flowType === "data"
-                      ? "会读取已配置数据，并可能写入输出目标。"
-                      : "可能调用外部服务并产生业务影响；当前入口不提供沙箱隔离。"
+                disabled={
+                  savePending ||
+                  publishPending ||
+                  compilePending ||
+                  runPending ||
+                  unpublishBusy ||
+                  operationPending
+                }
+                onClick={() =>
+                  setConversionTarget({
+                    id: workflow.id,
+                    name,
+                    version: Number(workflow.definitionVersion),
+                    definition: structuredClone(definition),
+                  })
                 }
               >
-                {workflow.flowType === "state" ? (
-                  <Compass size={14} />
-                ) : workflow.flowType === "data" ? (
-                  <Table2 size={14} />
-                ) : (
-                  <Play size={14} />
-                )}
-                <span>
-                  {workflow.flowType === "state"
-                    ? "运行状态流程"
-                    : workflow.flowType === "data"
-                      ? "执行数据流程"
-                      : "运行控制流程"}
-                </span>
+                <FileJson size={13} className="mr-2 text-muted-foreground" />
+                <span>检查存量数据配置</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                className="aiflow-type-control"
-                onClick={onValidate}
-                disabled={!canPublish || compilePending}
-                title="仅检查拓扑与语法，不会发布流程"
-              >
-                {compilePending ? (
-                  <Loader2 className="animate-spin" size={14} />
-                ) : (
-                  <CheckCircle2 size={14} />
-                )}
-                <span>仅执行预检</span>
-              </DropdownMenuItem>
+            )}
+            {(canCopy || canArchive || canManage || canEdit) && (
               <DropdownMenuSeparator />
-              <DropdownMenuLabel className="aiflow-type-control text-muted-foreground">
-                其他操作
-              </DropdownMenuLabel>
+            )}
+            {canCopy && (
               <DropdownMenuItem
+                disabled={operationPending}
                 className="aiflow-type-control"
-                onClick={() => setMembersDialogOpen(true)}
+                onClick={onDuplicate}
               >
-                <UsersRound size={13} className="mr-2 text-muted-foreground" />
-                <span>成员与权限</span>
-
+                <Copy size={13} className="mr-2 text-muted-foreground" />
+                <span>创建副本</span>
               </DropdownMenuItem>
-              <DropdownMenuItem
-                className="aiflow-type-control"
-                onClick={() => setGovernanceDialogOpen(true)}
-              >
-                <ShieldCheck size={13} className="mr-2 text-muted-foreground" />
-                <span>版本治理与快照</span>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                className="aiflow-type-control"
-                onClick={onImport}
-                disabled={!canModifyDefinition}
-              >
-                <Upload size={13} className="mr-2 text-muted-foreground" />
-                <span>导入定义 (JSON)</span>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="aiflow-type-control"
-                onClick={onExport}
-              >
-                <Download size={13} className="mr-2 text-muted-foreground" />
-                <span>导出备份 (JSON)</span>
-              </DropdownMenuItem>
-              {workflow.flowType === "data" && (
+            )}
+            {canEdit &&
+              getFlowProfile(
+                workflow.flowType ?? "state"
+              ).allowedNodeTypes.includes("subflow") && (
                 <DropdownMenuItem
                   className="aiflow-type-control"
-                  disabled={
-                    savePending ||
-                    publishPending ||
-                    compilePending ||
-                    runPending ||
-                    unpublishBusy ||
-                    operationPending
-                  }
-                  onClick={() =>
-                    setConversionTarget({
-                      id: workflow.id,
-                      name,
-                      version: Number(workflow.definitionVersion),
-                      definition: structuredClone(definition),
-                    })
-                  }
+                  onClick={() => setSubflowDialogOpen(true)}
                 >
-                  <FileJson size={13} className="mr-2 text-muted-foreground" />
-                  <span>检查存量数据配置</span>
+                  <FolderTree size={13} className="mr-2 text-muted-foreground" />
+                  <span>另存为私有子流程</span>
                 </DropdownMenuItem>
               )}
-              {(canCopy || canArchive || canManage || canEdit) && <DropdownMenuSeparator />}
-              {canCopy && (
+            {workflow.status === "published" && canPublish && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={onUnpublish}
+                  className="aiflow-type-control text-aiflow-warning focus:text-aiflow-warning"
+                >
+                  <Clock3 size={13} className="mr-2" />
+                  <span>取消发布</span>
+                </DropdownMenuItem>
+              </>
+            )}
+            {canArchive && (
+              <>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem
                   disabled={operationPending}
-                  className="aiflow-type-control"
-                  onClick={onDuplicate}
+                  onClick={onDelete}
+                  className="aiflow-type-control text-red-600 focus:text-red-600"
                 >
-                  <Copy size={13} className="mr-2 text-muted-foreground" />
-                  <span>创建副本</span>
+                  <ArchiveRestore size={13} className="mr-2" />
+                  <span>归档至流程仓库</span>
                 </DropdownMenuItem>
-              )}
-              {canEdit &&
-                getFlowProfile(
-                  workflow.flowType ?? "state"
-                ).allowedNodeTypes.includes("subflow") && (
-                  <DropdownMenuItem
-                    className="aiflow-type-control"
-                    onClick={() => setSubflowDialogOpen(true)}
+              </>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </EditorCommandBar>
+      {canPublish &&
+        !publicationGate.allowed &&
+        !(
+          workflow.status === "published" && publicationGate.kind === "draft"
+        ) && (
+          <EditorNotice label="发布条件" summary={publicationGate.reason} data-workflow-publication-gate="" role={publicationGate.kind === "unavailable" || publicationGate.kind === "version" ? "alert" : "status"} open={publicationGate.kind === "unavailable" || publicationGate.kind === "version"}>
+              <p className="min-w-0 break-words">{publicationGate.reason}</p>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                {publicationGate.kind === "version" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={onResolvePublicationVersion}
                   >
-                    <FolderTree
-                      size={13}
-                      className="mr-2 text-muted-foreground"
-                    />
-                    <span>另存为私有子流程</span>
-                  </DropdownMenuItem>
+                    处理版本变化
+                  </Button>
                 )}
-              {workflow.status === "published" && canPublish && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={onUnpublish}
-                    className="aiflow-type-control text-aiflow-warning focus:text-aiflow-warning"
-                  >
-                    <Clock3 size={13} className="mr-2" />
-                    <span>取消发布</span>
-                  </DropdownMenuItem>
-                </>
-              )}
-              {canArchive && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    disabled={operationPending}
-                    onClick={onDelete}
-                    className="aiflow-type-control text-red-600 focus:text-red-600"
-                  >
-                    <ArchiveRestore size={13} className="mr-2" />
-                    <span>归档至流程仓库</span>
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-      {canPublish && !publicationGate.allowed && !(workflow.status === "published" && publicationGate.kind === "draft") && <section data-workflow-publication-gate="" role={publicationGate.kind === "unavailable" || publicationGate.kind === "version" ? "alert" : "status"}
-        className="aiflow-type-body mb-3 grid gap-3 rounded-lg border border-aiflow-info-border bg-aiflow-info-surface p-3 text-foreground sm:flex sm:items-center sm:justify-between">
-        <p className="min-w-0 break-words">{publicationGate.reason}</p>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {publicationGate.kind === "version" && <Button type="button" variant="outline" className="min-h-11" onClick={onResolvePublicationVersion}>处理版本变化</Button>}
-          <Button type="button" variant="outline" className="min-h-11" disabled={publicationRefreshing || publishPending || savePending} onClick={onRefreshPublication}>
-            {publicationRefreshing ? "正在读取…" : "重新读取权限与规则"}
-          </Button>
-        </div>
-      </section>}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={
+                    publicationRefreshing || publishPending || savePending
+                  }
+                  onClick={onRefreshPublication}
+                >
+                  {publicationRefreshing ? "正在读取…" : "重新读取权限与规则"}
+                </Button>
+              </div>
+
+          </EditorNotice>
+        )}
       <WorkflowSubflowSnapshots key={`subflow-snapshots:${workflow.id}`} workflowId={workflow.id} savedVersion={draftBaseVersion} definition={definition} published={workflow.status === "published"}
         canEdit={canEdit} busy={savePending || publishPending || compilePending || unpublishBusy || Boolean(draftError)}
         onSave={onRefreshSubflows} onResolve={onResolveSubflowSave} />
       {draftError && <p role="alert" data-workflow-draft-error="" className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{draftError}</p>}
       {workflow.status === "published" && (
-        <section
-          aria-label="已发布流程编辑说明"
-          data-workflow-publication-gate={canPublish && publicationGate.kind === "draft" ? "" : undefined}
-          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-aiflow-info-border bg-aiflow-info-surface p-3"
-        >
-          <div className="min-w-0 flex-1">
-            <p className="aiflow-type-control font-semibold text-aiflow-info">
-              {canModifyDefinition ? "正在查看已发布版本" : "已发布版本只读"}
-            </p>
-            <p className="aiflow-type-control mt-1 leading-6 text-foreground">
-              {canModifyDefinition
-                ? publicationGate.kind === "draft" ? publicationGate.reason
-                  : "此处修改仅保留在本页。请按发布提示提交新版本；取消发布后可保存为草稿，历史运行仍使用原版本定义。"
-                : canEdit
-                  ? "当前账号无法提交已发布版本的修改。请由有发布权限的人员取消发布后，再编辑并保存草稿。"
-                  : "当前账号仅可查看流程配置；编辑或发布请联系流程负责人。"}
-            </p>
-          </div>
-          {canEdit && canPublish && (
-            <div className="flex flex-wrap gap-2"><Button
-              type="button"
-              variant="outline"
-              className="aiflow-type-control"
-              disabled={unpublishFlow.isPending}
-              onClick={onUnpublish}
-            >
-              取消发布后编辑草稿
-            </Button>
-              {publicationGate.kind === "draft" && <Button type="button" variant="outline" className="aiflow-type-control min-h-11" disabled={publicationRefreshing || unpublishBusy} onClick={onRefreshPublication}>
-                {publicationRefreshing ? "正在读取…" : "重新读取权限与规则"}
-              </Button>}
+        <EditorNotice label="发布与编辑说明" summary={canPublish && publicationGate.kind === "draft" ? publicationGate.reason : canModifyDefinition ? "当前修改只保留在本页" : "此版本仅可查看"} aria-label="已发布流程编辑说明" data-editor-publication-details="" data-workflow-publication-gate={canPublish && publicationGate.kind === "draft" ? "" : undefined}>
+            <div className="min-w-0 flex-1">
+              <p className="aiflow-type-control font-semibold text-aiflow-info">
+                {canModifyDefinition ? "正在查看已发布版本" : "已发布版本只读"}
+              </p>
+              <p className="aiflow-type-control mt-1 leading-6 text-foreground">
+                {canModifyDefinition
+                  ? publicationGate.kind === "draft"
+                    ? publicationGate.reason
+                    : "此处修改仅保留在本页。请按发布提示提交新版本；取消发布后可保存为草稿，历史运行仍使用原版本定义。"
+                  : canEdit
+                    ? "当前账号无法提交已发布版本的修改。请由有发布权限的人员取消发布后，再编辑并保存草稿。"
+                    : "当前账号仅可查看流程配置；编辑或发布请联系流程负责人。"}
+              </p>
             </div>
-          )}
-        </section>
+            {canEdit && canPublish && (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="aiflow-type-control"
+                  disabled={unpublishFlow.isPending}
+                  onClick={onUnpublish}
+                >
+                  取消发布后编辑草稿
+                </Button>
+                {publicationGate.kind === "draft" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="aiflow-type-control min-h-11"
+                    disabled={publicationRefreshing || unpublishBusy}
+                    onClick={onRefreshPublication}
+                  >
+                    {publicationRefreshing ? "正在读取…" : "重新读取权限与规则"}
+                  </Button>
+                )}
+              </div>
+            )}
+
+        </EditorNotice>
       )}
       {conversionUndo && conversionUndo.id === workflow.id && (
         <section
@@ -3041,7 +3048,7 @@ function FlowDesigner({
             )}
           </div>
           {compileDiagnostics.length > 0 && (
-            <ul className="mt-2 grid gap-1.5 text-xs text-red-900">
+            <ul className="mt-2 grid max-h-40 gap-1.5 overflow-y-auto overscroll-contain text-sm text-red-900">
               {compileDiagnostics.map((item, index) => (
                 <li
                   key={`${item.code}-${item.location.nodeId ?? item.location.edgeId ?? index}`}
@@ -3074,6 +3081,7 @@ function FlowDesigner({
       )}
       <ErrorBoundary>
         <WorkflowCanvas
+          viewportFit
           key={workflow.id}
           workflowId={workflow.id}
           projectId={workflow.projectId ?? undefined}

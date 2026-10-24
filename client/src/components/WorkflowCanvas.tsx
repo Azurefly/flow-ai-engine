@@ -6,6 +6,8 @@ import {
 } from "@shared/workflow-template";
 import { CanvasNameDialog } from "./CanvasNameDialog";
 import { Input } from "./ui/input";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import { useEditorViewport } from "@/hooks/useEditorViewport";
 import {
   dataflowInputFields,
   usesDataflowInputFieldSuggestions,
@@ -2332,6 +2334,7 @@ export default function WorkflowCanvas({
   definition,
   readOnly = false,
   compactReadOnlyPreview = false,
+  viewportFit = false,
   onDefinitionChange,
   templates = [],
   subflows = [],
@@ -2348,6 +2351,7 @@ export default function WorkflowCanvas({
   definition?: Definition | null;
   readOnly?: boolean;
   compactReadOnlyPreview?: boolean;
+  viewportFit?: boolean;
   onDefinitionChange?: (definition: Definition) => void;
   templates?: ReuseTemplate[];
   subflows?: ReuseSubflow[];
@@ -2394,6 +2398,45 @@ export default function WorkflowCanvas({
   const lastInitialFitKeyRef = useRef<string | null>(null);
   const participantPreview = trpc.workflow.previewParticipants.useMutation();
   const editorRegionRef = useRef<HTMLDivElement>(null);
+  const editorViewportStyle = useEditorViewport(
+    editorRegionRef,
+    viewportFit && !compactReadOnlyPreview && !fullscreen
+  );
+  const [paletteOpen, setPaletteOpen] = useState<"nodes" | "reuse" | null>(null);
+  const paletteOpenRef = useRef<"nodes" | "reuse" | null>(null);
+  const paletteNodeCount = useRef(nodes.length);
+  const suppressPaletteFocus = useRef(false);
+  const [displayOpen, setDisplayOpen] = useState(false);
+  const displayLocationFocus = useRef(false);
+  const changePalette = (kind: "nodes" | "reuse", open: boolean) => {
+    if (open) {
+      paletteNodeCount.current = nodes.length;
+      paletteOpenRef.current = kind;
+      setPaletteOpen(kind);
+    } else if (paletteOpenRef.current === kind) {
+      paletteOpenRef.current = null;
+      setPaletteOpen(null);
+    }
+  };
+  const closePaletteFocus = (event: Event) => {
+    if (suppressPaletteFocus.current || paletteOpenRef.current)
+      event.preventDefault();
+    suppressPaletteFocus.current = false;
+  };
+  useEffect(() => {
+    if (paletteOpen && nodes.length > paletteNodeCount.current) {
+      suppressPaletteFocus.current = true;
+      paletteOpenRef.current = null;
+      setPaletteOpen(null);
+      inspectorHeadingRef.current?.focus({ preventScroll: true });
+      revealInspector();
+    }
+  }, [nodes.length, paletteOpen]);
+  useEffect(() => {
+    paletteOpenRef.current = null;
+    setPaletteOpen(null);
+    setDisplayOpen(false);
+  }, [workflowId, readOnly]);
   const canvasRegionRef = useRef<HTMLDivElement>(null);
   const inspectorHeadingRef = useRef<HTMLHeadingElement>(null);
   const inspectorRevealFrameRef = useRef<number | null>(null);
@@ -3879,18 +3922,21 @@ export default function WorkflowCanvas({
       ref={editorRegionRef}
       data-aiflow-workflow-canvas=""
       data-workflow-editor={compactReadOnlyPreview ? undefined : ""}
+      data-editor-viewport={viewportFit ? "true" : undefined}
+      data-inspector-mode={inspectorMode}
+      style={editorViewportStyle}
       className={`grid min-w-0 max-w-full grid-cols-1 bg-card ${fullscreen ? `h-[100dvh] min-h-0 overflow-y-auto lg:overflow-hidden ${hasInspectorSelection && inspectorMode === "compact" ? "lg:grid-rows-[minmax(0,1fr)_auto]" : "lg:grid-rows-[minmax(0,1fr)]"}` : `${canvasMinHeight} overflow-hidden rounded-xl border border-border shadow-2xs`} ${
         !hasInspectorSelection || inspectorMode === "compact"
           ? ""
           : inspectorMode === "maximized"
-            ? "lg:grid-cols-[minmax(0,1fr)_620px]"
-            : "lg:grid-cols-[minmax(0,1fr)_420px]"
+            ? "lg:grid-cols-[minmax(0,1fr)_min(55%,620px)]"
+            : viewportFit ? "lg:grid-cols-[minmax(0,1fr)_clamp(280px,32%,400px)]" : "lg:grid-cols-[minmax(0,1fr)_420px]"
       }`}
     >
       <section
         ref={canvasRegionRef}
         tabIndex={-1}
-        style={{ scrollMarginTop: "4rem" }}
+        style={{ scrollMarginTop: fullscreen ? "1rem" : viewportFit ? "calc(var(--workspace-header-height,56px) + var(--aiflow-command-height,0px) + 24px)" : "4rem" }}
         className={
           fullscreen
             ? "relative min-h-0 min-w-0 bg-muted flex flex-col lg:h-full"
@@ -3899,25 +3945,36 @@ export default function WorkflowCanvas({
       >
         <div
           data-flow-canvas-toolbar=""
-          className="border-b border-border bg-card"
+          className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-card p-2"
         >
           {!readOnly && (
-            <div
-              data-flow-node-palette=""
-              className="flex min-h-12 items-center gap-2 px-3 py-1.5"
-            >
-              <details className="relative">
-                <summary className="aiflow-type-control inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-border bg-card px-3 font-semibold text-foreground shadow-2xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-[1024px]:h-9">
-                  <Plus size={14} />
-                  添加节点
-                  <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
-                    {availablePalette.length}
-                  </span>
-                  <span aria-hidden="true" className="text-muted-foreground">
-                    ▾
-                  </span>
-                </summary>
-                <div className="absolute left-0 top-full z-30 mt-2 max-h-[65vh] w-[min(92vw,720px)] overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-xl">
+            <div data-flow-node-palette="" className="contents">
+              <Popover
+                open={paletteOpen === "nodes"}
+                onOpenChange={open => changePalette("nodes", open)}
+              >
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    data-canvas-palette-trigger=""
+                  >
+                    <Plus size={14} />
+                    添加节点
+                    <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
+                      {availablePalette.length}
+                    </span>
+                    <span aria-hidden="true" className="text-muted-foreground">
+                      ▾
+                    </span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  aria-label="添加流程节点"
+                  align="start"
+                  collisionPadding={12}
+                  onCloseAutoFocus={closePaletteFocus}
+                  data-node-palette-popup=""
+                >
                   <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
                     搜索节点
                     <input
@@ -3925,9 +3982,7 @@ export default function WorkflowCanvas({
                       className="aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0"
                       placeholder="输入节点名称或用途"
                       value={nodePaletteSearch}
-                      onChange={event =>
-                        setNodePaletteSearch(event.target.value)
-                      }
+                      onChange={event => setNodePaletteSearch(event.target.value)}
                     />
                   </label>
                   <p className="aiflow-type-body mt-2 text-muted-foreground">
@@ -3943,12 +3998,8 @@ export default function WorkflowCanvas({
                           className="h-auto min-h-12 justify-start gap-2 rounded-lg border border-border px-2.5 py-2 text-left hover:border-aiflow-info-border hover:bg-aiflow-info-surface/50"
                           disabled={readOnly}
                           draggable={!readOnly}
-                          aria-label={
-                            "添加" + item.label + "：" + item.description
-                          }
-                          onDragStart={event =>
-                            handlePaletteDragStart(event, item)
-                          }
+                          aria-label={"添加" + item.label + "：" + item.description}
+                          onDragStart={event => handlePaletteDragStart(event, item)}
                           onClick={() => addNode(item)}
                           title={item.description}
                         >
@@ -3978,21 +4029,35 @@ export default function WorkflowCanvas({
                       业务资源与物理资源节点尚未接入当前项目。
                     </p>
                   )}
-                </div>
-              </details>
+                </PopoverContent>
+              </Popover>
               {reuseCount > 0 && (
-                <details className="relative">
-                  <summary className="aiflow-type-control inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md border border-border bg-card px-3 font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 min-[1024px]:h-9">
-                    <FolderTree size={14} />
-                    复用资源
-                    <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-1.5 py-0.5 font-mono text-aiflow-special">
-                      {reuseCount}
-                    </span>
-                    <span aria-hidden="true" className="text-muted-foreground">
-                      ▾
-                    </span>
-                  </summary>
-                  <div className="absolute left-0 top-full z-30 mt-2 max-h-[65vh] w-[min(92vw,720px)] overflow-y-auto rounded-lg border border-border bg-card p-3 shadow-xl">
+                <Popover
+                  open={paletteOpen === "reuse"}
+                  onOpenChange={open => changePalette("reuse", open)}
+                >
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      data-canvas-palette-trigger=""
+                    >
+                      <FolderTree size={14} />
+                      复用资源
+                      <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-1.5 py-0.5 font-mono text-aiflow-special">
+                        {reuseCount}
+                      </span>
+                      <span aria-hidden="true" className="text-muted-foreground">
+                        ▾
+                      </span>
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    aria-label="复用流程资源"
+                    align="start"
+                    collisionPadding={12}
+                    onCloseAutoFocus={closePaletteFocus}
+                    data-node-palette-popup=""
+                  >
                     <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
                       搜索可复用资源
                       <input
@@ -4030,9 +4095,7 @@ export default function WorkflowCanvas({
                                   size={13}
                                   className="shrink-0 text-muted-foreground"
                                 />
-                                <span className="truncate">
-                                  {template.name}
-                                </span>
+                                <span className="truncate">{template.name}</span>
                               </Button>
                             ))}
                           </div>
@@ -4076,46 +4139,40 @@ export default function WorkflowCanvas({
                         </p>
                       )}
                     </div>
-                  </div>
-                </details>
+                  </PopoverContent>
+                </Popover>
               )}
-              <span className="aiflow-type-body ml-auto hidden text-muted-foreground md:inline">
-                单击或拖拽节点到画布
-              </span>
             </div>
           )}
           {showCanvasActions && (
-            <div
-              data-flow-canvas-actions=""
-              className="flex min-h-10 flex-wrap items-center gap-1 border-t border-border bg-card/80 px-2 py-1 backdrop-blur-sm sm:px-3"
-            >
+            <div data-flow-canvas-actions="" className="contents">
               {!readOnly && (
                 <>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-11 w-11 gap-0 p-0 text-xs text-foreground hover:bg-muted disabled:opacity-40 sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                    data-canvas-icon=""
                     aria-label="撤销"
                     disabled={!historyState.canUndo}
                     onClick={undo}
                     title="撤销操作 (Ctrl+Z / ⌘Z)"
                   >
                     <RotateCcw size={13} className="text-muted-foreground" />
-                    <span className="hidden sm:inline">撤销</span>
+
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-11 w-11 gap-0 p-0 text-xs text-foreground hover:bg-muted disabled:opacity-40 sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                    data-canvas-icon=""
                     aria-label="重做"
                     disabled={!historyState.canRedo}
                     onClick={redo}
                     title="重做操作 (Ctrl+Y / ⌘Y)"
                   >
                     <RotateCw size={13} className="text-muted-foreground" />
-                    <span className="hidden sm:inline">重做</span>
+
                   </Button>
                   <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
                 </>
@@ -4125,7 +4182,7 @@ export default function WorkflowCanvas({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-11 w-11 gap-0 p-0 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                  data-canvas-icon=""
                   aria-label="整理画布"
                   onClick={() =>
                     window.dispatchEvent(new Event("flow:neaten-canvas"))
@@ -4137,35 +4194,97 @@ export default function WorkflowCanvas({
                   }
                 >
                   <Waypoints size={13} className="text-muted-foreground" />
-                  <span className="hidden sm:inline">整理画布</span>
+
                 </Button>
               )}
               <select
                 aria-label="定位并配置节点"
-                className="aiflow-type-control h-11 min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-foreground sm:max-w-64 min-[1024px]:h-9"
+                className="aiflow-type-control h-11 min-w-24 max-w-full flex-1 basis-36 rounded-md border border-border bg-card px-2 text-foreground lg:h-9 lg:max-w-56"
                 value={selectedId ?? ""}
                 disabled={!nodes.length}
                 onChange={event => inspectCanvasNode(event.target.value)}
               >
-                <option value="" disabled>选择节点（共 {nodes.length} 个）</option>
+                <option value="" disabled>
+                  选择节点（共 {nodes.length} 个）
+                </option>
                 {nodes.map(node => (
                   <option key={node.id} value={node.id}>
-                    {String(node.data.label || "未命名节点")} · {FLOW_NODE_DEFINITIONS[node.data.kind]?.label ?? node.data.kind} · {node.id}
+                    {String(node.data.label || "未命名节点")} ·{" "}
+                    {FLOW_NODE_DEFINITIONS[node.data.kind]?.label ?? node.data.kind}{" "}
+                    · {node.id}
                   </option>
                 ))}
               </select>
-              <Button type="button" variant={neighborhood ? "secondary" : "ghost"} size="sm" aria-label="高亮节点关联" aria-pressed={Boolean(neighborhood)} disabled={!selectedId} onClick={() => setHighlightRelated(value => !value)} title="查看选中节点的静态上游与下游连接" className="h-11 gap-1 px-2 min-[1024px]:h-9"><GitBranch size={15} />关联高亮</Button>
-              <select aria-label="定位并配置连线" className="aiflow-type-control h-11 min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-foreground sm:max-w-64 min-[1024px]:h-9"
-                value={selectedEdgeId ?? ""} disabled={!edges.length}
-                onChange={event => window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { edgeId: event.target.value } }))}>
-                <option value="" disabled>选择连线（共 {edges.length} 条）</option>
-                {edges.map(edge => <option key={edge.id} value={edge.id}>{`${String(nodeMap.get(edge.source)?.data.label ?? edge.source)} → ${String(nodeMap.get(edge.target)?.data.label ?? edge.target)}${edge.data?.loop ? " · 循环返回" : ""}`}</option>)}
-              </select>
+              <Popover open={displayOpen} onOpenChange={setDisplayOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-label="定位与显示"
+                    data-canvas-icon=""
+                    title="连线定位与节点关联高亮"
+                  >
+                    <GitBranch size={16} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  aria-label="定位与显示"
+                  align="end"
+                  collisionPadding={12}
+                  className="grid max-h-[var(--radix-popover-content-available-height)] w-[min(360px,calc(100vw-1.5rem))] gap-3 overflow-y-auto"
+                  onCloseAutoFocus={event => {
+                    if (displayLocationFocus.current) event.preventDefault();
+                    displayLocationFocus.current = false;
+                  }}
+                >
+                  <p className="text-sm font-semibold">定位与显示</p>
+                  <Button
+                    type="button"
+                    variant={neighborhood ? "secondary" : "ghost"}
+                    size="sm"
+                    aria-label="高亮节点关联"
+                    aria-pressed={Boolean(neighborhood)}
+                    disabled={!selectedId}
+                    onClick={() => setHighlightRelated(value => !value)}
+                    title="查看选中节点的静态上游与下游连接"
+                    className="h-11 gap-1 px-2 min-[1024px]:h-9"
+                  >
+                    <GitBranch size={15} />
+                    关联高亮
+                  </Button>
+                  <select
+                    aria-label="定位并配置连线"
+                    className="aiflow-type-control h-11 min-w-0 max-w-full rounded-md border border-border bg-card px-2 text-foreground sm:max-w-64 min-[1024px]:h-9"
+                    value={selectedEdgeId ?? ""}
+                    disabled={!edges.length}
+                    onChange={event => {
+                      displayLocationFocus.current = true;
+                      setDisplayOpen(false);
+                      window.dispatchEvent(
+                        new CustomEvent("flow:focus-node", {
+                          detail: { edgeId: event.target.value },
+                        })
+                      );
+                    }}
+                  >
+                    <option value="" disabled>
+                      选择连线（共 {edges.length} 条）
+                    </option>
+                    {edges.map(edge => (
+                      <option
+                        key={edge.id}
+                        value={edge.id}
+                      >{`${String(nodeMap.get(edge.source)?.data.label ?? edge.source)} → ${String(nodeMap.get(edge.target)?.data.label ?? edge.target)}${edge.data?.loop ? " · 循环返回" : ""}`}</option>
+                    ))}
+                  </select>
+                </PopoverContent>
+              </Popover>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-11 w-11 gap-0 p-0 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:w-auto sm:gap-1 sm:px-2 min-[1024px]:h-9"
+                data-canvas-icon=""
                 aria-label={fullscreen ? "退出全屏" : "全屏展示"}
                 onClick={() =>
                   window.dispatchEvent(new Event("flow:fullscreen-canvas"))
@@ -4173,9 +4292,7 @@ export default function WorkflowCanvas({
                 title="切换全屏沉浸设计模式"
               >
                 <Maximize2 size={13} className="text-muted-foreground" />
-                <span className="hidden sm:inline">
-                  {fullscreen ? "退出全屏" : "全屏展示"}
-                </span>
+
               </Button>
               {!readOnly && selectedEdgeId && (
                 <Button
@@ -4199,10 +4316,9 @@ export default function WorkflowCanvas({
                     size="sm"
                     aria-label="更多画布操作"
                     title="更多画布操作"
-                    className="ml-auto inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium text-muted-foreground hover:bg-muted sm:min-w-0 sm:justify-start min-[1024px]:h-9"
+                    data-canvas-icon="" className="ml-auto"
                   >
-                    <span className="sm:hidden">更多</span>
-                    <span className="hidden sm:inline">更多画布操作</span>
+                    <span className="sr-only">更多画布操作</span>
                     <span aria-hidden="true">▾</span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -4244,6 +4360,7 @@ export default function WorkflowCanvas({
         </div>
         <div
           ref={flowViewportRef}
+          data-flow-canvas-viewport=""
           className={`relative ${fullscreen ? "h-[480px] shrink-0 sm:h-[600px] lg:min-h-0 lg:h-auto lg:flex-1" : compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
@@ -4550,8 +4667,8 @@ export default function WorkflowCanvas({
             className="flex min-h-16 shrink-0 items-center justify-between border-b border-border px-4 py-3"
           >
             <div className={inspectorMode === "compact" ? "hidden" : ""}>
-              <h2 ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
-                配置信息
+              <h2 data-workflow-inspector-heading="" ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
+                {selectedEdgeId ? "连线配置" : `${selectedDefinition?.label ?? "节点"}配置`}
               </h2>
             </div>
             <div className="ml-auto flex items-center gap-1">
@@ -5119,7 +5236,7 @@ export default function WorkflowCanvas({
               </div>
             ))}
           {inspectorMode !== "compact" && !readOnly && (
-            <div className={`border-t border-border p-4 ${fullscreen ? "shrink-0 lg:max-h-[25vh] lg:overflow-y-auto" : ""}`}>
+            <div data-workflow-inspector-footer="" className={`border-t border-border p-4 ${fullscreen ? "shrink-0 lg:max-h-[25vh] lg:overflow-y-auto" : ""}`}>
               <details>
                 <summary className="aiflow-type-control cursor-pointer font-semibold text-foreground">
                   管理我的模板与子流程

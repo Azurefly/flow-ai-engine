@@ -17,7 +17,7 @@ const runtime = () => ({ loopExecutionVersion: 1, executionStepCount: 0, executi
 it("节点重叠时连线定位入口仍可打开循环设置，沿用同一选择处理器", () => {
   const source = readFileSync(new URL("../client/src/components/WorkflowCanvas.tsx", import.meta.url), "utf8");
   expect(source).toContain('aria-label="定位并配置连线"');
-  expect(source).toContain('new CustomEvent("flow:focus-node", { detail: { edgeId: event.target.value } })');
+  expect(source).toMatch(/new CustomEvent\("flow:focus-node",\s*\{\s*detail: \{ edgeId: event.target.value \},?\s*\}\)/);
   expect(source).toContain('setSelectedEdgeId(edge.id)');
 });
 it("初始访问有独立检查点，激活后提供明确的连线计数", () => {

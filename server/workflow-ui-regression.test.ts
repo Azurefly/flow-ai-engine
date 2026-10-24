@@ -8,7 +8,12 @@ import {
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
-const workflowCreationSource = source("../client/src/components/WorkflowCreateDialog.tsx");
+const editorCommandSource = source(
+  "../client/src/components/EditorCommandBar.tsx"
+);
+const workflowCreationSource = source(
+  "../client/src/components/WorkflowCreateDialog.tsx"
+);
 const authorizationSource = source(
   "../client/src/components/WorkflowRoleBindingsDialog.tsx"
 );
@@ -151,13 +156,20 @@ describe("分页流程缓存联动", () => {
     expect(
       content.match(/utils\.workflow\.page\.invalidate\(\)/g)
     ).toHaveLength(2);
-    const callback = content.split("updateWorkflowInfo.useMutation({")[1]?.split("onError:")[0];
+    const callback = content
+      .split("updateWorkflowInfo.useMutation({")[1]
+      ?.split("onError:")[0];
     expect(callback).toContain("utils.workflow.page.invalidate()");
-    expect(callback).toContain("utils.workflow.get.invalidate({ id: workflowId })");
-    const restored = content.split("onSaved={() =>")[1] ?? content.split("onSaved={()=>")[1];
+    expect(callback).toContain(
+      "utils.workflow.get.invalidate({ id: workflowId })"
+    );
+    const restored =
+      content.split("onSaved={() =>")[1] ?? content.split("onSaved={()=>")[1];
     expect(restored).toContain("restoreTarget.workflowId");
     expect(restored).toContain("utils.workflow.page.invalidate()");
-    expect(restored).toMatch(/utils\.workflow\.get\.invalidate\(\{\s*id\s*\}\)/);
+    expect(restored).toMatch(
+      /utils\.workflow\.get\.invalidate\(\{\s*id\s*\}\)/
+    );
   });
 });
 const runModalSource = source(
@@ -182,9 +194,10 @@ const warehouseSource = source(
 const systemConfigSource = source(
   "../client/src/components/SystemConfigShell.tsx"
 );
-const organizationManagementSource = source(
-  "../client/src/components/OrganizationManagementPage.tsx"
-) + source("../client/src/components/OrganizationMutationDialog.tsx") + source("../shared/organization-form.ts");
+const organizationManagementSource =
+  source("../client/src/components/OrganizationManagementPage.tsx") +
+  source("../client/src/components/OrganizationMutationDialog.tsx") +
+  source("../shared/organization-form.ts");
 const dialogSource = source("../client/src/components/ui/dialog.tsx");
 const commandSource = source("../client/src/components/ui/command.tsx");
 const internalAuthSource = source("./internal-auth.ts");
@@ -253,7 +266,7 @@ describe("流程版本发布状态", () => {
       "if (!selectedId || !draftDefinition || !isDraftDirty) return;"
     );
     expect(homeSource).toContain(
-      "!canEdit || !hasUnpublishedChanges || Boolean(draftError) || savePending"
+      "!canEdit || !hasUnpublishedChanges || Boolean(draftError) || editorBusy"
     );
     expect(homeSource).toContain("没有未保存修改");
     expect(workflowServiceSource).toContain("isWorkflowUpdateNoop({");
@@ -383,7 +396,7 @@ describe("流程设计器界面回归约束", () => {
     expect(runModalSource).toContain("runWorkflowMutation.mutateAsync");
   });
 
-  it("把真实运行与独立预检从紧凑主工具栏移入操作菜单", () => {
+  it("常用运行与预检可直接打开，菜单不重复且不跳过运行确认", () => {
     const designerStart = homeSource.indexOf("function FlowDesigner(");
     const designerEnd = homeSource.indexOf(
       "function valueFromField(",
@@ -397,16 +410,18 @@ describe("流程设计器界面回归约束", () => {
     expect(designerStart).toBeGreaterThanOrEqual(0);
     expect(menuStart).toBeGreaterThanOrEqual(0);
     expect(menuEnd).toBeGreaterThan(menuStart);
-    expect(operationMenu).toContain("onClick={() => setRunDialogOpen(true)}");
-    expect(operationMenu).toContain(
-      'disabled={Boolean(draftError) || (workflow.flowType !== "data" && !canRun)}'
+    const commands = designerSource.slice(
+      designerSource.indexOf("<EditorCommandBar"),
+      menuStart
     );
-    expect(operationMenu).toContain("运行控制流程");
-    expect(operationMenu).toContain("仅执行预检");
-    expect(operationMenu).toContain('className="aiflow-type-control"');
-    expect(
-      designerSource.indexOf("onClick={() => setRunDialogOpen(true)}")
-    ).toBeGreaterThan(menuStart);
+    expect(commands).toContain("onClick={() => setRunDialogOpen(true)}");
+    expect(commands).toContain(
+      'Boolean(draftError) || editorBusy || (workflow.flowType !== "data" && !canRun)'
+    );
+    expect(commands).toContain('aria-label="预检流程"');
+    expect(commands).toContain("onClick={onValidate}");
+    expect(operationMenu).not.toContain("setRunDialogOpen(true)");
+    expect(operationMenu).not.toContain("onClick={onValidate}");
     expect(designerSource).toContain("发布前会自动检查拓扑与语法");
   });
 
@@ -464,9 +479,13 @@ describe("流程设计器界面回归约束", () => {
 
   it("新建流程通过按钮打开创建弹窗，控制台壳层可在窄屏纵向收敛", () => {
     expect(homeSource).toContain('openWorkflowOperation({kind:"global"})');
-    expect(homeSource).toContain('lazy(() => import("@/components/WorkflowCreateDialog"))');
+    expect(homeSource).toContain(
+      'lazy(() => import("@/components/WorkflowCreateDialog"))'
+    );
     expect(workflowCreationSource).toContain('"新建流程"');
-    expect(workflowCreationSource).toContain("utils.client.workflow.create.mutate");
+    expect(workflowCreationSource).toContain(
+      "utils.client.workflow.create.mutate"
+    );
     expect(workflowCreationSource).toContain("requestKey: input.requestKey");
     expect(homeSource).toContain(
       "flex min-h-[calc(100vh-56px)] flex-col md:flex-row"
@@ -692,7 +711,8 @@ describe("流程设计器界面回归约束", () => {
 
     expect(paletteStart).toBeGreaterThanOrEqual(0);
     expect(paletteEnd).toBeGreaterThan(paletteStart);
-    expect(paletteSource).toContain("aiflow-type-control inline-flex");
+    expect(paletteSource).toContain('data-canvas-palette-trigger=""');
+    expect(styleSource).toContain("[data-canvas-palette-trigger]");
     expect(paletteSource).toContain("aiflow-type-meta rounded");
     expect(paletteSource).toContain(
       "aiflow-type-body mt-0.5 block line-clamp-2"
@@ -708,9 +728,7 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("flex-direction: row;");
     expect(styleSource).toContain("min-width: 44px;");
     expect(styleSource).toContain("min-height: 44px;");
-    expect(homeSource).toContain(
-      'className="ml-auto h-11 min-h-11 min-w-11 p-0 text-foreground'
-    );
+    expect(homeSource).toContain('data-editor-more=""');
   });
 
   it("身份目录使用单一页面滚动和至少 40px 的桌面操作目标", () => {
@@ -1193,10 +1211,16 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain(
       "utils.client.config.deleteOrganizationUnit.mutate"
     );
-    expect(organizationManagementSource).toContain("utils.client.iam.createUser.mutate");
+    expect(organizationManagementSource).toContain(
+      "utils.client.iam.createUser.mutate"
+    );
     expect(organizationManagementSource).toContain("新建内部用户");
-    expect(organizationManagementSource).toContain("disabled={Boolean(draft.createdUserId)}");
-    expect(organizationManagementSource).toContain("账号已创建，账号信息不可修改");
+    expect(organizationManagementSource).toContain(
+      "disabled={Boolean(draft.createdUserId)}"
+    );
+    expect(organizationManagementSource).toContain(
+      "账号已创建，账号信息不可修改"
+    );
     expect(organizationManagementSource).toContain("包含子机构成员");
     expect(organizationManagementSource).toContain("用户直接角色");
     expect(organizationManagementSource).toContain("部门继承角色");
@@ -1642,7 +1666,9 @@ describe("流程设计器界面回归约束", () => {
   it("画布与节点检查器在窄屏纵向堆叠，并在大屏恢复双列", () => {
     expect(canvasSource).toContain("grid-cols-1");
     expect(canvasSource).toContain("lg:grid-cols-[minmax(0,1fr)_420px]");
-    expect(canvasSource).toContain("lg:grid-cols-[minmax(0,1fr)_620px]");
+    expect(canvasSource).toContain(
+      "lg:grid-cols-[minmax(0,1fr)_min(55%,620px)]"
+    );
     expect(canvasSource).toContain(
       "border-t border-border bg-card lg:border-l lg:border-t-0"
     );
@@ -1676,7 +1702,9 @@ describe("流程设计器界面回归约束", () => {
 
   it("保留版本差异与可审计回滚入口", () => {
     expect(governanceSource).toContain("workflow.versionDiff.useQuery");
-    expect(source("../client/src/components/WorkflowVersionRestoreDialog.tsx")).toContain("utils.client.workflow.rollbackVersion.mutate");
+    expect(
+      source("../client/src/components/WorkflowVersionRestoreDialog.tsx")
+    ).toContain("utils.client.workflow.rollbackVersion.mutate");
     expect(governanceSource).toContain("恢复此版本");
     expect(governanceSource).toContain("基本信息");
     expect(governanceSource).toContain('activeSection === "versions"');
@@ -2198,7 +2226,8 @@ describe("流程设计器界面回归约束", () => {
   it("统一核心子页面上下文标题栏并优化运行筛选窄屏布局", () => {
     expect(projectWorkspaceSource).toContain("data-aiflow-context-header");
     expect(processDetailPageSource).toContain("data-aiflow-context-header");
-    expect(homeSource).toContain("data-aiflow-context-header");
+    expect(homeSource).toContain("<EditorCommandBar");
+    expect(editorCommandSource).toContain("data-aiflow-context-header");
     expect(runCenterSource).toContain("data-aiflow-context-header");
     expect(homeSource).toContain("workflowName={selectedWorkflow?.name}");
     expect(runCenterSource).toContain("当前流程：");
@@ -2880,9 +2909,7 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("设计器标题使用可用宽度和统一字号，常用按钮保留触控尺寸", () => {
-    expect(homeSource).toContain(
-      'className="mt-1.5 flex w-full min-w-0 items-center gap-1"'
-    );
+    expect(editorCommandSource).toContain('className="min-w-0 flex-1"');
     expect(homeSource).toContain("<textarea");
     expect(homeSource).toContain("rows={1}");
     expect(homeSource).toContain("max-h-24 w-full min-w-0 resize-none");
@@ -2890,11 +2917,11 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("Math.min(field.scrollHeight, 96)");
     expect(homeSource).toContain('title={name || "双击或聚焦以编辑流程名称"}');
     expect(styleSource).toContain(":is(h1, [data-aiflow-page-title])");
-    expect(homeSource).toContain("h-11 min-h-11 gap-1.5");
-    expect(canvasSource).toContain("inline-flex h-11 cursor-pointer");
-    expect(canvasSource).toContain("h-11 w-11 gap-0 p-0");
+    expect(styleSource).toContain(".editor-primary-actions > button");
+    expect(canvasSource).toContain('data-canvas-palette-trigger=""');
+    expect(canvasSource).toContain('data-canvas-icon=""');
     expect(canvasSource).toContain('aria-label="更多画布操作"');
-    expect(canvasSource).toContain('className="hidden sm:inline"');
+    expect(canvasSource).toContain('className="sr-only"');
     expect(canvasSource).toContain(
       "inline-flex min-h-11 cursor-pointer items-center"
     );
@@ -2915,11 +2942,15 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("设计器主要操作和属性控件在触屏断点保持 44px、桌面至少 36px", () => {
-    expect(homeSource).toContain("min-[1024px]:h-9 min-[1024px]:min-h-0");
+    expect(styleSource).toContain(
+      ".editor-primary-actions > button {height: 40px; min-height: 40px;}"
+    );
     expect(homeSource).not.toContain("sm:h-7 sm:min-h-0");
     expect(homeSource).not.toContain("sm:h-8 sm:min-h-0");
     expect(canvasSource).toContain('data-flow-canvas-actions=""');
-    expect(canvasSource).toContain("h-11 w-11 gap-0");
+    expect(styleSource).toContain(
+      "[data-canvas-icon] {height:44px; width:44px;"
+    );
     expect(canvasSource).toContain("min-[1024px]:h-9");
     expect(canvasSource).toContain(
       '"aiflow-type-control h-11 min-h-11 w-full rounded-md border'
@@ -3301,13 +3332,23 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("新增流程表单为文本与选择字段提供持久标签和手机触控高度", () => {
-    for (const label of ["流程代号", "流程名称", "流程说明（可选）", "流程类型", "关联数据源（可选）"])
+    for (const label of [
+      "流程代号",
+      "流程名称",
+      "流程说明（可选）",
+      "流程类型",
+      "关联数据源（可选）",
+    ])
       expect(workflowCreationSource).toContain(label);
     expect(workflowCreationSource).toContain('aria-label="流程类型"');
     expect(workflowCreationSource).toContain('aria-label="流程代号"');
-    expect(workflowCreationSource).toContain('aria-describedby="workflow-code-help"');
+    expect(workflowCreationSource).toContain(
+      'aria-describedby="workflow-code-help"'
+    );
     expect(workflowCreationSource).toContain('aria-label="关联数据源（可选）"');
-    expect(workflowCreationSource).toContain('className="grid gap-1.5 text-sm font-medium"');
+    expect(workflowCreationSource).toContain(
+      'className="grid gap-1.5 text-sm font-medium"'
+    );
     expect(workflowCreationSource).toContain("h-11 min-[1024px]:h-10");
     expect(workflowCreationSource).toContain("保留创建填写？");
   });
@@ -3409,10 +3450,14 @@ it("画布节点类型使用业务名称，避免英文大写和过度字距", (
 
 it("组织保存失败在弹窗内保留错误并允许修改重试", () => {
   expect(creationDialogSource).toContain('role="alert"');
-  const dialog=source("../client/src/components/OrganizationMutationDialog.tsx");
+  const dialog = source(
+    "../client/src/components/OrganizationMutationDialog.tsx"
+  );
   expect(dialog).toContain("errorMessage={error}");
-  expect(dialog).toContain('useResourceDraftState( "organization", "organization-configuration"');
-  const failure=dialog.split("} catch (cause)")[1]?.split("} finally")[0];
+  expect(dialog).toContain(
+    'useResourceDraftState( "organization", "organization-configuration"'
+  );
+  const failure = dialog.split("} catch (cause)")[1]?.split("} finally")[0];
   expect(failure).toContain("setError(");
   expect(failure).not.toContain("setDraft(initial)");
   expect(dialog).toContain("setDraft(initial); onClose(); onSaved(result)");
@@ -3808,9 +3853,28 @@ it("流程角色可主动刷新，刷新中及无可用权限时不能提交旧�
 });
 
 it("部门权限绑定预览全局权限并保护刷新中的选择", () => {
-  const dialog=source("../client/src/components/OrganizationMutationDialog.tsx");
-  for(const text of ["绑定后的权限","不限于本部门创建的流程","重新读取组织与权限","roles.refetch()","roles.isFetching","!reviewBusy","!roleChanged","Boolean(observed)","roleExpiryDateInput(text(\"expiresAt\"))","expectedRoleConfigToken: draft.roleToken","onlyIfAbsent: true","确认使用当前权限",'aria-label="权限组"']) expect(dialog).toContain(text);
-  expect(source("../client/src/components/CreationDialog.tsx")).toContain("if (pending || submitDisabled) return;");
+  const dialog = source(
+    "../client/src/components/OrganizationMutationDialog.tsx"
+  );
+  for (const text of [
+    "绑定后的权限",
+    "不限于本部门创建的流程",
+    "重新读取组织与权限",
+    "roles.refetch()",
+    "roles.isFetching",
+    "!reviewBusy",
+    "!roleChanged",
+    "Boolean(observed)",
+    'roleExpiryDateInput(text("expiresAt"))',
+    "expectedRoleConfigToken: draft.roleToken",
+    "onlyIfAbsent: true",
+    "确认使用当前权限",
+    'aria-label="权限组"',
+  ])
+    expect(dialog).toContain(text);
+  expect(source("../client/src/components/CreationDialog.tsx")).toContain(
+    "if (pending || submitDisabled) return;"
+  );
 });
 
 it("编译诊断支持定位连线并跳过无位置问题", () => {
@@ -3843,10 +3907,7 @@ it("侧栏流程按服务端十条分页搜索，独立于编辑器路由恢复"
   expect(homeSource).not.toContain("trpc.workflow.list.useQuery()");
 });
 it("分页外的流程保存发布后刷新详情缓存", () => {
-  for (const mutation of [
-    "update",
-    "publish",
-  ]) {
+  for (const mutation of ["update", "publish"]) {
     const start = homeSource.indexOf(`trpc.workflow.${mutation}.useMutation`);
     expect(start).toBeGreaterThan(-1);
     const errorHandler = homeSource.indexOf("onError:", start);
@@ -3856,7 +3917,7 @@ it("分页外的流程保存发布后刷新详情缓存", () => {
     );
   }
   for (const callback of ["onCreated={workflow=>{", "onArchived={id=>{"]) {
-    const handler=homeSource.split(callback)[1]?.split("toast.success")[0];
+    const handler = homeSource.split(callback)[1]?.split("toast.success")[0];
     expect(handler).toContain("utils.workflow.page.invalidate()");
     expect(handler).toContain("utils.workflow.get.invalidate()");
   }
@@ -3928,7 +3989,7 @@ it("数据流程测试弹窗按项目权限禁用执行并显示原因", () => {
   expect(modal).toContain("const executionPermissionHint = draftError ||");
   expect(modal).toContain("!isDataflow && !canRun");
   expect(homeSource).toContain(
-    'disabled={Boolean(draftError) || (workflow.flowType !== "data" && !canRun)}'
+    'Boolean(draftError) || editorBusy || (workflow.flowType !== "data" && !canRun)'
   );
   expect(modal).toContain("dataProjectAccess.refetch()");
 });
@@ -3997,12 +4058,14 @@ it("三类流程可从节点选择器定位配置，且不改动定义和撤销�
   expect(inspect).not.toContain("onDefinitionChange");
 });
 it("普通编辑器高度和滚动规则不覆盖原生全屏布局", () => {
-  expect(styleSource).toContain("[data-workflow-editor]:not(:fullscreen) {");
   expect(styleSource).toContain(
-    "[data-workflow-editor]:not(:fullscreen) [data-workflow-inspector] {"
+    '[data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) {'
   );
   expect(styleSource).toContain(
-    "[data-workflow-editor]:not(:fullscreen) [data-workflow-inspector-content] {"
+    '[data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector] {'
+  );
+  expect(styleSource).toContain(
+    '[data-workflow-editor][data-editor-viewport="true"]:not(:fullscreen) [data-workflow-inspector-content] {'
   );
 });
 it("全屏弹窗、菜单和人员选择浮层留在全屏元素内并响应退出", () => {
@@ -4077,14 +4140,10 @@ it("组织冲突确认在重新读取期间锁定并刷新完整成员快照", (
   );
   for (const handler of ["rebaseMember", "rebaseUnit"]) {
     expect(dialog).toMatch(
-      new RegExp(
-        "function " + handler + "\\(\\) \\{\\s+if \\(reviewBusy"
-      )
+      new RegExp("function " + handler + "\\(\\) \\{\\s+if \\(reviewBusy")
     );
     expect(dialog).toMatch(
-      new RegExp(
-        "disabled=\\{reviewBusy\\}\\s+onClick=\\{" + handler + "\\}"
-      )
+      new RegExp("disabled=\\{reviewBusy\\}\\s+onClick=\\{" + handler + "\\}")
     );
   }
   expect(organizationManagementSource).toContain(
@@ -4092,8 +4151,10 @@ it("组织冲突确认在重新读取期间锁定并刷新完整成员快照", (
   );
 });
 
-it("历史恢复默认草稿、固定目标与版本，提交先锁再清理并保留失败选择",()=>{
-  const dialog=source("../client/src/components/WorkflowVersionRestoreDialog.tsx");
+it("历史恢复默认草稿、固定目标与版本，提交先锁再清理并保留失败选择", () => {
+  const dialog = source(
+    "../client/src/components/WorkflowVersionRestoreDialog.tsx"
+  );
   expect(dialog).toContain("useState(false)");
   expect(dialog).toContain("restoreAsDraft: !publish");
   expect(dialog).toContain("expectedDefinitionVersion: target.currentVersion");
@@ -4102,6 +4163,29 @@ it("历史恢复默认草稿、固定目标与版本，提交先锁再清理并�
   expect(dialog).toContain("setError(");
   expect(dialog).not.toContain("await onSaved");
   expect(dialog).not.toContain("window.confirm");
-  expect(governanceSource).toMatch(/lazy\(\s*\(\) => import\("\.\/WorkflowVersionRestoreDialog"\)/);
+  expect(governanceSource).toMatch(
+    /lazy\(\s*\(\) => import\("\.\/WorkflowVersionRestoreDialog"\)/
+  );
   expect(governanceSource).toContain("versions.isError ? []");
+});
+
+it("共用编辑工作区按真实剩余高度布局，忙碌时禁止交叉提交", () => {
+  const hook = source("../client/src/hooks/useEditorViewport.ts");
+  expect(homeSource).toContain("viewportFit");
+  expect(homeSource).toContain(
+    "savePending || publishPending || compilePending || runPending || unpublishBusy || operationPending"
+  );
+  expect(homeSource).toContain("!unpublishTarget && !editorBusy && canEdit");
+  expect(homeSource).toContain('aria-label="预检流程"');
+  expect(homeSource).toContain('aria-label="保存画布"');
+  expect(homeSource).toContain("ref={moreActionsRef}");
+  expect(hook).toContain(
+    "element.getBoundingClientRect().top + window.scrollY"
+  );
+  expect(hook).toContain('window.matchMedia("(min-width: 1024px)")');
+  expect(hook).toContain("cancelAnimationFrame(frame)");
+  expect(canvasSource).toContain("clamp(280px,32%,400px)");
+  expect(canvasSource).toContain('aria-label="添加流程节点"');
+  expect(canvasSource).toContain('aria-label="复用流程资源"');
+  expect(canvasSource).toContain("onCloseAutoFocus={closePaletteFocus}");
 });

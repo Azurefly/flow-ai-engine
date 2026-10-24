@@ -49,5 +49,5 @@ it("结果不明时读取实际状态进行核对，核对中锁定关闭与重�
   expect(checking).toContain("unpublishCheckLock.current");
   expect(home).toContain("核对取消发布结果");
   expect(home).toContain("关闭并保留修改");
-  expect(home).toContain("!unpublishTarget && !unpublishBusy && canEdit");
+  expect(home).toContain("!unpublishTarget && !editorBusy && canEdit");
 });
