@@ -1180,6 +1180,8 @@ export const appRouter = router({
         z.object({
           view: z.enum(["todo", "done", "initiated", "all"]),
           projectId: z.string().min(8).max(64).optional(),
+          runId: z.string().min(8).max(64).optional(),
+          summaryOnly: z.boolean().optional(),
           status: z
             .enum(["pending", "claimed", "completed", "cancelled"])
             .optional(),
@@ -1192,6 +1194,7 @@ export const appRouter = router({
         z.object({
           view: z.enum(["todo", "done", "initiated", "all"]),
           projectId: z.string().min(8).max(64).optional(),
+          runId: z.string().min(8).max(64).optional(),
           status: z.string().trim().min(1).max(120).optional(),
           search: z.string().trim().max(200).optional(),
           createdAtFrom: z.coerce.date().optional(),

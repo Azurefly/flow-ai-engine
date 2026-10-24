@@ -36,6 +36,7 @@ const fixture = {
   runs: [],
 };
 const results = [];
+const apiTimings = [];
 let browser, page, root, own, beforeInfo;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const parse = x => (typeof x === "string" ? JSON.parse(x) : x);
@@ -75,27 +76,66 @@ class Session {
   }
   async api(method, input = null, mutation = false) {
     const body = JSON.stringify(sj.serialize(input));
-    const r = await fetch(
-      base +
-        "api/trpc/" +
-        method +
-        (mutation ? "" : "?input=" + encodeURIComponent(body)),
-      {
-        method: mutation ? "POST" : "GET",
-        headers: { "content-type": "application/json", cookie: this.cookie },
-        ...(mutation ? { body } : {}),
-        signal: AbortSignal.timeout(30000),
+    for (let attempt = 0; attempt < (mutation ? 1 : 2); attempt++) {
+      const started = Date.now();
+      let r;
+      try {
+        r = await fetch(
+          base +
+            "api/trpc/" +
+            method +
+            (mutation ? "" : "?input=" + encodeURIComponent(body)),
+          {
+            method: mutation ? "POST" : "GET",
+            headers: {
+              "content-type": "application/json",
+              cookie: this.cookie,
+            },
+            ...(mutation ? { body } : {}),
+            signal: AbortSignal.timeout(30000),
+          }
+        );
+        const cookie = r.headers.getSetCookie()[0];
+        if (cookie) this.cookie = cookie.split(";", 1)[0];
+        const data = await r.json();
+        if (!r.ok || data.error)
+          throw Object.assign(
+            new Error(method + ": " + (data.error?.json?.message || r.status)),
+            { status: r.status }
+          );
+        return sj.deserialize(data.result.data);
+      } catch (error) {
+        if (error.status) throw error;
+        const transport =
+          ["TimeoutError", "AbortError"].includes(error.name) ||
+          (error instanceof TypeError && /fetch failed/i.test(error.message));
+        if (!mutation && attempt === 0 && transport) {
+          report({
+            stage: "hierarchy-read-retry",
+            method,
+            elapsedMs: Date.now() - started,
+            reason: error.name,
+          });
+          continue;
+        }
+        throw new Error(
+          method +
+            " " +
+            (mutation ? "mutation" : "query") +
+            " failed: " +
+            error.message,
+          { cause: error }
+        );
+      } finally {
+        apiTimings.push({
+          method,
+          mutation,
+          attempt,
+          status: r?.status,
+          elapsedMs: Date.now() - started,
+        });
       }
-    );
-    const cookie = r.headers.getSetCookie()[0];
-    if (cookie) this.cookie = cookie.split(";", 1)[0];
-    const data = await r.json();
-    if (!r.ok || data.error)
-      throw Object.assign(
-        new Error(method + ": " + (data.error?.json?.message || r.status)),
-        { status: r.status }
-      );
-    return sj.deserialize(data.result.data);
+    }
   }
 }
 async function poll(label, read, accept) {
@@ -463,11 +503,56 @@ async function browserComplete(actor, task, stage, code, caseId) {
     pageErrors: 0,
   });
 }
+// A missing response is not proof that a write failed. Never reissue it here.
+async function confirmedTaskMutation(actor, method, input) {
+  try {
+    return await actor.session.api(method, input, true);
+  } catch (error) {
+    const cause = error.cause;
+    const transport =
+      cause &&
+      (["TimeoutError", "AbortError"].includes(cause.name) ||
+        (cause instanceof TypeError && /fetch failed/i.test(cause.message)));
+    if (!transport) throw error;
+    const current = await actor.session.api("task.get", {
+      taskId: input.taskId,
+    });
+    if (method === "task.claim") {
+      if (
+        current.status !== "claimed" ||
+        Number(current.claimedByUserId) !== actor.id
+      )
+        throw error;
+    } else if (method === "task.complete") {
+      if (
+        current.status !== "completed" ||
+        Number(current.completedByUserId) !== actor.id
+      )
+        throw error;
+      for (const [key, value] of Object.entries(input.result))
+        assert.deepEqual(
+          current.result?.[key],
+          value,
+          "Stored task result differs after response loss: " + key
+        );
+    } else throw error;
+    report({
+      stage: "hierarchy-write-reconciled",
+      method,
+      taskId: input.taskId,
+      status: current.status,
+      reissued: false,
+    });
+    return current;
+  }
+}
 const taskGroupKey = task => task.approvalGroupId || task.id;
 async function tasks(runId) {
   return (
     await own.api("task.list", {
       projectId: fixture.project.id,
+      runId,
+      summaryOnly: true,
       view: "initiated",
       limit: 200,
     })
@@ -638,7 +723,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
         browserUsed = true;
         browserLevels.add(stage.level);
       } else {
-        await actor.session.api("task.claim", { taskId: task.id }, true);
+        await confirmedTaskMutation(actor, "task.claim", { taskId: task.id });
         if (pooled) {
           const peer = candidates.find(x => x.id !== actor.id);
           await assert.rejects(
@@ -650,22 +735,18 @@ async function runScenario(flow, scenario, useBrowser = false) {
             false
           );
         }
-        await actor.session.api(
-          "task.complete",
-          {
-            taskId: task.id,
-            result: {
-              decision: reject ? "rejected" : "approved",
-              outcome: decisionFor(stage.flow, code),
-              reference: caseId,
-              phase: stage.id,
-              level: levels[stage.level],
-              reportNote: levels[stage.level] + "已核对",
-              comment: reject ? "退回补正，重新核对" : "三级正常流转",
-            },
+        await confirmedTaskMutation(actor, "task.complete", {
+          taskId: task.id,
+          result: {
+            decision: reject ? "rejected" : "approved",
+            outcome: decisionFor(stage.flow, code),
+            reference: caseId,
+            phase: stage.id,
+            level: levels[stage.level],
+            reportNote: levels[stage.level] + "已核对",
+            comment: reject ? "退回补正，重新核对" : "三级正常流转",
           },
-          true
-        );
+        });
       }
       if (selected.length === 2 && a === 0) {
         const all = await tasks(started.runId);
@@ -742,16 +823,18 @@ async function runScenario(flow, scenario, useBrowser = false) {
         {
           taskId: task.id,
           result: {
-            decision: "approved",
+            decision: reject ? "rejected" : "approved",
             outcome: decisionFor(stage.flow, code),
             reference: caseId,
             phase: stage.id,
             level: levels[stage.level],
             reportNote: "重复提交",
+            ...(reject ? { comment: "退回补正，重新核对" } : {}),
           },
         },
         true
-      )
+      ),
+      error => error.status === 403 || error.status === 409
     );
     assert.equal(
       (await tasks(started.runId)).filter(
@@ -830,6 +913,18 @@ async function runScenario(flow, scenario, useBrowser = false) {
     "utf8"
   );
   report({ stage: "hierarchy-run", ...result });
+}
+function observedScenario(flow, scenario, useBrowser = false) {
+  return runScenario(flow, scenario, useBrowser).catch(error => {
+    report({
+      stage: "hierarchy-scenario-error",
+      template: flow.template,
+      mode: flow.mode,
+      scenario,
+      error: error.message,
+    });
+    throw error;
+  });
 }
 (async () => {
   let failed = false;
@@ -935,6 +1030,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
     }
     report({
       stage: "hierarchy-setup",
+      clientNode: process.version,
       tag,
       levels,
       ordinaryUsers: people.length,
@@ -998,8 +1094,12 @@ async function runScenario(flow, scenario, useBrowser = false) {
             );
         }
         const outcomes = await Promise.allSettled([
-          runScenario(flow, "normal", template === "666" && mode === "single"),
-          runScenario(flow, "rework"),
+          observedScenario(
+            flow,
+            "normal",
+            template === "666" && mode === "single"
+          ),
+          observedScenario(flow, "rework"),
         ]);
         const failures = outcomes.filter(x => x.status === "rejected");
         if (failures.length)
@@ -1170,6 +1270,11 @@ async function runScenario(flow, scenario, useBrowser = false) {
       }
     }
     if (browser) await browser.close();
+    fs.writeFileSync(
+      path.join(out, "api-timings.json"),
+      JSON.stringify(apiTimings, null, 2),
+      "utf8"
+    );
     report({
       stage: "hierarchy-cleanup",
       tag,

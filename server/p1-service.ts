@@ -1,3 +1,4 @@
+import { taskSummarySelect } from "./task-list-projection";
 import { eligibleDirectoryPage } from "./eligible-directory-page";
 import { TRPCError } from "@trpc/server";
 import { DEFAULT_SYSTEM_SETTINGS as defaultSettings, assertSystemSettingConfigToken, mergeSystemSettingValue, readSystemSettingValue, systemSettingConfigToken } from "./system-setting-config";
@@ -143,7 +144,9 @@ function isTaskRunActionable(task: mysql.RowDataPacket) {
   } | null;
   return (
     ["running", "waiting"].includes(String(task.runStatus)) ||
-    (task.runStatus === "queued" && Array.isArray(payload?.parallelTokens))
+    (task.runStatus === "queued" &&
+      (Number(task.hasParallelContinuation) === 1 ||
+        Array.isArray(payload?.parallelTokens)))
   );
 }
 
@@ -319,6 +322,7 @@ export async function pageWorkflowTasks(
   input: {
     view: TaskView;
     projectId?: string;
+    runId?: string;
     status?: string;
     search?: string;
     createdAtFrom?: Date;
@@ -336,6 +340,10 @@ export async function pageWorkflowTasks(
   if (input.projectId) {
     clauses.push("t.projectId=?");
     baseParams.push(input.projectId);
+  }
+  if (input.runId) {
+    clauses.push("t.runId=?");
+    baseParams.push(input.runId);
   }
   if (input.status) {
     clauses.push(`${taskDisplayStatusSql}=?`);
@@ -386,7 +394,7 @@ export async function pageWorkflowTasks(
       }
       params.push(batchLimit);
       const [rows] = await db().query<mysql.RowDataPacket[]>(
-        `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,
+        `SELECT ${taskSummarySelect},w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,
                 initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
                 DATE_FORMAT(t.createdAt,'%Y-%m-%d %H:%i:%s.%f') AS cursorCreatedAt,
                 g.totalApprovers,g.requiredApprovals,g.memberVersion,
@@ -430,6 +438,8 @@ export async function listWorkflowTasks(
   input: {
     view: TaskView;
     projectId?: string;
+    runId?: string;
+    summaryOnly?: boolean;
     status?: "pending" | "claimed" | "completed" | "cancelled";
     createdAtFrom?: Date;
     createdAtBefore?: Date;
@@ -442,6 +452,10 @@ export async function listWorkflowTasks(
   if (input.projectId) {
     clauses.push("t.projectId=?");
     params.push(input.projectId);
+  }
+  if (input.runId) {
+    clauses.push("t.runId=?");
+    params.push(input.runId);
   }
   if (input.status) {
     clauses.push("t.status=?");
@@ -457,7 +471,7 @@ export async function listWorkflowTasks(
   }
   params.push(Math.min(Math.max(input.limit ?? 100, 1), 200));
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
+    `SELECT ${input.summaryOnly ? taskSummarySelect : "t.*"},w.name AS workflowName,w.flowType,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             g.totalApprovers,g.requiredApprovals,g.memberVersion,
             ${earlierPendingSignerSql} AS hasEarlierPendingSigner,
             (SELECT COUNT(*) FROM workflow_task gt WHERE gt.approvalGroupId=t.approvalGroupId AND gt.status='completed') AS completedDecisions,
