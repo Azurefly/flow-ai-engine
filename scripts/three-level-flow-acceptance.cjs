@@ -99,7 +99,8 @@ class Session {
   }
 }
 async function poll(label, read, accept) {
-  for (let i = 0; i < 100; i++) {
+  const deadline = Date.now() + 45000;
+  for (let i = 0; i < 50 && Date.now() < deadline; i++) {
     const v = await read();
     if (accept(v)) return v;
     await sleep(200);
@@ -462,6 +463,7 @@ async function browserComplete(actor, task, stage, code, caseId) {
     pageErrors: 0,
   });
 }
+const taskGroupKey = task => task.approvalGroupId || task.id;
 async function tasks(runId) {
   return (
     await own.api("task.list", {
@@ -531,12 +533,30 @@ async function runScenario(flow, scenario, useBrowser = false) {
       x => x.level === stage.level && x.kind === stage.kind
     );
     assert.equal(candidates.length, 2);
-    assert.deepEqual(
-      active.map(x => Number(x.assignedUserId)).sort((a, b) => a - b),
-      candidates.map(x => x.id).sort((a, b) => a - b)
-    );
-    assert.equal(active.length, 2);
-    const group = active[0].approvalGroupId;
+    const pooled = flow.mode === "single";
+    if (pooled) {
+      assert.equal(active.length, 1);
+      assert.equal(Number(active[0].assignedUserId), 0);
+      assert.deepEqual(
+        parse(active[0].candidateUserIdsJson)
+          .map(Number)
+          .sort((a, b) => a - b),
+        candidates.map(x => x.id).sort((a, b) => a - b)
+      );
+      for (const candidate of candidates)
+        assert.equal(
+          (await candidate.session.api("task.get", { taskId: active[0].id }))
+            .canAct,
+          true
+        );
+    } else {
+      assert.deepEqual(
+        active.map(x => Number(x.assignedUserId)).sort((a, b) => a - b),
+        candidates.map(x => x.id).sort((a, b) => a - b)
+      );
+      assert.equal(active.length, 2);
+    }
+    const group = taskGroupKey(active[0]);
     groupsSeen.add(group);
     visits.set(stage.id, (visits.get(stage.id) || 0) + 1);
     const wrong = people.find(
@@ -603,12 +623,15 @@ async function runScenario(flow, scenario, useBrowser = false) {
       index = acted.get(role) || 0;
     acted.set(role, index + 1);
     const selected =
-      flow.mode === "andSignFor" && !reject
+      (flow.mode === "andSignFor" && !reject) ||
+      (flow.mode === "orSignFor" && reject)
         ? candidates
         : [candidates[index % 2]];
     for (let a = 0; a < selected.length; a++) {
       const actor = selected[a],
-        task = active.find(x => Number(x.assignedUserId) === actor.id);
+        task = pooled
+          ? active[0]
+          : active.find(x => Number(x.assignedUserId) === actor.id);
       assert(task);
       if (useBrowser && !browserLevels.has(stage.level)) {
         await browserComplete(actor, task, stage, code, caseId);
@@ -616,6 +639,17 @@ async function runScenario(flow, scenario, useBrowser = false) {
         browserLevels.add(stage.level);
       } else {
         await actor.session.api("task.claim", { taskId: task.id }, true);
+        if (pooled) {
+          const peer = candidates.find(x => x.id !== actor.id);
+          await assert.rejects(
+            peer.session.api("task.claim", { taskId: task.id }, true),
+            e => e.status === 403 || e.status === 409
+          );
+          assert.equal(
+            (await peer.session.api("task.get", { taskId: task.id })).canAct,
+            false
+          );
+        }
         await actor.session.api(
           "task.complete",
           {
@@ -633,18 +667,17 @@ async function runScenario(flow, scenario, useBrowser = false) {
           true
         );
       }
-      if (flow.mode === "andSignFor" && !reject && a === 0) {
+      if (selected.length === 2 && a === 0) {
         const all = await tasks(started.runId);
         assert.equal(
-          all.filter(
-            x => x.approvalGroupId === group && x.status === "completed"
-          ).length,
+          all.filter(x => taskGroupKey(x) === group && x.status === "completed")
+            .length,
           1
         );
         assert.equal(
           all.filter(
             x =>
-              x.approvalGroupId === group &&
+              taskGroupKey(x) === group &&
               ["pending", "claimed"].includes(x.status)
           ).length,
           1
@@ -653,25 +686,41 @@ async function runScenario(flow, scenario, useBrowser = false) {
           !all.some(
             x =>
               ["pending", "claimed"].includes(x.status) &&
-              x.approvalGroupId !== group
+              taskGroupKey(x) !== group
           )
         );
       }
     }
+    report({
+      stage: "hierarchy-stage",
+      template: flow.template,
+      mode: flow.mode,
+      scenario,
+      node: stage.id,
+      level: levels[stage.level],
+    });
     const finalGroup = await poll(
       "group decided",
       () => tasks(started.runId),
       x =>
         !x.some(
           t =>
-            t.approvalGroupId === group &&
+            taskGroupKey(t) === group &&
             ["pending", "claimed"].includes(t.status)
         )
     );
-    const decided = finalGroup.filter(x => x.approvalGroupId === group);
+    const decided = finalGroup.filter(x => taskGroupKey(x) === group);
     const actors = actorsByLevel.get(stage.level) || new Set();
     for (const row of decided.filter(x => x.status === "completed")) {
-      assert.equal(Number(row.completedByUserId), Number(row.assignedUserId));
+      assert(
+        candidates.some(
+          candidate => candidate.id === Number(row.completedByUserId)
+        )
+      );
+      assert.equal(
+        Number(row.completedByUserId),
+        Number(pooled ? row.claimedByUserId : row.assignedUserId)
+      );
       actors.add(Number(row.completedByUserId));
     }
     actorsByLevel.set(stage.level, actors);
@@ -681,10 +730,12 @@ async function runScenario(flow, scenario, useBrowser = false) {
     );
     assert.equal(
       decided.filter(x => x.status === "cancelled").length,
-      2 - selected.length
+      (pooled ? 1 : 2) - selected.length
     );
     const actor = selected[0],
-      task = active.find(x => Number(x.assignedUserId) === actor.id);
+      task = pooled
+        ? active[0]
+        : active.find(x => Number(x.assignedUserId) === actor.id);
     await assert.rejects(
       actor.session.api(
         "task.complete",
@@ -704,7 +755,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
     );
     assert.equal(
       (await tasks(started.runId)).filter(
-        x => x.approvalGroupId === group && x.status === "completed"
+        x => taskGroupKey(x) === group && x.status === "completed"
       ).length,
       selected.length
     );
@@ -892,7 +943,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
       sourceHashes: sources.map(x => ({ id: x.id, sha256: x.sourceSha256 })),
     });
     for (const template of ["666", "667"])
-      for (const mode of ["orSignFor", "andSignFor"]) {
+      for (const mode of ["single", "andSignFor", "orSignFor"]) {
         const def = definition(template, mode);
         const made = await own.api(
           "project.createWorkflow",
@@ -946,15 +997,24 @@ async function runScenario(flow, scenario, useBrowser = false) {
               true
             );
         }
-        await runScenario(
-          flow,
-          "normal",
-          template === "666" && mode === "orSignFor"
-        );
-        await runScenario(flow, "rework");
+        const outcomes = await Promise.allSettled([
+          runScenario(flow, "normal", template === "666" && mode === "single"),
+          runScenario(flow, "rework"),
+        ]);
+        const failures = outcomes.filter(x => x.status === "rejected");
+        if (failures.length)
+          throw new AggregateError(
+            failures.map(x => x.reason),
+            "Three-level scenario failed"
+          );
       }
+    assert.equal(results.length, 12);
+    assert.equal(fixture.flows.length, 6);
   } catch (error) {
     failed = true;
+    if (error instanceof AggregateError)
+      for (const item of error.errors)
+        console.error(item.stack || String(item));
     console.error(error.stack || String(error));
     if (page)
       await page
