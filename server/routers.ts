@@ -821,6 +821,9 @@ export const appRouter = router({
     warehouse: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => listWarehouse(ctx.user, input.projectId)),
+    previewWorkflowImport: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64), payload: z.unknown(), preserveCodes: z.boolean().default(false) }))
+      .mutation(async ({ ctx, input }) => (await import("./warehouse-import")).previewWarehouseImport(ctx.user, input)),
     exportWorkflows: protectedProcedure
       .input(
         z.object({

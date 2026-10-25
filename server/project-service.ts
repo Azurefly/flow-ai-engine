@@ -498,10 +498,6 @@ export async function createProjectWorkflow(
     "project:workflow:create"
   );
   const creationSource = input.creationSource ?? "manual";
-  if (creationSource === "warehouse" && input.flowType === "data")
-    throw new Error(
-      "数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。"
-    );
   const processCode = (
     input.processCode?.trim() ||
     `${creationSource === "warehouse" ? "IMP" : "MAN"}_${id().slice(0, 10).toUpperCase()}`
@@ -976,16 +972,17 @@ export async function deleteFolder(
 }
 
 export async function listWarehouse(user: ProjectUser, projectId: string) {
-  await requireProjectPermission(user, projectId, "project:view");
+  const access = await requireProjectPermission(user, projectId, "project:view");
   const [folders] = await db().query<mysql.RowDataPacket[]>(
     "SELECT * FROM workflow_folder WHERE projectId=? ORDER BY name",
     [projectId]
   );
   const [workflows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,name,description,flowType,status,auditStatus,folderId,definitionVersion,updatedAt FROM workflow WHERE projectId=? AND archivedAt IS NULL ORDER BY updatedAt DESC",
+    "SELECT id,projectId,ownerUserId,name,description,flowType,status,auditStatus,folderId,definitionVersion,updatedAt FROM workflow WHERE projectId=? AND archivedAt IS NULL ORDER BY updatedAt DESC",
     [projectId]
   );
-  return { folders, workflows };
+  const permissions = await getProjectWorkflowPermissions(user, { projectId, roles: access.roles, workflows: workflows.map(row => ({ id: String(row.id), projectId, ownerUserId: Number(row.ownerUserId) })) });
+  return { folders, workflows: workflows.map(row => ({ ...row, canArchive: Boolean(permissions.get(String(row.id))?.has("workflow:members:manage")), canMove: access.permissions.has("project:workflow:edit") })) };
 }
 
 export async function exportProjectWorkflows(
@@ -996,7 +993,7 @@ export async function exportProjectWorkflows(
   const ids = Array.from(new Set(input.workflowIds));
   if (!ids.length) throw new Error("请选择至少一个要导出的流程。");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT id,name,description,flowType,status,auditStatus,folderId,definitionVersion,definitionJson FROM workflow WHERE projectId=? AND archivedAt IS NULL AND id IN (?) ORDER BY updatedAt DESC",
+    "SELECT id,projectId,processCode,name,description,flowType,status,auditStatus,folderId,definitionVersion,definitionJson FROM workflow WHERE projectId=? AND archivedAt IS NULL AND id IN (?) ORDER BY updatedAt DESC",
     [input.projectId, ids]
   );
   if (rows.length !== ids.length)

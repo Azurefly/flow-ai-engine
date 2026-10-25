@@ -545,6 +545,7 @@ function FlowConsole({
   const [aiPreview, setAiPreview] = useState<any>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
+  const businessFocused = section === "flows" && flowView === "workspace";
   const unsavedWorkflowId = useRef<string | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<{ proceed: () => void } | null>(null);
   const consoleHistory = useRef<GuardedConsoleHistory | null>(null);
@@ -1351,6 +1352,7 @@ function FlowConsole({
     <main
       data-aiflow-console=""
       data-editor-active={editorActive}
+      data-business-focused={businessFocused}
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
@@ -1447,7 +1449,14 @@ function FlowConsole({
               </span>
             </div>
           </div>
-          <div
+          {businessFocused && <DropdownMenu>
+            <DropdownMenuTrigger asChild><Button variant="outline" className="ml-2 shrink-0 gap-2" aria-label="切换工作空间">工作空间<ChevronDown size={14}/></Button></DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-44">
+              <DropdownMenuLabel>切换工作空间</DropdownMenuLabel>
+              {nav.map(item => <DropdownMenuItem key={item.id} onSelect={() => navigateSection(item.id)}><item.icon size={15}/>{item.id === "flows" ? "返回业务中心" : item.label}</DropdownMenuItem>)}
+            </DropdownMenuContent>
+          </DropdownMenu>}
+          {!businessFocused && <div
             data-aiflow-primary-nav=""
             role="tablist"
             aria-label="流程工作台主导航"
@@ -1487,7 +1496,7 @@ function FlowConsole({
                 <span data-workspace-nav-label="">{item.label}</span>
               </button>
             ))}
-          </div>
+          </div>}
           <div data-workspace-context="" className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground xl:flex">
             <span>{nav.find(item => item.id === activeSection)?.label}</span>
             <ChevronRight size={14} aria-hidden="true" />
@@ -1709,8 +1718,9 @@ function FlowConsole({
           id="aiflow-console-panel"
           ref={workspaceReveal}
           tabIndex={-1}
-          role="tabpanel"
-          aria-labelledby={`aiflow-console-tab-${activeSection}`}
+          role={businessFocused ? "region" : "tabpanel"}
+          aria-label={businessFocused ? "业务工作区" : undefined}
+          aria-labelledby={businessFocused ? undefined : `aiflow-console-tab-${activeSection}`}
           className="min-w-0 w-full flex-1"
         >
           {routeRestoring && (
@@ -2189,6 +2199,7 @@ function FlowConsole({
           )}
           {section === "warehouse" && (
             <WorkflowWarehouse
+              currentUserId={user.id}
               initialProject={selectedProject}
               onOpenWorkflow={(project, workflowId) => {
                 setSelectedProject(project);

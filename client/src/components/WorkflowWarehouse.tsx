@@ -44,9 +44,12 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ProjectRecord } from "./ProjectWorkspace";
+import type { FlowType } from "@shared/workflow-node-contract";
+import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
+const WarehouseImportDialog = lazy(() => import("./WarehouseImportDialog"));
 
 const warehouseActionClass = "aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0";
 
@@ -65,10 +68,12 @@ type WarehouseWorkflow = {
   name: string;
   description?: string | null;
   folderId?: string | null;
-  flowType: string;
+  flowType: FlowType;
   status: string;
   auditStatus: string;
   definitionVersion: number;
+  canArchive: boolean;
+  canMove: boolean;
 };
 type ArchivedWorkflow = WarehouseWorkflow & {
   projectId?: string | null;
@@ -84,13 +89,6 @@ type DeleteTarget =
   | { kind: "folder"; folder: Folder }
   | { kind: "workflow"; workflow: WarehouseWorkflow }
   | null;
-
-type ImportResult = {
-  index: number;
-  name: string;
-  success: boolean;
-  message: string;
-};
 
 const displayWorkflowName = (name: string) => name.replaceAll("_", "_\u200b");
 
@@ -117,9 +115,11 @@ function FlowBadge({ type }: { type: string }) {
 export default function WorkflowWarehouse({
   onOpenWorkflow,
   initialProject,
+  currentUserId,
 }: {
   onOpenWorkflow: (project: ProjectRecord, workflowId: string) => void;
   initialProject?: ProjectRecord | null;
+  currentUserId: number;
 }) {
   const utils = trpc.useUtils();
   const [pickedProject, setPickedProject] = useState<ProjectRecord | null>(initialProject ?? null);
@@ -150,7 +150,8 @@ export default function WorkflowWarehouse({
   const projectResults = trpc.project.page.useQuery({ limit: 50, search: projectSearchValue }, { enabled: projectSelectorOpen });
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const importRef = useRef<HTMLInputElement>(null);
+  const [importOpened, setImportOpened] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const workflowRowRefs = useRef(new Map<string, HTMLButtonElement>());
   const workflowPreviewRef = useRef<HTMLElement | null>(null);
   const returnToWorkflowListRef = useRef<HTMLButtonElement | null>(null);
@@ -173,7 +174,7 @@ export default function WorkflowWarehouse({
   const activeProjectId = currentProject?.id ?? "00000000";
   const warehouse = trpc.project.warehouse.useQuery(
     { projectId: activeProjectId },
-    { enabled: Boolean(currentProject) }
+    authorizationQueryPolicy(Boolean(currentProject))
   );
   const archivedWorkflows = trpc.workflow.archived.useQuery(
     { projectId: activeProjectId },
@@ -181,15 +182,15 @@ export default function WorkflowWarehouse({
   );
   const access = trpc.project.access.useQuery(
     { projectId: activeProjectId },
-    { enabled: Boolean(currentProject) }
+    authorizationQueryPolicy(Boolean(currentProject))
   );
   const workflowDetail: any = trpc.workflow.get.useQuery(
     { id: selectedWorkflowId ?? "00000000" },
-    { enabled: Boolean(selectedWorkflowId) }
+    authorizationQueryPolicy(Boolean(selectedWorkflowId))
   );
   const workflowAccess = trpc.workflow.access.useQuery(
     { id: selectedWorkflowId ?? "00000000" },
-    { enabled: Boolean(selectedWorkflowId), retry: false }
+    authorizationQueryPolicy(Boolean(selectedWorkflowId))
   );
   useEffect(() => {
     const previousId = previousSelectedWorkflowId.current;
@@ -211,22 +212,13 @@ export default function WorkflowWarehouse({
       if (frame !== undefined) window.cancelAnimationFrame(frame);
     };
   }, [selectedWorkflowId]);
-  const exportInput = useMemo(
-    () => ({ projectId: activeProjectId, workflowIds: checkedIds }),
-    [activeProjectId, checkedIds]
-  );
-  const exportWorkflows = trpc.project.exportWorkflows.useQuery(exportInput, {
-    enabled: false,
-    retry: false,
-  });
   const canEdit = Boolean(
-    access.data?.permissions?.has("project:workflow:edit")
+    !access.isError && access.data?.permissions?.has("project:workflow:edit")
   );
-  const canManageSelected = Boolean(
-    workflowAccess.data?.permissions?.has("workflow:members:manage")
-  );
-  const folders = (warehouse.data?.folders ?? []) as Folder[];
-  const workflows = (warehouse.data?.workflows ?? []) as WarehouseWorkflow[];
+  const canCreate = Boolean(!access.isError && access.data?.permissions?.has("project:workflow:create"));
+  const folders = (warehouse.isError ? [] : warehouse.data?.folders ?? []) as Folder[];
+  const workflows = (warehouse.isError ? [] : warehouse.data?.workflows ?? []) as WarehouseWorkflow[];
+  const selectedDetail = workflowDetail.isError || workflowAccess.isError ? null : workflowDetail.data;
   const restorableWorkflows = (
     (archivedWorkflows.data ?? []) as unknown as ArchivedWorkflow[]
   ).filter(workflow => workflow.projectId === activeProjectId);
@@ -288,13 +280,6 @@ export default function WorkflowWarehouse({
     },
     onError: error => toast.error(error.message),
   });
-  const createWorkflow = trpc.project.createWorkflow.useMutation({
-    onSuccess: () => {
-      invalidate();
-      toast.success("流程已导入并处于待审核状态。");
-    },
-    onError: error => toast.error(error.message),
-  });
   const deleteWorkflow = trpc.workflow.delete.useMutation({
     onSuccess: (_result, input) => {
       invalidate();
@@ -323,59 +308,16 @@ export default function WorkflowWarehouse({
     anchor.click();
     URL.revokeObjectURL(anchor.href);
   };
-  const exportSelected = async () => {
-    if (!checkedIds.length) return toast.error("请至少勾选一个流程后导出。");
-    const result = await exportWorkflows.refetch();
-    if (result.error) return toast.error(result.error.message);
-    download(`${currentProject?.code ?? "workflow"}-仓库导出.json`, {
-      exportedAt: new Date().toISOString(),
-      project: { code: currentProject?.code, name: currentProject?.name },
-      workflows: result.data,
-    });
-    toast.success(`已导出 ${result.data?.length ?? 0} 个流程。`);
-    setBatchMenuOpen(false);
-  };
-  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file || !currentProject) return;
+  const exportSelected = async (ids = checkedIds) => {
+    if (!ids.length) return toast.error("请至少勾选一个流程后导出。");
     try {
-      const parsed = JSON.parse(await file.text());
-      const items = Array.isArray(parsed.workflows)
-        ? parsed.workflows
-        : [parsed.workflow ?? parsed];
-      for (const item of items) {
-        const definition = item.definition ?? item.workflow?.definition;
-        const flowType = ["state", "control", "data"].includes(item.flowType)
-          ? item.flowType
-          : "state";
-        if (!definition?.nodes || !definition?.edges)
-          throw new Error("导入文件缺少流程定义。");
-        if (flowType === "data")
-          throw new Error(
-            "数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。"
-          );
-        await createWorkflow.mutateAsync({
-          projectId: currentProject.id,
-          processCode:
-            typeof item.processCode === "string" ? item.processCode : undefined,
-          name: String(item.name ?? item.workflow?.name ?? "导入流程"),
-          description:
-            typeof item.description === "string" ? item.description : undefined,
-          flowType,
-          creationSource: "warehouse",
-          folderId: selectedFolderId,
-          definition,
-        });
-      }
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "导入文件不是有效的流程仓库 JSON。"
-      );
-    } finally {
-      event.target.value = "";
-    }
+      const result = await utils.client.project.exportWorkflows.query({ projectId: activeProjectId, workflowIds: ids });
+      download(`${currentProject?.code ?? "workflow"}-仓库导出.json`, {
+        formatVersion: "1.0.0", exportedAt: new Date().toISOString(), total: result.length,
+        project: { id: activeProjectId, code: currentProject?.code, name: currentProject?.name }, workflows: result,
+      });
+      toast.success(`已导出 ${result.length} 个流程。`); setBatchMenuOpen(false);
+    } catch (error) { toast.error(error instanceof Error ? error.message : "导出失败，请重试。"); }
   };
   const openFolderDialog = (
     mode: NonNullable<FolderDialog>["mode"],
@@ -396,15 +338,6 @@ export default function WorkflowWarehouse({
             ? (folderDialog.target.parentId ?? null)
             : folderDialog.target.id,
     });
-  };
-  const exportCurrent = () => {
-    if (!workflowDetail.data) return;
-    download(`${workflowDetail.data.name || "workflow"}.json`, {
-      exportedAt: new Date().toISOString(),
-      project: { code: currentProject.code, name: currentProject.name },
-      workflows: [workflowDetail.data],
-    });
-    toast.success("已导出当前流程。");
   };
   const confirmDelete = () => {
     if (!deleteTarget) return;
@@ -477,7 +410,7 @@ export default function WorkflowWarehouse({
               流程仓库
             </h1>
             <p className="aiflow-type-body mt-1 text-muted-foreground">
-              在项目目录树中检索、归档、预览、批量导入和导出状态、控制流程；数据流请前往数据资源中心管理。
+              按目录管理状态、控制与数据流程。导入先预检再创建草稿，处理人和资源核对后才能审核发布。
             </p>
           </div>
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
@@ -778,7 +711,7 @@ export default function WorkflowWarehouse({
                         aria-label="批量操作"
                         aria-expanded={batchMenuOpen}
                         title="批量操作"
-                        disabled={!canEdit}
+                        disabled={access.isError || warehouse.isError}
                         onClick={() => setBatchMenuOpen(value => !value)}
                       >
                         <MoreHorizontal size={16} />
@@ -789,7 +722,8 @@ export default function WorkflowWarehouse({
                           <button
                             type="button"
                             className="aiflow-type-control flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left hover:bg-muted"
-                            onClick={() => importRef.current?.click()}
+                            disabled={!canCreate}
+                            onClick={() => { setImportOpened(true); setImportOpen(true); setBatchMenuOpen(false); }}
                           >
                             <Upload size={13} />
                             批量导入
@@ -937,7 +871,7 @@ export default function WorkflowWarehouse({
                           </span>
                         </div>
                       </button>
-                      {canManageSelected &&
+                      {workflow.canMove &&
                         selectedWorkflowId === workflow.id && (
                           <select
                             aria-label="移动流程目录"
@@ -959,7 +893,7 @@ export default function WorkflowWarehouse({
                             ))}
                           </select>
                         )}
-                      {canEdit && (
+                      {workflow.canArchive && (
                         <button
                           type="button"
                           className="aiflow-type-control inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded px-2 text-muted-foreground hover:bg-aiflow-warning-surface hover:text-aiflow-warning min-[1024px]:h-9 min-[1024px]:min-h-0"
@@ -1027,26 +961,26 @@ export default function WorkflowWarehouse({
                       </button>
                     </div>
                   </div>
-                  {workflowDetail.data ? (
+                  {selectedDetail ? (
                     <div>
                       <div className="border-b border-border p-3">
                         <div className="flex items-start gap-2">
                           <p
-                            aria-label={workflowDetail.data.name}
+                            aria-label={selectedDetail.name}
                             className="aiflow-type-card-title min-w-0 flex-1 break-words font-semibold leading-6 text-foreground"
-                            title={workflowDetail.data.name}
+                            title={selectedDetail.name}
                           >
-                            {displayWorkflowName(workflowDetail.data.name)}
+                            {displayWorkflowName(selectedDetail.name)}
                           </p>
                           <div className="flex shrink-0 flex-col items-end gap-1">
-                            <FlowBadge type={workflowDetail.data.flowType} />
+                            <FlowBadge type={selectedDetail.flowType} />
                             <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
-                              v{workflowDetail.data.definitionVersion}
+                              v{selectedDetail.definitionVersion}
                             </span>
                           </div>
                         </div>
                         <p className="aiflow-type-body mt-2 line-clamp-4 break-words text-muted-foreground">
-                          {workflowDetail.data.description || "未填写流程简介"}
+                          {selectedDetail.description || "未填写流程简介"}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button
@@ -1055,17 +989,17 @@ export default function WorkflowWarehouse({
                             onClick={() =>
                               onOpenWorkflow(
                                 currentProject,
-                                workflowDetail.data.id
+                                selectedDetail.id
                               )
                             }
                           >
-                            打开设计器
+                            {workflowAccess.data?.permissions?.has("workflow:edit") ? "打开设计器" : "查看流程"}
                           </Button>
                           <Button
                             className={warehouseActionClass}
                             variant="outline"
                             size="sm"
-                            onClick={exportCurrent}
+                            onClick={() => void exportSelected([selectedDetail.id])}
                           >
                             <Download size={12} />
                             导出流程
@@ -1074,8 +1008,9 @@ export default function WorkflowWarehouse({
                       </div>
                       <div className="min-w-0">
                         <WorkflowCanvas
-                          workflowId={workflowDetail.data.id}
-                          definition={workflowDetail.data.definition}
+                          workflowId={selectedDetail.id}
+                          flowType={selectedDetail.flowType}
+                          definition={selectedDetail.definition}
                           readOnly
                           compactReadOnlyPreview
                         />
@@ -1138,13 +1073,6 @@ export default function WorkflowWarehouse({
                 </aside>
               )}
             </div>
-            <input
-              ref={importRef}
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={importFile}
-            />
           </>
         )}
         <CreationDialog
@@ -1168,6 +1096,7 @@ export default function WorkflowWarehouse({
           </label>
           <p className="text-sm text-muted-foreground">{folderDescription.length}/2000</p>
         </CreationDialog>
+        {importOpened && <Suspense fallback={<p role="status">正在加载导入预检…</p>}><WarehouseImportDialog key={`${currentUserId}:${activeProjectId}`} open={importOpen} userId={currentUserId} projectId={activeProjectId} projectName={currentProject.name} folderId={selectedFolderId} folderName={selectedFolder?.name || "根目录"} onClose={() => setImportOpen(false)} onImported={invalidate}/></Suspense>}
         <Dialog
           open={Boolean(folderDialog)}
           onOpenChange={open => {

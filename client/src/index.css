@@ -1483,6 +1483,15 @@ h2 {
   [data-aiflow-console][data-editor-active="true"] {
     --workspace-rail: 80px;
   }
+  [data-aiflow-console][data-business-focused="true"] {
+    --workspace-rail: 0px;
+  }
+  [data-business-focused="true"] [data-aiflow-brand] {
+    width: 196px;
+  }
+  [data-business-focused="true"] [data-workspace-context] {
+    max-width: 26vw;
+  }
   [data-aiflow-console] > header > div:first-child {
     height: 64px;
   }

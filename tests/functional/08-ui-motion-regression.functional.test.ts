@@ -304,13 +304,13 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "aiflow-type-control"
       );
       expect(projectWorkspaceSource).toContain(
-        'className="aiflow-type-body mt-3 grid grid-cols-2 gap-x-4 gap-y-2"'
+        'className="aiflow-type-body grid gap-x-4 gap-y-2 sm:grid-cols-2"'
       );
       expect(projectWorkspaceSource).toMatch(
-        /className="aiflow-type-meta text-muted-foreground">\s*流程数/
+        /className="aiflow-type-control w-\[8%\] px-4 py-3 text-right">\s*流程数/
       );
       expect(projectWorkspaceSource).toMatch(
-        /className="aiflow-type-meta text-muted-foreground">\s*工作域/
+        /className="aiflow-type-control w-\[20%\] px-4 py-3">\s*工作域/
       );
       expect(projectWorkspaceSource).toContain(
         'className="aiflow-type-control grid gap-1 font-medium text-muted-foreground"'
@@ -668,13 +668,13 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
   });
 
   describe("TC-REG-002: 业务中心 (BusinessCenterView) 服务端分页与 CSV 模板契约", () => {
-    it("笔记本宽度使用紧凑表格，窄屏保留可读项目卡片", () => {
+    it("电脑端业务列表使用统一紧凑表格", () => {
       const source = readFileSync(
         "client/src/components/ProjectWorkspace.tsx",
         "utf8"
       );
-      expect(source).toContain('className="hidden min-[900px]:block"');
-      expect(source).toContain(
+      expect(source).toContain('data-business-table-desktop=""');
+      expect(source).not.toContain(
         'className="grid gap-2 p-3 sm:grid-cols-2 sm:gap-3 min-[900px]:hidden"'
       );
       expect(source).toContain(
@@ -1167,7 +1167,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(workspaceSrc).toContain("colSpan={6}");
       expect(workspaceSrc).toContain("grid-cols-2 gap-1.5");
       expect(workspaceSrc).toContain('aria-label="项目工作区"');
-      expect(workspaceSrc).toContain("xl:hidden");
+      expect(workspaceSrc).toContain('aria-label="业务流程列表"');
       expect(workspaceSrc).toContain("更多筛选");
       expect(workspaceSrc).toContain("显示第");
       expect(workspaceSrc).toContain("模板中还没有业务记录");

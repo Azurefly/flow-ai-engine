@@ -2022,17 +2022,17 @@ export async function submitWorkflowRun(input: {
     [input.workflowId]
   );
   const workflow = workflowRows[0] as PersistedWorkflow | undefined;
-  if (!workflow) throw new Error("流程不存在。");
+  if (!workflow) throw new TRPCError({ code: "NOT_FOUND", message: "流程不存在。" });
   if (workflow.flowType === "data")
-    throw new Error("数据流程必须通过数据流运行入口启动。");
+    throw new TRPCError({ code: "BAD_REQUEST", message: "数据流程必须通过数据流运行入口启动。" });
   if (workflow.archivedAt)
-    throw new Error("已归档流程不能发起运行，请先恢复流程。");
+    throw new TRPCError({ code: "CONFLICT", message: "已归档流程不能发起运行，请先恢复流程。" });
   if (
     workflow.projectId &&
     input.triggerType !== "test" &&
     (workflow.status !== "published" || workflow.auditStatus !== "approved")
   )
-    throw new Error("项目流程尚未发布或未通过审核，无法发起运行。");
+    throw new TRPCError({ code: "CONFLICT", message: "项目流程尚未发布或未通过审核，无法发起运行。" });
   const storedPlan = readJson(
     workflow.publishedExecutionPlanJson
   ) as WorkflowExecutionPlan | null;

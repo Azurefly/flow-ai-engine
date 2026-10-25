@@ -69,7 +69,16 @@ it("后续审批人等待期间不能办理，前序完成后恢复办理", () =
       status: "completed",
       hasEarlierPendingSigner: 1,
     } as any)
-  ).toMatchObject({ canAct: false, blockedReason: null });
+  ).toMatchObject({ canAct: false, blockedReason: "任务已完成，不能重复办理。" });
+});
+it.each([
+  ["completed", "success", "任务已完成"],
+  ["cancelled", "terminated", "任务已取消"],
+  ["pending", "failed", "流程运行失败"],
+  ["pending", "terminated", "流程已终止"],
+  ["claimed", "cancelled", "流程已取消"],
+])("结束状态 %s/%s 给出具体原因", (status, runStatus, label) => {
+  expect(taskActionState(12, { ...task, status, runStatus } as any)).toMatchObject({ canAct: false, actionLabel: label, blockedReason: expect.stringContaining(label) });
 });
 it("详情返回顺序等待原因并通过查询读取前序状态", async () => {
   mocks.query

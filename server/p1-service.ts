@@ -229,14 +229,19 @@ async function assertCurrentTaskOperation(
 }
 
 export function taskActionState(userId: number, task: mysql.RowDataPacket) {
+  const ended: Record<string, string> = { completed: "任务已完成", cancelled: "任务已取消", skipped: "任务已跳过" };
+  const taskEnd = ended[String(task.status)];
+  if (taskEnd) return { canAct: false, blockedReason: `${taskEnd}，不能重复办理。`, actionLabel: taskEnd };
   if (!isTaskRunActionable(task)) {
     const paused = task.runStatus === "blocked";
+    const runEnd: Record<string, string> = { success: "流程已完成", failed: "流程运行失败", cancelled: "流程已取消", terminated: "流程已终止" };
+    const reason = runEnd[String(task.runStatus)];
     return {
       canAct: false,
       blockedReason: paused
         ? "流程已暂停，恢复后才能办理。"
-        : "流程当前不可办理，请刷新状态。",
-      actionLabel: paused ? "流程已暂停" : "当前不可办理",
+        : reason ? `${reason}，当前任务不可办理。` : "流程当前不可办理，请刷新状态。",
+      actionLabel: paused ? "流程已暂停" : reason || "当前不可办理",
     };
   }
   const waiting =

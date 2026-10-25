@@ -62,6 +62,9 @@ import {
 const DataResourceCenter = lazy(() => import("./DataResourceCenter"));
 const ProjectArchiveDialog = lazy(() => import("./ProjectArchiveDialog"));
 const WorkflowReviewDialog = lazy(() => import("./WorkflowReviewDialog"));
+const projectInfoValueClass = "aiflow-type-body mt-0.5 break-words text-foreground";
+const projectFieldLabelClass = "aiflow-type-control block space-y-1 font-medium text-muted-foreground";
+const projectSummaryClass = "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden";
 
 export type ProjectRecord = {
   id: string;
@@ -520,13 +523,13 @@ function ProjectMoreDetails({ project }: { project: ProjectRecord }) {
     <dl className="aiflow-type-body grid gap-x-4 gap-y-2 sm:grid-cols-2">
       <div>
         <dt className="aiflow-type-meta text-muted-foreground">根部门</dt>
-        <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
+        <dd className={projectInfoValueClass}>
           {project.rootDepartment || "未配置"}
         </dd>
       </div>
       <div>
         <dt className="aiflow-type-meta text-muted-foreground">创建人</dt>
-        <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
+        <dd className={projectInfoValueClass}>
           {project.ownerName || project.ownerUsername || "—"}
         </dd>
       </div>
@@ -840,7 +843,7 @@ function BusinessCenterView({
             </div>
           ) : queryState.refreshing && <p role="status" className="aiflow-type-body px-4 py-2 text-muted-foreground">正在刷新业务列表…</p>}
 
-          <div className="hidden min-[900px]:block">
+          <div data-business-table-desktop="">
             <div className="overflow-x-auto">
               <table className="aiflow-type-body w-full min-w-[720px] table-fixed text-left">
                 <thead className="aiflow-type-control bg-muted font-medium text-muted-foreground">
@@ -938,74 +941,7 @@ function BusinessCenterView({
             </div>
           </div>
 
-          <ul className="grid gap-2 p-3 sm:grid-cols-2 sm:gap-3 min-[900px]:hidden">
-            {pageProjects.map(project => (
-              <li
-                key={project.id} data-project-row="" data-project-id={project.id}
-                className="min-w-0 rounded-md border border-border p-3 sm:p-3.5"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="aiflow-type-card-title break-words font-semibold text-foreground">
-                      {project.name}
-                    </h2>
-                    <p className="aiflow-type-meta mt-1 truncate font-mono text-muted-foreground">
-                      {project.code}
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="aiflow-type-control h-11 shrink-0 px-2.5 min-[1280px]:h-8"
-                    onClick={() => status === "archived" ? onLifecycle(project) : onOpenProject(project)}
-                  >
-                    {status === "archived" ? "查看归档" : "进入"}
-                  </Button>
-                  {status === "active" && Boolean(project.canManageArchive) && <Button type="button" variant="outline" size="sm" className="aiflow-type-control h-11 shrink-0 px-2.5" aria-label={`归档业务：${project.name}`} onClick={() => onLifecycle(project)}>归档</Button>}
-                </div>
-                <dl className="aiflow-type-body mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
-                  <div>
-                    <dt className="aiflow-type-meta text-muted-foreground">
-                      流程数
-                    </dt>
-                    <dd className="aiflow-type-body mt-0.5 font-mono tabular-nums text-foreground">
-                      {status === "archived" ? (project.archivedWorkflowCount ?? 0) : project.workflowCount == null
-                        ? "—"
-                        : project.workflowCount}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="aiflow-type-meta text-muted-foreground">
-                      工作域
-                    </dt>
-                    <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
-                      {project.domainCode
-                        ? project.domainName || project.domainCode
-                        : "未归属"}
-                    </dd>
-                  </div>
-                </dl>
-                <details className="group mt-3 border-t border-border pt-2">
-                  <summary className="aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 font-medium text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500">
-                    更多项目资料
-                    <ChevronDown
-                      size={16}
-                      aria-hidden="true"
-                      className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                    />
-                  </summary>
-                  <div className="mt-3">
-                    <ProjectMoreDetails project={project} />
-                  </div>
-                </details>
-              </li>
-            ))}
-            {!queryState.loading && !queryState.error && !pageProjects.length && (
-              <li className="aiflow-type-body p-8 text-center text-muted-foreground">
-                没有符合条件的业务项目。请调整筛选条件，或重置筛选。
-              </li>
-            )}
-          </ul>
+
 
           {pagination}
         </section>
@@ -1650,68 +1586,9 @@ function ServiceEndpointCenter({
             </p>
           </div>
         )}
+
         {!loading && endpoints.length > 0 && (
-          <div className="divide-y divide-border lg:hidden">
-            {endpoints.map(endpoint => (
-              <article key={endpoint.id} className="space-y-3 p-4">
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="aiflow-type-meta break-all font-mono font-semibold text-aiflow-info">
-                      {endpoint.refCode}
-                    </p>
-                    <h2 className="aiflow-type-body mt-1 break-words font-medium text-foreground">
-                      {endpoint.name}
-                    </h2>
-                  </div>
-                  <span
-                    className={`aiflow-type-meta shrink-0 rounded px-2 py-1 ${endpoint.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
-                  >
-                    {endpoint.status === "active" ? "启用" : "停用"}
-                  </span>
-                </div>
-                <dl className="aiflow-type-body space-y-2">
-                  <div>
-                    <dt className="aiflow-type-meta mb-1 text-muted-foreground">
-                      目标环境
-                    </dt>
-                    <dd>{renderTargetEnvironment(endpoint)}</dd>
-                  </div>
-                  <div>
-                    <dt className="aiflow-type-meta mb-1 text-muted-foreground">
-                      允许地址
-                    </dt>
-                    <dd className="break-all font-mono leading-5 text-muted-foreground">
-                      {endpoint.baseUrl}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt className="aiflow-type-meta mb-1 text-muted-foreground">
-                      认证方式
-                    </dt>
-                    <dd className="break-words text-muted-foreground">
-                      {endpoint.hasSecretRef
-                        ? `${endpoint.authScheme || "原值"} · ${endpoint.authHeaderName || "Authorization"}`
-                        : "无密钥"}
-                    </dd>
-                  </div>
-                </dl>
-                {canManage && (
-                  <Button
-                    variant="outline"
-                    className="min-h-11 w-full sm:w-auto min-[1024px]:min-h-10"
-                    aria-label={`${endpoint.status === "active" ? "停用" : "启用"}服务端点：${endpoint.name}（${endpoint.refCode}）`}
-                    disabled={setStatus.isPending}
-                    onClick={() => requestStatusChange(endpoint)}
-                  >
-                    {endpoint.status === "active" ? "停用端点" : "启用端点"}
-                  </Button>
-                )}
-              </article>
-            ))}
-          </div>
-        )}
-        {!loading && endpoints.length > 0 && (
-          <div className="hidden overflow-x-auto lg:block">
+          <div className="overflow-x-auto">
             <table className="aiflow-type-body min-w-[980px] w-full text-left">
               <thead className="aiflow-type-body bg-muted text-muted-foreground">
                 <tr>
@@ -1782,7 +1659,7 @@ function ServiceEndpointCenter({
         pending={create.isPending}
         onSubmit={submitCreate}
       >
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+        <label className={projectFieldLabelClass}>
           <span>端点引用名</span>
           <Input
             id="service-endpoint-ref-code"
@@ -1802,7 +1679,7 @@ function ServiceEndpointCenter({
         <p className="aiflow-type-body -mt-2 leading-5 text-muted-foreground">
           2–64位字母、数字或下划线，以字母开头，自动转为大写。
         </p>
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+        <label className={projectFieldLabelClass}>
           <span>端点名称</span>
           <Input
             id="service-endpoint-name"
@@ -1814,7 +1691,7 @@ function ServiceEndpointCenter({
             required
           />
         </label>
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+        <label className={projectFieldLabelClass}>
           <span>基础地址</span>
           <Input
             id="service-endpoint-base-url"
@@ -1833,7 +1710,7 @@ function ServiceEndpointCenter({
         <p className="aiflow-type-body -mt-2 leading-5 text-muted-foreground">
           仅支持HTTP/HTTPS及80、443端口；地址不得含账号密码，调用时会拒绝私网地址。
         </p>
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+        <label className={projectFieldLabelClass}>
           <span>目标环境</span>
           <select
             id="service-endpoint-target-environment"
@@ -1860,7 +1737,7 @@ function ServiceEndpointCenter({
         <p className="aiflow-type-body -mt-2 rounded-md border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-aiflow-warning">
           环境标签不改变调用地址，也不提供网络隔离。
         </p>
-        <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+        <label className={projectFieldLabelClass}>
           <span>SecretRef（可选）</span>
           <Input
             id="service-endpoint-secret-ref"
@@ -1886,7 +1763,7 @@ function ServiceEndpointCenter({
               </p>
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+              <label className={projectFieldLabelClass}>
                 <span>认证请求头</span>
                 <Input
                   id="service-endpoint-auth-header"
@@ -1901,7 +1778,7 @@ function ServiceEndpointCenter({
                   }
                 />
               </label>
-              <label className="aiflow-type-control block space-y-1 font-medium text-muted-foreground">
+              <label className={projectFieldLabelClass}>
                 <span>认证方案</span>
                 <Input
                   id="service-endpoint-auth-scheme"
@@ -2237,7 +2114,7 @@ function ProcessCenter({
                 <dt className="aiflow-type-meta text-muted-foreground">
                   流程说明
                 </dt>
-                <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
+                <dd className={projectInfoValueClass}>
                   {workflow.description || "未填写流程说明"}
                 </dd>
               </div>
@@ -2245,7 +2122,7 @@ function ProcessCenter({
                 <dt className="aiflow-type-meta text-muted-foreground">
                   关联数据源
                 </dt>
-                <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
+                <dd className={projectInfoValueClass}>
                   {workflow.flowType !== "data"
                     ? "不适用"
                     : workflow.dataSourceId
@@ -2258,7 +2135,7 @@ function ProcessCenter({
                 <dt className="aiflow-type-meta text-muted-foreground">
                   创建人
                 </dt>
-                <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
+                <dd className={projectInfoValueClass}>
                   {workflow.creatorName || workflow.creatorUsername || "—"}
                 </dd>
               </div>
@@ -2525,7 +2402,7 @@ function ProcessCenter({
         </details>
       </div>
       <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        <div className="hidden overflow-x-auto xl:block">
+        <div className="overflow-x-auto" role="region" aria-label="业务流程列表" tabIndex={0}>
           <table className="w-full min-w-[960px] text-left">
             <thead className="bg-muted text-sm font-medium text-muted-foreground">
               <tr>
@@ -2631,84 +2508,7 @@ function ProcessCenter({
             </tbody>
           </table>
         </div>
-        <div className="grid gap-3 p-3 xl:hidden">
-          {pageWorkflows.map((workflow: any) => (
-            <article
-              key={workflow.id}
-              data-project-workflow-row={workflow.id}
-              className="min-w-0 rounded-lg border border-border bg-card p-3.5 shadow-2xs"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <h2
-                    aria-label={workflow.name}
-                    title={workflow.name}
-                    className="aiflow-type-card-title mt-1 break-words font-semibold text-foreground"
-                  >
-                    {displayWorkflowName(workflow.name)}
-                  </h2>
-                </div>
-                <span
-                  className={
-                    workflow.status === "published"
-                      ? "inline-flex rounded border border-aiflow-info-border bg-aiflow-info-surface px-2 py-1 text-xs text-aiflow-info"
-                      : "inline-flex rounded border border-border px-2 py-1 text-xs text-muted-foreground"
-                  }
-                >
-                  {workflow.status === "published" ? "已发布" : "未发布"}
-                </span>
-              </div>
-              {getOptionalWorkflowDescription(workflow.description) && (
-                <p className="aiflow-type-body mt-2 line-clamp-2 break-words text-muted-foreground">
-                  {getOptionalWorkflowDescription(workflow.description)}
-                </p>
-              )}
-              <div className="aiflow-type-meta mt-3 flex flex-wrap items-center gap-2">
-                <span
-                  className={
-                    "rounded px-2 py-1 " +
-                    (flowTypeStyle[
-                      workflow.flowType as keyof typeof flowTypeStyle
-                    ] ?? "bg-muted text-muted-foreground")
-                  }
-                >
-                  {displayFlowType(workflow.flowType)}
-                </span>
-                <span
-                  className={
-                    workflow.auditStatus === "approved"
-                      ? "text-aiflow-success"
-                      : workflow.auditStatus === "rejected"
-                        ? "text-red-600"
-                        : "text-aiflow-warning"
-                  }
-                >
-                  <CircleDot className="mr-1 inline" size={12} />
-                  {displayAuditStatus(workflow.auditStatus)}
-                </span>
-                <span className="ml-auto tabular-nums text-muted-foreground">
-                  更新于 {formatDate(workflow.updatedAt)}
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2 border-t border-border pt-3">
-                      {renderPrimaryActions(workflow, "card")}
-                      {renderMoreActions(workflow, "card")}
-              </div>
-            </article>
-          ))}
-          {!workflows.length && (
-            <div className="rounded-lg border border-dashed border-input bg-card px-4 py-12 text-center text-sm text-muted-foreground">
-              <WorkflowListEmptyState
-                countMismatch={workflowCountMismatch}
-                reportedCount={project.workflowCount ?? 0}
-                canCreate={canCreate}
-                refreshing={refreshingWorkflows}
-                loadFailed={workflowLoadFailed}
-                onRefresh={onRefreshWorkflows}
-              />
-            </div>
-          )}
-        </div>
+
         <footer className="aiflow-type-meta flex flex-col gap-2 border-t border-border bg-card px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span aria-live="polite">
             显示第 {workflows.length ? (currentPage - 1) * pageSize + 1 : 0}–
@@ -3433,7 +3233,7 @@ function ProjectMembers({
               onClick={event => {
                 if (busy) event.preventDefault();
               }}
-              className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden"
+              className={projectSummaryClass}
             >
               <span>添加部门授权</span>
               <ChevronDown
@@ -3651,7 +3451,7 @@ function ProjectMembers({
               onClick={event => {
                 if (busy) event.preventDefault();
               }}
-              className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden"
+              className={projectSummaryClass}
             >
               <span>添加成员授权</span>
               <ChevronDown

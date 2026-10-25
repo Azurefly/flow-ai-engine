@@ -24,6 +24,7 @@ export function CreationDialog({
   children,
   className = "max-w-xl",
   destructive = false,
+  cancelLabel = "取消",
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -38,6 +39,7 @@ export function CreationDialog({
   children: ReactNode;
   className?: string;
   destructive?: boolean;
+  cancelLabel?: string;
 }) {
   return (
     <Dialog
@@ -101,7 +103,7 @@ export function CreationDialog({
               disabled={pending}
               onClick={() => onOpenChange(false)}
             >
-              取消
+              {cancelLabel}
             </Button>
             <Button
               type="submit"

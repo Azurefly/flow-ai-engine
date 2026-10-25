@@ -556,11 +556,11 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain("<CreationDialog");
   });
 
-  it("业务与流程列表按视口切换布局并保持主次信息层级", () => {
+  it("电脑端业务与流程列表统一表格并保持主次信息层级", () => {
     expect(projectWorkspaceSource).toContain(
-      'className="hidden min-[900px]:block"'
+      'data-business-table-desktop=""'
     );
-    expect(projectWorkspaceSource).toContain(
+    expect(projectWorkspaceSource).not.toContain(
       'className="grid gap-2 p-3 sm:grid-cols-2 sm:gap-3 min-[900px]:hidden"'
     );
     expect(projectWorkspaceSource).toContain("w-[36%] px-4 py-3");
@@ -576,7 +576,7 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain(
       'className="aiflow-type-body grid gap-x-4 gap-y-2 sm:grid-cols-2"'
     );
-    expect(projectWorkspaceSource).toContain(
+    expect(projectWorkspaceSource).not.toContain(
       'className="aiflow-type-body mt-3 grid grid-cols-2 gap-x-4 gap-y-2"'
     );
     expect(projectWorkspaceSource).toContain(
@@ -609,13 +609,13 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain(
       'renderMoreActions(workflow, "table")'
     );
-    expect(projectWorkspaceSource).toContain(
+    expect(projectWorkspaceSource).not.toContain(
       'renderMoreActions(workflow, "card")'
     );
     expect(projectWorkspaceSource).toContain(
       'className="aiflow-type-body mt-1 line-clamp-2 break-words text-muted-foreground"'
     );
-    expect(projectWorkspaceSource).toContain(
+    expect(projectWorkspaceSource).not.toContain(
       'className="aiflow-type-body mt-2 line-clamp-2 break-words text-muted-foreground"'
     );
     expect(projectWorkspaceSource).toContain("workflowCode(workflow)");
@@ -916,8 +916,9 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain(
       "workflow.processCode || String(workflow.id)"
     );
-    expect(warehouseSource).toContain('creationSource: "warehouse"');
-    expect(warehouseSource).toContain("processCode:");
+    const importer = source("../client/src/components/WarehouseImportDialog.tsx");
+    expect(importer).toContain('creationSource: "warehouse"');
+    expect(importer).toContain("processCode:");
   });
 
   it("流程中心把关联数据源留在按需详情，不挤占默认列表列", () => {
@@ -932,7 +933,7 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain(
       '{renderMoreActions(workflow, "table")}'
     );
-    expect(projectWorkspaceSource).toContain(
+    expect(projectWorkspaceSource).not.toContain(
       '{renderMoreActions(workflow, "card")}'
     );
     expect(projectWorkspaceSource).toContain(
@@ -991,10 +992,11 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain('aria-label="返回流程列表"');
   });
 
-  it("保留仓库上传仅适用于状态和控制流程的类型边界", () => {
-    expect(warehouseSource).toContain(
-      "数据流程不支持从流程仓库导入，请在数据资源中心独立设计和运行。"
-    );
+  it("仓库三类流程采用实际类型预览并先预检再导入草稿", () => {
+    expect(warehouseSource).toContain("WarehouseImportDialog");
+    expect(warehouseSource).toContain("flowType={selectedDetail.flowType}");
+    expect(warehouseSource).toContain("workflow.canArchive");
+    expect(warehouseSource).toContain("workflow.canMove");
     expect(projectWorkspaceSource).toContain("creationSource");
   });
 
@@ -1506,10 +1508,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
     expect(homeSource).toContain("aria-selected={activeSection === item.id}");
     expect(homeSource).toContain(
-      'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role="tabpanel"'
+      'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role={businessFocused ? "region" : "tabpanel"}'
     );
     expect(homeSource).toContain(
-      "aria-labelledby={`aiflow-console-tab-${activeSection}`}"
+      "aria-labelledby={businessFocused ? undefined : `aiflow-console-tab-${activeSection}`}"
     );
   });
 
@@ -2286,13 +2288,8 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain(
       'className="aiflow-type-body mt-2 text-muted-foreground"> 仅展示当前账号有权查看的业务项目；筛选不会扩大访问范围。'
     );
-    expect(projectWorkspaceSource).toContain(
-      'details className="group mt-3 border-t border-border pt-2"'
-    );
-    expect(projectWorkspaceSource).toContain("group-open:rotate-180");
-    expect(projectWorkspaceSource).toContain(
-      '<ChevronDown size={16} aria-hidden="true"'
-    );
+    expect(projectWorkspaceSource).toContain('aria-label={`更多业务操作：${project.name}`}');
+    expect(projectWorkspaceSource).toContain("<ProjectMoreDetails project={project} />");
     expect(projectWorkspaceSource).toContain(
       'view === "process" && workflows.isLoading'
     );
@@ -2367,7 +2364,7 @@ describe("流程设计器界面回归约束", () => {
       'const displayWorkflowName = (name: string) => name.replaceAll("_", "_\\u200b");'
     );
     expect(warehouseSource).toContain("aria-label={workflow.name}");
-    expect(warehouseSource).toContain("aria-label={workflowDetail.data.name}");
+    expect(warehouseSource).toContain("aria-label={selectedDetail.name}");
     expect(warehouseSource).toContain(
       'className="aiflow-type-control h-11 min-h-11 max-w-40 rounded border border-border bg-card px-2'
     );
@@ -2411,7 +2408,7 @@ describe("流程设计器界面回归约束", () => {
     expect(warehouseSource).toContain(
       'className="p-10 text-center text-sm text-muted-foreground"'
     );
-    expect(warehouseSource).toContain("canManageSelected");
+    expect(warehouseSource).toContain("workflow.canArchive");
     expect(routerSource).toContain("archived: protectedProcedure");
     expect(routerSource).toContain("restore: protectedProcedure");
     expect(workflowServiceSource).toContain("status IN ('queued','running')");
@@ -3253,17 +3250,15 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("grid min-w-0 grid-cols-2 gap-1.5");
   });
 
-  it("服务端点窄屏使用摘要卡，空状态和管理操作不依赖宽表格", () => {
+  it("电脑端服务端点使用统一表格并保留空状态与管理操作", () => {
     expect(projectWorkspaceSource).toContain(
       'className="min-h-11 min-[1024px]:min-h-10"'
     );
-    expect(projectWorkspaceSource).toContain(
+    expect(projectWorkspaceSource).not.toContain(
       "divide-y divide-border lg:hidden"
     );
-    expect(projectWorkspaceSource).toContain("hidden overflow-x-auto lg:block");
-    expect(projectWorkspaceSource).toContain(
-      "min-h-11 w-full sm:w-auto min-[1024px]:min-h-10"
-    );
+    expect(projectWorkspaceSource).toContain('className="overflow-x-auto"');
+    expect(projectWorkspaceSource).toContain('disabled={setStatus.isPending}');
     expect(projectWorkspaceSource).toContain('id="service-endpoint-ref-code"');
     expect(projectWorkspaceSource).toContain("<span>端点引用名</span>");
     expect(projectWorkspaceSource).toContain("{form.secretRef.trim() ? (");
@@ -3275,10 +3270,10 @@ describe("流程设计器界面回归约束", () => {
       "未填写密钥引用：调用不附加认证请求头。"
     );
     expect(projectWorkspaceSource).toContain(
-      'className="aiflow-type-control block space-y-1 font-medium text-muted-foreground"'
+      'projectFieldLabelClass = "aiflow-type-control block space-y-1 font-medium text-muted-foreground"'
     );
     expect(projectWorkspaceSource).toContain(
-      'className="aiflow-type-body space-y-2"'
+      'className="aiflow-type-body min-w-[980px] w-full text-left"'
     );
     expect(projectWorkspaceSource).toContain(
       'pattern="[A-Za-z][A-Za-z0-9_]{1,63}"'
@@ -3340,21 +3335,22 @@ describe("流程设计器界面回归约束", () => {
     );
   });
 
-  it("桌面流程表格显示完整可换行名称，并与窄屏保持一致", () => {
+  it("电脑端统一流程表格显示完整可换行名称并保留操作列", () => {
     const desktopTableStart = projectWorkspaceSource.indexOf(
-      '<div className="hidden overflow-x-auto xl:block">'
+      '<div className="overflow-x-auto" role="region" aria-label="业务流程列表"'
     );
-    const mobileCardsStart = projectWorkspaceSource.indexOf(
-      '<div className="grid gap-3 p-3 xl:hidden">',
+    const tableEnd = projectWorkspaceSource.indexOf(
+      '</table>',
       desktopTableStart
     );
     const desktopTable = projectWorkspaceSource.slice(
       desktopTableStart,
-      mobileCardsStart
+      tableEnd
     );
 
     expect(desktopTableStart).toBeGreaterThanOrEqual(0);
-    expect(mobileCardsStart).toBeGreaterThan(desktopTableStart);
+    expect(tableEnd).toBeGreaterThan(desktopTableStart);
+    expect(desktopTable).toContain('renderMoreActions(workflow, "table")');
     expect(desktopTable).toContain("aria-label={workflow.name}");
     expect(desktopTable).toContain("title={workflow.name}");
     expect(desktopTable).toContain("{displayWorkflowName(workflow.name)}");
