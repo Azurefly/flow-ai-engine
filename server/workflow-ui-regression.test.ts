@@ -1508,10 +1508,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
     expect(homeSource).toContain("aria-selected={activeSection === item.id}");
     expect(homeSource).toContain(
-      'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role={businessFocused ? "region" : "tabpanel"}'
+      'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role={workspaceFocused ? "region" : "tabpanel"}'
     );
     expect(homeSource).toContain(
-      "aria-labelledby={businessFocused ? undefined : `aiflow-console-tab-${activeSection}`}"
+      "aria-labelledby={workspaceFocused ? undefined : `aiflow-console-tab-${activeSection}`}"
     );
   });
 

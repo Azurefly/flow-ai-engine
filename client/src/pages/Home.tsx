@@ -546,6 +546,7 @@ function FlowConsole({
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
   const businessFocused = section === "flows" && flowView === "workspace";
+  const workspaceFocused = section !== "flows" || flowView !== "center";
   const unsavedWorkflowId = useRef<string | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<{ proceed: () => void } | null>(null);
   const consoleHistory = useRef<GuardedConsoleHistory | null>(null);
@@ -1332,6 +1333,7 @@ function FlowConsole({
     ...(user.role === "admin" ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }] : []),
   ];
   const activeSection = section === "system" && systemView !== "config" ? "identity" : section;
+  const workspaceLabel = businessFocused ? "业务工作区" : editorActive ? "流程设计器" : detailActive ? "流程详情" : nav.find(item => item.id === activeSection)?.label || "工作区";
 
   const workspaceWorkflows = selectedProject
     ? workflowItems.filter(
@@ -1352,7 +1354,7 @@ function FlowConsole({
     <main
       data-aiflow-console=""
       data-editor-active={editorActive}
-      data-business-focused={businessFocused}
+      data-workspace-focused={workspaceFocused}
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
@@ -1449,14 +1451,14 @@ function FlowConsole({
               </span>
             </div>
           </div>
-          {businessFocused && <DropdownMenu>
+          {workspaceFocused && <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="outline" className="ml-2 shrink-0 gap-2" aria-label="切换工作空间">工作空间<ChevronDown size={14}/></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-44">
               <DropdownMenuLabel>切换工作空间</DropdownMenuLabel>
               {nav.map(item => <DropdownMenuItem key={item.id} onSelect={() => navigateSection(item.id)}><item.icon size={15}/>{item.id === "flows" ? "返回业务中心" : item.label}</DropdownMenuItem>)}
             </DropdownMenuContent>
           </DropdownMenu>}
-          {!businessFocused && <div
+          {!workspaceFocused && <div
             data-aiflow-primary-nav=""
             role="tablist"
             aria-label="流程工作台主导航"
@@ -1718,9 +1720,9 @@ function FlowConsole({
           id="aiflow-console-panel"
           ref={workspaceReveal}
           tabIndex={-1}
-          role={businessFocused ? "region" : "tabpanel"}
-          aria-label={businessFocused ? "业务工作区" : undefined}
-          aria-labelledby={businessFocused ? undefined : `aiflow-console-tab-${activeSection}`}
+          role={workspaceFocused ? "region" : "tabpanel"}
+          aria-label={workspaceFocused ? workspaceLabel : undefined}
+          aria-labelledby={workspaceFocused ? undefined : `aiflow-console-tab-${activeSection}`}
           className="min-w-0 w-full flex-1"
         >
           {routeRestoring && (
