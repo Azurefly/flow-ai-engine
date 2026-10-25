@@ -208,9 +208,10 @@ export default defineConfig(({ command }) => {
         output: {
           onlyExplicitManualChunks: true,
           // Merge tiny shared dependency chunks to reduce request/import overhead.
-          experimentalMinChunkSize: 4 * 1024,
+          experimentalMinChunkSize: 64 * 1024,
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
+            if (id.replace(/\\/g, "/").includes("/lucide-react/")) return "icons";
             if (
               /\/components\/(CustomRoleDialog|SystemRoleAssignmentDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
                 id.replace(/\\/g, "/")

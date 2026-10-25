@@ -118,3 +118,46 @@ it("shares strict publication validation while keeping malformed drafts editable
     )?.props.children
   ).toContain("暂不生效");
 });
+
+it("自定义结果可选择办理含义且不修改连线和额外元数据", () => {
+  let changed: any;
+  const tree = WorkflowOutcomeEditor({
+    value: [
+      {
+        code: "custom_return",
+        label: "退回补正",
+        sourceHandle: "back",
+        extra: true,
+      },
+    ],
+    mode: "explicit",
+    config: { bdcz: { hqhqsz: "andSignFor" } },
+    disabled: false,
+    advanced: null,
+    onChange: next => {
+      changed = next;
+    },
+  });
+  const all = elements(tree);
+  expect(all.find(e => e.props.role === "alert")?.props.children).toContain(
+    "明确签署含义"
+  );
+  const select = all.find(e => e.type === "select")!;
+  select.props.onChange({ target: { value: "rejected" } });
+  expect(changed).toEqual([
+    {
+      code: "custom_return",
+      label: "退回补正",
+      sourceHandle: "back",
+      extra: true,
+      decision: "rejected",
+    },
+  ]);
+});
+it("系统保留结果的办理含义显示为固定选择", () => {
+  const all = editor([{ code: "approved", label: "确认" }]).all;
+  expect(all.find(e => e.type === "select")?.props).toMatchObject({
+    value: "approved",
+    disabled: true,
+  });
+});

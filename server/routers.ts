@@ -2232,7 +2232,10 @@ export const appRouter = router({
         const run = await getWorkflowRun(input.runId, ctx.user.id);
         const access = run ? await getWorkflowAccess(ctx.user, run.workflowId) : null;
         if (!run || !access?.permissions.has("workflow:view"))
-          throw new Error("运行记录不存在或无访问权限。");
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "运行记录不存在或无访问权限。",
+          });
         return Object.assign(run, { controlCapabilities: workflowRunControlCapabilities(ctx.user.id, run, access.permissions.has("workflow:run")) });
       }),
   }),

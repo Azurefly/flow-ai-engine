@@ -1,3 +1,5 @@
+import { outcomeDecision } from "@shared/operate-signing-outcomes";
+import { normalizeReferenceOperateConfig } from "@shared/reference-operate-config";
 import * as React from "react";
 import { assertOperateOutcomes } from "@shared/workflow-node-contract";
 import { Button } from "./ui/button";
@@ -17,7 +19,11 @@ export function WorkflowOutcomeEditor({
   targets,
   onChange,
   advanced,
+  config = {},
+  idPrefix = "workflow-outcome",
 }: {
+  config?: RecordValue;
+  idPrefix?: string;
   value: unknown;
   mode: string;
   disabled: boolean;
@@ -26,9 +32,11 @@ export function WorkflowOutcomeEditor({
   advanced: React.ReactNode;
 }) {
   const outcomes = Array.isArray(value) ? value : [];
+  const signing = normalizeReferenceOperateConfig(config);
+  const multiple = signing.signMode !== "single";
   let error = "";
   try {
-    assertOperateOutcomes({ outcomeMode: mode, outcomes: value });
+    assertOperateOutcomes({ ...config, outcomeMode: mode, outcomes: value });
   } catch (cause) {
     error = cause instanceof Error ? cause.message : String(cause);
   }
@@ -47,6 +55,21 @@ export function WorkflowOutcomeEditor({
       <p className="text-xs text-muted-foreground">
         办理人选择结果后，流程沿对应出口的连线继续。修改出口代号后，请重新检查画布连线。
       </p>
+      {normalizeReferenceOperateConfig(config).autoExecute && (
+        <p className="text-xs text-muted-foreground">
+          自动执行时只沿唯一的通过出口继续，不同时执行其他结果分支。
+        </p>
+      )}
+      {multiple && (
+        <p className="text-xs text-muted-foreground">
+          {signing.signMode === "orSignFor"
+            ? "任一人通过即可；所有人均未通过时走拒绝出口。"
+            : signing.signMode === "sequentialSignFor"
+              ? "按所设人员顺序逐人办理，全部通过才继续。"
+              : `通过票达到${Math.round(signing.passPercent * 100)}%后继续；无法达到门槛时走拒绝出口。`}
+          每种含义对应一个出口；弃权不计通过票。
+        </p>
+      )}
       {mode !== "explicit" && (
         <p
           role="status"
@@ -94,7 +117,7 @@ export function WorkflowOutcomeEditor({
                 删除
               </Button>
             </div>
-            <label className="grid gap-1 text-xs">
+            <label className="grid gap-1 text-sm">
               显示名称
               <input
                 className={inputClass}
@@ -103,7 +126,7 @@ export function WorkflowOutcomeEditor({
               />
             </label>
             <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-              <label className="grid gap-1 text-xs">
+              <label className="grid gap-1 text-sm">
                 结果代号
                 <input
                   className={inputClass}
@@ -113,7 +136,7 @@ export function WorkflowOutcomeEditor({
                   }
                 />
               </label>
-              <label className="grid gap-1 text-xs">
+              <label className="grid gap-1 text-sm">
                 出口代号
                 <input
                   className={inputClass}
@@ -127,6 +150,30 @@ export function WorkflowOutcomeEditor({
                 />
               </label>
             </div>
+            <label
+              className="grid gap-1 text-sm"
+              htmlFor={`${idPrefix}-decision-${index}`}
+            >
+              办理含义
+              <select
+                id={`${idPrefix}-decision-${index}`}
+                className={inputClass}
+                value={outcomeDecision(outcome) ?? ""}
+                disabled={["approved", "rejected", "abstained"].includes(
+                  String(outcome.code)
+                )}
+                onChange={event =>
+                  update(index, { decision: event.target.value || undefined })
+                }
+              >
+                <option value="">
+                  请选择{multiple ? "（多人签署必选）" : "（留空保持兼容）"}
+                </option>
+                <option value="approved">通过</option>
+                <option value="rejected">拒绝 / 退回</option>
+                <option value="abstained">弃权</option>
+              </select>
+            </label>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -140,7 +187,9 @@ export function WorkflowOutcomeEditor({
             <p
               className={`rounded p-2 text-sm ${mode === "explicit" && !destination ? "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200" : "bg-muted text-muted-foreground"}`}
             >
-              下一步：
+              {multiple && outcomeDecision(outcome) === "abstained"
+                ? "弃权不单独流转；最终按汇总通过或拒绝出口继续。单人出口："
+                : "下一步："}
               {mode !== "explicit"
                 ? "尚未启用自定义结果"
                 : destination || "未连接，请在画布上连接此出口"}

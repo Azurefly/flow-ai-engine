@@ -1,3 +1,4 @@
+import { assertSigningOutcomes, outcomeDecision, type SigningDecision } from "./operate-signing-outcomes";
 import { readDataflowFieldNames } from "./dataflow-field-list";
 import { readDeduplicateKeys } from "./dataflow-deduplicate-config";
 import { normalizeReferenceOperateConfig } from "./reference-operate-config";
@@ -61,6 +62,7 @@ export type OperateOutcome = {
   label: string;
   sourceHandle: string;
   requireComment?: boolean;
+  decision?: SigningDecision;
 };
 
 export type OperateOutcomeMode = "explicit" | "legacy_cancel";
@@ -82,6 +84,9 @@ export function readOperateOutcomes(config: NodeConfig): OperateOutcome[] {
         label: String(outcome.label ?? outcome.code ?? "").trim(),
         sourceHandle: String(outcome.sourceHandle ?? outcome.code ?? "").trim(),
         ...(outcome.requireComment === true ? { requireComment: true } : {}),
+        ...(outcome.decision !== undefined
+          ? { decision: outcome.decision as SigningDecision }
+          : {}),
       };
     });
 }
@@ -124,6 +129,15 @@ export function assertOperateOutcomes(config: NodeConfig) {
     outcomeCodes.add(outcome.code);
     outcomeHandles.add(outcome.sourceHandle);
   }
+  const signing = normalizeReferenceOperateConfig(config);
+  assertSigningOutcomes(outcomes, signing.signMode !== "single");
+  if (
+    outcomes.length &&
+    signing.autoExecute &&
+    outcomes.filter(outcome => outcomeDecision(outcome) === "approved")
+      .length !== 1
+  )
+    throw new Error("自动执行必须配置唯一一个通过含义的结果出口。");
 }
 
 /** Shared source/target contract used by both the designer and publish-time validation. */

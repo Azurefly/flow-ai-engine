@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { createHash } from "node:crypto";
 import {
   getFlowProfile,
@@ -124,10 +125,13 @@ export type WorkflowAnalysisOptions = {
   parallelRuntimeValidation?: boolean;
 };
 
-export class WorkflowCompileError extends Error {
-  readonly code = "WORKFLOW_COMPILE_FAILED";
+export class WorkflowCompileError extends TRPCError {
+  readonly compilerCode = "WORKFLOW_COMPILE_FAILED";
   constructor(readonly diagnostics: WorkflowCompileDiagnostic[]) {
-    super(diagnostics[0]?.message ?? "流程编译失败。");
+    super({
+      code: "BAD_REQUEST",
+      message: diagnostics[0]?.message ?? "流程编译失败。",
+    });
     this.name = "WorkflowCompileError";
   }
 }

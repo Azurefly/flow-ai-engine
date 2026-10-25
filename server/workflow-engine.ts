@@ -1,3 +1,5 @@
+import { TRPCError } from "@trpc/server";
+import { aggregateOutcomeCode, assertSigningOutcomes, outcomeDecision, contractOutcomeDecision } from "../shared/operate-signing-outcomes";
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
 import { activateWorkflowLoopVisit, chargeWorkflowLoopVisit, initialWorkflowLoopQueue, restoreParentLoopVisits, usesWorkflowLoopVisits, workflowLoopSuccessorCursors, workflowLoopVisitIdentity } from "./workflow-loop-runtime";
 import { emptyWorkflowLoopCursor, restoreWorkflowLoopCursor, type WorkflowLoopCursor } from "./workflow-loop-cursor";
@@ -56,6 +58,7 @@ import {
 } from "../shared/reference-router-config";
 import {
   readConditionHandles,
+  assertOperateOutcomes,
   readOperateOutcomeMode,
   readOperateOutcomes,
   resolveStateDisplayName,
@@ -1824,7 +1827,9 @@ export function resolveOperateOutcomeRouting(
   if (contract.mode !== "explicit")
     return { mode: "legacy_cancel" as const, handle: undefined };
   const handles = asRecord(contract.handles);
-  const handle = String(handles[outcome] ?? "").trim();
+  const handle = String(
+    Object.hasOwn(handles, outcome) ? (handles[outcome] ?? "") : ""
+  ).trim();
   if (!handle) throw new Error(`人工操作结果 ${outcome} 没有配置运行分支。`);
   return { mode: "explicit" as const, handle };
 }
@@ -1849,16 +1854,51 @@ export function validateOperateOutcomeSubmission(
     throw new Error(`操作结果“${outcome}”必须填写处理意见。`);
 }
 
-export function validateWorkflowTaskSubmission(task: JsonRecord, result: JsonRecord) {
-  const normalized = normalizeApprovalResult(result);
-  validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalized);
-  const payload = asRecord(readJson(task.payloadJson ?? task.payload));
-  const schema = asRecord(asRecord(payload.config).formSchema);
-  assertTaskFormSchema(schema);
-  if (Array.isArray(schema.fields)) Object.assign(normalized, validateFormSubmission(schema.fields, normalized));
-  if (task.approvalGroupId && !["approved", "rejected", "abstained"].includes(String(normalized.outcome)))
-    throw new Error("多人签署暂不支持自定义退回结果，请使用同意、拒绝或弃权。");
-  return normalized;
+export function validateWorkflowTaskSubmission(
+  task: JsonRecord,
+  result: JsonRecord
+) {
+  try {
+    const normalized = normalizeApprovalResult(result);
+    validateOperateOutcomeSubmission(task.outcomeHandlesJson, normalized);
+    const payload = asRecord(readJson(task.payloadJson ?? task.payload));
+    const schema = asRecord(asRecord(payload.config).formSchema);
+    assertTaskFormSchema(schema);
+    if (Array.isArray(schema.fields))
+      Object.assign(
+        normalized,
+        validateFormSubmission(schema.fields, normalized)
+      );
+    const contract = asRecord(readJson(task.outcomeHandlesJson));
+    if (contract.mode === "explicit") {
+      const outcomes = Array.isArray(contract.outcomes)
+        ? contract.outcomes.map(asRecord)
+        : Object.keys(asRecord(contract.handles)).map(code => ({ code }));
+      assertSigningOutcomes(outcomes, Boolean(task.approvalGroupId));
+      const configured = outcomes.find(
+        item => item.code === normalized.outcome
+      );
+      const expected = configured ? outcomeDecision(configured) : undefined;
+      if (expected && normalized.decision !== expected)
+        throw new Error("提交决定与所选业务结果的签署含义不一致。");
+    } else if (
+      task.approvalGroupId &&
+      !["approved", "rejected", "abstained"].includes(
+        String(normalized.outcome)
+      )
+    ) {
+      throw new Error(
+        "旧版多人签署只支持同意、拒绝或弃权，请配置显式业务结果。"
+      );
+    }
+    return normalized;
+  } catch (error) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: error instanceof Error ? error.message : String(error),
+      cause: error,
+    });
+  }
 }
 
 export function evaluateApprovalResults(input: {
@@ -3397,12 +3437,17 @@ export async function executeRunSegment(input: {
           );
         }
 
+        assertOperateOutcomes(config);
         if (shouldAutomaticallyExecute(config, input.context)) {
+          const automaticResults=readOperateOutcomes(config).filter(outcome=>outcomeDecision(outcome)==="approved");
+          if(readOperateOutcomeMode(config)==="explicit"&&automaticResults.length!==1)throw new Error("自动执行必须配置唯一一个通过含义的结果出口。");
+          const automaticOutcome=automaticResults[0];
           const completedByUserId = Number(
             runtime.lastActorUserId || runtime.triggeredByUserId
           );
           const automaticOutput = {
             automatic: true,
+            ...(automaticOutcome ? {decision:"approved",outcome:automaticOutcome.code} : {}),
             completedByUserId,
             operationName: String(
               firstConfiguredString(config.czmc, config.instruction) ??
@@ -3421,7 +3466,7 @@ export async function executeRunSegment(input: {
             new Set([...currentParticipants, ...relatedParticipants])
           );
           input.definition.edges
-            .filter(edge => edge.sourceNodeId === node.id)
+            .filter(edge => edge.sourceNodeId === node.id && (!automaticOutcome || edge.sourceHandle===automaticOutcome.sourceHandle))
             .forEach(edge => {
               setRuntimeNodeParticipants(
                 input.context,
@@ -4192,9 +4237,13 @@ async function completeTaskAndEvaluateApprovalGroup(
     };
   }
   const rejected = progress.outcome === "rejected";
+  const aggregateOutcome = aggregateOutcomeCode(
+    readJson(task.outcomeHandlesJson),
+    rejected ? "rejected" : "approved"
+  );
   await connection.query(
     "UPDATE workflow_task_group SET status='completed',groupOutcome=?,completedByTaskId=?,completedAt=NOW() WHERE id=? AND status='waiting'",
-    [rejected ? "rejected" : "approved", input.taskId, task.approvalGroupId]
+    [aggregateOutcome, input.taskId, task.approvalGroupId]
   );
   await connection.query(
     "UPDATE workflow_task SET status='cancelled' WHERE approvalGroupId=? AND status IN ('pending','claimed')",
@@ -4207,7 +4256,7 @@ async function completeTaskAndEvaluateApprovalGroup(
   return {
     continueFlow: !rejected,
     rejected,
-    outcome: rejected ? "rejected" : "approved",
+    outcome: aggregateOutcome,
     completedApprovals: progress.approved,
     rejectedApprovals: progress.rejected,
     completedDecisions: progress.completed,
@@ -4777,8 +4826,13 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         requiredApprovals: Number(task.requiredApprovals ?? 1),
         results: groupResults,
       });
+      const persistedDecision = contractOutcomeDecision(
+        readJson(task.outcomeHandlesJson),
+        task.groupOutcome
+      );
       const rejected = task.approvalGroupId
-        ? task.groupOutcome === "rejected" || task.groupStatus === "cancelled"
+        ? (persistedDecision ?? progress.outcome) === "rejected" ||
+          task.groupStatus === "cancelled"
         : progress.outcome === "rejected";
       const taskOutput = {
         taskId: String(task.id),
@@ -4796,7 +4850,13 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         operationCode: task.operationCode ?? task.nodeId,
         decision: rejected ? "rejected" : "approved",
         outcome: task.approvalGroupId
-          ? String(task.groupOutcome || progress.outcome)
+          ? String(
+              task.groupOutcome ||
+                aggregateOutcomeCode(
+                  readJson(task.outcomeHandlesJson),
+                  progress.outcome === "approved" ? "approved" : "rejected"
+                )
+            )
           : normalizedTaskResult.outcome,
         result: readJson(task.resultJson),
         groupResults,
@@ -4917,7 +4977,17 @@ export async function reconcileWorkflowContinuations(limit = 20) {
                 taskOutput.completedByUserId,
               ]),
               undefined,
-              workflowLoopSuccessorCursors(asRecord(asRecord(asRecord(readJson(task.payloadJson)).context).runtime), (readJson(task.definitionSnapshotJson) as Definition).edges, String(task.nodeId), queue, outcomeRouting.mode === "explicit" ? outcomeRouting.handle : undefined)
+              workflowLoopSuccessorCursors(
+                asRecord(
+                  asRecord(asRecord(readJson(task.payloadJson)).context).runtime
+                ),
+                (readJson(task.definitionSnapshotJson) as Definition).edges,
+                String(task.nodeId),
+                queue,
+                outcomeRouting.mode === "explicit"
+                  ? outcomeRouting.handle
+                  : undefined
+              )
             );
         }
         queue = resumeWorkflowQueue(
@@ -5264,8 +5334,20 @@ export async function getWorkflowRun(
     "SELECT * FROM workflow_milestone WHERE runId=? ORDER BY occurredAt ASC,id ASC",
     [runId]
   );
+  const [taskActivities] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT t.id,t.nodeId,t.status,t.executionKey,t.approvalGroupId,t.assignedUserId,t.claimedByUserId,t.completedByUserId,
+      NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.payloadJson,'$.nodeRunId')),'null'),'') AS nodeRunId,
+      JSON_LENGTH(t.candidateUserIdsJson) AS candidateCount,
+      COALESCE(NULLIF(completer.name,''),completer.username) AS completedByName,
+      COALESCE(NULLIF(claimant.name,''),claimant.username) AS claimedByName,
+      COALESCE(NULLIF(assignee.name,''),assignee.username) AS assignedName
+      FROM workflow_task t LEFT JOIN users completer ON completer.id=t.completedByUserId
+      LEFT JOIN users claimant ON claimant.id=t.claimedByUserId LEFT JOIN users assignee ON assignee.id=t.assignedUserId
+      WHERE t.runId=? ORDER BY t.createdAt,t.id`, [runId]
+  );
   return {
     ...run,
+    taskActivities,
     workflowId: String(run.workflowId),
     currentStateName:
       run.flowType === "state"

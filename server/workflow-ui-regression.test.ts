@@ -1504,16 +1504,19 @@ describe("流程设计器界面回归约束", () => {
     );
   });
 
-  it("实例详情按操作时间倒序展示必要字段，其余字段点击后以列表查看", () => {
+  it("实例详情按操作时间倒序展示记录，并联动只读流程图中的对应批次", () => {
     expect(instanceDetailSource).toContain("sortInstanceActions");
     expect(instanceDetailSource).toContain("operationTimestamp(right.action)");
     expect(instanceDetailSource).toContain("rightSequence - leftSequence");
     expect(instanceDetailSource).toContain("definitionNodeOrder");
     expect(instanceDetailSource).toContain(
-      "默认仅展示必要字段，并按操作时间倒序排列"
+      "按操作时间倒序排列，点击记录在图中查看对应节点与本次办理详情。"
     );
     expect(instanceDetailSource).toContain("data-instance-action-list");
-    expect(instanceDetailSource).toContain("查看详情");
+    expect(instanceDetailSource).toContain("在图中查看详情");
+    expect(instanceDetailSource).toContain("focusRequest=");
+    expect(instanceDetailSource).toContain("recordId: String(node.id)");
+    expect(instanceDetailSource).toContain('lazy(() => import("./RunExecutionCanvas"))');
     expect(instanceDetailSource).toContain("flattenInstanceFields");
     expect(instanceDetailSource).toContain('title="节点输入"');
     expect(instanceDetailSource).toContain('title="节点输出"');
@@ -3185,8 +3188,7 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).toContain(
       'className="aiflow-type-meta font-medium text-muted-foreground"'
     );
-    expect(instanceDetailSource).toContain('className="aiflow-type-control gov-summary"');
-    expect(governanceStyles).toContain(".gov-summary { @apply flex min-h-11 cursor-pointer items-center justify-between");
+    expect(instanceDetailSource).toContain('className="aiflow-type-body"');
     expect(instanceDetailSource).not.toContain("text-[10px]");
     expect(instanceDetailSource).not.toContain("text-xs");
     expect(instanceDetailSource).not.toContain("text-sm");

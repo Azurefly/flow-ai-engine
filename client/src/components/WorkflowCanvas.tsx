@@ -770,6 +770,7 @@ function ConfigFieldEditor({
   nodeKind,
   routeTargetLabels,
   outcomeMode,
+  operateConfig,
   onChange,
 }: {
   field: FlowNodeDefinition["fields"][number];
@@ -785,6 +786,7 @@ function ConfigFieldEditor({
   nodeKind?: NodeKind;
   routeTargetLabels?: Record<string, string>;
   outcomeMode?: string;
+  operateConfig?: NodeConfig;
   onChange: (value: unknown) => void;
 }) {
   const effectiveValue = value ?? fallback;
@@ -810,6 +812,8 @@ function ConfigFieldEditor({
       <WorkflowOutcomeEditor
         value={effectiveValue}
         mode={outcomeMode ?? "legacy_cancel"}
+        config={operateConfig}
+        idPrefix={suggestionId}
         disabled={disabled}
         targets={routeTargetLabels}
         onChange={onChange}
@@ -5108,6 +5112,7 @@ export default function WorkflowCanvas({
                                   : undefined
                             }
                             routeTargetLabels={selectedRouteTargetLabels}
+                            operateConfig={selectedConfig}
                             outcomeMode={String(
                               selectedConfig.outcomeMode ?? "legacy_cancel"
                             )}

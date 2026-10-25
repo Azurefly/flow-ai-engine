@@ -1,3 +1,4 @@
+import { outcomeDecision, type SigningDecision } from "@shared/operate-signing-outcomes";
 import { Button } from "@/components/ui/button";
 import {
   taskFormInputValue,
@@ -2462,6 +2463,7 @@ function taskOutcomeOptions(task: any): Array<{
   code: string;
   label: string;
   requireComment?: boolean;
+  decision?: SigningDecision;
 }> {
   let contract = task?.outcomeHandlesJson;
   if (typeof contract === "string") {
@@ -2477,6 +2479,7 @@ function taskOutcomeOptions(task: any): Array<{
       .map((item: any) => ({
         code: String(item.code ?? "").trim(),
         label: String(item.label ?? item.code ?? "").trim(),
+        decision: outcomeDecision(item),
         ...(item.requireComment === true ? { requireComment: true } : {}),
       }))
       .filter((item: any) => item.code && item.label);
@@ -2530,14 +2533,7 @@ function TaskDrawer({
   const selectedOutcome =
     configuredOutcomes.find(item => item.code === outcome) ??
     configuredOutcomes[0];
-  const decision: "approved" | "rejected" | "abstained" =
-    selectedOutcome?.code === "abstained"
-      ? "abstained"
-      : ["rejected", "returned", "cancelled"].includes(
-            selectedOutcome?.code ?? ""
-          )
-        ? "rejected"
-        : "approved";
+  const decision = outcomeDecision(selectedOutcome ?? {}) ?? "approved";
   const commentRequired =
     selectedOutcome?.requireComment === true || decision === "rejected";
   const [comment, setComment] = useState("");
@@ -2756,6 +2752,8 @@ function TaskDrawer({
         </header>
         {task && (
           <fieldset ref={taskBody} disabled={busy} className="task-body">
+            {task.canViewRun === true && task.runId && <Button type="button" variant="outline" className="min-h-11 w-fit" onClick={()=>requestExit(()=>onOpenRun(String(task.runId)))}>查看实例流程图</Button>}
+
             {task.payload?.assignmentRecovery?.reason && (
               <p className="rounded-lg border border-border bg-muted/40 p-3 text-sm leading-6">
                 重新分配说明：{task.payload.assignmentRecovery.reason}

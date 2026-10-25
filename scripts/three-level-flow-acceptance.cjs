@@ -11,7 +11,10 @@ const {
 // Explicit finite expansion for three organization levels; this is not a general XML importer.
 // Input documents and generated evidence stay local; only the generic runner is versioned.
 const base = "http://124.223.198.84:1180/";
-const files = process.argv.slice(2);
+const businessOutcomes = process.argv.includes("--business-outcomes");
+const files = process.argv
+  .slice(2)
+  .filter(arg => arg !== "--business-outcomes");
 assert.equal(files.length, 2, "Provide the main and police XML file paths");
 const parsed = spawnSync(
   "python",
@@ -171,6 +174,11 @@ function decisionFor(flowId, commandCode) {
     ? "rejected"
     : "approved";
 }
+function outcomeCode(flow, code) {
+  return businessOutcomes
+    ? "legacy_" + flow + "_" + code
+    : decisionFor(flow, code);
+}
 function specs(template) {
   const S = (id, level, kind, flow, codes, status = "3") => ({
     id,
@@ -264,10 +272,14 @@ function definition(template, mode) {
       instruction: "隔离三级验收；只处理当前层级和角色的任务。",
       assigneeMode: "role",
       assigneeRoleCode: roles.get(stage.level + ":" + stage.kind).code,
-      bdcz: { hqhqsz: mode, hqtgbfb: 100 },
+      bdcz: { hqhqsz: mode === "automatic" ? "" : mode, hqtgbfb: 100 },
+      ...(mode === "automatic" ? { autoExecute: true } : {}),
       outcomeMode: "explicit",
       outcomes: cs.map(c => ({
-        code: decisionFor(stage.flow, c.code),
+        code: outcomeCode(stage.flow, c.code),
+        ...(businessOutcomes
+          ? { decision: decisionFor(stage.flow, c.code) }
+          : {}),
         label: c.name,
         sourceHandle: "cmd" + c.code,
         ...(decisionFor(stage.flow, c.code) === "rejected"
@@ -406,7 +418,14 @@ function definition(template, mode) {
     edges,
   };
 }
-async function browserComplete(actor, task, stage, code, caseId) {
+async function browserComplete(
+  actor,
+  task,
+  stage,
+  code,
+  caseId,
+  inspectGraph = false
+) {
   if (!browser) {
     const runtime = path.join(process.env.LOCALAPPDATA, "ms-playwright");
     const exe = fs
@@ -445,6 +464,83 @@ async function browserComplete(actor, task, stage, code, caseId) {
   await expect(drawer.getByLabel("验收业务编号", { exact: true })).toHaveValue(
     caseId
   );
+  if (inspectGraph) {
+    await drawer
+      .getByRole("button", { name: "查看实例流程图", exact: true })
+      .click();
+    const graph = page.locator("[data-run-execution-graph]");
+    await expect(graph).toBeVisible();
+    await graph
+      .getByRole("combobox", { name: "查看实例节点", exact: true })
+      .selectOption(stage.id);
+    await graph
+      .getByRole("button", { name: "定位选中节点", exact: true })
+      .click();
+    const panel = graph.getByRole("region", {
+      name: "节点执行详情",
+      exact: true,
+    });
+    await expect(panel).toContainText("2名候选待签收");
+    let repeated = false;
+    if (stage.id === "branch_feedback") {
+      const batches = graph.getByRole("combobox", {
+        name: "查看执行批次",
+        exact: true,
+      });
+      await expect(batches).toBeVisible();
+      const ids = await batches
+        .locator("option")
+        .evaluateAll(options => options.map(o => o.value));
+      assert(ids.length >= 2);
+      await page.locator('[data-run-record-id="' + ids[0] + '"]').click();
+      await expect(batches).toHaveValue(ids[0]);
+      await expect(panel).toContainText("实际办理人");
+      await batches.selectOption(ids[ids.length - 1]);
+      await expect(panel).toContainText("2名候选待签收");
+      repeated = true;
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await graph
+      .getByRole("heading", { name: "实例流程图", exact: true })
+      .scrollIntoViewIfNeeded();
+    await expect(
+      graph.getByRole("heading", { name: "实例流程图", exact: true })
+    ).toBeVisible();
+    const dimensions = await page.evaluate(() => ({
+      width: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+    }));
+    assert(dimensions.scrollWidth <= dimensions.width + 1);
+    await page.screenshot({
+      path: path.join(out, "instance-graph-mobile-" + stage.id + ".png"),
+    });
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await graph.getByRole("button", { name: "查看全图", exact: true }).click();
+    await page.screenshot({
+      path: path.join(out, "instance-graph-desktop-" + stage.id + ".png"),
+    });
+    await graph.getByRole("button", { name: "原始布局", exact: true }).click();
+    await graph.getByRole("button", { name: "自动排布", exact: true }).click();
+    assert.equal(await graph.locator(".react-flow__node.draggable").count(), 0);
+    report({
+      stage: "hierarchy-instance-graph",
+      node: stage.id,
+      readOnly: true,
+      mobileOverflow: false,
+      repeatSelection: repeated,
+      pageErrors: errors.length,
+    });
+    await page.getByRole("button", { name: "返回工作台", exact: true }).click();
+    await page.locator('[data-task-open-id="' + task.id + '"]:visible').click();
+    await expect(drawer).toBeVisible();
+  }
+  await drawer
+    .getByRole("button", { name: command(stage.flow, code).name, exact: true })
+    .click();
+  if (decisionFor(stage.flow, code) === "rejected")
+    await drawer
+      .getByRole("textbox", { name: /处理意见/ })
+      .fill("退回补正，重新核对");
   await drawer
     .getByLabel("办理说明", { exact: true })
     .fill("浏览器真实办理：" + levels[stage.level]);
@@ -572,6 +668,58 @@ async function runScenario(flow, scenario, useBrowser = false) {
   );
   fixture.runs.push({ id: started.runId, workflowId: flow.id });
   remember();
+  if (
+    businessOutcomes &&
+    flow.template === "666" &&
+    flow.mode === "single" &&
+    scenario === "normal"
+  ) {
+    const outsider = people.filter(
+      p => p.level === 2 && p.kind === "police"
+    )[1];
+    const role = roles.get("2:police").code;
+    const bindings = await own.api("workflow.customRoleAssignments", {
+      workflowId: flow.id,
+      page: 0,
+      query: role,
+    });
+    const binding = bindings.items.find(
+      a =>
+        Number(a.userId) === outsider.id && a.roleCode === role && !a.revokedAt
+    );
+    assert(binding);
+    await own.api(
+      "workflow.revokeCustomRole",
+      { workflowId: flow.id, assignmentId: binding.id },
+      true
+    );
+    try {
+      await outsider.session.api("auth.login", outsider.login, true);
+      await assert.rejects(
+        outsider.session.api("workflow.runDetail", { runId: started.runId }),
+        error => error.status === 404
+      );
+      report({
+        stage: "hierarchy-graph-permission",
+        outsideViewRejected: true,
+      });
+    } finally {
+      const config = await own.api("iam.customRoleConfiguration", {
+        code: role,
+      });
+      await own.api(
+        "workflow.assignCustomRole",
+        {
+          workflowId: flow.id,
+          userId: outsider.id,
+          roleCode: role,
+          expectedConfigToken: config.configToken,
+        },
+        true
+      );
+      await outsider.session.api("auth.login", outsider.login, true);
+    }
+  }
   const stages = specs(flow.template),
     byId = new Map(stages.map(x => [x.id, x])),
     groupsSeen = new Set(),
@@ -579,6 +727,8 @@ async function runScenario(flow, scenario, useBrowser = false) {
     acted = new Map();
   const browserLevels = new Set(),
     actorsByLevel = new Map();
+  let graphReworkVerified = false,
+    browserRejectionVerified = false;
   let badAudit = false,
     badAssess = false,
     browserUsed = false,
@@ -654,7 +804,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
           taskId: active[0].id,
           result: {
             decision: "approved",
-            outcome: decisionFor(stage.flow, stage.codes[0]),
+            outcome: outcomeCode(stage.flow, stage.codes[0]),
             reference: caseId,
             phase: stage.id,
             level: levels[stage.level],
@@ -678,7 +828,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
             taskId: active[0].id,
             result: {
               decision: "approved",
-              outcome: decisionFor(stage.flow, stage.codes[0]),
+              outcome: outcomeCode(stage.flow, stage.codes[0]),
               reference: caseId,
               phase: stage.id,
               level: levels[stage.level],
@@ -688,6 +838,43 @@ async function runScenario(flow, scenario, useBrowser = false) {
           true
         ),
         e => e.status === 403
+      );
+    }
+    if (businessOutcomes && iteration === 0) {
+      const actor = candidates[0],
+        target = pooled
+          ? active[0]
+          : active.find(x => Number(x.assignedUserId) === actor.id);
+      await assert.rejects(
+        actor.session.api(
+          "task.execute",
+          {
+            taskId: target.id,
+            result: {
+              decision: "rejected",
+              outcome: outcomeCode(stage.flow, stage.codes[0]),
+              comment: "不得伪造票义",
+              reference: caseId,
+              phase: stage.id,
+              level: levels[stage.level],
+              reportNote: "预校验",
+            },
+          },
+          true
+        ),
+        error => error.status === 400
+      );
+      assert.equal(
+        (await actor.session.api("task.get", { taskId: target.id })).status,
+        "pending"
+      );
+    }
+    if (flow.mode === "sequentialSignFor") {
+      const later = candidates[1],
+        target = active.find(x => Number(x.assignedUserId) === later.id);
+      await assert.rejects(
+        later.session.api("task.claim", { taskId: target.id }, true),
+        error => error.status === 409
       );
     }
     let code = stage.codes[0];
@@ -708,7 +895,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
       index = acted.get(role) || 0;
     acted.set(role, index + 1);
     const selected =
-      (flow.mode === "andSignFor" && !reject) ||
+      (["andSignFor", "sequentialSignFor"].includes(flow.mode) && !reject) ||
       (flow.mode === "orSignFor" && reject)
         ? candidates
         : [candidates[index % 2]];
@@ -718,8 +905,38 @@ async function runScenario(flow, scenario, useBrowser = false) {
           ? active[0]
           : active.find(x => Number(x.assignedUserId) === actor.id);
       assert(task);
-      if (useBrowser && !browserLevels.has(stage.level)) {
-        await browserComplete(actor, task, stage, code, caseId);
+      const verifyGraphRework =
+        businessOutcomes &&
+        flow.template === "666" &&
+        flow.mode === "single" &&
+        scenario === "rework" &&
+        stage.id === "branch_feedback" &&
+        (visits.get(stage.id) || 0) > 1 &&
+        !graphReworkVerified;
+      const verifyRejection =
+        businessOutcomes &&
+        flow.template === "666" &&
+        flow.mode === "andSignFor" &&
+        scenario === "rework" &&
+        reject &&
+        stage.id.endsWith("_audit") &&
+        !browserRejectionVerified;
+      if (
+        (useBrowser && !browserLevels.has(stage.level)) ||
+        verifyGraphRework ||
+        verifyRejection
+      ) {
+        await browserComplete(
+          actor,
+          task,
+          stage,
+          code,
+          caseId,
+          businessOutcomes &&
+            (stage.id === "province_issue" || verifyGraphRework)
+        );
+        if (verifyGraphRework) graphReworkVerified = true;
+        if (verifyRejection) browserRejectionVerified = true;
         browserUsed = true;
         browserLevels.add(stage.level);
       } else {
@@ -739,7 +956,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
           taskId: task.id,
           result: {
             decision: reject ? "rejected" : "approved",
-            outcome: decisionFor(stage.flow, code),
+            outcome: outcomeCode(stage.flow, code),
             reference: caseId,
             phase: stage.id,
             level: levels[stage.level],
@@ -802,6 +1019,8 @@ async function runScenario(flow, scenario, useBrowser = false) {
         Number(row.completedByUserId),
         Number(pooled ? row.claimedByUserId : row.assignedUserId)
       );
+      assert.equal(row.result.outcome, outcomeCode(stage.flow, code));
+      assert.equal(row.result.decision, decisionFor(stage.flow, code));
       actors.add(Number(row.completedByUserId));
     }
     actorsByLevel.set(stage.level, actors);
@@ -824,7 +1043,7 @@ async function runScenario(flow, scenario, useBrowser = false) {
           taskId: task.id,
           result: {
             decision: reject ? "rejected" : "approved",
-            outcome: decisionFor(stage.flow, code),
+            outcome: outcomeCode(stage.flow, code),
             reference: caseId,
             phase: stage.id,
             level: levels[stage.level],
@@ -905,6 +1124,137 @@ async function runScenario(flow, scenario, useBrowser = false) {
     actorsByLevel: Object.fromEntries(
       [...actorsByLevel].map(([level, ids]) => [levels[level], [...ids]])
     ),
+  };
+  results.push(result);
+  fs.writeFileSync(
+    path.join(out, "results.json"),
+    JSON.stringify(results, null, 2),
+    "utf8"
+  );
+  report({ stage: "hierarchy-run", ...result });
+}
+async function verifyOutcomeEditor(flow, login, definition) {
+  assert(browser);
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+    reducedMotion: "reduce",
+  });
+  await context.route("**/*", route =>
+    route.request().url().startsWith(base) ? route.continue() : route.abort()
+  );
+  const editorPage = await context.newPage();
+  const errors = [];
+  editorPage.on("pageerror", error => errors.push(error.message));
+  try {
+    await editorPage.goto(base);
+    await editorPage.getByLabel("用户名", { exact: true }).fill(login.username);
+    await editorPage.getByLabel("密码", { exact: true }).fill(login.password);
+    await editorPage
+      .getByRole("button", { name: "登录流程引擎", exact: true })
+      .click();
+    await editorPage
+      .locator('input[type="password"]')
+      .waitFor({ state: "hidden" });
+    await editorPage.goto(base + "#/flows/workflow/" + flow.id + "/editor");
+    await editorPage
+      .getByRole("combobox", { name: "定位并配置节点", exact: true })
+      .selectOption("province_assess");
+    await editorPage.getByRole("tab", { name: /结果与分支/ }).click();
+    const group = editorPage.getByRole("group", {
+      name: "处理结果与下一步",
+      exact: true,
+    });
+    const meanings = group.getByLabel("办理含义", { exact: true });
+    await expect(meanings.nth(0)).toHaveValue("approved");
+    await expect(meanings.nth(1)).toHaveValue("rejected");
+    const handle = await group
+      .getByLabel("出口代号", { exact: true })
+      .nth(1)
+      .inputValue();
+    await meanings.nth(1).selectOption("approved");
+    await expect(group.getByRole("alert")).toContainText("每种含义只能");
+    await meanings.nth(1).selectOption("rejected");
+    await expect(group.getByRole("alert")).toHaveCount(0);
+    await expect(
+      group.getByLabel("出口代号", { exact: true }).nth(1)
+    ).toHaveValue(handle);
+    await editorPage.screenshot({
+      path: path.join(out, "business-outcome-editor.png"),
+    });
+    assert.deepEqual(errors, []);
+    const invalid = structuredClone(definition);
+    const review = invalid.nodes.find(n => n.id === "province_assess");
+    review.config.outcomes[1].decision = "approved";
+    const validation = await own.api(
+      "workflow.compile",
+      { id: flow.id, definition: invalid },
+      true
+    );
+    assert.equal(validation.ok, false);
+    assert(
+      validation.diagnostics.some(d => d.message.includes("每种含义只能"))
+    );
+    const unchanged = await own.api("workflow.get", { id: flow.id });
+    assert.deepEqual(unchanged.definition, definition);
+    report({
+      stage: "hierarchy-outcome-editor",
+      serverRejectsAmbiguity: true,
+      handlesUnchanged: true,
+      serverDefinitionUnchanged: true,
+      pageErrors: 0,
+    });
+  } finally {
+    await context.close();
+  }
+}
+async function runAutomatic(flow) {
+  const started = await own.api(
+    "workflow.run",
+    {
+      workflowId: flow.id,
+      triggerType: "test",
+      input: { caseId: tag + "_automatic_" + flow.template },
+      idempotencyKey: tag + "_automatic_" + flow.template,
+    },
+    true
+  );
+  fixture.runs.push({ id: started.runId, workflowId: flow.id });
+  remember();
+  const run = await poll(
+    "automatic closed path",
+    () => own.api("workflow.runDetail", { runId: started.runId }),
+    r => ["success", "failed", "cancelled"].includes(r.status)
+  );
+  assert.equal(run.status, "success");
+  assert.equal((await tasks(run.id)).length, 0);
+  const executions = run.nodeRuns.filter(n => n.nodeType === "operate");
+  assert.equal(executions.length, specs(flow.template).length);
+  assert.equal(new Set(executions.map(n => n.nodeId)).size, executions.length);
+  assert(
+    executions.every(n => {
+      const value = parse(n.outputJson);
+      return (
+        n.status === "success" &&
+        value.automatic === true &&
+        value.decision === "approved" &&
+        value.outcome.startsWith("legacy_")
+      );
+    })
+  );
+  assert.equal(
+    run.nodeRuns.filter(n => n.nodeId === "end" && n.status === "success")
+      .length,
+    1
+  );
+  const result = {
+    template: flow.template,
+    mode: "automatic",
+    scenario: "normal",
+    workflowId: flow.id,
+    runId: run.id,
+    status: "success",
+    automaticNodes: executions.length,
+    endExecutions: 1,
   };
   results.push(result);
   fs.writeFileSync(
@@ -1039,7 +1389,15 @@ function observedScenario(flow, scenario, useBrowser = false) {
       sourceHashes: sources.map(x => ({ id: x.id, sha256: x.sourceSha256 })),
     });
     for (const template of ["666", "667"])
-      for (const mode of ["single", "andSignFor", "orSignFor"]) {
+      for (const mode of businessOutcomes
+        ? [
+            "single",
+            "andSignFor",
+            "orSignFor",
+            "sequentialSignFor",
+            "automatic",
+          ]
+        : ["single", "andSignFor", "orSignFor"]) {
         const def = definition(template, mode);
         const made = await own.api(
           "project.createWorkflow",
@@ -1055,6 +1413,8 @@ function observedScenario(flow, scenario, useBrowser = false) {
         fixture.flows.push(flow);
         remember();
         const current = await own.api("workflow.get", { id: flow.id });
+        if (businessOutcomes && template === "666" && mode === "andSignFor")
+          await verifyOutcomeEditor(flow, ownerLogin, current.definition);
         await root.api(
           "project.auditWorkflow",
           {
@@ -1075,6 +1435,10 @@ function observedScenario(flow, scenario, useBrowser = false) {
           },
           true
         );
+        if (mode === "automatic") {
+          await runAutomatic(flow);
+          continue;
+        }
         for (const role of fixture.roles) {
           const config = await own.api("iam.customRoleConfiguration", {
             code: role.code,
@@ -1108,8 +1472,8 @@ function observedScenario(flow, scenario, useBrowser = false) {
             "Three-level scenario failed"
           );
       }
-    assert.equal(results.length, 12);
-    assert.equal(fixture.flows.length, 6);
+    assert.equal(results.length, businessOutcomes ? 18 : 12);
+    assert.equal(fixture.flows.length, businessOutcomes ? 10 : 6);
   } catch (error) {
     failed = true;
     if (error instanceof AggregateError)

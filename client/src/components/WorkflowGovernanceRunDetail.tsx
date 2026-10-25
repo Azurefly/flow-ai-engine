@@ -1,7 +1,9 @@
+import { lazy, Suspense, useState } from "react";
 import "./workflow-governance.css";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, Clock3, Flag, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { RunPayloadDetails } from "./RunPayloadDetails";
+const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
 
 function parse(value: unknown) {
   if (typeof value !== "string") return value;
@@ -72,42 +74,59 @@ function statusLabel(status: unknown) {
   );
 }
 
-function DetailFields({ title, value }: { title: string; value: unknown }) {
-  const allRows = flattenInstanceFields(value);
-  const rows = allRows.slice(0, 200);
-  if (!rows.length) return null;
+function FactSection({ run }: { run: any }) {
+  const state = run.flowType === "state";
+  const items = state ? (run.stateTransitions ?? []) : (run.milestones ?? []);
+  if (!state && run.flowType !== "control") return null;
   return (
-    <section className="min-w-0">
-      <h4 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
-        {title}
-      </h4>
-      <div className="overflow-hidden rounded-md border border-border">
-        <dl className="divide-y divide-border">
-          {rows.map((row, index) => (
-            <div
-              key={`${row.field}-${index}`}
-              className="aiflow-type-body gov-field"
-            >
-              <dt className="aiflow-type-meta break-all font-mono text-muted-foreground">
-                {row.field}
-              </dt>
-              <dd className="aiflow-type-body gov-field-value">
-                {row.value}
-              </dd>
+    <section>
+      <h3 className="aiflow-type-section-title font-semibold text-foreground">
+        {state ? "状态迁移历史" : "控制流程里程碑"} · {items.length}
+      </h3>
+      <p className="aiflow-type-body mt-1 text-muted-foreground">
+        {state
+          ? "以服务端不可变迁移事实为准，不从任务状态反向推断。"
+          : "里程碑是不可变执行标记，不改变业务状态或参与人权限。"}
+      </p>
+      <div className="mt-3 grid gap-2">
+        {items.map((item: any) => (
+          <article
+            key={item.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3 aiflow-type-body"
+          >
+            <div className="min-w-0">
+              <p className="break-words font-medium">
+                {state
+                  ? `${item.fromStateCode || "流程启动"} → ${item.toStateCode}`
+                  : item.displayName}
+              </p>
+              <p className="mt-1 break-all aiflow-type-meta text-muted-foreground">
+                {state
+                  ? `#${item.sequenceNo}`
+                  : `${item.milestoneCode} · ${item.category}`}
+              </p>
             </div>
-          ))}
-        </dl>
+            <time className="aiflow-type-meta text-muted-foreground">
+              {formatTime(state ? item.createdAt : item.occurredAt)}
+            </time>
+          </article>
+        ))}
+        {!items.length && (
+          <p className="rounded bg-muted p-3 aiflow-type-body text-muted-foreground">
+            {state ? "尚无状态迁移事实。" : "尚无里程碑。"}
+          </p>
+        )}
       </div>
-      {allRows.length > rows.length && (
-        <p className="aiflow-type-body mt-1 text-muted-foreground">
-          字段较多，仅展示前 {rows.length} 项。
-        </p>
-      )}
     </section>
   );
 }
-
 export function RunDetailContent({ run }: { run: any }) {
+  const [selection, setSelection] = useState<{
+    runId: string;
+    nodeId: string;
+    recordId: string;
+    version: number;
+  } | null>(null);
   if (!run)
     return (
       <div className="grid min-h-48 place-items-center">
@@ -158,147 +177,69 @@ export function RunDetailContent({ run }: { run: any }) {
         />
         <Summary label="状态版本" value={String(run.stateVersion ?? 0)} />
       </section>
-      {run.flowType === "control" && (
-        <section>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="aiflow-type-section-title font-semibold text-foreground">
-                控制流程里程碑
-              </h3>
-              <p className="aiflow-type-body mt-1 text-muted-foreground">
-                里程碑是不可变执行标记，不会改变业务状态或参与人权限。
-              </p>
-            </div>
-            <span className="aiflow-type-meta gov-state-badge">
-              {(run.milestones ?? []).length} 个
-            </span>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {(run.milestones ?? []).map((milestone: any) => (
-              <article
-                key={milestone.id}
-                className="min-w-0 rounded-lg border border-teal-100 bg-teal-50/50 p-3"
-              >
-                <div className="flex items-start gap-2">
-                  <Flag size={14} className="mt-0.5 shrink-0 text-teal-700" />
-                  <div className="min-w-0">
-                    <p className="aiflow-type-body break-words font-semibold text-foreground">
-                      {milestone.displayName}
-                    </p>
-                    <p className="aiflow-type-meta mt-0.5 break-all font-mono text-teal-700">
-                      {milestone.milestoneCode} · {milestone.category}
-                    </p>
-                    <p className="aiflow-type-meta mt-1 text-muted-foreground">
-                      {formatTime(milestone.occurredAt)}
-                    </p>
-                  </div>
-                </div>
-              </article>
-            ))}
-            {!(run.milestones ?? []).length && (
-              <p className="aiflow-type-body gov-wide-empty">
-                当前控制流程尚未产生里程碑。
-              </p>
-            )}
-          </div>
-        </section>
-      )}
-      {run.flowType === "state" && (
-        <section>
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h3 className="aiflow-type-section-title font-semibold text-foreground">
-                状态迁移历史
-              </h3>
-              <p className="aiflow-type-body mt-1 text-muted-foreground">
-                以服务端不可变迁移事实为准，不从任务状态反向推断。
-              </p>
-            </div>
-            <span className="aiflow-type-meta gov-node-badge">
-              {(run.stateTransitions ?? []).length} 次迁移
-            </span>
-          </div>
-          <div className="grid gap-2">
-            {(run.stateTransitions ?? []).map((transition: any) => (
-              <article
-                key={transition.id}
-                className="gov-node-row"
-              >
-                <span className="aiflow-type-meta font-mono font-semibold text-aiflow-info">
-                  #{transition.sequenceNo}
-                </span>
-                <span className="aiflow-type-body min-w-0 break-words text-muted-foreground">
-                  {transition.fromStateCode || "流程启动"}
-                </span>
-                <span className="aiflow-type-body gov-node-title">
-                  → {transition.toStateCode}
-                </span>
-                <span className="aiflow-type-meta text-muted-foreground">
-                  {formatTime(transition.createdAt)}
-                </span>
-              </article>
-            ))}
-            {!(run.stateTransitions ?? []).length && (
-              <p className="aiflow-type-body gov-empty">
-                当前实例尚未写入状态迁移事实。
-              </p>
-            )}
-          </div>
-        </section>
-      )}
+      <Suspense
+        fallback={
+          <p
+            className="p-4 aiflow-type-body text-muted-foreground"
+            role="status"
+          >
+            正在准备实例流程图…
+          </p>
+        }
+      >
+        <RunExecutionCanvas
+          key={run.id}
+          run={run}
+          focusRequest={
+            selection && selection.runId === run.id ? selection : undefined
+          }
+        />
+      </Suspense>
+      <RunPayloadDetails title="实例错误" value={run.errorJson} kind="error" />
+      <FactSection run={run} />
       <section>
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h3 className="aiflow-type-section-title font-semibold text-foreground">
-              操作记录
-            </h3>
-            <p className="aiflow-type-body mt-1 text-muted-foreground">
-              默认仅展示必要字段，并按操作时间倒序排列。
-            </p>
-          </div>
-          <span className="aiflow-type-meta gov-stage-badge">
-            {actions.length} 条
-          </span>
-        </div>
-        <div data-instance-action-list className="grid gap-2">
+        <h3 className="aiflow-type-section-title font-semibold text-foreground">
+          操作记录 · {actions.length}
+        </h3>
+        <p className="aiflow-type-body mt-1 text-muted-foreground">
+          按操作时间倒序排列，点击记录在图中查看对应节点与本次办理详情。
+        </p>
+        <div data-instance-action-list className="mt-3 grid gap-2">
           {actions.map((node: any) => (
             <article
               key={node.id}
-              className="min-w-0 rounded-lg border border-border bg-card shadow-sm"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
             >
-              <div className="gov-event-row">
-                <div className="aiflow-type-meta gov-event-label">
-                  <Clock3 size={13} className="shrink-0" />
-                  <span className="break-words">
-                    {formatTime(operationTime(node))}
-                  </span>
-                </div>
-                <div className="min-w-0">
-                  <p className="aiflow-type-body break-words font-medium text-foreground">
-                    {node.nodeName || "未命名操作"}
-                  </p>
-                  <p className="aiflow-type-meta font-mono gov-event-id">
-                    {node.nodeType || "unknown"}
-                  </p>
-                </div>
-                <span
-                  className={`aiflow-type-meta w-fit rounded-full px-2 py-1 ${node.status === "success" ? "bg-aiflow-success-surface text-aiflow-success" : node.status === "failed" ? "bg-aiflow-danger-surface text-aiflow-danger" : "bg-aiflow-warning-surface text-aiflow-warning"}`}
-                >
-                  {statusLabel(node.status)}
-                </span>
-                <span className="aiflow-type-meta text-muted-foreground">
-                  {node.durationMs ?? "—"} ms
-                </span>
+              <div className="min-w-0">
+                <p className="break-words aiflow-type-body font-medium">
+                  {node.nodeName || "未命名操作"} · {statusLabel(node.status)}
+                </p>
+                <p className="mt-1 aiflow-type-meta text-muted-foreground">
+                  {formatTime(operationTime(node))} · {node.durationMs ?? "—"}{" "}
+                  ms
+                </p>
               </div>
-              <details className="group border-t border-border">
-                <summary className="aiflow-type-control gov-expand">
-                  查看详情
-                  <ChevronDown
-                    size={13}
-                    className="transition-transform group-open:rotate-180"
-                  />
-                </summary>
-                <div className="grid min-w-0 gap-4 border-t border-border bg-muted/60 p-3">
+              {node.nodeId ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="min-h-11"
+                  data-run-record-id={node.id}
+                  onClick={() =>
+                    setSelection(previous => ({
+                      runId: run.id,
+                      nodeId: String(node.nodeId),
+                      recordId: String(node.id),
+                      version: (previous?.version ?? 0) + 1,
+                    }))
+                  }
+                >
+                  在图中查看详情
+                </Button>
+              ) : (
+                <details>
+                  <summary className="aiflow-type-body">查看旧记录</summary>
                   <RunPayloadDetails
                     title="节点输入"
                     value={node.inputJson}
@@ -308,44 +249,18 @@ export function RunDetailContent({ run }: { run: any }) {
                     title="节点输出"
                     value={node.outputJson}
                     kind="output"
-                    nodeType={node.nodeType}
                   />
                   <RunPayloadDetails
                     title="节点错误"
                     value={node.errorJson}
                     kind="error"
                   />
-                  <details className="overflow-hidden rounded-md border border-border bg-card">
-                    <summary className="aiflow-type-control gov-summary">
-                      节点技术信息（内部标识与时间）
-                      <span className="aiflow-type-meta font-normal text-muted-foreground">
-                        展开
-                      </span>
-                    </summary>
-                    <div className="border-t border-border p-2">
-                      <DetailFields
-                        title="节点技术信息"
-                        value={{
-                          id: node.id,
-                          runId: node.runId,
-                          nodeId: node.nodeId,
-                          nodeType: node.nodeType,
-                          status: node.status,
-                          startedAt: node.startedAt,
-                          finishedAt: node.finishedAt,
-                          createdAt: node.createdAt,
-                          sequenceNo: node.sequenceNo,
-                          durationMs: node.durationMs,
-                        }}
-                      />
-                    </div>
-                  </details>
-                </div>
-              </details>
+                </details>
+              )}
             </article>
           ))}
           {!actions.length && (
-            <p className="aiflow-type-body gov-empty-large">
+            <p className="rounded bg-muted p-4 aiflow-type-body text-muted-foreground">
               该实例尚无节点操作记录。
             </p>
           )}

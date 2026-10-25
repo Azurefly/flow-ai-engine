@@ -317,3 +317,21 @@ it("会签补偿使用最终决定任务的处理人，不能按成员创建顺�
     11
   );
 });
+
+it.each(["approved","rejected"])("会签补偿保留自定义%s结果和唯一分支",async decision=>{
+ const code=decision==="approved"?"confirm_business":"return_business";
+ const definition={edges:[{sourceNodeId:"review",sourceHandle:"pass",targetNodeId:"done"},{sourceNodeId:"review",sourceHandle:"return",targetNodeId:"rework"}]};
+ const contract={mode:"explicit",outcomes:[{code:"confirm_business",decision:"approved"},{code:"return_business",decision:"rejected"}],handles:{confirm_business:"pass",return_business:"return"}};
+ const task={id:"member",runId:"run",nodeId:"review",nodeRunId:"node-run",approvalGroupId:"group",groupStatus:"completed",groupOutcome:code,requiredApprovals:2,totalApprovers:2,assignedUserId:11,completedByUserId:11,resultJson:JSON.stringify({decision,outcome:code,comment:"已核对"}),nextNodeIdsJson:'["done","rework"]',payloadJson:"{}",outcomeHandlesJson:contract,definitionSnapshotJson:definition};
+ mocks.query.mockImplementation(async(sql:string)=>{
+ if(sql.includes("FROM workflow_task t"))return [[task]];
+ if(sql.includes("FROM workflow_run WHERE"))return [[{id:"run",status:"waiting",contextJson:"{}",startedAt:new Date()}]];
+ if(sql.includes("FROM workflow_run_job"))return [[]];
+ if(sql.includes("SELECT id,startedAt FROM workflow_node_run"))return [[{id:"node-run",startedAt:new Date()}]];
+ if(sql.includes("FROM workflow_task WHERE approvalGroupId"))return [[{id:"member",completedByUserId:11,resultJson:task.resultJson},{id:"other",completedByUserId:22,resultJson:task.resultJson}]];
+ return [{affectedRows:1}];
+ });
+ expect(await reconcileWorkflowContinuations()).toBe(1);
+ const insert=mocks.query.mock.calls.find(([sql])=>sql.includes("INSERT INTO workflow_run_job"));
+ const checkpoint=JSON.parse(insert![1][3]);expect(checkpoint.context.vars.review).toMatchObject({outcome:code,decision});expect(checkpoint.queue).toEqual([decision==="approved"?"done":"rework"]);
+});
