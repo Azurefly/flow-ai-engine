@@ -139,7 +139,7 @@ export function RunDetailContent({ run }: { run: any }) {
   );
   return (
     <div className="space-y-4 p-5">
-      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
         <Summary
           label="实例状态"
           value={statusLabel(run.status)}

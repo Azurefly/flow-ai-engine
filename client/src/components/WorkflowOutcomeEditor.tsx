@@ -156,6 +156,7 @@ export function WorkflowOutcomeEditor({
             >
               办理含义
               <select
+                aria-label="办理含义"
                 id={`${idPrefix}-decision-${index}`}
                 className={inputClass}
                 value={outcomeDecision(outcome) ?? ""}

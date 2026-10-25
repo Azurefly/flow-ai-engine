@@ -25,6 +25,8 @@ type ViewerNode = Node<
   { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
   "runNode"
 >;
+const inactiveColor = "border-border bg-muted text-muted-foreground";
+const selectClass = "h-11 min-w-0 rounded border border-border bg-card px-2";
 const colors: Record<string, string> = {
   idle: "border-border bg-card text-muted-foreground",
   success:
@@ -34,8 +36,8 @@ const colors: Record<string, string> = {
   running: "border-aiflow-info-border bg-aiflow-info-surface text-aiflow-info",
   waiting:
     "border-aiflow-warning-border bg-aiflow-warning-surface text-aiflow-warning",
-  skipped: "border-border bg-muted text-muted-foreground",
-  stopped: "border-border bg-muted text-muted-foreground",
+  skipped: inactiveColor,
+  stopped: inactiveColor,
 };
 function RunNode({ data }: NodeProps<ViewerNode>) {
   const item = data.item as RunRecord;
@@ -105,6 +107,8 @@ export default function RunExecutionCanvas({
           )
           .at(-1)
       : active?.records.at(-1));
+  const pending =
+    record && ["waiting", "running", "pending"].includes(record.status);
   const choose = (id: string) => {
     setSelected(id);
     setOccurrence("");
@@ -336,7 +340,7 @@ export default function RunExecutionCanvas({
             查看节点
             <select
               aria-label="查看实例节点"
-              className="h-11 min-w-0 rounded border border-border bg-card px-2"
+              className={selectClass}
               value={active?.id ?? ""}
               onChange={e => {
                 choose(e.target.value);
@@ -366,7 +370,7 @@ export default function RunExecutionCanvas({
                   执行批次
                   <select
                     aria-label="查看执行批次"
-                    className="h-11 min-w-0 rounded border border-border bg-card px-2"
+                    className={selectClass}
                     value={record?.id ?? ""}
                     onChange={e => setOccurrence(e.target.value)}
                   >
@@ -426,12 +430,14 @@ export default function RunExecutionCanvas({
                       </p>
                     </div>
                   ))}
-                  <RunPayloadDetails
-                    title="本次办理结果"
-                    value={record.outputJson}
-                    kind="output"
-                    nodeType={active.type}
-                  />
+                  {!pending && (
+                    <RunPayloadDetails
+                      title="本次办理结果"
+                      value={record.outputJson}
+                      kind="output"
+                      nodeType={active.type}
+                    />
+                  )}
                   <RunPayloadDetails
                     title="错误原因"
                     value={record.errorJson}
@@ -439,9 +445,17 @@ export default function RunExecutionCanvas({
                   />
                   <details>
                     <summary className="cursor-pointer aiflow-type-body text-muted-foreground">
-                      查看输入及记录信息
+                      查看输入、输出及记录信息
                     </summary>
                     <div className="mt-3">
+                      {pending && (
+                        <RunPayloadDetails
+                          title="节点输出"
+                          value={record.outputJson}
+                          kind="output"
+                          nodeType={active.type}
+                        />
+                      )}
                       <RunPayloadDetails
                         title="本次输入"
                         value={record.inputJson}
@@ -450,22 +464,7 @@ export default function RunExecutionCanvas({
                       <div className="mt-2 break-all aiflow-type-meta text-muted-foreground">
                         <RunPayloadDetails
                           title="记录信息"
-                          value={{
-                            ...Object.fromEntries(
-                              [
-                                "id",
-                                "nodeId",
-                                "nodeType",
-                                "status",
-                                "startedAt",
-                                "finishedAt",
-                                "createdAt",
-                                "sequenceNo",
-                                "durationMs",
-                              ].map(key => [key, record[key]])
-                            ),
-                            runId: run.id,
-                          }}
+                          value={record}
                           kind="input"
                         />
                       </div>

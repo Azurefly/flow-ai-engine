@@ -528,9 +528,10 @@ async function browserComplete(
       repeated = true;
     }
     await page.setViewportSize({ width: 390, height: 844 });
+    await graph.evaluate(element => element.scrollIntoView({ block: "start" }));
     await graph
-      .getByRole("heading", { name: "实例流程图", exact: true })
-      .scrollIntoViewIfNeeded();
+      .getByRole("button", { name: "定位选中节点", exact: true })
+      .click();
     await expect(
       graph.getByRole("heading", { name: "实例流程图", exact: true })
     ).toBeVisible();
@@ -543,6 +544,20 @@ async function browserComplete(
       path: path.join(out, "instance-graph-mobile-" + stage.id + ".png"),
     });
     await page.setViewportSize({ width: 1440, height: 1000 });
+    await graph
+      .getByRole("button", { name: "定位选中节点", exact: true })
+      .click();
+    const focused = graph.locator(
+      '.react-flow__node[data-id="' + stage.id + '"] button'
+    );
+    await expect(focused).toBeVisible();
+    assert(
+      (await focused.boundingBox()).width >= 140,
+      "Focused node label must remain readable"
+    );
+    await page.screenshot({
+      path: path.join(out, "instance-graph-focus-" + stage.id + ".png"),
+    });
     await graph.getByRole("button", { name: "查看全图", exact: true }).click();
     await page.screenshot({
       path: path.join(out, "instance-graph-desktop-" + stage.id + ".png"),
@@ -1231,6 +1246,11 @@ async function verifyOutcomeEditor(flow, login, definition) {
       serverDefinitionUnchanged: true,
       pageErrors: 0,
     });
+  } catch (error) {
+    await editorPage
+      .screenshot({ path: path.join(out, "outcome-editor-failure.png") })
+      .catch(() => {});
+    throw error;
   } finally {
     await context.close();
   }

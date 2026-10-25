@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { hasRunPayloadValue, splitRunPayload } from "./run-payload";
 
 describe("run payload presentation groups", () => {
+  it("folds pooled-task identifiers while preserving nested business identifiers", () => {
+    const result = { taskIds: ["business-1"], candidateUserIds: [9] };
+    const payload = splitRunPayload(
+      { taskIds: ["task-1"], candidateUserIds: [1, 2], result },
+      "operate"
+    );
+    expect(payload.businessInput).toEqual({ result });
+    expect(payload.runtimeMetadata).toEqual({
+      taskIds: ["task-1"],
+      candidateUserIds: [1, 2],
+    });
+    expect(splitRunPayload({ taskIds: ["external"] }).businessInput).toEqual({
+      taskIds: ["external"],
+    });
+  });
   it("folds only top-level approval runtime fields and preserves form values", () => {
     const form = {
       serial: "001",

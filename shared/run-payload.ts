@@ -65,6 +65,8 @@ export function splitRunPayload(
     nodeType === "operate"
       ? [
           "taskId",
+          "taskIds",
+          "candidateUserIds",
           "approvalGroupId",
           "signMode",
           "approvalProgress",
