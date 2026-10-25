@@ -234,20 +234,30 @@ async function run() {
       settings: {},
       viewport: { x: 0, y: 0, zoom: 1 },
       nodes,
-      edges: nodes
-        .slice(1)
-        .map((target, index) => ({
-          id: "edge-" + index,
-          sourceNodeId: nodes[index].id,
-          targetNodeId: target.id,
-          ...(index === nodes.length - 2 && lastHandle
-            ? { sourceHandle: lastHandle }
-            : {}),
-        })),
+      edges: nodes.slice(1).map((target, index) => ({
+        id: "edge-" + index,
+        sourceNodeId: nodes[index].id,
+        targetNodeId: target.id,
+        ...(index === nodes.length - 2 && lastHandle
+          ? { sourceHandle: lastHandle }
+          : {}),
+      })),
     };
   };
   const definitions = [
-    definition([]),
+    definition([
+      node(
+        "done",
+        "state",
+        {
+          nodeDh: "WARE_DONE",
+          stateCode: "WARE_DONE",
+          stateName: "业务完成",
+          stateType: "terminal",
+        },
+        300
+      ),
+    ]),
     definition(
       [
         node(
