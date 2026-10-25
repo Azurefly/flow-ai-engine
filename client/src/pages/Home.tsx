@@ -2184,6 +2184,7 @@ function FlowConsole({
           )}
           {section === "warehouse" && (
             <WorkflowWarehouse
+              initialProject={selectedProject}
               onOpenWorkflow={(project, workflowId) => {
                 setSelectedProject(project);
                 openFlowEditor(workflowId, "warehouse");

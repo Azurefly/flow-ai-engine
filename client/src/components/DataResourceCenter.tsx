@@ -183,6 +183,7 @@ export default function DataResourceCenter({
     void utils.data.resourceOptions.invalidate({ projectId });
     void utils.data.flows.invalidate({ projectId });
     void utils.data.runs.invalidate({ projectId });
+    void utils.data.runPage.invalidate({ projectId });
   };
   const reportResourceError = (error: {
     message: string;
@@ -410,6 +411,7 @@ export default function DataResourceCenter({
         flows.refetch(),
         runs.refetch(),
         schedules.refetch(),
+        utils.data.runPage.invalidate({ projectId }),
       ]);
       return;
     }
@@ -595,6 +597,7 @@ export default function DataResourceCenter({
           )}
           {!selectedQueryLoading && !selectedQueryError && tab === "flows" && (
             <DataflowWorkspace
+              projectId={projectId}
               projectName={projectName}
               canRun={canRun}
               resources={resources.data as any}
@@ -1173,19 +1176,57 @@ export default function DataResourceCenter({
 }
 
 function DataflowOperationList({
-  runs,
+  projectId,
   projectName,
+  workflowId,
+  onOpenRun,
 }: {
-  runs: any[];
+  projectId: string;
   projectName: string;
+  workflowId?: string;
+  onOpenRun?: (id: string) => void;
 }) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
-  const [keyword, setKeyword] = useState("");
-  const visibleRuns = runs.filter(run =>
-    `${run.id} ${run.workflowName} ${run.triggerName || ""} ${run.triggerType || ""}`
-      .toLowerCase()
-      .includes(keyword.trim().toLowerCase())
+  const blank = { search: "", trigger: "", status: "", from: "", through: "" };
+  const [filters, setFilters] = useState(blank);
+  const [applied, setApplied] = useState(blank);
+  const [cursors, setCursors] = useState<Array<string | undefined>>([
+    undefined,
+  ]);
+  const page = trpc.data.runPage.useQuery(
+    {
+      projectId,
+      limit: 10,
+      workflowId,
+      cursor: cursors.at(-1),
+      search: applied.search || undefined,
+      trigger: applied.trigger || undefined,
+      status: (applied.status || undefined) as
+        | "queued"
+        | "running"
+        | "success"
+        | "failed"
+        | undefined,
+      createdFrom: applied.from
+        ? new Date(`${applied.from}T00:00:00`)
+        : undefined,
+      createdBefore: applied.through
+        ? new Date(new Date(`${applied.through}T00:00:00`).getTime() + 86400000)
+        : undefined,
+    },
+    {
+      retry: false,
+      refetchInterval: query =>
+        query.state.data?.items.some(r =>
+          ["queued", "running"].includes(String(r.status))
+        )
+          ? 3000
+          : false,
+      refetchIntervalInBackground: false,
+    }
   );
+  const runs = page.isError ? [] : ((page.data?.items ?? []) as any[]);
+  const visibleRuns = runs;
   const expandedRun = runs.find(run => run.id === expandedRunId);
   const detail = trpc.data.runDetail.useQuery(
     {
@@ -1207,170 +1248,205 @@ function DataflowOperationList({
       dataflow-run-list=""
       className="overflow-hidden rounded-lg border border-border bg-card"
     >
-      <div className="flex flex-col gap-2 border-b border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className={resourceTitleClassName}>运行记录与审计</h2>
-          <p className="aiflow-type-body mt-1 max-w-2xl text-muted-foreground">
-            {projectName} · 当前接口最多返回最近 30
-            条；关键词筛选仅覆盖已加载记录。
-          </p>
-        </div>
-        <div className="grid min-w-0 gap-2 sm:flex sm:items-center">
-          <Input
-            className="aiflow-type-body h-11 w-full min-w-0 sm:h-9 sm:w-[280px] xl:h-8 xl:min-w-[220px]"
-            aria-label="搜索已加载的运行记录"
-            placeholder="搜索流程、触发人或运行 ID"
-            value={keyword}
-            onChange={event => setKeyword(event.target.value)}
-          />
-          <span className="aiflow-type-meta w-fit whitespace-nowrap rounded bg-muted px-2 py-1 text-muted-foreground">
-            {visibleRuns.length} / {runs.length} 条匹配
-          </span>
-        </div>
-      </div>
-      {visibleRuns.length > 0 ? (
-        <>
-          <div
-            dataflow-run-cards=""
-            role="list"
-            aria-label="数据流运行记录"
-            className="divide-y divide-border xl:hidden"
-          >
-            {visibleRuns.map(run => (
-              <article role="listitem" key={run.id} className="space-y-3 p-4">
-                <div className="flex min-w-0 items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h3 className="aiflow-type-card-title break-words font-medium text-foreground">
-                      {run.workflowName}
-                    </h3>
-                    <p className="aiflow-type-meta mt-1 break-words text-muted-foreground">
-                      {projectName}
-                    </p>
-                  </div>
-                  <State value={run.status} />
-                </div>
-                <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3">
-                  <div className="min-w-0">
-                    <dt className={metaClassName}>操作 ID</dt>
-                    <dd className="aiflow-type-code mt-1 break-all font-mono text-foreground">
-                      {String(run.id).slice(0, 8)}
-                    </dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className={metaClassName}>触发方式 / 人员</dt>
-                    <dd className="aiflow-type-body mt-1 break-words text-foreground">
-                      {run.triggerType === "schedule" ? "定时调度" : "手动运行"}{" "}
-                      · {run.triggerName || "系统用户"}
-                    </dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className={metaClassName}>启动时间</dt>
-                    <dd className="aiflow-type-meta mt-1 break-words text-foreground">
-                      {formatDataflowTime(run.startedAt ?? run.createdAt)}
-                    </dd>
-                  </div>
-                  <div className="min-w-0">
-                    <dt className={metaClassName}>结束时间</dt>
-                    <dd className="aiflow-type-meta mt-1 break-words text-foreground">
-                      {formatDataflowTime(run.finishedAt)}
-                    </dd>
-                  </div>
-                </dl>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="aiflow-type-control min-h-11 w-full text-aiflow-info"
-                  aria-expanded={expandedRunId === run.id}
-                  onClick={() =>
-                    setExpandedRunId(current =>
-                      current === run.id ? null : run.id
-                    )
-                  }
-                >
-                  {expandedRunId === run.id ? "收起详情" : "查看审计详情"}
-                </Button>
-              </article>
-            ))}
-          </div>
-          <div
-            dataflow-run-table=""
-            className="hidden overflow-x-auto xl:block"
-          >
-            <table className="w-full min-w-[960px] text-left text-sm">
-              <thead className="bg-muted text-sm font-medium text-muted-foreground">
-                <tr>
-                  <th className={nowrapCellClassName}>操作 ID</th>
-                  <th className={nowrapCellClassName}>业务名称</th>
-                  <th className={nowrapCellClassName}>流程名称</th>
-                  <th className={nowrapCellClassName}>启动时间</th>
-                  <th className={nowrapCellClassName}>结束时间</th>
-                  <th className={nowrapCellClassName}>状态</th>
-                  <th className="px-4 py-3 text-right whitespace-nowrap">
-                    操作
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleRuns.map(run => (
-                  <tr
-                    key={run.id}
-                    className="border-t border-border hover:bg-aiflow-info-surface/40"
-                  >
-                    <td className="aiflow-type-code px-4 py-3 font-mono text-muted-foreground">
-                      {String(run.id).slice(0, 8)}
-                    </td>
-                    <td className="aiflow-type-body px-4 py-3 text-muted-foreground">
-                      {projectName}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-foreground">
-                        {run.workflowName}
-                      </p>
-                      <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
-                        {run.triggerType === "schedule"
-                          ? "定时调度"
-                          : "手动运行"}{" "}
-                        · {run.triggerName || "系统用户"}
-                      </p>
-                    </td>
-                    <td className="aiflow-type-meta px-4 py-3 text-muted-foreground">
-                      {formatDataflowTime(run.startedAt ?? run.createdAt)}
-                    </td>
-                    <td className="aiflow-type-meta px-4 py-3 text-muted-foreground">
-                      {formatDataflowTime(run.finishedAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <State value={run.status} />
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 text-xs text-aiflow-info"
-                        onClick={() =>
-                          setExpandedRunId(current =>
-                            current === run.id ? null : run.id
-                          )
-                        }
-                      >
-                        {expandedRunId === run.id ? "收起详情" : "查看审计"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : (
-        <div
-          role="status"
-          className="px-4 py-10 text-center text-sm text-muted-foreground"
+      <div className="border-b border-border p-4">
+        <h2 className={resourceTitleClassName}>运行记录与审计</h2>
+        <p className="aiflow-type-body mt-1 text-muted-foreground">
+          {projectName} · 查询全部历史，每页10条
+        </p>
+        <form
+          className="mt-3 flex flex-wrap items-end gap-3"
+          onSubmit={event => {
+            event.preventDefault();
+            if (
+              JSON.stringify(filters) === JSON.stringify(applied) &&
+              cursors.length === 1
+            )
+              void page.refetch();
+            setApplied(filters);
+            setCursors([undefined]);
+            setExpandedRunId(null);
+          }}
         >
-          {keyword ? "未找到匹配的运行记录。" : "当前项目尚无数据流运行记录。"}
+          {(
+            [
+              ["search", "流程或实例", "搜索全部运行记录", "text"],
+              ["trigger", "发起人", "筛选发起人", "text"],
+              ["from", "开始日期", "开始日期", "date"],
+              ["through", "结束日期", "结束日期", "date"],
+            ] as const
+          ).map(([key, label, aria, type]) => (
+            <label key={key} className="grid gap-1 aiflow-type-body">
+              {label}
+              <Input
+                type={type}
+                aria-label={aria}
+                value={filters[key]}
+                maxLength={key === "trigger" ? 80 : 100}
+                min={key === "through" ? filters.from : undefined}
+                onChange={event =>
+                  setFilters({ ...filters, [key]: event.target.value })
+                }
+              />
+            </label>
+          ))}
+          <label className="grid gap-1 aiflow-type-body">
+            状态
+            <select
+              aria-label="运行状态"
+              className="h-9 rounded border border-border bg-card px-2"
+              value={filters.status}
+              onChange={event =>
+                setFilters({ ...filters, status: event.target.value })
+              }
+            >
+              <option value="">全部状态</option>
+              {["queued", "running", "success", "failed"].map(v => (
+                <option key={v} value={v}>
+                  {
+                    {
+                      queued: "排队中",
+                      running: "运行中",
+                      success: "成功",
+                      failed: "失败",
+                    }[v]
+                  }
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button type="submit" disabled={page.isFetching}>
+            查询
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={page.isFetching}
+            onClick={() => {
+              setFilters(blank);
+              setApplied(blank);
+              setCursors([undefined]);
+              setExpandedRunId(null);
+            }}
+          >
+            重置
+          </Button>
+        </form>
+      </div>
+      {page.isError ? (
+        <div role="alert" className="p-4 text-destructive">
+          运行记录读取失败：{page.error.message}
+          <Button
+            variant="outline"
+            className="ml-3"
+            onClick={() => void page.refetch()}
+          >
+            重试
+          </Button>
         </div>
+      ) : page.isLoading ? (
+        <p role="status" className="p-4">
+          正在查询运行记录…
+        </p>
+      ) : visibleRuns.length ? (
+        <table
+          dataflow-run-table=""
+          className="w-full table-fixed text-left text-sm"
+          aria-label="数据流运行记录"
+          aria-busy={page.isFetching}
+        >
+          <colgroup>
+            <col className="w-[30%]" />
+            <col className="w-[18%]" />
+            <col />
+            <col className="w-20" />
+            <col className="w-28" />
+          </colgroup>
+          <thead className="bg-muted text-sm font-medium text-muted-foreground">
+            <tr>
+              {["流程 / 实例", "发起人", "开始时间 / 结束时间", "状态", "操作"].map(
+                label => (
+                  <th key={label} className="px-3 py-3">
+                    {label}
+                  </th>
+                )
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {visibleRuns.map(run => (
+              <tr key={run.id} className="border-t border-border">
+                <td className="break-words px-3 py-3 font-medium">
+                  {run.workflowName}
+                  <p className={metaClassName} title={run.id}>
+                    实例 {String(run.id).slice(0, 8)}
+                  </p>
+                </td>
+                <td className="break-words px-3 py-3">
+                  {run.triggerName || "系统用户"}
+                  <p className={metaClassName}>
+                    {run.triggerType === "schedule" ? "定时调度" : "手动运行"}
+                  </p>
+                </td>
+                <td className="px-3 py-3 aiflow-type-meta">
+                  {formatDataflowTime(run.startedAt ?? run.createdAt)}
+                  <p className="mt-1 text-muted-foreground">
+                    {formatDataflowTime(run.finishedAt)}
+                  </p>
+                </td>
+                <td className="px-3 py-3">
+                  <State value={run.status} />
+                </td>
+                <td className="px-3 py-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-expanded={expandedRunId === run.id}
+                    onClick={() =>
+                      onOpenRun ? onOpenRun(run.id) : setExpandedRunId(current =>
+                        current === run.id ? null : run.id
+                      )
+                    }
+                  >
+                    {expandedRunId === run.id ? "收起" : "查看审计"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <p role="status" className="p-8 text-center text-muted-foreground">
+          未找到匹配的运行记录。
+        </p>
       )}
+      <nav
+        aria-label="数据运行分页"
+        className="flex items-center justify-end gap-3 border-t border-border p-3 aiflow-type-body"
+      >
+        <span aria-live="polite">第 {cursors.length} 页 · 每页10条</span>
+        <Button
+          variant="outline"
+          disabled={cursors.length === 1 || page.isFetching}
+          onClick={() => {
+            setCursors(cursors.slice(0, -1));
+            setExpandedRunId(null);
+          }}
+        >
+          上一页
+        </Button>
+        <Button
+          variant="outline"
+          disabled={!page.data?.nextCursor || page.isFetching || page.isError}
+          onClick={() => {
+            if (page.data?.nextCursor)
+              setCursors([...cursors, page.data.nextCursor]);
+            setExpandedRunId(null);
+          }}
+        >
+          下一页
+        </Button>
+      </nav>
       {expandedRun && (
         <div className="border-t border-border bg-muted p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1839,6 +1915,7 @@ function scheduleDetails(item: any) {
 }
 
 function DataflowWorkspace({
+  projectId,
   projectName,
   canRun,
   resources,
@@ -1869,6 +1946,7 @@ function DataflowWorkspace({
   onDeleteSchedule,
   deleteSchedulePending,
 }: {
+  projectId: string;
   projectName: string;
   canRun: boolean;
   resources: any;
@@ -2038,11 +2116,7 @@ function DataflowWorkspace({
         </div>
       </header>
 
-      <p role="status" aria-live="polite" className={metaClassName}>
-        {autoRefreshActive
-          ? "运行及调度状态自动刷新中；后台页面暂停自动刷新。"
-          : "当前没有执行中的运行或已启用计划，可手动刷新状态。"}
-      </p>
+      {autoRefreshActive && <p role="status" aria-live="polite" className={metaClassName}>状态自动刷新中</p>}
 
       <nav
         aria-label="数据流工作区视图"
@@ -2058,11 +2132,6 @@ function DataflowWorkspace({
           >
             <item.icon size={15} />
             {item.label}
-            {item.id === "runs" && (
-              <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
-                {runs.length}
-              </span>
-            )}
             {item.id === "schedules" && (
               <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
                 {schedules.length}
@@ -2223,7 +2292,7 @@ function DataflowWorkspace({
         ))}
 
       {section === "runs" && (
-        <DataflowOperationList runs={runs} projectName={projectName} />
+        <DataflowOperationList projectId={projectId} projectName={projectName} />
       )}
 
       {section === "schedules" && (
@@ -2737,20 +2806,7 @@ export function DataflowRunMonitor({
   viewAllowed?: boolean;
   blockedContent?: React.ReactNode;
 }) {
-  const runs = trpc.data.runs.useQuery(
-    {
-      projectId: projectId ?? "00000000",
-      workflowId: workflowId ?? "00000000",
-      limit: 10,
-      summaryOnly: true,
-    },
-    {
-      enabled: Boolean(viewAllowed && projectId && workflowId),
-      retry: false,
-      refetchInterval: 30000,
-      refetchIntervalInBackground: false,
-    }
-  );
+  const utils = trpc.useUtils();
   const detail = trpc.data.runDetail.useQuery(
     { projectId: projectId ?? "00000000", runId: selectedRunId ?? "00000000" },
     {
@@ -2775,46 +2831,21 @@ export function DataflowRunMonitor({
             数据流程运行监控
           </h1>
           <p className="aiflow-type-body mt-1 text-muted-foreground">
-            {workflowName} · 最近 10 条运行 · 每 30 秒刷新
+            {workflowName} · 完整历史查询与运行详情
           </p>
         </div>
         <Button
           variant="outline"
-          disabled={runs.isFetching || detail.isFetching}
+          disabled={!projectId || detail.isFetching}
           onClick={() => {
-            void runs.refetch();
+            void utils.data.runPage.invalidate({ projectId: projectId ?? "00000000", workflowId: workflowId ?? "00000000" });
             if (selectedRunId) void detail.refetch();
           }}
         >
           刷新运行记录
         </Button>
       </div>
-      {runs.isError ? (
-        <p role="alert" className="text-destructive">
-          读取运行记录失败：{runs.error.message}
-        </p>
-      ) : runs.isLoading ? (
-        <p role="status">正在读取运行记录…</p>
-      ) : (
-        <div className="grid gap-2" role="list" aria-label="数据流程运行记录">
-          {(runs.data ?? []).map((run: any) => (
-            <Button
-              key={run.id}
-              variant={run.id === selectedRunId ? "secondary" : "outline"}
-              className="h-auto min-h-11 justify-between gap-3 whitespace-normal text-left"
-              onClick={() => onSelect(run.id)}
-            >
-              <span className="break-all">
-                {run.id} · {formatDataflowTime(run.startedAt ?? run.createdAt)}
-              </span>
-              <State value={run.status} />
-            </Button>
-          ))}
-          {runs.data?.length === 0 && (
-            <p role="status">当前流程尚无数据运行记录。</p>
-          )}
-        </div>
-      )}
+      {projectId && workflowId && <DataflowOperationList key={workflowId} projectId={projectId} workflowId={workflowId} projectName={workflowName || "当前流程"} onOpenRun={onSelect}/>}
       {selectedRunId && (
         <section
           className={resourcePanelClassName}

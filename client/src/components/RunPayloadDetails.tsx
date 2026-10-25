@@ -1,4 +1,6 @@
 import { runErrorPreview } from "@shared/run-error-preview";
+import React from "react";
+import { taskResultView } from "@shared/task-result-view";
 import { hasRunPayloadValue, splitRunPayload } from "@shared/run-payload";
 
 type FieldRow = { field: string; value: string; fullValue?: string };
@@ -45,8 +47,14 @@ function flattenFields(
   return rows;
 }
 
-function PayloadFields({ value }: { value: unknown }) {
-  const rows = flattenFields(value);
+function PayloadFields({
+  value,
+  rows: fields,
+}: {
+  value?: unknown;
+  rows?: FieldRow[];
+}) {
+  const rows = fields ?? flattenFields(value);
   if (!rows.length) return null;
   return (
     <dl className="overflow-hidden rounded-md border border-border bg-card">
@@ -107,11 +115,13 @@ export function RunPayloadDetails({
   title,
   value,
   nodeType,
+  nodeConfig,
   kind = "input",
 }: {
   title: string;
   value: unknown;
   nodeType?: string;
+  nodeConfig?: unknown;
   kind?: "input" | "output" | "error";
 }) {
   if (value === null || value === undefined) return null;
@@ -147,6 +157,42 @@ export function RunPayloadDetails({
     );
   }
   const parts = splitRunPayload(value, nodeType);
+  const output = parts.businessInput as Record<string, unknown> | null;
+  if (
+    kind === "output" &&
+    nodeType === "operate" &&
+    output?.result &&
+    typeof output.result === "object" &&
+    !Array.isArray(output.result)
+  ) {
+    const view = taskResultView(nodeConfig, {
+      ...output.result,
+      outcome: output.outcome ?? (output.result as any).outcome,
+      decision: output.decision ?? (output.result as any).decision,
+    });
+    return (
+      <section data-run-payload-details className="min-w-0 space-y-2">
+        <h4 className="aiflow-type-section-title font-semibold">{title}</h4>
+        <PayloadFields
+          rows={[
+            { field: "办理结果", value: view.outcome || "未提供" },
+            ...(view.comment
+              ? [{ field: "处理意见", value: view.comment }]
+              : []),
+            ...view.rows.map(row => ({ field: row.label, value: row.value })),
+          ]}
+        />
+        <PayloadDisclosure
+          label="完整办理结果与汇总明细"
+          value={parts.businessInput}
+        />
+        <PayloadDisclosure
+          label="运行时元数据（内部诊断字段）"
+          value={parts.runtimeMetadata}
+        />
+      </section>
+    );
+  }
   const visibleGroups = [
     {
       label: kind === "output" ? "业务结果" : "业务输入",

@@ -463,6 +463,7 @@ export default function RunExecutionCanvas({
                       value={record.outputJson}
                       kind="output"
                       nodeType={active.type}
+                      nodeConfig={active.config}
                     />
                   )}
                   <RunPayloadDetails

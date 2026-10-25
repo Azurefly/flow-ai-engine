@@ -1,4 +1,5 @@
 import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
+import { decodeWorkbenchPageCursor, encodeWorkbenchPageCursor } from "./workbench-pagination";
 import { dataAssetReadiness, dataSourceReadiness } from "../shared/data-source-capabilities";
 import { assertDataflowResourcesReady } from "./dataflow-resource-readiness";
 import { builtinDataFunctionChoice } from "../shared/builtin-data-functions";
@@ -2298,6 +2299,96 @@ export async function listDataflowRuns(
     watermarkInputJson: undefined,
     watermarkOutputJson: undefined,
   }));
+}
+
+export async function pageDataflowRuns(
+  user: DataflowUser,
+  input: {
+    projectId: string;
+    workflowId?: string;
+    limit?: number;
+    cursor?: string;
+    search?: string;
+    status?: "queued" | "running" | "success" | "failed";
+    trigger?: string;
+    createdFrom?: Date;
+    createdBefore?: Date;
+  }
+) {
+  await requireProjectAccess(user, input.projectId, "view");
+  let after;
+  try {
+    after = decodeWorkbenchPageCursor(input.cursor, "instance");
+  } catch {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "运行记录游标无效，请重新查询。",
+    });
+  }
+  if (
+    input.createdFrom &&
+    input.createdBefore &&
+    input.createdFrom >= input.createdBefore
+  )
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "开始日期不能晚于结束日期。",
+    });
+  const clauses = ["r.projectId=?"],
+    params: unknown[] = [input.projectId];
+  for (const [field, value] of [
+    ["workflowId", input.workflowId],
+    ["status", input.status],
+  ] as const)
+    if (value) {
+      clauses.push(`r.${field}=?`);
+      params.push(value);
+    }
+  const like = (value: string) => `%${value.trim().replace(/[!%_]/g, "!$&")}%`;
+  if (input.search?.trim()) {
+    clauses.push("CONCAT_WS(' ',r.id,w.name) LIKE ? ESCAPE '!'");
+    params.push(like(input.search));
+  }
+  if (input.trigger?.trim()) {
+    clauses.push(
+      "CONCAT_WS(' ',r.triggeredByUserId,u.name,u.username) LIKE ? ESCAPE '!'"
+    );
+    params.push(like(input.trigger));
+  }
+  if (input.createdFrom) {
+    clauses.push("r.createdAt>=?");
+    params.push(input.createdFrom);
+  }
+  if (input.createdBefore) {
+    clauses.push("r.createdAt<?");
+    params.push(input.createdBefore);
+  }
+  if (after) {
+    clauses.push("(r.createdAt<? OR (r.createdAt=? AND r.id<?))");
+    params.push(after.createdAt, after.createdAt, after.id);
+  }
+  const limit = Math.min(100, Math.max(1, input.limit ?? 10));
+  params.push(limit + 1);
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT r.id,r.projectId,r.workflowId,r.status,r.triggerType,r.triggeredByUserId,r.durationMs,r.startedAt,r.finishedAt,r.createdAt,r.executionSource,r.definitionVersion,
+      DATE_FORMAT(r.createdAt,'%Y-%m-%d %H:%i:%s.%f') AS cursorCreatedAt,w.name AS workflowName,COALESCE(NULLIF(u.name,''),u.username) AS triggerName
+     FROM dataflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users u ON u.id=r.triggeredByUserId
+     WHERE ${clauses.join(" AND ")} ORDER BY r.createdAt DESC,r.id DESC LIMIT ?`,
+    params
+  );
+  const last = rows[Math.min(rows.length, limit) - 1];
+  return {
+    items: rows.slice(0, limit).map(({ cursorCreatedAt, ...row }) => row),
+    hasMore: rows.length > limit,
+    nextCursor:
+      rows.length > limit
+        ? encodeWorkbenchPageCursor({
+            kind: "instance",
+            createdAt: String(last.cursorCreatedAt),
+            id: String(last.id),
+          })
+        : null,
+  };
 }
 
 export async function getDataflowRun(

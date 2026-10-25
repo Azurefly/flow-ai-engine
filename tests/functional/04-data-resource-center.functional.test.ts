@@ -93,7 +93,8 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     );
     expect(resourceCenter).toContain('data-resource-table-mobile=""');
     expect(resourceCenter).toContain('data-resource-table-desktop=""');
-    expect(resourceCenter).toContain('dataflow-run-cards=""');
+    expect(resourceCenter).toContain('aria-label="数据运行分页"');
+    expect(resourceCenter).toContain("trpc.data.runPage.useQuery");
     expect(resourceCenter).toContain(
       'variant={visibleLabel ? "outline" : "ghost"}'
     );
@@ -116,7 +117,7 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     );
     expect(resourceCenter).toContain("grid grid-cols-2 gap-1 border-b");
     expect(resourceCenter).toContain(
-      "aiflow-type-control min-h-11 w-full text-aiflow-info"
+      'aria-expanded={expandedRunId === run.id}'
     );
     expect(projectWorkspace).toContain("flex min-h-11 min-w-0 items-center");
     expect(projectWorkspace).toContain("truncate whitespace-nowrap");

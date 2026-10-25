@@ -517,9 +517,9 @@ function toFlowEdges(definition: Definition): Edge[] {
     target: edge.targetNodeId,
     targetHandle: "target",
     data: { loop: edge.loop ?? null },
-    animated: true,
+    animated: false,
     interactionWidth: 24,
-    style: { stroke: "#94a3b8", strokeWidth: 1.7 },
+    style: { stroke: "#64748b", strokeWidth: 2 },
   }));
 }
 
@@ -2982,6 +2982,7 @@ export default function WorkflowCanvas({
               ...edge,
               label,
               selected: true,
+              animated: true,
               interactionWidth: 24,
               labelStyle: {
                 fill: isOperateRejected
@@ -3215,9 +3216,9 @@ export default function WorkflowCanvas({
         sourceHandle,
         target: nodeId,
         targetHandle: "target",
-        animated: true,
+        animated: false,
         interactionWidth: 24,
-        style: { stroke: "#94a3b8", strokeWidth: 1.7 },
+        style: { stroke: "#64748b", strokeWidth: 2 },
       };
       setNodes(current =>
         syncRouterRouteTargets(
@@ -3250,9 +3251,9 @@ export default function WorkflowCanvas({
         id: "edge-" + Date.now(),
         targetHandle: "target",
         data: { loop: source.id === target.id && flowType !== "data" ? { maxIterations: 3 } : null },
-        animated: true,
+        animated: false,
         interactionWidth: 24,
-        style: { stroke: "#94a3b8", strokeWidth: 1.7 },
+        style: { stroke: "#64748b", strokeWidth: 2 },
       } as Edge;
       const nextEdges = addEdge(nextEdge, edges);
       setEdges(current =>
@@ -5019,7 +5020,9 @@ export default function WorkflowCanvas({
                           <ConfigFieldEditor
                             key={`${workflowId ?? ""}-${selected.id}-${selected.data.kind}-${field.key}`}
                             field={
-                              projectId && field.key === selectedResourceKey
+                              selected.data.kind === "router" && field.key === "routes"
+                                ? { ...field, help: normalizeReferenceRouterConfig(selectedConfig).broadcast ? "并行：执行全部命中分支，全部到达汇聚节点后继续；未命中时走默认分支。" : "串行：只执行最高优先级的命中分支；未命中时走默认分支。" }
+                                : projectId && field.key === selectedResourceKey
                                 ? {
                                     ...field,
                                     help:

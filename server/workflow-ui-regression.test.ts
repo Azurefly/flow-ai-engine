@@ -2605,7 +2605,7 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain('onOpenResourceTab("assets")');
     expect(dataResourceSource).toContain('onOpenResourceTab("udfs")');
     expect(dataResourceSource).toContain("运行记录与审计");
-    expect(dataResourceSource).toContain("当前接口最多返回最近 30 条");
+    expect(dataResourceSource).toContain("查询全部历史，每页10条");
     expect(dataResourceSource).toContain("配置调度计划");
     expect(dataResourceSource).toContain("快速填写计划（UTC）");
     expect(dataResourceSource).toContain('value="0 */5 * * * *"');
@@ -2627,9 +2627,9 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).not.toContain("assetForm.");
     expect(dataResourceSource).toContain("data-resource-center");
     expect(dataResourceSource).toContain("dataflow-run-list");
-    expect(dataResourceSource).toContain("搜索已加载的运行记录");
+    expect(dataResourceSource).toContain("搜索全部运行记录");
     expect(dataResourceSource).toContain("未找到匹配的运行记录。");
-    expect(dataResourceSource).toContain("操作 ID");
+    expect(dataResourceSource).toContain("流程 / 实例");
     expect(dataResourceSource).toContain("结束时间");
     expect(dataResourceSource).toContain("查看审计");
     expect(dataResourceSource).toContain("function DataflowRunOutput");

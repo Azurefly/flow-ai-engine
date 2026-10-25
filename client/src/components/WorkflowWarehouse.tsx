@@ -48,6 +48,12 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ProjectRecord } from "./ProjectWorkspace";
 
+const warehouseActionClass = "aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0";
+
+const warehouseFrameClass = "min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6";
+
+const warehouseHeadingClass = "aiflow-type-section-title font-semibold text-foreground";
+
 type Folder = {
   id: string;
   parentId?: string | null;
@@ -110,12 +116,14 @@ function FlowBadge({ type }: { type: string }) {
 
 export default function WorkflowWarehouse({
   onOpenWorkflow,
+  initialProject,
 }: {
   onOpenWorkflow: (project: ProjectRecord, workflowId: string) => void;
+  initialProject?: ProjectRecord | null;
 }) {
   const utils = trpc.useUtils();
-  const [pickedProject, setPickedProject] = useState<ProjectRecord | null>(null);
-  const projectsQuery = trpc.project.page.useQuery({ limit: 1 });
+  const [pickedProject, setPickedProject] = useState<ProjectRecord | null>(initialProject ?? null);
+  const projectsQuery = trpc.project.page.useQuery({ limit: 1 }, { enabled: !initialProject });
   const projects = (projectsQuery.data?.items ?? []) as ProjectRecord[];
   const projectsLoading = projectsQuery.isLoading;
   const projectsError = projectsQuery.isError;
@@ -410,7 +418,7 @@ export default function WorkflowWarehouse({
 
   if (projectsLoading && !projects.length)
     return (
-      <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+      <div className={warehouseFrameClass}>
         <div
           role="status"
           aria-live="polite"
@@ -424,7 +432,7 @@ export default function WorkflowWarehouse({
 
   if (projectsError && !projects.length)
     return (
-      <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+      <div className={warehouseFrameClass}>
         <div
           role="alert"
           className="grid min-h-80 place-items-center rounded-lg border border-aiflow-danger-border bg-card p-8 text-center"
@@ -447,7 +455,7 @@ export default function WorkflowWarehouse({
 
   if (!currentProject)
     return (
-      <div className="min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6">
+      <div className={warehouseFrameClass}>
         <div className="grid min-h-80 place-items-center rounded-lg border border-dashed border-input bg-card p-10 text-center text-sm text-muted-foreground">
           暂无可访问项目；请先在流程设计中创建或加入一个业务项目。
         </div>
@@ -477,7 +485,7 @@ export default function WorkflowWarehouse({
               type="button"
               variant="outline"
               size="sm"
-              className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
+              className={warehouseActionClass}
               onClick={() => setShowArchived(value => !value)}
             >
               <ArchiveRestore size={14} />
@@ -729,7 +737,7 @@ export default function WorkflowWarehouse({
               >
                 <div className="border-b border-border p-3">
                   <div className="flex items-center justify-between gap-2">
-                    <h2 className="aiflow-type-section-title font-semibold text-foreground">
+                    <h2 className={warehouseHeadingClass}>
                       流程列表
                     </h2>
                     {canEdit && (
@@ -737,7 +745,7 @@ export default function WorkflowWarehouse({
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                        className={warehouseActionClass}
                         onClick={() => {
                           setFolderDialog({ mode: "selected" });
                           setFolderDialogName("");
@@ -838,7 +846,7 @@ export default function WorkflowWarehouse({
               >
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-3">
                   <div>
-                    <h2 className="aiflow-type-section-title font-semibold text-foreground">
+                    <h2 className={warehouseHeadingClass}>
                       {selectedFolder?.name ?? "根目录流程"}
                     </h2>
                     <p className="aiflow-type-body mt-1 text-muted-foreground">
@@ -990,7 +998,7 @@ export default function WorkflowWarehouse({
                   className="scroll-mt-14 flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
                 >
                   <div className="flex items-center justify-between border-b border-border p-3">
-                    <p className="aiflow-type-section-title font-semibold text-foreground">
+                    <p className={warehouseHeadingClass}>
                       流程简介
                     </p>
                     <div className="flex items-center gap-2">
@@ -1042,7 +1050,7 @@ export default function WorkflowWarehouse({
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
                           <Button
-                            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                            className={warehouseActionClass}
                             size="sm"
                             onClick={() =>
                               onOpenWorkflow(
@@ -1054,7 +1062,7 @@ export default function WorkflowWarehouse({
                             打开设计器
                           </Button>
                           <Button
-                            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                            className={warehouseActionClass}
                             variant="outline"
                             size="sm"
                             onClick={exportCurrent}

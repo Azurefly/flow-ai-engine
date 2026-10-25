@@ -195,6 +195,7 @@ import {
   getDataflowRunLineage,
   listDataSourceTests,
   listDataflowRuns,
+  pageDataflowRuns,
   listDataflowSchedules,
   listDataflows,
   listDataResources,
@@ -1095,6 +1096,15 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => listDataflowRuns(ctx.user, input)),
+    runPage: protectedProcedure
+      .input(z.object({
+        projectId: z.string().min(8).max(64), workflowId: z.string().min(8).max(64).optional(),
+        limit: z.number().int().min(1).max(100).default(10), cursor: z.string().max(512).optional(),
+        search: z.string().trim().max(100).optional(), trigger: z.string().trim().max(80).optional(),
+        status: z.enum(["queued", "running", "success", "failed"]).optional(),
+        createdFrom: z.date().optional(), createdBefore: z.date().optional(),
+      }))
+      .query(({ctx,input}) => pageDataflowRuns(ctx.user,input)),
     runDetail: protectedProcedure
       .input(
         z.object({
