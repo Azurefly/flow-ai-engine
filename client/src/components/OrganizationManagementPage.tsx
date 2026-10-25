@@ -463,7 +463,7 @@ export default function OrganizationManagementPage({
               onClick={onBack}
             >
               <ArrowLeft size={15} />
-              返回系统配置
+              返回账号与角色
             </button>
             <p className="aiflow-type-meta font-medium text-muted-foreground">
               人员与权限

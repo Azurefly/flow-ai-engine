@@ -1127,7 +1127,7 @@ describe("流程设计器界面回归约束", () => {
     );
   });
 
-  it("组织架构从系统配置进入独立安全页面，并以弹窗提交真实接口", () => {
+  it("组织架构从用户与权限进入独立安全页面，并以弹窗提交真实接口", () => {
     expect(consoleRouteSource).toContain(
       'view: "config" | "identity" | "organization"'
     );
@@ -1136,17 +1136,9 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(homeSource).toContain("OrganizationManagementPage");
     expect(homeSource).toContain('view: "organization"');
-    expect(systemConfigSource).toContain("打开组织架构管理");
-    expect(systemConfigSource).toContain("onOpenOrganization");
-    expect(systemConfigSource).toContain(
-      '{ id: "access" as const, label: "组织与权限"'
-    );
-    expect(systemConfigSource).not.toContain('{ id: "organization" as const');
-    expect(systemConfigSource).not.toContain('{ id: "identity" as const');
-    expect(systemConfigSource).toContain(
-      "维护部门成员与岗位，配置账号角色，查看授权来源和有效期。"
-    );
-    expect(systemConfigSource).toContain("打开身份与权限中心");
+    expect(homeSource).toContain('label: "用户与权限"');
+    expect(homeSource).toContain('aria-label="用户与权限分类"');
+    expect(systemConfigSource).not.toContain('id: "access"');
     expect(organizationManagementSource).toContain(
       'data-aiflow-organization-page=""'
     );
@@ -1231,28 +1223,11 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain("max-w-full break-all");
   });
 
-  it("组织与权限同级入口使用相同卡片、标题字号和按钮层级", () => {
-    const accessSettingsSource = systemConfigSource.slice(
-      systemConfigSource.indexOf("function AccessSettings("),
-      systemConfigSource.indexOf("function Header(")
-    );
-    expect(accessSettingsSource).toContain(
-      '"flex min-w-0 flex-col rounded-lg border border-border bg-card p-5"'
-    );
-    expect(accessSettingsSource).toContain(
-      '"mt-5 h-11 w-fit border-border text-foreground hover:bg-muted min-[1024px]:h-10"'
-    );
-    expect(
-      accessSettingsSource.match(/className=\{accessCardClassName\}/g)
-    ).toHaveLength(2);
-    expect(
-      accessSettingsSource.match(/className=\{accessCardActionClassName\}/g)
-    ).toHaveLength(2);
-    expect(accessSettingsSource.match(/variant="outline"/g)).toHaveLength(2);
-    expect(accessSettingsSource.match(/aiflow-type-card-title/g)).toHaveLength(
-      2
-    );
-    expect(accessSettingsSource).not.toContain("bg-blue-600");
+  it("用户与权限提升为主导航，账号和组织无需经过系统跳转卡片", () => {
+    expect(homeSource).toContain('id: "identity" as const, label: "用户与权限"');
+    expect(homeSource).toContain('aria-label="用户与权限分类"');
+    expect(organizationManagementSource).toContain("返回账号与角色");
+    expect(systemConfigSource).not.toContain("function AccessSettings");
   });
 
   it("组织成员和权限信息按统一字号角色显示", () => {
@@ -1356,11 +1331,8 @@ describe("流程设计器界面回归约束", () => {
     expect(runtimeStatusSource).toContain(
       'className="mt-1 text-sm text-muted-foreground"'
     );
-    expect(
-      runtimeStatusSource.match(
-        /className="mt-2 text-sm leading-5 text-muted-foreground"/g
-      )
-    ).toHaveLength(3);
+    expect(systemConfigSource).toContain('configDescriptionClass = "mt-2 text-sm leading-5 text-muted-foreground"');
+    expect(runtimeStatusSource.match(/className=\{configDescriptionClass\}/g)).toHaveLength(3);
     expect(runtimeStatusSource).toContain(
       'className="mt-2 space-y-1 text-sm leading-5 text-aiflow-danger"'
     );
@@ -1526,18 +1498,18 @@ describe("流程设计器界面回归约束", () => {
     expect(instanceDetailSource).not.toContain("JSON.stringify");
   });
 
-  it("保留原始顶层四页签与当前流程工作台内容区域关联", () => {
+  it("主导航页签与当前工作区内容区域关联", () => {
     expect(homeSource).toContain(
       'role="tablist" aria-label="流程工作台主导航"'
     );
     expect(homeSource).toContain("id={`aiflow-console-tab-${item.id}`}");
     expect(homeSource).toContain('aria-controls="aiflow-console-panel"');
-    expect(homeSource).toContain("aria-selected={section === item.id}");
+    expect(homeSource).toContain("aria-selected={activeSection === item.id}");
     expect(homeSource).toContain(
       'id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role="tabpanel"'
     );
     expect(homeSource).toContain(
-      "aria-labelledby={`aiflow-console-tab-${section}`}"
+      "aria-labelledby={`aiflow-console-tab-${activeSection}`}"
     );
   });
 
@@ -2677,11 +2649,14 @@ describe("流程设计器界面回归约束", () => {
       expect(systemConfigSource).toContain(`id="new-domain-${field}"`);
     }
     expect(systemConfigSource).toContain(
-      'className="aiflow-type-control grid gap-1 font-medium text-foreground"'
+      'configLabelClass = "aiflow-type-control grid gap-1 font-medium text-foreground"'
     );
     expect(systemConfigSource).toContain(
-      'className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 min-[1024px]:min-h-0"'
+      'configActionClass = "aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 min-[1024px]:min-h-0"'
     );
+    const domainForm = systemConfigSource.slice(systemConfigSource.indexOf('htmlFor="new-domain-code"'));
+    expect(domainForm.match(/className=\{configLabelClass\}/g)).toHaveLength(3);
+    expect(domainForm.match(/className=\{configActionClass\}/g)).toHaveLength(3);
     expect(systemConfigSource).not.toContain('<Input placeholder="域代号"');
   });
 

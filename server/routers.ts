@@ -441,6 +441,9 @@ export const appRouter = router({
     userAuthorizationDetails: iamManageProcedure
       .input(z.object({ userId: z.number().int().positive() }))
       .query(({ input }) => getUserAuthorizationDetails(input.userId)),
+    resourceAccess: iamManageProcedure
+      .input(z.object({ userId: z.number().int().positive(), workflowId: z.string().min(8).max(64), taskId: z.string().min(8).max(64).optional() }))
+      .query(async ({ ctx, input }) => (await import("./resource-access-diagnostics")).diagnoseResourceAccess(ctx.user,input)),
     roleAuthorizationDetails: iamManageProcedure
       .input(z.object({ roleId: z.number().int().positive() }))
       .query(({ input }) => getRoleAuthorizationDetails(input.roleId)),

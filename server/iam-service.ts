@@ -104,14 +104,14 @@ export function listPermissionCatalog() {
     workflowAllowed: code !== "workflow:create" && WORKFLOW_PERMISSIONS.includes(code as WorkflowPermission),
   }));
 }
-const memberRolePermissions: Record<WorkflowMemberRole, readonly WorkflowPermission[]> = {
+export const memberRolePermissions: Record<WorkflowMemberRole, readonly WorkflowPermission[]> = {
   owner: WORKFLOW_PERMISSIONS,
   editor: ["workflow:view", "workflow:edit"],
   operator: ["workflow:view", "workflow:run"],
   viewer: ["workflow:view"],
 };
 
-const projectMemberWorkflowPermissions: Record<ProjectMemberRole, readonly WorkflowPermission[]> = {
+export const projectMemberWorkflowPermissions: Record<ProjectMemberRole, readonly WorkflowPermission[]> = {
   owner: WORKFLOW_PERMISSIONS,
   designer: ["workflow:view", "workflow:edit", "workflow:publish"],
   operator: ["workflow:view", "workflow:run"],
@@ -243,6 +243,10 @@ async function assignedPermissionRows(userId: number, workflowId?: string | stri
 
 async function assignedPermissions(userId: number, workflowId?: string, connection?: mysql.PoolConnection) {
   return new Set((await assignedPermissionRows(userId, workflowId, false, connection)).map(row => row.code));
+}
+
+export function assignedPermissionSources(userId: number, workflowId: string, connection: mysql.PoolConnection) {
+  return assignedPermissionRows(userId, workflowId, true, connection);
 }
 
 /** Transaction callers initialize the catalog before acquiring their connection. */

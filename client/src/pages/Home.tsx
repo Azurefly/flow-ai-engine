@@ -163,6 +163,7 @@ const ProjectWorkspace = lazy(() =>
   }))
 );
 const WorkflowWarehouse = lazy(() => import("@/components/WorkflowWarehouse"));
+const ResourceAccessDiagnosticDialog = lazy(() => import("@/components/ResourceAccessDiagnosticDialog"));
 const SystemConfigShell = lazy(() => import("@/components/SystemConfigShell"));
 const OrganizationManagementPage = lazy(
   () => import("@/components/OrganizationManagementPage")
@@ -591,7 +592,11 @@ function FlowConsole({
     []
   );
   const navigateSection = useCallback(
-    (next: ConsoleSection) => {
+    (next: ConsoleSection | "identity") => {
+      if (next === "identity") {
+        if (canManageIdentity) navigateRoute({ section: "system", view: "identity" });
+        return;
+      }
       const permitted = next !== "system" || canManageIdentity;
       const resolved = permitted ? next : "flows";
       navigateRoute(
@@ -1322,10 +1327,10 @@ function FlowConsole({
     { id: "flows" as const, label: "流程设计", icon: FolderKanban },
     { id: "runs" as const, label: "已启动流程", icon: Activity },
     { id: "warehouse" as const, label: "流程仓库", icon: FolderKanban },
-    ...(canManageIdentity
-      ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }]
-      : []),
+    ...(canManageIdentity ? [{ id: "identity" as const, label: "用户与权限", icon: UsersRound }] : []),
+    ...(user.role === "admin" ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }] : []),
   ];
+  const activeSection = section === "system" && systemView !== "config" ? "identity" : section;
 
   const workspaceWorkflows = selectedProject
     ? workflowItems.filter(
@@ -1464,17 +1469,17 @@ function FlowConsole({
                 role="tab"
                 aria-label={item.label}
                 title={editorActive ? item.label : undefined}
-                aria-selected={section === item.id}
-                tabIndex={section === item.id ? 0 : -1}
+                aria-selected={activeSection === item.id}
+                tabIndex={activeSection === item.id ? 0 : -1}
                 aria-controls="aiflow-console-panel"
                 key={item.id}
                 onClick={() => navigateSection(item.id)}
-                className={`flex h-full items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-all ${section === item.id ? "border-slate-900 text-foreground font-semibold bg-muted/80" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                className={`flex h-full items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-all ${activeSection === item.id ? "border-slate-900 text-foreground font-semibold bg-muted/80" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
               >
                 <item.icon
                   size={14}
                   className={
-                    section === item.id
+                    activeSection === item.id
                       ? "text-foreground"
                       : "text-muted-foreground"
                   }
@@ -1484,7 +1489,7 @@ function FlowConsole({
             ))}
           </div>
           <div data-workspace-context="" className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground xl:flex">
-            <span>{nav.find(item => item.id === section)?.label}</span>
+            <span>{nav.find(item => item.id === activeSection)?.label}</span>
             <ChevronRight size={14} aria-hidden="true" />
             <span className="truncate font-medium text-foreground">{section === "flows" ? (flowView === "editor" ? (canViewWorkflow ? selectedWorkflow?.name : null) || "流程设计器" : flowView === "workspace" ? selectedProject?.name || "业务工作区" : flowView === "detail" ? (canViewWorkflow ? selectedWorkflow?.name : null) || "流程详情" : "业务中心") : section === "system" ? (systemView === "identity" ? "人员与权限" : systemView === "organization" ? "组织管理" : "通用与业务配置") : section === "runs" ? "办理与运行" : "浏览与复用"}</span>
           </div>
@@ -1577,17 +1582,17 @@ function FlowConsole({
               <li key={item.id}>
                 <button
                   type="button"
-                  aria-current={section === item.id ? "page" : undefined}
+                  aria-current={activeSection === item.id ? "page" : undefined}
                   onClick={() => {
                     navigateSection(item.id);
                     setMobileNavOpen(false);
                   }}
-                  className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium transition-colors ${section === item.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium transition-colors ${activeSection === item.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                 >
                   <item.icon
                     size={17}
                     className={
-                      section === item.id
+                      activeSection === item.id
                         ? "text-foreground"
                         : "text-muted-foreground"
                     }
@@ -1705,7 +1710,7 @@ function FlowConsole({
           ref={workspaceReveal}
           tabIndex={-1}
           role="tabpanel"
-          aria-labelledby={`aiflow-console-tab-${section}`}
+          aria-labelledby={`aiflow-console-tab-${activeSection}`}
           className="min-w-0 w-full flex-1"
         >
           {routeRestoring && (
@@ -2194,21 +2199,14 @@ function FlowConsole({
           {section === "system" &&
             user.role === "admin" &&
             systemView === "config" && (
-              <SystemConfigShell
-                onOpenIdentity={() =>
-                  navigateRoute({ section: "system", view: "identity" })
-                }
-                onOpenOrganization={() =>
-                  navigateRoute({ section: "system", view: "organization" })
-                }
-              />
+              <SystemConfigShell />
             )}
           {section === "system" &&
             canManageIdentity &&
             systemView === "organization" && (
               <OrganizationManagementPage
                 onBack={() =>
-                  navigateRoute({ section: "system", view: systemRootView })
+                  navigateRoute({ section: "system", view: "identity" })
                 }
               />
             )}
@@ -2217,15 +2215,10 @@ function FlowConsole({
             systemView === "identity" && (
               <div data-aiflow-identity-page="" className="aiflow-page-frame bg-background">
                 <div className="aiflow-page-content">
-                  <button
-                    className="aiflow-type-control aiflow-action-target mb-4 inline-flex items-center rounded px-3 text-aiflow-info hover:bg-accent hover:underline"
-                    onClick={() =>
-                      navigateRoute(user.role === "admin" ? { section: "system", view: "config" } : { section: "flows", view: "center" })
-                    }
-                  >
-                    ← {user.role === "admin" ? "返回系统配置" : "返回工作区"}
-                  </button>
-                  <Button className="ml-2 mb-4 min-h-11" variant="outline" onClick={() => navigateRoute({ section: "system", view: "organization" })}>组织架构</Button>
+                  <nav aria-label="用户与权限分类" className="mb-4 flex items-center gap-2 border-b border-border pb-3">
+                    <span aria-current="page" className="rounded bg-accent px-3 py-2 aiflow-type-control font-semibold text-aiflow-info">账号与角色</span>
+                    <Button variant="ghost" onClick={()=>navigateRoute({ section: "system", view: "organization" })}>组织架构</Button>
+                  </nav>
                   {roles.isError ? <section role="alert" className="grid gap-3 rounded-xl border border-border bg-card p-4"><p>身份目录暂不可用，已隐藏缓存。请重新读取当前权限与目录。</p><ResourceDraftRecoveryNotice/><Button variant="outline" onClick={()=>void Promise.allSettled([roles.refetch(),utils.auth.me.invalidate()])}>重新读取权限与目录</Button></section> : (
                   <IamCenter
                     currentUserId={user.id}
@@ -5077,6 +5070,7 @@ function UserAuthorizationPanel({
   embedded?: boolean;
 }) {
   const reveal = useContextReveal<HTMLDivElement>(selectedUserId);
+  const [diagnosticOpen,setDiagnosticOpen] = useState(false);
   const groups = useRef<(HTMLDivElement | null)[]>([]);
   const data =
     selectedUserId && Number(details.data?.user?.id) === selectedUserId
@@ -5089,6 +5083,7 @@ function UserAuthorizationPanel({
       >
         <div className="min-w-0">
           <p className="font-semibold">用户权限详情</p>
+          <Button variant="link" className="h-8 p-0" disabled={!data} onClick={()=>setDiagnosticOpen(true)}>诊断业务与流程权限</Button>
         </div>
         <Button
           size="sm"
@@ -5106,6 +5101,7 @@ function UserAuthorizationPanel({
         disabled={!selectedUserId}
         embedded={embedded}
       />
+      {diagnosticOpen && data && <Suspense fallback={<p role="status">正在加载权限诊断…</p>}><ResourceAccessDiagnosticDialog key={selectedUserId} userId={selectedUserId!} name={data.user.name || data.user.username} onClose={()=>setDiagnosticOpen(false)}/></Suspense>}
       <div
         ref={reveal}
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}

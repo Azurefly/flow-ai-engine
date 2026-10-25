@@ -13,7 +13,6 @@ import {
 import { trpc } from "@/lib/trpc";
 import {
   Activity,
-  Building2,
   CheckCircle2,
   ClipboardCheck,
   Copy,
@@ -21,29 +20,28 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
-  ShieldCheck,
   SlidersHorizontal,
   Workflow,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { toast } from "sonner";
 
-type Tab = "general" | "approval" | "domain" | "access" | "runtime";
+const configActionClass = "aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 min-[1024px]:min-h-0";
+const configCellClass = "px-4 py-3 whitespace-nowrap";
+const configLabelClass = "aiflow-type-control grid gap-1 font-medium text-foreground";
+const configCardClass = "min-w-0 rounded-lg border border-border bg-card p-4";
+const configValueClass = "aiflow-type-body font-medium text-muted-foreground";
+const configDescriptionClass = "mt-2 text-sm leading-5 text-muted-foreground";
 
-export default function SystemConfigShell({
-  onOpenIdentity,
-  onOpenOrganization,
-}: {
-  onOpenIdentity: () => void;
-  onOpenOrganization: () => void;
-}) {
+type Tab = "general" | "approval" | "domain" | "runtime";
+
+export default function SystemConfigShell() {
   const [tab, setTab] = useState<Tab>("general");
   const [collapsed, setCollapsed] = useState(false);
   const items = [
     { id: "general" as const, label: "通用设置", icon: SlidersHorizontal },
     { id: "approval" as const, label: "审批配置", icon: ClipboardCheck },
     { id: "domain" as const, label: "工作域配置", icon: Workflow },
-    { id: "access" as const, label: "组织与权限", icon: ShieldCheck },
     { id: "runtime" as const, label: "运行诊断", icon: Activity },
   ];
   const active = items.find(item => item.id === tab) ?? items[0];
@@ -155,14 +153,11 @@ export default function SystemConfigShell({
             aria-labelledby="system-config-active-tab"
             className="w-full min-w-0 p-5"
           >
-            <SystemSettingsEditor activeKey={tab === "general" || tab === "approval" ? tab : null} onSelectKey={setTab} />
+            <SystemSettingsEditor
+              activeKey={tab === "general" || tab === "approval" ? tab : null}
+              onSelectKey={setTab}
+            />
             {tab === "domain" && <DomainSettings />}
-            {tab === "access" && (
-              <AccessSettings
-                onOpenIdentity={onOpenIdentity}
-                onOpenOrganization={onOpenOrganization}
-              />
-            )}
             {tab === "runtime" && <RuntimeStatus />}
           </div>
         </section>
@@ -259,9 +254,9 @@ function RuntimeStatus() {
         data-runtime-summary=""
         className="mt-5 grid gap-3 sm:grid-cols-3"
       >
-        <article className="min-w-0 rounded-lg border border-border bg-card p-4">
+        <article className={configCardClass}>
           <div className="flex items-center justify-between gap-2">
-            <p className="aiflow-type-body font-medium text-muted-foreground">
+            <p className={configValueClass}>
               服务就绪检查
             </p>
             <span
@@ -274,12 +269,12 @@ function RuntimeStatus() {
             </span>
           </div>
           {readiness.isError && (
-            <p className="mt-2 text-sm leading-5 text-muted-foreground">
+            <p className={configDescriptionClass}>
               暂时无法读取运行诊断，请检查管理员会话或服务端状态。
             </p>
           )}
           {readiness.data?.ready && (
-            <p className="mt-2 text-sm leading-5 text-muted-foreground">
+            <p className={configDescriptionClass}>
               服务端 readiness 检查已通过；这不代表所有流程能力均完成生产验收。
             </p>
           )}
@@ -294,7 +289,7 @@ function RuntimeStatus() {
         </article>
         <article className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card p-4">
           <div className="min-w-0">
-            <p className="aiflow-type-body font-medium text-muted-foreground">
+            <p className={configValueClass}>
               持久化 Worker
             </p>
             <p className="mt-1 text-sm font-semibold text-foreground">
@@ -311,8 +306,8 @@ function RuntimeStatus() {
             aria-hidden="true"
           />
         </article>
-        <article className="min-w-0 rounded-lg border border-border bg-card p-4">
-          <p className="aiflow-type-body font-medium text-muted-foreground">
+        <article className={configCardClass}>
+          <p className={configValueClass}>
             能力验收状态
           </p>
           <div className="aiflow-type-meta mt-2 flex flex-wrap gap-1.5">
@@ -331,7 +326,7 @@ function RuntimeStatus() {
               </span>
             )}
           </div>
-          <p className="mt-2 text-sm leading-5 text-muted-foreground">
+          <p className={configDescriptionClass}>
             Worker 状态与能力成熟度不代表整体服务健康检查。
           </p>
         </article>
@@ -553,7 +548,7 @@ function DomainSettings() {
               <article
                 key={domain.id}
                 data-work-domain-card=""
-                className="min-w-0 rounded-lg border border-border bg-card p-4"
+                className={configCardClass}
               >
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -604,12 +599,12 @@ function DomainSettings() {
             <table className="w-full min-w-[720px] text-left text-sm">
               <thead className="bg-muted text-sm text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 whitespace-nowrap">代号</th>
-                  <th className="px-4 py-3 whitespace-nowrap">名称 / 说明</th>
-                  <th className="px-4 py-3 whitespace-nowrap">创建人</th>
-                  <th className="px-4 py-3 whitespace-nowrap">关联项目</th>
-                  <th className="px-4 py-3 whitespace-nowrap">状态</th>
-                  <th className="px-4 py-3 whitespace-nowrap">操作</th>
+                  <th className={configCellClass}>代号</th>
+                  <th className={configCellClass}>名称 / 说明</th>
+                  <th className={configCellClass}>创建人</th>
+                  <th className={configCellClass}>关联项目</th>
+                  <th className={configCellClass}>状态</th>
+                  <th className={configCellClass}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -709,12 +704,12 @@ function DomainSettings() {
       >
         <label
           htmlFor="new-domain-code"
-          className="aiflow-type-control grid gap-1 font-medium text-foreground"
+          className={configLabelClass}
         >
           工作域代号
           <Input
             id="new-domain-code"
-            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 min-[1024px]:min-h-0"
+            className={configActionClass}
             placeholder="请输入工作域代号"
             value={form.code}
             onChange={event =>
@@ -725,12 +720,12 @@ function DomainSettings() {
         </label>
         <label
           htmlFor="new-domain-name"
-          className="aiflow-type-control grid gap-1 font-medium text-foreground"
+          className={configLabelClass}
         >
           工作域名称
           <Input
             id="new-domain-name"
-            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 min-[1024px]:min-h-0"
+            className={configActionClass}
             placeholder="请输入工作域名称"
             value={form.name}
             onChange={event => setForm({ ...form, name: event.target.value })}
@@ -739,12 +734,12 @@ function DomainSettings() {
         </label>
         <label
           htmlFor="new-domain-description"
-          className="aiflow-type-control grid gap-1 font-medium text-foreground"
+          className={configLabelClass}
         >
           说明（可选）
           <Input
             id="new-domain-description"
-            className="aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 min-[1024px]:min-h-0"
+            className={configActionClass}
             placeholder="简要说明该工作域的业务范围"
             value={form.description}
             onChange={event =>
@@ -757,66 +752,6 @@ function DomainSettings() {
   );
 }
 
-function AccessSettings({
-  onOpenIdentity,
-  onOpenOrganization,
-}: {
-  onOpenIdentity: () => void;
-  onOpenOrganization: () => void;
-}) {
-  const accessCardClassName =
-    "flex min-w-0 flex-col rounded-lg border border-border bg-card p-5";
-  const accessCardActionClassName =
-    "mt-5 h-11 w-fit border-border text-foreground hover:bg-muted min-[1024px]:h-10";
-
-  return (
-    <div>
-      <Header
-        eyebrow="ORGANIZATION & AUTHORIZATION"
-        title="组织与权限"
-        description="维护部门成员与岗位，配置账号角色，查看授权来源和有效期。"
-      />
-      <div className="mt-6 grid gap-4 md:grid-cols-2">
-        <section className={accessCardClassName}>
-          <Building2 className="text-aiflow-info" size={22} />
-          <h3 className="aiflow-type-card-title mt-4 font-semibold text-foreground">
-            组织架构
-          </h3>
-          <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">
-            维护部门树、负责人、成员岗位和组织权限组，并驱动直属上级与角色处理人解析。
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className={accessCardActionClassName}
-            onClick={onOpenOrganization}
-          >
-            <Building2 size={16} />
-            打开组织架构管理
-          </Button>
-        </section>
-        <section className={accessCardClassName}>
-          <ShieldCheck className="text-aiflow-info" size={22} />
-          <h3 className="aiflow-type-card-title mt-4 font-semibold text-foreground">
-            账号与角色
-          </h3>
-          <p className="mt-2 flex-1 text-sm leading-6 text-muted-foreground">
-            维护内部账号、系统角色、直接与临时授权，查看用户权限和角色绑定用户。
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            className={accessCardActionClassName}
-            onClick={onOpenIdentity}
-          >
-            <ShieldCheck size={16} />
-            打开身份与权限中心
-          </Button>
-        </section>
-      </div>
-    </div>
-  );
-}
 function Header({
   eyebrow,
   title,

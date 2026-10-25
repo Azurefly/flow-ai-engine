@@ -678,31 +678,7 @@ export default function DataResourceCenter({
               <ResourceTable
                 columns={["名称", "类型 / 读取能力", "状态", "最近校验", "操作"]}
                 empty="尚未配置数据源。"
-                mobileCards={(resources.data?.sources ?? []).map(
-                  (source: any) => (
-                    <ResourceTableCard
-                      key={source.id}
-                      primary={source.name}
-                      secondary={
-                        source.connection?.description || "连接元数据已隐藏"
-                      }
-                      status={<State value={source.status} />}
-                      fields={[
-                        { label: "类型", value: dataSourceCapability(source.sourceType).label },
-                        { label: "流程读取", value: dataSourceReadiness(source).message },
-                        {
-                          label: "最近校验",
-                          value: source.lastTestedAt
-                            ? new Date(source.lastTestedAt).toLocaleString(
-                                "zh-CN"
-                              )
-                            : "—",
-                        },
-                      ]}
-                      actions={sourceActions(source, true)}
-                    />
-                  )
-                )}
+
               >
                 {(resources.data?.sources ?? []).map((source: any) => (
                   <tr key={source.id}>
@@ -739,38 +715,7 @@ export default function DataResourceCenter({
               ]}
               allowReadActions
               empty="尚无已探查资源。"
-              mobileCards={(resources.data?.assets ?? []).map((asset: any) => (
-                <ResourceTableCard
-                  key={asset.id}
-                  allowReadActions
-                  primary={asset.name}
-                  secondary={asset.sourceName || "未关联数据源"}
-                  status={<State value={asset.status} />}
-                  fields={[
-                    { label: "资源类型", value: asset.assetType },
-                    {
-                      label: "结构 / 样本",
-                      value: `${asset.schema?.length ?? 0} 字段 · ${asset.sample?.length ?? 0} 行样本`,
-                    },
-                  ]}
-                  actions={
-                    <>
-                      <ResourceDetails asset={asset} />
-                      <DeleteButton
-                        actionLabel="删除资源"
-                        resourceName={asset.name}
-                        visibleLabel="删除资源"
-                        onDelete={() =>
-                          removeAsset.mutateAsync({
-                            projectId,
-                            assetId: asset.id,
-                          })
-                        }
-                      />
-                    </>
-                  }
-                />
-              ))}
+
             >
               {(resources.data?.assets ?? []).map((asset: any) => (
                 <tr key={asset.id}>
@@ -916,34 +861,7 @@ export default function DataResourceCenter({
               <ResourceTable
                 columns={["函数", "类型", "描述", "状态", "操作"]}
                 empty="尚未注册函数。"
-                mobileCards={(resources.data?.udfs ?? []).map((udf: any) => (
-                  <ResourceTableCard
-                    key={udf.id}
-                    primary={udf.name}
-                    secondary={udf.returnType || "未声明返回类型"}
-                    status={<State value={udf.status} />}
-                    fields={[
-                      {
-                        label: "函数类型",
-                        value: dataFunctionTypeLabel(
-                          udf.udfType,
-                          udf.artifactRef
-                        ),
-                      },
-                      { label: "说明", value: udf.description || "—" },
-                    ]}
-                    actions={
-                      <DeleteButton
-                        actionLabel="删除函数"
-                        resourceName={udf.name}
-                        visibleLabel="删除函数"
-                        onDelete={() =>
-                          removeUdf.mutateAsync({ projectId, udfId: udf.id })
-                        }
-                      />
-                    }
-                  />
-                ))}
+
               >
                 {(resources.data?.udfs ?? []).map((udf: any) => (
                   <tr key={udf.id}>
@@ -1114,33 +1032,7 @@ export default function DataResourceCenter({
               <ResourceTable
                 columns={["插件", "类型", "版本", "状态", "操作"]}
                 empty="尚未登记项目插件。"
-                mobileCards={(resources.data?.plugins ?? []).map(
-                  (plugin: any) => (
-                    <ResourceTableCard
-                      key={plugin.id}
-                      primary={plugin.name}
-                      secondary="项目级插件"
-                      status={<State value={plugin.status} />}
-                      fields={[
-                        { label: "插件类型", value: plugin.pluginType },
-                        { label: "版本", value: plugin.version },
-                      ]}
-                      actions={
-                        <DeleteButton
-                          actionLabel="删除插件"
-                          resourceName={plugin.name}
-                          visibleLabel="删除插件"
-                          onDelete={() =>
-                            removePlugin.mutateAsync({
-                              projectId,
-                              pluginId: plugin.id,
-                            })
-                          }
-                        />
-                      }
-                    />
-                  )
-                )}
+
               >
                 {(resources.data?.plugins ?? []).map((plugin: any) => (
                   <tr key={plugin.id}>
@@ -2433,31 +2325,7 @@ function DataflowWorkspace({
             <ResourceTable
               columns={["数据流", "计划状态", "执行时间（UTC）", "操作"]}
               empty="尚未配置定时调度。"
-              mobileCards={schedules.map((item: any) => {
-                const scheduledFlow = flows.find(
-                  flowItem => flowItem.id === item.workflowId
-                );
-                return (
-                  <ResourceTableCard
-                    key={item.workflowId}
-                    primary={scheduledFlow?.name ?? "数据流不可见"}
-                    secondary={
-                      scheduledFlow?.status === "published"
-                        ? "已发布"
-                        : "当前流程尚未发布"
-                    }
-                    status={<State value={item.status} />}
-                    fields={[
-                      { label: "执行时间（UTC）", value: item.cronExpression },
-                      { label: "触发状态", value: scheduleDetails(item) },
-                    ]}
-                    actions={scheduleActions(
-                      item,
-                      scheduledFlow?.name ?? item.workflowId
-                    )}
-                  />
-                );
-              })}
+
             >
               {schedules.map((item: any) => {
                 const scheduledFlow = flows.find(
@@ -2507,13 +2375,11 @@ function ResourceTable({
   columns,
   children,
   empty,
-  mobileCards,
   allowReadActions = false,
 }: {
   columns: string[];
   children: React.ReactNode;
   empty: string;
-  mobileCards?: React.ReactNode;
   allowReadActions?: boolean;
 }) {
   const showActions =
@@ -2523,108 +2389,38 @@ function ResourceTable({
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
       {hasRows ? (
-        <>
-          {mobileCards !== undefined && (
-            <div
-              data-resource-table-mobile=""
-              role="list"
-              aria-label={`${columns[0]}列表`}
-              className="divide-y divide-border md:hidden"
+        <div
+          data-resource-table-desktop=""
+          role="region"
+          aria-label={`${columns[0]}列表，可横向滚动查看其余字段`}
+          tabIndex={0}
+          className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
+        >
+          <table className="w-full min-w-[620px] text-left text-sm [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-muted [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:left-0 [&_tbody_td:first-child]:z-10 [&_tbody_td:first-child]:bg-card">
+            <thead className="bg-muted text-sm font-medium text-muted-foreground">
+              <tr>
+                {visibleColumns.map(column => (
+                  <th key={column} className="whitespace-nowrap px-4 py-3">
+                    {column}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody
+              className={
+                showActions ? undefined : "[&_tr>td:last-child]:hidden"
+              }
             >
-              {mobileCards}
-            </div>
-          )}
-          {mobileCards === undefined && (
-            <div className="aiflow-type-body flex items-center gap-2 border-b border-border px-3 py-2 text-muted-foreground md:hidden">
-              <ArrowLeftRight size={14} aria-hidden="true" />
-              <span>左右滑动表格可查看其余字段</span>
-            </div>
-          )}
-          <div
-            data-resource-table-desktop=""
-            role="region"
-            aria-label={`${columns[0]}列表，可横向滚动查看其余字段`}
-            tabIndex={0}
-            className={`${mobileCards === undefined ? "" : "hidden md:block"} overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500`}
-          >
-            <table className="w-full min-w-[620px] text-left text-sm [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-muted [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:left-0 [&_tbody_td:first-child]:z-10 [&_tbody_td:first-child]:bg-card">
-              <thead className="bg-muted text-sm font-medium text-muted-foreground">
-                <tr>
-                  {visibleColumns.map(column => (
-                    <th key={column} className="whitespace-nowrap px-4 py-3">
-                      {column}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody
-                className={
-                  showActions ? undefined : "[&_tr>td:last-child]:hidden"
-                }
-              >
-                {children}
-              </tbody>
-            </table>
-          </div>
-        </>
-      ) : (
-        <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-          {empty}
+              {children}
+            </tbody>
+          </table>
         </div>
+      ) : (
+        <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+          {empty}
+        </p>
       )}
     </section>
-  );
-}
-
-function ResourceTableCard({
-  primary,
-  secondary,
-  status,
-  fields,
-  actions,
-  allowReadActions = false,
-}: {
-  primary: string;
-  secondary?: string;
-  status?: React.ReactNode;
-  fields: { label: string; value: React.ReactNode }[];
-  actions?: React.ReactNode;
-  allowReadActions?: boolean;
-}) {
-  const { canEdit } = useContext(ResourceEditContext);
-  return (
-    <article role="listitem" className="space-y-3 p-4">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="aiflow-type-section-title break-words font-medium text-foreground">
-            {primary}
-          </h3>
-          {secondary && (
-            <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
-              {secondary}
-            </p>
-          )}
-        </div>
-        {status}
-      </div>
-      <dl className="grid min-w-0 grid-cols-2 gap-x-3 gap-y-3">
-        {fields.map(field => (
-          <div key={field.label} className="min-w-0">
-            <dt className="aiflow-type-control text-muted-foreground">
-              {field.label}
-            </dt>
-            <dd className="aiflow-type-body mt-1 break-words text-foreground">
-              {field.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      {actions && (canEdit || allowReadActions) && (
-        <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-          {actions}
-        </div>
-      )}
-    </article>
   );
 }
 

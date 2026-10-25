@@ -32,7 +32,7 @@ export type ProjectPermission =
 const id = () => randomBytes(12).toString("base64url");
 const db = () => getSharedPool();
 
-const rolePermissions: Record<ProjectMemberRole, readonly ProjectPermission[]> =
+export const rolePermissions: Record<ProjectMemberRole, readonly ProjectPermission[]> =
   {
     owner: [
       "project:view",

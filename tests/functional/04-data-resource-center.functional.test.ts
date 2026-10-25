@@ -87,11 +87,10 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     expect(resourceCenter).not.toContain(
       "grid-cols-2 gap-2 pb-1 sm:flex sm:flex-wrap"
     );
-    expect(resourceCenter).toContain("左右滑动表格可查看其余字段");
     expect(resourceCenter).toContain(
       "aria-label={`${columns[0]}列表，可横向滚动查看其余字段`}"
     );
-    expect(resourceCenter).toContain('data-resource-table-mobile=""');
+    expect(resourceCenter).not.toContain("function ResourceTableCard");
     expect(resourceCenter).toContain('data-resource-table-desktop=""');
     expect(resourceCenter).toContain('aria-label="数据运行分页"');
     expect(resourceCenter).toContain("trpc.data.runPage.useQuery");

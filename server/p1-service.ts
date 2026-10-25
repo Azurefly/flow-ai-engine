@@ -549,6 +549,23 @@ export async function getWorkflowTask(user: User, taskId: string) {
   };
 }
 
+/** Read-only eligibility check sharing the task execution guards. Does not validate or submit form values. */
+export async function inspectWorkflowTaskAction(user: User, taskId: string, workflowId: string) {
+  const task: any = await getWorkflowTask(user, taskId);
+  if (!task || String(task.workflowId) !== workflowId)
+    return { id: taskId, canAct: false, reason: "任务不存在、不可见或不属于当前流程。" };
+  const blocked = taskActionState(user.id, task as mysql.RowDataPacket);
+  if (!(await canAccessTask(user, task as mysql.RowDataPacket, true)) || !blocked.canAct)
+    return { id: taskId, canAct: false, reason: blocked.blockedReason || "当前账号不是该任务的有效处理人，或任务已经结束。" };
+  try {
+    await assertCurrentTaskOperation(user, task as mysql.RowDataPacket);
+    return { id: taskId, canAct: true, reason: "当前具备办理资格，提交时仍会校验表单、任务版本与实时状态。" };
+  } catch (error) {
+    if (error && typeof error === "object" && ("sqlState" in error || ("code" in error && /^(ER_|ECONN|PROTOCOL_|ETIMEDOUT)/.test(String(error.code))))) throw error;
+    return { id: taskId, canAct: false, reason: error instanceof Error ? error.message : "当前任务不可办理。" };
+  }
+}
+
 export async function claimWorkflowTask(user: User, taskId: string) {
   const task: any = await getWorkflowTask(user, taskId);
   if (!task)

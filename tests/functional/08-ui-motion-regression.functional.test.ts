@@ -1105,7 +1105,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(homeSrc).toContain("onClose={() => setMobileNavOpen(false)}");
       expect(homeSrc).toContain('aria-label="工作区导航"');
       expect(homeSrc).toContain(
-        'aria-current={section === item.id ? "page" : undefined}'
+        'aria-current={activeSection === item.id ? "page" : undefined}'
       );
       expect(homeSrc).toContain('className="flex min-h-11 w-full items-center');
       expect(homeSrc).toContain(
@@ -1268,7 +1268,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "aiflow-type-meta whitespace-nowrap rounded px-2 py-1 ${tone}"
       );
       expect(resourceSrc).toContain(
-        'className="aiflow-type-body mt-1 break-words text-foreground"'
+        'data-resource-table-desktop=""'
       );
       expect(resourceSrc).toContain(
         'aria-current={tab === item.id ? "page" : undefined}'
