@@ -211,7 +211,14 @@ export default defineConfig(({ command }) => {
           experimentalMinChunkSize: 64 * 1024,
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
-            if (id.replace(/\\/g, "/").includes("/lucide-react/")) return "icons";
+            // These UI libraries initialize together; keep their dependency closure outside application chunks.
+            if (
+              id.includes("commonjsHelpers") ||
+              /\/(react|react-dom|scheduler|lucide-react|@xyflow\/[^/]+|@floating-ui\/[^/]+|zustand|use-sync-external-store|classcat|d3-[^/]+|internmap)\//.test(
+                id.replace(/\\/g, "/")
+              )
+            )
+              return "canvas-runtime";
             if (
               /\/components\/(CustomRoleDialog|SystemRoleAssignmentDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
                 id.replace(/\\/g, "/")

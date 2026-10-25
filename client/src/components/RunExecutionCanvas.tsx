@@ -15,7 +15,6 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   projectRunGraph,
-  parseRunValue,
   runNodeLabels,
   type RunRecord,
   type RunGraphNode,
@@ -257,7 +256,7 @@ export default function RunExecutionCanvas({
             {label}
           </span>
         ))}
-        <span>灰线为定义关系；蓝线为有明确执行结果的分支。</span>
+        <span>灰线：定义；蓝线：已确认。</span>
       </div>
       {graph.warning && (
         <p
@@ -394,7 +393,7 @@ export default function RunExecutionCanvas({
                       role="status"
                       className="rounded bg-muted p-2 aiflow-type-body"
                     >
-                      部分旧任务缺少批次标识，请结合下方操作记录核对办理人。
+                      旧任务缺少批次标识，办理人请核对操作记录。
                     </p>
                   )}
                   {activities.map((t: RunRecord) => (
@@ -429,13 +428,13 @@ export default function RunExecutionCanvas({
                   ))}
                   <RunPayloadDetails
                     title="本次办理结果"
-                    value={parseRunValue(record.outputJson)}
+                    value={record.outputJson}
                     kind="output"
                     nodeType={active.type}
                   />
                   <RunPayloadDetails
                     title="错误原因"
-                    value={parseRunValue(record.errorJson)}
+                    value={record.errorJson}
                     kind="error"
                   />
                   <details>
@@ -452,16 +451,20 @@ export default function RunExecutionCanvas({
                         <RunPayloadDetails
                           title="记录信息"
                           value={{
-                            id: record.id,
+                            ...Object.fromEntries(
+                              [
+                                "id",
+                                "nodeId",
+                                "nodeType",
+                                "status",
+                                "startedAt",
+                                "finishedAt",
+                                "createdAt",
+                                "sequenceNo",
+                                "durationMs",
+                              ].map(key => [key, record[key]])
+                            ),
                             runId: run.id,
-                            nodeId: record.nodeId,
-                            nodeType: record.nodeType,
-                            status: record.status,
-                            startedAt: record.startedAt,
-                            finishedAt: record.finishedAt,
-                            createdAt: record.createdAt,
-                            sequenceNo: record.sequenceNo,
-                            durationMs: record.durationMs,
                           }}
                           kind="input"
                         />

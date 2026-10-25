@@ -418,14 +418,7 @@ function definition(template, mode) {
     edges,
   };
 }
-async function browserComplete(
-  actor,
-  task,
-  stage,
-  code,
-  caseId,
-  inspectGraph = false
-) {
+async function ensureBrowser() {
   if (!browser) {
     const runtime = path.join(process.env.LOCALAPPDATA, "ms-playwright");
     const exe = fs
@@ -437,6 +430,41 @@ async function browserComplete(
     assert(exe);
     browser = await chromium.launch({ headless: true, executablePath: exe });
   }
+}
+async function verifyLoginShell() {
+  await ensureBrowser();
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1000 },
+  });
+  const errors = [];
+  try {
+    await context.route("**/*", route =>
+      route.request().url().startsWith(base) ? route.continue() : route.abort()
+    );
+    const shell = await context.newPage();
+    shell.on("pageerror", error => errors.push(error.message));
+    await shell.goto(base);
+    await expect(shell.getByLabel("用户名", { exact: true })).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(
+      shell.getByRole("button", { name: "登录流程引擎", exact: true })
+    ).toBeVisible();
+    assert.deepEqual(errors, []);
+    report({ stage: "hierarchy-login-shell", pageErrors: 0 });
+  } finally {
+    await context.close();
+  }
+}
+async function browserComplete(
+  actor,
+  task,
+  stage,
+  code,
+  caseId,
+  inspectGraph = false
+) {
+  await ensureBrowser();
   const ctx = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
     reducedMotion: "reduce",
@@ -1280,6 +1308,7 @@ function observedScenario(flow, scenario, useBrowser = false) {
   let failed = false;
   const cleanupErrors = [];
   try {
+    await verifyLoginShell();
     beforeInfo = serverInfo(true);
     root = new Session(beforeInfo.cookie);
     const ownerLogin = credentials("owner");

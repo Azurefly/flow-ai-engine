@@ -215,13 +215,13 @@ export function projectRunGraph(run: RunRecord) {
       ),
     warning:
       rawNodes.length === 0
-        ? "历史实例缺少流程快照，仅展示执行节点，无法还原定义连线。"
+        ? "缺少流程快照，仅展示执行节点，无法还原连线。"
         : rawNodes.length !== sourceNodes.filter(n => !n.fromLog).length ||
             (Array.isArray(definition?.edges) &&
               definition.edges.length !== edges.length)
-          ? "快照含不完整或重复记录，部分连线无法还原。"
+          ? "快照不完整或重复，部分连线无法还原。"
           : sourceNodes.some(n => n.fromLog)
-            ? "部分执行节点未包含在根流程快照中，已单独展示。"
+            ? "快照外执行节点已单独展示。"
             : "",
   };
 }
