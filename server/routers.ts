@@ -1604,7 +1604,7 @@ export const appRouter = router({
       .input(z.object({ id: z.string().min(8).max(64) }))
       .query(async ({ ctx, input }) => {
         const workflow = await getWorkflow(input.id, ctx.user);
-        if (!workflow) throw new Error("流程不存在或无访问权限。");
+        if (!workflow) throw new TRPCError({ code: "NOT_FOUND", message: "流程不存在或无访问权限。" });
         return workflow;
       }),
     compile: protectedProcedure
