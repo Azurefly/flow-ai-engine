@@ -312,6 +312,7 @@ export default function RunExecutionCanvas({
               <Background gap={22} />
               <Controls showInteractive={false} />
               <MiniMap
+                className="hidden lg:block"
                 pannable
                 zoomable
                 nodeColor={node =>
