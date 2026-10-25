@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
 import { RunDetailContent } from "./WorkflowGovernanceRunDetail";
-import { AlertTriangle, Loader2, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 
 export function ProcessWorkbenchRunTab({
@@ -9,11 +9,13 @@ export function ProcessWorkbenchRunTab({
   baseTabLabel,
   onClose,
   onReturn,
+  entryTaskId,
 }: {
   runId: string;
   baseTabLabel: string;
   onClose: () => void;
   onReturn: () => void;
+  entryTaskId?: string;
 }) {
   const detail = trpc.workflow.runDetail.useQuery(
     { runId },
@@ -36,45 +38,23 @@ export function ProcessWorkbenchRunTab({
       data-process-workbench-run-tab
       className="min-w-0 rounded-lg border border-border bg-card shadow-sm"
     >
-      <div
+      <nav
         data-process-workbench-tabs
-        className="grid min-w-0 grid-cols-2 gap-1 border-b border-border bg-muted px-2 pt-2 sm:flex sm:flex-wrap sm:px-3"
+        aria-label="实例详情路径"
+        className="flex items-center gap-2 border-b border-border px-5 py-2 aiflow-type-body text-muted-foreground"
       >
         <button
           type="button"
-          className="aiflow-type-control min-w-0 rounded-t border border-b-0 border-border bg-card px-2 py-2 text-center text-muted-foreground hover:bg-muted hover:text-foreground sm:px-3 sm:text-left"
+          className="min-h-9 hover:text-foreground"
           onClick={onReturn}
-          title={`返回${baseTabLabel}`}
         >
-          {baseTabLabel}
+          返回{baseTabLabel}
         </button>
-        <span
-          aria-current="page"
-          className="aiflow-type-control ml-1 flex min-w-0 items-center justify-center gap-1 rounded-t border border-b-0 border-aiflow-info-border bg-card px-2 py-2 font-medium text-aiflow-info sm:gap-2 sm:px-3"
-        >
-          <span className="min-w-0 truncate">实例详情</span>
-          <span aria-hidden="true">·</span>
-          <span className="aiflow-type-meta min-w-0 max-w-48 truncate">
-            {runId.slice(0, 8)}
-          </span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
-            aria-label="关闭实例详情页签"
-            title="关闭实例详情"
-            onClick={onClose}
-          >
-            <X size={13} />
-          </Button>
-        </span>
-      </div>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-5">
+        <span aria-hidden="true">/</span>
+        <span aria-current="page">实例详情</span>
+      </nav>
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3">
         <div className="min-w-0 flex-1">
-          <p className="aiflow-type-meta font-bold tracking-[.18em] text-aiflow-info">
-            PROCESS INSTANCE
-          </p>
           <h1
             data-aiflow-page-title=""
             className="aiflow-type-page-title mt-1 font-semibold text-foreground"
@@ -89,9 +69,12 @@ export function ProcessWorkbenchRunTab({
               {workflowName.replaceAll("_", "_\u200b")}
             </p>
           )}
-          <p className="aiflow-type-code mt-1 break-all font-mono text-muted-foreground">
-            实例编号：{runId}
-          </p>
+          <details className="aiflow-type-meta mt-1 text-muted-foreground">
+            <summary className="cursor-pointer">
+              实例编号 · {runId.slice(0, 8)}
+            </summary>
+            <p className="break-all">实例编号：{runId}</p>
+          </details>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button
@@ -158,7 +141,7 @@ export function ProcessWorkbenchRunTab({
           </div>
         </div>
       ) : run ? (
-        <RunDetailContent run={run} />
+        <RunDetailContent run={run} entryTaskId={entryTaskId} />
       ) : (
         <div className="p-8 text-center text-sm text-muted-foreground">
           当前实例暂无可展示的详情。

@@ -890,72 +890,19 @@ export default function OrganizationManagementPage({
                         正在读取当前范围的成员…
                       </p>
                     )}
-                    <div className="mt-4 grid gap-3 min-[1024px]:grid-cols-2 min-[1360px]:hidden">
-                      {selectedMembers.map(member => (
-                        <article
-                          key={member.id}
-                          className="min-w-0 rounded-lg border border-border bg-card p-3"
-                        >
-                          <div className="flex min-w-0 items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <h3 className="aiflow-type-card-title break-words font-semibold text-foreground">
-                                {member.name || member.username}
-                              </h3>
-                              <p className="aiflow-type-meta mt-0.5 break-all text-muted-foreground">
-                                {member.username}
-                                <OrganizationAccountStatus
-                                  status={member.userStatus}
-                                />
-                              </p>
-                            </div>
-                            <span className="aiflow-type-meta shrink-0 rounded bg-aiflow-info-surface px-2 py-1 text-aiflow-info">
-                              {member.isPrimary ? "主部门" : "兼任部门"}
-                            </span>
-                          </div>
-                          <div className="aiflow-type-body mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-                            <span>{member.title || "未配置岗位"}</span>
-                            <span className="text-muted-foreground">
-                              {member.unitName || selected.name}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex min-w-0 items-center justify-between gap-2 border-t border-border pt-1">
-                            <details className="min-w-0">
-                              <summary className="aiflow-type-control inline-flex min-h-11 cursor-pointer items-center text-muted-foreground hover:text-foreground">
-                                部门路径
-                              </summary>
-                              <p className="aiflow-type-body break-words leading-5 text-muted-foreground">
-                                {member.unitDisplayPath ||
-                                  member.unitName ||
-                                  "—"}
-                              </p>
-                            </details>
-                            <div className="shrink-0">
-                              {renderMemberActions(member)}
-                            </div>
-                          </div>
-                        </article>
-                      ))}
-                      {!selectedMembers.length &&
-                        !membersPageQuery.isFetching &&
-                        !membersPageQuery.isError && (
-                          <div className="rounded-lg border border-dashed border-input px-4 py-10 text-center text-sm text-muted-foreground">
-                            {memberQuery.trim()
-                              ? "没有匹配的成员，请更换关键词。"
-                              : includeDescendants
-                                ? "当前机构及子机构暂无成员。"
-                                : "当前部门暂无成员。"}
-                          </div>
-                        )}
-                    </div>
-                    <div className="mt-4 hidden overflow-x-auto min-[1360px]:block">
-                      <table className="w-full min-w-[920px] text-left text-sm">
+                    <div className="mt-4" data-organization-member-table>
+                      <table className="w-full table-fixed text-left text-sm">
+                        <colgroup>
+                          <col className="w-[28%]" />
+                          <col className="w-[20%]" />
+                          <col />
+                          <col className="w-44" />
+                        </colgroup>
                         <thead className="bg-muted text-sm text-muted-foreground">
                           <tr>
                             <th className="px-4 py-3">成员</th>
-                            <th className="px-4 py-3">登录名</th>
                             <th className="px-4 py-3">岗位/职务</th>
                             <th className="px-4 py-3">所属部门</th>
-                            <th className="px-4 py-3">部门关系</th>
                             <th className="px-4 py-3">操作</th>
                           </tr>
                         </thead>
@@ -970,25 +917,26 @@ export default function OrganizationManagementPage({
                                 <OrganizationAccountStatus
                                   status={member.userStatus}
                                 />
-                              </td>
-                              <td className="aiflow-type-meta max-w-[220px] break-all px-4 py-3 text-muted-foreground">
-                                {member.username}
+                                <p className="aiflow-type-meta mt-1 break-all font-normal text-muted-foreground">
+                                  {member.username}
+                                </p>
                               </td>
                               <td className="max-w-[220px] break-words px-4 py-3">
                                 {member.title || "未配置"}
                               </td>
-                              <td className="px-4 py-3 text-muted-foreground">
-                                {member.unitDisplayPath ||
-                                  member.unitName ||
-                                  "—"}
-                              </td>
-                              <td className="px-4 py-3">
+                              <td
+                                className="break-words px-4 py-3 text-muted-foreground"
+                                title={`部门路径：${member.unitDisplayPath || member.unitName}`}
+                              >
+                                <p className="mb-2">
+                                  {member.unitName || selected.name || "—"}
+                                </p>
                                 {member.isPrimary ? (
-                                  <span className="rounded bg-aiflow-info-surface px-2 py-1 text-xs text-aiflow-info">
+                                  <span className="whitespace-nowrap rounded bg-aiflow-info-surface px-2 py-1 text-xs text-aiflow-info">
                                     主部门
                                   </span>
                                 ) : (
-                                  <span className="text-xs text-muted-foreground">
+                                  <span className="whitespace-nowrap text-xs text-muted-foreground">
                                     兼任部门
                                   </span>
                                 )}
@@ -1003,7 +951,7 @@ export default function OrganizationManagementPage({
                             !membersPageQuery.isError && (
                               <tr>
                                 <td
-                                  colSpan={6}
+                                  colSpan={4}
                                   className="p-10 text-center text-muted-foreground"
                                 >
                                   {memberQuery.trim()

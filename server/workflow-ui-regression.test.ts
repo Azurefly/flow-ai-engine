@@ -362,7 +362,7 @@ describe("工作台只读任务运行详情入口", () => {
     expect(processWorkbenchSource).toContain("task.canViewRun === true");
     expect(processWorkbenchSource).toContain("查看运行详情");
     expect(processWorkbenchSource).toMatch(
-      /onOpenRun=\{\(runId: string\) => \{\s*setSelectedTaskId\(null\);\s*setSelectedRunId\(runId\);\s*\}\}/
+      /onOpenRun=\{\(runId: string\) => \{\s*setRunEntryTask\(\{ runId, taskId: selectedTaskId \}\);\s*setSelectedTaskId\(null\);\s*setSelectedRunId\(runId\);\s*\}\}/
     );
     expect(processWorkbenchSource).toContain("<ProcessWorkbenchRunTab");
   });
@@ -1263,16 +1263,16 @@ describe("流程设计器界面回归约束", () => {
       'className="aiflow-type-body mt-1 break-words text-muted-foreground"'
     );
     expect(organizationManagementSource).toContain(
-      'className="aiflow-type-card-title break-words font-semibold text-foreground"'
+      'className="aiflow-type-meta mt-1 break-all font-normal text-muted-foreground"'
     );
     expect(organizationManagementSource).toContain(
-      'className="aiflow-type-body mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground"'
+      'className="break-words px-4 py-3 text-muted-foreground"'
     );
     expect(organizationManagementSource).toContain(
-      'className="aiflow-type-body break-words leading-5 text-muted-foreground"'
+      'data-organization-member-table'
     );
     expect(organizationManagementSource).toContain(
-      'className="aiflow-type-meta mt-0.5 break-all text-muted-foreground"'
+      'className="aiflow-type-meta mt-1 break-all font-normal text-muted-foreground"'
     );
     expect(organizationManagementSource).toContain(
       'className="aiflow-type-body mt-1 text-muted-foreground"'
@@ -2199,7 +2199,7 @@ describe("流程设计器界面回归约束", () => {
       'className="aiflow-type-page-title mt-1 font-semibold text-foreground"'
     );
     expect(processWorkbenchRunTabSource).toContain(
-      'className="aiflow-type-control ml-1 flex min-w-0 items-center justify-center gap-1 rounded-t border border-b-0 border-aiflow-info-border bg-card px-2 py-2 font-medium text-aiflow-info sm:gap-2 sm:px-3"'
+      'aria-label="实例详情路径"'
     );
   });
 
@@ -2520,9 +2520,9 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("全屏展示");
     expect(canvasSource).toContain("取消高亮");
     expect(canvasSource).toContain("未完全配置");
-    expect(canvasSource).toContain("已配置（默认）");
+    expect(canvasSource).toContain("结构完整（默认）");
     expect(canvasSource).not.toContain('"配置中"');
-    expect(canvasSource).toContain("已配置");
+    expect(canvasSource).toContain("结构完整");
     expect(canvasSource).toContain("画布移动");
     expect(canvasSource).toContain("节点框选");
     expect(canvasSource).toContain("暂无配置信息");
@@ -2819,23 +2819,23 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain('label: "全部可见"');
     expect(processWorkbenchSource).toContain('label: "我发起"');
     expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
-    expect(processWorkbenchSource).toContain("onOpenRun={setSelectedRunId}");
+    expect(processWorkbenchSource).toContain("setRunEntryTask(null); setSelectedRunId(id)");
     expect(processWorkbenchSource).toContain("baseTabLabel={labels[view]}");
     expect(processWorkbenchSource).toMatch(
-      /const closeRunTab = \(\) => \{\s*setSelectedRunId\(null\);\s*invalidate\(\);\s*\}/
+      /const closeRunTab = \(\) => \{\s*setRunEntryTask\(null\);\s*setSelectedRunId\(null\);\s*invalidate\(\);\s*\}/
     );
     expect(processWorkbenchSource).toMatch(
       /setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);\s*invalidate\(\);/
     );
     expect(styleSource).toContain("--aiflow-section-gap: 1.25rem;");
-    expect(processWorkbenchRunTabSource).toContain("关闭实例详情页签");
+    expect(processWorkbenchRunTabSource).toContain('aria-label="实例详情路径"');
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
     expect(processWorkbenchRunTabSource).toContain(
       "trpc.workflow.runDetail.useQuery"
     );
     expect(processWorkbenchRunTabSource).toContain("baseTabLabel");
     expect(processWorkbenchRunTabSource).toContain(
-      "title={`返回${baseTabLabel}`}"
+      "返回{baseTabLabel}"
     );
     expect(processWorkbenchRunTabSource).toContain(
       "data-process-workbench-tabs"
@@ -3270,7 +3270,7 @@ describe("流程设计器界面回归约束", () => {
       "grid min-w-0 grid-cols-3 gap-1"
     );
     expect(processWorkbenchRunTabSource).toContain(
-      "grid min-w-0 grid-cols-2 gap-1"
+      "flex items-center gap-2 border-b border-border"
     );
     expect(processDetailPageSource).toContain(
       "grid h-auto w-full min-w-0 grid-cols-3"
@@ -3515,7 +3515,7 @@ it("数据流失败摘要优先使用持久化节点记录并展示节点错误"
   );
 });
 
-it("组织成员卡片与表格区分停用账号并统一主部门名称", () => {
+it("组织成员统一表格区分停用账号并统一主部门名称", () => {
   expect(organizationManagementSource).toContain(
     "function OrganizationAccountStatus"
   );
@@ -3523,7 +3523,7 @@ it("组织成员卡片与表格区分停用账号并统一主部门名称", () =
     organizationManagementSource.match(
       /<OrganizationAccountStatus status={member.userStatus}/g
     )
-  ).toHaveLength(2);
+  ).toHaveLength(1);
   expect(organizationManagementSource).toContain("账号启用");
   expect(organizationManagementSource).toContain("账号停用");
   expect(organizationManagementSource).toContain("账号状态未确认");

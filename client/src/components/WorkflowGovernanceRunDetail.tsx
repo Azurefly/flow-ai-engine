@@ -120,7 +120,13 @@ function FactSection({ run }: { run: any }) {
     </section>
   );
 }
-export function RunDetailContent({ run }: { run: any }) {
+export function RunDetailContent({
+  run,
+  entryTaskId,
+}: {
+  run: any;
+  entryTaskId?: string;
+}) {
   const [selection, setSelection] = useState<{
     runId: string;
     nodeId: string;
@@ -139,7 +145,7 @@ export function RunDetailContent({ run }: { run: any }) {
   );
   return (
     <div className="space-y-4 p-5">
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-x-5 gap-y-2 rounded-lg border border-border px-4 py-3 lg:grid-cols-4">
         <Summary
           label="实例状态"
           value={statusLabel(run.status)}
@@ -161,22 +167,31 @@ export function RunDetailContent({ run }: { run: any }) {
           label="开始时间"
           value={formatTime(run.startedAt ?? run.createdAt)}
         />
-        <Summary label="结束时间" value={formatTime(run.finishedAt)} />
-        <Summary
-          label="当前业务状态"
-          value={
-            run.flowType === "state"
-              ? run.currentStateName || run.currentStateCode || "尚未进入状态"
-              : "不适用"
-          }
-          secondary={
-            run.flowType === "state" && run.currentStateName
-              ? run.currentStateCode
-              : undefined
-          }
-        />
-        <Summary label="状态版本" value={String(run.stateVersion ?? 0)} />
+        {run.flowType === "state" && (
+          <Summary
+            label="当前业务状态"
+            value={
+              run.flowType === "state"
+                ? run.currentStateName || run.currentStateCode || "尚未进入状态"
+                : "不适用"
+            }
+            secondary={
+              run.flowType === "state" && run.currentStateName
+                ? run.currentStateCode
+                : undefined
+            }
+          />
+        )}
       </section>
+      <details className="aiflow-type-meta text-muted-foreground">
+        <summary className="cursor-pointer">实例版本与时间信息</summary>
+        <p className="mt-2">
+          结束时间：{formatTime(run.finishedAt)}
+          {run.flowType === "state"
+            ? ` · 状态版本：${run.stateVersion ?? 0}`
+            : ""}
+        </p>
+      </details>
       <Suspense
         fallback={
           <p
@@ -190,6 +205,7 @@ export function RunDetailContent({ run }: { run: any }) {
         <RunExecutionCanvas
           key={run.id}
           run={run}
+          entryTaskId={entryTaskId}
           focusRequest={
             selection && selection.runId === run.id ? selection : undefined
           }
@@ -336,7 +352,7 @@ function Summary({
   secondary?: string;
 }) {
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-muted p-3">
+    <div className="min-w-0">
       <p className="aiflow-type-meta font-medium text-muted-foreground">
         {label}
       </p>

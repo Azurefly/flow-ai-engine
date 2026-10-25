@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { projectRunGraph } from "../shared/run-execution-graph";
+import {
+  projectRunGraph,
+  resolveRunGraphFocus,
+} from "../shared/run-execution-graph";
 const definition = {
   nodes: [
     { id: "start", name: "开始", type: "start" },
@@ -41,6 +44,74 @@ const run = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 describe("实例执行画布投影", () => {
+  it("来源任务精确选择并行共享节点的各自批次，不被最新批次覆盖", () => {
+    const data = run({
+      status: "success",
+      taskActivities: [
+        { id: "task-a", nodeId: "review", nodeRunId: "a" },
+        { id: "task-b", nodeId: "review", nodeRunId: "b" },
+      ],
+      nodeRuns: [
+        { id: "a", nodeId: "review", status: "success", sequenceNo: 2 },
+        { id: "b", nodeId: "review", status: "success", sequenceNo: 5 },
+      ],
+    });
+    const { nodes } = projectRunGraph(data);
+    expect(resolveRunGraphFocus(data, nodes, "task-a")).toEqual({
+      nodeId: "review",
+      recordId: "a",
+    });
+    expect(resolveRunGraphFocus(data, nodes, "task-b")).toEqual({
+      nodeId: "review",
+      recordId: "b",
+    });
+    data.taskActivities[0].nodeRunId = undefined;
+    expect(resolveRunGraphFocus(data, nodes, "task-a")).toMatchObject({
+      nodeId: "review",
+      warning: expect.any(String),
+    });
+    expect(
+      resolveRunGraphFocus(data, nodes, "task-a").recordId
+    ).toBeUndefined();
+    expect(
+      resolveRunGraphFocus(data, nodes, "foreign-task").nodeId
+    ).toBeUndefined();
+  });
+  it("已完成实例按实际执行顺序定位，定义末尾的开始节点不会抢占焦点", () => {
+    const data = run({
+      status: "success",
+      definitionSnapshotJson: {
+        ...definition,
+        nodes: [...definition.nodes].reverse(),
+      },
+      nodeRuns: [
+        { id: "first", nodeId: "start", sequenceNo: 1, status: "success" },
+        { id: "final", nodeId: "done", sequenceNo: 6, status: "success" },
+      ],
+    });
+    expect(resolveRunGraphFocus(data, projectRunGraph(data).nodes)).toEqual({
+      nodeId: "done",
+      recordId: "final",
+    });
+    data.nodeRuns.push({ id: "retry", nodeId: "review", sequenceNo: 2, status: "failed" });
+    expect(resolveRunGraphFocus(data, projectRunGraph(data).nodes).recordId).toBe("final");
+  });
+  it("运行中定位等待批次，失败实例优先定位错误", () => {
+    const data = run({
+      nodeRuns: [
+        { id: "wait", nodeId: "review", sequenceNo: 2, status: "waiting" },
+        { id: "later", nodeId: "done", sequenceNo: 5, status: "success" },
+      ],
+    });
+    expect(
+      resolveRunGraphFocus(data, projectRunGraph(data).nodes).recordId
+    ).toBe("wait");
+    data.status = "failed";
+    data.nodeRuns[0].status = "failed";
+    expect(
+      resolveRunGraphFocus(data, projectRunGraph(data).nodes).recordId
+    ).toBe("wait");
+  });
   it("以运行快照展示完整流程，未执行节点不伪装完成", () => {
     const graph = projectRunGraph(
       run({
@@ -236,13 +307,11 @@ describe("实例执行画布投影", () => {
   });
   it("长链使用迭代布局，避免递归调用栈溢出", () => {
     const nodes = Array.from({ length: 2000 }, (_, i) => ({ id: String(i) }));
-    const edges = nodes
-      .slice(1)
-      .map((_, i) => ({
-        id: "e" + i,
-        sourceNodeId: String(i),
-        targetNodeId: String(i + 1),
-      }));
+    const edges = nodes.slice(1).map((_, i) => ({
+      id: "e" + i,
+      sourceNodeId: String(i),
+      targetNodeId: String(i + 1),
+    }));
     const graph = projectRunGraph(
       run({ definitionSnapshotJson: { nodes, edges } })
     );

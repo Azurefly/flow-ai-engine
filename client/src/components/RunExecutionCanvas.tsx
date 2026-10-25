@@ -15,6 +15,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   projectRunGraph,
+  resolveRunGraphFocus,
   runNodeLabels,
   type RunRecord,
   type RunGraphNode,
@@ -80,11 +81,17 @@ const nodeTypes = { runNode: RunNode };
 export default function RunExecutionCanvas({
   run,
   focusRequest,
+  entryTaskId,
 }: {
   run: RunRecord;
   focusRequest?: { nodeId: string; recordId: string; version: number };
+  entryTaskId?: string;
 }) {
   const graph = useMemo(() => projectRunGraph(run), [run]);
+  const initialFocus = useMemo(
+    () => resolveRunGraphFocus(run, graph.nodes, entryTaskId),
+    [run, graph, entryTaskId]
+  );
   const [selected, setSelected] = useState("");
   const [occurrence, setOccurrence] = useState("");
   const [layout, setLayout] = useState(true);
@@ -96,17 +103,20 @@ export default function RunExecutionCanvas({
   );
   const active =
     graph.nodes.find(n => n.id === selected) ??
-    current[0] ??
-    graph.nodes.at(-1);
+    graph.nodes.find(n => n.id === initialFocus.nodeId);
   const record =
     active?.records.find((r: RunRecord) => r.id === occurrence) ??
-    (active?.activeCount
-      ? active.records
-          .filter((r: RunRecord) =>
-            ["running", "waiting", "pending"].includes(r.status)
-          )
-          .at(-1)
-      : active?.records.at(-1));
+    (!selected && initialFocus.warning
+      ? undefined
+      : !selected && initialFocus.recordId
+        ? active?.records.find(r => r.id === initialFocus.recordId)
+        : active?.activeCount
+          ? active.records
+              .filter((r: RunRecord) =>
+                ["running", "waiting", "pending"].includes(r.status)
+              )
+              .at(-1)
+          : active?.records.at(-1));
   const pending =
     record && ["waiting", "running", "pending"].includes(record.status);
   const choose = (id: string) => {
@@ -270,6 +280,14 @@ export default function RunExecutionCanvas({
           {graph.warning}
         </p>
       )}
+      {initialFocus.warning && !selected && !occurrence && (
+        <p
+          role="status"
+          className="mx-4 mb-3 rounded bg-aiflow-warning-surface p-3 aiflow-type-body"
+        >
+          {initialFocus.warning}
+        </p>
+      )}
       <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div
           style={{
@@ -354,6 +372,7 @@ export default function RunExecutionCanvas({
                 });
               }}
             >
+              {!active && <option value="" disabled>请选择节点</option>}
               {graph.nodes.map(n => (
                 <option key={n.id} value={n.id}>
                   {n.name} · {runNodeLabels[n.status]}
@@ -375,6 +394,11 @@ export default function RunExecutionCanvas({
                     value={record?.id ?? ""}
                     onChange={e => setOccurrence(e.target.value)}
                   >
+                    {!record && (
+                      <option value="" disabled>
+                        请选择需要核对的执行批次
+                      </option>
+                    )}
                     {active.records.map((r: RunRecord, i: number) => (
                       <option key={r.id} value={r.id}>
                         第{i + 1}次 · {runNodeLabels[r.status] ?? r.status}
@@ -385,7 +409,9 @@ export default function RunExecutionCanvas({
               )}
               {!record ? (
                 <p className="aiflow-type-body text-muted-foreground">
-                  此节点尚未执行。
+                  {active.records.length
+                    ? "请选择执行批次后查看本次办理。"
+                    : "此节点尚未执行。"}
                 </p>
               ) : (
                 <>

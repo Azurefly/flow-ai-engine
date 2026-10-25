@@ -334,8 +334,8 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
             configState === "partial"
               ? `未完全配置：${configAssessment.error}`
               : configState === "editing"
-                ? "已配置（默认）"
-                : "已配置"
+                ? "结构完整（默认），运行前仍需预检"
+                : "结构完整，运行前仍需预检"
           }
         />
       </div>
@@ -4381,11 +4381,11 @@ export default function WorkflowCanvas({
                 </span>
                 <span className="flex items-center gap-1">
                   <i className="h-2 w-2 rounded-full bg-blue-500" />
-                  已配置（默认）
+                  结构完整（默认）
                 </span>
                 <span className="flex items-center gap-1">
                   <i className="h-2 w-2 rounded-full bg-emerald-500" />
-                  已配置
+                  结构完整
                 </span>
               </div>
               <div className="flex flex-wrap gap-3 text-muted-foreground">
@@ -4744,8 +4744,8 @@ export default function WorkflowCanvas({
                       {selectedConfigState === "partial"
                         ? "未完全配置"
                         : selectedConfigState === "editing"
-                          ? "已配置（默认）"
-                          : "已配置"}
+                          ? "结构完整（默认）"
+                          : "结构完整"}
                       {selected.data.kind === "operate" && readOperateOutcomeMode(selectedConfig) === "legacy_cancel" && (
                         <button type="button" className="ml-2 min-h-11 text-aiflow-warning underline" onClick={() => setInspectorTab("结果与分支")}>兼容分支</button>
                       )}

@@ -100,7 +100,7 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
   });
 
   describe("组织架构管理（OrganizationManagementPage）交互与层级树维护", () => {
-    it("窄屏聚焦部门详情，并以卡片呈现成员和按需显示长路径", () => {
+    it("电脑端成员表保持操作列可见并收起长部门路径", () => {
       const start = performance.now();
       const source = readFileSync(
         new URL(
@@ -115,13 +115,15 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
       );
       expect(source).toContain("setMobileDirectoryOpen(true)");
       expect(source).toContain(
-        'className="mt-4 grid gap-3 min-[1024px]:grid-cols-2 min-[1360px]:hidden"'
+        'data-organization-member-table'
       );
       expect(source).toContain(
-        'className="mt-4 hidden overflow-x-auto min-[1360px]:block"'
+        'className="w-full table-fixed text-left text-sm"'
       );
       expect(source).toContain("text-xs text-aiflow-info");
       expect(source).toContain("部门路径");
+      expect(source).not.toContain("min-w-[920px]");
+      expect(source).toContain('className="w-44"');
       expect(source).toContain(
         'className="mt-4 grid grid-cols-1 gap-2 min-[448px]:grid-cols-2 xl:grid-cols-3"'
       );
@@ -136,7 +138,7 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
 
       TestResultCollector.record({
         testId: "TC-MOD6-ORG-009",
-        name: "窄屏组织目录与成员卡片信息层级",
+        name: "电脑端成员表布局与信息层级",
         category: "contract",
         module: "组织架构管理",
         target: "OrganizationManagementPage.ResponsiveLayout",

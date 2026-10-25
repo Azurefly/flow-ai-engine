@@ -123,6 +123,7 @@ export default function ProcessWorkbench() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
+  const [runEntryTask, setRunEntryTask] = useState<{ runId: string; taskId: string } | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(10);
   const [pageCursorStack, setPageCursorStack] = useState<
@@ -324,7 +325,7 @@ export default function ProcessWorkbench() {
     status: string;
     runId?: string;
     canViewRun?: boolean;
-  }) => {
+  }, submitted: { taskId: string }) => {
     invalidate(false);
     if (result.status === "cancelled")
       toast.warning("处理结果已记录，流程已结束。");
@@ -336,8 +337,10 @@ export default function ProcessWorkbench() {
             ? "处理结果已记录，后续节点已排队执行。"
             : "处理结果已记录，流程已完成。"
       );
-    if (result.runId && result.canViewRun === true)
+    if (result.runId && result.canViewRun === true) {
+      setRunEntryTask({ runId: result.runId, taskId: submitted.taskId });
       setSelectedRunId(result.runId);
+    }
     setSelectedTaskId(null);
   };
   const complete = trpc.task.complete.useMutation({
@@ -417,7 +420,10 @@ export default function ProcessWorkbench() {
           item.canViewRun === true &&
           ["success", "cancelled"].includes(String(item.status))
       );
-      if (completed?.runId) setSelectedRunId(completed.runId);
+      if (completed?.runId) {
+        setRunEntryTask({ runId: completed.runId, taskId: completed.taskId });
+        setSelectedRunId(completed.runId);
+      }
       const message = `批量处理已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`;
       if (!success) toast.error(message);
       else if (failed) toast.warning(message);
@@ -458,10 +464,12 @@ export default function ProcessWorkbench() {
     },
   ];
   const closeRunTab = () => {
+    setRunEntryTask(null);
     setSelectedRunId(null);
     invalidate();
   };
   const changeView = (next: View) => {
+    setRunEntryTask(null);
     setView(next);
     setSelectedRunId(null);
     setSelectedTaskId(null);
@@ -519,7 +527,7 @@ export default function ProcessWorkbench() {
       >
         <aside
           data-workbench-navigation=""
-          className="min-w-0 overflow-hidden rounded-lg border border-border bg-card p-2 shadow-sm"
+          className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card p-2 shadow-sm ${selectedRunId ? "hidden" : ""}`}
         >
           <div
             data-workbench-nav-header=""
@@ -630,11 +638,12 @@ export default function ProcessWorkbench() {
         <section
           aria-label="流程工作台内容"
           data-workbench-content=""
-          className="min-w-0"
+          className={`min-w-0 ${selectedRunId ? "lg:col-span-2" : ""}`}
         >
           {selectedRunId ? (
             <ProcessWorkbenchRunTab
               runId={selectedRunId}
+              entryTaskId={runEntryTask?.runId === selectedRunId ? runEntryTask.taskId : undefined}
               baseTabLabel={labels[view]}
               onClose={closeRunTab}
               onReturn={closeRunTab}
@@ -836,7 +845,7 @@ export default function ProcessWorkbench() {
                     instances.isError ? instances.error.message : undefined
                   }
                   onRetry={() => void instances.refetch()}
-                  onOpenRun={setSelectedRunId}
+                  onOpenRun={(id: string) => { setRunEntryTask(null); setSelectedRunId(id); }}
                   emptyMessage={
                     activeHasNextPage
                       ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
@@ -868,6 +877,7 @@ export default function ProcessWorkbench() {
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
           onOpenRun={(runId: string) => {
+            setRunEntryTask({ runId, taskId: selectedTaskId });
             setSelectedTaskId(null);
             setSelectedRunId(runId);
           }}
@@ -1103,7 +1113,7 @@ function Board({
                     {task.workflowName} · {task.nodeName}
                   </p>
                   <p className="aiflow-type-meta mt-1 tabular-nums text-muted-foreground">
-                    {date(task.createdAt)}
+                    实例 {String(task.runId || "—").slice(0, 8)} · 任务 {String(task.id).slice(0, 8)} · {date(task.createdAt)}
                   </p>
                   <div className="aiflow-type-body mt-0.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
                     <span className="min-w-0 break-words">

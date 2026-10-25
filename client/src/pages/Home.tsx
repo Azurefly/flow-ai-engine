@@ -1999,7 +1999,7 @@ function FlowConsole({
                           status: result.ok ? "passed" : "failed",
                           checkedAt: Date.now(),
                           message: result.ok
-                            ? undefined
+                            ? "结构与静态依赖通过，兜底以当前用户预览；动态参与人在运行时校验。"
                             : `预检发现 ${result.diagnostics.length} 项问题。`,
                         });
                       },

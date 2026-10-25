@@ -1286,7 +1286,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "gbms",
         label: "并行分支",
-        help: "开启执行全部命中分支；关闭仅执行最高优先级分支。并行暂不可发布。",
+        help: "开启后执行全部命中分支；关闭时仅执行最高优先级分支。主流程支持并行，同步子流程暂不支持。",
         kind: "boolean",
         required: true,
       },
@@ -1299,7 +1299,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "parallelJoinNodeId",
         label: "汇聚节点",
-        help: "全部并行分支必须到达此节点后再继续。选择后自动绑定；并行草稿仅供管理员测试，暂不可发布。",
+        help: "全部并行分支必须到达此节点后再继续，选择后自动绑定。并行仅用于主流程，同步子流程需改用串行路由。",
         kind: "text",
       },
       {

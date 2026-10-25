@@ -1,4 +1,61 @@
 export type RunRecord = Record<string, any>;
+export type RunGraphFocus = {
+  nodeId?: string;
+  recordId?: string;
+  warning?: string;
+};
+/** Resolve task identity against this run's authorized activities, never by time proximity. */
+export function resolveRunGraphFocus(
+  run: RunRecord,
+  nodes: RunGraphNode[],
+  taskId?: string
+): RunGraphFocus {
+  if (taskId) {
+    const task = (run.taskActivities ?? []).find(
+      (t: RunRecord) => t.id === taskId
+    );
+    const node = nodes.find(n => n.id === task?.nodeId);
+    if (node) {
+      const record = node.records.find(r => r.id === task.nodeRunId);
+      if (record) return { nodeId: node.id, recordId: record.id };
+      if (!task.nodeRunId && node.records.length === 1)
+        return { nodeId: node.id, recordId: node.records[0].id };
+      return {
+        nodeId: node.id,
+        warning:
+          "来源任务缺少批次标识，请手动核对执行批次。",
+      };
+    }
+    return { warning: "当前实例记录无法定位来源任务，请核对任务与操作记录。" };
+  }
+  const candidates = nodes.flatMap(node =>
+    node.records.map(record => ({ node, record }))
+  );
+  const live = !["success", "failed", "cancelled", "terminated"].includes(
+    run.status
+  );
+  const priority = ({ record }: (typeof candidates)[number]) =>
+    run.status === "failed" && record.status === "failed"
+      ? 2
+      : live && ["running", "waiting", "pending"].includes(record.status)
+        ? 1
+        : 0;
+  candidates.sort(
+    (a, b) =>
+      priority(b) - priority(a) ||
+      (Number(b.record.sequenceNo) || 0) - (Number(a.record.sequenceNo) || 0) ||
+      new Date(
+        b.record.finishedAt ?? b.record.startedAt ?? b.record.createdAt ?? 0
+      ).getTime() -
+        new Date(
+          a.record.finishedAt ?? a.record.startedAt ?? a.record.createdAt ?? 0
+        ).getTime()
+  );
+  const latest = candidates[0];
+  return latest
+    ? { nodeId: latest.node.id, recordId: latest.record.id }
+    : { nodeId: nodes[0]?.id };
+}
 export type RunGraphNode = RunRecord & {
   id: string;
   name: string;

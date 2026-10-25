@@ -1,4 +1,5 @@
 import { workflowInfoToken } from "./workflow-info-token";
+import { workflowParticipantReadiness } from "./workflow-participant-readiness";
 import { workflowCopyName } from "../shared/workflow-creation-form";
 import { assertDataflowResourcesReady } from "./dataflow-resource-readiness";
 import { assertWorkflowCreationAccess, assertWorkflowConfigurationToken, prepareWorkflowCreationRequest, replayWorkflowCreationRequest, saveWorkflowCreationRequest, type WorkflowCreationRequest } from "./workflow-creation-request";
@@ -875,9 +876,12 @@ export async function compileWorkflowDraft(
     );
     if(current.flowType === "data" && current.projectId)
       await assertDataflowResourcesReady(db(),current.projectId,resolved);
-    return compileWorkflowDefinition(resolved, {
+    const compiled = compileWorkflowDefinition(resolved, {
       flowType: current.flowType,
     });
+    if (!compiled.ok) return compiled;
+    const diagnostics = await workflowParticipantReadiness(workflowId, resolved, user.id);
+    return diagnostics.length ? { ok: false, diagnostics } : compiled;
   } catch (error) {
     if (error && typeof error === "object" && "diagnostics" in error)
       return {
