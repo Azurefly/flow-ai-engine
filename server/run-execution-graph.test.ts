@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   projectRunGraph,
   resolveRunGraphFocus,
+  resolveRunGraphRecord,
 } from "../shared/run-execution-graph";
 const definition = {
   nodes: [
@@ -44,6 +45,41 @@ const run = (extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 describe("实例执行画布投影", () => {
+  it("查看其他节点后返回来源节点保留任务批次，明确选择可以覆盖来源", () => {
+    const data = run({
+      status: "success",
+      taskActivities: [{ id: "task-a", nodeId: "review", nodeRunId: "a" }],
+      nodeRuns: [
+        { id: "a", nodeId: "review", status: "success", sequenceNo: 2, outputJson: { branch: "A" } },
+        { id: "b", nodeId: "review", status: "success", sequenceNo: 5, outputJson: { branch: "B" } },
+        { id: "end", nodeId: "done", status: "success", sequenceNo: 6 },
+      ],
+    });
+    const { nodes } = projectRunGraph(data);
+    const focus = resolveRunGraphFocus(data, nodes, "task-a");
+    const review = nodes.find(node => node.id === "review");
+    expect(resolveRunGraphRecord(review, focus, "")?.outputJson.branch).toBe("A");
+    expect(resolveRunGraphRecord(nodes.find(node => node.id === "done"), focus, "")?.id).toBe("end");
+    expect(resolveRunGraphRecord(review, focus, "")?.id).toBe("a");
+    expect(resolveRunGraphRecord(review, focus, "b")?.outputJson.branch).toBe("B");
+    expect(resolveRunGraphRecord(review, focus, "missing-batch")).toBeUndefined();
+  });
+  it("旧任务缺少批次映射时，切换节点不会把最新一批当作其办理结果", () => {
+    const data = run({
+      taskActivities: [{ id: "legacy", nodeId: "review" }],
+      nodeRuns: [
+        { id: "a", nodeId: "review", status: "waiting", sequenceNo: 2 },
+        { id: "b", nodeId: "review", status: "success", sequenceNo: 5 },
+      ],
+    });
+    const { nodes } = projectRunGraph(data);
+    const node = nodes.find(node => node.id === "review");
+    const focus = resolveRunGraphFocus(data, nodes, "legacy");
+    expect(focus.warning).toBeTruthy();
+    expect(resolveRunGraphRecord(node, focus, "")).toBeUndefined();
+    expect(resolveRunGraphRecord(node, focus, "b")?.id).toBe("b");
+    expect(resolveRunGraphRecord(node, {}, "")?.id).toBe("a");
+  });
   it("来源任务精确选择并行共享节点的各自批次，不被最新批次覆盖", () => {
     const data = run({
       status: "success",

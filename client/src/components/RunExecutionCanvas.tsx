@@ -16,6 +16,7 @@ import "@xyflow/react/dist/style.css";
 import {
   projectRunGraph,
   resolveRunGraphFocus,
+  resolveRunGraphRecord,
   runNodeLabels,
   type RunRecord,
   type RunGraphNode,
@@ -94,6 +95,7 @@ export default function RunExecutionCanvas({
   );
   const [selected, setSelected] = useState("");
   const [occurrence, setOccurrence] = useState("");
+  const chosenRecords = useRef(new Map<string, string>());
   const [layout, setLayout] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const api = useRef<ReactFlowInstance<ViewerNode, Edge> | null>(null);
@@ -104,24 +106,14 @@ export default function RunExecutionCanvas({
   const active =
     graph.nodes.find(n => n.id === selected) ??
     graph.nodes.find(n => n.id === initialFocus.nodeId);
-  const record =
-    active?.records.find((r: RunRecord) => r.id === occurrence) ??
-    (!selected && initialFocus.warning
-      ? undefined
-      : !selected && initialFocus.recordId
-        ? active?.records.find(r => r.id === initialFocus.recordId)
-        : active?.activeCount
-          ? active.records
-              .filter((r: RunRecord) =>
-                ["running", "waiting", "pending"].includes(r.status)
-              )
-              .at(-1)
-          : active?.records.at(-1));
+  const record = resolveRunGraphRecord(active, initialFocus, occurrence);
   const pending =
     record && ["waiting", "running", "pending"].includes(record.status);
   const choose = (id: string) => {
+    if (id === active?.id) return;
+    if (active && record) chosenRecords.current.set(active.id, record.id);
     setSelected(id);
-    setOccurrence("");
+    setOccurrence(chosenRecords.current.get(id) ?? "");
   };
   const nodes: ViewerNode[] = graph.nodes.map(n => ({
     id: n.id,

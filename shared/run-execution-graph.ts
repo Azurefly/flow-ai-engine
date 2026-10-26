@@ -65,6 +65,23 @@ export type RunGraphNode = RunRecord & {
   position: { x: number; y: number };
   layout: { x: number; y: number };
 };
+/** Keep a task's batch when returning to its node; unknown identities stay unselected. */
+export function resolveRunGraphRecord(
+  node: RunGraphNode | undefined,
+  focus: RunGraphFocus,
+  recordId: string
+): RunRecord | undefined {
+  if (!node) return undefined;
+  if (recordId) return node.records.find(record => record.id === recordId);
+  if (node.id === focus.nodeId) {
+    if (focus.warning) return undefined;
+    if (focus.recordId)
+      return node.records.find(record => record.id === focus.recordId);
+  }
+  return node.activeCount
+    ? node.records.filter(record => ["running", "waiting", "pending"].includes(record.status)).at(-1)
+    : node.records.at(-1);
+}
 export const runNodeLabels: Record<string, string> = {
   idle: "未执行",
   running: "运行中",

@@ -141,7 +141,7 @@ export function ProcessWorkbenchRunTab({
           </div>
         </div>
       ) : run ? (
-        <RunDetailContent run={run} entryTaskId={entryTaskId} />
+        <RunDetailContent key={`${runId}:${entryTaskId ?? ""}`} run={run} entryTaskId={entryTaskId} />
       ) : (
         <div className="p-8 text-center text-sm text-muted-foreground">
           当前实例暂无可展示的详情。
