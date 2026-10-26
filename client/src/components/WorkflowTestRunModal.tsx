@@ -25,6 +25,7 @@ import {
   runAfterDraftSave,
 } from "@shared/run-after-draft-save";
 import { canStartActualWorkflowRun } from "@shared/actual-run-confirmation";
+import { canonicalResourcePayload } from "@shared/resource-creation";
 import { toast } from "sonner";
 import {
   Play,
@@ -157,7 +158,7 @@ export default function WorkflowTestRunModal({
     }
   };
   const utils = trpc.useUtils();
-  const readinessKey = JSON.stringify([open, workflow?.id, runInput, definition, inputErrors]);
+  const readinessKey = canonicalResourcePayload([open, workflow?.id, runInput, definition, inputErrors]);
   const liveReadinessKey = useRef(readinessKey);
   liveReadinessKey.current = readinessKey;
   const [readiness, setReadiness] = useState<{ key: string; result: NonNullable<typeof readinessRequest.data> } | null>(null);

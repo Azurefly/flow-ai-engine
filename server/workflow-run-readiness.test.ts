@@ -30,6 +30,7 @@ import {
   type WorkflowDefinition,
 } from "./workflow-compiler";
 import { createDefaultNodeConfig } from "../shared/workflow-node-contract";
+import { canonicalResourcePayload } from "../shared/resource-creation";
 
 function definition(config: Record<string, unknown> = {}): WorkflowDefinition {
   return {
@@ -101,6 +102,16 @@ beforeEach(() => {
 });
 
 describe("本次运行的只读就绪检查", () => {
+  it("保存时的JSON属性重排不使本次输入失效，真实修改或关闭窗口仍会失效", () => {
+    const before = { nodes: [{ id: "review", config: { mode: "user", userId: 7 } }] };
+    const saved = { nodes: [{ config: { userId: 7, mode: "user" }, id: "review" }] };
+    const key = (open: boolean, graph: unknown, userId: string | number = 7) => canonicalResourcePayload([open, "workflow", { userId }, graph, []]);
+    expect(JSON.stringify(before)).not.toBe(JSON.stringify(saved));
+    expect(key(true, saved)).toBe(key(true, before));
+    expect(key(false, saved)).not.toBe(key(true, before));
+    expect(key(true, saved, "7")).not.toBe(key(true, before));
+    expect(key(true, { nodes: [] })).not.toBe(key(true, before));
+  });
   it.each([
     "initiator",
     "initiator_manager",
