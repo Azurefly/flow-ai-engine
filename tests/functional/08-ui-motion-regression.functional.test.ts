@@ -14,7 +14,12 @@ function collectClientSourceFiles(directory: string): string[] {
 function expectSemanticRoleForCopy(source: string, copy: string, role: string) {
   const copyIndex = source.indexOf(copy);
   expect(copyIndex).toBeGreaterThanOrEqual(0);
-  expect(source.slice(Math.max(0, copyIndex - 800), copyIndex)).toContain(role);
+  const context = source.slice(Math.max(0, copyIndex - 800), copyIndex);
+  const sharedClasses = Array.from(context.matchAll(/className=\{([A-Za-z_$][\w$]*)\}/g), match => {
+    const declaration = source.match(new RegExp(`const ${match[1]} = ("(?:[^"\\\\]|\\\\.)*");`));
+    return declaration ? JSON.parse(declaration[1]) : "";
+  });
+  expect([context, ...sharedClasses].join(" ")).toContain(role);
 }
 
 function expectSemanticBodyForCopy(source: string, copy: string) {
@@ -223,7 +228,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         homeSource,
         "管理账号与角色，查看有效权限和授权来源。"
       );
-      expectSemanticBodyForCopy(homeSource, "当前流程未提供可读取的入口字段");
+      expectSemanticBodyForCopy(workflowTestRunSource, "业务编号请选择文本以保留前导零");
       const memberDialogSource = readFileSync(
         "client/src/components/WorkflowRoleBindingsDialog.tsx",
         "utf8"
@@ -342,7 +347,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       );
       expectSemanticBodyForCopy(
         workflowTestRunSource,
-        "状态流程本质是长周期的业务对象生命周期"
+        "请在“已启动流程”中查看待办任务或所需事件"
       );
       expectSemanticBodyForCopy(
         workflowTestRunSource,
@@ -384,9 +389,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "该流程已被驳回。重置后回到待审核草稿"
       );
       expect(homeSource).toContain("p-3 aiflow-type-control text-foreground");
-      expect(homeSource).toContain(
-        "aiflow-type-code max-h-48 overflow-auto rounded bg-slate-950 p-3 font-mono text-emerald-200"
-      );
+      expect(homeSource).not.toContain("function LogBlock");
       expect(memberDialogSource).toContain('className="auth-title"');
       expect(styleSource).toContain(
         ".auth-title {font-size:var(--aiflow-type-section)"

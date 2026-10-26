@@ -64,6 +64,7 @@ import {
   resolveStateDisplayName,
 } from "../shared/workflow-node-contract";
 import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-source";
+import { assertRunPreflightRevision } from "./workflow-run-revision";
 import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
 import { ENV } from "./_core/env";
 import { loadRuntimeModelCatalog } from "./runtime-model-catalog";
@@ -2016,6 +2017,8 @@ export async function submitWorkflowRun(input: {
   idempotencyKey?: string;
   requestId?: string;
   triggerType?: string;
+  expectedDefinitionVersion?: number;
+  expectedExecutionPlanHash?: string;
 }) {
   const [workflowRows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT id,ownerUserId,name,projectId,flowType,status,auditStatus,archivedAt,definitionVersion,definitionJson,publishedExecutionPlanJson,publishedExecutionPlanHash FROM workflow WHERE id=? LIMIT 1",
@@ -2054,6 +2057,7 @@ export async function submitWorkflowRun(input: {
           flowType: workflow.flowType,
         }).plan;
   const executableDefinition = executablePlan.definition;
+  assertRunPreflightRevision(Number(workflow.definitionVersion), input.expectedExecutionPlanHash ? hashWorkflowExecutionPlan(executablePlan) : "", input);
   const requestedIdempotencyKey = input.idempotencyKey?.trim();
   const jobIdempotencyKey = requestedIdempotencyKey
     ? `workflow:start:${input.workflowId}:${input.triggeredBy.id}:${requestedIdempotencyKey}`

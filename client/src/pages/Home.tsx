@@ -3311,289 +3311,6 @@ function FlowDesigner({
   );
 }
 
-function valueFromField(value: string): unknown {
-  if (value === "true") return true;
-  if (value === "false") return false;
-  if (value !== "" && Number.isFinite(Number(value))) return Number(value);
-  return value;
-}
-
-function StructuredRunInput({
-  value,
-  onChange,
-  canRun,
-  runPending,
-  onRun,
-}: {
-  value: Record<string, unknown>;
-  onChange: (value: Record<string, unknown>) => void;
-  canRun: boolean;
-  runPending: boolean;
-  onRun: () => void;
-}) {
-  const toRows = (input: Record<string, unknown>) =>
-    Object.entries(input).map(([key, item]) => ({
-      key,
-      value: String(item ?? ""),
-    }));
-  const [rows, setRows] = useState(() => toRows(value));
-  const isInternalUpdate = useRef(false);
-
-  useEffect(() => {
-    if (isInternalUpdate.current) {
-      isInternalUpdate.current = false;
-      return;
-    }
-    setRows(toRows(value));
-  }, [value]);
-  const update = (next: Array<{ key: string; value: string }>) => {
-    setRows(next);
-    isInternalUpdate.current = true;
-    onChange(
-      Object.fromEntries(
-        next
-          .filter(row => row.key.trim())
-          .map(row => [row.key, valueFromField(row.value)])
-      )
-    );
-  };
-  return (
-    <section
-      data-structured-run-input
-      className="mb-3 min-w-0 rounded-lg border border-border bg-card p-3"
-    >
-      <div>
-        <p className="aiflow-type-section-title flex items-center gap-2 font-semibold text-foreground">
-          <CirclePlay size={14} className="text-aiflow-success" />
-          运行字段
-        </p>
-        <p className="aiflow-type-body mt-1 text-muted-foreground">
-          当前流程未提供可读取的入口字段
-          schema；请按业务约定填写字段名和值。数值与 true/false
-          会自动保留类型，无需编辑 JSON。
-        </p>
-      </div>
-      <div className="mt-3 grid min-w-0 gap-2">
-        {!rows.length && (
-          <div
-            role="status"
-            className="aiflow-type-body rounded border border-dashed border-border bg-muted px-3 py-2 text-muted-foreground"
-          >
-            当前未填写运行字段；如该流程不需要输入，可直接运行，否则请先按业务约定添加字段。
-          </div>
-        )}
-        {rows.map((row, index) => (
-          <div
-            key={index}
-            className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(100px,.8fr)_minmax(0,1.2fr)_auto]"
-          >
-            <Input
-              aria-label="运行字段名称"
-              className="col-span-2 min-w-0 sm:col-span-1"
-              placeholder="字段名"
-              value={row.key}
-              onChange={event =>
-                update(
-                  rows.map((current, rowIndex) =>
-                    rowIndex === index
-                      ? { ...current, key: event.target.value }
-                      : current
-                  )
-                )
-              }
-            />
-            <Input
-              aria-label="运行字段值"
-              className="min-w-0"
-              placeholder="字段值"
-              value={row.value}
-              onChange={event =>
-                update(
-                  rows.map((current, rowIndex) =>
-                    rowIndex === index
-                      ? { ...current, value: event.target.value }
-                      : current
-                  )
-                )
-              }
-            />
-            <button
-              type="button"
-              className="rounded px-2 text-muted-foreground hover:text-red-600"
-              onClick={() =>
-                update(rows.filter((_, rowIndex) => rowIndex !== index))
-              }
-              aria-label="删除运行字段"
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          className="w-fit text-xs font-medium text-aiflow-info hover:underline"
-          onClick={() => update([...rows, { key: "", value: "" }])}
-        >
-          + 添加运行字段
-        </button>
-      </div>
-      <div className="mt-4 flex justify-end gap-2 border-t border-border pt-3">
-        <Button
-          className="bg-blue-600 text-white hover:bg-blue-700 shadow-2xs"
-          size="sm"
-          disabled={!canRun || runPending}
-          onClick={onRun}
-        >
-          {runPending ? (
-            <Loader2 className="animate-spin" size={14} />
-          ) : (
-            <Play size={14} />
-          )}
-          立即运行测试
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function LegacyRunCenter({
-  runs,
-  selectedRun,
-  onSelect,
-}: {
-  runs: any[];
-  selectedRun: any;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <div className="p-4 lg:p-6">
-      <div className="mb-5">
-        <p className="text-xs font-bold tracking-[.18em] text-aiflow-info">
-          RUNTIME OBSERVABILITY
-        </p>
-        <h2
-          data-aiflow-page-title=""
-          className="aiflow-type-page-title mt-1 font-semibold"
-        >
-          执行历史与节点日志
-        </h2>
-      </div>
-      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
-        <section className="overflow-hidden rounded-lg border border-border bg-card">
-          <div className="border-b border-border px-4 py-3 text-sm font-semibold">
-            近期运行
-          </div>
-          <div className="max-h-[650px] overflow-y-auto">
-            {runs.map(run => (
-              <button
-                key={run.id}
-                onClick={() => onSelect(run.id)}
-                className={`w-full border-b border-border p-4 text-left hover:bg-muted ${selectedRun?.id === run.id ? "bg-aiflow-info-surface" : ""}`}
-              >
-                <div className="flex justify-between gap-2">
-                  <code className="text-xs text-muted-foreground">
-                    {run.id.slice(0, 8)}
-                  </code>
-                  <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${run.status === "success" ? "bg-aiflow-success-surface text-aiflow-success" : run.status === "failed" ? "bg-red-100 text-red-700" : "bg-aiflow-warning-surface text-aiflow-warning"}`}
-                  >
-                    {run.status}
-                  </span>
-                </div>
-                <div className="mt-2 flex gap-3 text-[11px] text-muted-foreground">
-                  <span>{formatTime(run.createdAt)}</span>
-                  <span>{run.durationMs ?? "—"} ms</span>
-                </div>
-              </button>
-            ))}
-            {!runs.length && (
-              <p className="p-6 text-center text-sm text-muted-foreground">
-                尚无运行记录。
-              </p>
-            )}
-          </div>
-        </section>
-        <section className="min-h-80 rounded-lg border border-border bg-card p-5">
-          {selectedRun ? (
-            <>
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-xs font-bold tracking-[.18em] text-muted-foreground">
-                    RUN {selectedRun.id.slice(0, 8)}
-                  </p>
-                  <h3 className="mt-1 font-semibold">
-                    {selectedRun.status === "success" ? "运行成功" : "运行详情"}
-                  </h3>
-                </div>
-                <span className="text-xs text-muted-foreground">
-                  {selectedRun.durationMs ?? "—"} ms
-                </span>
-              </div>
-              <div className="mt-5 grid gap-3">
-                {selectedRun.nodeRuns?.map((node: any) => (
-                  <details
-                    key={node.id}
-                    className="rounded border border-border bg-muted p-3"
-                  >
-                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm">
-                      <span className="flex items-center gap-2">
-                        <span
-                          className={`h-2 w-2 rounded-full ${node.status === "success" ? "bg-emerald-500" : node.status === "failed" ? "bg-red-500" : "bg-slate-400"}`}
-                        />
-                        {node.nodeName}
-                        <code className="text-[10px] text-muted-foreground">
-                          {node.nodeType}
-                        </code>
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {node.durationMs ?? "—"} ms
-                      </span>
-                    </summary>
-                    <div className="mt-3 grid gap-3 border-t border-border pt-3 text-xs">
-                      <LogBlock
-                        title="输入"
-                        value={decodeJson(node.inputJson)}
-                      />
-                      <LogBlock
-                        title="输出"
-                        value={decodeJson(node.outputJson)}
-                      />
-                      <LogBlock
-                        title="错误"
-                        value={decodeJson(node.errorJson)}
-                      />
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="grid h-full place-items-center text-center text-sm text-muted-foreground">
-              <div>
-                <Clock3 className="mx-auto" size={28} />
-                <p className="mt-3">从左侧选择一次运行以查看节点级日志。</p>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    </div>
-  );
-}
-function LogBlock({ title, value }: { title: string; value: unknown }) {
-  if (value === null || value === undefined) return null;
-  return (
-    <div>
-      <p className="aiflow-type-control mb-1 font-semibold text-muted-foreground">
-        {title}
-      </p>
-      <pre className="aiflow-type-code max-h-48 overflow-auto rounded bg-slate-950 p-3 font-mono text-emerald-200">
-        {JSON.stringify(value, null, 2)}
-      </pre>
-    </div>
-  );
-}
-
 type InternalUserForm = {
   username: string;
   name: string;
@@ -3754,8 +3471,8 @@ function IamCenter({
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
-  const [mobileUserDetailsOpen, setMobileUserDetailsOpen] = useState(false);
-  const [mobileRoleDetailsOpen, setMobileRoleDetailsOpen] = useState(false);
+
+
   const [revokeTarget,setRevokeTarget]=useState<{id:string;userId:number;userLabel:string;roleName:string;scopeLabel:string}|null>(null);
   const pendingRevokeRoleId=revokeTarget?.id??null;
   const [revokeError,setRevokeError]=useState("");
@@ -3888,11 +3605,11 @@ function IamCenter({
       first &&
       !filteredUsers.some(account => Number(account.id) === selectedUserId)
     ) {
-      setMobileUserDetailsOpen(false);
+
       setSelectedUserId(Number(first.id));
     }
     if (!first && selectedUserId !== null) {
-      setMobileUserDetailsOpen(false);
+
       setSelectedUserId(null);
     }
   }, [
@@ -3968,8 +3685,8 @@ function IamCenter({
     setAiPreview(null);
   };
 
-  const openUserAssignment=()=>{if(!selectedUserId||!userDetails.data)return;setMobileUserDetailsOpen(false);setAssignmentTarget({mode:"user",userId:String(selectedUserId),userLabel:`${userDetails.data.user.name||userDetails.data.user.username}（${userDetails.data.user.username}）`});};
-  const openRoleAssignment=()=>{if(!selectedRole||selectedRole.scope!=="system")return;setMobileRoleDetailsOpen(false);setAssignmentTarget({mode:"role",roleCode:selectedRole.code,roleName:selectedRole.name,configToken:selectedRole.configToken});};
+  const openUserAssignment=()=>{if(!selectedUserId||!userDetails.data)return;setAssignmentTarget({mode:"user",userId:String(selectedUserId),userLabel:`${userDetails.data.user.name||userDetails.data.user.username}（${userDetails.data.user.username}）`});};
+  const openRoleAssignment=()=>{if(!selectedRole||selectedRole.scope!=="system")return;setAssignmentTarget({mode:"role",roleCode:selectedRole.code,roleName:selectedRole.name,configToken:selectedRole.configToken});};
 
   return (
     <div className="space-y-5 p-4 lg:p-6 [&_input]:h-11 [&_select]:h-11 [&_button]:min-h-11 min-[1024px]:[&_input]:h-10 min-[1024px]:[&_select]:h-10 min-[1024px]:[&_button]:min-h-10">
@@ -4377,7 +4094,7 @@ function IamCenter({
                   setUserStatus(event.target.value as typeof userStatus);
                   setUserPage(0);
                   setSelectedUserId(null);
-                  setMobileUserDetailsOpen(false);
+
                 }}>
                   <option value="active">启用账号</option>
                   <option value="disabled">停用账号</option>
@@ -4471,7 +4188,7 @@ function IamCenter({
                         className="min-[1024px]:hidden"
                         onClick={() => {
                           setSelectedUserId(Number(account.id));
-                          setMobileUserDetailsOpen(true);
+
                         }}
                       >
                         <Eye size={14} />
@@ -4528,7 +4245,7 @@ function IamCenter({
               </div>
             )}
           </section>
-          <section className="sticky top-4 hidden min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card min-[1024px]:block">
+          <section className="sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card">
             <UserAuthorizationPanel
               selectedUserId={selectedUserId}
               details={userDetails}
@@ -4537,29 +4254,7 @@ function IamCenter({
               revoking={revokeRole.isPending}
             />
           </section>
-          <Dialog
-            open={mobileUserDetailsOpen}
-            onOpenChange={setMobileUserDetailsOpen}
-          >
-            <DialogContent className="max-w-xl">
-              <DialogHeader>
-                <DialogTitle>用户权限与角色</DialogTitle>
-                <DialogDescription>
-                  在当前用户上下文中查看有效权限、绑定或撤销直接角色。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="max-h-[70vh] overflow-y-auto pr-1">
-                <UserAuthorizationPanel
-                  selectedUserId={selectedUserId}
-                  details={userDetails}
-                  onAssign={openUserAssignment}
-                  onRevoke={requestRoleRevoke}
-                  revoking={revokeRole.isPending}
-                  embedded
-                />
-              </div>
-            </DialogContent>
-          </Dialog>
+
           <Dialog
             open={pendingRevokeRoleId !== null}
             onOpenChange={open => {
@@ -4664,18 +4359,7 @@ function IamCenter({
                       {role.code}
                     </p>
                   </button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`查看角色详情：${role.name}（${role.code}）`}
-                    className="aiflow-type-control h-11 min-w-11 px-2 min-[1024px]:hidden"
-                    onClick={() => {
-                      setSelectedRoleId(Number(role.id));
-                      setMobileRoleDetailsOpen(true);
-                    }}
-                  >
-                    <Eye size={13} />
-                  </Button>
+
                 </div>
               ))}
               {!filteredRoles.length && (
@@ -4727,42 +4411,18 @@ function IamCenter({
               </div>
             )}
           </section>
-          <section className="sticky top-4 hidden min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card min-[1024px]:block">
+          <section className="sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card">
             <RoleAuthorizationPanel
               details={roleDetails}
               selectedRole={selectedRole}
               onAssign={openRoleAssignment}
               onManage={(mode, role) => {
-                setMobileRoleDetailsOpen(false);
+
                 setRoleEditor({ mode, role });
               }}
             />
           </section>
-          <Dialog
-            open={mobileRoleDetailsOpen}
-            onOpenChange={setMobileRoleDetailsOpen}
-          >
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>角色详情</DialogTitle>
-                <DialogDescription className="aiflow-type-body leading-6">
-                  查看角色权限、直接绑定用户及组织继承用户。
-                </DialogDescription>
-              </DialogHeader>
-              <div className="max-h-[70vh] overflow-y-auto pr-1">
-                <RoleAuthorizationPanel
-                  details={roleDetails}
-                  selectedRole={selectedRole}
-                  onAssign={openRoleAssignment}
-                  onManage={(mode, role) => {
-                    setMobileRoleDetailsOpen(false);
-                    setRoleEditor({ mode, role });
-                  }}
-                  embedded
-                />
-              </div>
-            </DialogContent>
-          </Dialog>
+
         </div>
       )}
 

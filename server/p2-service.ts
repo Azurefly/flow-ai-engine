@@ -27,6 +27,7 @@ import {
   type WorkflowExecutionPlan,
 } from "./workflow-compiler";
 import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-source";
+import { assertRunPreflightRevision } from "./workflow-run-revision";
 import { probeSafeHttpEndpoint, resolveTemplates } from "./workflow-engine";
 import { resolveExternalSecret } from "./service-endpoint-service";
 import { resolveDataflowJoinInputs } from "../shared/dataflow-join-inputs";
@@ -2079,6 +2080,8 @@ export async function runDataflow(
     scheduleBucket?: string;
     scheduleAdmission?: NativeScheduleAdmission;
     hostedTaskUid?: string;
+    expectedDefinitionVersion?: number;
+    expectedExecutionPlanHash?: string;
   }
 ) {
   await requireProjectAccess(
@@ -2128,6 +2131,7 @@ export async function runDataflow(
       executionPlan = compiled.plan;
       executionPlanHash = compiled.planHash;
     }
+    assertRunPreflightRevision(Number(workflow.definitionVersion), executionPlanHash, input);
     definition = executionPlan.definition;
     await assertDataflowResourcesReady(connection,input.projectId,definition,true);
     const admission = input.scheduleAdmission

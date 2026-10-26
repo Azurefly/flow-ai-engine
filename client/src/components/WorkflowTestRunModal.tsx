@@ -50,6 +50,16 @@ import {
   Clock,
   HelpCircle,
 } from "lucide-react";
+const inactiveTabClass = "border-transparent text-muted-foreground hover:text-foreground";
+const resultPanelClass = "rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]";
+const nodePanelClass = "rounded-lg border border-border bg-muted/50 overflow-hidden";
+const nodeHeaderClass = "flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors";
+const nodeIndexClass = "flex h-5 w-5 items-center justify-center rounded-full bg-aiflow-info-surface text-[10px] font-bold text-aiflow-info";
+const outputLabelClass = "aiflow-type-body mb-1.5 font-semibold text-muted-foreground";
+const jsonOutputClass = "aiflow-type-code max-h-40 overflow-auto rounded bg-slate-900 p-2.5 font-mono text-emerald-300";
+const payloadLabelClass = "aiflow-type-body mb-1 font-semibold text-muted-foreground";
+const emptyStateClass = "aiflow-type-body py-8 text-center text-muted-foreground";
+
 
 interface WorkflowTestRunModalProps {
   open: boolean;
@@ -102,6 +112,7 @@ export default function WorkflowTestRunModal({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const readinessRequest = trpc.workflow.runReadiness.useMutation({ retry: false });
   const [acknowledgedActualRun, setAcknowledgedActualRun] = useState(false);
   const [outputPage, setOutputPage] = useState(1);
   const OUTPUT_PAGE_SIZE = 10;
@@ -113,7 +124,7 @@ export default function WorkflowTestRunModal({
       canRun: canExecute,
       isRunning,
       acknowledged: acknowledgedActualRun,
-    }) && inputErrors.length === 0;
+    }) && inputErrors.length === 0 && !readinessRequest.isPending;
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) setAcknowledgedActualRun(false);
@@ -146,6 +157,23 @@ export default function WorkflowTestRunModal({
     }
   };
   const utils = trpc.useUtils();
+  const readinessKey = JSON.stringify([open, workflow?.id, runInput, definition, inputErrors]);
+  const liveReadinessKey = useRef(readinessKey);
+  liveReadinessKey.current = readinessKey;
+  const [readiness, setReadiness] = useState<{ key: string; result: NonNullable<typeof readinessRequest.data> } | null>(null);
+  const [readinessError, setReadinessError] = useState("");
+  const currentReadiness = readiness?.key === readinessKey ? readiness.result : null;
+  useEffect(() => { setAcknowledgedActualRun(false); setReadinessError(""); }, [readinessKey, open]);
+  const checkConditions = async () => {
+    const key = liveReadinessKey.current;
+    setReadinessError("");
+    let result;
+    try { result = await readinessRequest.mutateAsync({ workflowId: workflow.id, input: runInput, mode: isDataflow && workflow.status === "published" ? "formal" : "test" }); }
+    catch (error) { if (key === liveReadinessKey.current) { setReadinessError(error instanceof Error ? error.message : "检查失败，请重试。"); setViewMode("config"); } throw error; }
+    if (key !== liveReadinessKey.current) throw new Error("输入或画布已变化，本次未创建运行，请重新检查。");
+    setReadiness({ key, result });
+    return result;
+  };
 
   // Mutations
   const runWorkflowMutation = trpc.workflow.run.useMutation();
@@ -321,6 +349,9 @@ export default function WorkflowTestRunModal({
         workflowStatus: String(workflow?.status ?? "draft"),
         saveDraft: onSaveDraft,
         run: async () => {
+          const checked = await checkConditions();
+          if (!checked.canStart) { setViewMode("config"); throw new Error(checked.issues[0]?.message || "运行条件未通过，未创建实例。"); }
+          const checkpoint = { expectedDefinitionVersion: checked.definitionVersion, expectedExecutionPlanHash: checked.planHash ?? undefined };
           if (isDataflow) {
             if (!workflow.projectId) {
               throw new Error("数据流缺少所属业务项目，无法执行。");
@@ -330,6 +361,7 @@ export default function WorkflowTestRunModal({
               workflowId: workflow.id,
               mode: workflow.status === "published" ? "formal" : "test",
               data: runInput,
+              ...checkpoint,
             });
             setActiveRunId(res.runId);
             void utils.data.runs.invalidate({ projectId: workflow.projectId });
@@ -346,6 +378,7 @@ export default function WorkflowTestRunModal({
               input: runInput,
               idempotencyKey,
               triggerType: "test",
+              ...checkpoint,
             });
             setActiveRunId(res.runId);
             void utils.workflow.runs.invalidate();
@@ -376,8 +409,7 @@ export default function WorkflowTestRunModal({
     toast.success("已复制到剪贴板");
   };
 
-  const isCompleted =
-    currentRun?.status === "success" || currentRun?.status === "failed";
+  const isCompleted = ["success", "failed", "cancelled", "terminated"].includes(String(currentRun?.status ?? ""));
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
@@ -475,9 +507,7 @@ export default function WorkflowTestRunModal({
                     <div className="aiflow-type-body flex items-center gap-2 font-semibold text-aiflow-warning">
                       <Clock size={16} className="text-aiflow-warning" />
                       <span>
-                        {isStateflow
-                          ? "流转挂起：等待参与人审批操作"
-                          : "流程等待外部事件挂起"}
+                        {currentRun?.status === "blocked" ? "运行已阻塞" : "等待办理或外部事件"}
                       </span>
                     </div>
                   ) : (
@@ -507,7 +537,7 @@ export default function WorkflowTestRunModal({
                   </div>
                 ) : (
                   <div className="aiflow-type-body font-medium text-muted-foreground">
-                    准备就绪
+                    {currentRun?.status === "terminated" ? "运行已终止" : currentRun?.status === "cancelled" ? "运行已取消" : "尚未发起运行"}
                   </div>
                 )}
 
@@ -713,6 +743,17 @@ export default function WorkflowTestRunModal({
                   checked={acknowledgedActualRun}
                   onChange={setAcknowledgedActualRun}
                 />
+                <section aria-label="本次运行条件" className="mt-4 space-y-2 rounded-lg border border-border p-3 text-sm">
+                  <Button type="button" variant="outline" disabled={!canExecute || isRunning || readinessRequest.isPending || inputErrors.length > 0} onClick={() => void checkConditions().catch(error => setReadinessError(error.message))}>{readinessRequest.isPending ? "正在检查…" : "检查运行条件"}</Button>
+                  <p className="text-muted-foreground">只读检查已保存版本与本次输入，不执行节点或外部请求；运行前保存草稿后会复查。</p>
+                  {readinessError && <p role="alert">{readinessError}</p>}
+                  {currentReadiness && <div role="status" className="space-y-2">
+                    <p>v{currentReadiness.definitionVersion} · {currentReadiness.executionSource === "published_plan" ? "已发布快照" : "已保存定义"} · {!currentReadiness.canStart ? "存在阻断项，未创建实例" : currentReadiness.checks.some(item => item.status === "deferred") ? "部分条件待运行时确认" : "当前检查未发现阻断项"}</p>
+                    {currentReadiness.issues.map((issue, i) => <p key={i} className="text-aiflow-danger">{issue.message}</p>)}
+                    {currentReadiness.checks.length > 0 && <details><summary>处理人检查 · {currentReadiness.checks.length} 项</summary>{currentReadiness.checks.map(item => <p key={item.nodeId}>{item.name}：{item.message}</p>)}</details>}
+                    <p className="text-muted-foreground">动态条件和外部服务在执行时再校验，不保证所有分支成功。</p>
+                  </div>}
+                </section>
                 <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
                   <Button
                     type="button"
@@ -756,10 +797,10 @@ export default function WorkflowTestRunModal({
                       <Clock className="h-5 w-5 text-aiflow-warning shrink-0 mt-0.5" />
                       <div className="aiflow-type-body text-aiflow-warning">
                         <p className="font-semibold text-amber-900">
-                          状态流转已就绪：当前处于等待参与人操作（审批/签署/提交）阶段
+                          {currentRun?.status === "blocked" ? "运行已阻塞" : "状态流程正在等待"}
                         </p>
                         <p className="mt-1 leading-relaxed text-aiflow-warning">
-                          状态流程本质是长周期的业务对象生命周期，当前节点已成功流转至人工待办任务。在实际业务运行中，需由对应角色成员（如经办人、风控初审员、主管）在【已启动流程-工作台】中完成审批后方可继续流转。下方已为您呈现当前到达的状态节点与上下文数据。
+                          {currentRun?.status === "blocked" ? "请核对节点诊断和处理人配置。" : "请在“已启动流程”中查看待办任务或所需事件。"}
                         </p>
                       </div>
                     </div>
@@ -773,7 +814,7 @@ export default function WorkflowTestRunModal({
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === "result"
                       ? "border-blue-600 text-aiflow-info"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                      : inactiveTabClass
                   }`}
                   onClick={() => setActiveTab("result")}
                 >
@@ -793,7 +834,7 @@ export default function WorkflowTestRunModal({
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === "steps"
                       ? "border-blue-600 text-aiflow-info"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                      : inactiveTabClass
                   }`}
                   onClick={() => setActiveTab("steps")}
                 >
@@ -818,7 +859,7 @@ export default function WorkflowTestRunModal({
                   className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                     activeTab === "input"
                       ? "border-blue-600 text-aiflow-info"
-                      : "border-transparent text-muted-foreground hover:text-foreground"
+                      : inactiveTabClass
                   }`}
                   onClick={() => setActiveTab("input")}
                 >
@@ -829,7 +870,7 @@ export default function WorkflowTestRunModal({
 
               {/* Tab 1: Result Output */}
               {activeTab === "result" && (
-                <div className="rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]">
+                <div className={resultPanelClass}>
                   {/* Error view if failed */}
                   {(runError || currentRun?.error) && (
                     <div className="aiflow-type-body mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
@@ -1113,7 +1154,7 @@ export default function WorkflowTestRunModal({
 
               {/* Tab 2: Execution Steps / Node Details */}
               {activeTab === "steps" && (
-                <div className="rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]">
+                <div className={resultPanelClass}>
                   <p className="aiflow-type-body mb-3 text-muted-foreground">
                     按照流程拓扑顺序记录各算子的实际执行状态、耗时与输入输出数据：
                   </p>
@@ -1142,16 +1183,16 @@ export default function WorkflowTestRunModal({
                         return (
                           <div
                             key={item.id}
-                            className="rounded-lg border border-border bg-muted/50 overflow-hidden"
+                            className={nodePanelClass}
                           >
                             <div
-                              className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors"
+                              className={nodeHeaderClass}
                               onClick={() =>
                                 setExpandedNodeId(isExpanded ? null : item.id)
                               }
                             >
                               <div className="flex items-center gap-2.5">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-aiflow-info-surface text-[10px] font-bold text-aiflow-info">
+                                <span className={nodeIndexClass}>
                                   {index + 1}
                                 </span>
                                 <span
@@ -1213,13 +1254,13 @@ export default function WorkflowTestRunModal({
                                 (Array.isArray(item.output?.rows) &&
                                   item.output.rows.length) ? (
                                   <div>
-                                    <p className="aiflow-type-body mb-1.5 font-semibold text-muted-foreground">
+                                    <p className={outputLabelClass}>
                                       节点输出数据 (
                                       {artifact?.sample?.length ||
                                         item.output?.rows?.length}{" "}
                                       条)
                                     </p>
-                                    <pre className="aiflow-type-code max-h-40 overflow-auto rounded bg-slate-900 p-2.5 font-mono text-emerald-300">
+                                    <pre className={jsonOutputClass}>
                                       {JSON.stringify(
                                         artifact?.sample || item.output?.rows,
                                         null,
@@ -1229,10 +1270,10 @@ export default function WorkflowTestRunModal({
                                   </div>
                                 ) : item.output ? (
                                   <div>
-                                    <p className="aiflow-type-body mb-1.5 font-semibold text-muted-foreground">
+                                    <p className={outputLabelClass}>
                                       节点输出
                                     </p>
-                                    <pre className="aiflow-type-code max-h-40 overflow-auto rounded bg-slate-900 p-2.5 font-mono text-emerald-300">
+                                    <pre className={jsonOutputClass}>
                                       {JSON.stringify(item.output, null, 2)}
                                     </pre>
                                   </div>
@@ -1271,16 +1312,16 @@ export default function WorkflowTestRunModal({
                         return (
                           <div
                             key={node.id}
-                            className="rounded-lg border border-border bg-muted/50 overflow-hidden"
+                            className={nodePanelClass}
                           >
                             <div
-                              className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors"
+                              className={nodeHeaderClass}
                               onClick={() =>
                                 setExpandedNodeId(isExpanded ? null : node.id)
                               }
                             >
                               <div className="flex items-center gap-2.5">
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-aiflow-info-surface text-[10px] font-bold text-aiflow-info">
+                                <span className={nodeIndexClass}>
                                   {index + 1}
                                 </span>
                                 <span
@@ -1317,7 +1358,7 @@ export default function WorkflowTestRunModal({
                             {isExpanded && (
                               <div className="border-t border-border bg-card p-3.5 grid gap-3 sm:grid-cols-2">
                                 <div>
-                                  <p className="aiflow-type-body mb-1 font-semibold text-muted-foreground">
+                                  <p className={payloadLabelClass}>
                                     节点输入
                                   </p>
                                   <pre className="aiflow-type-code max-h-36 overflow-auto rounded bg-slate-900 p-2 text-slate-200">
@@ -1325,7 +1366,7 @@ export default function WorkflowTestRunModal({
                                   </pre>
                                 </div>
                                 <div>
-                                  <p className="aiflow-type-body mb-1 font-semibold text-muted-foreground">
+                                  <p className={payloadLabelClass}>
                                     {node.error ? "节点报错" : "节点输出"}
                                   </p>
                                   <pre
@@ -1350,7 +1391,7 @@ export default function WorkflowTestRunModal({
 
                     {!dataflowLineageQuery.data?.artifacts?.length &&
                       !currentRun?.nodeRuns?.length && (
-                        <div className="aiflow-type-body py-8 text-center text-muted-foreground">
+                        <div className={emptyStateClass}>
                           {isRunning
                             ? "正在搜集各节点执行信息…"
                             : "暂无节点执行明细"}
@@ -1362,7 +1403,7 @@ export default function WorkflowTestRunModal({
 
               {/* Tab 3: Run Input Parameters */}
               {activeTab === "input" && (
-                <div className="rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]">
+                <div className={resultPanelClass}>
                   <div className="flex items-center justify-between mb-3">
                     <p className="aiflow-type-body text-muted-foreground">
                       本次运行提交的输入字段：
@@ -1383,7 +1424,7 @@ export default function WorkflowTestRunModal({
                       {JSON.stringify(currentRun?.input ?? {}, null, 2)}
                     </pre>
                   ) : (
-                    <div className="aiflow-type-body py-8 text-center text-muted-foreground">
+                    <div className={emptyStateClass}>
                       本次运行未传入额外自定义输入参数（使用默认配置运行）。
                     </div>
                   )}

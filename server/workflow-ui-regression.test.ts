@@ -500,10 +500,11 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("trpc.workflow.unpublish.useMutation");
     expect(homeSource).toContain("取消发布");
     expect(homeSource).toContain("历史版本与运行审计已保留");
-    expect(homeSource).toContain("StructuredRunInput");
-    expect(homeSource).toContain("运行字段");
-    expect(homeSource).toContain("添加运行字段");
-    expect(homeSource).toContain("当前未填写运行字段");
+    const runtimeInput = source("../client/src/components/WorkflowTestRunModal.tsx");
+    expect(runtimeInput).toContain("runInputRowsFromValue(runInput");
+    expect(runtimeInput).toContain("添加字段");
+    expect(homeSource).not.toContain("function StructuredRunInput");
+    expect(homeSource).not.toContain("function LegacyRunCenter");
     expect(homeSource).toContain("setRunInput({})");
     expect(homeSource).not.toContain('prompt: "请总结输入内容"');
     expect(homeSource).not.toContain("id: 2,");
@@ -686,11 +687,9 @@ describe("流程设计器界面回归约束", () => {
     );
   });
 
-  it("角色详情弹窗避免重复标题并使用统一字号层级", () => {
-    expect(homeSource).toContain("<DialogTitle>角色详情</DialogTitle>");
-    expect(homeSource).toContain(
-      '<DialogDescription className="aiflow-type-body leading-6">'
-    );
+  it("角色详情在同一电脑工作区内显示并使用统一字号层级", () => {
+    expect(homeSource).toContain("<RoleAuthorizationPanel");
+    expect(homeSource).not.toContain("mobileRoleDetailsOpen");
     expect(homeSource).toContain("{!embedded && (");
     expect(homeSource).toContain(
       "aiflow-type-section-title break-words font-semibold text-foreground"
@@ -1377,9 +1376,8 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("data-iam-user-more-actions");
     expect(homeSource).toContain('data-iam-account-status-action=""');
     expect(homeSource).toContain('data-iam-role-row=""');
-    expect(homeSource).toContain(
-      "aria-label={`查看角色详情：${role.name}（${role.code}）`}"
-    );
+    expect(homeSource).toContain("aria-pressed={selectedRoleId === Number(role.id)}");
+    expect(homeSource).toContain("onClick={() => setSelectedRoleId(Number(role.id))}");
     expect(homeSource).toContain("查看权限与角色");
     expect(homeSource).toContain("新增单个账号");
     expect(homeSource).toContain(
@@ -2741,7 +2739,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).not.toContain("JSON.parse(runInput)");
     expect(homeSource).toContain("useState<Record<string, unknown>>");
     expect(homeSource).not.toContain('prompt: "请总结输入内容"');
-    expect(homeSource).toContain("Object.fromEntries");
+    expect(source("../client/src/components/WorkflowTestRunModal.tsx")).toContain("onChangeRunInput(parsed.input)");
     expect(processWorkbenchSource).toContain(
       "const payload = createPayload(resultRows)"
     );
@@ -4067,7 +4065,7 @@ it("人员目录默认启用并按服务端状态筛选，切换后重置分页�
   );
   expect(filter.slice(0, 700)).toContain("setUserPage(0)");
   expect(filter.slice(0, 700)).toContain("setSelectedUserId(null)");
-  expect(filter.slice(0, 700)).toContain("setMobileUserDetailsOpen(false)");
+  expect(homeSource).not.toContain("mobileUserDetailsOpen");
   expect(homeSource).toContain("默认显示启用账号；查看停用账号请切换状态。");
 });
 it("流程角色目录变化保留原选择但阻止失效角色提交", () => {

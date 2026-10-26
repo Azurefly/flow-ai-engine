@@ -1089,6 +1089,8 @@ export const appRouter = router({
           workflowId: z.string().min(8).max(64),
           mode: z.enum(["formal", "test"]).optional(),
           data: z.record(z.string(), z.unknown()).optional(),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
+          expectedExecutionPlanHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
         })
       )
       .mutation(({ ctx, input }) => runDataflow(ctx.user, input)),
@@ -1626,6 +1628,9 @@ export const appRouter = router({
         if (!result) throw new Error("流程不存在或无发布权限。");
         return result;
       }),
+    runReadiness: protectedProcedure
+      .input(z.object({ workflowId: z.string().min(8).max(64), input: z.record(z.string(), z.unknown()).optional(), mode: z.enum(["formal", "test"]) }))
+      .mutation(async ({ ctx, input }) => (await import("./workflow-run-readiness")).inspectWorkflowRunReadiness(ctx.user, input)),
     previewParticipants: protectedProcedure
       .input(
         z.object({
@@ -1987,6 +1992,8 @@ export const appRouter = router({
           input: z.record(z.string(), z.unknown()).optional(),
           idempotencyKey: z.string().trim().min(8).max(128).optional(),
           triggerType: z.enum(["manual", "test", "schedule"]).optional(),
+          expectedDefinitionVersion: z.number().int().positive().optional(),
+          expectedExecutionPlanHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
         })
       )
       .mutation(async ({ ctx, input }) => {
@@ -2009,6 +2016,8 @@ export const appRouter = router({
           idempotencyKey: input.idempotencyKey,
           requestId: ctx.requestId,
           triggerType: input.triggerType,
+          expectedDefinitionVersion: input.expectedDefinitionVersion,
+          expectedExecutionPlanHash: input.expectedExecutionPlanHash,
         });
       }),
     cancelRun: protectedProcedure
