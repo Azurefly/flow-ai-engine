@@ -5,8 +5,11 @@ export async function getRunApprovalProgress(
   runId: string
 ): Promise<RunApprovalGroup[]> {
   const [rows] = await getSharedPool().query<RowDataPacket[]>(
-    `SELECT g.nodeId,g.signMode,g.totalApprovers,g.requiredApprovals,t.status,
+    `SELECT g.id AS groupId,g.nodeId,g.signMode,g.totalApprovers,g.requiredApprovals,t.status,
+      NULLIF(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(t.payloadJson,'$.nodeRunId')),'null'),'') AS nodeRunId,
       JSON_UNQUOTE(JSON_EXTRACT(t.resultJson,'$.decision')) AS decision,
+      CASE WHEN JSON_TYPE(JSON_EXTRACT(t.resultJson,'$.comment'))='STRING'
+        THEN JSON_UNQUOTE(JSON_EXTRACT(t.resultJson,'$.comment')) ELSE NULL END AS comment,
       COALESCE(NULLIF(completer.name,''),NULLIF(claimant.name,''),NULLIF(assignee.name,''),'未指定人员') AS participantName
       FROM workflow_task_group g JOIN workflow_task t ON t.approvalGroupId=g.id
       LEFT JOIN users assignee ON assignee.id=t.assignedUserId
@@ -16,11 +19,15 @@ export async function getRunApprovalProgress(
     [runId]
   );
   const groups = new Map<string, RunApprovalGroup>();
+  const nodeRuns = new Map<string, Set<string>>();
   for (const row of rows) {
     const nodeId = String(row.nodeId);
-    let group = groups.get(nodeId);
+    const groupId = String(row.groupId);
+    let group = groups.get(groupId);
     if (!group) {
       group = {
+        groupId,
+        nodeRunId: null,
         nodeId,
         signMode: String(row.signMode),
         total: Number(row.totalApprovers),
@@ -29,10 +36,14 @@ export async function getRunApprovalProgress(
         rejected: 0,
         participants: [],
       };
-      groups.set(nodeId, group);
+      groups.set(groupId, group);
+      nodeRuns.set(groupId, new Set());
     }
+    if (row.nodeRunId) nodeRuns.get(groupId)!.add(String(row.nodeRunId));
     const decision =
-      row.decision === "approved" || row.decision === "rejected"
+      row.decision === "approved" ||
+      row.decision === "rejected" ||
+      row.decision === "abstained"
         ? row.decision
         : null;
     if (row.status === "completed" && decision === "approved") group.approved++;
@@ -41,7 +52,18 @@ export async function getRunApprovalProgress(
       name: String(row.participantName),
       status: String(row.status),
       decision,
+      comment:
+        row.status === "completed" && typeof row.comment === "string"
+          ? row.comment
+          : null,
     });
   }
-  return Array.from(groups.values());
+  return Array.from(groups.values(), group => ({
+    ...group,
+    batchConflict: nodeRuns.get(group.groupId)!.size > 1,
+    nodeRunId:
+      nodeRuns.get(group.groupId)!.size === 1
+        ? Array.from(nodeRuns.get(group.groupId)!)[0]
+        : null,
+  }));
 }

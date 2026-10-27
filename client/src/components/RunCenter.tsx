@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { formatRunDuration } from "@shared/run-duration";
 import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
 import { RunApprovalProgress } from "./RunApprovalProgress";
-import type { RunApprovalGroup } from "@shared/run-approval-progress";
+import { approvalGroupsForRecord } from "@shared/run-approval-progress";
 import { formatRunStatus, runStatusSummary } from "@shared/run-status-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -119,6 +119,10 @@ export default function RunCenter({
     () => nodeExecutionEntries<any>(runDetail?.nodeRuns ?? []),
     [runDetail?.nodeRuns]
   );
+  const snapshotNodes = useMemo(() => {
+    const snapshot = decodeJson(runDetail?.definitionSnapshotJson);
+    return Array.isArray(snapshot?.nodes) ? snapshot.nodes : [];
+  }, [runDetail?.definitionSnapshotJson]);
   const hasSelectedRun = Boolean(selectedRunId || runDetail);
   useEffect(() => {
     const activeRunId = selectedRunId ?? selectedRun?.id ?? null;
@@ -924,14 +928,10 @@ export default function RunCenter({
                         />
                       </summary>
                       <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
-                        {runDetail?.approvalGroups
-                          ?.filter(
-                            (group: RunApprovalGroup) =>
-                              group.nodeId === node.nodeId
-                          )
-                          .map((group: RunApprovalGroup) => (
+                        {approvalGroupsForRecord(runDetail?.approvalGroups ?? [], node)
+                          .map(group => (
                             <RunApprovalProgress
-                              key={group.nodeId}
+                              key={group.groupId}
                               group={group}
                             />
                           ))}
@@ -945,6 +945,7 @@ export default function RunCenter({
                           value={node.outputJson}
                           kind="output"
                           nodeType={node.nodeType}
+                          nodeConfig={snapshotNodes.find((item: { id: string }) => item.id === node.nodeId)?.config}
                         />
                         <RunPayloadDetails
                           title="错误"

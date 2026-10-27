@@ -369,6 +369,16 @@ describe("工作台只读任务运行详情入口", () => {
 });
 
 describe("流程设计器界面回归约束", () => {
+  it("监控记录和实例图按执行批次展示审批组，并使用冻结表单名称", () => {
+    const graph = source("../client/src/components/RunExecutionCanvas.tsx");
+    expect(graph).toContain("approvalGroupsForRecord(run.approvalGroups ?? [], record)");
+    expect(graph).toContain("!approvalGroups.length && activities.map");
+    const monitor = source("../client/src/components/RunCenter.tsx");
+    expect(monitor).toContain("approvalGroupsForRecord(runDetail?.approvalGroups ?? [], node)");
+    expect(monitor).toContain("decodeJson(runDetail?.definitionSnapshotJson)");
+    expect(monitor).toContain("nodeConfig={snapshotNodes.find");
+    expect(monitor).not.toContain("group.nodeId === node.nodeId");
+  });
   it("运行阻断问题可返回对应配置，关闭对话框后焦点进入配置面板", () => {
     expect(runModalSource).toContain('aria-label="运行阻断问题"');
     expect(runModalSource).toContain("workflowDiagnosticTarget(issue.location, definition)");

@@ -22,6 +22,8 @@ import {
   type RunGraphNode,
 } from "@shared/run-execution-graph";
 import { RunPayloadDetails } from "./RunPayloadDetails";
+import { RunApprovalProgress } from "./RunApprovalProgress";
+import { approvalGroupsForRecord } from "@shared/run-approval-progress";
 import { Button } from "./ui/button";
 type ViewerNode = Node<
   { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
@@ -153,6 +155,7 @@ export default function RunExecutionCanvas({
   const activities = nodeActivities.filter((t: RunRecord) =>
     t.nodeRunId ? t.nodeRunId === record?.id : active?.records.length === 1
   );
+  const approvalGroups = record ? approvalGroupsForRecord(run.approvalGroups ?? [], record) : [];
   const focusId = useRef(active?.id);
   focusId.current = active?.id;
   useEffect(() => {
@@ -419,7 +422,8 @@ export default function RunExecutionCanvas({
                       旧任务缺少批次标识，办理人请核对操作记录。
                     </p>
                   )}
-                  {activities.map((t: RunRecord) => (
+                  {approvalGroups.map(group => <RunApprovalProgress key={group.groupId} group={group} />)}
+                  {!approvalGroups.length && activities.map((t: RunRecord) => (
                     <div
                       key={t.id}
                       className="rounded border border-border p-2 aiflow-type-body"
