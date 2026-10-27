@@ -12,7 +12,7 @@ it("用户与权限位于主导航，组织与账号页使用同一个主导航�
   expect(home).toContain('id: "identity" as const, label: "用户与权限"');
   expect(home).toContain('systemView !== "config" ? "identity" : section');
   expect(home).toContain(
-    "aria-labelledby={workspaceFocused ? undefined : `aiflow-console-tab-${activeSection}`}"
+    'aria-current={activeSection === item.id ? "page" : undefined}'
   );
   expect(home).toContain(
     'if (canManageIdentity) navigateRoute({ section: "system", view: "identity" })'

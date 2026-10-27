@@ -298,7 +298,7 @@ export default function RunCenter({
   if (!viewAllowed) return blockedContent ?? null;
   if (!workflowId)
     return (
-      <div className="aiflow-type-body grid min-h-[calc(100vh-56px)] place-items-center p-8 text-center text-muted-foreground">
+      <div className="aiflow-type-body grid min-h-[calc(100dvh-64px)] place-items-center p-8 text-center text-muted-foreground">
         <div>
           <Clock3 className="mx-auto" size={30} />
           <p className="mt-3">请先在流程仓库选择一个可查看的流程。</p>

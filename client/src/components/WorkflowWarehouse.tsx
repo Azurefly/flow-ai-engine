@@ -53,7 +53,7 @@ const WarehouseImportDialog = lazy(() => import("./WarehouseImportDialog"));
 
 const warehouseActionClass = "aiflow-type-control h-11 min-h-11 min-[1024px]:h-9 min-[1024px]:min-h-0";
 
-const warehouseFrameClass = "min-h-[calc(100vh-56px)] bg-background p-4 sm:p-6";
+const warehouseFrameClass = "min-h-[calc(100dvh-64px)] bg-background p-4 sm:p-6";
 
 const warehouseHeadingClass = "aiflow-type-section-title font-semibold text-foreground";
 

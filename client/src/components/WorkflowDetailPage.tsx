@@ -73,7 +73,7 @@ export function WorkflowDetailPage({
     return (
       <div
         data-aiflow-process-detail-page=""
-        className="grid min-h-[calc(100vh-56px)] place-items-center bg-background p-6"
+        className="grid min-h-[calc(100dvh-64px)] place-items-center bg-background p-6"
       >
         <div className="border border-border bg-card px-5 py-4 text-sm text-muted-foreground shadow-sm">
           正在读取授权流程详情…

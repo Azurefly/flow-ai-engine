@@ -11,12 +11,14 @@ export function EditorCommandBar({
   onBack,
   title,
   context,
+  navigation,
   children,
 }: {
   backLabel: string;
   onBack: () => void;
   title: ReactNode;
   context: ReactNode;
+  navigation?: ReactNode;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLElement>(null);
@@ -54,6 +56,7 @@ export function EditorCommandBar({
         >
           <ChevronLeft size={18} />
         </button>
+        {navigation}
         <div className="min-w-0 flex-1">
           {title}
           <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">

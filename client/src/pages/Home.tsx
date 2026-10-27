@@ -56,6 +56,10 @@ import {
   type ConsoleSection,
 } from "../../../shared/console-route";
 import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-navigation";
+import {
+  primaryWorkspaceRoute,
+  shouldHandlePrimaryNavigationClick,
+} from "@shared/primary-navigation";
 import { createGuardedConsoleHistory, type GuardedConsoleHistory, type ConsoleHistoryEntry } from "@shared/guarded-console-history";
 import { requestConsoleNavigation } from "@/lib/console-navigation-guard";
 import { resolveSelectedWorkflow } from "../../../shared/workflow-selection";
@@ -124,6 +128,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ReactNode,
 } from "react";
 import { toast } from "sonner";
 
@@ -546,7 +551,6 @@ function FlowConsole({
   const importRef = useRef<HTMLInputElement>(null);
   const editorActive = section === "flows" && flowView === "editor";
   const businessFocused = section === "flows" && flowView === "workspace";
-  const workspaceFocused = section !== "flows" || flowView !== "center";
   const unsavedWorkflowId = useRef<string | null>(null);
   const [pendingNavigation, setPendingNavigation] = useState<{ proceed: () => void } | null>(null);
   const consoleHistory = useRef<GuardedConsoleHistory | null>(null);
@@ -601,15 +605,7 @@ function FlowConsole({
       }
       const permitted = next !== "system" || canManageIdentity;
       const resolved = permitted ? next : "flows";
-      navigateRoute(
-        resolved === "flows"
-          ? { section: "flows", view: "center" }
-          : resolved === "runs"
-            ? { section: "runs", view: "workbench" }
-            : resolved === "warehouse"
-              ? { section: "warehouse" }
-              : { section: "system", view: systemRootView }
-      );
+      navigateRoute(primaryWorkspaceRoute(resolved, systemRootView));
     },
     [navigateRoute, canManageIdentity, systemRootView]
   );
@@ -1354,7 +1350,6 @@ function FlowConsole({
     <main
       data-aiflow-console=""
       data-editor-active={editorActive}
-      data-workspace-focused={workspaceFocused}
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
@@ -1407,7 +1402,7 @@ function FlowConsole({
         </aside>
       )}
       <header className="sticky top-0 z-30 border-b border-border/80 bg-card text-foreground shadow-2xs">
-        <div className="flex h-12 items-center">
+        <div className="flex h-16 min-w-0 items-center">
           <button
             type="button"
             data-aiflow-mobile-nav-trigger=""
@@ -1419,19 +1414,6 @@ function FlowConsole({
           >
             {mobileNavOpen ? <X size={17} /> : <Menu size={17} />}
           </button>
-          {editorActive && canViewWorkflow && (
-            <button
-              type="button"
-              data-aiflow-flow-list-trigger=""
-              className="hidden h-12 w-12 place-items-center border-r border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:grid"
-              onClick={() => setFlowListOpen(value => !value)}
-              aria-label={flowListOpen ? "收起流程列表" : "展开流程列表"}
-              aria-expanded={flowListOpen}
-              aria-controls="aiflow-workflow-library"
-            >
-              {flowListOpen ? <X size={17} /> : <Menu size={17} />}
-            </button>
-          )}
           <div
             data-aiflow-brand=""
             className="hidden min-w-0 items-center gap-2.5 px-3.5 min-[360px]:flex"
@@ -1451,41 +1433,25 @@ function FlowConsole({
               </span>
             </div>
           </div>
-          {workspaceFocused && <DropdownMenu>
-            <DropdownMenuTrigger asChild><Button variant="outline" className="ml-2 shrink-0 gap-2" aria-label="切换工作空间">工作空间<ChevronDown size={14}/></Button></DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-44">
-              <DropdownMenuLabel>切换工作空间</DropdownMenuLabel>
-              {nav.map(item => <DropdownMenuItem key={item.id} onSelect={() => navigateSection(item.id)}><item.icon size={15}/>{item.id === "flows" ? "返回业务中心" : item.label}</DropdownMenuItem>)}
-            </DropdownMenuContent>
-          </DropdownMenu>}
-          {!workspaceFocused && <div
+          <nav
             data-aiflow-primary-nav=""
-            role="tablist"
-            aria-label="流程工作台主导航"
-            className="ml-3 hidden h-full items-end gap-0.5 md:flex"
-            onKeyDown={event => {
-              if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]'));
-              const index = buttons.indexOf(event.target as HTMLButtonElement);
-              if (index < 0) return;
-              event.preventDefault();
-              const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (["ArrowLeft", "ArrowUp"].includes(event.key) ? -1 : 1) + buttons.length) % buttons.length;
-              buttons[next]?.focus();
-            }}
+            aria-label="工作空间主导航"
+            className="hidden min-w-0 items-center gap-1 md:flex"
           >
-            <span data-workspace-nav-caption="" aria-hidden="true">工作空间</span>
             {nav.map(item => (
-              <button
-                id={`aiflow-console-tab-${item.id}`}
-                role="tab"
+              <a
+                id={`aiflow-console-nav-${item.id}`}
                 aria-label={item.label}
-                title={editorActive ? item.label : undefined}
-                aria-selected={activeSection === item.id}
-                tabIndex={activeSection === item.id ? 0 : -1}
-                aria-controls="aiflow-console-panel"
+                href={formatConsoleRoute(primaryWorkspaceRoute(item.id, systemRootView))}
+                aria-current={activeSection === item.id ? "page" : undefined}
                 key={item.id}
-                onClick={() => navigateSection(item.id)}
-                className={`flex h-full items-center gap-1.5 border-b-2 px-3 text-xs font-medium transition-all ${activeSection === item.id ? "border-slate-900 text-foreground font-semibold bg-muted/80" : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                onClick={event => {
+                  if (shouldHandlePrimaryNavigationClick(event)) {
+                    event.preventDefault();
+                    navigateSection(item.id);
+                  }
+                }}
+                className="aiflow-type-control"
               >
                 <item.icon
                   size={14}
@@ -1496,14 +1462,9 @@ function FlowConsole({
                   }
                 />
                 <span data-workspace-nav-label="">{item.label}</span>
-              </button>
+              </a>
             ))}
-          </div>}
-          <div data-workspace-context="" className="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground xl:flex">
-            <span>{nav.find(item => item.id === activeSection)?.label}</span>
-            <ChevronRight size={14} aria-hidden="true" />
-            <span className="truncate font-medium text-foreground">{section === "flows" ? (flowView === "editor" ? (canViewWorkflow ? selectedWorkflow?.name : null) || "流程设计器" : flowView === "workspace" ? selectedProject?.name || "业务工作区" : flowView === "detail" ? (canViewWorkflow ? selectedWorkflow?.name : null) || "流程详情" : "业务中心") : section === "system" ? (systemView === "identity" ? "人员与权限" : systemView === "organization" ? "组织管理" : "通用与业务配置") : section === "runs" ? "办理与运行" : "浏览与复用"}</span>
-          </div>
+          </nav>
           <Button data-workspace-search-trigger="" type="button" variant="outline" className="ml-auto h-10 min-w-10 gap-2 px-2 text-muted-foreground sm:px-3" onClick={() => setCommandOpen(true)} aria-label="快捷查找业务、流程或页面" aria-keyshortcuts="Control+k Meta+k">
             <Search size={16} /><span className="hidden lg:inline">快捷查找</span><kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-xs lg:inline">Ctrl K</kbd>
           </Button>
@@ -1638,7 +1599,7 @@ function FlowConsole({
           </span>
         </div>
       </dialog>
-      <div data-workspace-body="" className="flex min-h-[calc(100vh-56px)] flex-col md:flex-row">
+      <div data-workspace-body="" className="flex min-h-[calc(100dvh-64px)] flex-col md:flex-row">
         {section === "flows" && flowView === "editor" && canViewWorkflow && (
           <aside
             id="aiflow-workflow-library"
@@ -1720,9 +1681,8 @@ function FlowConsole({
           id="aiflow-console-panel"
           ref={workspaceReveal}
           tabIndex={-1}
-          role={workspaceFocused ? "region" : "tabpanel"}
-          aria-label={workspaceFocused ? workspaceLabel : undefined}
-          aria-labelledby={workspaceFocused ? undefined : `aiflow-console-tab-${activeSection}`}
+          role="region"
+          aria-label={workspaceLabel}
           className="min-w-0 w-full flex-1"
         >
           {routeRestoring && (
@@ -1730,7 +1690,7 @@ function FlowConsole({
               data-aiflow-route-restoring
               role={routeProjectQuery.isError ? "alert" : "status"}
               aria-live="polite"
-              className="grid min-h-[calc(100vh-56px)] place-items-center p-8 text-sm text-muted-foreground"
+              className="grid min-h-[calc(100dvh-64px)] place-items-center p-8 text-sm text-muted-foreground"
             >
               <div className="grid max-w-xl gap-4">
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
@@ -1956,6 +1916,20 @@ function FlowConsole({
               </div>
             ) : (
               <FlowDesigner
+                navigationControl={
+                  <button
+                    type="button"
+                    data-aiflow-flow-list-trigger=""
+                    className="editor-back"
+                    onClick={() => setFlowListOpen(value => !value)}
+                    title={flowListOpen ? "收起流程列表" : "展开流程列表"}
+                    aria-label={flowListOpen ? "收起流程列表" : "展开流程列表"}
+                    aria-expanded={flowListOpen}
+                    aria-controls="aiflow-workflow-library"
+                  >
+                    {flowListOpen ? <X size={17} /> : <Menu size={17} />}
+                  </button>
+                }
                 workflow={selectedWorkflow}
                 draftError={draftError}
                 definition={draftDefinition}
@@ -2325,6 +2299,7 @@ function FlowConsole({
 }
 
 function FlowDesigner({
+  navigationControl,
   workflow,
   draftError,
   definition,
@@ -2409,6 +2384,7 @@ function FlowDesigner({
   onDefinitionChange: (definition: Definition) => void;
   backLabel: string;
   onBackToDesignCenter: () => void;
+  navigationControl: ReactNode;
   onSave: () => void;
   onRefreshSubflows: () => Promise<void>;
   onResolveSubflowSave: () => void;
@@ -2546,7 +2522,7 @@ function FlowDesigner({
   }, [canEdit, editorBusy, workflow?.status, onSave, unpublishTarget]);
   if (!workflow || !definition)
     return (
-      <div className="grid min-h-[calc(100vh-56px)] place-items-center p-8">
+      <div className="grid min-h-[calc(100dvh-64px)] place-items-center p-8">
         <div className="max-w-md text-center">
           <FolderKanban className="mx-auto text-slate-300" size={42} />
           <h2 className="mt-4 font-semibold text-foreground">
@@ -2572,6 +2548,7 @@ function FlowDesigner({
       className="min-w-0 max-w-full overflow-x-clip p-3 sm:p-4 lg:p-5"
     >
       <EditorCommandBar
+        navigation={navigationControl}
         backLabel={backLabel}
         onBack={onBackToDesignCenter}
         title={
