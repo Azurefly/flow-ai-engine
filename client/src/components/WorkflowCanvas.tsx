@@ -2788,9 +2788,13 @@ export default function WorkflowCanvas({
 
   useEffect(() => {
     const focus = (event: Event) => {
-      const detail = (event as CustomEvent<{ nodeId?: string; edgeId?: string }>).detail;
+      const detail = (event as CustomEvent<{ nodeId?: string; edgeId?: string; focusInspector?: boolean }>).detail;
+      const focusInspector = () => {
+        if (detail?.focusInspector) window.requestAnimationFrame(() => inspectorHeadingRef.current?.focus({ preventScroll: true }));
+      };
       if (detail?.edgeId) {
         inspectCanvasEdge(detail.edgeId);
+        focusInspector();
         return;
       }
       const nodeId = detail?.nodeId;
@@ -2805,6 +2809,7 @@ export default function WorkflowCanvas({
         block: "center",
       });
       reactFlow?.fitView({ nodes: [node], padding: 0.6, duration: 180 });
+      focusInspector();
     };
     window.addEventListener("flow:focus-node", focus);
     return () => window.removeEventListener("flow:focus-node", focus);

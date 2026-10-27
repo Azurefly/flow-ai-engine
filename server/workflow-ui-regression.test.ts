@@ -369,6 +369,17 @@ describe("工作台只读任务运行详情入口", () => {
 });
 
 describe("流程设计器界面回归约束", () => {
+  it("运行阻断问题可返回对应配置，关闭对话框后焦点进入配置面板", () => {
+    expect(runModalSource).toContain('aria-label="运行阻断问题"');
+    expect(runModalSource).toContain("workflowDiagnosticTarget(issue.location, definition)");
+    expect(runModalSource).toContain("pendingDiagnosticTarget.current = target");
+    expect(runModalSource).toContain("onCloseAutoFocus={event =>");
+    expect(runModalSource).toContain('new CustomEvent("flow:focus-node"');
+    expect(runModalSource).toContain("focusInspector: true");
+    expect(canvasSource).toContain("if (detail?.focusInspector)");
+    expect(canvasSource).toContain("inspectorHeadingRef.current?.focus({ preventScroll: true })");
+    expect(runModalSource).toContain("检查来自服务端保存的版本");
+  });
   it("运行入口明确发起真实运行，不宣传仿真、抽样、单步或沙箱隔离", () => {
     expect(homeSource).toContain('"运行状态流程"');
     expect(homeSource).toContain('"执行数据流程"');

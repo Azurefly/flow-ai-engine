@@ -26,6 +26,7 @@ import {
 } from "@shared/run-after-draft-save";
 import { canStartActualWorkflowRun } from "@shared/actual-run-confirmation";
 import { canonicalResourcePayload } from "@shared/resource-creation";
+import { workflowDiagnosticTarget } from "@shared/workflow-diagnostic-target";
 import { toast } from "sonner";
 import {
   Play,
@@ -164,6 +165,7 @@ export default function WorkflowTestRunModal({
   const [readiness, setReadiness] = useState<{ key: string; result: NonNullable<typeof readinessRequest.data> } | null>(null);
   const [readinessError, setReadinessError] = useState("");
   const currentReadiness = readiness?.key === readinessKey ? readiness.result : null;
+  const pendingDiagnosticTarget = useRef<ReturnType<typeof workflowDiagnosticTarget>>(null);
   useEffect(() => { setAcknowledgedActualRun(false); setReadinessError(""); }, [readinessKey, open]);
   const checkConditions = async () => {
     const key = liveReadinessKey.current;
@@ -414,7 +416,13 @@ export default function WorkflowTestRunModal({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="w-[calc(100vw-1rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-1rem)] min-h-0 flex flex-col p-0 overflow-hidden border-border shadow-2xl">
+      <DialogContent onCloseAutoFocus={event => {
+        const target = pendingDiagnosticTarget.current;
+        if (!target) return;
+        event.preventDefault();
+        pendingDiagnosticTarget.current = null;
+        window.dispatchEvent(new CustomEvent("flow:focus-node", { detail: { ...target, focusInspector: true } }));
+      }} className="w-[calc(100vw-1rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-1rem)] min-h-0 flex flex-col p-0 overflow-hidden border-border shadow-2xl">
         {/* Modal Header */}
         <DialogHeader className="shrink-0 border-b border-border bg-muted/70 px-4 py-3 sm:px-5">
           <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -750,7 +758,17 @@ export default function WorkflowTestRunModal({
                   {readinessError && <p role="alert">{readinessError}</p>}
                   {currentReadiness && <div role="status" className="space-y-2">
                     <p>v{currentReadiness.definitionVersion} · {currentReadiness.executionSource === "published_plan" ? "已发布快照" : "已保存定义"} · {!currentReadiness.canStart ? "存在阻断项，未创建实例" : currentReadiness.checks.some(item => item.status === "deferred") ? "部分条件待运行时确认" : "当前检查未发现阻断项"}</p>
-                    {currentReadiness.issues.map((issue, i) => <p key={i} className="text-aiflow-danger">{issue.message}</p>)}
+                    {hasUnpublishedChanges && <p className="text-aiflow-warning">检查来自服务端保存的版本；定位后请核对当前画布中的未保存修改。</p>}
+                    {currentReadiness.issues.length > 0 && <ul aria-label="运行阻断问题" className="space-y-2">{currentReadiness.issues.map((issue, i) => {
+                      const target = workflowDiagnosticTarget(issue.location, definition);
+                      return <li key={i} className="flex min-w-0 flex-wrap items-center gap-2 rounded border border-aiflow-danger-border p-2">
+                        <p className="min-w-0 flex-1 text-aiflow-danger">{issue.message}</p>
+                        {target && <Button type="button" variant="outline" size="sm" className="max-w-48 shrink-0" title={target.label} aria-label={target.label} onClick={() => {
+                          pendingDiagnosticTarget.current = target;
+                          handleDialogOpenChange(false);
+                        }}><span className="truncate">{target.label}</span></Button>}
+                      </li>;
+                    })}</ul>}
                     {currentReadiness.checks.length > 0 && <details><summary>处理人检查 · {currentReadiness.checks.length} 项</summary>{currentReadiness.checks.map(item => <p key={item.nodeId}>{item.name}：{item.message}</p>)}</details>}
                     <p className="text-muted-foreground">动态条件和外部服务在执行时再校验，不保证所有分支成功。</p>
                   </div>}
