@@ -369,6 +369,18 @@ describe("工作台只读任务运行详情入口", () => {
 });
 
 describe("流程设计器界面回归约束", () => {
+  it("实例图初始缩放配置稳定，记录定位与展开画布保持阅读意图", () => {
+    const graph = source("../client/src/components/RunExecutionCanvas.tsx");
+    expect(graph).toContain("useState(() => runGraphFitOptions(initialFocus.nodeId))");
+    expect(graph).toContain("fitViewOptions={initialFit}");
+    expect(graph).toContain("fitViewOptions={overviewFit}");
+    expect(graph).toContain("fit(focusRequest.nodeId)");
+    expect(graph).toContain("overview.current ? undefined : focusId.current");
+    expect(graph).toContain("[layout, ready, expanded]");
+    expect(graph).not.toContain("const timer = setTimeout");
+    expect(graph).not.toContain("fitViewOptions={{");
+    expect(graph.indexOf("fit(id);", graph.indexOf("const choose ="))).toBeLessThan(graph.indexOf("if (id === active?.id) return;"));
+  });
   it("监控记录和实例图按执行批次展示审批组，并使用冻结表单名称", () => {
     const graph = source("../client/src/components/RunExecutionCanvas.tsx");
     expect(graph).toContain("approvalGroupsForRecord(run.approvalGroups ?? [], record)");

@@ -24,6 +24,7 @@ import {
 import { RunPayloadDetails } from "./RunPayloadDetails";
 import { RunApprovalProgress } from "./RunApprovalProgress";
 import { approvalGroupsForRecord } from "@shared/run-approval-progress";
+import { runGraphFitOptions } from "@shared/run-graph-viewport";
 import { Button } from "./ui/button";
 type ViewerNode = Node<
   { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
@@ -81,6 +82,7 @@ function RunNode({ data }: NodeProps<ViewerNode>) {
   );
 }
 const nodeTypes = { runNode: RunNode };
+const overviewFit = runGraphFitOptions();
 export default function RunExecutionCanvas({
   run,
   focusRequest,
@@ -102,6 +104,12 @@ export default function RunExecutionCanvas({
   const [expanded, setExpanded] = useState(false);
   const api = useRef<ReactFlowInstance<ViewerNode, Edge> | null>(null);
   const [ready, setReady] = useState(false);
+  const [initialFit] = useState(() => runGraphFitOptions(initialFocus.nodeId));
+  const overview = useRef(false);
+  const fit = (nodeId?: string) => {
+    overview.current = !nodeId;
+    void api.current?.fitView(runGraphFitOptions(nodeId));
+  };
   const current = graph.nodes.filter(n =>
     ["running", "waiting", "failed"].includes(n.status)
   );
@@ -112,6 +120,7 @@ export default function RunExecutionCanvas({
   const pending =
     record && ["waiting", "running", "pending"].includes(record.status);
   const choose = (id: string) => {
+    fit(id);
     if (id === active?.id) return;
     if (active && record) chosenRecords.current.set(active.id, record.id);
     setSelected(id);
@@ -160,45 +169,21 @@ export default function RunExecutionCanvas({
   focusId.current = active?.id;
   useEffect(() => {
     if (!ready) return;
-    const timer = setTimeout(
-      () =>
-        void api.current?.fitView({
-          ...(focusId.current ? { nodes: [{ id: focusId.current }] } : {}),
-          padding: 0.25,
-          minZoom: 0.65,
-          maxZoom: 1,
-          duration: 0,
-        }),
-      50
-    );
-    return () => clearTimeout(timer);
-  }, [layout, ready]);
+    void api.current?.fitView(runGraphFitOptions(overview.current ? undefined : focusId.current));
+  }, [layout, ready, expanded]);
   const root = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (focusRequest) {
       setSelected(focusRequest.nodeId);
       setOccurrence(focusRequest.recordId);
       if (ready) {
-        void api.current?.fitView({
-          nodes: [{ id: focusRequest.nodeId }],
-          padding: 0.25,
-          minZoom: 0.65,
-          maxZoom: 1,
-          duration: 0,
-        });
+        fit(focusRequest.nodeId);
         root.current?.scrollIntoView({ block: "start", behavior: "auto" });
       }
     }
   }, [focusRequest, ready]);
   const focus = () => {
-    if (active && api.current)
-      void api.current.fitView({
-        nodes: [{ id: active.id }],
-        padding: 0.25,
-        maxZoom: 1,
-        minZoom: 0.3,
-        duration: 0,
-      });
+    if (active) fit(active.id);
   };
   return (
     <section
@@ -221,14 +206,7 @@ export default function RunExecutionCanvas({
             variant="outline"
             size="sm"
             disabled={!ready}
-            onClick={() =>
-              void api.current?.fitView({
-                padding: 0.18,
-                minZoom: 0.01,
-                maxZoom: 1,
-                duration: 0,
-              })
-            }
+            onClick={() => fit()}
           >
             查看全图
           </Button>
@@ -266,6 +244,7 @@ export default function RunExecutionCanvas({
           </span>
         ))}
         <span>灰线：定义；蓝线：已确认。</span>
+        <span>点击节点放大阅读，查看全图浏览整体关系。</span>
       </div>
       {graph.warning && (
         <p
@@ -304,7 +283,7 @@ export default function RunExecutionCanvas({
               }}
               onNodeClick={(_e, n) => choose(n.id)}
               fitView
-              fitViewOptions={{ padding: 0.18, minZoom: 0.01, maxZoom: 1 }}
+              fitViewOptions={initialFit}
               minZoom={0.01}
               maxZoom={1.5}
               nodesDraggable={false}
@@ -323,7 +302,7 @@ export default function RunExecutionCanvas({
               proOptions={{ hideAttribution: true }}
             >
               <Background gap={22} />
-              <Controls showInteractive={false} />
+              <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => { overview.current = true; }} />
               <MiniMap
                 className="hidden lg:block"
                 pannable
@@ -358,13 +337,6 @@ export default function RunExecutionCanvas({
               value={active?.id ?? ""}
               onChange={e => {
                 choose(e.target.value);
-                void api.current?.fitView({
-                  nodes: [{ id: e.target.value }],
-                  padding: 0.25,
-                  minZoom: 0.3,
-                  maxZoom: 1,
-                  duration: 0,
-                });
               }}
             >
               {!active && <option value="" disabled>请选择节点</option>}
