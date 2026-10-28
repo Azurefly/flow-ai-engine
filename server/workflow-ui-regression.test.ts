@@ -2632,10 +2632,10 @@ describe("流程设计器界面回归约束", () => {
     expect(dataResourceSource).toContain("未找到匹配的运行记录。");
     expect(dataResourceSource).toContain("流程 / 实例");
     expect(dataResourceSource).toContain("结束时间");
-    expect(dataResourceSource).toContain("查看审计");
+    expect(dataResourceSource).toContain("实例详情");
     expect(dataResourceSource).toContain("function DataflowRunOutput");
     expect(dataResourceSource).toContain("最终结果预览");
-    expect(dataResourceSource).toContain("节点执行摘要");
+    expect(dataResourceSource).toContain("<RunExecutionCanvas");
     expect(dataResourceSource).toContain("查看完整原始数据（JSON）");
     expect(dataResourceSource).toContain("max-h-72 max-w-full overflow-auto");
     expect(dataResourceSource).not.toContain("max-h-none");
@@ -3504,16 +3504,16 @@ it("数据流程监控使用独立运行接口并保留深链接和真实错误"
   expect(dataResourceSource).toContain('runId: selectedRunId ?? "00000000"');
   expect(dataResourceSource).toContain("limit: 10");
 });
-it("数据流失败摘要优先使用持久化节点记录并展示节点错误", () => {
-  expect(dataResourceSource).toContain(
-    "Array.isArray(run.nodeRuns) && run.nodeRuns.length > 0"
-  );
-  expect(dataResourceSource).toContain('open={run.status === "failed"}');
-  expect(dataResourceSource).toContain("状态与错误");
-  expect(dataResourceSource).toContain('node.error.message ?? "节点执行失败"');
-  expect(dataResourceSource).toContain(
-    "...(Array.isArray(result?.nodes) ? result.nodes : [])"
-  );
+it("数据实例共用只读图并保留失败定位与结果表格，详情不被列表挤到下方", () => {
+  const canvas = source("../client/src/components/RunExecutionCanvas.tsx");
+  expect(dataResourceSource).toContain("dataflowGraphRun(run)");
+  expect(dataResourceSource).toContain("renderDataOutput={record =>");
+  expect(dataResourceSource).toContain("hidden={Boolean(selectedRunId)}");
+  expect(dataResourceSource).toContain("<DataflowResultTable");
+  expect(canvas).toContain('title="错误原因"');
+  expect(canvas).toContain("record.errorJson");
+  expect(canvas).toContain("快照依赖");
+  expect(dataResourceSource).toContain("返回运行记录");
 });
 
 it("组织成员统一表格区分停用账号并统一主部门名称", () => {
@@ -3611,8 +3611,7 @@ it("运行监控同样支持全部最终结果集选择", () => {
 it("单结果预览也显示运行中保存的输出名称", () => {
   expect(runModalSource).toContain("dataResults.length === 1");
   expect(runModalSource).toContain("{dataResults[0].name}");
-  expect(dataResourceSource).toContain("terminal && dataResults.length === 1");
-  expect(dataResourceSource).toContain("{terminal.name}");
+  expect(dataResourceSource).toContain("title={terminal ? `最终结果预览 · ${terminal.name}`");
 });
 
 it("控制结束保存原因和耗时，监控缺失耗时不拼接单位", () => {
@@ -3654,7 +3653,7 @@ it("节点明细展示中文类型并保留节点标识，内部渲染类型不�
   expect(monitor).toContain("workflowNodeTypeLabel(node.nodeType)");
   expect(monitor).toContain("node.nodeName || node.nodeId");
   expect(monitor).toContain("nodeType={node.nodeType}");
-  expect(dataResourceSource).toContain("workflowNodeTypeLabel(node.nodeType)");
+  expect(source("../client/src/components/RunExecutionCanvas.tsx")).toContain("workflowNodeTypeLabel(active.type)");
 });
 
 it("节点与模板命名使用站内弹窗，等待服务端结果并保留失败输入", () => {

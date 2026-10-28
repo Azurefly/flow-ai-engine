@@ -65,6 +65,6 @@ it("运行监控失权时隐藏内容并暂停读取，同一实例的操作原�
     "if (!viewAllowed) return blockedContent ?? null;"
   );
   expect(dataMonitor).toContain(
-    "{projectId && workflowId && <DataflowOperationList"
+    "{projectId && workflowId && <div hidden={Boolean(selectedRunId)}><DataflowOperationList"
   );
 });

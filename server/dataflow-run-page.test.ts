@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ query: vi.fn(), access: vi.fn() }));
 vi.mock("./db", () => ({ getSharedPool: () => ({ query: mocks.query }) }));
 vi.mock("./project-service", () => ({ getProjectAccess: mocks.access }));
-import { pageDataflowRuns } from "./p2-service";
+import { pageDataflowRuns, getDataflowRun } from "./p2-service";
 import {
   decodeWorkbenchPageCursor,
   encodeWorkbenchPageCursor,
@@ -69,6 +69,21 @@ it("没有项目查看权限时拒绝且不读取历史数据", async () => {
     pageDataflowRuns(user, { projectId: "private" })
   ).rejects.toThrow("无权");
   expect(mocks.query).not.toHaveBeenCalled();
+  await expect(getDataflowRun(user, { projectId: "private", runId: "r" })).rejects.toThrow("无权");
+  expect(mocks.query).not.toHaveBeenCalled();
+});
+it("实例图来自运行快照，保留尝试、时间及结果，不能读取别的业务实例", async () => {
+  mocks.query.mockResolvedValueOnce([[{ id: "r", projectId: "p", workflowId: "w", status: "success", definitionSnapshotJson: { nodes: [{ id: "a", name: "历史名", type: "source", config: { secret: "private" } }], edges: [] } }]])
+    .mockResolvedValueOnce([[{ id: "n", nodeId: "a", nodeType: "source", status: "success", sequenceNo: 1, attempt: 2, rowCount: 0, outputJson: { rows: [] }, startedAt: new Date(1), finishedAt: new Date(2) }]]);
+  const run = await getDataflowRun(user, { projectId: "p", runId: "r" });
+  expect(run?.definitionSnapshot.nodes[0]).toMatchObject({ id: "a", name: "历史名" });
+  expect(run?.definitionSnapshot.nodes[0]).not.toHaveProperty("config");
+  expect(run?.nodeRuns[0]).toMatchObject({ id: "n", attempt: 2, rowCount: 0, output: { rows: [] }, startedAt: new Date(1), finishedAt: new Date(2) });
+  expect(mocks.query.mock.calls[0][1]).toEqual(["p", "r"]);
+  mocks.query.mockClear().mockResolvedValueOnce([[]]);
+  expect(await getDataflowRun(user, { projectId: "other", runId: "r" })).toBeNull();
+  expect(mocks.query).toHaveBeenCalledTimes(1);
+  expect(mocks.query.mock.calls[0][1]).toEqual(["other", "r"]);
 });
 it("无效游标与倒置日期是可修复的请求错误，不能冒充空列表", async () => {
   await expect(

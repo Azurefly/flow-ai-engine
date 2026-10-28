@@ -105,7 +105,9 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     );
     expect(resourceCenter).toContain('dataflow-output-summary=""');
     expect(resourceCenter).toContain("最终结果预览");
-    expect(resourceCenter).toContain("节点执行摘要");
+    expect(resourceCenter).toContain("<RunExecutionCanvas");
+    expect(resourceCenter).toContain("renderDataOutput={record =>");
+    expect(resourceCenter).toContain("<DataflowResultTable");
     expect(resourceCenter).toContain("查看完整原始数据（JSON）");
     expect(resourceCenter).toContain(
       "max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words"
@@ -116,7 +118,7 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     );
     expect(resourceCenter).toContain("grid grid-cols-2 gap-1 border-b");
     expect(resourceCenter).toContain(
-      'aria-expanded={expandedRunId === run.id}'
+      'aria-expanded={onOpenRun ? undefined : expandedRunId === run.id}'
     );
     expect(projectWorkspace).toContain("flex min-h-11 min-w-0 items-center");
     expect(projectWorkspace).toContain("truncate whitespace-nowrap");

@@ -1,4 +1,5 @@
 import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
+import { dataflowRunSnapshot } from "../shared/dataflow-run-view";
 import { decodeWorkbenchPageCursor, encodeWorkbenchPageCursor } from "./workbench-pagination";
 import { dataAssetReadiness, dataSourceReadiness } from "../shared/data-source-capabilities";
 import { assertDataflowResourcesReady } from "./dataflow-resource-readiness";
@@ -2421,6 +2422,7 @@ export async function getDataflowRun(
     id: String(r.id),
     projectId: String(r.projectId),
     workflowId: String(r.workflowId),
+    definitionSnapshot: dataflowRunSnapshot(r.definitionSnapshotJson),
     executionSource: r.executionSource ? String(r.executionSource) : null,
     definitionVersion:
       r.definitionVersion === null || r.definitionVersion === undefined
@@ -2447,6 +2449,8 @@ export async function getDataflowRun(
       attempt: Number(n.attempt),
       rowCount: n.rowCount as number | null,
       durationMs: n.durationMs as number | null,
+      startedAt: n.startedAt as Date | null,
+      finishedAt: n.finishedAt as Date | null,
       input: parseJson(n.inputJson, {}),
       output: parseJson(n.outputJson, null),
       error: parseJson(n.errorJson, null),

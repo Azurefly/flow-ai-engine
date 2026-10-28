@@ -25,6 +25,7 @@ import { RunPayloadDetails } from "./RunPayloadDetails";
 import { RunApprovalProgress } from "./RunApprovalProgress";
 import { approvalGroupsForRecord } from "@shared/run-approval-progress";
 import { runGraphFitOptions } from "@shared/run-graph-viewport";
+import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import { Button } from "./ui/button";
 type ViewerNode = Node<
   { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
@@ -87,10 +88,12 @@ export default function RunExecutionCanvas({
   run,
   focusRequest,
   entryTaskId,
+  renderDataOutput,
 }: {
   run: RunRecord;
   focusRequest?: { nodeId: string; recordId: string; version: number };
   entryTaskId?: string;
+  renderDataOutput?: (record: RunRecord) => React.ReactNode;
 }) {
   const graph = useMemo(() => projectRunGraph(run), [run]);
   const initialFocus = useMemo(
@@ -243,7 +246,7 @@ export default function RunExecutionCanvas({
             {label}
           </span>
         ))}
-        <span>灰线：定义；蓝线：已确认。</span>
+        <span>{run.flowType === "data" ? "灰线：快照依赖；节点颜色：执行状态。" : "灰线：定义；蓝线：已确认。"}</span>
         <span>点击节点放大阅读，查看全图浏览整体关系。</span>
       </div>
       {graph.warning && (
@@ -386,6 +389,9 @@ export default function RunExecutionCanvas({
                     本次：{runNodeLabels[record.status] ?? record.status} · 耗时{" "}
                     {record.durationMs ?? "—"} ms
                   </p>
+                  {run.flowType === "data" && <p className="aiflow-type-body text-muted-foreground">
+                    {workflowNodeTypeLabel(active.type)} · {active.id} · 输出 {record.rowCount ?? "—"} 行 · {record.attempt ? `第 ${record.attempt} 次尝试` : "未记录尝试次数"}
+                  </p>}
                   {legacyAmbiguous && (
                     <p
                       role="status"
@@ -425,7 +431,7 @@ export default function RunExecutionCanvas({
                       </p>
                     </div>
                   ))}
-                  {!pending && (
+                  {renderDataOutput ? renderDataOutput(record) : !pending && (
                     <RunPayloadDetails
                       title="本次办理结果"
                       value={record.outputJson}

@@ -1,13 +1,12 @@
-import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
+import { dataflowGraphRun } from "@shared/dataflow-run-view";
+import { DataflowResultTable } from "./DataflowResultTable";
 import { canProbeDataSource, dataSourceCapability, dataSourceReadiness } from "@shared/data-source-capabilities";
 import {
   builtinDataFunctions,
   dataFunctionTypeLabel,
 } from "@shared/builtin-data-functions";
 import {
-  dataflowResultColumns,
   dataflowTerminalResults,
-  dataflowResultPage,
 } from "@shared/dataflow-result-preview";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import {
@@ -57,6 +56,8 @@ import {
 } from "lucide-react";
 import {
   Children,
+  lazy,
+  Suspense,
   isValidElement,
   useContext,
   useMemo,
@@ -64,6 +65,8 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+
+const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
 
 const metaClassName = "aiflow-type-meta text-muted-foreground";
 const mutedCellClassName = "px-4 py-3 text-xs text-muted-foreground";
@@ -1293,14 +1296,14 @@ function DataflowOperationList({
                     type="button"
                     variant="outline"
                     size="sm"
-                    aria-expanded={expandedRunId === run.id}
+                    aria-expanded={onOpenRun ? undefined : expandedRunId === run.id}
                     onClick={() =>
                       onOpenRun ? onOpenRun(run.id) : setExpandedRunId(current =>
                         current === run.id ? null : run.id
                       )
                     }
                   >
-                    {expandedRunId === run.id ? "收起" : "查看审计"}
+                    {expandedRunId === run.id ? "收起" : "实例详情"}
                   </Button>
                 </td>
               </tr>
@@ -1356,10 +1359,7 @@ function DataflowOperationList({
             </div>
             <State value={expandedRun.status} />
           </div>
-          <details className="mt-3 min-w-0 rounded border border-border bg-card p-3">
-            <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center font-medium text-foreground">
-              查看运行结果或报错信息
-            </summary>
+          <div className="mt-3 min-w-0">
             {detail.isError ? (
               <div
                 role="alert"
@@ -1386,7 +1386,7 @@ function DataflowOperationList({
                 运行记录不存在或已无法访问。
               </p>
             )}
-          </details>
+          </div>
         </div>
       )}
     </section>
@@ -1402,44 +1402,26 @@ function parseDataflowResult(value: unknown): unknown {
   }
 }
 
-function formatDataflowValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  if (!text) return String(value);
-  return text.length > 96 ? `${text.slice(0, 93)}…` : text;
-}
 
 function DataflowRunOutput({ run }: { run: any }) {
-  const [resultPageIndex, setResultPageIndex] = useState(0);
   const [selectedTerminal, setSelectedTerminal] = useState(0);
   const [showRaw, setShowRaw] = useState(false);
-  const rawResult = run.output ??
+  const rawResult = (run.error ? { output: run.output, error: run.error } : run.output) ??
     run.error ?? { message: "当前运行未生成额外输出。" };
-  const result = parseDataflowResult(rawResult) as any;
-  const nodes =
-    Array.isArray(run.nodeRuns) && run.nodeRuns.length > 0
-      ? run.nodeRuns
-      : Array.isArray(result?.nodes)
-        ? result.nodes
-        : [];
+  const result = parseDataflowResult(run.output) as any;
+  const failure = parseDataflowResult(run.error) as any;
+  const graphRun = useMemo(() => dataflowGraphRun(run), [run]);
   const dataResults = dataflowTerminalResults(result);
   const terminal = dataResults[selectedTerminal];
   const lastNode = [...(Array.isArray(result?.nodes) ? result.nodes : [])]
     .reverse()
     .find((node: any) => Array.isArray(node?.output?.rows));
   const terminalRows = terminal?.rows ?? lastNode?.output?.rows ?? [];
-  const preview = dataflowResultPage(terminalRows, resultPageIndex);
-  const previewRows = preview.rows;
-  const columns = useMemo(
-    () => dataflowResultColumns(terminalRows),
-    [terminalRows]
-  );
-  const rowCount = terminal ? terminalRows.length : (lastNode?.rowCount ?? "—");
   const errorMessage =
-    result && typeof result === "object" && "message" in result
-      ? String(result.message)
-      : typeof result === "string"
-        ? result
+    failure && typeof failure === "object" && "message" in failure
+      ? String(failure.message)
+      : typeof failure === "string"
+        ? failure
         : "运行失败，展开原始数据可查看完整错误信息。";
   const visibleErrorMessage =
     errorMessage.length > 240
@@ -1463,7 +1445,6 @@ function DataflowRunOutput({ run }: { run: any }) {
             value={selectedTerminal}
             onChange={event => {
               setSelectedTerminal(Number(event.target.value));
-              setResultPageIndex(0);
             }}
           >
             {dataResults.map((item, index) => (
@@ -1474,26 +1455,13 @@ function DataflowRunOutput({ run }: { run: any }) {
           </select>
         </label>
       )}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <div className="rounded-md border border-border bg-muted px-3 py-2">
-          <p className={metaClassName}>执行节点</p>
-          <p className="aiflow-type-body mt-1 font-semibold text-foreground">
-            {nodes.length || "—"}
-          </p>
-        </div>
-        <div className="rounded-md border border-border bg-muted px-3 py-2">
-          <p className={metaClassName}>最终结果行数</p>
-          <p className="aiflow-type-body mt-1 font-semibold text-foreground">
-            {rowCount}
-          </p>
-        </div>
-        <div className="col-span-2 rounded-md border border-border bg-muted px-3 py-2 sm:col-span-1">
-          <p className={metaClassName}>运行状态</p>
-          <div className="mt-1">
-            <State value={run.status} />
-          </div>
-        </div>
-      </div>
+      <Suspense fallback={<p role="status">正在加载实例流程图…</p>}>
+        <RunExecutionCanvas key={run.id} run={graphRun} renderDataOutput={record => (
+          Array.isArray(record.outputJson?.rows)
+            ? <DataflowResultTable key={record.id} rows={record.outputJson.rows} title="节点输出预览" />
+            : null
+        )} />
+      </Suspense>
 
       {run.error && (
         <div
@@ -1504,144 +1472,7 @@ function DataflowRunOutput({ run }: { run: any }) {
         </div>
       )}
 
-      {columns.length > 0 ? (
-        <section className="min-w-0 rounded-md border border-border bg-card p-3">
-          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="aiflow-type-body font-semibold text-foreground">
-              最终结果预览
-              {terminal && dataResults.length === 1 && (
-                <span className="ml-2 font-normal text-muted-foreground">
-                  {terminal.name}
-                </span>
-              )}
-            </h3>
-            <span className={metaClassName}>
-              第 {preview.page + 1} / {preview.pageCount} 页 · 每页 10 行 · 共{" "}
-              {terminalRows.length} 行
-            </span>
-          </div>
-          <p className="mb-2 text-xs text-muted-foreground">
-            共 {columns.length} 个字段；可横向滚动查看全部字段。
-          </p>
-          <div className="max-w-full overflow-x-auto">
-            <table className="w-full min-w-[360px] text-left">
-              <thead className="bg-muted text-sm text-muted-foreground">
-                <tr>
-                  {columns.map(column => (
-                    <th
-                      key={column}
-                      className="aiflow-type-meta whitespace-nowrap px-2 py-1.5 font-medium"
-                    >
-                      {column}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {previewRows.map((row: any, rowIndex: number) => (
-                  <tr key={rowIndex} className="border-t border-border">
-                    {columns.map(column => (
-                      <td
-                        key={column}
-                        className="aiflow-type-meta max-w-48 truncate px-2 py-1.5 text-foreground"
-                      >
-                        {formatDataflowValue(row[column])}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-3 flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label="结果上一页"
-              disabled={preview.page === 0}
-              onClick={() => setResultPageIndex(preview.page - 1)}
-            >
-              上一页
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label="结果下一页"
-              disabled={preview.page + 1 >= preview.pageCount}
-              onClick={() => setResultPageIndex(preview.page + 1)}
-            >
-              下一页
-            </Button>
-          </div>
-        </section>
-      ) : (
-        !run.error && (
-          <p className="aiflow-type-body rounded-md border border-border bg-card px-3 py-3 text-muted-foreground">
-            {nodes.length > 0
-              ? "本次运行没有可展示的终端结果行。"
-              : "暂无可结构化展示的运行结果。"}
-          </p>
-        )
-      )}
-
-      {nodes.length > 0 && (
-        <details
-          open={run.status === "failed"}
-          className="min-w-0 rounded border border-border bg-card px-3"
-        >
-          <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center font-medium text-foreground">
-            节点执行摘要（{nodes.length}）
-          </summary>
-          <div className="mt-1 max-h-60 overflow-auto pb-3">
-            <table className="w-full min-w-[360px] text-left">
-              <thead className="sticky top-0 bg-muted text-sm text-muted-foreground">
-                <tr>
-                  <th className="aiflow-type-meta px-2 py-1.5 font-medium">
-                    节点
-                  </th>
-                  <th className="aiflow-type-meta px-2 py-1.5 font-medium">
-                    类型
-                  </th>
-                  <th className="aiflow-type-meta px-2 py-1.5 text-right font-medium">
-                    输出行数
-                  </th>
-                  <th className="aiflow-type-meta px-2 py-1.5 font-medium">
-                    状态与错误
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {nodes.map((node: any, index: number) => (
-                  <tr
-                    key={node.nodeId ?? index}
-                    className="border-t border-border"
-                  >
-                    <td className="aiflow-type-meta px-2 py-1.5 font-mono text-foreground">
-                      {node.nodeId ?? `节点 ${index + 1}`}
-                    </td>
-                    <td className="aiflow-type-meta px-2 py-1.5 text-muted-foreground">
-                      {workflowNodeTypeLabel(node.nodeType)}
-                    </td>
-                    <td className="aiflow-type-meta px-2 py-1.5 text-right tabular-nums text-foreground">
-                      {node.rowCount ?? "—"}
-                    </td>
-                    <td className="aiflow-type-meta px-2 py-1.5">
-                      <State value={node.status ?? "success"} />
-                      {node.error && (
-                        <p className="mt-1 max-w-sm whitespace-pre-wrap break-words text-destructive">
-                          {String(node.error.message ?? "节点执行失败")}
-                        </p>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </details>
-      )}
+      {(terminal || lastNode) && <DataflowResultTable key={selectedTerminal} rows={terminalRows} title={terminal ? `最终结果预览 · ${terminal.name}` : "最终结果预览"} />}
 
       <div className="min-w-0 rounded border border-border bg-card px-3">
         <button
@@ -2641,18 +2472,18 @@ export function DataflowRunMonitor({
           刷新运行记录
         </Button>
       </div>
-      {projectId && workflowId && <DataflowOperationList key={workflowId} projectId={projectId} workflowId={workflowId} projectName={workflowName || "当前流程"} onOpenRun={onSelect}/>}
+      {projectId && workflowId && <div hidden={Boolean(selectedRunId)}><DataflowOperationList key={workflowId} projectId={projectId} workflowId={workflowId} projectName={workflowName || "当前流程"} onOpenRun={onSelect}/></div>}
       {selectedRunId && (
         <section
           className={resourcePanelClassName}
           aria-label="数据流程运行详情"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="aiflow-type-section-title font-semibold break-all">
-              运行详情 · {selectedRunId}
+            <h2 className="aiflow-type-section-title font-semibold" title={selectedRunId}>
+              实例详情 · {selectedRunId.slice(0, 8)}
             </h2>
             <Button variant="ghost" onClick={onClearSelection}>
-              关闭运行详情
+              返回运行记录
             </Button>
           </div>
           {detail.isError ? (
@@ -2662,7 +2493,12 @@ export function DataflowRunMonitor({
           ) : detail.isLoading ? (
             <p role="status">正在读取运行详情…</p>
           ) : matchingDetail ? (
-            <DataflowRunOutput key={selectedRunId} run={matchingDetail} />
+            <>
+              <p className="aiflow-type-body my-3 text-muted-foreground">
+                <State value={matchingDetail.status} /> · {matchingDetail.triggerName || "系统用户"} · {formatDataflowTime(matchingDetail.startedAt)} · 耗时 {matchingDetail.durationMs ?? "—"} ms
+              </p>
+              <DataflowRunOutput key={selectedRunId} run={matchingDetail} />
+            </>
           ) : (
             <p role="alert">运行记录不属于当前流程或已无法访问。</p>
           )}
