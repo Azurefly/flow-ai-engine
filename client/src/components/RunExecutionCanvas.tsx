@@ -25,7 +25,7 @@ import {
 import { RunPayloadDetails } from "./RunPayloadDetails";
 import { RunApprovalProgress } from "./RunApprovalProgress";
 import { approvalGroupsForRecord } from "@shared/run-approval-progress";
-import { runGraphFitOptions } from "@shared/run-graph-viewport";
+import { runGraphFitOptions, runGraphHandles } from "@shared/run-graph-viewport";
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import { Button } from "./ui/button";
 type ViewerNode = Node<
@@ -50,12 +50,7 @@ function RunNode({ data }: NodeProps<ViewerNode>) {
   const item = data.item as RunRecord;
   return (
     <>
-      <Handle
-        type="target"
-        position={Position.Left}
-        isConnectable={false}
-        style={{ opacity: 0 }}
-      />
+      <Handle type="target" position={Position.Left} isConnectable={false} style={{ opacity: 0 }} />
       <button
         type="button"
         onClick={() => (data.choose as (id: string) => void)(item.id)}
@@ -74,12 +69,7 @@ function RunNode({ data }: NodeProps<ViewerNode>) {
             : "尚未到达"}
         </span>
       </button>
-      <Handle
-        type="source"
-        position={Position.Right}
-        isConnectable={false}
-        style={{ opacity: 0 }}
-      />
+      <Handle type="source" position={Position.Right} isConnectable={false} style={{ opacity: 0 }} />
     </>
   );
 }
@@ -145,6 +135,7 @@ export default function RunExecutionCanvas({
     draggable: false,
     connectable: false,
     measured: sizes.get(n.id),
+    handles: runGraphHandles(sizes.get(n.id)),
   }));
   const edges: Edge[] = graph.edges.map(e => ({
     id: e.id,

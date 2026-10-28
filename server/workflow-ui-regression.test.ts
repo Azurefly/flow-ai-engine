@@ -381,6 +381,7 @@ describe("流程设计器界面回归约束", () => {
     expect(graph).toContain("<ViewportMeasurement onReady={setMeasured} />");
     expect(graph).toContain("onlyRenderVisibleElements={measured}");
     expect(graph).toContain("measured: sizes.get(n.id)");
+    expect(graph).toContain("handles: runGraphHandles(sizes.get(n.id))");
     expect(graph).toContain('change.type === "dimensions" && change.dimensions');
     expect(graph).toContain("if (!ready || !measured) return");
     expect(graph).not.toContain("const timer = setTimeout");
