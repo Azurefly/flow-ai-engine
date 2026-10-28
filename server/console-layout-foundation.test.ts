@@ -31,7 +31,7 @@ it("主要页面共用内容宽度和留白，次级导航按明确折叠状态�
     'data-aiflow-identity-page=""'
   );
   expect(css).toContain("--aiflow-content-max: 1440px;");
-  expect(css).toContain("--aiflow-subnav-width: 200px;");
+  expect(css).toContain("--aiflow-subnav-width: 192px;");
   expect(css).toContain(
     '[data-aiflow-project-workspace][data-navigation-collapsed="true"] > aside'
   );

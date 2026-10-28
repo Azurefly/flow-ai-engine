@@ -1,3 +1,4 @@
+import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
 import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
@@ -58,7 +59,6 @@ import {
 import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-navigation";
 import {
   primaryWorkspaceRoute,
-  shouldHandlePrimaryNavigationClick,
 } from "@shared/primary-navigation";
 import { createGuardedConsoleHistory, type GuardedConsoleHistory, type ConsoleHistoryEntry } from "@shared/guarded-console-history";
 import { requestConsoleNavigation } from "@/lib/console-navigation-guard";
@@ -100,9 +100,7 @@ import {
   KeyRound,
   Loader2,
   LockKeyhole,
-  LogOut,
   Menu,
-  Moon,
   MoreHorizontal,
   Play,
   Plus,
@@ -110,7 +108,6 @@ import {
   ShieldCheck,
   Search,
   SlidersHorizontal,
-  Sun,
   Table2,
   Upload,
   UsersRound,
@@ -1401,115 +1398,15 @@ function FlowConsole({
           <Button variant="outline" disabled={isDraftDirty} onClick={() => window.location.reload()}>刷新工作台</Button>
         </aside>
       )}
-      <header className="sticky top-0 z-30 border-b border-border/80 bg-card text-foreground shadow-2xs">
-        <div className="flex h-16 min-w-0 items-center">
-          <button
-            type="button"
-            data-aiflow-mobile-nav-trigger=""
-            className="grid h-12 w-12 place-items-center border-r border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
-            onClick={() => setMobileNavOpen(true)}
-            aria-label={mobileNavOpen ? "关闭工作区导航" : "打开工作区导航"}
-            aria-expanded={mobileNavOpen}
-            aria-controls="aiflow-mobile-navigation"
-          >
-            {mobileNavOpen ? <X size={17} /> : <Menu size={17} />}
-          </button>
-          <div
-            data-aiflow-brand=""
-            className="hidden min-w-0 items-center gap-2.5 px-3.5 min-[360px]:flex"
-          >
-            <div className="grid h-7 w-7 place-items-center rounded-md bg-slate-900 text-white shadow-2xs">
-              <Gauge size={15} />
-            </div>
-            <div
-              data-aiflow-brand-name=""
-              className="hidden sm:flex items-baseline gap-1.5"
-            >
-              <span className="text-sm font-semibold tracking-tight text-foreground">
-                {general.platformName}
-              </span>
-              <span className="text-[10px] font-mono text-muted-foreground">
-                Studio
-              </span>
-            </div>
-          </div>
-          <nav
-            data-aiflow-primary-nav=""
-            aria-label="工作空间主导航"
-            className="hidden min-w-0 items-center gap-1 md:flex"
-          >
-            {nav.map(item => (
-              <a
-                id={`aiflow-console-nav-${item.id}`}
-                aria-label={item.label}
-                href={formatConsoleRoute(primaryWorkspaceRoute(item.id, systemRootView))}
-                aria-current={activeSection === item.id ? "page" : undefined}
-                key={item.id}
-                onClick={event => {
-                  if (shouldHandlePrimaryNavigationClick(event)) {
-                    event.preventDefault();
-                    navigateSection(item.id);
-                  }
-                }}
-                className="aiflow-type-control"
-              >
-                <item.icon
-                  size={14}
-                  className={
-                    activeSection === item.id
-                      ? "text-foreground"
-                      : "text-muted-foreground"
-                  }
-                />
-                <span data-workspace-nav-label="">{item.label}</span>
-              </a>
-            ))}
-          </nav>
-          <Button data-workspace-search-trigger="" type="button" variant="outline" className="ml-auto h-10 min-w-10 gap-2 px-2 text-muted-foreground sm:px-3" onClick={() => setCommandOpen(true)} aria-label="快捷查找业务、流程或页面" aria-keyshortcuts="Control+k Meta+k">
-            <Search size={16} /><span className="hidden lg:inline">快捷查找</span><kbd className="hidden rounded border border-border bg-muted px-1.5 py-0.5 text-xs lg:inline">Ctrl K</kbd>
-          </Button>
-          <div
-            data-aiflow-user-actions=""
-            className="flex h-full items-center gap-1 px-2 text-xs min-[400px]:gap-2.5 min-[400px]:px-3.5"
-          >
-            <span data-workspace-account-name="" title={user.name || user.username || "内部用户"} className="hidden text-muted-foreground lg:inline">
-              {user.name || user.username || "内部用户"}
-            </span>
-            <span data-workspace-account-role="" className="shrink-0 whitespace-nowrap rounded-full border border-border/80 bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground min-[400px]:px-2.5">
-              {user.role === "admin" ? "系统管理员" : "成员"}
-            </span>
-            {toggleTheme && (
-              <Button
-                data-aiflow-theme-toggle=""
-                variant="ghost"
-                size="sm"
-                className="aiflow-type-control aiflow-action-target text-muted-foreground hover:bg-accent hover:text-aiflow-info"
-                onClick={toggleTheme}
-                title={theme === "dark" ? "切换至浅色模式" : "切换至暗黑模式"}
-              >
-                {theme === "dark" ? <Sun size={15} /> : <Moon size={15} />}
-                <span className="sr-only">切换主题</span>
-              </Button>
-            )}
-            <Button
-              data-aiflow-logout=""
-              variant="ghost"
-              size="sm"
-              className="aiflow-type-control aiflow-action-target text-muted-foreground hover:bg-accent hover:text-aiflow-info"
-              onClick={() => {
+      <WorkspaceHeader platformName={general.platformName} user={user} nav={nav} activeSection={activeSection} systemRootView={systemRootView}
+        theme={theme} onTheme={toggleTheme} onSearch={() => setCommandOpen(true)} onNavigate={navigateSection}
+        mobileOpen={mobileNavOpen} onOpenMobile={() => setMobileNavOpen(true)} onLogout={() => {
                 const proceed = () => {
                   if (unsavedWorkflowId.current) setPendingNavigation({ proceed: onLogout });
                   else onLogout();
                 };
                 if (requestConsoleNavigation(proceed)) proceed();
-              }}
-            >
-              <LogOut size={15} />
-              退出
-            </Button>
-          </div>
-        </div>
-      </header>
+        }} />
       <dialog
         ref={mobileNavDialogRef}
         id="aiflow-mobile-navigation"
@@ -1741,14 +1638,8 @@ function FlowConsole({
             !routeRestoring &&
             flowView === "workspace" &&
             selectedProject && (
-              <div>
-                <div
-                  data-aiflow-business-selector
-                  className="flex flex-col gap-1.5 border-b border-border bg-card px-4 py-2 lg:flex-row lg:items-center lg:justify-between"
-                >
-                  <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <span className="shrink-0">当前业务</span>
-                    <Popover
+                <ProjectWorkspace
+                  contextNavigation={(<Popover
                       open={projectPickerOpen}
                       onOpenChange={setProjectPickerOpen}
                     >
@@ -1757,20 +1648,13 @@ function FlowConsole({
                           type="button"
                           variant="outline"
                           size="sm"
-                          className="aiflow-type-control h-11 min-h-11 min-w-0 w-full max-w-[560px] flex-1 shrink justify-between gap-2 px-2 text-sm font-medium lg:w-auto lg:flex-initial min-[1280px]:h-8 min-[1280px]:min-h-8"
+                          className="aiflow-business-picker h-auto min-w-0 w-full justify-between gap-2 px-3 py-2 text-sm font-medium"
                           aria-label="切换当前受权业务"
                           aria-expanded={projectPickerOpen}
                         >
-                          <span className="min-w-0 flex-1 truncate text-left">
-                            <span className="font-semibold text-foreground">
-                              {selectedProject.code}
-                            </span>
-                            <span className="px-1 text-muted-foreground">
-                              ·
-                            </span>
-                            <span className="text-muted-foreground">
-                              {selectedProject.name}
-                            </span>
+                          <span className="min-w-0 flex-1 text-left" title={`${selectedProject.name}（${selectedProject.code}）`}>
+                            <span className="block truncate font-semibold">{selectedProject.name}</span>
+                            <span className="block truncate text-xs font-normal text-muted-foreground">{selectedProject.code}</span>
                           </span>
                           <ChevronDown
                             size={14}
@@ -1835,16 +1719,11 @@ function FlowConsole({
                               )}
                             </CommandGroup>
                           </CommandList>
+                          <p className="border-t px-3 py-2 text-xs text-muted-foreground">仅显示当前账号具备查看权限的业务项目</p>
                           {projects.data?.hasMore && <p className="border-t p-3 text-sm text-muted-foreground">显示前 50 个匹配项目；输入名称或代号以缩小范围。</p>}
                         </Command>
                       </PopoverContent>
-                    </Popover>
-                  </div>
-                  <span className="aiflow-type-meta text-muted-foreground lg:text-right">
-                    仅显示当前账号具备查看权限的业务项目
-                  </span>
-                </div>
-                <ProjectWorkspace
+                    </Popover>)}
                   onCreateWorkflow={project=>openWorkflowOperation({kind:"project",projectId:project.id,projectName:project.name})}
                   project={selectedProject}
                   onBack={() =>
@@ -1864,7 +1743,6 @@ function FlowConsole({
                     navigateRoute({ section: "warehouse" })
                   }
                 />
-              </div>
             )}
           {section === "flows" && !routeRestoring && (flowView === "detail" || flowView === "editor") && workflowContentState !== "granted" && workflowAccessNotice}
           {section === "flows" && !routeRestoring && flowView === "detail" && workflowContentState === "granted" && (
@@ -2534,6 +2412,7 @@ function FlowDesigner({
         </div>
       </div>
     );
+  const emphasizeSave = hasUnpublishedChanges && workflow.status !== "published";
   const flowProfile = getFlowProfile(workflow.flowType ?? "state");
   const firstLocatableDiagnostic = compileDiagnostics.find(item => item.location.nodeId || item.location.edgeId);
   const publishVersionAllowed = canPublishWorkflowVersion(
@@ -2605,9 +2484,9 @@ function FlowDesigner({
         <Button
           ref={saveButtonRef}
           type="button"
-          variant="outline"
+          variant={emphasizeSave ? "default" : "outline"}
           size="sm"
-          aria-label="保存画布"
+          aria-label="保存草稿"
           onClick={onSave}
           disabled={
             !canEdit ||
@@ -2631,20 +2510,10 @@ function FlowDesigner({
             <Save size={13} className="text-muted-foreground" />
           )}
           <span className="sm:hidden">保存</span>
-          <span className="hidden sm:inline">保存画布</span>
+          <span className="hidden sm:inline">保存草稿</span>
         </Button>
 
-        <Button
-          type="button"
-          variant="outline"
-          aria-label="预检流程"
-          onClick={onValidate}
-          disabled={!canPublish || editorBusy}
-          title="仅检查拓扑与配置，不会发布或运行"
-        >
-          <CheckCircle2 size={15} />
-          <span>预检</span>
-        </Button>
+
         <Button
           type="button"
           variant="outline"
@@ -2670,6 +2539,7 @@ function FlowDesigner({
         <Button
           size="sm"
           aria-label={workflow.status === "published" ? "发布新版本" : "发布"}
+          variant={emphasizeSave ? "outline" : "default"}
           data-editor-publish=""
           onClick={onPublish}
           disabled={
@@ -2720,6 +2590,9 @@ function FlowDesigner({
             <DropdownMenuLabel className="aiflow-type-control text-muted-foreground">
               其他操作
             </DropdownMenuLabel>
+            <DropdownMenuItem aria-label="预检流程" onClick={onValidate} disabled={!canPublish || editorBusy}>
+              <CheckCircle2 size={15} />预检流程
+            </DropdownMenuItem>
             <DropdownMenuItem
               className="aiflow-type-control"
               onClick={() => setMembersDialogOpen(true)}
@@ -3713,7 +3586,7 @@ function IamCenter({
               <Button
                 type="button"
                 aria-label="新增账号"
-                className="min-h-11 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:min-h-0"
+                className="min-h-11 min-[1024px]:min-h-0"
                 data-iam-account-create-menu
               >
                 <Plus size={15} />

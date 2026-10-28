@@ -8,6 +8,7 @@ import {
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+const workspaceHeaderSource = source("../client/src/components/WorkspaceHeader.tsx");
 const editorCommandSource = source(
   "../client/src/components/EditorCommandBar.tsx"
 );
@@ -435,7 +436,7 @@ describe("流程设计器界面回归约束", () => {
     expect(runModalSource).toContain("runWorkflowMutation.mutateAsync");
   });
 
-  it("常用运行与预检可直接打开，菜单不重复且不跳过运行确认", () => {
+  it("运行直接打开确认配置，预检收进菜单且不重复入口", () => {
     const designerStart = homeSource.indexOf("function FlowDesigner(");
     const designerEnd = homeSource.indexOf(
       "function valueFromField(",
@@ -457,10 +458,11 @@ describe("流程设计器界面回归约束", () => {
     expect(commands).toContain(
       'Boolean(draftError) || editorBusy || (workflow.flowType !== "data" && !canRun)'
     );
-    expect(commands).toContain('aria-label="预检流程"');
-    expect(commands).toContain("onClick={onValidate}");
+    expect(commands).not.toContain('aria-label="预检流程"');
+    expect(operationMenu).toContain('aria-label="预检流程"');
+    expect(operationMenu).toContain('disabled={!canPublish || editorBusy}');
     expect(operationMenu).not.toContain("setRunDialogOpen(true)");
-    expect(operationMenu).not.toContain("onClick={onValidate}");
+    expect(operationMenu).toContain("onClick={onValidate}");
     expect(designerSource).toContain("发布前会自动检查拓扑与语法");
   });
 
@@ -1083,22 +1085,15 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("恢复原始项目工作区的受权业务选择控件和切换状态清理", () => {
-    expect(homeSource).toContain("data-aiflow-business-selector");
+    expect(homeSource).not.toContain("data-aiflow-business-selector");
+    expect(homeSource).toContain("contextNavigation={");
     expect(homeSource).toContain("切换当前受权业务");
     expect(homeSource).toContain("仅显示当前账号具备查看权限的业务项目");
-    expect(homeSource).toContain(
-      'className="aiflow-type-control h-11 min-h-11'
-    );
-    expect(homeSource).toMatch(
-      /<span className="aiflow-type-meta text-muted-foreground lg:text-right">\s*仅显示当前账号具备查看权限的业务项目/
-    );
-    expect(homeSource).toContain(
-      "lg:flex-row lg:items-center lg:justify-between"
-    );
-    expect(homeSource).toContain("max-w-[560px] flex-1 shrink");
-    expect(homeSource).toContain(
-      'className="min-w-0 flex-1 truncate text-left"'
-    );
+    expect(homeSource).toContain("aiflow-business-picker");
+    expect(homeSource).toContain('title={`${selectedProject.name}（${selectedProject.code}）`}');
+    const sidebar = projectWorkspaceSource.slice(projectWorkspaceSource.indexOf("<aside"), projectWorkspaceSource.indexOf("</aside>"));
+    expect(sidebar).toContain("contextNavigation ??");
+    expect(homeSource).toContain("navigateRoute({ section: \"flows\", view: \"workspace\", projectId: project.id,");
     expect(homeSource).toContain("setSelectedWorkflowId(null)");
     expect(projectWorkspaceSource).toContain(
       "useResourceDraftState<WorkspaceView>"
@@ -1539,17 +1534,19 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("各工作区共享原生主导航链接与当前页选中态", () => {
-    expect(homeSource).toContain('aria-label="工作空间主导航"');
-    expect(homeSource).toContain("id={`aiflow-console-nav-${item.id}`}");
-    expect(homeSource).toContain("href={formatConsoleRoute(primaryWorkspaceRoute(item.id, systemRootView))}");
-    expect(homeSource).toContain('aria-current={activeSection === item.id ? "page" : undefined}');
-    expect(homeSource).toContain("shouldHandlePrimaryNavigationClick(event)");
+    expect(workspaceHeaderSource).toContain('aria-label="工作空间主导航"');
+    expect(workspaceHeaderSource).toContain("id={`aiflow-console-nav-${item.id}`}");
+    expect(workspaceHeaderSource).toMatch(/href=\{formatConsoleRoute\(\s*primaryWorkspaceRoute\(item.id, systemRootView\)\s*\)\}/);
+    expect(workspaceHeaderSource).toContain('aria-current={activeSection === item.id ? "page" : undefined}');
+    expect(workspaceHeaderSource).toContain("shouldHandlePrimaryNavigationClick(event)");
     expect(homeSource).toContain('id="aiflow-console-panel" ref={workspaceReveal} tabIndex={-1} role="region"');
     expect(homeSource).toContain("aria-label={workspaceLabel}");
     expect(homeSource).not.toContain("workspaceFocused");
-    const header = homeSource.slice(homeSource.indexOf('<header className="sticky top-0'), homeSource.indexOf('<dialog', homeSource.indexOf('<header className="sticky top-0')));
-    expect(header).not.toContain("flowListOpen");
-    expect(header).not.toContain("DropdownMenuTrigger");
+    expect(workspaceHeaderSource).not.toContain("flowListOpen");
+    expect(workspaceHeaderSource).toContain("data-workspace-account-trigger");
+    expect(workspaceHeaderSource).toContain("onNavigate(item.id)");
+    expect(homeSource).toContain("<WorkspaceHeader");
+    expect(homeSource).toContain("onNavigate={navigateSection}");
     expect(homeSource).toContain('data-aiflow-flow-list-trigger=""');
     expect(homeSource).toContain("navigation={navigationControl}");
   });
@@ -1640,8 +1637,8 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("手机使用全站导航抽屉与顶层路由联动", () => {
-    expect(homeSource).toContain('data-aiflow-mobile-nav-trigger=""');
-    expect(homeSource).toContain('aria-controls="aiflow-mobile-navigation"');
+    expect(workspaceHeaderSource).toContain("data-aiflow-mobile-nav-trigger");
+    expect(workspaceHeaderSource).toContain('aria-controls="aiflow-mobile-navigation"');
     expect(homeSource).toContain("<dialog");
     expect(homeSource).toContain("dialog.showModal()");
     expect(homeSource).toContain("onClose={() => setMobileNavOpen(false)}");
@@ -2957,7 +2954,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("设计器主要操作和属性控件在触屏断点保持 44px、桌面至少 36px", () => {
     expect(styleSource).toContain(
-      ".editor-primary-actions > button {height: 40px; min-height: 40px;}"
+      ".editor-primary-actions > button {height: 36px; min-height: 36px;}"
     );
     expect(homeSource).not.toContain("sm:h-7 sm:min-h-0");
     expect(homeSource).not.toContain("sm:h-8 sm:min-h-0");
@@ -2978,11 +2975,11 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("桌面主导航统一为单行链接，流程详情保留紧凑预览", () => {
-    expect(homeSource).toContain('data-aiflow-brand-name=""');
-    expect(homeSource).toContain('data-aiflow-primary-nav=""');
-    expect(homeSource).toContain('data-aiflow-user-actions=""');
+    expect(workspaceHeaderSource).toContain("data-aiflow-brand-name");
+    expect(workspaceHeaderSource).toContain("data-aiflow-primary-nav");
+    expect(workspaceHeaderSource).toContain("data-aiflow-user-actions");
     expect(styleSource).toContain("@media (min-width: 768px)");
-    expect(styleSource).toContain("[data-aiflow-brand] > div:first-child");
+    expect(styleSource).toContain("[data-workspace-brand-mark]");
     expect(styleSource).toContain("[data-aiflow-user-actions] button");
     expect(styleSource).toContain("[data-aiflow-primary-nav] > a");
     expect(styleSource).toContain("overscroll-behavior-x: contain;");
@@ -4185,7 +4182,7 @@ it("共用编辑工作区按真实剩余高度布局，忙碌时禁止交叉提�
   );
   expect(homeSource).toContain("!unpublishTarget && !editorBusy && canEdit");
   expect(homeSource).toContain('aria-label="预检流程"');
-  expect(homeSource).toContain('aria-label="保存画布"');
+  expect(homeSource).toContain('aria-label="保存草稿"');
   expect(homeSource).toContain("ref={moreActionsRef}");
   expect(hook).toContain(
     "element.getBoundingClientRect().top + window.scrollY"

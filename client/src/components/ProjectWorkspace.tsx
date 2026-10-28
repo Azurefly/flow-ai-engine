@@ -52,7 +52,7 @@ import {
   Building2,
   Trash2,
 } from "lucide-react";
-import { type ChangeEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, type ChangeEvent, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   Popover,
@@ -724,7 +724,7 @@ function BusinessCenterView({
               <Button
                 type="button"
                 size="sm"
-                className="aiflow-type-control h-11 bg-slate-900 px-3 font-medium text-white hover:bg-slate-800 min-[1280px]:h-8"
+                className="aiflow-type-control h-11 px-3 font-medium min-[1280px]:h-9"
                 onClick={() => setShowCreate(true)}
               >
                 <Plus size={14} className="mr-1" />
@@ -911,7 +911,8 @@ function BusinessCenterView({
                         <Button
                           type="button"
                           size="sm"
-                          className="aiflow-type-control h-8 px-2.5"
+                          variant="ghost"
+                          className="aiflow-type-control h-8 px-2.5 text-aiflow-info"
                           onClick={() => status === "archived" ? onLifecycle(project) : onOpenProject(project)}
                         >
                           {status === "archived" ? "查看归档" : "进入"}
@@ -1134,6 +1135,7 @@ type ProcessFilters = {
 
 export function ProjectWorkspace({
   project,
+  contextNavigation,
   onBack,
   onOpenWorkflow,
   onOpenDetail,
@@ -1141,6 +1143,7 @@ export function ProjectWorkspace({
   onCreateWorkflow,
 }: {
   project: ProjectRecord;
+  contextNavigation?: ReactNode;
   onBack: () => void;
   onOpenWorkflow: (workflowId: string) => void;
   onOpenDetail: (workflowId: string) => void;
@@ -1269,7 +1272,7 @@ export function ProjectWorkspace({
             </button>
           </div>
           {!sidebarCollapsed && (
-            <>
+            contextNavigation ?? <>
               <h2
                 aria-label={project.name}
                 className="aiflow-type-section-title mt-2.5 hidden break-words font-semibold text-foreground [overflow-wrap:anywhere] lg:block"
@@ -2210,10 +2213,10 @@ function ProcessCenter({
   };
 
   return (
-    <div>
+    <div data-workspace-process-center>
       <div
         data-aiflow-context-header
-        className="mb-4 flex flex-col gap-3 rounded-lg border border-border bg-card p-3.5 shadow-2xs sm:flex-row sm:items-center sm:justify-between"
+        className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="min-w-0">
           <p className="aiflow-type-body hidden text-muted-foreground sm:block">
@@ -2287,7 +2290,7 @@ function ProcessCenter({
             <Button
               type="button"
               size="sm"
-              className="aiflow-type-control h-11 gap-1 bg-slate-900 px-2 font-medium text-white shadow-2xs hover:bg-slate-800 sm:h-8"
+              className="aiflow-type-control h-11 gap-1 px-3 font-medium sm:h-9"
               onClick={onOpenCreate}
             >
               <Plus size={14} className="hidden sm:block" />

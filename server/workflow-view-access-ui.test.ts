@@ -13,9 +13,8 @@ it("编辑器、详情和运行监控共用已确认查看权限的边界", () =
   expect(
     home.match(/workflowContentState !== "granted"/g)?.length
   ).toBeGreaterThanOrEqual(2);
-  const headerStart = home.indexOf('<header className="sticky top-0');
-  const globalHeader = home.slice(headerStart, home.indexOf("</header>", headerStart));
-  expect(headerStart).toBeGreaterThan(0);
+  const globalHeader = readFileSync(new URL("../client/src/components/WorkspaceHeader.tsx", import.meta.url), "utf8");
+  expect(home).toContain("<WorkspaceHeader");
   expect(globalHeader).not.toContain("selectedWorkflow");
   expect(home).toContain('flowView === "editor" && canViewWorkflow &&');
   expect(home).toContain(

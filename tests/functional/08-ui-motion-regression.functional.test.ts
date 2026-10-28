@@ -1099,9 +1099,12 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "utf8"
       );
 
-      expect(homeSrc).toContain('data-aiflow-mobile-nav-trigger=""');
-      expect(homeSrc).toContain("aria-expanded={mobileNavOpen}");
-      expect(homeSrc).toContain('aria-controls="aiflow-mobile-navigation"');
+      const headerSrc = readFileSync(new URL("../../client/src/components/WorkspaceHeader.tsx", import.meta.url), "utf8");
+      expect(homeSrc).toContain("<WorkspaceHeader");
+      expect(homeSrc).toContain("mobileOpen={mobileNavOpen}");
+      expect(headerSrc).toContain("data-aiflow-mobile-nav-trigger");
+      expect(headerSrc).toContain("aria-expanded={mobileOpen}");
+      expect(headerSrc).toContain('aria-controls="aiflow-mobile-navigation"');
       expect(homeSrc).toContain("<dialog");
       expect(homeSrc).toContain("dialog.showModal()");
       expect(homeSrc).toContain('id="aiflow-mobile-navigation"');

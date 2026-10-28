@@ -11,7 +11,7 @@ const system = readFileSync(
 it("用户与权限位于主导航，组织与账号页使用同一个主导航选中项", () => {
   expect(home).toContain('id: "identity" as const, label: "用户与权限"');
   expect(home).toContain('systemView !== "config" ? "identity" : section');
-  expect(home).toContain(
+  expect(readFileSync(new URL("../client/src/components/WorkspaceHeader.tsx", import.meta.url), "utf8")).toContain(
     'aria-current={activeSection === item.id ? "page" : undefined}'
   );
   expect(home).toContain(
