@@ -1279,12 +1279,12 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(resourceSrc).toContain(
         'aria-current={tab === item.id ? "page" : undefined}'
       );
-      expect(homeSrc).toContain('login_failed: { label: "登录失败"');
+      expect(readFileSync(new URL("../../shared/role-audit-event.ts", import.meta.url), "utf8")).toContain('login_failed: { label: "登录失败"');
       expect(homeSrc).toContain(
         'return authorizationAuditActions[action]?.label ?? "未识别操作"'
       );
       expect(homeSrc).toContain(
-        "显示 {filteredAudit.length} / {audit.length} 条已加载记录"
+        "共 ${auditTotal} 条匹配记录"
       );
       expect(homeSrc).toContain('data-iam-audit-detail=""');
       expect(homeSrc).toContain("复制原码");

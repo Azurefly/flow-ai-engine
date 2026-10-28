@@ -1,3 +1,4 @@
+import { authorizationAuditPageInput } from "./authorization-audit-pagination";
 import { workflowConfigurationToken } from "./workflow-creation-request";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import { getWorkflowPublicationAccess } from "./workflow-publication-access";
@@ -47,6 +48,7 @@ import {
   grantWorkflowMember,
   listActiveUsersForWorkflowAssignment,
   listAuthorizationAudit,
+  listAuthorizationAuditPage,
   listRoles,
   listPermissionCatalog,
   listWorkflowMembers,
@@ -545,6 +547,9 @@ export const appRouter = router({
         await deleteCustomRole({ ...input, actorUserId: ctx.user.id, actorTokenVersion: ctx.user.tokenVersion });
         return { success: true };
       }),
+    authorizationAuditPage: iamManageProcedure
+      .input(authorizationAuditPageInput)
+      .query(({ input }) => listAuthorizationAuditPage(input)),
     authorizationAudit: iamManageProcedure
       .input(
         z

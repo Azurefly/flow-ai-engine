@@ -1,3 +1,4 @@
+import { authorizationAuditActions, authorizationAuditCategories, auditDateBounds, type AuditCategory } from "@shared/role-audit-event";
 import { IdentityWorkspace } from "@/components/IdentityWorkspace";
 import type { IdentityTab } from "@shared/console-route";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
@@ -3180,41 +3181,13 @@ type AiUserPreview = {
   rationale: string;
 };
 
-type AuditCategory = "authentication" | "account" | "roles" | "projects";
-const authorizationAuditActions: Record<
-  string,
-  { label: string; category: AuditCategory }
-> = {
-  login_success: { label: "登录成功", category: "authentication" },
-  login_failed: { label: "登录失败", category: "authentication" },
-  logout: { label: "退出登录", category: "authentication" },
-  user_created: { label: "创建账号", category: "account" },
-  user_updated: { label: "更新账号或成员关系", category: "account" },
-  user_disabled: { label: "停用账号", category: "account" },
-  role_created: { label: "创建自定义角色", category: "roles" },
-  project_archived: { label: "归档业务", category: "projects" },
-  project_restored: { label: "恢复业务", category: "projects" },
-  role_updated: { label: "修改自定义角色", category: "roles" },
-  role_deleted: { label: "删除自定义角色", category: "roles" },
-  role_assigned: { label: "授予角色", category: "roles" },
-  role_revoked: { label: "撤销角色", category: "roles" },
-  temporary_role_assigned: { label: "授予临时角色", category: "roles" },
-  temporary_role_revoked: { label: "撤销临时角色", category: "roles" },
-};
 
 function auditActionLabel(action: string) {
   return authorizationAuditActions[action]?.label ?? "未识别操作";
 }
 
 function auditCategoryLabel(category: string) {
-  const labels: Record<string, string> = {
-    authentication: "认证",
-    account: "账号管理",
-    roles: "角色授权",
-    projects: "业务归档",
-    other: "其他",
-  };
-  return labels[category] ?? "其他";
+  return authorizationAuditCategories[category] ?? authorizationAuditCategories.other;
 }
 
 function auditDetailsText(value: unknown) {
@@ -3303,7 +3276,13 @@ function IamCenter({
   const [auditPage, setAuditPage] = useState(0);
   const [roleSearch, setRoleSearch] = useState("");
   const [auditSearch, setAuditSearch] = useState("");
-  const [auditCategory, setAuditCategory] = useState("all");
+  const [auditCategory, setAuditCategory] = useState<AuditCategory | "all" | "other">("all");
+  const [auditSearchValue, setAuditSearchValue] = useState("");
+  const [auditSnapshot, setAuditSnapshot] = useState<number>();
+  useEffect(() => {
+    const timer = setTimeout(() => setAuditSearchValue(auditSearch.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [auditSearch]);
   const [auditFrom, setAuditFrom] = useState("");
   const [auditTo, setAuditTo] = useState("");
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
@@ -3323,8 +3302,26 @@ function IamCenter({
     success: boolean;
     error?: string;
   }> | null>(null);
-  const auditQuery = trpc.iam.authorizationAudit.useQuery({ limit: 20 }, { enabled: tab === "audit", retry: false });
-  const audit: any[] = auditQuery.isError ? [] : auditQuery.data ?? [];
+  const auditDates = auditDateBounds(auditFrom, auditTo);
+  const auditTyping = auditSearch.trim() !== auditSearchValue;
+  const auditQuery = trpc.iam.authorizationAuditPage.useQuery({
+    limit: auditPageSize, offset: auditPage * auditPageSize, search: auditSearchValue,
+    category: auditCategory, from: auditDates.from, until: auditDates.until, snapshotBefore: auditSnapshot,
+  }, { enabled: tab === "audit" && !auditDates.error && !auditTyping, retry: false });
+  const auditBusy = auditTyping || auditQuery.isFetching || auditQuery.isPending;
+  const auditReady = !auditBusy && !auditQuery.isError && !auditDates.error;
+  const visibleAudit: any[] = auditReady ? auditQuery.data?.items ?? [] : [];
+  const auditTotal = auditQuery.data?.total ?? 0;
+  const auditPageCount = Math.max(1, Math.ceil(auditTotal / auditPageSize));
+  const resetAuditPage = () => { setAuditPage(0); setAuditSnapshot(undefined); setExpandedAuditId(null); };
+  const goToAuditPage = (page: number) => {
+    setAuditSnapshot(auditQuery.data?.snapshotBefore); setExpandedAuditId(null);
+    setAuditPage(Math.max(0, Math.min(auditPageCount - 1, page)));
+  };
+  const refreshAudit = () => {
+    if (auditPage || auditSnapshot !== undefined) resetAuditPage();
+    else void auditQuery.refetch();
+  };
   const userDirectory = trpc.iam.userDirectory.useQuery(
     {
       search: userSearch.trim(),
@@ -3379,41 +3376,6 @@ function IamCenter({
       )
     );
   }, [roleSearch, roles]);
-  const filteredAudit = useMemo(() => {
-    const keyword = auditSearch.trim().toLowerCase();
-    const startTime = auditFrom
-      ? new Date(`${auditFrom}T00:00:00`).getTime()
-      : null;
-    const endTime = auditTo
-      ? new Date(`${auditTo}T23:59:59.999`).getTime()
-      : null;
-    return audit.filter(item => {
-      const action = authorizationAuditActions[item.action];
-      const category = action?.category ?? "other";
-      if (auditCategory !== "all" && auditCategory !== category) return false;
-      if (keyword) {
-        const searchable = [
-          item.action,
-          action?.label,
-          item.actorUsername,
-          item.targetUsername,
-          item.resourceType,
-          item.resourceId,
-          item.requestId,
-        ]
-          .map(value => String(value ?? "").toLowerCase())
-          .join(" ");
-        if (!searchable.includes(keyword)) return false;
-      }
-      if (startTime !== null || endTime !== null) {
-        const createdAt = new Date(item.createdAt).getTime();
-        if (!Number.isFinite(createdAt)) return false;
-        if (startTime !== null && createdAt < startTime) return false;
-        if (endTime !== null && createdAt > endTime) return false;
-      }
-      return true;
-    });
-  }, [audit, auditCategory, auditFrom, auditSearch, auditTo]);
   const rolePageCount = Math.max(
     1,
     Math.ceil(filteredRoles.length / rolePageSize)
@@ -3421,14 +3383,6 @@ function IamCenter({
   const visibleRoles = filteredRoles.slice(
     rolePage * rolePageSize,
     (rolePage + 1) * rolePageSize
-  );
-  const auditPageCount = Math.max(
-    1,
-    Math.ceil(filteredAudit.length / auditPageSize)
-  );
-  const visibleAudit = filteredAudit.slice(
-    auditPage * auditPageSize,
-    (auditPage + 1) * auditPageSize
   );
   const selectedRole = roles.find(role => Number(role.id) === selectedRoleId);
 
@@ -3472,9 +3426,6 @@ function IamCenter({
   useEffect(() => {
     if (rolePage >= rolePageCount) setRolePage(rolePageCount - 1);
   }, [rolePage, rolePageCount]);
-  useEffect(() => {
-    if (auditPage >= auditPageCount) setAuditPage(auditPageCount - 1);
-  }, [auditPage, auditPageCount]);
   useEffect(() => {
     setSelectedPreviewUsers(
       new Set((aiPreview?.users ?? []).map(account => account.username))
@@ -4211,30 +4162,22 @@ function IamCenter({
         </div>
       )}
 
-      {tab === "audit" && (auditQuery.isError ? (
-        <section role="alert" className="rounded-lg border border-border bg-card p-4">
-          <p>授权审计读取失败，请重试。</p><Button variant="outline" onClick={() => void auditQuery.refetch()}>重新读取授权审计</Button>
-        </section>
-      ) : auditQuery.isPending ? <p role="status">正在读取授权审计…</p> : (
+      {tab === "audit" && (
         <section className="rounded-lg border border-border bg-card">
-          <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="aiflow-type-section-title flex items-center gap-2 font-semibold">
-              <SlidersHorizontal size={15} />
-              授权审计
-            </div>
-            <span className="aiflow-type-meta text-muted-foreground">
-              显示 {filteredAudit.length} / {audit.length} 条已加载记录
-            </span>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+            <span>{auditReady && auditQuery.data ? `共 ${auditTotal} 条匹配记录 · 截至 ${formatTime(new Date(auditQuery.data.snapshotBefore - 1))}` : "全部历史记录"}</span>
+            <Button variant="ghost" size="sm" onClick={refreshAudit} disabled={auditBusy || Boolean(auditDates.error)} title="刷新查看新记录">刷新审计记录</Button>
           </div>
           <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2 border-b border-border bg-muted/60 p-3 min-[1024px]:grid-cols-[minmax(180px,1fr)_140px_auto_auto] min-[1024px]:items-start">
             <Input
               aria-label="搜索授权审计"
+              maxLength={160}
               className="col-span-2 min-h-11 min-w-0 bg-card min-[1024px]:col-span-1 min-[1024px]:min-h-0"
               placeholder="搜索操作、操作者、对象或请求 ID"
               value={auditSearch}
               onChange={event => {
                 setAuditSearch(event.target.value);
-                setAuditPage(0);
+                resetAuditPage();
               }}
             />
             <select
@@ -4242,16 +4185,11 @@ function IamCenter({
               className="col-span-2 h-11 min-w-0 rounded-md border border-border bg-card px-2 min-[1024px]:col-span-1 min-[1024px]:h-10"
               value={auditCategory}
               onChange={event => {
-                setAuditCategory(event.target.value);
-                setAuditPage(0);
+                setAuditCategory(event.target.value as typeof auditCategory);
+                resetAuditPage();
               }}
             >
-              <option value="all">全部类别</option>
-              <option value="authentication">认证</option>
-              <option value="account">账号管理</option>
-              <option value="roles">角色授权</option>
-              <option value="projects">业务归档</option>
-              <option value="other">其他 / 未识别</option>
+              {Object.entries(authorizationAuditCategories).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
             <details
               data-iam-audit-date-filter
@@ -4278,7 +4216,7 @@ function IamCenter({
                     value={auditFrom}
                     onChange={event => {
                       setAuditFrom(event.target.value);
-                      setAuditPage(0);
+                      resetAuditPage();
                     }}
                   />
                 </label>
@@ -4291,7 +4229,7 @@ function IamCenter({
                     value={auditTo}
                     onChange={event => {
                       setAuditTo(event.target.value);
-                      setAuditPage(0);
+                      resetAuditPage();
                     }}
                   />
                 </label>
@@ -4307,12 +4245,13 @@ function IamCenter({
                 setAuditCategory("all");
                 setAuditFrom("");
                 setAuditTo("");
-                setAuditPage(0);
+                resetAuditPage();
               }}
             >
               重置
             </Button>
           </div>
+          {auditDates.error ? <p role="alert" className="p-4 text-aiflow-danger">{auditDates.error}</p> : auditQuery.isError ? <div role="alert" className="p-4"><p>授权审计读取失败，筛选条件已保留。</p><Button variant="outline" disabled={auditBusy} onClick={() => void auditQuery.refetch()}>重新读取授权审计</Button></div> : auditBusy ? <p role="status" className="p-4">正在读取授权审计…</p> : null}
           <div className="hidden grid-cols-[150px_minmax(130px,1fr)_minmax(150px,1fr)_minmax(150px,1.1fr)_80px_90px] gap-3 border-b border-border bg-muted px-4 py-2 text-[10px] font-medium text-muted-foreground min-[1024px]:grid">
             <span>时间</span>
             <span>操作者 → 对象</span>
@@ -4470,15 +4409,11 @@ function IamCenter({
                 </div>
               );
             })}
-            {!filteredAudit.length && (
-              <p className="p-8 text-center text-sm text-muted-foreground">
-                {audit.length
-                  ? "没有符合当前筛选条件的审计记录。"
-                  : "暂未记录授权事件。"}
-              </p>
+            {auditReady && !visibleAudit.length && (
+              <p className="p-8 text-center text-sm text-muted-foreground">没有符合当前筛选条件的审计记录。</p>
             )}
           </div>
-          {filteredAudit.length > auditPageSize && (
+          {auditReady && auditQuery.data && (
             <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
               <Button
                 type="button"
@@ -4486,7 +4421,7 @@ function IamCenter({
                 size="sm"
                 className="h-11 min-[1024px]:h-10"
                 disabled={auditPage === 0}
-                onClick={() => setAuditPage(page => Math.max(0, page - 1))}
+                onClick={() => goToAuditPage(auditPage - 1)}
               >
                 上一页
               </Button>
@@ -4494,7 +4429,7 @@ function IamCenter({
                 aria-live="polite"
                 className="text-xs text-muted-foreground"
               >
-                {auditPage + 1} / {auditPageCount} · 每页 {auditPageSize} 条
+                {auditPage + 1} / {auditPageCount} · 每页 {auditPageSize} 条 · 共 {auditTotal} 条
               </span>
               <Button
                 type="button"
@@ -4502,16 +4437,14 @@ function IamCenter({
                 size="sm"
                 className="h-11 min-[1024px]:h-10"
                 disabled={auditPage + 1 >= auditPageCount}
-                onClick={() =>
-                  setAuditPage(page => Math.min(auditPageCount - 1, page + 1))
-                }
+                onClick={() => goToAuditPage(auditPage + 1)}
               >
                 下一页
               </Button>
             </div>
           )}
         </section>
-      ))}
+      )}
     </div>
   );
 }

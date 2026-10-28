@@ -1,3 +1,4 @@
+import { authorizationAuditPageInput, authorizationAuditFilter, type AuthorizationAuditPageInput } from "./authorization-audit-pagination";
 import { normalizeRoleAuditEvent } from "../shared/role-audit-event";
 import { assertRoleExpiryRange } from "../shared/role-expiry";
 import { randomUUID } from "node:crypto";
@@ -793,6 +794,24 @@ export async function listAssignableRoleUsersPage(input: {
     [...args, input.limit, input.offset]
   );
   return { items, total: Number(countRows[0]?.total ?? 0), offset: input.offset, limit: input.limit };
+}
+
+export async function listAuthorizationAuditPage(input: AuthorizationAuditPageInput = {}) {
+  const parsed = authorizationAuditPageInput.parse(input);
+  const [clock] = await db().query<mysql.RowDataPacket[]>("SELECT UNIX_TIMESTAMP(CURRENT_TIMESTAMP()) * 1000 AS snapshotBefore");
+  const now = Number(clock[0].snapshotBefore);
+  const snapshotBefore = Math.min(parsed.snapshotBefore ?? now, now);
+  const { where, args } = authorizationAuditFilter(parsed, snapshotBefore);
+  const joins = `FROM authorization_audit_log a
+    LEFT JOIN users actor ON actor.id=a.actorUserId
+    LEFT JOIN users target ON target.id=a.targetUserId`;
+  const [counts] = await db().query<mysql.RowDataPacket[]>(`SELECT COUNT(*) AS total ${joins} ${where}`, args);
+  const total = Number(counts[0]?.total ?? 0);
+  const offset = Math.min(parsed.offset, Math.max(0, Math.ceil(total / parsed.limit) - 1) * parsed.limit);
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT a.*,actor.username AS actorUsername,target.username AS targetUsername ${joins} ${where}
+      ORDER BY a.createdAt DESC,a.id DESC LIMIT ? OFFSET ?`, [...args, parsed.limit, offset]);
+  return { items: rows.map(row => normalizeRoleAuditEvent(row)), total, offset, limit: parsed.limit, snapshotBefore };
 }
 
 export async function listAuthorizationAudit(limit = 100) {

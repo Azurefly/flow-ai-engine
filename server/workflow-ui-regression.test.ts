@@ -1505,7 +1505,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       'className="block break-words text-foreground [overflow-wrap:anywhere]"'
     );
-    expect(homeSource).toContain("aiflow-type-section-title flex items-center");
+    expect(homeSource).toContain("共 ${auditTotal} 条匹配记录");
     expect(homeSource).toContain("aiflow-type-meta text-muted-foreground");
     expect(homeSource).toContain(
       "aiflow-type-body mt-0.5 break-words text-foreground"
@@ -1667,7 +1667,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "enabled: editorActive && canViewWorkflow, retry: false"
     );
-    expect(homeSource).toContain("enabled: tab === \"audit\", retry: false");
+    expect(homeSource).toContain("enabled: tab === \"audit\" && !auditDates.error && !auditTyping, retry: false");
     expect(homeSource).not.toContain(
       "const members = trpc.workflow.members.useQuery"
     );
