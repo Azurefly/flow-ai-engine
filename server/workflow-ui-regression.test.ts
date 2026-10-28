@@ -376,7 +376,13 @@ describe("流程设计器界面回归约束", () => {
     expect(graph).toContain("fitViewOptions={overviewFit}");
     expect(graph).toContain("fit(focusRequest.nodeId)");
     expect(graph).toContain("overview.current ? undefined : focusId.current");
-    expect(graph).toContain("[layout, ready, expanded]");
+    expect(graph).toContain("[layout, ready, measured, expanded]");
+    expect(graph).toContain("const initialized = useNodesInitialized()");
+    expect(graph).toContain("<ViewportMeasurement onReady={setMeasured} />");
+    expect(graph).toContain("onlyRenderVisibleElements={measured}");
+    expect(graph).toContain("measured: sizes.get(n.id)");
+    expect(graph).toContain('change.type === "dimensions" && change.dimensions');
+    expect(graph).toContain("if (!ready || !measured) return");
     expect(graph).not.toContain("const timer = setTimeout");
     expect(graph).not.toContain("fitViewOptions={{");
     expect(graph.indexOf("fit(id);", graph.indexOf("const choose ="))).toBeLessThan(graph.indexOf("if (id === active?.id) return;"));

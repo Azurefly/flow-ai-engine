@@ -7,6 +7,7 @@ import {
   Handle,
   Position,
   MarkerType,
+  useNodesInitialized,
   type Node,
   type Edge,
   type NodeProps,
@@ -84,6 +85,11 @@ function RunNode({ data }: NodeProps<ViewerNode>) {
 }
 const nodeTypes = { runNode: RunNode };
 const overviewFit = runGraphFitOptions();
+function ViewportMeasurement({ onReady }: { onReady: (ready: boolean) => void }) {
+  const initialized = useNodesInitialized();
+  useEffect(() => onReady(initialized), [initialized, onReady]);
+  return null;
+}
 export default function RunExecutionCanvas({
   run,
   focusRequest,
@@ -107,6 +113,8 @@ export default function RunExecutionCanvas({
   const [expanded, setExpanded] = useState(false);
   const api = useRef<ReactFlowInstance<ViewerNode, Edge> | null>(null);
   const [ready, setReady] = useState(false);
+  const [measured, setMeasured] = useState(false);
+  const [sizes, setSizes] = useState(new Map<string, { width: number; height: number }>());
   const [initialFit] = useState(() => runGraphFitOptions(initialFocus.nodeId));
   const overview = useRef(false);
   const fit = (nodeId?: string) => {
@@ -136,6 +144,7 @@ export default function RunExecutionCanvas({
     data: { item: n, choose, selected: active?.id === n.id },
     draggable: false,
     connectable: false,
+    measured: sizes.get(n.id),
   }));
   const edges: Edge[] = graph.edges.map(e => ({
     id: e.id,
@@ -171,20 +180,20 @@ export default function RunExecutionCanvas({
   const focusId = useRef(active?.id);
   focusId.current = active?.id;
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !measured) return;
     void api.current?.fitView(runGraphFitOptions(overview.current ? undefined : focusId.current));
-  }, [layout, ready, expanded]);
+  }, [layout, ready, measured, expanded]);
   const root = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (focusRequest) {
       setSelected(focusRequest.nodeId);
       setOccurrence(focusRequest.recordId);
-      if (ready) {
+      if (ready && measured) {
         fit(focusRequest.nodeId);
         root.current?.scrollIntoView({ block: "start", behavior: "auto" });
       }
     }
-  }, [focusRequest, ready]);
+  }, [focusRequest, ready, measured]);
   const focus = () => {
     if (active) fit(active.id);
   };
@@ -200,7 +209,7 @@ export default function RunExecutionCanvas({
             实例流程图
           </h3>
           <p className="aiflow-type-body mt-1 text-muted-foreground">
-            基于本次运行快照 · {graph.nodes.length} 个节点 ·{" "}
+            {graph.hasSnapshot ? "基于本次运行快照" : "仅有节点执行记录"} · {graph.nodes.length} 个节点 ·{" "}
             {current.filter(n => n.activeCount).length} 处进行中
           </p>
         </div>
@@ -208,7 +217,7 @@ export default function RunExecutionCanvas({
           <Button
             variant="outline"
             size="sm"
-            disabled={!ready}
+            disabled={!ready || !measured}
             onClick={() => fit()}
           >
             查看全图
@@ -216,7 +225,7 @@ export default function RunExecutionCanvas({
           <Button
             variant="outline"
             size="sm"
-            disabled={!ready || !active}
+            disabled={!ready || !measured || !active}
             onClick={focus}
           >
             定位选中节点
@@ -285,6 +294,15 @@ export default function RunExecutionCanvas({
                 setReady(true);
               }}
               onNodeClick={(_e, n) => choose(n.id)}
+              onNodesChange={changes => {
+                if (!changes.some(change => change.type === "dimensions" && change.dimensions)) return;
+                setSizes(previous => {
+                  const next = new Map(previous);
+                  for (const change of changes)
+                    if (change.type === "dimensions" && change.dimensions) next.set(change.id, change.dimensions);
+                  return next;
+                });
+              }}
               fitView
               fitViewOptions={initialFit}
               minZoom={0.01}
@@ -295,7 +313,7 @@ export default function RunExecutionCanvas({
               elementsSelectable
               panOnDrag
               zoomOnScroll={false}
-              onlyRenderVisibleElements
+              onlyRenderVisibleElements={measured}
               ariaLabelConfig={{
                 "controls.zoomIn.ariaLabel": "放大画布",
                 "controls.zoomOut.ariaLabel": "缩小画布",
@@ -304,6 +322,7 @@ export default function RunExecutionCanvas({
               }}
               proOptions={{ hideAttribution: true }}
             >
+              <ViewportMeasurement onReady={setMeasured} />
               <Background gap={22} />
               <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => { overview.current = true; }} />
               <MiniMap
@@ -389,7 +408,7 @@ export default function RunExecutionCanvas({
                     本次：{runNodeLabels[record.status] ?? record.status} · 耗时{" "}
                     {record.durationMs ?? "—"} ms
                   </p>
-                  {run.flowType === "data" && <p className="aiflow-type-body text-muted-foreground">
+                  {run.flowType === "data" && <p className="aiflow-type-body break-words text-muted-foreground">
                     {workflowNodeTypeLabel(active.type)} · {active.id} · 输出 {record.rowCount ?? "—"} 行 · {record.attempt ? `第 ${record.attempt} 次尝试` : "未记录尝试次数"}
                   </p>}
                   {legacyAmbiguous && (
