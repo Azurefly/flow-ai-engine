@@ -738,7 +738,7 @@ describe("流程设计器界面回归约束", () => {
       "aiflow-type-section-title break-words font-semibold text-foreground"
     );
     expect(homeSource).toContain(
-      "aiflow-type-control h-11 min-h-11 shrink-0 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10 min-[1024px]:min-h-10"
+      "aiflow-type-control h-11 min-h-11 shrink-0 min-[1024px]:h-10 min-[1024px]:min-h-10"
     );
   });
 
@@ -1667,7 +1667,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "enabled: editorActive && canViewWorkflow, retry: false"
     );
-    expect(homeSource).toContain("enabled: identityActive && identityTab === \"audit\", retry: false");
+    expect(homeSource).toContain("enabled: tab === \"audit\", retry: false");
     expect(homeSource).not.toContain(
       "const members = trpc.workflow.members.useQuery"
     );

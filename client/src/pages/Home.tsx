@@ -766,10 +766,6 @@ function FlowConsole({
     retry: false,
   });
   const roles = trpc.iam.roles.useQuery(undefined, authorizationQueryPolicy(identityActive));
-  const audit = trpc.iam.authorizationAudit.useQuery(
-    { limit: 20 },
-    { enabled: identityActive && identityTab === "audit", retry: false }
-  );
 
   useEffect(() => {
     const route = requestedRoute.route;
@@ -2081,7 +2077,6 @@ function FlowConsole({
                     currentUserId={user.id}
                     changingStatus={updateUserStatus.isPending}
                     roles={roles.data ?? []}
-                    audit={audit.data ?? []}
                     form={userForm}
                     setForm={setUserForm}
                     onCreate={() =>
@@ -3249,7 +3244,6 @@ function IamCenter({
   currentUserId,
   changingStatus,
   roles,
-  audit,
   form,
   setForm,
   onCreate,
@@ -3265,7 +3259,6 @@ function IamCenter({
 }: {
   tab: IdentityTab;
   roles: any[];
-  audit: any[];
   currentUserId: number;
   changingStatus: boolean;
   form: InternalUserForm;
@@ -3330,6 +3323,8 @@ function IamCenter({
     success: boolean;
     error?: string;
   }> | null>(null);
+  const auditQuery = trpc.iam.authorizationAudit.useQuery({ limit: 20 }, { enabled: tab === "audit", retry: false });
+  const audit: any[] = auditQuery.isError ? [] : auditQuery.data ?? [];
   const userDirectory = trpc.iam.userDirectory.useQuery(
     {
       search: userSearch.trim(),
@@ -4216,7 +4211,11 @@ function IamCenter({
         </div>
       )}
 
-      {tab === "audit" && (
+      {tab === "audit" && (auditQuery.isError ? (
+        <section role="alert" className="rounded-lg border border-border bg-card p-4">
+          <p>授权审计读取失败，请重试。</p><Button variant="outline" onClick={() => void auditQuery.refetch()}>重新读取授权审计</Button>
+        </section>
+      ) : auditQuery.isPending ? <p role="status">正在读取授权审计…</p> : (
         <section className="rounded-lg border border-border bg-card">
           <div className="flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="aiflow-type-section-title flex items-center gap-2 font-semibold">
@@ -4512,7 +4511,7 @@ function IamCenter({
             </div>
           )}
         </section>
-      )}
+      ))}
     </div>
   );
 }
@@ -4550,7 +4549,8 @@ function UserAuthorizationPanel({
         </div>
         <Button
           size="sm"
-          className="aiflow-type-control h-11 shrink-0 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10"
+          variant="outline"
+          className="aiflow-type-control h-11 shrink-0 min-[1024px]:h-10"
           disabled={!data || details.isLoading || data.user.status !== "active"}
           onClick={onAssign}
         >
@@ -4721,7 +4721,8 @@ function RoleAuthorizationPanel({
         )}
         <Button
           size="sm"
-          className="aiflow-type-control h-11 min-h-11 shrink-0 bg-blue-600 text-white shadow-2xs hover:bg-blue-700 min-[1024px]:h-10 min-[1024px]:min-h-10"
+          variant="outline"
+          className="aiflow-type-control h-11 min-h-11 shrink-0 min-[1024px]:h-10 min-[1024px]:min-h-10"
           disabled={!data || details.isLoading || !assignable}
           onClick={onAssign}
         >
