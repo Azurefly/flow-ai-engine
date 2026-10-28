@@ -1,3 +1,5 @@
+export type IdentityTab = "users" | "roles" | "audit";
+
 export type ConsoleSection = "flows" | "runs" | "warehouse" | "system";
 
 export type ConsoleRoute =
@@ -7,7 +9,8 @@ export type ConsoleRoute =
   | { section: "runs"; view: "workbench" }
   | { section: "runs"; view: "monitor"; workflowId: string; runId?: string }
   | { section: "warehouse" }
-  | { section: "system"; view: "config" | "identity" | "organization" };
+  | { section: "system"; view: "config" | "organization" }
+  | { section: "system"; view: "identity"; identityTab?: IdentityTab };
 
 export const consoleSections: ConsoleSection[] = [
   "flows",
@@ -66,6 +69,12 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
       return { section: "system", view: "config" };
     if (parts.length === 2 && parts[1] === "identity")
       return { section: "system", view: "identity" };
+    if (
+      parts.length === 3 &&
+      parts[1] === "identity" &&
+      (parts[2] === "users" || parts[2] === "roles" || parts[2] === "audit")
+    )
+      return { section: "system", view: "identity", identityTab: parts[2] };
     if (parts.length === 2 && parts[1] === "organization")
       return { section: "system", view: "organization" };
   }
@@ -85,7 +94,10 @@ export function formatConsoleRoute(route: ConsoleRoute): string {
     return route.runId ? `${base}/${encodeURIComponent(route.runId)}` : base;
   }
   if (route.section === "warehouse") return "#/warehouse";
-  if (route.view === "identity") return "#/system/identity";
+  if (route.view === "identity")
+    return route.identityTab
+      ? `#/system/identity/${route.identityTab}`
+      : "#/system/identity";
   if (route.view === "organization") return "#/system/organization";
   return "#/system";
 }

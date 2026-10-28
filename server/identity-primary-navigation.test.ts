@@ -19,5 +19,7 @@ it("用户与权限位于主导航，组织与账号页使用同一个主导航�
   );
   expect(system).not.toContain('id: "access"');
   expect(system).not.toContain("function AccessSettings");
-  expect(home).toContain('aria-label="用户与权限分类"');
+  expect(home).toContain("<IdentityWorkspace");
+  expect(home).toContain('canManageIdentity && systemView !== "config"');
+  expect(readFileSync(new URL("../client/src/components/IdentityWorkspace.tsx", import.meta.url), "utf8")).toContain('aria-label="用户与权限分类"');
 });

@@ -1,3 +1,5 @@
+import { IdentityWorkspace } from "@/components/IdentityWorkspace";
+import type { IdentityTab } from "@shared/console-route";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
 import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
@@ -579,6 +581,8 @@ function FlowConsole({
     unsavedWorkflowId.current = null;
   }, []);
   const detailActive = section === "flows" && flowView === "detail";
+  const identityTab: IdentityTab = requestedRoute.route.section === "system" && requestedRoute.route.view === "identity"
+    ? requestedRoute.route.identityTab ?? "users" : "users";
   const identityActive =
     section === "system" && systemView === "identity" && canManageIdentity;
   const navigateRoute = useCallback(
@@ -764,7 +768,7 @@ function FlowConsole({
   const roles = trpc.iam.roles.useQuery(undefined, authorizationQueryPolicy(identityActive));
   const audit = trpc.iam.authorizationAudit.useQuery(
     { limit: 20 },
-    { enabled: identityActive, retry: false }
+    { enabled: identityActive && identityTab === "audit", retry: false }
   );
 
   useEffect(() => {
@@ -2066,26 +2070,14 @@ function FlowConsole({
             systemView === "config" && (
               <SystemConfigShell />
             )}
-          {section === "system" &&
-            canManageIdentity &&
-            systemView === "organization" && (
-              <OrganizationManagementPage
-                onBack={() =>
-                  navigateRoute({ section: "system", view: "identity" })
-                }
-              />
-            )}
-          {section === "system" &&
-            canManageIdentity &&
-            systemView === "identity" && (
-              <div data-aiflow-identity-page="" className="aiflow-page-frame bg-background">
-                <div className="aiflow-page-content">
-                  <nav aria-label="用户与权限分类" className="mb-4 flex items-center gap-2 border-b border-border pb-3">
-                    <span aria-current="page" className="rounded bg-accent px-3 py-2 aiflow-type-control font-semibold text-aiflow-info">账号与角色</span>
-                    <Button variant="ghost" onClick={()=>navigateRoute({ section: "system", view: "organization" })}>组织架构</Button>
-                  </nav>
+          {section === "system" && canManageIdentity && systemView !== "config" && (
+            <IdentityWorkspace active={systemView === "organization" ? "organization" : identityTab} onNavigate={navigateRoute}>
+              {systemView === "organization" ? (
+                <OrganizationManagementPage embedded onBack={() => navigateRoute({ section: "system", view: "identity" })} />
+              ) : (<>
                   {roles.isError ? <section role="alert" className="grid gap-3 rounded-xl border border-border bg-card p-4"><p>身份目录暂不可用，已隐藏缓存。请重新读取当前权限与目录。</p><ResourceDraftRecoveryNotice/><Button variant="outline" onClick={()=>void Promise.allSettled([roles.refetch(),utils.auth.me.invalidate()])}>重新读取权限与目录</Button></section> : (
                   <IamCenter
+                    tab={identityTab}
                     currentUserId={user.id}
                     changingStatus={updateUserStatus.isPending}
                     roles={roles.data ?? []}
@@ -2137,9 +2129,9 @@ function FlowConsole({
                     }}
                   />
                   )}
-                </div>
-              </div>
-            )}
+              </>)}
+            </IdentityWorkspace>
+          )}
         </section>
       </div>
       <input
@@ -3253,6 +3245,7 @@ async function copyAuditActionCode(value: string) {
 }
 
 function IamCenter({
+  tab,
   currentUserId,
   changingStatus,
   roles,
@@ -3270,6 +3263,7 @@ function IamCenter({
   previewing,
   onConfirmPreview,
 }: {
+  tab: IdentityTab;
   roles: any[];
   audit: any[];
   currentUserId: number;
@@ -3307,7 +3301,6 @@ function IamCenter({
   const statusAction = statusTarget?.status === "active" ? "停用" : "启用";
   const [normalError, setNormalError] = useState("");
   const [aiDialogOpen, setAiDialogOpen] = useState(false);
-  const [tab, setTab] = useState<"users" | "roles" | "audit">("users");
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
   const [userSearch, setUserSearch] = useState("");
@@ -3539,7 +3532,7 @@ function IamCenter({
   const openRoleAssignment=()=>{if(!selectedRole||selectedRole.scope!=="system")return;setAssignmentTarget({mode:"role",roleCode:selectedRole.code,roleName:selectedRole.name,configToken:selectedRole.configToken});};
 
   return (
-    <div className="space-y-5 p-4 lg:p-6 [&_input]:h-11 [&_select]:h-11 [&_button]:min-h-11 min-[1024px]:[&_input]:h-10 min-[1024px]:[&_select]:h-10 min-[1024px]:[&_button]:min-h-10">
+    <div data-iam-center className="min-w-0 space-y-5 [&_input]:h-11 [&_select]:h-11 [&_button]:min-h-11 min-[1024px]:[&_input]:h-10 min-[1024px]:[&_select]:h-10 min-[1024px]:[&_button]:min-h-10">
       {roleEditor && (
         <ErrorBoundary>
           <Suspense fallback={<p role="status">正在加载角色编辑器…</p>}>
@@ -3574,14 +3567,14 @@ function IamCenter({
             data-aiflow-page-title=""
             className="aiflow-type-page-title mt-1 font-semibold"
           >
-            内部账号与权限中心
+            {tab === "users" ? "用户账号" : tab === "roles" ? "角色与权限" : "授权审计"}
           </h1>
           <p className="aiflow-type-body mt-1 text-muted-foreground">
-            管理账号与角色，查看有效权限和授权来源。
+            {tab === "users" ? "管理账号与角色，查看有效权限和授权来源。" : tab === "roles" ? "配置角色权限，核对直接绑定与组织继承来源。" : "按操作者、对象与时间追溯授权变更。"}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <DropdownMenu>
+          {tab === "users" && <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
@@ -3611,7 +3604,8 @@ function IamCenter({
                 AI 辅助批量创建
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>
+          </DropdownMenu>}
+          {tab === "roles" && <Button onClick={() => setRoleEditor({ mode: "create" })}><Plus size={15} />新增角色</Button>}
         </div>
       </div>
 
@@ -3858,57 +3852,10 @@ function IamCenter({
       {assignmentTarget && <Suspense fallback={<p role="status">正在加载角色授权表单…</p>}><SystemRoleAssignmentDialog key={`${assignmentTarget.mode}:${assignmentTarget.userId||assignmentTarget.roleCode}`} target={assignmentTarget} onClose={()=>setAssignmentTarget(null)}/></Suspense>}
 
 
-      <div
-        role="tablist"
-        aria-label="内部账号与权限中心"
-        className="grid min-w-0 grid-cols-3 gap-1 border-b border-border bg-card px-2 sm:flex sm:flex-wrap"
-      >
-        {(
-          [
-            {
-              id: "users",
-              label: "用户账号",
-              shortLabel: "用户",
-              icon: UsersRound,
-            },
-            {
-              id: "roles",
-              label: "角色与权限",
-              shortLabel: "角色",
-              icon: KeyRound,
-            },
-            {
-              id: "audit",
-              label: "授权审计",
-              shortLabel: "审计",
-              icon: SlidersHorizontal,
-            },
-          ] as const
-        ).map(item => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-label={item.label}
-            aria-selected={tab === item.id}
-            className={`aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1 text-center min-[640px]:gap-2 min-[640px]:px-3 min-[1024px]:h-10 ${tab === item.id ? "border-aiflow-info bg-aiflow-info-surface text-aiflow-info" : "border-transparent text-muted-foreground hover:bg-muted"}`}
-            onClick={() => setTab(item.id)}
-          >
-            <span
-              className={`grid h-7 w-7 place-items-center rounded-full ${tab === item.id ? "bg-aiflow-info-surface text-aiflow-info" : "bg-muted text-muted-foreground"}`}
-            >
-              <item.icon size={14} />
-            </span>
-            <span className="min-[640px]:hidden">{item.shortLabel}</span>
-            <span className="hidden min-[640px]:inline">{item.label}</span>
-          </button>
-        ))}
-      </div>
-
       {tab === "users" && (
         <div
           data-iam-user-workbench
-          className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[minmax(300px,420px)_minmax(0,1fr)]"
+          className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]"
         >
           <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
             <div className="border-b border-border p-4">
@@ -4149,13 +4096,6 @@ function IamCenter({
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold">角色列表</p>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setRoleEditor({ mode: "create" })}
-                >
-                  新增角色
-                </Button>
                 <span className="text-xs text-muted-foreground">
                   {filteredRoles.length} / {roles.length}
                 </span>

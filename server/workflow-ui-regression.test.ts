@@ -8,6 +8,7 @@ import {
 const source = (path: string) =>
   readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+const identityWorkspaceSource = source("../client/src/components/IdentityWorkspace.tsx");
 const workspaceHeaderSource = source("../client/src/components/WorkspaceHeader.tsx");
 const editorCommandSource = source(
   "../client/src/components/EditorCommandBar.tsx"
@@ -1165,15 +1166,15 @@ describe("流程设计器界面回归约束", () => {
 
   it("组织架构从用户与权限进入独立安全页面，并以弹窗提交真实接口", () => {
     expect(consoleRouteSource).toContain(
-      'view: "config" | "identity" | "organization"'
+      'view: "config" | "organization"'
     );
     expect(consoleRouteSource).toContain(
       'if (route.view === "organization") return "#/system/organization"'
     );
     expect(homeSource).toContain("OrganizationManagementPage");
-    expect(homeSource).toContain('view: "organization"');
+    expect(identityWorkspaceSource).toContain('view: "organization"');
     expect(homeSource).toContain('label: "用户与权限"');
-    expect(homeSource).toContain('aria-label="用户与权限分类"');
+    expect(identityWorkspaceSource).toContain('aria-label="用户与权限分类"');
     expect(systemConfigSource).not.toContain('id: "access"');
     expect(organizationManagementSource).toContain(
       'data-aiflow-organization-page=""'
@@ -1261,7 +1262,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("用户与权限提升为主导航，账号和组织无需经过系统跳转卡片", () => {
     expect(homeSource).toContain('id: "identity" as const, label: "用户与权限"');
-    expect(homeSource).toContain('aria-label="用户与权限分类"');
+    expect(identityWorkspaceSource).toContain('aria-label="用户与权限分类"');
     expect(organizationManagementSource).toContain("返回账号与角色");
     expect(systemConfigSource).not.toContain("function AccessSettings");
   });
@@ -1397,9 +1398,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("createUsersBatch.useMutation");
     expect(homeSource).toContain("密码不会发送给模型");
     expect(homeSource).toContain("即将创建的用户");
-    expect(homeSource).toContain('id: "users", label: "用户账号"');
-    expect(homeSource).toContain('id: "roles", label: "角色与权限"');
-    expect(homeSource).toContain('id: "audit", label: "授权审计"');
+    expect(identityWorkspaceSource).toContain('id: "users", label: "用户账号"');
+    expect(identityWorkspaceSource).toContain('id: "roles", label: "角色与权限"');
+    expect(identityWorkspaceSource).toContain('id: "audit", label: "授权审计"');
     expect(homeSource).toContain("userAuthorizationDetails.useQuery");
     expect(homeSource).toContain("roleAuthorizationDetails.useQuery");
     expect(homeSource).toContain("直接绑定用户");
@@ -1421,9 +1422,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       'data-role-origin={Number(role.isSystem) ? "builtin" : "custom"}'
     );
-    expect(homeSource).toContain(
-      "aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1 text-center min-[640px]:gap-2 min-[640px]:px-3 min-[1024px]:h-10"
-    );
+    expect(identityWorkspaceSource).toContain("aiflow-module-link");
+    expect(homeSource).not.toContain('aria-label="内部账号与权限中心"');
+    expect(homeSource).toContain("tab={identityTab}");
     expect(
       source("../client/src/components/SystemRoleAssignmentDialog.tsx")
     ).toContain('className="auth-select"');
@@ -1457,8 +1458,8 @@ describe("流程设计器界面回归约束", () => {
     expect(
       source("../client/src/components/SystemRoleAssignmentDialog.tsx")
     ).toContain("为角色绑定用户");
-    expect(homeSource).toContain("min-[640px]:hidden");
-    expect(homeSource).toContain("hidden min-[640px]:inline");
+    expect(identityWorkspaceSource).toContain("{item.label}");
+    expect(identityWorkspaceSource).toContain('aria-label={item.label}');
     expect(source("./iam-assignment-service.ts")).toContain("请勿重复绑定");
     expect(routerSource).toContain("previewUserBatch: iamManageProcedure");
     expect(routerSource).toContain("createUsersBatch: iamManageProcedure");
@@ -1666,7 +1667,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "enabled: editorActive && canViewWorkflow, retry: false"
     );
-    expect(homeSource).toContain("enabled: identityActive, retry: false");
+    expect(homeSource).toContain("enabled: identityActive && identityTab === \"audit\", retry: false");
     expect(homeSource).not.toContain(
       "const members = trpc.workflow.members.useQuery"
     );
@@ -3271,7 +3272,7 @@ describe("流程设计器界面回归约束", () => {
 
   it("各级页签在窄屏换行而不把关键入口推到横向滚动区", () => {
     expect(homeSource).toContain("grid min-h-12 min-w-0 grid-cols-2");
-    expect(homeSource).toContain("grid min-w-0 grid-cols-3 gap-1");
+    expect(identityWorkspaceSource).toContain('className="mt-2 grid gap-1"');
     expect(organizationManagementSource).toContain(
       "grid min-w-0 grid-cols-3 gap-1"
     );

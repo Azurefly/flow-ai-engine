@@ -69,8 +69,10 @@ type UnitDialogMode = "root" | "sibling" | "child" | "edit" | null;
 type PageTab = "overview" | "members" | "permissions";
 export default function OrganizationManagementPage({
   onBack,
+  embedded = false,
 }: {
   onBack: () => void;
+  embedded?: boolean;
 }) {
   const utils = trpc.useUtils();
   const organization = trpc.config.organizationDirectory.useQuery(
@@ -452,11 +454,12 @@ export default function OrganizationManagementPage({
   return (
     <div
       data-aiflow-organization-page=""
-      className="aiflow-page-frame bg-background"
+      className={embedded ? "min-w-0" : "aiflow-page-frame bg-background"}
     >
-      <div className="aiflow-page-content overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div className={embedded ? "min-w-0 overflow-hidden rounded-xl border border-border bg-card" : "aiflow-page-content overflow-hidden rounded-xl border border-border bg-card shadow-sm"}>
         <header className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
+            {!embedded && (
             <button
               type="button"
               className="aiflow-type-control mb-2 flex min-h-11 items-center gap-1 text-aiflow-info hover:underline min-[1024px]:min-h-10"
@@ -465,6 +468,7 @@ export default function OrganizationManagementPage({
               <ArrowLeft size={15} />
               返回账号与角色
             </button>
+            )}
             <p className="aiflow-type-meta font-medium text-muted-foreground">
               人员与权限
             </p>
@@ -479,7 +483,7 @@ export default function OrganizationManagementPage({
             ref={unitActionsRef}
             className="relative self-start sm:self-auto"
           >
-            <summary className="inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md bg-[#2d6bea] px-3 text-sm font-medium text-white shadow-2xs hover:bg-[#245fc8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 min-[1024px]:h-10">
+            <summary className="inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 min-[1024px]:h-10">
               <Plus size={15} />
               新增部门 <ChevronDown size={14} />
             </summary>

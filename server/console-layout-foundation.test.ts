@@ -23,11 +23,12 @@ it("主要页面共用内容宽度和留白，次级导航按明确折叠状态�
     "ProcessWorkbench",
     "OrganizationManagementPage",
     "WorkflowWarehouse",
+    "IdentityWorkspace",
   ])
     expect(read(`client/src/components/${path}.tsx`)).toContain(
       "aiflow-page-content"
     );
-  expect(read("client/src/pages/Home.tsx")).toContain(
+  expect(read("client/src/components/IdentityWorkspace.tsx")).toContain(
     'data-aiflow-identity-page=""'
   );
   expect(css).toContain("--aiflow-content-max: 1440px;");
