@@ -62,3 +62,9 @@ it("dialog motion never interpolates responsive width or viewport height", () =>
     expect(source).not.toContain("transition-all");
   }
 });
+
+it("流程管理标题不继承旧装饰卡片，工作区使用统一冷色表面", () => {
+  expect(css).not.toContain("#eaf4df");
+  expect(css).not.toContain("#20332d");
+  expect(css).toMatch(/\[data-workspace-process-center\] > \[data-aiflow-context-header\]\s*\{\s*background-image: none;\s*box-shadow: none;\s*border-radius: 0;/);
+});

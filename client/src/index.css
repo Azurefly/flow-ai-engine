@@ -158,11 +158,11 @@
   --chart-5: var(--color-blue-800);
   --radius: 0.875rem;
   --aiflow-surface-radius: 1rem;
-  --aiflow-surface-shadow: 0 4px 20px rgb(26 43 31 / 5%);
-  --aiflow-surface-shadow-raised: 0 12px 36px rgb(26 43 31 / 10%);
+  --aiflow-surface-shadow: 0 4px 20px rgb(27 41 64 / 5%);
+  --aiflow-surface-shadow-raised: 0 12px 36px rgb(27 41 64 / 10%);
   --aiflow-workspace-glow: radial-gradient(
     ellipse at top left,
-    #eaf4df 0,
+    #eef2ff 0,
     transparent 65%
   );
   /* Console type scale: meta 13, body/controls 14, section 16, dialog 18, page 22, display 24px. */
@@ -342,7 +342,7 @@ h2 {
   --aiflow-surface-shadow-raised: 0 12px 36px rgb(0 0 0 / 25%);
   --aiflow-workspace-glow: radial-gradient(
     ellipse at top left,
-    #20332d 0,
+    #18233b 0,
     transparent 65%
   );
   --primary: #2563eb;
@@ -1394,6 +1394,11 @@ h2 {
 [data-aiflow-console] {
   --workspace-rail: 0px;
   --workspace-header-height: 64px;
+}
+[data-workspace-process-center] > [data-aiflow-context-header] {
+  background-image: none;
+  box-shadow: none;
+  border-radius: 0;
 }
 [data-workspace-body] {
   margin-left: 0;
