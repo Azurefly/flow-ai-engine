@@ -13,7 +13,7 @@ import { AccessRelationshipOverview, focusAccessGroup } from "@/components/Acces
 import { CanvasNameDialog } from "@/components/CanvasNameDialog";
 import { getFlowProfile } from "@shared/flow-profile-contract";
 import { canApplyDataflowConfigConversion } from "@shared/dataflow-config-conversion-guard";
-import { shouldResetRunRoute } from "@shared/run-route-guard";
+import { resolveMonitorRunId, shouldResetRunRoute } from "@shared/run-route-guard";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
 import { Button } from "@/components/ui/button";
@@ -245,6 +245,11 @@ function formatTime(value: unknown) {
 }
 
 // UX 优化：复用完全相同的样式字符串，保留 DOM 类名、事件和状态分支。
+const controlTextClass = "aiflow-type-control";
+const desktopFieldClass = "h-11 min-[1024px]:h-10";
+const panelFooterClass = "flex items-center justify-between gap-2 border-t border-border px-3 py-2";
+const panelClass = "min-w-0 overflow-hidden rounded-lg border border-border bg-card";
+const identityCodeClass = "aiflow-type-meta mt-0.5 break-all font-mono text-foreground";
 const filterInputClass = "h-11 border-input bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-[#2d6bea]";
 const moduleRailClass = "sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card";
 const searchIconClass = "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground";
@@ -754,13 +759,15 @@ function FlowConsole({
   const workflowContentState = canViewWorkflow && !selectedWorkflow && selectedWorkflowQuery.isError ? "unavailable" : workflowAccessState;
   const selectedWorkflowDefinition = canViewWorkflow && selectedWorkflow
     ? (decodeJson(selectedWorkflow.definition) as Definition) : null;
+  // UX 修复：监控按当前路由选取实例，避免切换流程时短暂查询旧实例；保留原有视图状态。
+  const monitorRunId = resolveMonitorRunId(requestedRoute.route, selectedRunId);
   const detailInput = useMemo(
-    () => ({ runId: selectedRunId ?? "00000000-0000-0000-0000-000000000000" }),
-    [selectedRunId]
+    () => ({ runId: monitorRunId ?? "00000000-0000-0000-0000-000000000000" }),
+    [monitorRunId]
   );
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, {
     enabled: Boolean(
-      canViewWorkflow && selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data"
+      canViewWorkflow && selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data" && monitorRunId
     ),
     retry: false,
     refetchInterval: query =>
@@ -2078,7 +2085,7 @@ function FlowConsole({
                           projectId={selectedWorkflow?.projectId}
                           workflowId={effectiveWorkflowId}
                           workflowName={selectedWorkflow?.name}
-                          selectedRunId={selectedRunId}
+                          selectedRunId={monitorRunId}
                           selectedRun={runDetail.data ?? null}
                           selectedRunLoading={runDetail.isLoading}
                           selectedRunError={runDetail.isError}
@@ -2638,14 +2645,14 @@ function FlowDesigner({
               <CheckCircle2 size={15} />预检流程
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="aiflow-type-control"
+              className={controlTextClass}
               onClick={() => setMembersDialogOpen(true)}
             >
               <UsersRound size={13} className={mutedIconClass} />
               <span>成员与权限</span>
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="aiflow-type-control"
+              className={controlTextClass}
               onClick={() => setGovernanceDialogOpen(true)}
             >
               <ShieldCheck size={13} className={mutedIconClass} />
@@ -2653,20 +2660,20 @@ function FlowDesigner({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="aiflow-type-control"
+              className={controlTextClass}
               onClick={onImport}
               disabled={!canModifyDefinition}
             >
               <Upload size={13} className={mutedIconClass} />
               <span>导入定义 (JSON)</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className="aiflow-type-control" onClick={onExport}>
+            <DropdownMenuItem className={controlTextClass} onClick={onExport}>
               <Download size={13} className={mutedIconClass} />
               <span>导出备份 (JSON)</span>
             </DropdownMenuItem>
             {workflow.flowType === "data" && (
               <DropdownMenuItem
-                className="aiflow-type-control"
+                className={controlTextClass}
                 disabled={
                   savePending ||
                   publishPending ||
@@ -2694,7 +2701,7 @@ function FlowDesigner({
             {canCopy && (
               <DropdownMenuItem
                 disabled={operationPending}
-                className="aiflow-type-control"
+                className={controlTextClass}
                 onClick={onDuplicate}
               >
                 <Copy size={13} className={mutedIconClass} />
@@ -2706,7 +2713,7 @@ function FlowDesigner({
                 workflow.flowType ?? "state"
               ).allowedNodeTypes.includes("subflow") && (
                 <DropdownMenuItem
-                  className="aiflow-type-control"
+                  className={controlTextClass}
                   onClick={() => setSubflowDialogOpen(true)}
                 >
                   <FolderTree size={13} className={mutedIconClass} />
@@ -2799,7 +2806,7 @@ function FlowDesigner({
                 <Button
                   type="button"
                   variant="outline"
-                  className="aiflow-type-control"
+                  className={controlTextClass}
                   disabled={unpublishFlow.isPending}
                   onClick={onUnpublish}
                 >
@@ -3859,7 +3866,7 @@ function IamCenter({
           data-iam-user-workbench
           className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]"
         >
-          <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+          <section className={panelClass}>
             <div className="border-b border-border p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">用户目录</p>
@@ -4023,7 +4030,7 @@ function IamCenter({
                   variant="outline"
                   size="sm"
                   disabled={userPage === 0}
-                  className="h-11 min-[1024px]:h-10"
+                  className={desktopFieldClass}
                   onClick={() => setUserPage(page => page - 1)}
                 >
                   上一页
@@ -4036,7 +4043,7 @@ function IamCenter({
                   variant="outline"
                   size="sm"
                   disabled={userPage + 1 >= userPageCount}
-                  className="h-11 min-[1024px]:h-10"
+                  className={desktopFieldClass}
                   onClick={() => setUserPage(page => page + 1)}
                 >
                   下一页
@@ -4094,7 +4101,7 @@ function IamCenter({
           data-iam-role-workbench
           className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[280px_minmax(0,1fr)]"
         >
-          <section className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+          <section className={panelClass}>
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold">角色列表</p>
@@ -4161,12 +4168,12 @@ function IamCenter({
               )}
             </div>
             {filteredRoles.length > rolePageSize && (
-              <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
+              <div className={panelFooterClass}>
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-11 min-[1024px]:h-10"
+                  className={desktopFieldClass}
                   disabled={rolePage === 0}
                   onClick={() => {
                     const nextPage = Math.max(0, rolePage - 1);
@@ -4188,7 +4195,7 @@ function IamCenter({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-11 min-[1024px]:h-10"
+                  className={desktopFieldClass}
                   disabled={rolePage + 1 >= rolePageCount}
                   onClick={() => {
                     const nextPage = Math.min(rolePageCount - 1, rolePage + 1);
@@ -4295,7 +4302,7 @@ function IamCenter({
               type="button"
               variant="outline"
               size="sm"
-              className="h-11 min-[1024px]:h-10"
+              className={desktopFieldClass}
               onClick={() => {
                 setAuditSearch("");
                 setAuditCategory("all");
@@ -4435,7 +4442,7 @@ function IamCenter({
                       <dl className="aiflow-type-meta grid gap-2 sm:grid-cols-3">
                         <div>
                           <dt className={mutedTextClass}>原始操作码</dt>
-                          <dd className="aiflow-type-meta mt-0.5 break-all font-mono text-foreground">
+                          <dd className={identityCodeClass}>
                             {item.action}
                           </dd>
                         </div>
@@ -4452,7 +4459,7 @@ function IamCenter({
                         </div>
                         <div>
                           <dt className={mutedTextClass}>请求 ID</dt>
-                          <dd className="aiflow-type-meta mt-0.5 break-all font-mono text-foreground">
+                          <dd className={identityCodeClass}>
                             {item.requestId || "—"}
                           </dd>
                         </div>
@@ -4470,12 +4477,12 @@ function IamCenter({
             )}
           </div>
           {auditReady && auditQuery.data && (
-            <div className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
+            <div className={panelFooterClass}>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-11 min-[1024px]:h-10"
+                className={desktopFieldClass}
                 disabled={auditPage === 0}
                 onClick={() => goToAuditPage(auditPage - 1)}
               >
@@ -4491,7 +4498,7 @@ function IamCenter({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-11 min-[1024px]:h-10"
+                className={desktopFieldClass}
                 disabled={auditPage + 1 >= auditPageCount}
                 onClick={() => goToAuditPage(auditPage + 1)}
               >

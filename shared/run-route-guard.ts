@@ -1,3 +1,15 @@
+import type { ConsoleRoute } from "./console-route";
+
+/** The monitor route owns its run identity, including an explicit empty selection. */
+export function resolveMonitorRunId(
+  route: ConsoleRoute,
+  selectedRunId: string | null
+) {
+  return route.section === "runs" && route.view === "monitor"
+    ? route.runId ?? null
+    : selectedRunId;
+}
+
 export function shouldResetRunRoute(input: {
   requestedRunId: string;
   queriedRunId: string;

@@ -2270,6 +2270,13 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("navigationControls={runNavigation}");
   });
 
+  it("监控查询与页面使用同一目标路由实例，避免跨流程查询旧编号", () => {
+    expect(homeSource).toContain("resolveMonitorRunId(requestedRoute.route, selectedRunId)");
+    expect(homeSource).toContain("runId: monitorRunId ??");
+    expect(homeSource).toContain("selectedRunId={monitorRunId}");
+    expect(homeSource).toContain('selectedWorkflow.flowType !== "data" && monitorRunId');
+  });
+
   it("保留主要工作区、项目工作区和独立系统配置入口", () => {
     expect(homeSource).toContain('label: "已启动流程"');
     expect(homeSource).toContain('label: "流程仓库"');

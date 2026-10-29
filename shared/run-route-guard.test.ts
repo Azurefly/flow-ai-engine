@@ -1,5 +1,21 @@
 import { expect, it } from "vitest";
-import { shouldResetRunRoute } from "./run-route-guard";
+import { resolveMonitorRunId, shouldResetRunRoute } from "./run-route-guard";
+
+it("切换到无实例的新流程时不沿用旧实例编号", () => {
+  const route = { section: "runs", view: "monitor", workflowId: "data-flow" } as const;
+  expect(resolveMonitorRunId(route, "previous-control-run")).toBe(null);
+  expect(resolveMonitorRunId(route, null)).toBe(null);
+});
+it("直达或切换实例立即使用目标路由的编号，不等待旧State同步", () => {
+  const route = { section: "runs", view: "monitor", workflowId: "new-flow", runId: "new-run" } as const;
+  expect(resolveMonitorRunId(route, null)).toBe("new-run");
+  expect(resolveMonitorRunId(route, "old-run")).toBe("new-run");
+  expect(resolveMonitorRunId(route, "new-run")).toBe("new-run");
+});
+it("工作台与流程详情保留原有实例状态处理", () => {
+  expect(resolveMonitorRunId({ section: "runs", view: "workbench" }, "old-run")).toBe("old-run");
+  expect(resolveMonitorRunId({ section: "flows", view: "detail", workflowId: "new-flow" }, "old-run")).toBe("old-run");
+});
 const target = {
   requestedRunId: "new-run",
   queriedRunId: "new-run",
