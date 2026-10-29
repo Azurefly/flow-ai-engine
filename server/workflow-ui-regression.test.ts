@@ -1908,16 +1908,17 @@ describe("流程设计器界面回归约束", () => {
       '未知状态（原值：${value || "空"}）'
     );
     expect(runCenterSource).toContain(
-      'className="aiflow-type-control h-11 lg:h-9"'
+      'const compactButtonClass = "aiflow-type-control h-11 lg:h-9"'
+    );
+    expect(runCenterSource).toContain("className={compactButtonClass}");
+    expect(runCenterSource).toContain(
+      'className={`${compactButtonClass} text-aiflow-info`}'
     );
     expect(runCenterSource).toContain(
-      'className="aiflow-type-control h-11 text-aiflow-info lg:h-9"'
+      'className={`${compactButtonClass} text-aiflow-warning`}'
     );
     expect(runCenterSource).toContain(
-      'className="aiflow-type-control h-11 text-aiflow-warning lg:h-9"'
-    );
-    expect(runCenterSource).toContain(
-      'className="aiflow-type-control h-11 text-red-700 lg:h-9"'
+      'className={`${compactButtonClass} text-red-700`}'
     );
     expect(runCenterSource).not.toContain("sm:h-7");
     expect(runCenterSource).not.toContain("sm:h-8");
@@ -1928,7 +1929,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(runCenterSource).toContain("lg:flex-none");
     expect(runCenterSource).toContain(
-      "xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]"
+      "2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]"
     );
     expect(runCenterSource).not.toContain("max-h-[650px] overflow-y-auto");
     expect(runPayloadDetailsSource).toContain(

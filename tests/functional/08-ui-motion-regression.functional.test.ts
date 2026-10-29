@@ -915,6 +915,10 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
   describe("TC-REG-006: 运行监控中心 (RunCenter) 告警与未选中状态自适应", () => {
     it("零告警轻量展示，常规视口单列，超宽屏选中后分栏", () => {
       const start = performance.now();
+      const runCenterSource = readFileSync(
+        new URL("../../client/src/components/RunCenter.tsx", import.meta.url),
+        "utf8"
+      );
 
       const statusMap: Record<string, string> = {
         success: "成功",
@@ -932,16 +936,11 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(statusMap["waiting"]).toBe("等待中");
       expect(statusMap["blocked"]).toBe("已阻塞");
 
-      // Grid columns derivation
-      const getGridCols = (hasSelectedRun: boolean) =>
-        hasSelectedRun
-          ? "2xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]"
-          : "grid-cols-1";
-
-      expect(getGridCols(false)).toBe("grid-cols-1");
-      expect(getGridCols(true)).toBe(
-        "2xl:grid-cols-[minmax(320px,420px)_minmax(0,1fr)]"
+      // Check the shipped layout rather than a duplicated test-only formula.
+      expect(runCenterSource).toContain(
+        "2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]"
       );
+      expect(runCenterSource).toContain('"hidden 2xl:block"');
 
       TestResultCollector.record({
         testId: "TC-REG-RUN-007",
@@ -968,11 +967,13 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(source).toContain("col-span-2 sm:col-span-1");
       expect(source).toContain('className="flex min-w-0 flex-row gap-2"');
       expect(source).toContain(
-        'className="aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"'
+        'const refreshButtonClass = "aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"'
       );
       expect(source).toContain(
-        'className="aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9"'
+        'const filterSelectClass = "aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9"'
       );
+      expect(source).toContain("className={refreshButtonClass}");
+      expect(source).toContain("className={filterSelectClass}");
       expect(source).toContain(
         'className="aiflow-type-control h-11 min-w-0 w-full lg:h-9"'
       );
@@ -982,15 +983,16 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       );
       expect(source).toContain("disabled={!hasRunFilters}");
       expect(source).toContain("更多筛选");
-      expect(source).toContain('className="aiflow-type-control h-11 lg:h-9"');
+      expect(source).toContain('const compactButtonClass = "aiflow-type-control h-11 lg:h-9"');
+      expect(source).toContain("className={compactButtonClass}");
       expect(source).toContain(
-        'className="aiflow-type-control h-11 text-aiflow-info lg:h-9"'
+        'className={`${compactButtonClass} text-aiflow-info`}'
       );
       expect(source).toContain(
-        'className="aiflow-type-control h-11 text-aiflow-warning lg:h-9"'
+        'className={`${compactButtonClass} text-aiflow-warning`}'
       );
       expect(source).toContain(
-        'className="aiflow-type-control h-11 text-red-700 lg:h-9"'
+        'className={`${compactButtonClass} text-red-700`}'
       );
       expect(source).not.toContain("sm:h-7");
       expect(source).not.toContain("sm:h-8");

@@ -31,9 +31,23 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { RunPayloadDetails } from "./RunPayloadDetails";
 import { workflowRunControlAllowed, type WorkflowRunControlCapabilities } from "@shared/workflow-run-controls";
+
+const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
+
+// UX 优化：共享相同样式字符串，保持 DOM 类名与事件不变。
+const supportingMetaClass = "aiflow-type-meta mt-1 text-muted-foreground";
+const timeClass = "aiflow-type-meta font-mono tabular-nums";
+const compactButtonClass = "aiflow-type-control h-11 lg:h-9";
+const paginationButtonClass = "h-11 flex-1 lg:h-9 lg:flex-none";
+const labelClass = "font-medium text-foreground";
+const metricHintClass = "mt-2 text-muted-foreground";
+const errorTextClass = "text-sm text-destructive";
+const mutedMetaClass = "aiflow-type-meta text-muted-foreground";
+const filterSelectClass = "aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9";
+const refreshButtonClass = "aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none";
 
 function formatTime(value: unknown) {
   return value
@@ -83,10 +97,18 @@ export default function RunCenter({
   } | null>(null);
   const [controlReason, setControlReason] = useState("");
   const [controlError, setControlError] = useState("");
+  // UX 优化：日志与画布通过实例及执行记录 ID 关联，不猜测同名节点的批次。
+  const [graphSelection, setGraphSelection] = useState<{
+    runId: string;
+    nodeId: string;
+    recordId: string;
+    version: number;
+  } | null>(null);
   useEffect(() => {
     setControlDialog(null);
     setControlReason("");
     setControlError("");
+    setGraphSelection(null);
   }, [workflowId, selectedRunId]);
   const [status, setStatus] = useState<
     | ""
@@ -127,7 +149,7 @@ export default function RunCenter({
   useEffect(() => {
     const activeRunId = selectedRunId ?? selectedRun?.id ?? null;
     let frame: number | undefined;
-    if (activeRunId && window.matchMedia("(max-width: 1279px)").matches) {
+    if (activeRunId && window.matchMedia("(max-width: 1535px)").matches) {
       frame = window.requestAnimationFrame(() =>
         runDetailRef.current?.scrollIntoView({
           behavior: "smooth",
@@ -344,8 +366,8 @@ export default function RunCenter({
           </p>
         </div>
         <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:flex-row lg:items-center">
-          <div className="aiflow-type-meta text-muted-foreground">
-            <p className="font-medium text-foreground">
+          <div className={mutedMetaClass}>
+            <p className={labelClass}>
               {refreshInterval
                 ? `自动刷新 · 每 ${refreshInterval / 1000} 秒`
                 : "自动刷新已暂停"}
@@ -359,7 +381,7 @@ export default function RunCenter({
               type="button"
               variant="outline"
               size="sm"
-              className="aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"
+              className={refreshButtonClass}
               aria-pressed={autoRefreshEnabled}
               onClick={() => setAutoRefreshEnabled(enabled => !enabled)}
             >
@@ -374,7 +396,7 @@ export default function RunCenter({
               type="button"
               variant="outline"
               size="sm"
-              className="aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"
+              className={refreshButtonClass}
               disabled={dataFetching}
               onClick={() => {
                 void Promise.all([
@@ -401,7 +423,7 @@ export default function RunCenter({
         <div className="grid min-w-0 grid-cols-2 items-center gap-2 lg:grid-cols-[minmax(180px,1fr)_minmax(160px,0.9fr)_minmax(220px,1.2fr)_auto]">
           <select
             aria-label="按运行状态筛选"
-            className="aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9"
+            className={filterSelectClass}
             value={status}
             onChange={event => setStatus(event.target.value as typeof status)}
           >
@@ -417,7 +439,7 @@ export default function RunCenter({
           </select>
           <select
             aria-label="按时间筛选"
-            className="aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9"
+            className={filterSelectClass}
             value={range}
             onChange={event => setRange(event.target.value as typeof range)}
           >
@@ -532,11 +554,11 @@ export default function RunCenter({
         <summary className="aiflow-type-control min-h-7 cursor-pointer font-medium text-foreground">
           更多指标
         </summary>
-        <p className="mt-2 text-muted-foreground">
+        <p className={metricHintClass}>
           执行中：{metricsUnavailable ? "—" : metrics.data.executingRuns} ·
           等待/暂停：{metricsUnavailable ? "—" : metrics.data.waitingRuns}
         </p>
-        <p className="mt-2 text-muted-foreground">
+        <p className={metricHintClass}>
           平均耗时仅统计有耗时记录的成功、失败运行；取消和终止不计入。当前样本：
           {metricsUnavailable ? "—" : metrics.data.durationSamples} 条。
         </p>
@@ -553,7 +575,7 @@ export default function RunCenter({
         <div className="aiflow-type-body flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5 text-muted-foreground shadow-2xs">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
             <CheckCircle2 size={14} className="text-aiflow-success" />
-            <span className="font-medium text-foreground">失败告警</span>
+            <span className={labelClass}>失败告警</span>
             <span className="text-muted-foreground">
               当前筛选范围内无告警记录
             </span>
@@ -593,7 +615,7 @@ export default function RunCenter({
                       {decodeJson(alert.detailsJson)?.message ||
                         "请查看运行节点日志。"}
                     </p>
-                    <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                    <p className={supportingMetaClass}>
                       {formatTime(alert.createdAt)} ·{" "}
                       {formatRunDuration(alert.durationMs)}
                     </p>
@@ -603,7 +625,7 @@ export default function RunCenter({
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="aiflow-type-control h-11 lg:h-9"
+                      className={compactButtonClass}
                       onClick={() => onSelect(String(alert.runId))}
                     >
                       查看运行
@@ -613,7 +635,7 @@ export default function RunCenter({
                         type="button"
                         size="sm"
                         variant="outline"
-                        className="aiflow-type-control h-11 lg:h-9"
+                        className={compactButtonClass}
                         disabled={markRead.isPending}
                         onClick={() => markRead.mutate({ alertId: alert.id })}
                       >
@@ -628,12 +650,12 @@ export default function RunCenter({
         </section>
       )}
       <div
-        className={`grid min-w-0 gap-4 ${hasSelectedRun ? "grid-cols-1 xl:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]" : "grid-cols-1"}`}
+        className={`grid min-w-0 gap-4 ${hasSelectedRun ? "grid-cols-1 2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]" : "grid-cols-1"}`}
       >
         <section
           ref={runListRef}
           data-run-history-panel
-          className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card ${hasSelectedRun ? "hidden xl:block" : ""}`}
+          className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card ${hasSelectedRun ? "hidden 2xl:block" : ""}`}
         >
           <div className="aiflow-type-section-title flex items-center justify-between border-b border-border px-4 py-3 font-semibold">
             <span>运行记录</span>
@@ -662,10 +684,10 @@ export default function RunCenter({
                   </span>
                 </div>
                 <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-muted-foreground">
-                  <span className="aiflow-type-meta font-mono tabular-nums">
+                  <span className={timeClass}>
                     {formatTime(run.createdAt)}
                   </span>
-                  <span className="aiflow-type-meta font-mono tabular-nums">
+                  <span className={timeClass}>
                     {formatRunDuration(run.durationMs)}
                   </span>
                   <span className="aiflow-type-body min-w-0 break-words">
@@ -691,7 +713,7 @@ export default function RunCenter({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-11 flex-1 lg:h-9 lg:flex-none"
+                className={paginationButtonClass}
                 disabled={historyCursorStack.length <= 1 || runs.isFetching}
                 onClick={() =>
                   setHistoryNavigation({
@@ -706,7 +728,7 @@ export default function RunCenter({
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-11 flex-1 lg:h-9 lg:flex-none"
+                className={paginationButtonClass}
                 disabled={!runs.data?.nextCursor || runs.isFetching}
                 onClick={() => {
                   const nextCursor = runs.data?.nextCursor;
@@ -738,7 +760,7 @@ export default function RunCenter({
                 </h3>
               </div>
               <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
-                <span className="aiflow-type-meta text-muted-foreground">
+                <span className={mutedMetaClass}>
                   {formatRunDuration(runDetail?.durationMs)}
                 </span>
                 <Button
@@ -756,7 +778,7 @@ export default function RunCenter({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="aiflow-type-control h-11 text-aiflow-info lg:h-9"
+                      className={`${compactButtonClass} text-aiflow-info`}
                       disabled={controlPending}
                       onClick={() => {
                         if (runDetail.status === "blocked") {
@@ -778,7 +800,7 @@ export default function RunCenter({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="aiflow-type-control h-11 text-aiflow-warning lg:h-9"
+                      className={`${compactButtonClass} text-aiflow-warning`}
                       disabled={controlPending}
                       onClick={() => {
                         setControlError("");
@@ -796,7 +818,7 @@ export default function RunCenter({
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="aiflow-type-control h-11 text-red-700 lg:h-9"
+                      className={`${compactButtonClass} text-red-700`}
                       disabled={controlPending}
                       onClick={() => {
                         setControlError("");
@@ -820,7 +842,7 @@ export default function RunCenter({
               >
                 {runStatusSummary(runDetail).map(item => (
                   <div key={item.label} className="min-w-0">
-                    <dt className="aiflow-type-meta text-muted-foreground">
+                    <dt className={mutedMetaClass}>
                       {item.label}
                     </dt>
                     <dd className="aiflow-type-body mt-1 break-words font-medium text-foreground">
@@ -866,11 +888,24 @@ export default function RunCenter({
               </div>
             ) : (
               <div className="mt-5 grid gap-3">
+                {/* UX 优化：复用授权运行快照的只读画布，原执行日志和控制入口完整保留。 */}
+                {runDetail && (
+                  <>
+                    <Suspense fallback={<p role="status">正在准备实例流程图…</p>}>
+                      <RunExecutionCanvas
+                        key={runDetail.id}
+                        run={runDetail}
+                        focusRequest={graphSelection && graphSelection.runId === runDetail.id ? graphSelection : undefined}
+                      />
+                    </Suspense>
+                    <RunPayloadDetails title="实例错误" value={runDetail.errorJson} kind="error" />
+                  </>
+                )}
                 <div>
                   <h3 className="aiflow-type-control font-semibold">
                     节点执行记录 · {nodeEntries.length} 条
                   </h3>
-                  <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                  <p className={supportingMetaClass}>
                     同一节点的多次执行分别记录，展开可查看每次输入、输出和错误。
                   </p>
                 </div>
@@ -908,7 +943,7 @@ export default function RunCenter({
                             {statusLabel}
                           </span>
                           {totalOccurrences > 1 && (
-                            <span className="aiflow-type-meta text-muted-foreground">
+                            <span className={mutedMetaClass}>
                               第 {occurrence} 次执行记录
                             </span>
                           )}
@@ -928,6 +963,23 @@ export default function RunCenter({
                         />
                       </summary>
                       <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
+                        {runDetail && node.nodeId && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="w-fit"
+                            data-run-record-id={node.id}
+                            onClick={() => setGraphSelection(previous => ({
+                              runId: runDetail.id,
+                              nodeId: String(node.nodeId),
+                              recordId: String(node.id),
+                              version: (previous?.version ?? 0) + 1,
+                            }))}
+                          >
+                            在图中查看本次执行
+                          </Button>
+                        )}
                         {approvalGroupsForRecord(runDetail?.approvalGroups ?? [], node)
                           .map(group => (
                             <RunApprovalProgress
@@ -1000,11 +1052,11 @@ export default function RunCenter({
             </label>
           )}
           {controlError && (
-            <p role="alert" className="text-sm text-destructive">
+            <p role="alert" className={errorTextClass}>
               {controlError}
             </p>
           )}
-          {!dialogAllowed && controlDialog && <p role="alert" className="text-sm text-destructive">当前权限或运行状态已变化，此操作不可提交。请返回并刷新运行记录。</p>}
+          {!dialogAllowed && controlDialog && <p role="alert" className={errorTextClass}>当前权限或运行状态已变化，此操作不可提交。请返回并刷新运行记录。</p>}
           <DialogFooter>
             <Button
               variant="outline"
