@@ -2068,7 +2068,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "排序字段",
-        help: "按顺序设置字段和升降序；前面的字段优先。",
+        help: "按顺序填写 field 和 direction（asc 升序、desc 降序），字符串默认升序。兼容旧 order；两者并存时需一致。",
         kind: "json",
         required: true,
       },

@@ -110,6 +110,7 @@ import {
   DATA_FIELD_EDITOR_PROFILES,
   dataFieldEditorKey,
   newDataFieldItem,
+  updateDataFieldItem,
 } from "./workflow-data-field-editor";
 import type { Definition } from "../../../server/workflow-service";
 import {
@@ -149,6 +150,21 @@ const canvasDangerMenuItemClass = "block w-full px-3 py-2 text-left text-red-600
 const canvasRemoveClass = "text-muted-foreground hover:text-red-600";
 const canvasCompactControlClass = "aiflow-type-control h-7";
 const canvasMutedTextClass = "text-muted-foreground";
+
+const canvasHandleClass = "!h-3 !w-3 !border-2 !border-white shadow-2xs hover:scale-125 transition-transform";
+const canvasFieldGroupClass = "grid gap-1.5";
+const canvasCompactLabelClass = "aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground";
+const canvasStackedLabelClass = "aiflow-type-control grid gap-1.5 font-medium text-muted-foreground";
+const canvasSectionTitleClass = "aiflow-type-section-title mb-2 font-semibold text-foreground";
+const canvasNestedCardClass = "grid min-w-0 gap-2 rounded border border-border bg-card p-2";
+const canvasRemoveFieldClass = "rounded px-1 text-muted-foreground hover:text-red-600";
+const canvasMutedLabelClass = "aiflow-type-control font-medium text-muted-foreground";
+const canvasConfigGridClass = "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3";
+const canvasSectionHelpClass = "aiflow-type-body mt-2 text-muted-foreground";
+const canvasBodyHelpClass = "aiflow-type-body text-muted-foreground";
+const canvasResponsiveButtonClass = "min-h-11 text-sm min-[1024px]:min-h-9";
+const canvasHelpLinkClass = "text-indigo-700 hover:underline";
+const canvasFieldErrorClass = "aiflow-type-body text-red-600";
 
 type NodeKind = FlowNodeType;
 type FlowNodeData = { label: string; kind: NodeKind; config: NodeConfig };
@@ -326,7 +342,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           type="target"
           position={Position.Left}
           id="target"
-          className="!h-3 !w-3 !border-2 !border-white shadow-2xs hover:scale-125 transition-transform"
+          className={canvasHandleClass}
           style={{ backgroundColor: appearance.color }}
         />
       )}
@@ -443,7 +459,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
             type="source"
             position={Position.Right}
             id={id}
-            className="!h-3 !w-3 !border-2 !border-white shadow-2xs hover:scale-125 transition-transform"
+            className={canvasHandleClass}
             style={{
               top: `${((index + 1) / (handles.length + 1)) * 100}%`,
               backgroundColor: handleColor,
@@ -873,8 +889,8 @@ function ConfigFieldEditor({
       option => option.value === current
     );
     return (
-      <div className="grid gap-1.5">
-        <label className="grid gap-1.5">
+      <div className={canvasFieldGroupClass}>
+        <label className={canvasFieldGroupClass}>
           {label}
           <select
             className={inputClass}
@@ -901,7 +917,7 @@ function ConfigFieldEditor({
         </label>
         <FieldHelp help={field.help} />
         {availabilityError && (
-          <p id={`${suggestionId}-availability`} role="alert" className="aiflow-type-body text-red-600">
+          <p id={`${suggestionId}-availability`} role="alert" className={canvasFieldErrorClass}>
             {availabilityError}
           </p>
         )}
@@ -920,7 +936,7 @@ function ConfigFieldEditor({
   }
   if (field.kind === "boolean")
     return (
-      <label className="grid gap-1.5">
+      <label className={canvasFieldGroupClass}>
         {label}
         <span className="inline-flex h-9 items-center gap-2 rounded-md border border-border bg-card px-2.5 text-sm text-foreground">
           <input
@@ -936,7 +952,7 @@ function ConfigFieldEditor({
     );
   if (field.kind === "select")
     return (
-      <label className="grid gap-1.5">
+      <label className={canvasFieldGroupClass}>
         {label}
         <select
           className={inputClass}
@@ -955,7 +971,7 @@ function ConfigFieldEditor({
     );
   if (field.kind === "textarea")
     return (
-      <label className="grid gap-1.5">
+      <label className={canvasFieldGroupClass}>
         {label}
         <textarea
           className="min-h-20 w-full rounded-md border border-border bg-card p-2.5 text-sm text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground"
@@ -996,7 +1012,7 @@ function ConfigFieldEditor({
     );
   if (field.kind === "number")
     return (
-      <label className="grid gap-1.5">
+      <label className={canvasFieldGroupClass}>
         {label}
         <NodeNumberInput
           field={field}
@@ -1009,7 +1025,7 @@ function ConfigFieldEditor({
       </label>
     );
   return (
-    <label className="grid gap-1.5">
+    <label className={canvasFieldGroupClass}>
       {label}
       <input
         placeholder={
@@ -1112,7 +1128,7 @@ function StructuredPropertyNameInput({
         }}
       />
       {error && (
-        <span role="alert" className="aiflow-type-body text-red-600">
+        <span role="alert" className={canvasFieldErrorClass}>
           {error}
         </span>
       )}
@@ -1133,7 +1149,7 @@ function NestedStructuredValueEditor({
     "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
   if (Array.isArray(value)) {
     return (
-      <div className="grid min-w-0 gap-2 rounded border border-border bg-card p-2">
+      <div className={canvasNestedCardClass}>
         {value.map((item, index) => (
           <div
             key={index}
@@ -1152,7 +1168,7 @@ function NestedStructuredValueEditor({
             />
             <button
               type="button"
-              className="rounded px-1 text-muted-foreground hover:text-red-600"
+              className={canvasRemoveFieldClass}
               disabled={disabled}
               onClick={() =>
                 onChange(value.filter((_, itemIndex) => itemIndex !== index))
@@ -1207,7 +1223,7 @@ function NestedStructuredValueEditor({
     const updateEntries = (next: Array<[string, unknown]>) =>
       onChange(Object.fromEntries(next.filter(([key]) => key.trim())));
     return (
-      <div className="grid min-w-0 gap-2 rounded border border-border bg-card p-2">
+      <div className={canvasNestedCardClass}>
         {entries.map(([key, entryValue], index) => (
           <div
             key={key + "-" + index}
@@ -1243,7 +1259,7 @@ function NestedStructuredValueEditor({
             />
             <button
               type="button"
-              className="rounded px-1 text-muted-foreground hover:text-red-600"
+              className={canvasRemoveFieldClass}
               disabled={disabled}
               onClick={() =>
                 updateEntries(
@@ -1649,7 +1665,7 @@ function OriginalObjectEditor({
       {visibleSpecs.map(spec => (
         <label
           key={spec.key}
-          className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground"
+          className={canvasCompactLabelClass}
         >
           <span>{spec.label}</span>
           <OriginalFieldControl
@@ -1667,7 +1683,7 @@ function OriginalObjectEditor({
       ))}
       {Object.keys(extras).length > 0 && (
         <div className="grid gap-1">
-          <span className="aiflow-type-control font-medium text-muted-foreground">
+          <span className={canvasMutedLabelClass}>
             原版扩展字段
           </span>
           <NestedStructuredValueEditor
@@ -1900,24 +1916,24 @@ function StructuredListRow({
         {originalSpecs.map(spec => (
           <label
             key={spec.key}
-            className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground"
+            className={canvasCompactLabelClass}
           >
             <span>{spec.label}</span>
             <OriginalFieldControl
               spec={spec}
               value={
                 fieldKey === "data_sort" && spec.key === "direction"
-                  ? String(record[spec.key] ?? "asc").toLowerCase()
+                  ? String(record[spec.key] ?? record.order ?? "asc").toLowerCase()
                   : record[spec.key]
               }
               disabled={disabled}
-              onChange={next => onChange({ ...record, [spec.key]: next })}
+              onChange={next => onChange(updateDataFieldItem(fieldKey, record, spec.key, next))}
             />
           </label>
         ))}
         {Object.keys(extras).length > 0 && (
           <div className="grid gap-1">
-            <span className="aiflow-type-control font-medium text-muted-foreground">
+            <span className={canvasMutedLabelClass}>
               原版扩展字段
             </span>
             <NestedStructuredValueEditor
@@ -2215,7 +2231,7 @@ function StructuredListRow({
 }
 
 function FieldHelp({ help }: { help: string }) {
-  return <p className="aiflow-type-body text-muted-foreground">{help}</p>;
+  return <p className={canvasBodyHelpClass}>{help}</p>;
 }
 
 type ConfigField = FlowNodeDefinition["fields"][number];
@@ -4004,7 +4020,7 @@ export default function WorkflowCanvas({
                   onCloseAutoFocus={closePaletteFocus}
                   data-node-palette-popup=""
                 >
-                  <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
+                  <label className={canvasStackedLabelClass}>
                     搜索节点
                     <input
                       type="search"
@@ -4014,7 +4030,7 @@ export default function WorkflowCanvas({
                       onChange={event => setNodePaletteSearch(event.target.value)}
                     />
                   </label>
-                  <p className="aiflow-type-body mt-2 text-muted-foreground">
+                  <p className={canvasSectionHelpClass}>
                     拖拽或单击添加节点。
                   </p>
                   {visiblePalette.length ? (
@@ -4087,7 +4103,7 @@ export default function WorkflowCanvas({
                     onCloseAutoFocus={closePaletteFocus}
                     data-node-palette-popup=""
                   >
-                    <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
+                    <label className={canvasStackedLabelClass}>
                       搜索可复用资源
                       <input
                         type="search"
@@ -4100,10 +4116,10 @@ export default function WorkflowCanvas({
                     <div className="mt-3 grid gap-3">
                       {visibleTemplates.length > 0 && (
                         <section>
-                          <h3 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+                          <h3 className={canvasSectionTitleClass}>
                             节点模板
                           </h3>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className={canvasConfigGridClass}>
                             {visibleTemplates.map(template => (
                               <Button
                                 key={template.id}
@@ -4132,10 +4148,10 @@ export default function WorkflowCanvas({
                       )}
                       {visibleSubflows.length > 0 && (
                         <section>
-                          <h3 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+                          <h3 className={canvasSectionTitleClass}>
                             可用子流程
                           </h3>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          <div className={canvasConfigGridClass}>
                             {visibleSubflows.map(subflow => (
                               <Button
                                 key={subflow.id}
@@ -4354,7 +4370,7 @@ export default function WorkflowCanvas({
                 <DropdownMenuContent align="end" className="min-w-44">
                   <DropdownMenuItem
                     aria-label="保存为图片"
-                    className="min-h-11 text-sm min-[1024px]:min-h-9"
+                    className={canvasResponsiveButtonClass}
                     onSelect={() =>
                       window.dispatchEvent(new Event("flow:save-canvas-image"))
                     }
@@ -4364,7 +4380,7 @@ export default function WorkflowCanvas({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     aria-label="取消高亮"
-                    className="min-h-11 text-sm min-[1024px]:min-h-9"
+                    className={canvasResponsiveButtonClass}
                     onSelect={() =>
                       window.dispatchEvent(new Event("flow:clear-highlight"))
                     }
@@ -4837,7 +4853,7 @@ export default function WorkflowCanvas({
                   >
                       {selected.data.kind === "router" &&
                         activeInspectorGroup.label === "兼容规则" && (
-                          <p className="aiflow-type-body mt-2 text-muted-foreground">
+                          <p className={canvasSectionHelpClass}>
                             {Array.isArray(selected.data.config.routes) &&
                             selected.data.config.routes.length
                               ? "当前使用“分支规则”；兼容字段不覆盖已有规则。"
@@ -5291,7 +5307,7 @@ export default function WorkflowCanvas({
                       </span>
                       <button
                         type="button"
-                        className="text-indigo-700 hover:underline"
+                        className={canvasHelpLinkClass}
                         onClick={() => {
                           setNameDialog({
                             title: "修改模板名称",
@@ -5307,7 +5323,7 @@ export default function WorkflowCanvas({
                       </button>
                       <button
                         type="button"
-                        className="text-indigo-700 hover:underline"
+                        className={canvasHelpLinkClass}
                         disabled={
                           !isFlowNodeAllowed(flowType, template.nodeType)
                         }
@@ -5363,7 +5379,7 @@ export default function WorkflowCanvas({
                     </div>
                   ))}
                   {!templates.length && !subflows.length && (
-                    <p className="aiflow-type-body text-muted-foreground">
+                    <p className={canvasBodyHelpClass}>
                       从选中节点保存模板，或在设计器顶部将当前流程保存为子流程。
                     </p>
                   )}

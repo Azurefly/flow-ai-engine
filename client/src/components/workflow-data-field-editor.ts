@@ -55,3 +55,19 @@ export function newDataFieldItem(key: string) {
   const profile = DATA_FIELD_EDITOR_PROFILES[key];
   return profile ? { ...profile.initial } : undefined;
 }
+
+/** An explicit direction choice updates an existing legacy alias without dropping metadata. */
+export function updateDataFieldItem(
+  key: string,
+  item: Record<string, unknown>,
+  field: string,
+  value: unknown
+) {
+  return {
+    ...item,
+    [field]: value,
+    ...(key === "data_sort" && field === "direction" && "order" in item
+      ? { order: value }
+      : {}),
+  };
+}

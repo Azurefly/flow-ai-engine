@@ -1,4 +1,5 @@
 import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
+import { sortDataflowRows } from "./dataflow-sort-rows";
 import { dataflowRunSnapshot } from "../shared/dataflow-run-view";
 import { decodeWorkbenchPageCursor, encodeWorkbenchPageCursor } from "./workbench-pagination";
 import { dataAssetReadiness, dataSourceReadiness } from "../shared/data-source-capabilities";
@@ -1599,32 +1600,7 @@ async function runDataflowDefinition(
           operation: "deduplicate",
         };
       } else if (String(node.type) === "sort") {
-        const fields = Array.isArray(config.fields) ? config.fields : [];
-        const rows = [...rowsFromInput(inputs)];
-        rows.sort((left, right) => {
-          for (const item of fields) {
-            const field = String((item as JsonRecord)?.field ?? item);
-            const direction =
-              String((item as JsonRecord)?.direction ?? "asc").toLowerCase() ===
-              "desc"
-                ? -1
-                : 1;
-            const a = left[field];
-            const b = right[field];
-            if (a === b) continue;
-            return (
-              (a === undefined || a === null
-                ? -1
-                : b === undefined || b === null
-                  ? 1
-                  : a < b
-                    ? -1
-                    : 1) * direction
-            );
-          }
-          return 0;
-        });
-        output = { rows, operation: "sort" };
+        output = { rows: sortDataflowRows(rowsFromInput(inputs), config), operation: "sort" };
       } else if (String(node.type) === "transform") {
         let rows = rowsFromInput(inputs);
         const mappings =

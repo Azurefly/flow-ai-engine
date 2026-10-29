@@ -758,7 +758,8 @@ describe("流程设计器界面回归约束", () => {
     expect(paletteSource).toContain(
       "aiflow-type-body mt-0.5 block line-clamp-2"
     );
-    expect(paletteSource).toContain("aiflow-type-section-title mb-2");
+    expect(paletteSource).toContain("className={canvasSectionTitleClass}");
+    expect(canvasSource).toContain('const canvasSectionTitleClass = "aiflow-type-section-title mb-2 font-semibold text-foreground";');
     expect(paletteSource).not.toMatch(/text-\[(?:9|10|11)px\]|text-xs/);
   });
 
@@ -3113,8 +3114,9 @@ describe("流程设计器界面回归约束", () => {
       'font-size="10" font-family="Arial, sans-serif"'
     );
     expect(canvasSource).toContain(
-      'className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground"'
+      'const canvasCompactLabelClass = "aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground";'
     );
+    expect(canvasSource).toContain('className={canvasCompactLabelClass}');
     expect(canvasSource).toContain(
       'className="aiflow-type-body font-normal text-muted-foreground"'
     );
