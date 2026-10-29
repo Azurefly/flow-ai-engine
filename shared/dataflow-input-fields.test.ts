@@ -25,7 +25,7 @@ it("资源读取字段限制会同步影响建议", () =>
     fields(
       "trim",
       [
-        { ...nodes[0], config: { assetId: "asset", fields: ["text"] } },
+        { ...nodes[0], config: { assetId: "asset", columns: ["text"] } },
         nodes[1],
       ],
       edges,

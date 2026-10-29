@@ -1031,6 +1031,12 @@ function ConfigFieldEditor({
           ))}
         </datalist>
       ) : null}
+      {/* UX 优化：提示字段来源变化，保留手动填写与原校验、执行规则。 */}
+      {fieldSuggestions?.length && draft.trim() && !fieldSuggestions.includes(draft.trim()) ? (
+        <p role="status" className="text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+          当前字段不在可确认的上游输出中，请核对读取字段、投影或聚合配置。仍可手动填写。
+        </p>
+      ) : null}
       <FieldHelp help={field.help} />
     </label>
   );

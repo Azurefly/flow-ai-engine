@@ -1,3 +1,6 @@
+import { readAggregateConfig } from "./dataflow-aggregate-config";
+import { readDataflowFieldNames } from "./dataflow-field-list";
+
 export function usesDataflowInputFieldSuggestions(kind: string, key: string) {
   return (
     (kind === "udf" && key === "inputField") ||
@@ -18,13 +21,16 @@ export function dataflowInputFields(
     if (!node) return [];
     const next = new Set(seen).add(id);
     if (["source", "table"].includes(node.kind)) {
-      const configured = node.config.fields;
-      return Array.isArray(configured) && configured.length
-        ? configured.filter(
-            (field): field is string => typeof field === "string"
-          )
-        : (assets.find(asset => asset.value === node.config.assetId)?.fields ??
-            []);
+      // UX 修复：连接器实际读取 columns，不能推荐已排除的资源列。
+      try {
+        const columns = readDataflowFieldNames(node.config.columns, "读取字段");
+        return columns.length
+          ? columns
+          : (assets.find(asset => asset.value === node.config.assetId)?.fields ??
+              []);
+      } catch {
+        return [];
+      }
     }
     const upstream = edges.filter(edge => edge.target === id);
     if (node.kind === "join") {
@@ -54,6 +60,15 @@ export function dataflowInputFields(
       return output;
     }
     if (upstream.length !== 1) return [];
+    // UX 优化：聚合输出由配置确定，不沿用原始明细列或依赖样本元数据。
+    if (node.kind === "aggregate") {
+      try {
+        const { groupBy, metrics } = readAggregateConfig(node.config);
+        return [...groupBy, ...metrics.map(metric => metric.name)];
+      } catch {
+        return [];
+      }
+    }
     const fields = read(upstream[0].source, next);
     if (!fields.length) return [];
     if (["map", "project"].includes(node.kind)) {
