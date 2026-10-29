@@ -56,7 +56,7 @@ import {
   UserRoundPlus,
   UsersRound,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import "./task-drawer.css";
 
@@ -117,7 +117,14 @@ function approvalProgressText(task: any) {
   return `${approvalLabel(task)}通过 ${Number(progress.approved ?? progress.completed ?? 0)}/${Number(progress.required || 1)}（共 ${Number(progress.total || 1)} 人）${rejected ? ` · 拒绝 ${rejected}` : ""}`;
 }
 
-export default function ProcessWorkbench() {
+// UX 优化：复用完全相同的样式字符串，保留 DOM 类名、事件和状态分支。
+const statusChipClass = "aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground";
+const summaryLabelClass = "aiflow-type-body shrink-0 text-muted-foreground";
+const filterLabelClass = "aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground";
+const summaryRowClass = "flex min-w-0 justify-between gap-2";
+const detailTextClass = "aiflow-type-body mt-1 break-words text-muted-foreground";
+
+export default function ProcessWorkbench({ navigationControls }: { navigationControls?: ReactNode }) {
   const utils = trpc.useUtils();
   const [view, setView] = useState<View>("board");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -557,6 +564,8 @@ export default function ProcessWorkbench() {
               )}
             </button>
           </div>
+          {/* UX 优化：复用原有页签和视图事件，保留导航保护与收起状态。 */}
+          {navigationControls}
           <label className="mt-2 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 lg:hidden">
             <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
               视图
@@ -591,7 +600,7 @@ export default function ProcessWorkbench() {
                 aria-current={view === item.id ? "page" : undefined}
                 title={sidebarCollapsed ? labels[item.id] : undefined}
                 onClick={() => changeView(item.id)}
-                className={`flex min-h-11 min-w-0 items-center gap-1.5 rounded px-2 py-2.5 text-left text-sm transition-colors lg:px-3 ${sidebarCollapsed ? "lg:justify-center" : ""} ${view === item.id ? "bg-accent font-semibold text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
+                className={`flex min-h-10 min-w-0 items-center gap-1.5 rounded px-2 py-2 text-left text-sm transition-colors lg:px-3 ${sidebarCollapsed ? "lg:justify-center" : ""} ${view === item.id ? "bg-accent font-semibold text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
               >
                 <item.icon size={16} />
                 <span
@@ -979,7 +988,7 @@ function TaskBatchBar({
             <option value="abstained">弃权</option>
           </select>
         </label>
-        <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+        <label className={filterLabelClass}>
           处理意见{decision === "rejected" ? "（必填）" : "（可选）"}
           <input
             className="h-11 min-w-0 rounded border border-border bg-card px-3 text-sm font-normal"
@@ -1253,7 +1262,7 @@ function WorkbenchListFilters({
             </span>
           </summary>
           <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(140px,180px)_minmax(0,1fr)_minmax(0,1fr)]">
-            <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+            <label className={filterLabelClass}>
               <span>{statusLabel}</span>
               <select
                 value={status}
@@ -1269,7 +1278,7 @@ function WorkbenchListFilters({
                 ))}
               </select>
             </label>
-            <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+            <label className={filterLabelClass}>
               <span>创建时间从</span>
               <Input
                 type="date"
@@ -1279,7 +1288,7 @@ function WorkbenchListFilters({
                 className="h-11 lg:h-9"
               />
             </label>
-            <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground">
+            <label className={filterLabelClass}>
               <span>创建时间至</span>
               <Input
                 type="date"
@@ -1420,7 +1429,7 @@ function TaskList({
                     <h3 className="aiflow-type-body break-words font-semibold text-foreground">
                       {task.workflowName || "未命名流程"}
                     </h3>
-                    <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+                    <p className={detailTextClass}>
                       {task.nodeName || "未命名任务节点"}
                     </p>
                     {approvalLabel(task) && (
@@ -1434,16 +1443,16 @@ function TaskList({
                   </span>
                 </div>
                 <dl className="aiflow-type-body mt-3 grid gap-1 border-t border-border pt-2">
-                  <div className="flex min-w-0 justify-between gap-2">
-                    <dt className="aiflow-type-body shrink-0 text-muted-foreground">
+                  <div className={summaryRowClass}>
+                    <dt className={summaryLabelClass}>
                       发起人
                     </dt>
                     <dd className="min-w-0 truncate text-right text-muted-foreground">
                       {task.initiatedByName || "—"}
                     </dd>
                   </div>
-                  <div className="flex min-w-0 justify-between gap-2">
-                    <dt className="aiflow-type-body shrink-0 text-muted-foreground">
+                  <div className={summaryRowClass}>
+                    <dt className={summaryLabelClass}>
                       创建时间
                     </dt>
                     <dd className="min-w-0 break-words text-right tabular-nums text-muted-foreground">
@@ -1630,12 +1639,12 @@ function InstanceStatus({ run }: { run: any }) {
     >
       {badge(executionStatus)}
       {businessStatus && (
-        <span className="aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+        <span className={statusChipClass}>
           业务：{businessStatus}
         </span>
       )}
       {participantStatus && participantStatus !== businessStatus && (
-        <span className="aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground">
+        <span className={statusChipClass}>
           我的办理：{participantStatus}
         </span>
       )}
@@ -1698,7 +1707,7 @@ function InstanceList({
                   <InstanceStatus run={run} />
                 </div>
                 <dl className="aiflow-type-body mt-3 grid gap-1 border-t border-border pt-2">
-                  <div className="flex min-w-0 justify-between gap-2">
+                  <div className={summaryRowClass}>
                     <dt className="aiflow-type-meta shrink-0 text-muted-foreground">
                       实例编号
                     </dt>
@@ -1706,15 +1715,15 @@ function InstanceList({
                       {run.id.slice(0, 8)}
                     </dd>
                   </div>
-                  <div className="flex min-w-0 justify-between gap-2">
-                    <dt className="aiflow-type-body shrink-0 text-muted-foreground">
+                  <div className={summaryRowClass}>
+                    <dt className={summaryLabelClass}>
                       发起人
                     </dt>
                     <dd className="aiflow-type-body min-w-0 break-words text-right text-muted-foreground">
                       {run.initiatedByName || "—"}
                     </dd>
                   </div>
-                  <div className="flex min-w-0 justify-between gap-2">
+                  <div className={summaryRowClass}>
                     <dt className="aiflow-type-meta shrink-0 text-muted-foreground">
                       创建时间
                     </dt>
@@ -1839,7 +1848,7 @@ function QueryErrorState({
         <p className="aiflow-type-section-title mt-3 font-semibold text-foreground">
           {title}
         </p>
-        <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+        <p className={detailTextClass}>
           {message || "暂时无法读取数据。"}
         </p>
         <Button
@@ -1891,7 +1900,7 @@ function QueryErrorRow({
         <p className="aiflow-type-section-title mt-2 font-medium text-foreground">
           查询失败
         </p>
-        <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+        <p className={detailTextClass}>
           {message || "暂时无法读取数据。"}
         </p>
         <Button

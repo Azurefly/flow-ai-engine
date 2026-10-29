@@ -196,7 +196,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(processWorkbenchSource).toContain('data-aiflow-page-title=""');
       expect(homeSource).toContain('data-aiflow-page-title=""');
       expect(systemConfigSource).toContain('data-aiflow-page-title=""');
-      expect(homeSource).toContain("aiflow-type-control h-12 min-w-0");
+      expect(homeSource).toContain("aiflow-module-link w-full");
+      expect(styleSource).toMatch(/\.aiflow-module-link\s*\{[^}]*font-size: var\(--aiflow-type-control\)/);
       expect(homeSource).not.toContain("text-xs sm:px-4 sm:text-sm");
       expect(resourceCenterSource).toContain(
         "aiflow-type-control inline-flex min-h-11"

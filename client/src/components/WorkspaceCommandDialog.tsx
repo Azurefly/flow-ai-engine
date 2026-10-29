@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import type { ConsoleRoute } from "@shared/console-route";
 import {
@@ -28,16 +28,19 @@ import {
 } from "lucide-react";
 
 export default function WorkspaceCommandDialog({
+  target = "workspace",
   canManageIdentity,
   isAdmin,
   onClose,
   onNavigate,
 }: {
+  target?: "workspace" | "monitor";
   canManageIdentity: boolean;
   isAdmin: boolean;
   onClose: () => void;
   onNavigate: (route: ConsoleRoute) => void;
 }) {
+  // UX 优化：仅增加监控目的地，普通查找仍保留原有页面、业务和流程入口。
   const [search, setSearch] = useState("");
   const [settled, setSettled] = useState("");
   const navigating = useRef(false);
@@ -56,7 +59,12 @@ export default function WorkspaceCommandDialog({
   const enabled = Boolean(settled);
   const projects = trpc.project.page.useQuery(
     { search: settled, limit: 5 },
-    { enabled, retry: false, staleTime: 0, refetchOnWindowFocus: false }
+    {
+      enabled: enabled && target !== "monitor",
+      retry: false,
+      staleTime: 0,
+      refetchOnWindowFocus: false,
+    }
   );
   const workflows = trpc.workflow.search.useQuery(
     { search: settled },
@@ -68,7 +76,9 @@ export default function WorkspaceCommandDialog({
   );
   const waiting = search.trim().slice(0, 100) !== settled;
   const pending =
-    waiting || (enabled && (projects.isFetching || workflows.isFetching));
+    waiting ||
+    (enabled &&
+      ((target !== "monitor" && projects.isFetching) || workflows.isFetching));
   function go(route: ConsoleRoute) {
     navigating.current = true;
     onClose();
@@ -97,21 +107,32 @@ export default function WorkspaceCommandDialog({
         }}
       >
         <div className="px-5 pb-3 pt-5 pr-16">
-          <DialogTitle>快捷查找</DialogTitle>
+          <DialogTitle>
+            {target === "monitor" ? "选择监控流程" : "快捷查找"}
+          </DialogTitle>
           <DialogDescription className="mt-1">
-            搜索业务、流程或页面，只显示当前账号有权访问的结果。
+            {target === "monitor"
+              ? "输入流程名称，从有权查看且未归档的流程中选择。"
+              : "搜索业务、流程或页面，只显示当前账号有权访问的结果。"}
           </DialogDescription>
         </div>
         <Command shouldFilter={false} className="min-h-0">
           <CommandInput
-            aria-label="搜索业务、流程或页面"
+            aria-label={
+              target === "monitor" ? "搜索监控流程" : "搜索业务、流程或页面"
+            }
             placeholder="输入名称或关键词…"
             value={search}
             onValueChange={setSearch}
             maxLength={100}
           />
           <CommandList className="max-h-[min(440px,60dvh)] p-2">
-            {commands.length > 0 && (
+            {target === "monitor" && !enabled && !waiting && (
+              <p className="p-4 text-sm text-muted-foreground">
+                请输入流程名称查找。
+              </p>
+            )}
+            {commands.length > 0 && target !== "monitor" && (
               <CommandGroup heading="前往页面">
                 {commands.map(item => (
                   <CommandItem
@@ -143,7 +164,7 @@ export default function WorkspaceCommandDialog({
             )}
             {!waiting && enabled && (
               <>
-                {projects.isError && (
+                {projects.isError && target !== "monitor" && (
                   <div role="alert" className="p-3 text-aiflow-danger">
                     业务查找失败。
                     <Button
@@ -165,7 +186,8 @@ export default function WorkspaceCommandDialog({
                     </Button>
                   </div>
                 )}
-                {!projects.isError &&
+                {target !== "monitor" &&
+                  !projects.isError &&
                   !projects.isFetching &&
                   Boolean(projects.data?.items.length) && (
                     <CommandGroup heading="业务项目">
@@ -204,11 +226,19 @@ export default function WorkspaceCommandDialog({
                           key={item.id}
                           value={`workflow-${item.id}`}
                           onSelect={() =>
-                            go({
-                              section: "flows",
-                              view: "detail",
-                              workflowId: item.id,
-                            })
+                            go(
+                              target === "monitor"
+                                ? {
+                                    section: "runs",
+                                    view: "monitor",
+                                    workflowId: item.id,
+                                  }
+                                : {
+                                    section: "flows",
+                                    view: "detail",
+                                    workflowId: item.id,
+                                  }
+                            )
                           }
                           className="min-h-14 gap-3 rounded-xl"
                         >
@@ -232,10 +262,10 @@ export default function WorkspaceCommandDialog({
                     </CommandGroup>
                   )}
                 {!pending &&
-                  !projects.isError &&
+                  (!projects.isError || target === "monitor") &&
                   !workflows.isError &&
-                  !commands.length &&
-                  !projects.data?.items.length &&
+                  (!commands.length || target === "monitor") &&
+                  (!projects.data?.items.length || target === "monitor") &&
                   !workflows.data?.length && (
                     <p
                       role="status"

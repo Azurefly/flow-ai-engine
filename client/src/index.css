@@ -1699,3 +1699,12 @@ select {
   content: ""; position: absolute; left: 0; width: 3px; height: 18px;
   border-radius: 3px; background: var(--primary);
 }
+
+/* UX 优化：限定运行工作区样式范围，保留运行控件及其事件。 */
+[data-runs-monitor-content] > [data-runtime-monitor] { padding: 0; }
+[data-runs-monitor-content] [data-aiflow-context-header] { background-image: none; box-shadow: none; border-radius: 0; }
+[data-aiflow-run-view-tabs] [aria-selected="true"] { background: var(--accent); color: var(--primary); }
+@media (min-width: 1024px) {
+  [data-workbench-layout][data-navigation-collapsed="true"] [data-aiflow-run-view-tabs] button { justify-content: center; }
+  [data-workbench-layout][data-navigation-collapsed="true"] [data-aiflow-run-view-tabs] button > span { display: none; }
+}

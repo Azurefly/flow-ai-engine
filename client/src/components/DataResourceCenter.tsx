@@ -2451,7 +2451,7 @@ export function DataflowRunMonitor({
     detail.data?.workflowId === workflowId ? detail.data : null;
   if (!viewAllowed) return blockedContent ?? null;
   return (
-    <section className="space-y-4 p-4 sm:p-5" aria-label="数据流程运行监控">
+    <section data-runtime-monitor className="space-y-4 p-4 sm:p-5" aria-label="数据流程运行监控">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="aiflow-type-page-title font-semibold">

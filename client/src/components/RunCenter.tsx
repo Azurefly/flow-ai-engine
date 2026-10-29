@@ -311,10 +311,10 @@ export default function RunCenter({
     );
 
   return (
-    <div className="min-w-0 space-y-5 p-4 lg:p-6">
+    <div data-runtime-monitor className="min-w-0 space-y-5 p-4 lg:p-6">
       <div
         data-aiflow-context-header
-        className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm lg:flex-row lg:items-end lg:justify-between"
+        className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
       >
         <div className="min-w-0 lg:flex-1">
           <p className="aiflow-type-meta font-bold tracking-[.18em] text-aiflow-info">

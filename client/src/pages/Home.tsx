@@ -244,6 +244,18 @@ function formatTime(value: unknown) {
   return new Date(String(value)).toLocaleString("zh-CN", { hour12: false });
 }
 
+// UX 优化：复用完全相同的样式字符串，保留 DOM 类名、事件和状态分支。
+const filterInputClass = "h-11 border-input bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-[#2d6bea]";
+const moduleRailClass = "sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card";
+const searchIconClass = "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground";
+const mutedMetaClass = "text-xs text-muted-foreground";
+const mutedTextClass = "text-muted-foreground";
+const compactFilterLabelClass = "mb-1 block text-[10px] text-muted-foreground min-[1024px]:hidden";
+const mutedIconClass = "mr-2 text-muted-foreground";
+const emptyStateClass = "p-8 text-center text-sm text-muted-foreground";
+const sectionTitleClass = "mb-2 font-semibold text-foreground";
+const supportingTextClass = "mt-1 break-words text-muted-foreground";
+
 export default function Home() {
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery(undefined, { refetchInterval: query => query.state.data ? 30_000 : false });
@@ -376,7 +388,7 @@ function LoginScreen({
           <label className="grid gap-2 text-xs font-medium text-muted-foreground">
             用户名
             <Input
-              className="h-11 border-input bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-[#2d6bea]"
+              className={filterInputClass}
               autoComplete="username"
               value={credentials.username}
               onChange={event =>
@@ -388,7 +400,7 @@ function LoginScreen({
           <label className="grid gap-2 text-xs font-medium text-muted-foreground">
             密码
             <Input
-              className="h-11 border-input bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-[#2d6bea]"
+              className={filterInputClass}
               type="password"
               autoComplete="current-password"
               minLength={12}
@@ -425,11 +437,13 @@ function FlowConsole({
 }) {
   const { theme, toggleTheme } = useTheme();
   const [commandOpen, setCommandOpen] = useState(false);
+  const [commandTarget, setCommandTarget] = useState<"workspace" | "monitor">("workspace");
   useEffect(() => {
     const openCommand = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "k" || event.isComposing) return;
       if (document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], dialog[open]')) return;
       event.preventDefault();
+      setCommandTarget("workspace");
       setCommandOpen(true);
     };
     window.addEventListener("keydown", openCommand);
@@ -1344,6 +1358,65 @@ function FlowConsole({
     })()}
     onBack={() => navigateRoute({ section: "flows", view: "center" })} />;
 
+  const openMonitorLookup = () => {
+    setCommandTarget("monitor");
+    setCommandOpen(true);
+  };
+  // UX 优化：将原有受导航保护的页签事件放入同一模块导航，不改变办理和权限分支。
+  const runNavigation = (
+    <>
+      <div
+        data-aiflow-run-view-tabs
+        role="tablist"
+        aria-orientation="vertical"
+        aria-label="已启动流程视图"
+        className="grid gap-1"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-label="流程工作台"
+          title="流程工作台"
+          aria-selected={runView === "workbench"}
+          className={`aiflow-module-link w-full ${runView === "workbench" ? "bg-accent font-semibold text-primary" : "text-muted-foreground hover:bg-muted"}`}
+          onClick={() => navigateRoute({ section: "runs", view: "workbench" })}
+        >
+          <Gauge size={16} className="shrink-0" />
+          <span>流程工作台</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-label="运行监控"
+          title="运行监控"
+          aria-selected={runView === "monitor"}
+          className={`aiflow-module-link w-full ${runView === "monitor" ? "bg-accent font-semibold text-primary" : "text-muted-foreground hover:bg-muted"}`}
+          onClick={() => {
+            selectedId &&
+              navigateRoute({
+                section: "runs",
+                view: "monitor",
+                workflowId: selectedId,
+              });
+            if (!selectedId) openMonitorLookup();
+          }}
+        >
+          <Activity size={16} className="shrink-0" />
+          <span>运行监控</span>
+        </button>
+      </div>
+      {runView === "monitor" && (
+        <Button
+          variant="outline"
+          className="mt-3 w-full"
+          onClick={openMonitorLookup}
+        >
+          切换流程
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <main
       data-aiflow-console=""
@@ -1351,7 +1424,7 @@ function FlowConsole({
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
-        <WorkspaceCommandDialog canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />
+        <WorkspaceCommandDialog target={commandTarget} canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />
       </Suspense>}
       <Dialog open={Boolean(draftConflict) && canViewWorkflow} onOpenChange={open => { if (!open && !reloadDraftPending) setDraftConflict(null); }}>
         <DialogContent className="sm:max-w-lg">
@@ -1400,7 +1473,7 @@ function FlowConsole({
         </aside>
       )}
       <WorkspaceHeader platformName={general.platformName} user={user} nav={nav} activeSection={activeSection} systemRootView={systemRootView}
-        theme={theme} onTheme={toggleTheme} onSearch={() => setCommandOpen(true)} onNavigate={navigateSection}
+        theme={theme} onTheme={toggleTheme} onSearch={() => { setCommandTarget("workspace"); setCommandOpen(true); }} onNavigate={navigateSection}
         mobileOpen={mobileNavOpen} onOpenMobile={() => setMobileNavOpen(true)} onLogout={() => {
                 const proceed = () => {
                   if (unsavedWorkflowId.current) setPendingNavigation({ proceed: onLogout });
@@ -1430,7 +1503,7 @@ function FlowConsole({
           </h2>
           <p
             id="aiflow-mobile-navigation-description"
-            className="text-xs text-muted-foreground"
+            className={mutedMetaClass}
           >
             选择要打开的工作区
           </p>
@@ -1482,7 +1555,7 @@ function FlowConsole({
                 }}
                 className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <FolderKanban size={17} className="text-muted-foreground" />
+                <FolderKanban size={17} className={mutedTextClass} />
                 流程列表
               </button>
             </div>
@@ -1983,72 +2056,55 @@ function FlowConsole({
             ))}
           {section === "runs" && !routeRestoring && (
             <div>
-              <div
-                data-aiflow-run-view-tabs
-                role="tablist"
-                aria-label="已启动流程视图"
-                className="grid min-h-12 min-w-0 grid-cols-2 gap-1 border-b border-border bg-card px-2 sm:flex sm:flex-wrap sm:px-4"
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={runView === "workbench"}
-                  className={`aiflow-type-control h-12 min-w-0 border-b-2 px-2 sm:px-4 ${runView === "workbench" ? "border-aiflow-info bg-aiflow-info-surface text-aiflow-info" : "border-transparent text-muted-foreground hover:bg-muted"}`}
-                  onClick={() =>
-                    navigateRoute({ section: "runs", view: "workbench" })
-                  }
-                >
-                  流程工作台
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={runView === "monitor"}
-                  className={`aiflow-type-control h-12 min-w-0 border-b-2 px-2 sm:px-4 ${runView === "monitor" ? "border-aiflow-info bg-aiflow-info-surface text-aiflow-info" : "border-transparent text-muted-foreground hover:bg-muted"}`}
-                  onClick={() =>
-                    selectedId &&
-                    navigateRoute({
-                      section: "runs",
-                      view: "monitor",
-                      workflowId: selectedId,
-                    })
-                  }
-                >
-                  运行监控
-                </button>
-              </div>
               {runView === "workbench" ? (
-                <ProcessWorkbench />
-              ) : workflowContentState !== "granted" && mountedMonitorWorkflowId.current !== effectiveWorkflowId ? workflowAccessNotice : (
-                <RuntimeMonitor
-                  viewAllowed={workflowContentState === "granted"}
-                  blockedContent={workflowAccessNotice}
-                  projectId={selectedWorkflow?.projectId}
-                  workflowId={effectiveWorkflowId}
-                  workflowName={selectedWorkflow?.name}
-                  selectedRunId={selectedRunId}
-                  selectedRun={runDetail.data ?? null}
-                  selectedRunLoading={runDetail.isLoading}
-                  selectedRunError={runDetail.isError}
-                  onSelect={runId =>
-                    selectedId &&
-                    navigateRoute({
-                      section: "runs",
-                      view: "monitor",
-                      workflowId: selectedId,
-                      runId,
-                    })
-                  }
-                  onClearSelection={() =>
-                    selectedId &&
-                    navigateRoute({
-                      section: "runs",
-                      view: "monitor",
-                      workflowId: selectedId,
-                    })
-                  }
-                  onRetrySelection={() => void runDetail.refetch()}
-                />
+                <ProcessWorkbench navigationControls={runNavigation} />
+              ) : (
+                <div
+                  data-runs-monitor-workspace
+                  className="aiflow-page-frame bg-background"
+                >
+                  <div className="aiflow-page-content aiflow-split-layout grid items-start gap-4">
+                    <aside className="rounded-lg border border-border bg-card p-2">
+                      {runNavigation}
+                    </aside>
+                    <section data-runs-monitor-content className="min-w-0">
+                      {workflowContentState !== "granted" &&
+                      mountedMonitorWorkflowId.current !== effectiveWorkflowId ? (
+                        workflowAccessNotice
+                      ) : (
+                        <RuntimeMonitor
+                          viewAllowed={workflowContentState === "granted"}
+                          blockedContent={workflowAccessNotice}
+                          projectId={selectedWorkflow?.projectId}
+                          workflowId={effectiveWorkflowId}
+                          workflowName={selectedWorkflow?.name}
+                          selectedRunId={selectedRunId}
+                          selectedRun={runDetail.data ?? null}
+                          selectedRunLoading={runDetail.isLoading}
+                          selectedRunError={runDetail.isError}
+                          onSelect={(runId) =>
+                            selectedId &&
+                            navigateRoute({
+                              section: "runs",
+                              view: "monitor",
+                              workflowId: selectedId,
+                              runId,
+                            })
+                          }
+                          onClearSelection={() =>
+                            selectedId &&
+                            navigateRoute({
+                              section: "runs",
+                              view: "monitor",
+                              workflowId: selectedId,
+                            })
+                          }
+                          onRetrySelection={() => void runDetail.refetch()}
+                        />
+                      )}
+                    </section>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -2495,7 +2551,7 @@ function FlowDesigner({
           {savePending ? (
             <Loader2 className="animate-spin text-aiflow-info" size={13} />
           ) : (
-            <Save size={13} className="text-muted-foreground" />
+            <Save size={13} className={mutedTextClass} />
           )}
           <span className="sm:hidden">保存</span>
           <span className="hidden sm:inline">保存草稿</span>
@@ -2585,14 +2641,14 @@ function FlowDesigner({
               className="aiflow-type-control"
               onClick={() => setMembersDialogOpen(true)}
             >
-              <UsersRound size={13} className="mr-2 text-muted-foreground" />
+              <UsersRound size={13} className={mutedIconClass} />
               <span>成员与权限</span>
             </DropdownMenuItem>
             <DropdownMenuItem
               className="aiflow-type-control"
               onClick={() => setGovernanceDialogOpen(true)}
             >
-              <ShieldCheck size={13} className="mr-2 text-muted-foreground" />
+              <ShieldCheck size={13} className={mutedIconClass} />
               <span>版本治理与快照</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
@@ -2601,11 +2657,11 @@ function FlowDesigner({
               onClick={onImport}
               disabled={!canModifyDefinition}
             >
-              <Upload size={13} className="mr-2 text-muted-foreground" />
+              <Upload size={13} className={mutedIconClass} />
               <span>导入定义 (JSON)</span>
             </DropdownMenuItem>
             <DropdownMenuItem className="aiflow-type-control" onClick={onExport}>
-              <Download size={13} className="mr-2 text-muted-foreground" />
+              <Download size={13} className={mutedIconClass} />
               <span>导出备份 (JSON)</span>
             </DropdownMenuItem>
             {workflow.flowType === "data" && (
@@ -2628,7 +2684,7 @@ function FlowDesigner({
                   })
                 }
               >
-                <FileJson size={13} className="mr-2 text-muted-foreground" />
+                <FileJson size={13} className={mutedIconClass} />
                 <span>检查存量数据配置</span>
               </DropdownMenuItem>
             )}
@@ -2641,7 +2697,7 @@ function FlowDesigner({
                 className="aiflow-type-control"
                 onClick={onDuplicate}
               >
-                <Copy size={13} className="mr-2 text-muted-foreground" />
+                <Copy size={13} className={mutedIconClass} />
                 <span>创建副本</span>
               </DropdownMenuItem>
             )}
@@ -2653,7 +2709,7 @@ function FlowDesigner({
                   className="aiflow-type-control"
                   onClick={() => setSubflowDialogOpen(true)}
                 >
-                  <FolderTree size={13} className="mr-2 text-muted-foreground" />
+                  <FolderTree size={13} className={mutedIconClass} />
                   <span>另存为私有子流程</span>
                 </DropdownMenuItem>
               )}
@@ -3807,7 +3863,7 @@ function IamCenter({
             <div className="border-b border-border p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">用户目录</p>
-                <span className="text-xs text-muted-foreground">
+                <span className={mutedMetaClass}>
                   {userDirectory.isPending
                     ? "正在读取…"
                     : userTotal
@@ -3817,7 +3873,7 @@ function IamCenter({
               </div>
               <label className="relative mt-3 block min-w-0">
                 <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  className={searchIconClass}
                   size={14}
                 />
                 <Input
@@ -3848,7 +3904,7 @@ function IamCenter({
             </div>
             <div className="p-2">
               {userDirectory.isPending && (
-                <p className="p-8 text-center text-sm text-muted-foreground">
+                <p className={emptyStateClass}>
                   正在读取用户目录…
                 </p>
               )}
@@ -3955,7 +4011,7 @@ function IamCenter({
                 </div>
               ))}
               {userDirectory.isSuccess && !filteredUsers.length && (
-                <p className="p-8 text-center text-sm text-muted-foreground">
+                <p className={emptyStateClass}>
                   没有匹配的内部用户。
                 </p>
               )}
@@ -3972,7 +4028,7 @@ function IamCenter({
                 >
                   上一页
                 </Button>
-                <span aria-live="polite" className="text-muted-foreground">
+                <span aria-live="polite" className={mutedTextClass}>
                   {userPage + 1} / {userPageCount}
                 </span>
                 <Button
@@ -3988,7 +4044,7 @@ function IamCenter({
               </div>
             )}
           </section>
-          <section className="sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card">
+          <section className={moduleRailClass}>
             <UserAuthorizationPanel
               selectedUserId={selectedUserId}
               details={userDetails}
@@ -4042,13 +4098,13 @@ function IamCenter({
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between gap-2">
                 <p className="font-semibold">角色列表</p>
-                <span className="text-xs text-muted-foreground">
+                <span className={mutedMetaClass}>
                   {filteredRoles.length} / {roles.length}
                 </span>
               </div>
               <label className="relative mt-3 block min-w-0">
                 <Search
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                  className={searchIconClass}
                   size={14}
                 />
                 <Input
@@ -4099,7 +4155,7 @@ function IamCenter({
                 </div>
               ))}
               {!filteredRoles.length && (
-                <p className="p-8 text-center text-sm text-muted-foreground">
+                <p className={emptyStateClass}>
                   没有匹配的角色。
                 </p>
               )}
@@ -4124,7 +4180,7 @@ function IamCenter({
                 </Button>
                 <span
                   aria-live="polite"
-                  className="text-xs text-muted-foreground"
+                  className={mutedMetaClass}
                 >
                   {rolePage + 1} / {rolePageCount}
                 </span>
@@ -4147,7 +4203,7 @@ function IamCenter({
               </div>
             )}
           </section>
-          <section className="sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card">
+          <section className={moduleRailClass}>
             <RoleAuthorizationPanel
               details={roleDetails}
               selectedRole={selectedRole}
@@ -4275,7 +4331,7 @@ function IamCenter({
                 >
                   <div className="aiflow-type-body grid min-w-0 grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 min-[1024px]:grid-cols-[150px_minmax(130px,1fr)_minmax(150px,1fr)_minmax(150px,1.1fr)_80px_90px] min-[1024px]:items-center min-[1024px]:gap-3">
                     <div className="min-w-0">
-                      <span className="mb-1 block text-[10px] text-muted-foreground min-[1024px]:hidden">
+                      <span className={compactFilterLabelClass}>
                         时间
                       </span>
                       <span className="aiflow-type-meta text-muted-foreground">
@@ -4294,7 +4350,7 @@ function IamCenter({
                       </span>
                     </div>
                     <div className="col-span-2 min-w-0 min-[1024px]:col-span-1 min-[1024px]:col-start-2">
-                      <span className="mb-1 block text-[10px] text-muted-foreground min-[1024px]:hidden">
+                      <span className={compactFilterLabelClass}>
                         操作者 → 对象
                       </span>
                       <span
@@ -4306,7 +4362,7 @@ function IamCenter({
                       </span>
                     </div>
                     <div className="min-w-0 min-[1024px]:col-start-3">
-                      <span className="mb-1 block text-[10px] text-muted-foreground min-[1024px]:hidden">
+                      <span className={compactFilterLabelClass}>
                         操作
                       </span>
                       <span
@@ -4339,7 +4395,7 @@ function IamCenter({
                       </span>
                     </div>
                     <div className="min-w-0 min-[1024px]:col-start-4">
-                      <span className="mb-1 block text-[10px] text-muted-foreground min-[1024px]:hidden">
+                      <span className={compactFilterLabelClass}>
                         资源
                       </span>
                       <span
@@ -4378,13 +4434,13 @@ function IamCenter({
                     >
                       <dl className="aiflow-type-meta grid gap-2 sm:grid-cols-3">
                         <div>
-                          <dt className="text-muted-foreground">原始操作码</dt>
+                          <dt className={mutedTextClass}>原始操作码</dt>
                           <dd className="aiflow-type-meta mt-0.5 break-all font-mono text-foreground">
                             {item.action}
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-muted-foreground">
+                          <dt className={mutedTextClass}>
                             资源类型 / ID
                           </dt>
                           <dd className="aiflow-type-body mt-0.5 break-words text-foreground">
@@ -4395,7 +4451,7 @@ function IamCenter({
                           </dd>
                         </div>
                         <div>
-                          <dt className="text-muted-foreground">请求 ID</dt>
+                          <dt className={mutedTextClass}>请求 ID</dt>
                           <dd className="aiflow-type-meta mt-0.5 break-all font-mono text-foreground">
                             {item.requestId || "—"}
                           </dd>
@@ -4410,7 +4466,7 @@ function IamCenter({
               );
             })}
             {auditReady && !visibleAudit.length && (
-              <p className="p-8 text-center text-sm text-muted-foreground">没有符合当前筛选条件的审计记录。</p>
+              <p className={emptyStateClass}>没有符合当前筛选条件的审计记录。</p>
             )}
           </div>
           {auditReady && auditQuery.data && (
@@ -4427,7 +4483,7 @@ function IamCenter({
               </Button>
               <span
                 aria-live="polite"
-                className="text-xs text-muted-foreground"
+                className={mutedMetaClass}
               >
                 {auditPage + 1} / {auditPageCount} · 每页 {auditPageSize} 条 · 共 {auditTotal} 条
               </span>
@@ -4503,10 +4559,10 @@ function UserAuthorizationPanel({
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
         {!selectedUserId && (
-          <p className="text-muted-foreground">请从左侧选择用户。</p>
+          <p className={mutedTextClass}>请从左侧选择用户。</p>
         )}
         {selectedUserId && details.isLoading && (
-          <p className="text-muted-foreground">正在读取角色与权限…</p>
+          <p className={mutedTextClass}>正在读取角色与权限…</p>
         )}
         {selectedUserId && details.error && (
           <p className="break-words text-aiflow-danger">
@@ -4549,7 +4605,7 @@ function UserAuthorizationPanel({
             />
             </div>
             <div ref={element => { groups.current[2] = element; }} tabIndex={-1} data-access-details-target="">
-              <p className="mb-2 font-semibold text-foreground">
+              <p className={sectionTitleClass}>
                 系统级有效权限（{data.effectivePermissions.length}）
               </p>
               <p className="mb-2 text-muted-foreground">
@@ -4571,7 +4627,7 @@ function UserAuthorizationPanel({
                   </div>
                 ))}
                 {!data.effectivePermissions.length && (
-                  <p className="text-muted-foreground">无</p>
+                  <p className={mutedTextClass}>无</p>
                 )}
               </div>
             </div>
@@ -4674,10 +4730,10 @@ function RoleAuthorizationPanel({
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
         {!selectedRole?.id && (
-          <p className="text-muted-foreground">请从左侧选择角色。</p>
+          <p className={mutedTextClass}>请从左侧选择角色。</p>
         )}
         {selectedRole?.id && details.isLoading && (
-          <p className="text-muted-foreground">正在读取角色绑定…</p>
+          <p className={mutedTextClass}>正在读取角色绑定…</p>
         )}
         {selectedRole?.id && details.error && (
           <p className="break-words text-aiflow-danger">
@@ -4704,7 +4760,7 @@ function RoleAuthorizationPanel({
             </div>
             <AccessRelationshipOverview identity={selectedRole.id} label={data.role.name} nodes={[{ label: "权限清单", count: data.permissions.length }, { label: "直接绑定记录", count: data.directUsers.length }, { label: "组织继承记录", count: data.inheritedUsers.length }]} onSelect={index => focusAccessGroup(groups.current[index])} />
             <div ref={element => { groups.current[0] = element; }} tabIndex={-1} data-access-details-target="">
-              <p className="mb-2 font-semibold text-foreground">
+              <p className={sectionTitleClass}>
                 权限清单（{data.permissions.length}）
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -4739,7 +4795,7 @@ function RoleAuthorizationPanel({
             </div>
             {data.organizationUnits.length > 0 && (
               <div>
-                <p className="mb-2 font-semibold text-foreground">绑定组织</p>
+                <p className={sectionTitleClass}>绑定组织</p>
                 <div className="flex flex-wrap gap-1.5">
                   {data.organizationUnits.map((unit: any) => (
                     <span
@@ -4774,7 +4830,7 @@ function RoleDetailGroup({
 }) {
   return (
     <div>
-      <p className="mb-2 font-semibold text-foreground">
+      <p className={sectionTitleClass}>
         {title}（{roles.length}）
       </p>
       <div className="grid gap-1.5">
@@ -4806,7 +4862,7 @@ function RoleDetailGroup({
             <p className="mt-0.5 break-all font-mono text-aiflow-info">
               {role.roleCode}
             </p>
-            <p className="mt-1 break-words text-muted-foreground">
+            <p className={supportingTextClass}>
               {role.unitName
                 ? `来源组织：${role.unitName}`
                 : role.scopeType === "system"
@@ -4819,13 +4875,13 @@ function RoleDetailGroup({
                 : "长期有效"}
             </p>
             {role.note && (
-              <p className="mt-1 break-words text-muted-foreground">
+              <p className={supportingTextClass}>
                 授权备注：{role.note}
               </p>
             )}
           </div>
         ))}
-        {!roles.length && <p className="text-muted-foreground">无</p>}
+        {!roles.length && <p className={mutedTextClass}>无</p>}
       </div>
     </div>
   );
@@ -4842,7 +4898,7 @@ function UserBindingGroup({
 }) {
   return (
     <div>
-      <p className="mb-2 font-semibold text-foreground">
+      <p className={sectionTitleClass}>
         {title}（{users.length}）
       </p>
       <div className="grid gap-1.5 sm:grid-cols-2">
@@ -4864,7 +4920,7 @@ function UserBindingGroup({
                 {source}
               </span>
             </div>
-            <p className="mt-1 break-words text-muted-foreground">
+            <p className={supportingTextClass}>
               {account.unitName
                 ? `组织：${account.unitName}`
                 : account.scopeType === "system"
@@ -4877,13 +4933,13 @@ function UserBindingGroup({
                 : "长期有效"}
             </p>
             {account.note && (
-              <p className="mt-1 break-words text-muted-foreground">
+              <p className={supportingTextClass}>
                 授权备注：{account.note}
               </p>
             )}
           </div>
         ))}
-        {!users.length && <p className="text-muted-foreground">无</p>}
+        {!users.length && <p className={mutedTextClass}>无</p>}
       </div>
     </div>
   );

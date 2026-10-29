@@ -2230,8 +2230,9 @@ describe("流程设计器界面回归约束", () => {
 
   it("工作台任务说明使用16px正文，短审批进度使用13px辅助层级", () => {
     expect(processWorkbenchSource).toContain(
-      'className="aiflow-type-body mt-1 break-words text-muted-foreground"'
+      'const detailTextClass = "aiflow-type-body mt-1 break-words text-muted-foreground"'
     );
+    expect(processWorkbenchSource).toContain("className={detailTextClass}");
     expect(processWorkbenchSource).toContain(
       'className="aiflow-type-meta mt-1 inline-flex rounded bg-indigo-50 px-1.5 py-0.5 text-indigo-600"'
     );
@@ -2264,7 +2265,8 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(runCenterSource).toContain("disabled={!hasRunFilters}");
     expect(runCenterSource).toContain('className="sr-only"');
-    expect(homeSource).toContain("grid min-h-12 min-w-0 grid-cols-2");
+    expect(homeSource).toContain("aiflow-module-link w-full");
+    expect(homeSource).toContain("navigationControls={runNavigation}");
   });
 
   it("保留主要工作区、项目工作区和独立系统配置入口", () => {
@@ -3271,7 +3273,8 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("各级页签在窄屏换行而不把关键入口推到横向滚动区", () => {
-    expect(homeSource).toContain("grid min-h-12 min-w-0 grid-cols-2");
+    expect(homeSource).toContain("data-aiflow-run-view-tabs");
+    expect(homeSource).toContain('className="grid gap-1"');
     expect(identityWorkspaceSource).toContain('className="mt-2 grid gap-1"');
     expect(organizationManagementSource).toContain(
       "grid min-w-0 grid-cols-3 gap-1"
