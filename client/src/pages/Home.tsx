@@ -2071,7 +2071,7 @@ function FlowConsole({
                   className="aiflow-page-frame bg-background"
                 >
                   <div className="aiflow-page-content aiflow-split-layout grid items-start gap-4">
-                    <aside className="rounded-lg border border-border bg-card p-2">
+                    <aside className="self-start rounded-lg border border-border bg-card p-2 lg:sticky lg:top-[calc(var(--workspace-header-height,64px)+16px)]">
                       {runNavigation}
                     </aside>
                     <section data-runs-monitor-content className="min-w-0">

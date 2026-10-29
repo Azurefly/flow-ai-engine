@@ -8,6 +8,7 @@ import { CanvasNameDialog } from "./CanvasNameDialog";
 import { Input } from "./ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { useEditorViewport } from "@/hooks/useEditorViewport";
+import { useInspectorGroupNavigation } from "@/hooks/useInspectorGroupNavigation";
 import {
   dataflowInputFields,
   usesDataflowInputFieldSuggestions,
@@ -137,6 +138,17 @@ import {
   toggleConfigSelection,
   toggleStateInnateOperation,
 } from "./workflow-config-editor";
+
+// UX 优化：共享相同样式字符串，保留配置控件及其事件。
+const inspectorToolClass = "flex min-h-9 min-w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const canvasMenuItemClass = "block w-full px-3 py-2 text-left hover:bg-muted";
+const canvasFieldLabelClass = "aiflow-type-control grid min-w-0 gap-1 text-muted-foreground";
+const canvasSelectClass = "aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0";
+const canvasIconRowClass = "flex items-center gap-1";
+const canvasDangerMenuItemClass = "block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50";
+const canvasRemoveClass = "text-muted-foreground hover:text-red-600";
+const canvasCompactControlClass = "aiflow-type-control h-7";
+const canvasMutedTextClass = "text-muted-foreground";
 
 type NodeKind = FlowNodeType;
 type FlowNodeData = { label: string; kind: NodeKind; config: NodeConfig };
@@ -1150,7 +1162,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="aiflow-type-control h-7"
+            className={canvasCompactControlClass}
             disabled={disabled}
             onClick={() => onChange([...value, ""])}
           >
@@ -1161,7 +1173,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="aiflow-type-control h-7"
+            className={canvasCompactControlClass}
             disabled={disabled}
             onClick={() => onChange([...value, {}])}
           >
@@ -1172,7 +1184,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="aiflow-type-control h-7"
+            className={canvasCompactControlClass}
             disabled={disabled}
             onClick={() => onChange([...value, []])}
           >
@@ -1243,7 +1255,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="aiflow-type-control h-7"
+            className={canvasCompactControlClass}
             disabled={disabled}
             onClick={() => onChange({ ...record, [nextObjectKey(record)]: "" })}
           >
@@ -1254,7 +1266,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="aiflow-type-control h-7"
+            className={canvasCompactControlClass}
             disabled={disabled}
             onClick={() => onChange({ ...record, [nextObjectKey(record)]: {} })}
           >
@@ -1265,7 +1277,7 @@ function NestedStructuredValueEditor({
             type="button"
             size="sm"
             variant="outline"
-            className="aiflow-type-control h-7"
+            className={canvasCompactControlClass}
             disabled={disabled}
             onClick={() => onChange({ ...record, [nextObjectKey(record)]: [] })}
           >
@@ -1867,7 +1879,7 @@ function StructuredListRow({
           </span>
           <button
             type="button"
-            className="text-muted-foreground hover:text-red-600"
+            className={canvasRemoveClass}
             disabled={disabled}
             onClick={onRemove}
             aria-label={
@@ -1954,7 +1966,7 @@ function StructuredListRow({
           </button>
         </div>
         <div className="grid min-w-0 gap-2 sm:grid-cols-2">
-          <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
+          <label className={canvasFieldLabelClass}>
             路径句柄
             <input
               className={inputClass}
@@ -1966,7 +1978,7 @@ function StructuredListRow({
               }
             />
           </label>
-          <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
+          <label className={canvasFieldLabelClass}>
             路径名称
             <input
               className={inputClass}
@@ -1979,7 +1991,7 @@ function StructuredListRow({
             />
           </label>
         </div>
-        <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
+        <label className={canvasFieldLabelClass}>
           优先级（-1 为默认规则）
           <input
             type="number"
@@ -2002,13 +2014,13 @@ function StructuredListRow({
             值越大越先匹配；同值按创建顺序。留空按 0 处理。
           </span>
         </label>
-        <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
+        <label className={canvasFieldLabelClass}>
           目标节点
           <span className="aiflow-type-control flex min-h-11 items-center rounded border border-border bg-muted px-2 text-foreground">
             {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}
           </span>
         </label>
-        <label className="aiflow-type-control grid min-w-0 gap-1 text-muted-foreground">
+        <label className={canvasFieldLabelClass}>
           流程身份（逗号分隔）
           <input
             className={inputClass}
@@ -2130,7 +2142,7 @@ function StructuredListRow({
         </label>
         <button
           type="button"
-          className="text-muted-foreground hover:text-red-600"
+          className={canvasRemoveClass}
           disabled={disabled}
           onClick={onRemove}
           aria-label="删除表单字段"
@@ -2165,7 +2177,7 @@ function StructuredListRow({
         />
         <button
           type="button"
-          className="text-muted-foreground hover:text-red-600"
+          className={canvasRemoveClass}
           disabled={disabled}
           onClick={onRemove}
           aria-label={`删除${label}`}
@@ -2185,7 +2197,7 @@ function StructuredListRow({
       />
       <button
         type="button"
-        className="text-muted-foreground hover:text-red-600"
+        className={canvasRemoveClass}
         disabled={disabled}
         onClick={onRemove}
         aria-label="删除列表项"
@@ -2383,6 +2395,7 @@ export default function WorkflowCanvas({
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState(toFlowEdges(initial));
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const groupNavigation = useInspectorGroupNavigation(selectedId);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
   const [deletedEdge, setDeletedEdge] = useState<Edge | null>(null);
   const [contextMenu, setContextMenu] = useState<CanvasContextMenu>(null);
@@ -3973,7 +3986,7 @@ export default function WorkflowCanvas({
                     <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
                       {availablePalette.length}
                     </span>
-                    <span aria-hidden="true" className="text-muted-foreground">
+                    <span aria-hidden="true" className={canvasMutedTextClass}>
                       ▾
                     </span>
                   </button>
@@ -3989,7 +4002,7 @@ export default function WorkflowCanvas({
                     搜索节点
                     <input
                       type="search"
-                      className="aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                      className={canvasSelectClass}
                       placeholder="输入节点名称或用途"
                       value={nodePaletteSearch}
                       onChange={event => setNodePaletteSearch(event.target.value)}
@@ -4056,7 +4069,7 @@ export default function WorkflowCanvas({
                       <span className="aiflow-type-meta rounded bg-aiflow-special-surface px-1.5 py-0.5 font-mono text-aiflow-special">
                         {reuseCount}
                       </span>
-                      <span aria-hidden="true" className="text-muted-foreground">
+                      <span aria-hidden="true" className={canvasMutedTextClass}>
                         ▾
                       </span>
                     </button>
@@ -4072,7 +4085,7 @@ export default function WorkflowCanvas({
                       搜索可复用资源
                       <input
                         type="search"
-                        className="aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0"
+                        className={canvasSelectClass}
                         placeholder="输入模板或子流程名称"
                         value={reuseSearch}
                         onChange={event => setReuseSearch(event.target.value)}
@@ -4168,7 +4181,7 @@ export default function WorkflowCanvas({
                     onClick={undo}
                     title="撤销操作 (Ctrl+Z / ⌘Z)"
                   >
-                    <RotateCcw size={13} className="text-muted-foreground" />
+                    <RotateCcw size={13} className={canvasMutedTextClass} />
 
                   </Button>
                   <Button
@@ -4181,7 +4194,7 @@ export default function WorkflowCanvas({
                     onClick={redo}
                     title="重做操作 (Ctrl+Y / ⌘Y)"
                   >
-                    <RotateCw size={13} className="text-muted-foreground" />
+                    <RotateCw size={13} className={canvasMutedTextClass} />
 
                   </Button>
                   <span className="mx-1 hidden h-4 w-px bg-slate-200 sm:block" />
@@ -4203,7 +4216,7 @@ export default function WorkflowCanvas({
                       : "整理画布：执行 DAG 依赖自动排版"
                   }
                 >
-                  <Waypoints size={13} className="text-muted-foreground" />
+                  <Waypoints size={13} className={canvasMutedTextClass} />
 
                 </Button>
               )}
@@ -4301,7 +4314,7 @@ export default function WorkflowCanvas({
                 }
                 title="切换全屏沉浸设计模式"
               >
-                <Maximize2 size={13} className="text-muted-foreground" />
+                <Maximize2 size={13} className={canvasMutedTextClass} />
 
               </Button>
               {!readOnly && selectedEdgeId && (
@@ -4381,33 +4394,33 @@ export default function WorkflowCanvas({
             </summary>
             <div className="grid gap-2 border-t border-border px-3 py-2">
               <div className="flex flex-wrap gap-3">
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <i className="h-2 w-2 rounded-full bg-red-500" />
                   未完全配置
                 </span>
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <i className="h-2 w-2 rounded-full bg-blue-500" />
                   结构完整（默认）
                 </span>
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <i className="h-2 w-2 rounded-full bg-emerald-500" />
                   结构完整
                 </span>
               </div>
               <div className="flex flex-wrap gap-3 text-muted-foreground">
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <Move size={13} />
                   画布移动
                 </span>
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <Maximize2 size={13} />
                   画布缩放
                 </span>
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <MousePointer2 size={13} />
                   选择连线
                 </span>
-                <span className="flex items-center gap-1">
+                <span className={canvasIconRowClass}>
                   <Square size={12} />
                   节点框选
                 </span>
@@ -4445,7 +4458,7 @@ export default function WorkflowCanvas({
                       {!["start", "end"].includes(targetNode.data.kind) && (
                         <button
                           type="button"
-                          className="block w-full px-3 py-2 text-left hover:bg-muted"
+                          className={canvasMenuItemClass}
                           onClick={() => {
                             setInspectorMode("normal");
                             setSelectedId(targetNode.id);
@@ -4461,7 +4474,7 @@ export default function WorkflowCanvas({
                         !readOnly && (
                           <button
                             type="button"
-                            className="block w-full px-3 py-2 text-left hover:bg-muted"
+                            className={canvasMenuItemClass}
                             onClick={() => {
                               setNameDialog({
                                 title: "修改节点名称",
@@ -4486,7 +4499,7 @@ export default function WorkflowCanvas({
                         )}
                       <button
                         type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-muted"
+                        className={canvasMenuItemClass}
                         onClick={() => {
                           navigator.clipboard
                             ?.writeText(targetNode.id)
@@ -4498,7 +4511,7 @@ export default function WorkflowCanvas({
                       </button>
                       <button
                         type="button"
-                        className="block w-full px-3 py-2 text-left hover:bg-muted"
+                        className={canvasMenuItemClass}
                         onClick={() => showNodePath(targetNode.id)}
                       >
                         查看路径
@@ -4526,7 +4539,7 @@ export default function WorkflowCanvas({
                           <div className="my-1 border-t border-border" />
                           <button
                             type="button"
-                            className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                            className={canvasDangerMenuItemClass}
                             onClick={() => removeNode(targetNode.id)}
                           >
                             删除节点
@@ -4540,7 +4553,7 @@ export default function WorkflowCanvas({
                 <>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left hover:bg-muted"
+                    className={canvasMenuItemClass}
                     onClick={() =>
                       alignSelectedNodes(
                         "X",
@@ -4552,7 +4565,7 @@ export default function WorkflowCanvas({
                   </button>
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left hover:bg-muted"
+                    className={canvasMenuItemClass}
                     onClick={() =>
                       alignSelectedNodes(
                         "Y",
@@ -4565,7 +4578,7 @@ export default function WorkflowCanvas({
                   {!readOnly && (
                     <button
                       type="button"
-                      className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                      className={canvasDangerMenuItemClass}
                       onClick={deleteSelectedNodes}
                     >
                       批量删除
@@ -4573,7 +4586,7 @@ export default function WorkflowCanvas({
                   )}
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left hover:bg-muted"
+                    className={canvasMenuItemClass}
                     onClick={() => {
                       setNodes(current =>
                         current.map(node => ({ ...node, selected: false }))
@@ -4590,7 +4603,7 @@ export default function WorkflowCanvas({
                 !readOnly && (
                   <button
                     type="button"
-                    className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50"
+                    className={canvasDangerMenuItemClass}
                     onClick={() => {
                       deleteSelectedEdge();
                       closeContextMenu();
@@ -4602,7 +4615,7 @@ export default function WorkflowCanvas({
               {contextMenu.kind === "pane" && !readOnly && (
                 <button
                   type="button"
-                  className="block w-full px-3 py-2 text-left hover:bg-muted"
+                  className={canvasMenuItemClass}
                   onClick={() => {
                     setSelectedId(null);
                     setSelectedEdgeId(null);
@@ -4676,19 +4689,20 @@ export default function WorkflowCanvas({
             data-workflow-inspector-header=""
             className="flex min-h-16 shrink-0 items-center justify-between border-b border-border px-4 py-3"
           >
-            <div className={inspectorMode === "compact" ? "hidden" : ""}>
+            <div className={inspectorMode === "compact" ? "hidden" : "min-w-0"}>
               <h2 data-workflow-inspector-heading="" ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
                 {selectedEdgeId ? "连线配置" : `${selectedDefinition?.label ?? "节点"}配置`}
               </h2>
+              {selected && <p className="aiflow-type-meta mt-0.5 line-clamp-2 break-words text-muted-foreground" title={String(selected.data.label ?? "")}>{selected.data.label}</p>}
             </div>
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               <button type="button" className="mr-1 min-h-11 rounded px-2 text-sm text-aiflow-info hover:bg-muted lg:hidden" onClick={() => {
                 canvasRegionRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
                 canvasRegionRef.current?.focus({ preventScroll: true });
               }}>返回画布</button>
               <button
                 type="button"
-                className={`rounded p-1.5 text-muted-foreground hover:bg-muted ${inspectorLocked ? "text-indigo-600" : ""}`}
+                className={`${inspectorToolClass} ${inspectorLocked ? "text-indigo-600" : ""}`}
                 title={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
                 aria-label={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
                 onClick={() => setInspectorLocked(value => !value)}
@@ -4697,7 +4711,7 @@ export default function WorkflowCanvas({
               </button>
               <button
                 type="button"
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                className={inspectorToolClass}
                 title="最大化面板"
                 aria-label="最大化面板"
                 onClick={() => setInspectorMode("maximized")}
@@ -4706,7 +4720,7 @@ export default function WorkflowCanvas({
               </button>
               <button
                 type="button"
-                className={`rounded p-1.5 text-muted-foreground hover:bg-muted ${inspectorMode === "normal" ? "text-slate-300" : ""}`}
+                className={`${inspectorToolClass} ${inspectorMode === "normal" ? "text-slate-300" : ""}`}
                 title="恢复配置面板"
                 aria-label="恢复配置面板"
                 onClick={() => setInspectorMode("normal")}
@@ -4715,7 +4729,7 @@ export default function WorkflowCanvas({
               </button>
               <button
                 type="button"
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted"
+                className={inspectorToolClass}
                 title="最小化面板"
                 aria-label="最小化面板"
                 onClick={() => setInspectorMode("compact")}
@@ -4728,12 +4742,14 @@ export default function WorkflowCanvas({
             (selected && selectedDefinition ? (
               <div
                 data-workflow-inspector-content=""
+                ref={groupNavigation.contentRef}
                 className={fullscreen ? "min-h-0 overflow-y-auto lg:flex-1" : "max-h-[650px] overflow-y-auto"}
               >
                 <div className="space-y-3 p-4">
                   <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
-                    节点名称
+                    节点名称（画布）
                     <input
+                      aria-label="节点名称"
                       className="h-9 rounded-lg border border-border px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted"
                       value={String(selected.data.label ?? "")}
                       disabled={inspectorDisabled}
@@ -4752,8 +4768,9 @@ export default function WorkflowCanvas({
                         : selectedConfigState === "editing"
                           ? "结构完整（默认）"
                           : "结构完整"}
+                      <span className="font-normal text-muted-foreground"> · 运行前需预检</span>
                       {selected.data.kind === "operate" && readOperateOutcomeMode(selectedConfig) === "legacy_cancel" && (
-                        <button type="button" className="ml-2 min-h-11 text-aiflow-warning underline" onClick={() => setInspectorTab("结果与分支")}>兼容分支</button>
+                        <button type="button" className="ml-2 min-h-11 text-aiflow-warning underline" onClick={() => { setInspectorTab("结果与分支"); groupNavigation.reveal(); }}>兼容分支</button>
                       )}
                     </p>
                     {selectedConfigAssessment?.error && (
@@ -4769,8 +4786,9 @@ export default function WorkflowCanvas({
                 </div>
                 <div
                   role="tablist"
+                  ref={groupNavigation.tabsRef}
                   aria-label={`${selectedDefinition.label}配置分类`}
-                  className="sticky top-0 z-10 grid min-w-0 grid-cols-2 gap-1.5 border-y border-border bg-muted px-3 py-2 sm:flex sm:flex-wrap"
+                  className="sticky top-0 z-10 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-1 border-y border-border bg-muted px-3 py-2"
                   onKeyDown={event => {
                     const current = selectedFieldGroups.findIndex(group => group.label === activeInspectorGroup?.label);
                     const target = event.key === "Home" ? 0 : event.key === "End" ? selectedFieldGroups.length - 1 : event.key === "ArrowRight" ? (current + 1) % selectedFieldGroups.length : event.key === "ArrowLeft" ? (current - 1 + selectedFieldGroups.length) % selectedFieldGroups.length : null;
@@ -4778,6 +4796,7 @@ export default function WorkflowCanvas({
                     event.preventDefault();
                     setInspectorTab(selectedFieldGroups[target].label);
                     event.currentTarget.querySelectorAll<HTMLButtonElement>('button[role="tab"]')[target]?.focus();
+                    groupNavigation.reveal();
                   }}
                 >
                   {selectedFieldGroups.map(group => (
@@ -4791,12 +4810,12 @@ export default function WorkflowCanvas({
                       aria-selected={
                         activeInspectorGroup?.label === group.label
                       }
-                      className={`min-w-0 whitespace-normal rounded-lg px-2 py-1.5 text-xs font-medium transition-all sm:px-3 ${
+                      className={`aiflow-type-control min-h-9 min-w-0 whitespace-normal rounded-md border px-2 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         activeInspectorGroup?.label === group.label
-                          ? "bg-blue-600 text-white shadow-xs"
-                          : "border border-border/80 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
+                          ? "border-primary/20 bg-accent text-primary"
+                          : "border-transparent text-muted-foreground hover:bg-card hover:text-foreground"
                       }`}
-                      onClick={() => setInspectorTab(group.label)}
+                      onClick={() => { setInspectorTab(group.label); groupNavigation.reveal(); }}
                     >
                       {group.label}
                     </button>
@@ -4805,9 +4824,10 @@ export default function WorkflowCanvas({
                 {activeInspectorGroup && (
                   <section
                     role="tabpanel"
+                    ref={groupNavigation.panelRef}
                     id={`${inspectorTabId}-panel`}
                     aria-labelledby={`${inspectorTabId}-${activeInspectorGroup.label}`}
-                    className="m-4 rounded-xl border border-border bg-card p-4 shadow-sm"
+                    className="min-w-0 px-4 py-4"
                   >
                       {selected.data.kind === "router" &&
                         activeInspectorGroup.label === "兼容规则" && (

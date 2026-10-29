@@ -3293,7 +3293,11 @@ describe("流程设计器界面回归约束", () => {
     expect(processDetailPageSource).toContain(
       "grid h-auto w-full min-w-0 grid-cols-3"
     );
-    expect(canvasSource).toContain("grid min-w-0 grid-cols-2 gap-1.5");
+    expect(canvasSource).toContain("grid-cols-[repeat(auto-fit,minmax(100px,1fr))]");
+    expect(canvasSource).toContain("ref={groupNavigation.tabsRef}");
+    expect(canvasSource).toContain("ref={groupNavigation.panelRef}");
+    expect(canvasSource).toContain("ref={groupNavigation.contentRef}");
+    expect(canvasSource).toContain("groupNavigation.reveal()");
   });
 
   it("电脑端服务端点使用统一表格并保留空状态与管理操作", () => {
