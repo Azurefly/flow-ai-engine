@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasBounds, canvasConnectionPoints, canvasContextIds, canvasHasCrowding, canvasHasDiscreteMove, canvasNodeRects, readableCanvasLayout, roundedCanvasPath } from "../client/src/components/workflow-canvas-geometry";
+import { canvasBounds, canvasConnectionPoints, canvasContextIds, canvasEdgeLabelAnchor, canvasHasCrowding, canvasHasDiscreteMove, canvasNodeRects, readableCanvasLayout, roundedCanvasPath } from "../client/src/components/workflow-canvas-geometry";
 
 const node = (id: string, x = 0, y = 0, height = 88) => ({ id, position: { x, y }, measured: { width: 208, height }, data: { kind: "router", config: { original: true } } });
 const overlaps = (a: ReturnType<typeof canvasNodeRects>[number], b: ReturnType<typeof canvasNodeRects>[number]) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -11,6 +11,15 @@ function crossesBody(points: { x: number; y: number }[], r: ReturnType<typeof ca
   });
 }
 describe("画布阅读布局与连线可见性", () => {
+  it("短分支标签留在两节点之间，回退标签沿外侧长通道显示", () => {
+    const rects = canvasNodeRects([node("a", 40, 40), node("b", 376, 40)]);
+    const points = canvasConnectionPoints({ x: 252, y: 70 }, { x: 372, y: 84 }, rects, "a", "b");
+    const label = canvasEdgeLabelAnchor(points, 0.87), halfWidth = 64 / 0.87 / 2;
+    expect(label.x - halfWidth).toBeGreaterThan(rects[0].x + rects[0].width);
+    expect(label.x + halfWidth).toBeLessThan(rects[1].x);
+    const back = canvasConnectionPoints({ x: 588, y: 84 }, { x: 36, y: 84 }, rects, "b", "a");
+    expect(canvasEdgeLabelAnchor(back, 0.87).y).toBeLessThan(Math.min(...rects.map(r => r.y)));
+  });
   it("键盘移动生成一次显式编辑，尺寸、选择、未移动及鼠标手势不重复记历史", () => {
     const nodes = [node("a", 40, 40), node("b", 376, 40)];
     const changes = [{ id: "a", type: "position", position: { x: 45, y: 40 }, dragging: false }, { id: "b", type: "position", position: { x: 381, y: 40 }, dragging: false }];

@@ -118,6 +118,15 @@ export function roundedCanvasPath(points: CanvasPoint[]) {
   return path + ` L${last.x},${last.y}`;
 }
 
+/** Short forward labels belong in the port gap, away from adjacent return lanes. */
+export function canvasEdgeLabelAnchor(points: CanvasPoint[], zoom: number) {
+  let a = points[0], b = points[1] ?? a;
+  for (let i = 1; i < points.length; i++) if (Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) > Math.hypot(b.x - a.x, b.y - a.y)) { a = points[i - 1]; b = points[i]; }
+  const end = points[points.length - 1];
+  if (points.length <= 4 && end.x > points[0].x) { a = points[0]; b = end; }
+  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 24 / zoom };
+}
+
 export function canvasBounds(rects: CanvasRect[], points: CanvasPoint[] = []) {
   if (!rects.length) return { x: 0, y: 0, width: 400, height: 200 };
   const left = Math.min(...rects.map(n => n.x), ...points.map(p => p.x)), top = Math.min(...rects.map(n => n.y), ...points.map(p => p.y));
