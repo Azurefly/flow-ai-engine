@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canvasBounds, canvasConnectionPoints, canvasContextIds, canvasHasCrowding, canvasNodeRects, readableCanvasLayout, roundedCanvasPath } from "../client/src/components/workflow-canvas-geometry";
+import { canvasBounds, canvasConnectionPoints, canvasContextIds, canvasHasCrowding, canvasHasDiscreteMove, canvasNodeRects, readableCanvasLayout, roundedCanvasPath } from "../client/src/components/workflow-canvas-geometry";
 
 const node = (id: string, x = 0, y = 0, height = 88) => ({ id, position: { x, y }, measured: { width: 208, height }, data: { kind: "router", config: { original: true } } });
 const overlaps = (a: ReturnType<typeof canvasNodeRects>[number], b: ReturnType<typeof canvasNodeRects>[number]) => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
@@ -11,6 +11,15 @@ function crossesBody(points: { x: number; y: number }[], r: ReturnType<typeof ca
   });
 }
 describe("画布阅读布局与连线可见性", () => {
+  it("键盘移动生成一次显式编辑，尺寸、选择、未移动及鼠标手势不重复记历史", () => {
+    const nodes = [node("a", 40, 40), node("b", 376, 40)];
+    const changes = [{ id: "a", type: "position", position: { x: 45, y: 40 }, dragging: false }, { id: "b", type: "position", position: { x: 381, y: 40 }, dragging: false }];
+    expect(canvasHasDiscreteMove(nodes, changes)).toBe(true);
+    expect(canvasHasDiscreteMove(nodes, changes, true)).toBe(false);
+    expect(canvasHasDiscreteMove(nodes, [{ ...changes[0], dragging: true }])).toBe(false);
+    expect(canvasHasDiscreteMove(nodes, [{ id: "a", type: "dimensions" }, { id: "a", type: "select" }, { ...changes[0], position: { x: 40, y: 40 } }])).toBe(false);
+    expect(nodes[0].position).toEqual({ x: 40, y: 40 });
+  });
   it("旧流程150/200间距的7个节点不再遮线，也不改写原始定义", () => {
     const nodes = [0, 150, 300, 500, 700, 900, 1100].map((x, i) => node(String(i), x));
     const edges = nodes.slice(1).map((n, i) => ({ source: String(i), target: n.id }));

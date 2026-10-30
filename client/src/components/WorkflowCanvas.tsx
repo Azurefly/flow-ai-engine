@@ -2,7 +2,7 @@
 const surfaceClass1 = "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
 import "./workflow-canvas-design.css";
 import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
-import { canvasNodeRects, canvasHasCrowding, readableCanvasLayout, canvasContextIds, canvasConnectionPoints, canvasBounds, roundedCanvasPath } from "./workflow-canvas-geometry";
+import { canvasNodeRects, canvasHasDiscreteMove, canvasHasCrowding, readableCanvasLayout, canvasContextIds, canvasConnectionPoints, canvasBounds, roundedCanvasPath } from "./workflow-canvas-geometry";
 import { availableWorkflowReuseResources } from "@shared/workflow-reuse-resources";
 import { readCanvasSourceHandles as sourceHandles } from "./workflow-canvas-handles";
 import {
@@ -29,6 +29,7 @@ import {
 } from "@shared/workflow-parallel-binding";
 import {
   addEdge,
+  applyNodeChanges,
   getViewportForBounds,
   Background,
   Controls,
@@ -41,6 +42,7 @@ import {
   useStore,
   useUpdateNodeInternals,
   type Connection,
+  type NodeChange,
   type Edge,
   type Node,
   type NodeProps,
@@ -2517,6 +2519,19 @@ export default function WorkflowCanvas({
     [pushHistory]
   );
 
+  // Keyboard moves bypass pointer callbacks; promote the projection atomically and keep Undo.
+  const onCanvasNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
+    if (canvasHasDiscreteMove(latestNodesRef.current, changes, Boolean(dragStartSnapshotRef.current))) {
+      pushHistory();
+      if (readingActiveRef.current) {
+        setCanvasPresentation("original");
+        setNodes(applyNodeChanges(changes, displayedNodesRef.current));
+        return;
+      }
+    }
+    onNodesChange(changes);
+  }, [onNodesChange, pushHistory, setNodes]);
+
   useEffect(() => {
     if (emittedDefinitionRef.current === definitionSignature) {
       appliedDefinitionRef.current = definitionSignature;
@@ -4537,7 +4552,7 @@ export default function WorkflowCanvas({
             edgeTypes={canvasEdgeTypes}
             onMove={(_event, viewport) => flowViewportRef.current?.style.setProperty("--canvas-zoom", String(viewport.zoom))}
             onInit={setReactFlow}
-            onNodesChange={readOnly ? undefined : onNodesChange}
+            onNodesChange={readOnly ? undefined : onCanvasNodesChange}
             onEdgesChange={readOnly ? undefined : onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeSelectionClick}

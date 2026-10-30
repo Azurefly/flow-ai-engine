@@ -3,6 +3,15 @@ type LayoutNode = { id: string; position: { x: number; y: number }; measured?: {
 type LayoutEdge = { source: string; target: string; data?: Record<string, unknown> };
 export type CanvasPoint = { x: number; y: number };
 
+/** Keyboard position batches need one history entry; pointer gestures own their history. */
+export function canvasHasDiscreteMove(nodes: readonly LayoutNode[], changes: readonly { type: string; id?: string; position?: CanvasPoint; dragging?: boolean }[], pointerDragging = false) {
+  return !pointerDragging && changes.some(change => {
+    if (change.type !== "position" || !change.position || change.dragging) return false;
+    const node = nodes.find(n => n.id === change.id);
+    return node && (node.position.x !== change.position.x || node.position.y !== change.position.y);
+  });
+}
+
 export function canvasNodeRects(nodes: readonly LayoutNode[]): CanvasRect[] {
   return nodes.map(n => ({ id: n.id, ...n.position, width: n.measured?.width || 208, height: n.measured?.height || 88 }));
 }
