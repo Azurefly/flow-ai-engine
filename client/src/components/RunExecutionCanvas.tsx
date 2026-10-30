@@ -349,6 +349,7 @@ export default function RunExecutionCanvas({
               <Background color="var(--aiflow-canvas-dot)" gap={24} size={1} />
               <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => { void api.current?.fitView(overviewFit).then(() => fit()); }} />
               <MiniMap
+                style={{ width: 160, height: 80 }}
                 className="hidden lg:block"
                 pannable
                 zoomable
