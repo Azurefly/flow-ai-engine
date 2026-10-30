@@ -1532,10 +1532,8 @@ function OriginalObjectEditor({
         </label>
       ))}
       {Object.keys(extras).length > 0 && (
-        <div className="grid gap-1">
-          <span className={canvasMutedLabelClass}>
-            原版扩展字段
-          </span>
+        <details data-canvas-compat-fields="">
+            <summary>原版扩展字段</summary>
           <NestedStructuredValueEditor
             value={extras}
             disabled={disabled}
@@ -1553,7 +1551,7 @@ function OriginalObjectEditor({
               });
             }}
           />
-        </div>
+          </details>
       )}
     </div>
   );
@@ -1782,10 +1780,8 @@ function StructuredListRow({
           </label>
         ))}
         {Object.keys(extras).length > 0 && (
-          <div className="grid gap-1">
-            <span className={canvasMutedLabelClass}>
-              原版扩展字段
-            </span>
+          <details data-canvas-compat-fields="">
+            <summary>原版扩展字段</summary>
             <NestedStructuredValueEditor
               value={extras}
               disabled={disabled}
@@ -1803,7 +1799,7 @@ function StructuredListRow({
                 });
               }}
             />
-          </div>
+          </details>
         )}
       </div>
     );
@@ -4239,9 +4235,10 @@ export default function WorkflowCanvas({
                     size="sm"
                     aria-label="更多画布操作"
                     title="更多画布操作"
-                    data-canvas-icon="" className="ml-auto"
+                    data-canvas-icon="" data-canvas-more="" className="ml-auto"
                   >
                     <span className="sr-only">更多画布操作</span>
+                    <span aria-hidden="true">更多</span>
                     <span aria-hidden="true">▾</span>
                   </Button>
                 </DropdownMenuTrigger>
@@ -4668,6 +4665,7 @@ export default function WorkflowCanvas({
                     />
                   </label>
                   <div
+                    data-canvas-assessment={selectedConfigState}
                     className={`rounded-lg border px-3 py-2 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-aiflow-info-border bg-aiflow-info-surface" : "border-aiflow-success-border bg-aiflow-success-surface"}`}
                   >
                     <p className="text-xs font-semibold text-foreground">
