@@ -1,5 +1,10 @@
 import type { NodeHandle, Position } from "@xyflow/react";
 
+/** Dense overview names are too short to distinguish; begin with the active neighborhood. */
+export function initialRunViewNode(zoom: number, nodeId?: string) {
+  return zoom < 0.4 ? nodeId : undefined;
+}
+
 /** Read-only nodes have one input and one output at their measured vertical center. */
 export function runGraphHandles(size = { width: 224, height: 140 }): NodeHandle[] {
   return [

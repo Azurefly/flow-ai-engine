@@ -1,7 +1,14 @@
 import { expect, it } from "vitest";
 import { getViewportForBounds } from "@xyflow/react";
-import { runGraphFitOptions, runGraphHandles } from "./run-graph-viewport";
+import { initialRunViewNode, runGraphFitOptions, runGraphHandles } from "./run-graph-viewport";
 import { createRequire } from "node:module";
+it("密集长图先定位当前节点，短图保留全览，缺失标识不猜节点", () => {
+  const long = getViewportForBounds({ x: 0, y: 0, width: 4000, height: 400 }, 620, 420, 0.01, 1, 0.18);
+  const short = getViewportForBounds({ x: 0, y: 0, width: 550, height: 104 }, 620, 420, 0.01, 1, 0.18);
+  expect(initialRunViewNode(long.zoom, "end")).toBe("end");
+  expect(initialRunViewNode(short.zoom, "end")).toBeUndefined();
+  expect(initialRunViewNode(long.zoom)).toBeUndefined();
+});
 it("长流程中的具体办理节点居中并保持正文原始字号", () => {
   const options = runGraphFitOptions("shared");
   const bounds = { x: 6000, y: 200, width: 224, height: 140 };

@@ -1,3 +1,4 @@
+const surfaceClass1 = "aiflow-type-body text-muted-foreground";
 import "./run-execution-canvas.css";
 import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
 import { canvasNodeRects, readableCanvasLayout, canvasContextIds, canvasViewBounds, canvasHasCrowding } from "@shared/workflow-canvas-geometry";
@@ -29,24 +30,27 @@ import {
 import { RunPayloadDetails } from "./RunPayloadDetails";
 import { RunApprovalProgress } from "./RunApprovalProgress";
 import { approvalGroupsForRecord } from "@shared/run-approval-progress";
-import { runGraphFitOptions, runGraphHandles } from "@shared/run-graph-viewport";
+import { initialRunViewNode, runGraphFitOptions, runGraphHandles } from "@shared/run-graph-viewport";
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import { Button } from "./ui/button";
 type ViewerNode = Node<
   { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
   "runNode"
 >;
+// Tailwind keeps these complete tokens while equivalent status classes share one factory.
+// border-aiflow-success-border bg-aiflow-success-surface text-aiflow-success
+// border-aiflow-danger-border bg-aiflow-danger-surface text-aiflow-danger
+// border-aiflow-info-border bg-aiflow-info-surface text-aiflow-info
+// border-aiflow-warning-border bg-aiflow-warning-surface text-aiflow-warning
+const tone = (name: string) => `border-aiflow-${name}-border bg-aiflow-${name}-surface text-aiflow-${name}`;
 const inactiveColor = "border-border bg-muted text-muted-foreground";
 const selectClass = "h-11 min-w-0 rounded border border-border bg-card px-2";
 const colors: Record<string, string> = {
   idle: "border-border bg-card text-muted-foreground",
-  success:
-    "border-aiflow-success-border bg-aiflow-success-surface text-aiflow-success",
-  failed:
-    "border-aiflow-danger-border bg-aiflow-danger-surface text-aiflow-danger",
-  running: "border-aiflow-info-border bg-aiflow-info-surface text-aiflow-info",
-  waiting:
-    "border-aiflow-warning-border bg-aiflow-warning-surface text-aiflow-warning",
+  success: tone("success"),
+  failed: tone("danger"),
+  running: tone("info"),
+  waiting: tone("warning"),
   skipped: inactiveColor,
   stopped: inactiveColor,
 };
@@ -116,6 +120,7 @@ export default function RunExecutionCanvas({
   const [sizes, setSizes] = useState(new Map<string, { width: number; height: number }>());
   const [initialFit] = useState(() => runGraphFitOptions(focusRequest?.nodeId ?? (entryTaskId ? initialFocus.nodeId : undefined)));
   const overview = useRef(!entryTaskId && !focusRequest);
+  const firstView = useRef(true);
   const viewport = useRef<HTMLDivElement | null>(null);
   const viewNodes = useRef<ViewerNode[]>([]);
   const viewEdges = useRef<Edge[]>([]);
@@ -124,7 +129,11 @@ export default function RunExecutionCanvas({
     const region = viewport.current;
     if (!api.current || !region) return;
     const rects = canvasNodeRects(viewNodes.current);
-    void api.current.setViewport(getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18), { duration: 0 });
+    const next = getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18);
+    const initial = firstView.current && !nodeId ? initialRunViewNode(next.zoom, focusId.current) : undefined;
+    firstView.current = false;
+    if (initial) { fit(initial); return; }
+    void api.current.setViewport(next, { duration: 0 });
   };
   const current = graph.nodes.filter(n =>
     ["running", "waiting", "failed"].includes(n.status)
@@ -268,10 +277,10 @@ export default function RunExecutionCanvas({
           </span>
         ))}
         <span>{run.flowType === "data" ? "灰线：快照依赖；节点颜色：执行状态。" : "灰线：定义；蓝线：已确认。"}</span>
-        <span>点击节点放大阅读，查看全图浏览整体关系。</span>
+        <span>节点视图包含上下游，全图浏览完整依赖。</span>
       </div>
       </details>
-      {!layout && canvasHasCrowding(nodes) && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">原始坐标存在重叠；切换自动排布可查看完整路径，快照不会被修改。</p>}
+      {!layout && canvasHasCrowding(nodes) && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">原始布局重叠，请切换自动排布（不修改快照）。</p>}
       {graph.warning && (
         <p
           role="status"
@@ -411,14 +420,14 @@ export default function RunExecutionCanvas({
                 </label>
               )}
               {!record ? (
-                <p className="aiflow-type-body text-muted-foreground">
+                <p className={surfaceClass1}>
                   {active.records.length
                     ? "请选择执行批次后查看本次办理。"
                     : "此节点尚未执行。"}
                 </p>
               ) : (
                 <>
-                  <p className="aiflow-type-body text-muted-foreground">
+                  <p className={surfaceClass1}>
                     本次：{runNodeLabels[record.status] ?? record.status} · 耗时{" "}
                     {record.durationMs ?? "—"} ms
                   </p>
