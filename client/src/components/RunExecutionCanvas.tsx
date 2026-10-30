@@ -1,3 +1,6 @@
+import "./run-execution-canvas.css";
+import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
+import { canvasNodeRects, readableCanvasLayout, canvasContextIds, canvasViewBounds, canvasHasCrowding } from "@shared/workflow-canvas-geometry";
 import { useMemo, useState, useRef, useEffect } from "react";
 import {
   ReactFlow,
@@ -6,7 +9,8 @@ import {
   MiniMap,
   Handle,
   Position,
-  MarkerType,
+  getViewportForBounds,
+  useStore,
   useNodesInitialized,
   type Node,
   type Edge,
@@ -48,6 +52,7 @@ const colors: Record<string, string> = {
 };
 function RunNode({ data }: NodeProps<ViewerNode>) {
   const item = data.item as RunRecord;
+  const compact = useStore(state => state.transform[2] < 0.72);
   return (
     <>
       <Handle type="target" position={Position.Left} isConnectable={false} style={{ opacity: 0 }} />
@@ -55,15 +60,18 @@ function RunNode({ data }: NodeProps<ViewerNode>) {
         type="button"
         onClick={() => (data.choose as (id: string) => void)(item.id)}
         aria-label={`${item.name}，${item.status === "waiting" && item.type === "operate" ? "待办理" : runNodeLabels[item.status]}，${item.records.length}次执行`}
-        className={`w-56 rounded-lg border-2 p-3 text-left shadow-sm ${colors[item.status]} ${data.selected ? "ring-2 ring-blue-500 ring-offset-2" : ""}`}
+        data-run-node=""
+        data-compact={compact ? "true" : undefined}
+        title={item.name}
+        className={`run-graph-node ${colors[item.status]} ${data.selected ? "is-selected" : ""}`}
       >
-        <span className="block break-words aiflow-type-body font-semibold">
+        <span className="run-graph-node-title">
           {item.name}
         </span>
-        <span className="mt-2 block aiflow-type-body">
-          {runNodeLabels[item.status]}
+        <span data-run-node-status={item.status} className={`run-graph-node-status ${colors[item.status]}`} title={runNodeLabels[item.status]}>
+          <span>{runNodeLabels[item.status]}</span>
         </span>
-        <span className="mt-1 block aiflow-type-meta">
+        <span className="run-graph-node-count">
           {item.records.length
             ? `${item.records.length} 次执行${item.activeCount ? ` · ${item.activeCount} 处等待` : ""}`
             : "尚未到达"}
@@ -74,6 +82,7 @@ function RunNode({ data }: NodeProps<ViewerNode>) {
   );
 }
 const nodeTypes = { runNode: RunNode };
+const edgeTypes = { runEdge: CanvasConnectionEdge };
 const overviewFit = runGraphFitOptions();
 function ViewportMeasurement({ onReady }: { onReady: (ready: boolean) => void }) {
   const initialized = useNodesInitialized();
@@ -105,11 +114,17 @@ export default function RunExecutionCanvas({
   const [ready, setReady] = useState(false);
   const [measured, setMeasured] = useState(false);
   const [sizes, setSizes] = useState(new Map<string, { width: number; height: number }>());
-  const [initialFit] = useState(() => runGraphFitOptions(initialFocus.nodeId));
-  const overview = useRef(false);
+  const [initialFit] = useState(() => runGraphFitOptions(focusRequest?.nodeId ?? (entryTaskId ? initialFocus.nodeId : undefined)));
+  const overview = useRef(!entryTaskId && !focusRequest);
+  const viewport = useRef<HTMLDivElement | null>(null);
+  const viewNodes = useRef<ViewerNode[]>([]);
+  const viewEdges = useRef<Edge[]>([]);
   const fit = (nodeId?: string) => {
     overview.current = !nodeId;
-    void api.current?.fitView(runGraphFitOptions(nodeId));
+    const region = viewport.current;
+    if (!api.current || !region) return;
+    const rects = canvasNodeRects(viewNodes.current);
+    void api.current.setViewport(getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18), { duration: 0 });
   };
   const current = graph.nodes.filter(n =>
     ["running", "waiting", "failed"].includes(n.status)
@@ -127,7 +142,7 @@ export default function RunExecutionCanvas({
     setSelected(id);
     setOccurrence(chosenRecords.current.get(id) ?? "");
   };
-  const nodes: ViewerNode[] = graph.nodes.map(n => ({
+  const rawNodes: ViewerNode[] = graph.nodes.map(n => ({
     id: n.id,
     type: "runNode",
     position: layout ? n.layout : n.position,
@@ -135,28 +150,24 @@ export default function RunExecutionCanvas({
     draggable: false,
     connectable: false,
     measured: sizes.get(n.id),
-    handles: runGraphHandles(sizes.get(n.id)),
+    handles: runGraphHandles(sizes.get(n.id) ?? { width: 208, height: 104 }),
   }));
-  const edges: Edge[] = graph.edges.map(e => ({
+  // UX: measured reading geometry is shared with the designer; original snapshot stays intact.
+  const nodes = layout ? readableCanvasLayout(rawNodes, graph.edges.map(e => ({ source: String(e.source), target: String(e.target), data: { loop: e.returning } }))) : rawNodes;
+  const rects = canvasNodeRects(nodes);
+  viewNodes.current = nodes;
+  const edges: Edge[] = graph.edges.map((e, canvasLane) => ({
     id: e.id,
     source: e.source,
     target: e.target,
-    type: "smoothstep",
+    type: "runEdge",
+    data: { canvasRects: rects, canvasLane, loop: e.returning, canvasEmphasis: Boolean(e.confirmed), canvasStroke: e.confirmed ? "var(--aiflow-canvas-selected)" : undefined },
     label: e.label
       ? `${e.returning ? "返回 · " : ""}${e.label}${e.confirmed ? ` · 已确认${e.confirmed}次` : ""}`
       : undefined,
-    style: {
-      stroke: e.confirmed ? "#2563eb" : "#94a3b8",
-      strokeWidth: e.confirmed ? 3 : 1.5,
-      strokeDasharray: e.returning ? "6 4" : undefined,
-    },
-    markerEnd: {
-      type: MarkerType.ArrowClosed,
-      color: e.confirmed ? "#2563eb" : "#94a3b8",
-    },
-    labelStyle: { fontSize: 12 },
-    interactionWidth: 14,
+
   }));
+  viewEdges.current = edges;
   const nodeActivities = (run.taskActivities ?? []).filter(
     (t: RunRecord) => t.nodeId === active?.id
   );
@@ -172,8 +183,15 @@ export default function RunExecutionCanvas({
   focusId.current = active?.id;
   useEffect(() => {
     if (!ready || !measured) return;
-    void api.current?.fitView(runGraphFitOptions(overview.current ? undefined : focusId.current));
+    fit(overview.current ? undefined : focusId.current);
   }, [layout, ready, measured, expanded]);
+  useEffect(() => {
+    const region = viewport.current;
+    if (!region || !ready || !measured || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => fit(overview.current ? undefined : focusId.current));
+    observer.observe(region);
+    return () => observer.disconnect();
+  }, [ready, measured]);
   const root = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (focusRequest) {
@@ -192,9 +210,10 @@ export default function RunExecutionCanvas({
     <section
       ref={root}
       data-run-execution-graph
-      className="min-w-0 scroll-mt-20 rounded-xl border border-border bg-card"
+      data-run-canvas-design=""
+      className="run-graph"
     >
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-4">
+      <header className="run-graph-header">
         <div>
           <h3 className="aiflow-type-section-title font-semibold text-foreground">
             实例流程图
@@ -239,7 +258,9 @@ export default function RunExecutionCanvas({
           </Button>
         </div>
       </header>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 aiflow-type-meta text-muted-foreground">
+      <details data-run-legend="">
+        <summary>图例与阅读说明</summary>
+      <div className="run-graph-legend-items">
         {Object.entries(runNodeLabels).map(([key, label]) => (
           <span key={key} className="inline-flex items-center gap-1">
             <i className={`h-3 w-3 rounded border ${colors[key]}`} />
@@ -249,6 +270,8 @@ export default function RunExecutionCanvas({
         <span>{run.flowType === "data" ? "灰线：快照依赖；节点颜色：执行状态。" : "灰线：定义；蓝线：已确认。"}</span>
         <span>点击节点放大阅读，查看全图浏览整体关系。</span>
       </div>
+      </details>
+      {!layout && canvasHasCrowding(nodes) && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">原始坐标存在重叠；切换自动排布可查看完整路径，快照不会被修改。</p>}
       {graph.warning && (
         <p
           role="status"
@@ -265,11 +288,9 @@ export default function RunExecutionCanvas({
           {initialFocus.warning}
         </p>
       )}
-      <div className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div data-run-canvas-body="" className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_320px]" style={{height: expanded ? "min(78vh,900px)" : "clamp(360px,58vh,640px)"}}>
         <div
-          style={{
-            height: expanded ? "min(78vh,900px)" : "clamp(360px,58vh,640px)",
-          }}
+          ref={viewport}
           className="min-w-0 border-y border-border bg-muted/30 lg:border-r"
           role="region"
           aria-label="实例只读流程画布"
@@ -280,6 +301,8 @@ export default function RunExecutionCanvas({
               nodes={nodes}
               edges={edges}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
+              onMove={(_event, value) => viewport.current?.style.setProperty("--canvas-zoom", String(value.zoom))}
               onInit={instance => {
                 api.current = instance;
                 setReady(true);
@@ -314,8 +337,8 @@ export default function RunExecutionCanvas({
               proOptions={{ hideAttribution: true }}
             >
               <ViewportMeasurement onReady={setMeasured} />
-              <Background gap={22} />
-              <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => { overview.current = true; }} />
+              <Background color="var(--aiflow-canvas-dot)" gap={24} size={1} />
+              <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => { void api.current?.fitView(overviewFit).then(() => fit()); }} />
               <MiniMap
                 className="hidden lg:block"
                 pannable

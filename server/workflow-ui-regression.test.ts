@@ -178,7 +178,7 @@ const runModalSource = source(
   "../client/src/components/WorkflowTestRunModal.tsx"
 );
 const canvasDesignStyles = source("../client/src/components/workflow-canvas-design.css");
-const canvasGeometrySource = source("../client/src/components/workflow-canvas-geometry.ts");
+const canvasGeometrySource = source("../shared/workflow-canvas-geometry.ts");
 const canvasSource = source("../client/src/components/WorkflowCanvas.tsx");
 const nodeContractSource = source("../shared/workflow-node-contract.ts");
 const flowProfileSource = source("../shared/flow-profile-contract.ts");
@@ -376,7 +376,7 @@ describe("工作台只读任务运行详情入口", () => {
 describe("流程设计器界面回归约束", () => {
   it("实例图初始缩放配置稳定，记录定位与展开画布保持阅读意图", () => {
     const graph = source("../client/src/components/RunExecutionCanvas.tsx");
-    expect(graph).toContain("useState(() => runGraphFitOptions(initialFocus.nodeId))");
+    expect(graph).toContain("useState(() => runGraphFitOptions(focusRequest?.nodeId ?? (entryTaskId ? initialFocus.nodeId : undefined)))");
     expect(graph).toContain("fitViewOptions={initialFit}");
     expect(graph).toContain("fitViewOptions={overviewFit}");
     expect(graph).toContain("fit(focusRequest.nodeId)");
@@ -386,7 +386,7 @@ describe("流程设计器界面回归约束", () => {
     expect(graph).toContain("<ViewportMeasurement onReady={setMeasured} />");
     expect(graph).toContain("onlyRenderVisibleElements={measured}");
     expect(graph).toContain("measured: sizes.get(n.id)");
-    expect(graph).toContain("handles: runGraphHandles(sizes.get(n.id))");
+    expect(graph).toContain("handles: runGraphHandles(sizes.get(n.id) ?? { width: 208, height: 104 })");
     expect(graph).toContain('change.type === "dimensions" && change.dimensions');
     expect(graph).toContain("if (!ready || !measured) return");
     expect(graph).not.toContain("const timer = setTimeout");
@@ -4229,5 +4229,5 @@ it("阅读投影隔离于持久化，拖动和整理仍可连同显示模式一�
   const edge = source("../client/src/components/CanvasConnectionEdge.tsx");
   expect(edge).toContain("interactionWidth={24 / zoom}");
   expect(edge).toContain('markerWidth={9 / zoom}');
-  expect(edge).toContain("strokeWidth: (selected ? 3 : 2) / zoom");
+  expect(edge).toContain("strokeWidth: (emphasized ? 3 : 2) / zoom");
 });

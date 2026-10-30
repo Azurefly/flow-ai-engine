@@ -352,6 +352,7 @@ describe("实例执行画布投影", () => {
       run({ definitionSnapshotJson: { nodes, edges } })
     );
     expect(graph.nodes).toHaveLength(2000);
-    expect(graph.nodes.at(-1)?.layout.x).toBe(1999 * 310);
+    expect(graph.nodes.at(-1)!.layout.x).toBeLessThan(2000 * 500);
+    for (let i = 1; i < graph.nodes.length; i++) expect(graph.nodes[i].layout.x - graph.nodes[i - 1].layout.x).toBeGreaterThanOrEqual(208 + 96);
   });
 });

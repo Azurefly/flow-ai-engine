@@ -1,0 +1,67 @@
+/* Read-only instance geometry shares the designer's visual foundations. */
+[data-run-canvas-design] {
+  --aiflow-canvas-edge: #71839b;
+  --aiflow-canvas-selected: #315efb;
+  --aiflow-canvas-return: #ad771c;
+  --aiflow-canvas-dot: #d9e0ea;
+  --canvas-zoom: 1;
+  position: relative;
+  min-width: 0;
+  scroll-margin-top: 80px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 10px;
+  box-shadow: none;
+}
+.dark [data-run-canvas-design] {
+  --aiflow-canvas-edge: #a2b1c7;
+  --aiflow-canvas-selected: #8aa9ff;
+  --aiflow-canvas-return: #f1c175;
+  --aiflow-canvas-dot: #344157;
+}
+[data-run-canvas-design] > header {display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: center;}
+[data-run-canvas-design] > header p {font-size: 13px !important; line-height: 20px !important;}
+[data-run-canvas-design] > header button {height: 34px; min-height: 34px; border-radius: 6px;}
+[data-run-canvas-design] [data-run-legend] {position: relative; padding: 8px 16px;}
+[data-run-canvas-design] [data-run-legend] > summary {width: fit-content; cursor: pointer; font-size: 13px; color: var(--muted-foreground);}
+[data-run-canvas-design] [data-run-legend] > div {position: absolute; top: 100%; left: 16px; z-index: 10; width: min(640px, calc(100vw - 80px)); border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: 0 4px 12px #0f172a12;}
+[data-run-canvas-design] [data-run-canvas-body] {min-height: 0; align-items: stretch;}
+[data-run-canvas-design] [aria-label="实例只读流程画布"] {position: relative; min-height: 0; height: 100%; background: var(--background);}
+[data-run-canvas-design] .run-graph-node {
+  position: relative;
+  display: block;
+  width: 208px;
+  height: 104px;
+  overflow: visible;
+  border: 1px solid var(--border) !important;
+  border-radius: 10px;
+  padding: 12px 14px;
+  text-align: left;
+  background: var(--card) !important;
+  color: var(--foreground) !important;
+  box-shadow: 0 2px 5px #0f172a08;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+[data-run-canvas-design] .run-graph-node:hover {border-color: var(--aiflow-canvas-edge) !important; box-shadow: 0 4px 12px #0f172a10;}
+[data-run-canvas-design] .run-graph-node.is-selected,
+[data-run-canvas-design] .run-graph-node:focus-visible {outline: 2px solid var(--aiflow-canvas-selected); outline-offset: 1px;}
+[data-run-canvas-design] .run-graph-node-title {display: block; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: max(14px, calc(12px / var(--canvas-zoom))) !important; line-height: 1.4 !important;}
+[data-run-canvas-design] .run-graph-node-status {display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 2px 6px; border: 1px solid; border-radius: 4px; font-size: 12px; line-height: 18px;}
+[data-run-canvas-design] .run-graph-node-status::before {content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor;}
+[data-run-canvas-design] .run-graph-node-count {display: block; margin-top: 4px; font-size: 12px !important; line-height: 18px !important; color: var(--muted-foreground);}
+[data-run-canvas-design] .run-graph-node[data-compact] {display: flex; align-items: center;}
+[data-run-canvas-design] .run-graph-node[data-compact] .run-graph-node-title {width: 100%; padding-right: calc(9px / var(--canvas-zoom));}
+[data-run-canvas-design] .run-graph-node[data-compact] .run-graph-node-count,
+[data-run-canvas-design] .run-graph-node[data-compact] .run-graph-node-status > span {display: none;}
+[data-run-canvas-design] .run-graph-node[data-compact] .run-graph-node-status {position: absolute; right: 8px; top: 50%; padding: 0; margin: 0; border: 0; background: transparent; transform: translateY(-50%);}
+[data-run-canvas-design] .run-graph-node[data-compact] .run-graph-node-status::before {width: calc(5px / var(--canvas-zoom)); height: calc(5px / var(--canvas-zoom));}
+[data-run-canvas-design] [data-run-node-details] {min-height: 0; height: 100%; padding: 12px 16px; overscroll-behavior: contain; scrollbar-gutter: stable;}
+@media (max-width: 1023px) {
+  [data-run-canvas-design] [data-run-canvas-body] {height: auto !important;}
+  [data-run-canvas-design] [aria-label="实例只读流程画布"] {height: 420px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-run-canvas-design] .run-graph-node {transition: none;}
+}
+
+[data-run-canvas-design] .run-graph-legend-items {display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; font-size: 13px; line-height: 20px; color: var(--muted-foreground);}

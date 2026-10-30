@@ -2,7 +2,7 @@
 const surfaceClass1 = "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
 import "./workflow-canvas-design.css";
 import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
-import { canvasNodeRects, canvasHasDiscreteMove, canvasHasCrowding, readableCanvasLayout, canvasContextIds, canvasConnectionPoints, canvasBounds, roundedCanvasPath } from "./workflow-canvas-geometry";
+import { canvasNodeRects, canvasHasDiscreteMove, canvasHasCrowding, readableCanvasLayout, canvasContextIds, canvasConnectionPoints, canvasBounds, canvasViewBounds, roundedCanvasPath } from "./workflow-canvas-geometry";
 import { availableWorkflowReuseResources } from "@shared/workflow-reuse-resources";
 import { readCanvasSourceHandles as sourceHandles } from "./workflow-canvas-handles";
 import {
@@ -2349,14 +2349,8 @@ export default function WorkflowCanvas({
     if (!reactFlow || !flowViewportRef.current) return Promise.resolve(false);
     const allRects = canvasNodeRects(displayedNodesRef.current), currentEdges = latestEdgesRef.current;
     const ids = edgeId ? new Set(currentEdges.filter(e => e.id === edgeId).flatMap(e => [e.source, e.target])) : canvasContextIds(allRects, currentEdges, nodeId);
-    const rects = allRects.filter(n => ids.has(n.id));
-    const points = currentEdges.flatMap((edge, lane) => {
-      if (!ids.has(edge.source) || !ids.has(edge.target)) return [];
-      const a = allRects.find(n => n.id === edge.source), b = allRects.find(n => n.id === edge.target);
-      return a && b ? canvasConnectionPoints({ x: a.x + a.width + 4, y: a.y + a.height / 2 }, { x: b.x - 4, y: b.y + b.height / 2 }, allRects, edge.source, edge.target, lane) : [];
-    });
     const viewport = flowViewportRef.current;
-    return reactFlow.setViewport(getViewportForBounds(canvasBounds(rects, points), viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
+    return reactFlow.setViewport(getViewportForBounds(canvasViewBounds(allRects, currentEdges, ids), viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
   }, [reactFlow, prefersReducedMotion]);
 
   const definitionSignature = useMemo(

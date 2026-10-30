@@ -1,3 +1,4 @@
+import { readableCanvasLayout } from "./workflow-canvas-geometry";
 export type RunRecord = Record<string, any>;
 export type RunGraphFocus = {
   nodeId?: string;
@@ -252,29 +253,9 @@ export function projectRunGraph(run: RunRecord) {
       }
     }
   }
-  const indegree = new Map(nodes.map(n => [n.id, 0])),
-    rank = new Map(nodes.map(n => [n.id, 0]));
-  for (const e of edges)
-    if (!e.returning) indegree.set(e.target, indegree.get(e.target)! + 1);
-  const queue = nodes.filter(n => !indegree.get(n.id)).map(n => n.id);
-  for (let i = 0; i < queue.length; i++) {
-    for (const e of outgoing.get(queue[i]) ?? []) {
-      if (e.returning) continue;
-      rank.set(
-        e.target,
-        Math.max(rank.get(e.target)!, rank.get(e.source)! + 1)
-      );
-      indegree.set(e.target, indegree.get(e.target)! - 1);
-      if (!indegree.get(e.target)) queue.push(e.target);
-    }
-  }
-  const rows = new Map<number, number>();
-  for (const n of nodes) {
-    const col = rank.get(n.id) ?? 0;
-    const row = rows.get(col) ?? 0;
-    rows.set(col, row + 1);
-    n.layout = { x: col * 310, y: row * 150 };
-  }
+  const positions = new Map(readableCanvasLayout(nodes.map(n => ({ id: n.id, position: n.position, measured: { width: 208, height: 104 } })), edges.map(e => ({ source: String(e.source), target: String(e.target), data: { loop: e.returning } }))).map(n => [n.id, n.position]));
+  for (const node of nodes) node.layout = positions.get(node.id)!;
+
   return {
     nodes,
     edges,
