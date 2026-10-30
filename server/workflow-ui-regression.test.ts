@@ -3299,6 +3299,10 @@ describe("流程设计器界面回归约束", () => {
       "grid h-auto w-full min-w-0 grid-cols-3"
     );
     expect(canvasSource).toContain("grid-cols-[repeat(auto-fit,minmax(100px,1fr))]");
+    const inspectorTabsStyle = canvasDesignStyles.match(/\[role="tablist"\]\s*\{([^}]*)\}/)?.[1];
+    expect(inspectorTabsStyle).toContain("display: grid");
+    expect(inspectorTabsStyle).not.toMatch(/display: flex|overflow-x: auto/);
+    expect(canvasDesignStyles.match(/\[role="tab"\]\s*\{([^}]*)\}/)?.[1]).toContain("min-width: 0");
     expect(canvasSource).toContain("ref={groupNavigation.tabsRef}");
     expect(canvasSource).toContain("ref={groupNavigation.panelRef}");
     expect(canvasSource).toContain("ref={groupNavigation.contentRef}");
