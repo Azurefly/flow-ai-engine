@@ -1,3 +1,13 @@
+// Shared presentation strings keep equivalent controls consistent without changing handlers.
+const surfaceClass1 = "aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10";
+const surfaceClass2 = "aiflow-type-meta font-medium text-muted-foreground";
+const surfaceClass3 = "absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg";
+const surfaceClass4 = "flex h-11 items-center gap-2 rounded px-2.5 text-left text-sm text-foreground hover:bg-muted min-[1024px]:h-10";
+const surfaceClass5 = "p-6 text-center text-sm text-muted-foreground";
+const surfaceClass6 = "aiflow-type-control inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-md border border-border px-3 text-foreground hover:bg-muted";
+const surfaceClass7 = "flex flex-wrap items-center justify-between gap-3";
+const surfaceClass8 = "aiflow-type-body text-muted-foreground";
+const surfaceClass9 = "rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground";
 import { visibleOrganizationIds } from "../../../shared/organization-tree-visibility";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import {
@@ -320,7 +330,7 @@ export default function OrganizationManagementPage({
               type="button"
               aria-label={`编辑岗位：${memberIdentity}`}
               disabled={busy}
-              className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10"
+              className={surfaceClass1}
               onClick={() =>
                 openDialog({ kind: "member", unit: memberUnit(member), member })
               }
@@ -331,7 +341,7 @@ export default function OrganizationManagementPage({
             <button
               type="button"
               aria-label={`迁移成员：${memberIdentity}`}
-              className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10"
+              className={surfaceClass1}
               disabled={busy}
               onClick={() => openMoveDialog(member)}
             >
@@ -342,7 +352,7 @@ export default function OrganizationManagementPage({
               <button
                 type="button"
                 aria-label={`设为主部门：${memberIdentity}`}
-                className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10"
+                className={surfaceClass1}
                 disabled={busy}
                 onClick={() => setMemberAsPrimary(member)}
               >
@@ -469,7 +479,7 @@ export default function OrganizationManagementPage({
               返回账号与角色
             </button>
             )}
-            <p className="aiflow-type-meta font-medium text-muted-foreground">
+            <p className={surfaceClass2}>
               人员与权限
             </p>
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
@@ -487,10 +497,10 @@ export default function OrganizationManagementPage({
               <Plus size={15} />
               新增部门 <ChevronDown size={14} />
             </summary>
-            <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg">
+            <div className={surfaceClass3}>
               <button
                 type="button"
-                className="flex h-11 items-center gap-2 rounded px-2.5 text-left text-sm text-foreground hover:bg-muted min-[1024px]:h-10"
+                className={surfaceClass4}
                 onClick={() => openUnitAction("root")}
               >
                 <Plus size={14} />
@@ -500,7 +510,7 @@ export default function OrganizationManagementPage({
                 <>
                   <button
                     type="button"
-                    className="flex h-11 items-center gap-2 rounded px-2.5 text-left text-sm text-foreground hover:bg-muted min-[1024px]:h-10"
+                    className={surfaceClass4}
                     onClick={() => openUnitAction("sibling")}
                   >
                     <Plus size={14} />
@@ -508,7 +518,7 @@ export default function OrganizationManagementPage({
                   </button>
                   <button
                     type="button"
-                    className="flex h-11 items-center gap-2 rounded px-2.5 text-left text-sm text-foreground hover:bg-muted min-[1024px]:h-10"
+                    className={surfaceClass4}
                     onClick={() => openUnitAction("child")}
                   >
                     <Plus size={14} />
@@ -589,7 +599,7 @@ export default function OrganizationManagementPage({
                   </p>
                 )}
               {!organization.isLoading && !units.length && (
-                <div className="p-6 text-center text-sm text-muted-foreground">
+                <div className={surfaceClass5}>
                   尚未创建部门，请点击“新增根部门”。
                 </div>
               )}
@@ -597,7 +607,7 @@ export default function OrganizationManagementPage({
                 Boolean(query.trim()) &&
                 units.length > 0 &&
                 visibleIds?.size === 0 && (
-                  <div className="p-6 text-center text-sm text-muted-foreground">
+                  <div className={surfaceClass5}>
                     没有匹配的机构，请更换关键词。
                   </div>
                 )}
@@ -665,13 +675,13 @@ export default function OrganizationManagementPage({
                     <details ref={selectedUnitActionsRef} className="relative">
                       <summary
                         aria-label="更多部门操作"
-                        className="aiflow-type-control inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-md border border-border px-3 text-foreground hover:bg-muted"
+                        className={surfaceClass6}
                       >
                         <MoreHorizontal size={15} />
                         更多操作
                         <ChevronDown size={14} />
                       </summary>
-                      <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg">
+                      <div className={surfaceClass3}>
                         <button
                           type="button"
                           className="aiflow-type-control flex min-h-11 items-center gap-2 rounded px-2.5 text-left text-foreground hover:bg-muted"
@@ -834,8 +844,8 @@ export default function OrganizationManagementPage({
                 )}
                 {tab === "members" && (
                   <div className="mt-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="aiflow-type-body text-muted-foreground">
+                    <div className={surfaceClass7}>
+                      <p className={surfaceClass8}>
                         成员可跨部门任职；主部门用于确定直属上级。
                       </p>
                       <div className="flex flex-wrap gap-2">
@@ -971,7 +981,7 @@ export default function OrganizationManagementPage({
                     </div>
                     {memberPageInfo && memberPageInfo.total > 0 && (
                       <div className="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="aiflow-type-body text-muted-foreground">
+                        <p className={surfaceClass8}>
                           显示 {memberPageInfo.from}–{memberPageInfo.to} 项，共{" "}
                           {memberPageInfo.total} 位成员
                         </p>
@@ -1024,8 +1034,8 @@ export default function OrganizationManagementPage({
                 )}
                 {tab === "permissions" && (
                   <div className="mt-5">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="aiflow-type-body text-muted-foreground">
+                    <div className={surfaceClass7}>
+                      <p className={surfaceClass8}>
                         绑定后，部门启用成员按有效期实时继承权限；可选择是否覆盖子部门成员。
                       </p>
                       <Button
@@ -1069,7 +1079,7 @@ export default function OrganizationManagementPage({
                           <details className="relative self-start">
                             <summary
                               aria-label={`权限组 ${binding.roleName} 的操作`}
-                              className="aiflow-type-control inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-md border border-border px-3 text-foreground hover:bg-muted"
+                              className={surfaceClass6}
                             >
                               <MoreHorizontal size={15} />
                               更多操作
@@ -1126,7 +1136,7 @@ export default function OrganizationManagementPage({
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="aiflow-type-body text-muted-foreground">
+            <p className={surfaceClass8}>
               {roleMember?.username} · 系统级角色 · 每 30 秒更新
             </p>
             <Button
@@ -1156,14 +1166,14 @@ export default function OrganizationManagementPage({
               {liveRoleAccount?.status === "disabled" && (
                 <p
                   role="alert"
-                  className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground"
+                  className={surfaceClass9}
                 >
                   账号已停用：下方保留角色配置来源，该账号不能登录或执行操作。
                 </p>
               )}
               {liveRoleAccount?.status === "active" &&
                 liveRoleAccount?.role === "admin" && (
-                  <p className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+                  <p className={surfaceClass9}>
                     系统管理员账号拥有全部系统权限，下方展示额外配置的角色来源。
                   </p>
                 )}
@@ -1230,7 +1240,7 @@ export default function OrganizationManagementPage({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg border border-border p-3">
-      <p className="aiflow-type-meta font-medium text-muted-foreground">
+      <p className={surfaceClass2}>
         {label}
       </p>
       <p className="aiflow-type-body mt-1 break-words font-medium text-foreground">

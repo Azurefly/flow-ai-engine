@@ -1,3 +1,12 @@
+// Shared presentation strings keep equivalent controls consistent without changing handlers.
+const surfaceClass1 = "h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm";
+const surfaceClass2 = "aiflow-type-body mt-1 text-muted-foreground";
+const surfaceClass3 = "bg-muted text-sm font-medium text-muted-foreground";
+const surfaceClass4 = "flex flex-wrap items-center justify-between gap-2";
+const surfaceClass5 = "mt-1 text-sm leading-5 text-muted-foreground";
+const surfaceClass6 = "aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground";
+const surfaceClass7 = "aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0";
+const surfaceClass8 = "aiflow-type-control grid gap-1 font-medium text-muted-foreground";
 import { dataflowGraphRun } from "@shared/dataflow-run-view";
 import { DataflowResultTable } from "./DataflowResultTable";
 import { canProbeDataSource, dataSourceCapability, dataSourceReadiness } from "@shared/data-source-capabilities";
@@ -800,7 +809,7 @@ export default function DataResourceCenter({
               </ResourceField>
               <ResourceField label="函数类型">
                 <select
-                  className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
+                  className={surfaceClass1}
                   value={udfForm.udfType}
                   onChange={event =>
                     setUdfForm({
@@ -1002,7 +1011,7 @@ export default function DataResourceCenter({
               </ResourceField>
               <ResourceField label="插件类型">
                 <select
-                  className="h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm"
+                  className={surfaceClass1}
                   value={pluginForm.pluginType}
                   onChange={event =>
                     setPluginForm({
@@ -1145,7 +1154,7 @@ function DataflowOperationList({
     >
       <div className="border-b border-border p-4">
         <h2 className={resourceTitleClassName}>运行记录与审计</h2>
-        <p className="aiflow-type-body mt-1 text-muted-foreground">
+        <p className={surfaceClass2}>
           {projectName} · 查询全部历史，每页10条
         </p>
         <form
@@ -1256,7 +1265,7 @@ function DataflowOperationList({
             <col className="w-20" />
             <col className="w-28" />
           </colgroup>
-          <thead className="bg-muted text-sm font-medium text-muted-foreground">
+          <thead className={surfaceClass3}>
             <tr>
               {["流程 / 实例", "发起人", "开始时间 / 结束时间", "状态", "操作"].map(
                 label => (
@@ -1344,7 +1353,7 @@ function DataflowOperationList({
       </nav>
       {expandedRun && (
         <div className="border-t border-border bg-muted p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className={surfaceClass4}>
             <div>
               <p className="text-sm font-semibold text-foreground">
                 运行详情 · {String(expandedRun.id).slice(0, 8)}
@@ -1555,7 +1564,7 @@ function ResourceForm({
     <div className="grid h-fit min-w-0 gap-3 rounded-lg border border-aiflow-info-border bg-card p-4 shadow-sm">
       <div>
         <p className="font-semibold text-foreground">{title}</p>
-        <p className="aiflow-type-body mt-1 text-muted-foreground">
+        <p className={surfaceClass2}>
           {description}
         </p>
       </div>
@@ -1774,7 +1783,7 @@ function DataflowWorkspace({
           <h2 className="truncate text-base font-semibold text-foreground">
             {projectName} · 数据流
           </h2>
-          <p className="mt-1 text-sm leading-5 text-muted-foreground">
+          <p className={surfaceClass5}>
             在流程设计中心编辑定义；在此查看运行、资源引用和调度状态。
           </p>
         </div>
@@ -1873,7 +1882,7 @@ function DataflowWorkspace({
             <p className="text-sm font-medium text-foreground">
               尚未创建数据流程
             </p>
-            <p className="mt-1 text-sm leading-5 text-muted-foreground">
+            <p className={surfaceClass5}>
               请先在流程设计中心创建并发布数据流；发布前不会显示运行和调度操作。
             </p>
           </div>
@@ -1949,7 +1958,7 @@ function DataflowWorkspace({
                       {assetPreview.map((asset: any) => (
                         <li
                           key={asset.id}
-                          className="aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground"
+                          className={surfaceClass6}
                         >
                           {asset.name} · {asset.assetType}
                         </li>
@@ -1968,7 +1977,7 @@ function DataflowWorkspace({
                     )}
                     <button
                       type="button"
-                      className="aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0"
+                      className={surfaceClass7}
                       onClick={() => onOpenResourceTab("assets")}
                     >
                       查看资源目录
@@ -1982,7 +1991,7 @@ function DataflowWorkspace({
                       {udfPreview.map((udf: any) => (
                         <li
                           key={udf.id}
-                          className="aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground"
+                          className={surfaceClass6}
                         >
                           {udf.name} ·{" "}
                           {dataFunctionTypeLabel(udf.udfType, udf.artifactRef)}
@@ -2002,7 +2011,7 @@ function DataflowWorkspace({
                     )}
                     <button
                       type="button"
-                      className="aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0"
+                      className={surfaceClass7}
                       onClick={() => onOpenResourceTab("udfs")}
                     >
                       查看函数目录
@@ -2023,7 +2032,7 @@ function DataflowWorkspace({
           {canEdit && (
             <section className={resourcePanelClassName}>
               <h3 className={resourceTitleClassName}>配置调度计划</h3>
-              <p className="aiflow-type-body mt-1 text-muted-foreground">
+              <p className={surfaceClass2}>
                 使用六段 UTC 表达式：秒 分 时 日 月
                 星期。保存为暂停草稿；启用后由后台按计划运行。暂停不会中断已发起的运行。
               </p>
@@ -2035,7 +2044,7 @@ function DataflowWorkspace({
                     onSaveSchedule();
                   }}
                 >
-                  <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+                  <label className={surfaceClass8}>
                     已发布数据流
                     <select
                       className="h-11 rounded-md border border-border bg-card px-2 text-sm font-normal sm:h-9"
@@ -2061,7 +2070,7 @@ function DataflowWorkspace({
                       ))}
                     </select>
                   </label>
-                  <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+                  <label className={surfaceClass8}>
                     Cron 表达式（UTC）
                     <Input
                       aria-label="Cron 表达式（UTC）"
@@ -2228,7 +2237,7 @@ function ResourceTable({
           className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
         >
           <table className="w-full min-w-[620px] text-left text-sm [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-muted [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:left-0 [&_tbody_td:first-child]:z-10 [&_tbody_td:first-child]:bg-card">
-            <thead className="bg-muted text-sm font-medium text-muted-foreground">
+            <thead className={surfaceClass3}>
               <tr>
                 {visibleColumns.map(column => (
                   <th key={column} className="whitespace-nowrap px-4 py-3">
@@ -2457,7 +2466,7 @@ export function DataflowRunMonitor({
           <h1 className="aiflow-type-page-title font-semibold">
             数据流程运行监控
           </h1>
-          <p className="aiflow-type-body mt-1 text-muted-foreground">
+          <p className={surfaceClass2}>
             {workflowName} · 完整历史查询与运行详情
           </p>
         </div>
@@ -2478,7 +2487,7 @@ export function DataflowRunMonitor({
           className={resourcePanelClassName}
           aria-label="数据流程运行详情"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className={surfaceClass4}>
             <h2 className="aiflow-type-section-title font-semibold" title={selectedRunId}>
               实例详情 · {selectedRunId.slice(0, 8)}
             </h2>

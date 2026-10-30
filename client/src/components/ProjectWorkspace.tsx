@@ -1,3 +1,33 @@
+// Shared presentation strings keep equivalent controls consistent without changing handlers.
+const surfaceClass1 = "aiflow-type-meta text-muted-foreground";
+const surfaceClass2 = "aiflow-type-body mt-1 text-muted-foreground";
+const surfaceClass3 = "aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 min-[1280px]:min-h-0";
+const surfaceClass4 = "overflow-hidden rounded-lg border border-border bg-card shadow-2xs";
+const surfaceClass5 = "aiflow-type-control h-11 min-[1280px]:h-9";
+const surfaceClass6 = "aiflow-type-control grid gap-1 text-muted-foreground";
+const surfaceClass7 = "aiflow-type-control grid gap-1 font-medium text-muted-foreground";
+const surfaceClass8 = "aiflow-type-body font-normal text-muted-foreground";
+const surfaceClass9 = "aiflow-type-control font-medium text-muted-foreground";
+const surfaceClass10 = "aiflow-type-body text-muted-foreground";
+const surfaceClass11 = "aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground";
+const surfaceClass12 = "aiflow-type-page-title mt-1 font-semibold text-foreground";
+const surfaceClass13 = "min-h-11 text-sm min-[1024px]:min-h-10";
+const surfaceClass14 = "aiflow-type-body -mt-2 leading-5 text-muted-foreground";
+const surfaceClass15 = "aiflow-type-body font-semibold text-foreground";
+const surfaceClass16 = "aiflow-type-meta mt-0.5 tabular-nums text-foreground";
+const surfaceClass17 = "h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9";
+const surfaceClass18 = "py-8 text-center text-sm text-muted-foreground";
+const surfaceClass19 = "aiflow-type-body font-medium text-foreground";
+const surfaceClass20 = "grid gap-1.5 text-sm text-foreground";
+const surfaceClass21 = "aiflow-type-body flex flex-col gap-1 border-b border-border bg-muted/70 px-4 py-3 font-semibold sm:flex-row sm:items-center sm:justify-between";
+const surfaceClass22 = "aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground";
+const surfaceClass23 = "aiflow-type-body leading-5 font-normal text-muted-foreground";
+const surfaceClass24 = "shrink-0 transition-transform group-open:rotate-180";
+const surfaceClass25 = "grid min-w-0 gap-3 border-t border-border bg-muted p-4 sm:grid-cols-2";
+const surfaceClass26 = "h-11 min-w-0 rounded border border-border bg-card px-2 text-sm text-foreground";
+const surfaceClass27 = "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between";
+const surfaceClass28 = "aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9";
+const surfaceClass29 = "aiflow-type-body p-6 text-center text-muted-foreground";
 import { workflowReviewSnapshot } from "@shared/workflow-review-snapshot";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { projectCapabilities } from "@shared/project-capabilities";
@@ -522,25 +552,25 @@ function ProjectMoreDetails({ project }: { project: ProjectRecord }) {
   return (
     <dl className="aiflow-type-body grid gap-x-4 gap-y-2 sm:grid-cols-2">
       <div>
-        <dt className="aiflow-type-meta text-muted-foreground">根部门</dt>
+        <dt className={surfaceClass1}>根部门</dt>
         <dd className={projectInfoValueClass}>
           {project.rootDepartment || "未配置"}
         </dd>
       </div>
       <div>
-        <dt className="aiflow-type-meta text-muted-foreground">创建人</dt>
+        <dt className={surfaceClass1}>创建人</dt>
         <dd className={projectInfoValueClass}>
           {project.ownerName || project.ownerUsername || "—"}
         </dd>
       </div>
       <div>
-        <dt className="aiflow-type-meta text-muted-foreground">创建时间</dt>
+        <dt className={surfaceClass1}>创建时间</dt>
         <dd className="aiflow-type-code mt-0.5 font-mono tabular-nums text-foreground">
           {formatDate(project.createdAt)}
         </dd>
       </div>
       <div className="sm:col-span-2">
-        <dt className="aiflow-type-meta text-muted-foreground">说明</dt>
+        <dt className={surfaceClass1}>说明</dt>
         <dd className="aiflow-type-body mt-0.5 whitespace-pre-wrap break-words text-foreground">
           {project.description || "—"}
         </dd>
@@ -675,7 +705,7 @@ function BusinessCenterView({
             <h1 className="aiflow-type-page-title font-semibold tracking-tight text-foreground">
               业务中心
             </h1>
-            <p className="aiflow-type-body mt-1 text-muted-foreground">
+            <p className={surfaceClass2}>
               管理业务项目，并进入对应流程与资源工作区。
             </p>
           </div>
@@ -695,7 +725,7 @@ function BusinessCenterView({
                   disabled={!canCreate}
                   aria-label="下载业务导入模板 CSV"
                   onClick={onDownloadTemplate}
-                  className="aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 min-[1280px]:min-h-0"
+                  className={surfaceClass3}
                 >
                   下载导入模板
                 </button>
@@ -704,7 +734,7 @@ function BusinessCenterView({
                   disabled={!canCreate || importing || status === "archived"}
                   aria-label={importing ? "正在导入业务 CSV" : "导入业务 CSV"}
                   onClick={onRequestImport}
-                  className="aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 min-[1280px]:min-h-0"
+                  className={surfaceClass3}
                 >
                   {importing ? "正在导入…" : "导入业务 CSV"}
                 </button>
@@ -734,7 +764,7 @@ function BusinessCenterView({
           </div>
         </header>
 
-        <section className="overflow-hidden rounded-lg border border-border bg-card shadow-2xs">
+        <section className={surfaceClass4}>
           <div className="border-b border-border bg-muted/70 p-3 sm:p-4">
             <div className="aiflow-type-section-title mb-2 flex items-center gap-2 font-semibold text-foreground">
               <FolderKanban size={15} className="text-muted-foreground" />
@@ -764,7 +794,7 @@ function BusinessCenterView({
                 <Button
                   type="button"
                   size="sm"
-                  className="aiflow-type-control h-11 min-[1280px]:h-9"
+                  className={surfaceClass5}
                   onClick={onQuery}
                 >
                   查询
@@ -773,7 +803,7 @@ function BusinessCenterView({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="aiflow-type-control h-11 min-[1280px]:h-9"
+                  className={surfaceClass5}
                   onClick={onReset}
                 >
                   重置
@@ -782,7 +812,7 @@ function BusinessCenterView({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="aiflow-type-control h-11 min-[1280px]:h-9"
+                  className={surfaceClass5}
                   aria-expanded={advancedOpen}
                   onClick={() => setAdvancedOpen(value => !value)}
                 >
@@ -792,7 +822,7 @@ function BusinessCenterView({
             </div>
             {advancedOpen && (
               <div className="mt-3 grid gap-2 rounded-md border border-border bg-card p-3 sm:grid-cols-2">
-                <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+                <label className={surfaceClass6}>
                   创建时间从
                   <Input
                     className="h-11 min-[1280px]:h-9"
@@ -807,7 +837,7 @@ function BusinessCenterView({
                     }
                   />
                 </label>
-                <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+                <label className={surfaceClass6}>
                   创建时间至
                   <Input
                     className="h-11 min-[1280px]:h-9"
@@ -956,7 +986,7 @@ function BusinessCenterView({
           submitDisabled={domainDirectory.loading || domainDirectory.error}
           onSubmit={onCreate}
         >
-          <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+          <label className={surfaceClass7}>
             业务代号
             <Input
               aria-label="业务代号"
@@ -969,7 +999,7 @@ function BusinessCenterView({
               required
             />
           </label>
-          <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+          <label className={surfaceClass7}>
             业务名称
             <Input
               aria-label="业务名称"
@@ -979,7 +1009,7 @@ function BusinessCenterView({
               required
             />
           </label>
-          <div className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+          <div className={surfaceClass7}>
             <span>工作域</span>
             <SearchableMultiSelect
               ariaLabel="选择工作域"
@@ -1007,7 +1037,7 @@ function BusinessCenterView({
             {domainDirectory.loading && (
               <p
                 role="status"
-                className="aiflow-type-body font-normal text-muted-foreground"
+                className={surfaceClass8}
               >
                 正在加载工作域…
               </p>
@@ -1028,13 +1058,13 @@ function BusinessCenterView({
               domains.length === 0 && (
                 <p
                   role="status"
-                  className="aiflow-type-body font-normal text-muted-foreground"
+                  className={surfaceClass8}
                 >
                   当前没有可选工作域；新业务将保持未归属状态。
                 </p>
               )}
           </div>
-          <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+          <label className={surfaceClass7}>
             业务说明（可选）
             <Input
               aria-label="业务说明（可选）"
@@ -1046,7 +1076,7 @@ function BusinessCenterView({
             />
           </label>
           <div className="grid gap-1">
-            <label className="aiflow-type-control font-medium text-muted-foreground">
+            <label className={surfaceClass9}>
               添加可见部门（可多选；部门成员自动继承可见权）
             </label>
             <SearchableMultiSelect
@@ -1075,7 +1105,7 @@ function BusinessCenterView({
             )}
           </div>
           <div className="grid gap-1">
-            <label className="aiflow-type-control font-medium text-muted-foreground">
+            <label className={surfaceClass9}>
               添加可见人（可多选；直接授权人员可见权）
             </label>
             <SearchableMultiSelect
@@ -1214,7 +1244,7 @@ export function ProjectWorkspace({
           <p className="mt-2 text-sm font-medium text-foreground">
             正在读取项目流程
           </p>
-          <p className="aiflow-type-body mt-1 text-muted-foreground">
+          <p className={surfaceClass2}>
             正在加载当前业务授权范围内的流程与审核状态…
           </p>
         </div>
@@ -1224,7 +1254,7 @@ export function ProjectWorkspace({
     return (
       <section role="alert" data-project-access-denied="" className="m-4 grid gap-3 rounded-lg border border-border bg-card p-5">
         <h1 className="aiflow-type-page-title font-semibold">{access.isError ? "暂时无法确认业务权限" : "业务访问权限已变化"}</h1>
-        <p className="aiflow-type-body text-muted-foreground">{access.isError ? "业务权限读取失败，缓存内容暂时隐藏。当前填写仍保留在本次账号会话中，可重新读取后继续。" : "当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。"}</p>
+        <p className={surfaceClass10}>{access.isError ? "业务权限读取失败，缓存内容暂时隐藏。当前填写仍保留在本次账号会话中，可重新读取后继续。" : "当前无权查看此业务，或业务状态已变化。请刷新权限或返回业务中心。"}</p>
         <ResourceDraftRecoveryNotice />
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" disabled={access.isFetching || members.isFetching} onClick={() => void refreshAccess()}>刷新业务权限</Button>
@@ -1548,13 +1578,13 @@ function ServiceEndpointCenter({
     <div data-project-service-endpoints="">
       <div className="mb-5 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
+          <p className={surfaceClass11}>
             PROJECT SERVICE CATALOG
           </p>
-          <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
+          <h1 className={surfaceClass12}>
             服务端点
           </h1>
-          <p className="aiflow-type-body mt-1 text-muted-foreground">
+          <p className={surfaceClass2}>
             项目流程只能通过这里登记的域名访问外部服务；SecretRef
             只引用运行环境密钥。
           </p>
@@ -1666,7 +1696,7 @@ function ServiceEndpointCenter({
           <span>端点引用名</span>
           <Input
             id="service-endpoint-ref-code"
-            className="min-h-11 text-sm min-[1024px]:min-h-10"
+            className={surfaceClass13}
             placeholder="例如 CRM_API"
             minLength={2}
             maxLength={64}
@@ -1679,14 +1709,14 @@ function ServiceEndpointCenter({
             required
           />
         </label>
-        <p className="aiflow-type-body -mt-2 leading-5 text-muted-foreground">
+        <p className={surfaceClass14}>
           2–64位字母、数字或下划线，以字母开头，自动转为大写。
         </p>
         <label className={projectFieldLabelClass}>
           <span>端点名称</span>
           <Input
             id="service-endpoint-name"
-            className="min-h-11 text-sm min-[1024px]:min-h-10"
+            className={surfaceClass13}
             placeholder="例如 CRM 查询服务"
             maxLength={160}
             value={form.name}
@@ -1698,7 +1728,7 @@ function ServiceEndpointCenter({
           <span>基础地址</span>
           <Input
             id="service-endpoint-base-url"
-            className="min-h-11 text-sm min-[1024px]:min-h-10"
+            className={surfaceClass13}
             type="url"
             placeholder="https://api.example.com/v1/"
             maxLength={2048}
@@ -1710,7 +1740,7 @@ function ServiceEndpointCenter({
             required
           />
         </label>
-        <p className="aiflow-type-body -mt-2 leading-5 text-muted-foreground">
+        <p className={surfaceClass14}>
           仅支持HTTP/HTTPS及80、443端口；地址不得含账号密码，调用时会拒绝私网地址。
         </p>
         <label className={projectFieldLabelClass}>
@@ -1744,7 +1774,7 @@ function ServiceEndpointCenter({
           <span>SecretRef（可选）</span>
           <Input
             id="service-endpoint-secret-ref"
-            className="min-h-11 text-sm min-[1024px]:min-h-10"
+            className={surfaceClass13}
             placeholder="例如 env:FLOW_SECRET_CRM_TOKEN"
             maxLength={144}
             pattern="env:FLOW_SECRET_[A-Z0-9_]{2,128}"
@@ -1758,7 +1788,7 @@ function ServiceEndpointCenter({
         {form.secretRef.trim() ? (
           <div className="rounded-lg border border-border bg-muted p-3">
             <div className="mb-3">
-              <p className="aiflow-type-body font-semibold text-foreground">
+              <p className={surfaceClass15}>
                 认证请求配置
               </p>
               <p className="aiflow-type-body mt-1 leading-5 text-muted-foreground">
@@ -1770,7 +1800,7 @@ function ServiceEndpointCenter({
                 <span>认证请求头</span>
                 <Input
                   id="service-endpoint-auth-header"
-                  className="min-h-11 text-sm min-[1024px]:min-h-10"
+                  className={surfaceClass13}
                   placeholder="Authorization"
                   maxLength={128}
                   pattern="[A-Za-z0-9-]{1,128}"
@@ -1785,7 +1815,7 @@ function ServiceEndpointCenter({
                 <span>认证方案</span>
                 <Input
                   id="service-endpoint-auth-scheme"
-                  className="min-h-11 text-sm min-[1024px]:min-h-10"
+                  className={surfaceClass13}
                   placeholder="Bearer"
                   maxLength={32}
                   pattern="[A-Za-z][A-Za-z0-9._-]{0,31}"
@@ -1908,7 +1938,7 @@ function WorkflowListEmptyState({
             ? "流程列表读取失败，项目概览数量暂时无法核实。"
             : `项目概览显示 ${reportedCount} 个流程，当前列表返回 0 条。`}
         </p>
-        <p className="aiflow-type-body text-muted-foreground">
+        <p className={surfaceClass10}>
           {loadFailed
             ? "请重试；如仍失败，请核对项目流程归属与查看权限。"
             : "请重新读取，或核对项目流程归属与查看权限。"}
@@ -2093,12 +2123,12 @@ function ProcessCenter({
           }}
         >
           <div className="min-h-0 overflow-y-auto px-4 py-3">
-            <h3 className="aiflow-type-body font-semibold text-foreground">
+            <h3 className={surfaceClass15}>
               流程信息
             </h3>
             <dl className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   流程名称
                 </dt>
                 <dd className="aiflow-type-body mt-0.5 break-words font-medium text-foreground">
@@ -2106,7 +2136,7 @@ function ProcessCenter({
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   流程代号
                 </dt>
                 <dd className="aiflow-type-meta mt-0.5 break-all font-mono text-foreground">
@@ -2114,7 +2144,7 @@ function ProcessCenter({
                 </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   流程说明
                 </dt>
                 <dd className={projectInfoValueClass}>
@@ -2122,7 +2152,7 @@ function ProcessCenter({
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   关联数据源
                 </dt>
                 <dd className={projectInfoValueClass}>
@@ -2135,7 +2165,7 @@ function ProcessCenter({
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   创建人
                 </dt>
                 <dd className={projectInfoValueClass}>
@@ -2143,15 +2173,15 @@ function ProcessCenter({
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   创建时间
                 </dt>
-                <dd className="aiflow-type-meta mt-0.5 tabular-nums text-foreground">
+                <dd className={surfaceClass16}>
                   {formatDate(workflow.createdAt)}
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   创建来源
                 </dt>
                 <dd className="aiflow-type-body mt-0.5 text-foreground">
@@ -2161,20 +2191,20 @@ function ProcessCenter({
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   最近发布时间
                 </dt>
-                <dd className="aiflow-type-meta mt-0.5 tabular-nums text-foreground">
+                <dd className={surfaceClass16}>
                   {workflow.publishedAt
                     ? formatDate(workflow.publishedAt)
                     : "尚未发布"}
                 </dd>
               </div>
               <div>
-                <dt className="aiflow-type-meta text-muted-foreground">
+                <dt className={surfaceClass1}>
                   最近取消发布时间
                 </dt>
-                <dd className="aiflow-type-meta mt-0.5 tabular-nums text-foreground">
+                <dd className={surfaceClass16}>
                   {workflow.unpublishedAt
                     ? formatDate(workflow.unpublishedAt)
                     : "尚未取消发布"}
@@ -2204,8 +2234,8 @@ function ProcessCenter({
                 onClick={() => { setOpenWorkflowActionsId(null); action.run(); }}
               >{action.label}</button>
             ))}
-            {(actionsFor(workflow).reviewBlockedReason || actionsFor(workflow).publishBlockedReason) && <p role="status" className="aiflow-type-body text-muted-foreground">{actionsFor(workflow).reviewBlockedReason || actionsFor(workflow).publishBlockedReason}</p>}
-            {actionsFor(workflow).canPublish && actionsFor(workflow).publicationRule?.requireProjectApproval === false && <p role="status" className="aiflow-type-body text-muted-foreground">当前规则无需审核，可直接发布此草稿。</p>}
+            {(actionsFor(workflow).reviewBlockedReason || actionsFor(workflow).publishBlockedReason) && <p role="status" className={surfaceClass10}>{actionsFor(workflow).reviewBlockedReason || actionsFor(workflow).publishBlockedReason}</p>}
+            {actionsFor(workflow).canPublish && actionsFor(workflow).publicationRule?.requireProjectApproval === false && <p role="status" className={surfaceClass10}>当前规则无需审核，可直接发布此草稿。</p>}
           </div>
         </PopoverContent>
       </Popover>
@@ -2364,10 +2394,10 @@ function ProcessCenter({
             <span aria-hidden="true">▾</span>
           </summary>
           <div className="grid gap-2 pb-1 pt-3 sm:grid-cols-2">
-            <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+            <label className={surfaceClass6}>
               审核状态
               <select
-                className="h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9"
+                className={surfaceClass17}
                 value={filters.auditStatus ?? ""}
                 onChange={event =>
                   setFilters({
@@ -2383,10 +2413,10 @@ function ProcessCenter({
                 <option value="rejected">审核驳回</option>
               </select>
             </label>
-            <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+            <label className={surfaceClass6}>
               发布状态
               <select
-                className="h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9"
+                className={surfaceClass17}
                 value={filters.status ?? ""}
                 onChange={event =>
                   setFilters({
@@ -2625,13 +2655,13 @@ function ProcessCenter({
             </DialogHeader>
             <div className="max-h-96 space-y-3 overflow-y-auto pr-1">
               {approvalHistory.isLoading && (
-                <p className="py-8 text-center text-sm text-muted-foreground">
+                <p className={surfaceClass18}>
                   正在读取审批记录…
                 </p>
               )}
               {!approvalHistory.isLoading &&
                 !(approvalHistory.data ?? []).length && (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
+                  <p className={surfaceClass18}>
                     暂无审批记录。
                   </p>
                 )}
@@ -2640,7 +2670,7 @@ function ProcessCenter({
                   key={entry.id}
                   className="border-l-2 border-aiflow-info bg-muted px-3 py-2.5"
                 >
-                  <p className="aiflow-type-body font-medium text-foreground">
+                  <p className={surfaceClass19}>
                     {entry.operation === "workflow_audit_reset"
                       ? "重置审核状态"
                       : entry.details?.auditStatus === "approved"
@@ -2771,7 +2801,7 @@ function ProcessLaunchDialog({
             disabled={pending || !allowed}
             className="grid min-w-0 gap-3 sm:grid-cols-2"
           >
-            <label className="grid gap-1.5 text-sm text-foreground">
+            <label className={surfaceClass20}>
               发起方类型
               <select
                 className="h-9 rounded border border-border bg-card px-2 text-sm"
@@ -2785,7 +2815,7 @@ function ProcessLaunchDialog({
                 <option value="AuthUnitWord">AuthUnitWord</option>
               </select>
             </label>
-            <label className="grid gap-1.5 text-sm text-foreground">
+            <label className={surfaceClass20}>
               流程应结束时间（可选）
               <Input
                 type="datetime-local"
@@ -2811,13 +2841,13 @@ function ProcessLaunchDialog({
               ["businessInformationThree", "业务信息三"],
               ["businessInformationText", "业务信息说明"],
             ] as const).map(([key, label]) => (
-              <label key={key} className="grid gap-1.5 text-sm text-foreground">
+              <label key={key} className={surfaceClass20}>
                 {label}
                 <Input value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
               </label>
             ))}
           </fieldset>
-          <p className="aiflow-type-body text-muted-foreground">
+          <p className={surfaceClass10}>
             当前流程：{workflow.name}
             。实际发起人由服务端会话身份记录，不能由此表单伪造。
           </p>
@@ -3149,18 +3179,18 @@ function ProjectMembers({
   return (
     <div data-project-authorizations="" aria-busy={busy} className="space-y-6">
       <div className="border-b border-border pb-4">
-        <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
+        <p className={surfaceClass11}>
           人员与权限
         </p>
-        <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
+        <h1 className={surfaceClass12}>
           业务成员与部门授权
         </h1>
-        <p className="aiflow-type-body mt-1 text-muted-foreground">
+        <p className={surfaceClass2}>
           创建人保留所有权；可按人员或部门授予查看、运行或设计角色。业务管理员可管理本业务，不会获得系统管理员权限。
           多项有效授权共同生效；移除仅影响选中的角色授权，其他角色和部门继承仍保留。
         </p>
         <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-          <p className="aiflow-type-meta text-muted-foreground">
+          <p className={surfaceClass1}>
             {busy
               ? "正在提交授权，请等待完成。"
               : memberDirty || unitDirty
@@ -3207,12 +3237,12 @@ function ProjectMembers({
       </div>
 
       {/* 可见部门授权管理 */}
-      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-2xs">
-        <div className="aiflow-type-body flex flex-col gap-1 border-b border-border bg-muted/70 px-4 py-3 font-semibold sm:flex-row sm:items-center sm:justify-between">
+      <section className={surfaceClass4}>
+        <div className={surfaceClass21}>
           <span className="flex min-w-0 flex-wrap items-center gap-1.5">
             <Building2 size={16} className="text-aiflow-info" />
             <span>可见部门列表（部门继承授权）</span>
-            <span className="aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground">
+            <span className={surfaceClass22}>
               {projectUnits.isPending
                 ? "读取中"
                 : projectUnits.isError
@@ -3220,7 +3250,7 @@ function ProjectMembers({
                   : `${(projectUnits.data ?? []).length} 个部门`}
             </span>
           </span>
-          <span className="aiflow-type-body leading-5 font-normal text-muted-foreground">
+          <span className={surfaceClass23}>
             启用部门中的成员继承此处选择的角色
           </span>
         </div>
@@ -3242,7 +3272,7 @@ function ProjectMembers({
               <ChevronDown
                 size={16}
                 aria-hidden="true"
-                className="shrink-0 transition-transform group-open:rotate-180"
+                className={surfaceClass24}
               />
             </summary>
             <form
@@ -3266,10 +3296,10 @@ function ProjectMembers({
             >
               <fieldset
                 disabled={busy || !canManage}
-                className="grid min-w-0 gap-3 border-t border-border bg-muted p-4 sm:grid-cols-2"
+                className={surfaceClass25}
               >
                 <div className="grid min-w-0 gap-1.5">
-                  <p className="aiflow-type-meta text-muted-foreground">
+                  <p className={surfaceClass1}>
                     授权部门
                   </p>
                   <SearchableMultiSelect
@@ -3316,12 +3346,12 @@ function ProjectMembers({
                     )}
                 </div>
                 <label className="grid min-w-0 content-start gap-1.5">
-                  <span className="aiflow-type-meta text-muted-foreground">
+                  <span className={surfaceClass1}>
                     授予的角色
                   </span>
                   <select
                     aria-label="部门权限角色"
-                    className="h-11 min-w-0 rounded border border-border bg-card px-2 text-sm text-foreground"
+                    className={surfaceClass26}
                     value={unitForm.role}
                     onChange={event =>
                       setUnitForm({
@@ -3372,10 +3402,10 @@ function ProjectMembers({
             (projectUnits.data ?? []).map((item: any) => (
               <div
                 key={item.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className={surfaceClass27}
               >
                 <div>
-                  <p className="aiflow-type-body font-medium text-foreground">
+                  <p className={surfaceClass19}>
                     {item.unitName || item.unitCode}
                   </p>
                   <p className="aiflow-type-meta mt-0.5 font-mono text-muted-foreground">
@@ -3397,7 +3427,7 @@ function ProjectMembers({
                       type="button"
                       disabled={busy}
                       aria-label={`移除部门授权：${item.unitName || item.unitCode}（${item.unitCode}）`}
-                      className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
+                      className={surfaceClass28}
                       onClick={() =>
                         setPermissionRevocation({
                           kind: "unit",
@@ -3417,7 +3447,7 @@ function ProjectMembers({
           {!projectUnits.isPending &&
             !projectUnits.isError &&
             !(projectUnits.data ?? []).length && (
-              <p className="aiflow-type-body p-6 text-center text-muted-foreground">
+              <p className={surfaceClass29}>
                 尚未绑定可见部门，外部部门员工无法继承访问。
               </p>
             )}
@@ -3425,12 +3455,12 @@ function ProjectMembers({
       </section>
 
       {/* 可见人授权管理 */}
-      <section className="overflow-hidden rounded-lg border border-border bg-card shadow-2xs">
-        <div className="aiflow-type-body flex flex-col gap-1 border-b border-border bg-muted/70 px-4 py-3 font-semibold sm:flex-row sm:items-center sm:justify-between">
+      <section className={surfaceClass4}>
+        <div className={surfaceClass21}>
           <span className="flex min-w-0 flex-wrap items-center gap-1.5">
             <UsersRound size={16} className="text-aiflow-info" />
             <span>可见人列表（成员直接授权）</span>
-            <span className="aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground">
+            <span className={surfaceClass22}>
               {membersLoading
                 ? "读取中"
                 : membersError
@@ -3438,7 +3468,7 @@ function ProjectMembers({
                   : `${new Set(members.map(member => member.userId)).size} 位成员`}
             </span>
           </span>
-          <span className="aiflow-type-body leading-5 font-normal text-muted-foreground">
+          <span className={surfaceClass23}>
             单独授权人员清单
           </span>
         </div>
@@ -3460,7 +3490,7 @@ function ProjectMembers({
               <ChevronDown
                 size={16}
                 aria-hidden="true"
-                className="shrink-0 transition-transform group-open:rotate-180"
+                className={surfaceClass24}
               />
             </summary>
             <form
@@ -3486,10 +3516,10 @@ function ProjectMembers({
             >
               <fieldset
                 disabled={busy || !canManage}
-                className="grid min-w-0 gap-3 border-t border-border bg-muted p-4 sm:grid-cols-2"
+                className={surfaceClass25}
               >
                 <div className="grid min-w-0 gap-1.5">
-                  <p className="aiflow-type-meta text-muted-foreground">
+                  <p className={surfaceClass1}>
                     授权人员
                   </p>
                   <SearchableMultiSelect
@@ -3536,12 +3566,12 @@ function ProjectMembers({
                     )}
                 </div>
                 <label className="grid min-w-0 content-start gap-1.5">
-                  <span className="aiflow-type-meta text-muted-foreground">
+                  <span className={surfaceClass1}>
                     授予的角色
                   </span>
                   <select
                     aria-label="用户权限角色"
-                    className="h-11 min-w-0 rounded border border-border bg-card px-2 text-sm text-foreground"
+                    className={surfaceClass26}
                     value={form.role}
                     onChange={event =>
                       setForm({
@@ -3559,7 +3589,7 @@ function ProjectMembers({
                 <div className="grid min-w-0 gap-1.5 sm:col-span-2 sm:max-w-sm">
                   <label
                     htmlFor={`project-member-expiry-${projectId}`}
-                    className="aiflow-type-meta text-muted-foreground"
+                    className={surfaceClass1}
                   >
                     有效期（小时，可选）
                   </label>
@@ -3621,10 +3651,10 @@ function ProjectMembers({
             members.map(member => (
               <div
                 key={member.id}
-                className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                className={surfaceClass27}
               >
                 <div>
-                  <p className="aiflow-type-body font-medium text-foreground">
+                  <p className={surfaceClass19}>
                     {member.name || member.username}
                   </p>
                   <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
@@ -3644,7 +3674,7 @@ function ProjectMembers({
                       type="button"
                       disabled={busy}
                       aria-label={`移除成员授权：${member.name || member.username}（${member.username}） · ${projectRoleLabel(member.role)}`}
-                      className="aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9"
+                      className={surfaceClass28}
                       onClick={() =>
                         setPermissionRevocation({
                           kind: "member",
@@ -3664,7 +3694,7 @@ function ProjectMembers({
               </div>
             ))}
           {!membersLoading && !membersError && !members.length && (
-            <p className="aiflow-type-body p-6 text-center text-muted-foreground">
+            <p className={surfaceClass29}>
               项目尚无单独可见人员。
             </p>
           )}

@@ -1,3 +1,8 @@
+// Shared presentation strings keep equivalent controls consistent without changing handlers.
+const surfaceClass1 = "aiflow-type-body mt-1 text-muted-foreground";
+const surfaceClass2 = "aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground";
+const surfaceClass3 = "grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground";
+const surfaceClass4 = "w-full rounded px-2 py-1.5 text-left hover:bg-muted";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -409,7 +414,7 @@ export default function WorkflowWarehouse({
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               流程仓库
             </h1>
-            <p className="aiflow-type-body mt-1 text-muted-foreground">
+            <p className={surfaceClass1}>
               按目录管理状态、控制与数据流程。导入先预检再创建草稿，处理人和资源核对后才能审核发布。
             </p>
           </div>
@@ -622,7 +627,7 @@ export default function WorkflowWarehouse({
                       >
                         {displayWorkflowName(workflow.name)}
                       </p>
-                      <p className="aiflow-type-body mt-1 text-muted-foreground">
+                      <p className={surfaceClass1}>
                         {workflow.description || "未填写流程简介"} · 归档于{" "}
                         {workflow.archivedAt
                           ? new Date(workflow.archivedAt).toLocaleString(
@@ -783,7 +788,7 @@ export default function WorkflowWarehouse({
                     <h2 className={warehouseHeadingClass}>
                       {selectedFolder?.name ?? "根目录流程"}
                     </h2>
-                    <p className="aiflow-type-body mt-1 text-muted-foreground">
+                    <p className={surfaceClass1}>
                       勾选后可批量导出；点击流程可查看简介和只读画布。
                     </p>
                   </div>
@@ -866,7 +871,7 @@ export default function WorkflowWarehouse({
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
                           <FlowBadge type={workflow.flowType} />
-                          <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                          <span className={surfaceClass2}>
                             v{workflow.definitionVersion}
                           </span>
                         </div>
@@ -974,7 +979,7 @@ export default function WorkflowWarehouse({
                           </p>
                           <div className="flex shrink-0 flex-col items-end gap-1">
                             <FlowBadge type={selectedDetail.flowType} />
-                            <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground">
+                            <span className={surfaceClass2}>
                               v{selectedDetail.definitionVersion}
                             </span>
                           </div>
@@ -1020,7 +1025,7 @@ export default function WorkflowWarehouse({
                     <div
                       role="status"
                       aria-live="polite"
-                      className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground"
+                      className={surfaceClass3}
                     >
                       <div>
                         <Loader2
@@ -1034,7 +1039,7 @@ export default function WorkflowWarehouse({
                   ) : workflowDetail.isError ? (
                     <div
                       role="alert"
-                      className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground"
+                      className={surfaceClass3}
                     >
                       <div>
                         <FolderClosed
@@ -1057,7 +1062,7 @@ export default function WorkflowWarehouse({
                       </div>
                     </div>
                   ) : (
-                    <div className="grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground">
+                    <div className={surfaceClass3}>
                       <div>
                         <FolderClosed
                           className="mx-auto text-slate-300"
@@ -1263,7 +1268,7 @@ function FolderTree({
               <div className="absolute right-0 z-30 mt-1 w-28 rounded-md border border-border bg-card p-1 text-xs text-foreground shadow-lg">
                 <button
                   type="button"
-                  className="w-full rounded px-2 py-1.5 text-left hover:bg-muted"
+                  className={surfaceClass4}
                   onClick={() => {
                     setMenuOpen(false);
                     onAddSibling(folder);
@@ -1273,7 +1278,7 @@ function FolderTree({
                 </button>
                 <button
                   type="button"
-                  className="w-full rounded px-2 py-1.5 text-left hover:bg-muted"
+                  className={surfaceClass4}
                   onClick={() => {
                     setMenuOpen(false);
                     onAddChild(folder);

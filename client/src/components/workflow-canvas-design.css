@@ -1,0 +1,72 @@
+/* Desktop canvas foundations are isolated from lists, forms and runtime graphs. */
+[data-canvas-redesign] {
+  --aiflow-canvas-edge: #71839b;
+  --aiflow-canvas-selected: #315efb;
+  --aiflow-canvas-return: #ad771c;
+  --aiflow-canvas-dot: #d9e0ea;
+  --canvas-zoom: 1;
+  box-shadow: none;
+}
+.dark [data-canvas-redesign] {
+  --aiflow-canvas-edge: #a2b1c7;
+  --aiflow-canvas-selected: #8aa9ff;
+  --aiflow-canvas-return: #f1c175;
+  --aiflow-canvas-dot: #344157;
+}
+[data-canvas-redesign] [data-flow-canvas-viewport] {background: var(--background);}
+[data-canvas-redesign] .flow-design-node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 208px;
+  height: 88px;
+  padding: 12px 14px;
+  overflow: visible;
+  border: 1px solid var(--border);
+  border-radius: 10px !important;
+  background: var(--card);
+  box-shadow: 0 2px 5px #0f172a08;
+  transition: border-color 150ms, box-shadow 150ms;
+}
+[data-canvas-redesign] .flow-design-node:hover {border-color: var(--aiflow-canvas-edge); box-shadow: 0 4px 12px #0f172a10;}
+[data-canvas-redesign] .flow-design-node.is-selected {box-shadow: 0 0 0 2px var(--aiflow-canvas-selected);}
+[data-canvas-redesign] .flow-design-node-row {width: 100%; gap: 10px;}
+[data-canvas-redesign] .flow-design-node [data-flow-node-glyph] {width: 30px; height: 30px; border-radius: 8px; box-shadow: none;}
+[data-canvas-redesign] .flow-design-node-title {font-size: 14px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+[data-canvas-redesign] .flow-design-node-type {font-size: 12px; line-height: 18px;}
+[data-canvas-redesign] .flow-design-node[data-compact] .flow-design-node-title {font-size: max(14px, calc(12px / var(--canvas-zoom))); line-height: 1.4;}
+[data-canvas-redesign] .flow-design-node[data-compact] :is(.flow-design-node-type, [data-flow-node-glyph], [data-canvas-config-state]) {display: none;}
+[data-canvas-redesign] [data-canvas-node-accent] {display: none;}
+[data-canvas-redesign] [data-canvas-config-state]:not([data-canvas-config-state="partial"]) {background: var(--aiflow-canvas-edge);}
+/* Supplemental route/model information stays available on hover; handles never clip. */
+[data-canvas-redesign] .flow-design-node-details {display: none; position: absolute; top: calc(100% + 8px); left: 0; width: 240px; margin: 0; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: 0 6px 18px #0f172a18; pointer-events: none;}
+[data-canvas-redesign] .flow-design-node:not([data-compact]):hover .flow-design-node-details {display: grid;}
+[data-canvas-redesign] .react-flow__handle {background: var(--card) !important; border-color: var(--aiflow-canvas-edge) !important; transition: border-color 150ms;}
+[data-canvas-redesign] .react-flow__handle::after {content: ""; position: absolute; width: max(18px, calc(24px / var(--canvas-zoom))); height: max(18px, calc(24px / var(--canvas-zoom))); left: 50%; top: 50%; transform: translate(-50%, -50%);}
+[data-canvas-redesign] .react-flow__handle:hover {border-color: var(--aiflow-canvas-selected) !important;}
+[data-canvas-redesign] .react-flow__edge.selected {z-index: 2;}
+[data-canvas-redesign] [data-canvas-view-controls] {box-shadow: 0 2px 8px #0f172a08;}
+[data-canvas-redesign] [data-canvas-view-controls] button {min-height: 30px; padding-inline: 10px; font-size: 13px; transition: background-color 150ms, color 150ms;}
+[data-canvas-redesign] [data-canvas-view-controls] button[aria-pressed="true"] {background: var(--accent); color: var(--aiflow-canvas-selected);}
+[data-canvas-redesign] [data-canvas-view-controls] button:disabled {opacity: .4; cursor: default;}
+[data-canvas-redesign] [data-canvas-view-controls] button:focus-visible {outline: 2px solid var(--aiflow-canvas-selected); outline-offset: 2px;}
+[data-canvas-redesign] [data-flow-canvas-viewport] > details > summary {min-height: 38px; padding: 8px 12px; font-size: 13px; font-weight: 500;}
+[data-canvas-redesign] [data-workflow-inspector-header] {min-height: 64px; padding: 12px 16px;}
+[data-canvas-redesign] [data-workflow-inspector-heading] {font-size: 16px; line-height: 24px;}
+[data-canvas-redesign] [data-workflow-inspector] [role="tablist"] {display: flex; gap: 4px; overflow-x: auto; background: var(--card); padding: 6px 12px;}
+[data-canvas-redesign] [data-workflow-inspector] [role="tab"] {min-width: max-content; border: 0; border-radius: 5px; font-size: 13px;}
+@media (min-width: 1024px) {
+  [data-canvas-redesign]:has(> aside):not([data-inspector-mode="compact"]):not([data-inspector-mode="maximized"]) {grid-template-columns: minmax(0, 1fr) 360px;}
+  [data-canvas-redesign] [data-flow-canvas-toolbar] {min-height: 52px; padding: 8px 12px; gap: 8px;}
+  [data-canvas-redesign] [data-canvas-icon] {width: 34px; height: 34px; min-height: 34px;}
+  [data-canvas-redesign] [data-canvas-palette-trigger] {height: 34px; min-height: 34px;}
+  [data-aiflow-designer]:has([data-canvas-redesign]) {padding: 12px 16px;}
+  [data-aiflow-designer]:has([data-canvas-redesign]) .editor-command-bar {top: var(--workspace-header-height, 56px); padding: 8px 0; margin-bottom: 8px; border: 0; border-radius: 0; gap: 16px;}
+  [data-aiflow-designer]:has([data-canvas-redesign]) .editor-command-bar [data-aiflow-page-title] {font-size: 18px; line-height: 26px; min-height: 34px;}
+  [data-aiflow-designer]:has([data-canvas-redesign]) .editor-notice {margin-bottom: 8px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-canvas-redesign] .flow-design-node,
+  [data-canvas-redesign] .react-flow__handle,
+  [data-canvas-redesign] [data-canvas-view-controls] button {transition: none;}
+}

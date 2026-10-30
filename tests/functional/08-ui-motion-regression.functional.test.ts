@@ -1,6 +1,11 @@
+import { inlinePresentationClasses } from "../presentation-source";
 import { describe, expect, it } from "vitest";
 import { TestResultCollector } from "./helpers/test-harness";
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync as rawReadFileSync } from "node:fs";
+
+function readFileSync(path: string, encoding: "utf8") {
+  return inlinePresentationClasses(rawReadFileSync(path, encoding));
+}
 import { join } from "node:path";
 
 function collectClientSourceFiles(directory: string): string[] {
@@ -94,7 +99,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       ]);
       const rawFontSizes = new Set<string>();
       for (const file of collectClientSourceFiles("client/src")) {
-        const source = readFileSync(file, "utf8");
+        const source = inlinePresentationClasses(readFileSync(file, "utf8"));
         for (const match of source.matchAll(/text-\[([\d.]+(?:px|rem))\]/g)) {
           rawFontSizes.add(match[1]);
         }
@@ -457,8 +462,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(canvasSource).not.toContain("fontSize: 12");
       expect(canvasSource).toContain("minZoom={0.1}");
       expect(canvasSource).toContain("lastInitialFitKeyRef");
-      expect(canvasSource).toContain("minZoom: 0.1,");
-      expect(canvasSource).toContain("maxZoom: 1.25,");
+      expect(canvasSource).toContain("viewport.clientHeight, 0.1, 1, 0.12)");
+      expect(readFileSync("client/src/components/workflow-canvas-design.css", "utf8")).toContain("calc(12px / var(--canvas-zoom))");
       expect(canvasSource).toContain("minZoom={0.1}");
       expect(canvasSource).toContain("maxZoom={1.25}");
 

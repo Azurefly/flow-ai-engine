@@ -1,3 +1,8 @@
+// Shared presentation strings keep equivalent controls consistent without changing handlers.
+const surfaceClass1 = "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
+import "./workflow-canvas-design.css";
+import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
+import { canvasNodeRects, canvasHasCrowding, readableCanvasLayout, canvasContextIds, canvasConnectionPoints, canvasBounds, roundedCanvasPath } from "./workflow-canvas-geometry";
 import { availableWorkflowReuseResources } from "@shared/workflow-reuse-resources";
 import { readCanvasSourceHandles as sourceHandles } from "./workflow-canvas-handles";
 import {
@@ -24,6 +29,7 @@ import {
 } from "@shared/workflow-parallel-binding";
 import {
   addEdge,
+  getViewportForBounds,
   Background,
   Controls,
   Handle,
@@ -44,7 +50,7 @@ import "@xyflow/react/dist/style.css";
 import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
-import { automaticCanvasFit, hasCanvasInspectorSelection, readWorkflowLoopLimit } from "./workflow-canvas-viewport";
+import { hasCanvasInspectorSelection, readWorkflowLoopLimit } from "./workflow-canvas-viewport";
 import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
 import { WorkflowOutcomeEditor } from "./WorkflowOutcomeEditor";
 import {
@@ -151,7 +157,7 @@ const canvasRemoveClass = "text-muted-foreground hover:text-red-600";
 const canvasCompactControlClass = "aiflow-type-control h-7";
 const canvasMutedTextClass = "text-muted-foreground";
 
-const canvasHandleClass = "!h-3 !w-3 !border-2 !border-white shadow-2xs hover:scale-125 transition-transform";
+const canvasHandleClass = "!h-2 !w-2 !border-2 shadow-none";
 const canvasFieldGroupClass = "grid gap-1.5";
 const canvasCompactLabelClass = "aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground";
 const canvasStackedLabelClass = "aiflow-type-control grid gap-1.5 font-medium text-muted-foreground";
@@ -185,7 +191,8 @@ type CanvasContextMenu = {
   nodeId?: string;
   edgeId?: string;
 } | null;
-type HistorySnapshot = { nodes: CanvasNode[]; edges: Edge[] };
+type CanvasPresentation = "auto" | "readable" | "original";
+type HistorySnapshot = { nodes: CanvasNode[]; edges: Edge[]; presentation?: CanvasPresentation };
 
 const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   start: { icon: Play, color: "#10b981" },
@@ -302,6 +309,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
         )
       : "[]"
   );
+  const compact = useStore(state => state.transform[2] < 0.72);
   const handles = sourceHandles(
     nodeData.kind,
     nodeData.config,
@@ -311,7 +319,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
   const handleSignature = JSON.stringify(handles);
   useEffect(() => {
     updateNodeInternals(id);
-  }, [id, handleSignature, updateNodeInternals]);
+  }, [id, handleSignature, compact, updateNodeInternals]);
   const hasTarget = nodeData.kind !== "start";
   const routeItems: NodeConfig[] =
     nodeData.kind === "router"
@@ -330,11 +338,14 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
       : {};
   return (
     <div
-      className={`relative w-56 max-w-[calc(100vw-3rem)] overflow-hidden rounded-2xl border bg-card px-4 py-3.5 shadow-[0_4px_16px_rgba(15,23,42,0.06),0_1px_3px_rgba(15,23,42,0.04)] transition-all ${selected ? "-translate-y-0.5 ring-3 ring-blue-500/30 border-blue-500 shadow-[0_12px_28px_rgba(37,99,235,0.18)]" : "hover:-translate-y-0.5 hover:shadow-[0_8px_24px_rgba(15,23,42,0.10)]"}`}
-      style={{ borderColor: selected ? "#3b82f6" : `${appearance.color}4d` }}
+      className={`flow-design-node ${selected ? "is-selected" : ""}`}
+      title={nodeData.label}
+      data-compact={compact ? "true" : undefined}
+      data-node-kind={nodeData.kind}
+      style={{ borderColor: selected ? "var(--aiflow-canvas-selected)" : "var(--border)" }}
     >
       <div
-        className="absolute inset-x-0 top-0 h-1 rounded-t-2xl opacity-90"
+        data-canvas-node-accent="" className="absolute inset-x-0 top-0 h-1 rounded-t-2xl opacity-90"
         style={{ backgroundColor: appearance.color }}
       />
       {hasTarget && (
@@ -346,18 +357,18 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           style={{ backgroundColor: appearance.color }}
         />
       )}
-      <div className="flex items-center gap-3">
+      <div className="flow-design-node-row flex items-center gap-3">
         <NodeTypeGlyph icon={appearance.icon} color={appearance.color} />
         <div className="min-w-0 flex-1">
-          <span className="block break-words text-sm font-semibold leading-5 text-foreground">
+          <span className="flow-design-node-title block break-words text-sm font-semibold leading-5 text-foreground">
             {nodeData.label}
           </span>
-          <span className="aiflow-type-meta mt-0.5 block break-words text-muted-foreground">
+          <span className="flow-design-node-type aiflow-type-meta mt-0.5 block break-words text-muted-foreground">
             {FLOW_NODE_DEFINITIONS[nodeData.kind].label}
           </span>
         </div>
         <span
-          className={`h-2 w-2 shrink-0 rounded-full ${configState === "partial" ? "bg-red-500" : configState === "editing" ? "bg-blue-500" : "bg-emerald-500"}`}
+          data-canvas-config-state={configState} className={`h-2 w-2 shrink-0 rounded-full ${configState === "partial" ? "bg-red-500" : configState === "editing" ? "bg-blue-500" : "bg-emerald-500"}`}
           title={
             configState === "partial"
               ? `未完全配置：${configAssessment.error}`
@@ -368,7 +379,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
         />
       </div>
       {nodeData.kind === "llm" && (
-        <div className="aiflow-type-meta mt-3 flex flex-wrap gap-1.5 border-t border-border pt-2.5 font-semibold">
+        <div className="flow-design-node-details aiflow-type-meta mt-3 flex flex-wrap gap-1.5 border-t border-border pt-2.5 font-semibold">
           <span className="rounded-md bg-indigo-50 px-1.5 py-1 text-indigo-700">
             {String(nodeData.config.model || "自动模型")}
           </span>
@@ -393,7 +404,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
         </div>
       )}
       {routeItems.length > 0 && (
-        <div className="mt-3 grid gap-1.5 border-t border-border pt-2.5">
+        <div className="flow-design-node-details mt-3 grid gap-1.5 border-t border-border pt-2.5">
           {routeItems.map((route, index) => {
             const routeName = String(
               route.label ||
@@ -491,6 +502,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
 }
 
 const nodeTypes = { workflowNode: FlowNodeCard };
+const canvasEdgeTypes = { workspace: CanvasConnectionEdge };
 
 function defaultDefinition(): Definition {
   return {
@@ -583,172 +595,10 @@ function toDefinition(
  * Automatically calculates a clean, non-overlapping hierarchical layout for canvas nodes.
  * Guarantees zero overlapping cards and clear horizontal and vertical spacing.
  */
-export function autoLayoutNodes<
-  T extends {
-    id: string;
-    position: { x: number; y: number };
-    data?: { kind?: string; label?: string };
-  },
->(nodes: T[], edges: Edge[]): T[] {
-  if (nodes.length <= 1) return nodes;
-
-  const nodeMap = new Map(nodes.map(n => [n.id, n]));
-  const incoming = new Map<string, string[]>();
-  const outgoing = new Map<string, string[]>();
-
-  for (const n of nodes) {
-    incoming.set(n.id, []);
-    outgoing.set(n.id, []);
-  }
-
-  for (const e of edges) {
-    if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
-      outgoing.get(e.source)?.push(e.target);
-      incoming.get(e.target)?.push(e.source);
-    }
-  }
-
-  // 1. Assign topological ranks (longest path propagation capped at 30 iterations)
-  const ranks = new Map<string, number>();
-  for (const n of nodes) ranks.set(n.id, 0);
-
-  // Propagate ranks along edges
-  for (let iter = 0; iter < Math.min(nodes.length, 30); iter++) {
-    let changed = false;
-    for (const e of edges) {
-      if (nodeMap.has(e.source) && nodeMap.has(e.target)) {
-        const srcRank = ranks.get(e.source) ?? 0;
-        const tgtRank = ranks.get(e.target) ?? 0;
-        if (tgtRank < srcRank + 1) {
-          ranks.set(e.target, srcRank + 1);
-          changed = true;
-        }
-      }
-    }
-    if (!changed) break;
-  }
-
-  // Ensure end nodes sit at maxRank
-  const endNodes = nodes.filter(n => n.data?.kind === "end");
-  let maxRank = 0;
-  for (const r of Array.from(ranks.values())) {
-    if (r > maxRank) maxRank = r;
-  }
-  for (const endNode of endNodes) {
-    if ((ranks.get(endNode.id) ?? 0) < maxRank) {
-      ranks.set(endNode.id, maxRank);
-    }
-  }
-
-  // Group nodes by rank
-  const rankBuckets = new Map<number, T[]>();
-  for (const n of nodes) {
-    const r = ranks.get(n.id) ?? 0;
-    const bucket = rankBuckets.get(r) ?? [];
-    bucket.push(n);
-    rankBuckets.set(r, bucket);
-  }
-
-  // Layout parameters:
-  // Node card width is 224px (w-56) with padding.
-  // Using 350px column step ensures a clean 126px horizontal gap between successive nodes!
-  const COL_SPACING = 350;
-  const ROW_HEIGHT = 160;
-  const START_X = 60;
-  const BASELINE_Y = 200;
-
-  const newPositions = new Map<string, { x: number; y: number }>();
-  const sortedRanks = Array.from(rankBuckets.keys()).sort((a, b) => a - b);
-
-  for (const r of sortedRanks) {
-    const nodesInRank = rankBuckets.get(r) ?? [];
-    const count = nodesInRank.length;
-
-    // Sort nodes in this rank:
-    // Try to sort by the average Y of their parents to reduce edge crossings
-    nodesInRank.sort((a, b) => {
-      const parentsA = incoming.get(a.id) ?? [];
-      const parentsB = incoming.get(b.id) ?? [];
-      const avgYA = parentsA.length
-        ? parentsA.reduce(
-            (sum, pid) => sum + (newPositions.get(pid)?.y ?? BASELINE_Y),
-            0
-          ) / parentsA.length
-        : BASELINE_Y;
-      const avgYB = parentsB.length
-        ? parentsB.reduce(
-            (sum, pid) => sum + (newPositions.get(pid)?.y ?? BASELINE_Y),
-            0
-          ) / parentsB.length
-        : BASELINE_Y;
-      return avgYA - avgYB;
-    });
-
-    if (count === 1) {
-      const node = nodesInRank[0]!;
-      const parents = incoming.get(node.id) ?? [];
-      let targetY = BASELINE_Y;
-      if (parents.length === 1) {
-        targetY = newPositions.get(parents[0]!)?.y ?? BASELINE_Y;
-      } else if (parents.length > 1) {
-        targetY = Math.round(
-          parents.reduce(
-            (sum, pid) => sum + (newPositions.get(pid)?.y ?? BASELINE_Y),
-            0
-          ) / parents.length
-        );
-      }
-      newPositions.set(node.id, {
-        x: START_X + r * COL_SPACING,
-        y: targetY,
-      });
-    } else {
-      // Multiple nodes in column (branches): spread vertically around baseline
-      const totalSpan = (count - 1) * ROW_HEIGHT;
-      const startY = BASELINE_Y - totalSpan / 2;
-      nodesInRank.forEach((node, index) => {
-        newPositions.set(node.id, {
-          x: START_X + r * COL_SPACING,
-          y: Math.round(startY + index * ROW_HEIGHT),
-        });
-      });
-    }
-  }
-
-  // Overlap Collision Prevention Pass:
-  // Ensure no two nodes ever overlap (dx < 260 && dy < 120)
-  for (let iter = 0; iter < 3; iter++) {
-    let hadCollision = false;
-    for (let i = 0; i < nodes.length; i++) {
-      for (let j = i + 1; j < nodes.length; j++) {
-        const idA = nodes[i]!.id;
-        const idB = nodes[j]!.id;
-        const posA = newPositions.get(idA)!;
-        const posB = newPositions.get(idB)!;
-
-        const dx = Math.abs(posA.x - posB.x);
-        const dy = Math.abs(posA.y - posB.y);
-
-        if (dx < 260 && dy < 120) {
-          hadCollision = true;
-          if (posA.y <= posB.y) {
-            posB.y = posA.y + 140;
-          } else {
-            posA.y = posB.y + 140;
-          }
-        }
-      }
-    }
-    if (!hadCollision) break;
-  }
-
-  return nodes.map(n => ({
-    ...n,
-    position: newPositions.get(n.id) ?? n.position,
-  }));
+export function autoLayoutNodes<T extends { id: string; position: { x: number; y: number }; measured?: { width?: number; height?: number }; data?: { kind?: string; label?: string } }>(nodes: T[], edges: Edge[]): T[] {
+  return readableCanvasLayout(nodes, edges);
 }
 
-/** Keep modern router rules and legacy lysz entries aligned with actual outgoing edges. */
 function syncRouterRouteTargets(
   nodes: CanvasNode[],
   edges: Edge[],
@@ -1146,7 +996,7 @@ function NestedStructuredValueEditor({
   onChange: (value: unknown) => void;
 }) {
   const inputClass =
-    "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
+    surfaceClass1;
   if (Array.isArray(value)) {
     return (
       <div className={canvasNestedCardClass}>
@@ -1512,7 +1362,7 @@ function OriginalFieldControl({
   onChange: (value: unknown) => void;
 }) {
   const inputClass =
-    "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
+    surfaceClass1;
   if (spec.kind === "structured")
     return (
       <NestedStructuredValueEditor
@@ -1867,7 +1717,7 @@ function StructuredListRow({
   onRemove: () => void;
 }) {
   const inputClass =
-    "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
+    surfaceClass1;
   const originalSpecs =
     DATA_FIELD_EDITOR_PROFILES[fieldKey]?.fields ??
     ORIGINAL_LIST_ITEM_SPECS[fieldKey];
@@ -2488,12 +2338,34 @@ export default function WorkflowCanvas({
   latestNodesRef.current = nodes;
   const latestEdgesRef = useRef(edges);
   latestEdgesRef.current = edges;
+  const { prefersReducedMotion } = useMotionPreference();
+  // UX: display projection never enters toDefinition; explicit layout edits retain history.
+  const [canvasPresentation, setCanvasPresentation] = useState<CanvasPresentation>("auto");
+  const presentationRef = useRef(canvasPresentation); presentationRef.current = canvasPresentation;
+  const readingDragRef = useRef<HistorySnapshot | null>(null);
+  const readingActive = canvasPresentation === "readable" || (canvasPresentation === "auto" && canvasHasCrowding(nodes));
+  const readingNodes = useMemo(() => readingActive ? readableCanvasLayout(nodes, edges) : nodes, [nodes, edges, readingActive]);
+  const displayedNodesRef = useRef(readingNodes); displayedNodesRef.current = readingNodes;
+  const readingActiveRef = useRef(readingActive); readingActiveRef.current = readingActive;
+  const fitCanvas = useCallback((nodeId?: string | null, edgeId?: string | null, duration = 180) => {
+    if (!reactFlow || !flowViewportRef.current) return Promise.resolve(false);
+    const allRects = canvasNodeRects(displayedNodesRef.current), currentEdges = latestEdgesRef.current;
+    const ids = edgeId ? new Set(currentEdges.filter(e => e.id === edgeId).flatMap(e => [e.source, e.target])) : canvasContextIds(allRects, currentEdges, nodeId);
+    const rects = allRects.filter(n => ids.has(n.id));
+    const points = currentEdges.flatMap((edge, lane) => {
+      if (!ids.has(edge.source) || !ids.has(edge.target)) return [];
+      const a = allRects.find(n => n.id === edge.source), b = allRects.find(n => n.id === edge.target);
+      return a && b ? canvasConnectionPoints({ x: a.x + a.width + 4, y: a.y + a.height / 2 }, { x: b.x - 4, y: b.y + b.height / 2 }, allRects, edge.source, edge.target, lane) : [];
+    });
+    const viewport = flowViewportRef.current;
+    return reactFlow.setViewport(getViewportForBounds(canvasBounds(rects, points), viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
+  }, [reactFlow, prefersReducedMotion]);
+
   const definitionSignature = useMemo(
     () => JSON.stringify(definition ?? defaultDefinition()),
     [definition]
   );
 
-  const { prefersReducedMotion } = useMotionPreference();
   const revealInspector = useCallback(() => {
     if (!window.matchMedia("(max-width: 1023px)").matches) return;
     if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
@@ -2511,9 +2383,9 @@ export default function WorkflowCanvas({
     setContextMenu(null);
     setInspectorMode("normal");
     setNodes(current => current.map(item => ({ ...item, selected: item.id === node.id })));
-    reactFlow?.fitView({ ...automaticCanvasFit(compactReadOnlyPreview, node.id), duration: prefersReducedMotion ? 0 : 180 });
+    void fitCanvas(node.id);
     revealInspector();
-  }, [compactReadOnlyPreview, prefersReducedMotion, reactFlow, revealInspector, setNodes]);
+  }, [fitCanvas, revealInspector, setNodes]);
   const inspectCanvasEdge = useCallback((edgeId: string) => {
     const edge = latestEdgesRef.current.find(item => item.id === edgeId);
     if (!edge) return;
@@ -2522,9 +2394,9 @@ export default function WorkflowCanvas({
     setContextMenu(null);
     setInspectorMode("normal");
     setNodes(current => current.map(node => ({ ...node, selected: false })));
-    reactFlow?.fitView({ nodes: latestNodesRef.current.filter(node => node.id === edge.source || node.id === edge.target), padding: 0.6, duration: prefersReducedMotion ? 0 : 180 });
+    void fitCanvas(null, edge.id);
     revealInspector();
-  }, [prefersReducedMotion, reactFlow, revealInspector, setNodes]);
+  }, [fitCanvas, revealInspector, setNodes]);
   useEffect(() => () => {
     if (inspectorRevealFrameRef.current !== null) window.cancelAnimationFrame(inspectorRevealFrameRef.current);
   }, []);
@@ -2544,13 +2416,14 @@ export default function WorkflowCanvas({
   } | null>(null);
 
   const pushHistory = useCallback(
-    (currentNodes?: CanvasNode[], currentEdges?: Edge[]) => {
+    (currentNodes?: CanvasNode[], currentEdges?: Edge[], presentation = presentationRef.current) => {
       if (readOnly) return;
       const n = currentNodes ?? latestNodesRef.current;
       const e = currentEdges ?? latestEdgesRef.current;
       const snapshot: HistorySnapshot = {
         nodes: structuredClone(n),
         edges: structuredClone(e),
+        presentation,
       };
       pastRef.current = [...pastRef.current.slice(-29), snapshot];
       futureRef.current = [];
@@ -2566,8 +2439,10 @@ export default function WorkflowCanvas({
     const currentSnapshot: HistorySnapshot = {
       nodes: structuredClone(latestNodesRef.current),
       edges: structuredClone(latestEdgesRef.current),
+      presentation: presentationRef.current,
     };
     futureRef.current = [currentSnapshot, ...futureRef.current.slice(0, 29)];
+    setCanvasPresentation(previous.presentation ?? "auto");
     setNodes(previous.nodes);
     setEdges(previous.edges);
     setSelectedId(current =>
@@ -2590,8 +2465,10 @@ export default function WorkflowCanvas({
     const currentSnapshot: HistorySnapshot = {
       nodes: structuredClone(latestNodesRef.current),
       edges: structuredClone(latestEdgesRef.current),
+      presentation: presentationRef.current,
     };
     pastRef.current = [...pastRef.current.slice(-29), currentSnapshot];
+    setCanvasPresentation(next.presentation ?? "auto");
     setNodes(next.nodes);
     setEdges(next.edges);
     setSelectedId(current =>
@@ -2608,6 +2485,11 @@ export default function WorkflowCanvas({
   }, [readOnly, setEdges, setNodes]);
 
   const onNodeDragStart = useCallback((_event: any, node: CanvasNode) => {
+    if (readingActiveRef.current) {
+      readingDragRef.current = { nodes: structuredClone(latestNodesRef.current), edges: structuredClone(latestEdgesRef.current), presentation: presentationRef.current };
+      setNodes(displayedNodesRef.current.map(n => ({ ...n, position: { ...n.position } })));
+      setCanvasPresentation("original");
+    }
     dragStartSnapshotRef.current = {
       id: node.id,
       x: node.position.x,
@@ -2626,8 +2508,14 @@ export default function WorkflowCanvas({
         const priorNodes = latestNodesRef.current.map(n =>
           n.id === node.id ? { ...n, position: { x, y } } : n
         );
-        pushHistory(priorNodes, latestEdgesRef.current);
+        const before = readingDragRef.current;
+        pushHistory(before?.nodes ?? priorNodes, before?.edges ?? latestEdgesRef.current, before?.presentation ?? presentationRef.current);
+      } else if (readingDragRef.current) {
+        setNodes(readingDragRef.current.nodes);
+        setCanvasPresentation(readingDragRef.current.presentation ?? "auto");
       }
+      readingDragRef.current = null;
+      setNodes(current => [...current]);
       dragStartSnapshotRef.current = null;
     },
     [pushHistory]
@@ -2668,11 +2556,7 @@ export default function WorkflowCanvas({
     let secondFrame = 0;
     firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
-        void reactFlow
-          .fitView({
-            ...automaticCanvasFit(compactReadOnlyPreview),
-            duration: 0,
-          })
+        void fitCanvas(undefined, undefined, 0)
           .then(applied => {
             if (applied) lastInitialFitKeyRef.current = fitKey;
           });
@@ -2689,13 +2573,14 @@ export default function WorkflowCanvas({
     definitionSignature,
     reactFlow,
     workflowId,
+    fitCanvas,
   ]);
 
   const hasInspectorSelection = hasCanvasInspectorSelection(nodes, edges, selectedId, selectedEdgeId);
   const inspectorReveal = useContextReveal<HTMLElement>(selectedId || selectedEdgeId);
   const [highlightRelated, setHighlightRelated] = useState(false);
   const neighborhood = useMemo(() => highlightRelated ? traceWorkflowNeighborhood(nodes.map(node => node.id), edges, selectedId) : null, [highlightRelated, nodes, edges, selectedId]);
-  const presentedNodes = useMemo(() => neighborhood ? nodes.map(node => ({ ...node, className: `${node.className ?? ""} ${neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"}` })) : nodes, [nodes, neighborhood]);
+  const presentedNodes = useMemo(() => neighborhood ? readingNodes.map(node => ({ ...node, className: `${node.className ?? ""} ${neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"}` })) : readingNodes, [readingNodes, neighborhood]);
   const inspectorExpanded = hasInspectorSelection && inspectorMode !== "compact";
   useEffect(() => {
     if (!reactFlow) return;
@@ -2707,10 +2592,7 @@ export default function WorkflowCanvas({
     let secondFrame = 0;
     firstFrame = window.requestAnimationFrame(() => {
       secondFrame = window.requestAnimationFrame(() => {
-        void reactFlow.fitView({
-          ...automaticCanvasFit(compactReadOnlyPreview, selectedId),
-          duration: 180,
-        });
+        void fitCanvas(selectedId, selectedEdgeId);
       });
     });
 
@@ -2718,12 +2600,11 @@ export default function WorkflowCanvas({
       window.cancelAnimationFrame(firstFrame);
       window.cancelAnimationFrame(secondFrame);
     };
-  }, [compactReadOnlyPreview, inspectorExpanded, reactFlow, selectedId]);
+  }, [compactReadOnlyPreview, inspectorExpanded, reactFlow, selectedId, selectedEdgeId, fitCanvas]);
 
   useEffect(() => {
     const viewport = flowViewportRef.current;
     if (
-      !compactReadOnlyPreview ||
       !reactFlow ||
       !viewport ||
       typeof ResizeObserver === "undefined"
@@ -2750,12 +2631,7 @@ export default function WorkflowCanvas({
       resizeTimer = window.setTimeout(() => {
         firstFrame = window.requestAnimationFrame(() => {
           secondFrame = window.requestAnimationFrame(() => {
-            void reactFlow.fitView({
-              padding: compactReadOnlyPreview ? 0.12 : 0.22,
-              minZoom: 0.1,
-              maxZoom: 1.25,
-              duration: 180,
-            });
+            void fitCanvas(selectedId, selectedEdgeId);
           });
         });
       }, 120);
@@ -2768,10 +2644,10 @@ export default function WorkflowCanvas({
       window.cancelAnimationFrame(firstFrame);
       window.cancelAnimationFrame(secondFrame);
     };
-  }, [compactReadOnlyPreview, reactFlow]);
+  }, [compactReadOnlyPreview, reactFlow, fitCanvas, selectedId, selectedEdgeId]);
 
   useEffect(() => {
-    if (!onDefinitionChange || isLayoutAnimatingRef.current) return;
+    if (!onDefinitionChange || isLayoutAnimatingRef.current || readingDragRef.current) return;
     const next = toDefinition(nodes, edges, baseRef.current);
     const serialized = JSON.stringify(next);
     if (
@@ -2815,11 +2691,11 @@ export default function WorkflowCanvas({
         behavior: "smooth",
         block: "center",
       });
-      reactFlow?.fitView({ nodes: [next], padding: 0.6, duration: 180 });
+      void fitCanvas(next.id);
     };
     window.addEventListener("flow:inspect-node", inspect);
     return () => window.removeEventListener("flow:inspect-node", inspect);
-  }, [reactFlow]);
+  }, [reactFlow, fitCanvas]);
 
   useEffect(() => {
     const focus = (event: Event) => {
@@ -2843,12 +2719,12 @@ export default function WorkflowCanvas({
         behavior: "smooth",
         block: "center",
       });
-      reactFlow?.fitView({ nodes: [node], padding: 0.6, duration: 180 });
+      void fitCanvas(node.id);
       focusInspector();
     };
     window.addEventListener("flow:focus-node", focus);
     return () => window.removeEventListener("flow:focus-node", focus);
-  }, [inspectCanvasEdge, reactFlow]);
+  }, [inspectCanvasEdge, reactFlow, fitCanvas]);
 
   const selected = useMemo(
     () => nodes.find(node => node.id === selectedId),
@@ -3021,6 +2897,7 @@ export default function WorkflowCanvas({
           ? {
               ...edge,
               label,
+              data: { ...edge.data, outcomeColor: outcomeStroke },
               selected: true,
               animated: true,
               interactionWidth: 24,
@@ -3056,6 +2933,7 @@ export default function WorkflowCanvas({
           : {
               ...edge,
               label,
+              data: { ...edge.data, outcomeColor: outcomeStroke },
               selected: false,
               interactionWidth: 24,
               labelStyle: {
@@ -3077,7 +2955,9 @@ export default function WorkflowCanvas({
       }),
     [edges, nodeMap, selectedEdgeId]
   );
-  const presentedEdges = useMemo(() => neighborhood ? displayedEdges.map(edge => ({ ...edge, className: `${edge.className ?? ""} ${neighborhood.edges.has(edge.id) ? "aiflow-related-edge" : "aiflow-unrelated-edge"}` })) : displayedEdges, [displayedEdges, neighborhood]);
+  const canvasRects = useMemo(() => canvasNodeRects(readingNodes), [readingNodes]);
+  const workspaceEdges = useMemo(() => displayedEdges.map((edge, canvasLane) => ({ ...edge, type: "workspace", data: { ...edge.data, canvasRects, canvasLane } })), [displayedEdges, canvasRects]);
+  const presentedEdges = useMemo(() => neighborhood ? workspaceEdges.map(edge => ({ ...edge, className: `${edge.className ?? ""} ${neighborhood.edges.has(edge.id) ? "aiflow-related-edge" : "aiflow-unrelated-edge"}` })) : workspaceEdges, [workspaceEdges, neighborhood]);
 
   useEffect(() => {
     setInspectorTab(selectedFieldGroups[0]?.label ?? "");
@@ -3773,25 +3653,20 @@ export default function WorkflowCanvas({
     [edges, nodes]
   );
   const exportCanvasImage = () => {
-    const width = Math.max(900, ...nodes.map(node => node.position.x + 240));
-    const height = Math.max(520, ...nodes.map(node => node.position.y + 140));
-    const byId = new Map(nodes.map(node => [node.id, node]));
-    const lines = edges
-      .map(edge => {
-        const source = byId.get(edge.source);
-        const target = byId.get(edge.target);
-        return source && target
-          ? `<line x1="${source.position.x + 164}" y1="${source.position.y + 43}" x2="${target.position.x}" y2="${target.position.y + 43}" stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)" />`
-          : "";
-      })
-      .join("");
-    const cards = nodes
-      .map(
-        node =>
-          `<g><rect x="${node.position.x}" y="${node.position.y}" width="164" height="72" rx="10" fill="#ffffff" stroke="${colorFor(node.data.kind)}" stroke-width="2"/><text x="${node.position.x + 14}" y="${node.position.y + 30}" fill="#0f172a" font-size="14" font-family="Arial, sans-serif" font-weight="700">${escapeXml(node.data.label)}</text><text x="${node.position.x + 14}" y="${node.position.y + 52}" fill="#64748b" font-size="14" font-family="Arial, sans-serif">${escapeXml(node.data.kind.toUpperCase())}</text></g>`
-      )
-      .join("");
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs><rect width="100%" height="100%" fill="#f8fafc"/>${lines}${cards}</svg>`;
+    // UX: exported geometry follows the visible reading projection and routed edges.
+    const visibleNodes = displayedNodesRef.current;
+    const rects = canvasNodeRects(visibleNodes);
+    const routes = latestEdgesRef.current.flatMap((edge, lane) => {
+      const a = rects.find(n => n.id === edge.source), b = rects.find(n => n.id === edge.target);
+      return a && b ? [{ edge, points: canvasConnectionPoints({ x: a.x + a.width + 4, y: a.y + a.height / 2 }, { x: b.x - 4, y: b.y + b.height / 2 }, rects, edge.source, edge.target, lane) }] : [];
+    });
+    const bounds = canvasBounds(rects, routes.flatMap(r => r.points));
+    const lines = routes.map(({ points }) => `<path d="${roundedCanvasPath(points)}" fill="none" stroke="#71839b" stroke-width="2" marker-end="url(#arrow)"/>`).join("");
+    const cards = visibleNodes.map(node => {
+      const r = rects.find(rect => rect.id === node.id)!;
+      return `<g><title>${escapeXml(node.data.label)}</title><rect x="${r.x}" y="${r.y}" width="${r.width}" height="${r.height}" rx="10" fill="#ffffff" stroke="#cbd5e1"/><text x="${r.x + 14}" y="${r.y + 36}" fill="#0f172a" font-size="14" font-family="sans-serif" font-weight="600">${escapeXml(node.data.label.slice(0, 16))}</text><text x="${r.x + 14}" y="${r.y + 60}" fill="#64748b" font-size="12" font-family="sans-serif">${escapeXml(FLOW_NODE_DEFINITIONS[node.data.kind].label)}</text></g>`;
+    }).join("");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(bounds.width)}" height="${Math.ceil(bounds.height)}" viewBox="${bounds.x} ${bounds.y} ${bounds.width} ${bounds.height}"><defs><marker id="arrow" viewBox="0 0 12 12" refX="12" refY="6" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill="#71839b"/></marker></defs><rect x="${bounds.x}" y="${bounds.y}" width="100%" height="100%" fill="#f8fafc"/>${lines}${cards}</svg>`;
     const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -3829,6 +3704,7 @@ export default function WorkflowCanvas({
       if (!currentNodes.length || readOnly) return;
 
       pushHistory(currentNodes, currentEdges);
+      setCanvasPresentation("original");
       const neatNodes = autoLayoutNodes(currentNodes, currentEdges);
 
       if (
@@ -3846,7 +3722,7 @@ export default function WorkflowCanvas({
           onDefinitionChange(nextDef);
         }
         setTimeout(() => {
-          reactFlow?.fitView({ padding: 0.22, duration: 0 });
+          void fitCanvas(undefined, undefined, 0);
         }, 30);
         toast.success("画布已完成自动拓扑排版与间距整理。");
         focusCanvas();
@@ -3856,7 +3732,7 @@ export default function WorkflowCanvas({
       if (layoutRafRef.current) cancelAnimationFrame(layoutRafRef.current);
       isLayoutAnimatingRef.current = true;
       const startPositions = new Map(
-        currentNodes.map(n => [n.id, { ...n.position }])
+        displayedNodesRef.current.map(n => [n.id, { ...n.position }])
       );
       const targetPositions = new Map(
         neatNodes.map(n => [n.id, { ...n.position }])
@@ -3901,7 +3777,7 @@ export default function WorkflowCanvas({
             onDefinitionChange(nextDef);
           }
           setTimeout(() => {
-            reactFlow?.fitView({ padding: 0.22, duration: 250 });
+            void fitCanvas(undefined, undefined, 250);
           }, 30);
           toast.success("画布已完成自动拓扑排版与间距整理。");
           focusCanvas();
@@ -3931,7 +3807,7 @@ export default function WorkflowCanvas({
       window.removeEventListener("flow:save-canvas-image", saveCanvasImage);
       window.removeEventListener("flow:fullscreen-canvas", fullscreenCanvas);
     };
-  }, [reactFlow, fullscreen]);
+  }, [reactFlow, fullscreen, fitCanvas, readOnly, pushHistory, prefersReducedMotion, onDefinitionChange]);
 
   const availablePalette = palette.filter(item =>
     isFlowNodeAllowed(flowType, item.type)
@@ -3966,6 +3842,8 @@ export default function WorkflowCanvas({
     <div
       ref={editorRegionRef}
       data-aiflow-workflow-canvas=""
+      data-canvas-redesign=""
+      data-reading-layout={readingActive ? "true" : "false"}
       data-workflow-editor={compactReadOnlyPreview ? undefined : ""}
       data-editor-viewport={viewportFit ? "true" : undefined}
       data-inspector-mode={inspectorMode}
@@ -4410,6 +4288,12 @@ export default function WorkflowCanvas({
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
         >
+          {!compactReadOnlyPreview && <div data-canvas-view-controls="" className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-md border border-border bg-card p-1 text-xs">
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" onClick={() => { void fitCanvas(); }}>总览</button>
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" disabled={!selectedId} onClick={() => { void fitCanvas(selectedId); }}>上下游</button>
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" title="切换显示布局，不修改已保存坐标" aria-pressed={readingActive} onClick={() => { setCanvasPresentation(readingActive ? "original" : "readable"); window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void fitCanvas(selectedId); })); }}>{readingActive ? "阅读布局" : "原始布局"}</button>
+          </div>}
+          {!readingActive && canvasHasCrowding(nodes) && <p data-canvas-layout-warning="" role="status" className="absolute bottom-3 left-16 z-10 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">原始节点重叠；切换阅读布局可查看连线，不修改原坐标。</p>}
           <details className="aiflow-type-control absolute left-3 top-3 z-10 rounded-lg border border-border bg-card/95 text-muted-foreground shadow-sm">
             <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 py-2 font-semibold text-foreground">
               画布说明
@@ -4653,6 +4537,8 @@ export default function WorkflowCanvas({
             nodes={presentedNodes}
             edges={presentedEdges}
             nodeTypes={nodeTypes}
+            edgeTypes={canvasEdgeTypes}
+            onMove={(_event, viewport) => flowViewportRef.current?.style.setProperty("--canvas-zoom", String(viewport.zoom))}
             onInit={setReactFlow}
             onNodesChange={readOnly ? undefined : onNodesChange}
             onEdgesChange={readOnly ? undefined : onEdgesChange}
@@ -4686,7 +4572,7 @@ export default function WorkflowCanvas({
             minZoom={0.1}
             maxZoom={1.25}
           >
-            <Background color="#cbd5e1" gap={22} size={1.25} />
+            <Background color="var(--aiflow-canvas-dot)" gap={24} size={1} />
             <MiniMap
               className={compactReadOnlyPreview ? "hidden" : "hidden md:block"}
               nodeColor={node => colorFor((node.data as FlowNodeData).kind)}
@@ -4696,6 +4582,7 @@ export default function WorkflowCanvas({
             <Controls
               className="flow-canvas-controls"
               showInteractive={!readOnly}
+              onFitView={() => { void fitCanvas(); }}
             />
           </ReactFlow>
           {neighborhood && <p data-workflow-neighborhood="" role="status" className="aiflow-type-meta pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-5rem)] rounded-xl border border-border bg-card/95 px-3 py-2 text-muted-foreground">静态连接 · 上游 {neighborhood.upstream.size} 个 · 下游 {neighborhood.downstream.size} 个</p>}

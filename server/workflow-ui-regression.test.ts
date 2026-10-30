@@ -1,3 +1,4 @@
+import { inlinePresentationClasses } from "../tests/presentation-source";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
@@ -6,7 +7,7 @@ import {
 } from "../shared/workflow-publish";
 
 const source = (path: string) =>
-  readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
+  inlinePresentationClasses(readFileSync(new URL(path, import.meta.url), "utf8")).replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
 const identityWorkspaceSource = source("../client/src/components/IdentityWorkspace.tsx");
 const workspaceHeaderSource = source("../client/src/components/WorkspaceHeader.tsx");
@@ -176,6 +177,8 @@ describe("分页流程缓存联动", () => {
 const runModalSource = source(
   "../client/src/components/WorkflowTestRunModal.tsx"
 );
+const canvasDesignStyles = source("../client/src/components/workflow-canvas-design.css");
+const canvasGeometrySource = source("../client/src/components/workflow-canvas-geometry.ts");
 const canvasSource = source("../client/src/components/WorkflowCanvas.tsx");
 const nodeContractSource = source("../shared/workflow-node-contract.ts");
 const flowProfileSource = source("../shared/flow-profile-contract.ts");
@@ -721,8 +724,8 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(canvasSource).toContain("minZoom={0.1}");
     expect(canvasSource).toContain("lastInitialFitKeyRef");
-    expect(canvasSource).toContain("minZoom: 0.1,");
-    expect(canvasSource).toContain("maxZoom: 1.25,");
+    expect(canvasSource).toContain("viewport.clientHeight, 0.1, 1, 0.12)");
+    expect(canvasDesignStyles).toContain("calc(12px / var(--canvas-zoom))");
     expect(canvasSource).toContain("minZoom={0.1}");
     expect(canvasSource).toContain("maxZoom={1.25}");
     expect(canvasSource).toContain(
@@ -1696,8 +1699,8 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain('data-flow-canvas-actions=""');
     expect(canvasSource).toContain("showCanvasActions = true");
     expect(processDetailPageSource).toContain("showCanvasActions={false}");
-    expect(canvasSource).toContain("rounded-2xl");
-    expect(canvasSource).toContain("max-w-[calc(100vw-3rem)]");
+    expect(canvasDesignStyles).toContain("border-radius: 10px !important;");
+    expect(canvasDesignStyles).toContain("width: 208px;");
     expect(canvasSource).toContain("break-words text-sm font-semibold");
     expect(canvasSource).toContain("justify-start");
     expect(styleSource).toContain("[data-flow-node-palette]");
@@ -2485,7 +2488,7 @@ describe("流程设计器界面回归约束", () => {
       'compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]"'
     );
     expect(canvasSource).toContain(
-      "automaticCanvasFit(compactReadOnlyPreview)"
+      "fitCanvas(undefined, undefined, 0)"
     );
     expect(canvasSource).toContain(
       'compactReadOnlyPreview ? "hidden" : "hidden md:block"'
@@ -2564,7 +2567,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("最小化面板");
     expect(canvasSource).toContain('role="tablist"');
     expect(canvasSource).toContain('role="tabpanel"');
-    expect(canvasSource).toContain("rounded-2xl border bg-card");
+    expect(canvasDesignStyles).toContain("border-radius: 10px !important;");
     expect(canvasSource).toContain("画布说明");
     expect(canvasSource).toContain("RotateCcw");
     expect(canvasSource).toContain("若无元件，请添加元件。");
@@ -2950,7 +2953,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(canvasSource).toContain("previousInspectorExpandedRef");
     expect(canvasSource).toContain(
-      "automaticCanvasFit(compactReadOnlyPreview, selectedId)"
+      "fitCanvas(selectedId, selectedEdgeId)"
     );
     expect(canvasSource).toContain('aria-label="保存为图片"');
     expect(canvasSource).toContain('aria-label="取消高亮"');
@@ -3105,10 +3108,10 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem;");
     expect(canvasSource).toContain(
-      'font-size="14" font-family="Arial, sans-serif"'
+      'font-size="14" font-family="sans-serif"'
     );
     expect(canvasSource).toContain(
-      'font-size="14" font-family="Arial, sans-serif"'
+      'font-size="14" font-family="sans-serif"'
     );
     expect(canvasSource).not.toContain(
       'font-size="10" font-family="Arial, sans-serif"'
@@ -3910,7 +3913,7 @@ it("编译诊断支持定位连线并跳过无位置问题", () => {
   expect(homeSource).toContain("edgeId: item.location.edgeId");
   expect(canvasSource).toContain("if (detail?.edgeId)");
   expect(canvasSource).toContain(
-    "node.id === edge.source || node.id === edge.target"
+    "canvasConnectionPoints("
   );
 });
 it("账号缓存隔离完成后才渲染工作台并重置页面选择", () => {
@@ -4075,7 +4078,7 @@ it("三类流程可从节点选择器定位配置，且不改动定义和撤销�
   expect(inspect).toContain("setSelectedEdgeId(null)");
   expect(inspect).toContain("revealInspector()");
   expect(inspect).toContain(
-    "automaticCanvasFit(compactReadOnlyPreview, node.id)"
+    "fitCanvas(node.id)"
   );
   expect(inspect).not.toContain("pushHistory");
   expect(inspect).not.toContain("onDefinitionChange");
@@ -4211,4 +4214,20 @@ it("共用编辑工作区按真实剩余高度布局，忙碌时禁止交叉提�
   expect(canvasSource).toContain('aria-label="添加流程节点"');
   expect(canvasSource).toContain('aria-label="复用流程资源"');
   expect(canvasSource).toContain("onCloseAutoFocus={closePaletteFocus}");
+});
+
+
+it("阅读投影隔离于持久化，拖动和整理仍可连同显示模式一起撤销", () => {
+  expect(canvasSource).toContain("readingActive ? readableCanvasLayout(nodes, edges) : nodes");
+  expect(canvasSource).toContain("toDefinition(nodes, edges, baseRef.current)");
+  expect(canvasSource).not.toContain("toDefinition(readingNodes");
+  expect(canvasSource).toContain("setCanvasPresentation(previous.presentation");
+  expect(canvasSource).toContain("before?.nodes ?? priorNodes");
+  expect(canvasGeometrySource).toContain("height + 64");
+  expect(canvasGeometrySource).toContain("width)) + 128");
+  expect(canvasDesignStyles).toContain("overflow: visible;");
+  const edge = source("../client/src/components/CanvasConnectionEdge.tsx");
+  expect(edge).toContain("interactionWidth={24 / zoom}");
+  expect(edge).toContain('markerWidth={9 / zoom}');
+  expect(edge).toContain("strokeWidth: (selected ? 3 : 2) / zoom");
 });
