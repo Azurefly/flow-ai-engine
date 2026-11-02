@@ -35,12 +35,14 @@ const input = {
   },
 };
 let schedule: any;
+let actor: any;
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.access.mockResolvedValue({
     exists: true,
     permissions: new Set(["project:workflow:edit"]),
   });
+  actor = { id: 7, role: "admin", status: "active", tokenVersion: 4 };
   schedule = {
     id: "schedule-owned",
     schedulerType: "internal",
@@ -73,6 +75,8 @@ beforeEach(() => {
     edges: [{ id: "edge", sourceNodeId: "start", targetNodeId: "end" }],
   };
   mocks.query.mockImplementation(async (sql: string) => {
+    if (sql.startsWith("SELECT id,role,status,tokenVersion FROM users"))
+      return [actor ? [actor] : []];
     if (sql.includes("JOIN users u"))
       return [[{ ownerUserId: 7, status: "active" }]];
     if (sql.includes("FROM flow_project"))
@@ -95,6 +99,101 @@ beforeEach(() => {
     return [{ affectedRows: 1 }];
   });
   mocks.poolQuery.mockResolvedValue([[]]);
+});
+
+it.each(["disabled", "session_changed", "missing"])(
+  "事务等待后账号状态%s不能再创建运行或推进调度",
+  async state => {
+    if (state === "disabled") actor.status = "disabled";
+    if (state === "session_changed") actor.tokenVersion = 5;
+    if (state === "missing") actor = null;
+    await expect(
+      runDataflow({ ...owner, tokenVersion: 4 }, input)
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      mocks.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE)/.test(sql))
+    ).toBe(false);
+    expect(mocks.commit).not.toHaveBeenCalled();
+    expect(mocks.rollback).toHaveBeenCalledOnce();
+    expect(mocks.release).toHaveBeenCalledOnce();
+  }
+);
+
+it("进入事务后重新读取有效业务权限，外部预检允许不等于仍可发起", async () => {
+  mocks.access
+    .mockResolvedValueOnce({
+      exists: true,
+      permissions: new Set(["project:workflow:edit"]),
+    })
+    .mockResolvedValue({ exists: true, permissions: new Set() });
+  await expect(
+    runDataflow({ ...owner, tokenVersion: 4 }, input)
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(
+    mocks.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE)/.test(sql))
+  ).toBe(false);
+  expect(mocks.access.mock.calls[1][2]).toMatchObject({ lock: true });
+  expect(mocks.access.mock.calls[1][2].connection.query).toBe(mocks.query);
+});
+
+it("管理员角色在等待中被降级时使用事务内的新角色核对，不能沿用旧管理员身份", async () => {
+  actor.role = "user";
+  mocks.access.mockImplementation(async user => ({
+    exists: true,
+    permissions: new Set(
+      user.role === "admin" ? ["project:workflow:edit"] : []
+    ),
+  }));
+  await expect(
+    runDataflow({ ...owner, tokenVersion: 4 }, input)
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(mocks.access.mock.calls[1][0]).toEqual({ id: 7, role: "user" });
+  expect(
+    mocks.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE)/.test(sql))
+  ).toBe(false);
+});
+
+it("角色变为普通用户但仍有业务编辑权限时允许调度，账号锁先于业务及运行写入", async () => {
+  actor.role = "user";
+  await expect(
+    runDataflow({ ...owner, tokenVersion: 4 }, input)
+  ).resolves.toMatchObject({ status: "queued" });
+  expect(mocks.access.mock.calls[1][0]).toEqual({ id: 7, role: "user" });
+  const sql = mocks.query.mock.calls.map(([query]) => String(query));
+  const account = sql.findIndex(query =>
+    query.startsWith("SELECT id,role,status,tokenVersion FROM users")
+  );
+  const project = sql.findIndex(query =>
+    query.startsWith("SELECT id,status FROM flow_project")
+  );
+  const insert = sql.findIndex(query =>
+    query.startsWith("INSERT INTO dataflow_run ")
+  );
+  expect(account).toBeLessThan(project);
+  expect(project).toBeLessThan(insert);
+});
+
+it.each([
+  ["formal", "project:workflow:run"],
+  ["test", "project:workflow:edit"],
+] as const)("手工%s模式在事务内保留原%s准入要求", async (mode, permission) => {
+  actor.role = "user";
+  mocks.access.mockResolvedValue({
+    exists: true,
+    permissions: new Set([permission]),
+  });
+  await expect(
+    runDataflow(
+      { id: 7, role: "user", tokenVersion: 4 },
+      { projectId: input.projectId, workflowId: input.workflowId, mode }
+    )
+  ).resolves.toMatchObject({ status: "queued" });
+  expect(mocks.access.mock.calls[1][2]).toMatchObject({ lock: true });
+  expect(
+    mocks.query.mock.calls.some(([sql]) =>
+      String(sql).startsWith("INSERT INTO dataflow_run ")
+    )
+  ).toBe(true);
 });
 
 it("运行、Job 和下一时刻在同一连接中提交，调度发现不执行数据节点", async () => {

@@ -2061,11 +2061,9 @@ export async function runDataflow(
     expectedExecutionPlanHash?: string;
   }
 ) {
-  await requireProjectAccess(
-    user,
-    input.projectId,
-    input.triggerType === "schedule" || input.mode === "test" ? "edit" : "run"
-  );
+  const accessMode =
+    input.triggerType === "schedule" || input.mode === "test" ? "edit" : "run";
+  await requireProjectAccess(user, input.projectId, accessMode);
   const runId = id();
   let definition: any;
   let executionPlan: WorkflowExecutionPlan;
@@ -2073,7 +2071,38 @@ export async function runDataflow(
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
+    // 等待事务锁后重新核对账号、会话及授权，与其他业务写操作使用相同锁顺序。
+    const [actors] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR UPDATE",
+      [user.id]
+    );
+    const actor = actors[0];
+    if (
+      !actor ||
+      actor.status !== "active" ||
+      (user.tokenVersion !== undefined &&
+        Number(actor.tokenVersion) !== user.tokenVersion)
+    )
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "登录状态已变化，请刷新权限后重新发起。",
+      });
     await lockActiveProject(connection, input.projectId);
+    const access = await getProjectAccess(
+      { id: Number(actor.id), role: actor.role === "admin" ? "admin" : "user" },
+      input.projectId,
+      { connection, lock: true }
+    );
+    if (
+      !access.exists ||
+      !access.permissions.has(
+        accessMode === "edit" ? "project:workflow:edit" : "project:workflow:run"
+      )
+    )
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message: "业务权限已变化，当前账号不能发起此数据流程。",
+      });
     const [workflows] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND archivedAt IS NULL LIMIT 1 FOR UPDATE",
       [input.workflowId, input.projectId]
