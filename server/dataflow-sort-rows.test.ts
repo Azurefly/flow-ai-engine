@@ -121,4 +121,63 @@ describe("排序配置与实际执行使用同一合同", () => {
       sortDataflowRows(input, { fields: [{ field: "x", order: "wrong" }] })
     ).toThrow("排序方向");
   });
+
+  it("数字和文本混合时所有输入排列产生一致的类型顺序，不形成比较环", () => {
+    const rows = [{ v: 3 }, { v: "2" }, { v: "10" }];
+    const permutations = <T>(values: T[]): T[][] =>
+      values.length
+        ? values.flatMap((value, index) =>
+            permutations(values.filter((_, i) => i !== index)).map(rest => [
+              value,
+              ...rest,
+            ])
+          )
+        : [[]];
+    for (const input of permutations(rows)) {
+      expect(sortDataflowRows(input, { fields: ["v"] })).toEqual([
+        rows[0],
+        rows[2],
+        rows[1],
+      ]);
+      expect(
+        sortDataflowRows(input, { fields: [{ field: "v", direction: "desc" }] })
+      ).toEqual([rows[1], rows[2], rows[0]]);
+    }
+  });
+
+  it("数字、文本、布尔与结构值不隐式混同，等价对象继续比较次级字段", () => {
+    const rows = [
+      { id: "object-b", v: { b: 2, a: 1 }, tie: 2 },
+      { id: "object-a", v: { a: 1, b: 2 }, tie: 1 },
+      { id: "array", v: [1] },
+      { id: "true", v: true },
+      { id: "false", v: false },
+      { id: "text", v: "1" },
+      { id: "number", v: 1 },
+      { id: "null", v: null },
+    ];
+    const before = JSON.stringify(rows);
+    expect(
+      sortDataflowRows(rows, { fields: ["v", "tie"] }).map(row => row.id)
+    ).toEqual([
+      "null",
+      "number",
+      "text",
+      "false",
+      "true",
+      "array",
+      "object-a",
+      "object-b",
+    ]);
+    expect(JSON.stringify(rows)).toBe(before);
+  });
+
+  it.each([NaN, Infinity, -Infinity, 1n, Symbol("invalid"), () => 1])(
+    "单行非法JSON排序值也明确拒绝：%s",
+    value => {
+      expect(() => sortDataflowRows([{ v: value }], { fields: ["v"] })).toThrow(
+        "排序字段 v"
+      );
+    }
+  );
 });
