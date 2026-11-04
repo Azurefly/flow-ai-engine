@@ -3275,6 +3275,12 @@ async function copyAuditActionCode(value: string) {
   }
 }
 
+// UX：完整标识文本仍保留在DOM与title中，前半段可省略，末8个字符始终可辨认。
+function IdentifierText({ value }: { value?: string }) {
+  const characters = Array.from(value ?? "");
+  return <><span>{characters.slice(0, -8).join("")}</span><span>{characters.slice(-8).join("")}</span></>;
+}
+
 function IamCenter({
   tab,
   currentUserId,
@@ -3966,7 +3972,7 @@ function IamCenter({
                         data-iam-user-login=""
                         title={account.username}
                       >
-                        {account.username}
+                        <IdentifierText value={account.username} />
                       </span>
                       <span
                         data-iam-user-meta=""
@@ -4159,7 +4165,7 @@ function IamCenter({
                       className="aiflow-type-meta mt-0.5 break-words font-mono text-muted-foreground [overflow-wrap:anywhere]"
                       title={role.code}
                     >
-                      {role.code}
+                      <IdentifierText value={role.code} />
                     </p>
                   </button>
 

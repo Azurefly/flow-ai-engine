@@ -27,6 +27,9 @@
   [data-iam-user-name], [data-iam-role-name] {font-size: 14px; line-height: 22px; font-weight: 600; color: var(--foreground);}
   [data-iam-user-login], [data-iam-user-meta], [data-iam-role-code] {margin-top: 2px; font-size: 12px; line-height: 18px; color: var(--muted-foreground);}
   [data-iam-user-login], [data-iam-role-code] {font-family: var(--font-mono,ui-monospace,monospace);}
+  [data-iam-user-login], [data-iam-role-code] {display: flex;}
+  [data-iam-user-login] > span:first-child, [data-iam-role-code] > span:first-child {min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+  [data-iam-user-login] > span:last-child, [data-iam-role-code] > span:last-child {flex-shrink: 0;}
   [data-iam-user-state] {flex-shrink: 0; border-radius: 4px; padding: 2px 4px; font-size: 12px; line-height: 18px;}
   [data-iam-role-row] > button {display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px;}
   [data-iam-role-row] > button > div {display: contents;}
