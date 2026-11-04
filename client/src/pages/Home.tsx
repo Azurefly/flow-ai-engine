@@ -3949,25 +3949,26 @@ function IamCenter({
                     <span className="min-w-0">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <span
-                          className="aiflow-type-body min-w-0 break-words font-medium text-foreground [overflow-wrap:anywhere]"
+                          data-iam-user-name=""
                           title={account.name || account.username}
                         >
                           {account.name || account.username}
                         </span>
                         <span
-                          className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] leading-none ${account.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-slate-200 text-muted-foreground"}`}
+                          data-iam-user-state=""
+                          className={account.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-slate-200 text-muted-foreground"}
                         >
                           {account.status === "active" ? "启用" : "停用"}
                         </span>
                       </span>
                       <span
-                        className="mt-0.5 block break-words font-mono text-[10px] leading-4 text-muted-foreground [overflow-wrap:anywhere]"
+                        data-iam-user-login=""
                         title={account.username}
                       >
                         {account.username}
                       </span>
                       <span
-                        className="mt-0.5 block break-words text-[10px] leading-4 text-muted-foreground [overflow-wrap:anywhere]"
+                        data-iam-user-meta=""
                         title={formatTime(account.lastSignedIn)}
                       >
                         {account.role === "admin" ? "系统管理员" : "普通用户"}
@@ -4141,7 +4142,8 @@ function IamCenter({
                   >
                     <div className="flex min-w-0 items-center justify-between gap-2">
                       <p
-                        className="aiflow-type-body min-w-0 break-words font-semibold text-foreground [overflow-wrap:anywhere]"
+                        data-iam-role-name=""
+                        className="aiflow-type-body min-w-0 break-words font-semibold text-foreground"
                         title={role.name}
                       >
                         {role.name}
@@ -4152,6 +4154,7 @@ function IamCenter({
                       </span>
                     </div>
                     <p
+                      data-iam-role-code=""
                       className="aiflow-type-meta mt-0.5 break-words font-mono text-muted-foreground [overflow-wrap:anywhere]"
                       title={role.code}
                     >
@@ -4563,6 +4566,7 @@ function UserAuthorizationPanel({
       {diagnosticOpen && data && <Suspense fallback={<p role="status">正在加载权限诊断…</p>}><ResourceAccessDiagnosticDialog key={selectedUserId} userId={selectedUserId!} name={data.user.name || data.user.username} onClose={()=>setDiagnosticOpen(false)}/></Suspense>}
       <div
         ref={reveal}
+        data-iam-detail-scroll=""
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
         {!selectedUserId && (
@@ -4734,6 +4738,7 @@ function RoleAuthorizationPanel({
       />
       <div
         ref={reveal}
+        data-iam-detail-scroll=""
         className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
       >
         {!selectedRole?.id && (

@@ -1,0 +1,40 @@
+/* 人员与权限阅读工作区：目录、操作和证据各有稳定位置。 */
+[data-access-relationship] {padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--background);}
+[data-access-relationship] > p {margin-bottom: 8px; font-size: 13px; line-height: 20px; color: var(--muted-foreground);}
+[data-access-counts] {display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px;}
+[data-access-counts] > button {display: flex; min-width: 0; min-height: 52px; justify-content: center; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); color: var(--foreground); transition: border-color 150ms, background-color 150ms;}
+[data-access-counts] > button:hover {border-color: var(--aiflow-info-border);}
+[data-access-counts] > button[aria-pressed="true"] {border-color: var(--aiflow-info-border); background: var(--aiflow-info-surface); color: var(--aiflow-info);}
+[data-access-counts] .aiflow-access-count {font-size: 18px; line-height: 24px;}
+[data-access-counts] > button > span:last-child {font-size: 13px; line-height: 20px; overflow-wrap: anywhere; color: var(--muted-foreground);}
+[data-access-relationship] > details {margin-top: 8px;}
+[data-access-relationship] summary {width: fit-content; cursor: pointer; padding: 4px 0; font-size: 13px; line-height: 20px; color: var(--muted-foreground);}
+[data-access-identity] {width: fit-content; max-width: 100%; margin: 8px auto 0; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); font-size: 14px; line-height: 22px; font-weight: 600; overflow-wrap: anywhere; text-align: center;}
+[data-access-relationship] svg {width: 100%; height: 48px; overflow: visible;}
+[data-access-relationship] path[data-selected="false"] {stroke: var(--muted-foreground); opacity: .7;}
+[data-access-branches] {display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px;}
+[data-access-branches] > span {min-width: 0; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); text-align: center; font-size: 13px; line-height: 20px; overflow-wrap: anywhere;}
+[data-access-relationship] :is(button,summary):focus-visible {outline: 2px solid var(--ring); outline-offset: 2px;}
+@media (min-width: 1024px) {
+  [data-iam-user-workbench], [data-iam-role-workbench] {height: calc(100dvh - 208px); min-height: 420px; gap: 16px; align-items: stretch;}
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) > section {min-height: 0; height: 100%; position: static;}
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:first-child {display: grid; grid-template-rows: auto minmax(0,1fr) auto;}
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:first-child > div:nth-child(2) {min-height: 0; overflow-y: auto; overscroll-behavior: contain;}
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:nth-child(2) {display: grid; grid-template-rows: auto auto minmax(0,1fr);}
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) [data-iam-detail-scroll] {min-height: 0; max-height: none; overflow-y: auto; overscroll-behavior: contain;}
+  [data-iam-user-row] {padding: 8px; gap: 4px;}
+  [data-iam-user-name], [data-iam-user-login], [data-iam-user-meta], [data-iam-role-name], [data-iam-role-code] {display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;}
+  [data-iam-user-name], [data-iam-role-name] {font-size: 14px; line-height: 22px; font-weight: 600; color: var(--foreground);}
+  [data-iam-user-login], [data-iam-user-meta], [data-iam-role-code] {margin-top: 2px; font-size: 12px; line-height: 18px; color: var(--muted-foreground);}
+  [data-iam-user-login], [data-iam-role-code] {font-family: var(--font-mono,ui-monospace,monospace);}
+  [data-iam-user-state] {flex-shrink: 0; border-radius: 4px; padding: 2px 4px; font-size: 12px; line-height: 18px;}
+  [data-iam-role-row] > button {display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px;}
+  [data-iam-role-row] > button > div {display: contents;}
+  [data-iam-role-name] {grid-column: 1 / -1;}
+  [data-iam-role-code] {grid-row: 2; grid-column: 1;}
+  [data-iam-role-row] .role-classification {grid-row: 2; grid-column: 2; align-self: center;}
+  [data-iam-user-row] > button:focus-visible {outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px;}
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-access-counts] > button {transition: none;}
+}
