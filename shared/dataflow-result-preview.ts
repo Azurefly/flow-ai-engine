@@ -2,11 +2,10 @@ export const dataflowResultPageSize = 10;
 
 /** Display only: the underlying value and row remain unchanged. */
 export function dataflowResultValue(value: unknown, preview = true): string {
-  if (value === null || value === undefined)
+  if (value == null)
     return preview ? "—" : value === null ? "null" : "未提供";
   if (!preview && typeof value !== "object") return String(value);
-  const text = typeof value === "string" ? value : JSON.stringify(value, null, preview ? undefined : 2);
-  if (!text) return String(value);
+  const text = (typeof value === "string" ? value : JSON.stringify(value, null, preview ? undefined : 2)) || String(value);
   return preview && text.length > 96
     ? `${text.slice(0, 93).replace(/[\uD800-\uDBFF]$/, "")}…`
     : text;

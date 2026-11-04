@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import {
   dataflowResultColumns,
   dataflowResultPage,
@@ -18,6 +18,7 @@ export function DataflowResultTable({
 }) {
   const [page, setPage] = useState(0);
   const [cell, setCell] = useState<{ column: string; value: unknown; row: number } | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const preview = dataflowResultPage(rows, page);
   const previewRows = preview.rows;
   const columns = useMemo(() => dataflowResultColumns(rows), [rows]);
@@ -40,7 +41,7 @@ export function DataflowResultTable({
         </span>
       </header>
       <p>
-        共 {columns.length} 个字段；点击值查看全文，横向滚动查看其他字段。
+        {columns.length} 个字段 · 点击值看全文，可横向滚动。
       </p>
       <div data-result-scroll="">
         <table>
@@ -67,7 +68,7 @@ export function DataflowResultTable({
                         : JSON.stringify(row[column])
                     }
                   >
-                    <button type="button" title="查看完整内容" onClick={() => setCell({ column, value: row[column], row: preview.offset + rowIndex + 1 })}>
+                    <button type="button" title="查看完整内容" onClick={event => { trigger.current = event.currentTarget; setCell({ column, value: row[column], row: preview.offset + rowIndex + 1 }); }}>
                       {formatDataflowValue(row[column])}
                     </button>
                   </td>
@@ -101,7 +102,7 @@ export function DataflowResultTable({
       </footer>
       {/* UX：全文按需打开，不缩小字号；保留原始值，不在表格内展开巨型段落。 */}
       <Dialog open={Boolean(cell)} onOpenChange={open => { if (!open) setCell(null); }}>
-        <DialogContent data-result-value-dialog="" showCloseButton={false}>
+        <DialogContent data-result-value-dialog="" showCloseButton={false} onCloseAutoFocus={event => { event.preventDefault(); trigger.current?.focus(); }}>
           <Button type="button" variant="ghost" size="icon" className="result-value-close" aria-label="关闭完整内容" onClick={() => setCell(null)}>×</Button>
           <DialogHeader>
             <DialogTitle>单元格完整内容</DialogTitle>

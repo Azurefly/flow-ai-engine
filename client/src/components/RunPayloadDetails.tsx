@@ -172,7 +172,7 @@ export function RunPayloadDetails({
       decision: output.decision ?? (output.result as any).decision,
     });
     return (
-      <section data-run-payload-details className="min-w-0 space-y-2">
+      <section data-run-payload-details>
         <h4 className="aiflow-type-section-title">{title}</h4>
         <PayloadFields
           rows={[
@@ -223,8 +223,8 @@ export function RunPayloadDetails({
               value={group.value}
             />
           ) : (
-            <div key={group.label} className="min-w-0">
-              <p className="aiflow-type-body mb-1 font-medium text-muted-foreground">
+            <div key={group.label}>
+              <p className="aiflow-type-body" data-payload-group-label="">
                 {group.label}
               </p>
               <PayloadFields value={group.value} />
