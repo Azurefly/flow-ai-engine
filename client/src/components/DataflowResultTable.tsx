@@ -2,16 +2,12 @@ import React, { useMemo, useState } from "react";
 import {
   dataflowResultColumns,
   dataflowResultPage,
+  dataflowResultValue as formatDataflowValue,
+  dataflowResultValueKind,
 } from "@shared/dataflow-result-preview";
 import { Button } from "./ui/button";
 import "./dataflow-result-table.css";
-
-function formatDataflowValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  const text = typeof value === "string" ? value : JSON.stringify(value);
-  if (!text) return String(value);
-  return text.length > 96 ? `${text.slice(0, 93)}…` : text;
-}
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 
 export function DataflowResultTable({
   rows,
@@ -21,12 +17,13 @@ export function DataflowResultTable({
   title?: string;
 }) {
   const [page, setPage] = useState(0);
+  const [cell, setCell] = useState<{ column: string; value: unknown; row: number } | null>(null);
   const preview = dataflowResultPage(rows, page);
   const previewRows = preview.rows;
   const columns = useMemo(() => dataflowResultColumns(rows), [rows]);
   if (!columns.length)
     return (
-      <p className="aiflow-type-body rounded border border-border p-3 text-muted-foreground">
+      <p className="aiflow-type-body" data-result-empty="">
         {title} · 共 {rows.length} 行
       </p>
     );
@@ -43,7 +40,7 @@ export function DataflowResultTable({
         </span>
       </header>
       <p>
-        共 {columns.length} 个字段；可横向滚动查看全部字段。
+        共 {columns.length} 个字段；点击值查看全文，横向滚动查看其他字段。
       </p>
       <div data-result-scroll="">
         <table>
@@ -53,7 +50,7 @@ export function DataflowResultTable({
                 <th
                   key={column}
                 >
-                  {column}
+                  <span title={column}>{column}</span>
                 </th>
               ))}
             </tr>
@@ -70,7 +67,9 @@ export function DataflowResultTable({
                         : JSON.stringify(row[column])
                     }
                   >
-                    {formatDataflowValue(row[column])}
+                    <button type="button" title="查看完整内容" onClick={() => setCell({ column, value: row[column], row: preview.offset + rowIndex + 1 })}>
+                      {formatDataflowValue(row[column])}
+                    </button>
                   </td>
                 ))}
               </tr>
@@ -100,6 +99,20 @@ export function DataflowResultTable({
           下一页
         </Button>
       </footer>
+      {/* UX：全文按需打开，不缩小字号；保留原始值，不在表格内展开巨型段落。 */}
+      <Dialog open={Boolean(cell)} onOpenChange={open => { if (!open) setCell(null); }}>
+        <DialogContent data-result-value-dialog="" showCloseButton={false}>
+          <Button type="button" variant="ghost" size="icon" className="result-value-close" aria-label="关闭完整内容" onClick={() => setCell(null)}>×</Button>
+          <DialogHeader>
+            <DialogTitle>单元格完整内容</DialogTitle>
+            <DialogDescription>{cell ? `第 ${cell.row} 行 · ${dataflowResultValueKind(cell.value)}` : ""}</DialogDescription>
+          </DialogHeader>
+          {cell && <>
+            <p data-result-field-name="">{cell.column}</p>
+            <pre tabIndex={0} aria-label="完整字段值">{formatDataflowValue(cell.value, false)}</pre>
+          </>}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }

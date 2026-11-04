@@ -1,4 +1,5 @@
 /* 结果表的局部排版，不改变应用中的其他表格。 */
+[data-result-empty] {border: 1px solid var(--border); border-radius: 4px; padding: 12px; color: var(--muted-foreground);}
 [data-dataflow-result] {min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--card); padding: 12px;}
 [data-dataflow-result] > header {display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px;}
 [data-dataflow-result] h3 {font-size: 14px; line-height: 22px; font-weight: 600; color: var(--foreground);}
@@ -9,8 +10,17 @@
 [data-dataflow-result] table {width: 100%; min-width: 360px; text-align: left; font-size: 13px; line-height: 20px;}
 [data-dataflow-result] thead {background: var(--muted); color: var(--muted-foreground);}
 [data-dataflow-result] th {white-space: nowrap; font-weight: 500;}
+[data-dataflow-result] th > span {display: block; max-width: 192px; overflow: hidden; text-overflow: ellipsis;}
 [data-dataflow-result] th,
 [data-dataflow-result] td {padding: 6px 8px;}
 [data-dataflow-result] tbody tr {border-top: 1px solid var(--border);}
 [data-dataflow-result] td {max-width: 192px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground);}
+[data-dataflow-result] td > button {--aiflow-type-control: 13px; --aiflow-leading-control: 20px; display: block; width: 100%; max-width: 192px; min-height: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; cursor: pointer; border-radius: 3px;}
+[data-dataflow-result] td > button:hover {color: var(--aiflow-info); background: var(--muted);}
+[data-dataflow-result] td > button:focus-visible {outline: 2px solid var(--ring); outline-offset: -2px;}
 [data-dataflow-result] > footer {display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px;}
+[data-result-value-dialog][data-slot="dialog-content"] {max-width: min(768px,calc(100dvw - 32px)); max-height: calc(100dvh - 32px); overflow: hidden; gap: 12px;}
+[data-result-value-dialog] .result-value-close {position: absolute; top: 8px; right: 8px; height: 36px; width: 36px;}
+[data-result-value-dialog] > [data-slot="dialog-header"] {padding-right: 36px;}
+[data-result-value-dialog] [data-result-field-name] {min-width: 0; max-height: 88px; overflow: auto; overflow-wrap: anywhere; font-size: 13px; line-height: 20px; color: var(--muted-foreground);}
+[data-result-value-dialog] > pre {min-width: 0; max-width: 100%; max-height: min(52vh,420px); overflow: auto; overflow-wrap: anywhere; white-space: pre-wrap; border: 1px solid var(--border); border-radius: 6px; padding: 12px; background: var(--muted); font-size: 14px; line-height: 22px;}

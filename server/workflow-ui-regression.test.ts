@@ -3178,20 +3178,18 @@ describe("流程设计器界面回归约束", () => {
 
   it("运行节点详情对字段值、说明和展开控件使用统一字号语义", () => {
     expect(runPayloadDetailsSource).toContain(
-      'className="aiflow-type-section-title mb-2 font-semibold text-foreground"'
+      'className="aiflow-type-section-title"'
     );
-    expect(runPayloadDetailsSource).toContain(
-      'className="aiflow-type-code break-all font-mono text-muted-foreground"'
-    );
-    expect(runPayloadDetailsSource).toContain(
-      'className="aiflow-type-code max-h-48 overflow-auto whitespace-pre-wrap break-words border-t border-border p-2 [overflow-wrap:anywhere]"'
-    );
-    expect(runPayloadDetailsSource).toContain(
-      'className="aiflow-type-body min-w-0 whitespace-pre-wrap break-words text-foreground"'
-    );
-    expect(runPayloadDetailsSource).toContain(
-      'className="aiflow-type-control flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"'
-    );
+    expect(runPayloadDetailsSource).toContain('className="aiflow-type-meta" title={row.field}');
+    expect(runPayloadDetailsSource).toContain('data-payload-preview=""');
+    expect(runPayloadDetailsSource).toContain('className="aiflow-type-body"');
+    expect(runPayloadDetailsSource).toContain('className="aiflow-type-code whitespace-pre-wrap break-words"');
+    const fieldStyles = source("../client/src/components/run-payload-details.css");
+    expect(fieldStyles).toContain("overflow-wrap: anywhere");
+    expect(fieldStyles).toContain("max-height: 176px");
+    expect(fieldStyles).toContain("max-height: 192px");
+    expect(runPayloadDetailsSource).toContain('data-payload-disclosure=""');
+    expect(fieldStyles).toContain("min-height: 44px");
     expect(runPayloadDetailsSource).toContain(
       'className="aiflow-type-body rounded-md border border-dashed border-border px-3 py-2 text-muted-foreground"'
     );

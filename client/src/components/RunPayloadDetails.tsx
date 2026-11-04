@@ -2,6 +2,7 @@ import { runErrorPreview } from "@shared/run-error-preview";
 import React from "react";
 import { taskResultView } from "@shared/task-result-view";
 import { hasRunPayloadValue, splitRunPayload } from "@shared/run-payload";
+import "./run-payload-details.css";
 
 type FieldRow = { field: string; value: string; fullValue?: string };
 const FIELD_PREVIEW_LIMIT = 1600;
@@ -39,7 +40,7 @@ function flattenFields(
     text.length > FIELD_PREVIEW_LIMIT
       ? {
           field: prefix || "值",
-          value: `${text.slice(0, FIELD_PREVIEW_LIMIT)}…`,
+          value: `${text.slice(0, FIELD_PREVIEW_LIMIT).replace(/[\uD800-\uDBFF]$/, "")}…`,
           fullValue: text,
         }
       : { field: prefix || "值", value: text }
@@ -57,23 +58,23 @@ function PayloadFields({
   const rows = fields ?? flattenFields(value);
   if (!rows.length) return null;
   return (
-    <dl className="overflow-hidden rounded-md border border-border bg-card">
+    <dl data-payload-fields="">
       {rows.map((row, index) => (
         <div
           key={`${row.field}-${index}`}
-          className="grid min-w-0 gap-1 border-b border-border px-3 py-2 last:border-b-0 sm:grid-cols-[minmax(112px,0.35fr)_minmax(0,1fr)]"
+          data-payload-field=""
         >
-          <dt className="aiflow-type-code break-all font-mono text-muted-foreground">
+          <dt className="aiflow-type-meta" title={row.field}>
             {row.field}
           </dt>
-          <dd className="aiflow-type-body min-w-0 whitespace-pre-wrap break-words text-foreground">
-            {row.value}
+          <dd className="aiflow-type-body">
+            <div data-payload-preview="">{row.value}</div>
             {row.fullValue && (
-              <details className="mt-2 rounded border border-border bg-muted">
-                <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center px-2 font-medium text-aiflow-info focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
+              <details>
+                <summary className="aiflow-type-control">
                   查看完整内容（{row.fullValue.length} 字符）
                 </summary>
-                <pre className="aiflow-type-code max-h-48 overflow-auto whitespace-pre-wrap break-words border-t border-border p-2 [overflow-wrap:anywhere]">
+                <pre className="aiflow-type-code whitespace-pre-wrap break-words">
                   {row.fullValue}
                 </pre>
               </details>
@@ -99,12 +100,12 @@ function PayloadDisclosure({
 }) {
   if (!hasRunPayloadValue(value)) return null;
   return (
-    <details className="overflow-hidden rounded-md border border-border bg-muted">
-      <summary className="aiflow-type-control flex min-h-11 cursor-pointer items-center justify-between gap-3 px-3 font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
+    <details data-payload-disclosure="">
+      <summary className="aiflow-type-control">
         {label}
-        <span className="font-normal text-muted-foreground">展开</span>
+        <span>展开</span>
       </summary>
-      <div className="border-t border-border p-2">
+      <div>
         <PayloadFields value={value} />
       </div>
     </details>
@@ -128,17 +129,17 @@ export function RunPayloadDetails({
   if (kind === "error") {
     const error = runErrorPreview(value);
     return (
-      <section data-run-payload-details className="min-w-0">
-        <h4 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+      <section data-run-payload-details>
+        <h4 className="aiflow-type-section-title">
           {title}
         </h4>
-        <div className="grid min-w-0 gap-2">
+        <div data-payload-groups="">
           {error.message && (
             <PayloadFields value={{ 错误原因: error.message }} />
           )}
           {hasRunPayloadValue(error.details) && (
-            <div className="min-w-0">
-              <p className="aiflow-type-body mb-1 font-medium text-muted-foreground">
+            <div>
+              <p className="aiflow-type-body" data-payload-group-label="">
                 错误详情
               </p>
               <PayloadFields value={error.details} />
@@ -172,7 +173,7 @@ export function RunPayloadDetails({
     });
     return (
       <section data-run-payload-details className="min-w-0 space-y-2">
-        <h4 className="aiflow-type-section-title font-semibold">{title}</h4>
+        <h4 className="aiflow-type-section-title">{title}</h4>
         <PayloadFields
           rows={[
             { field: "办理结果", value: view.outcome || "未提供" },
@@ -209,11 +210,11 @@ export function RunPayloadDetails({
   ].filter(group => hasRunPayloadValue(group.value));
 
   return (
-    <section data-run-payload-details className="min-w-0">
-      <h4 className="aiflow-type-section-title mb-2 font-semibold text-foreground">
+    <section data-run-payload-details>
+      <h4 className="aiflow-type-section-title">
         {title}
       </h4>
-      <div className="grid min-w-0 gap-2">
+      <div data-payload-groups="">
         {visibleGroups.map(group =>
           group.collapsed ? (
             <PayloadDisclosure

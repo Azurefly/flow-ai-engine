@@ -1,4 +1,24 @@
 export const dataflowResultPageSize = 10;
+
+/** Display only: the underlying value and row remain unchanged. */
+export function dataflowResultValue(value: unknown, preview = true): string {
+  if (value === null || value === undefined)
+    return preview ? "—" : value === null ? "null" : "未提供";
+  if (!preview && typeof value !== "object") return String(value);
+  const text = typeof value === "string" ? value : JSON.stringify(value, null, preview ? undefined : 2);
+  if (!text) return String(value);
+  return preview && text.length > 96
+    ? `${text.slice(0, 93).replace(/[\uD800-\uDBFF]$/, "")}…`
+    : text;
+}
+
+export function dataflowResultValueKind(value: unknown): string {
+  if (value === null) return "空值";
+  if (value === "") return "空字符串";
+  if (Array.isArray(value)) return "列表";
+  return ({ string: "文本", number: "数字", boolean: "布尔值", object: "对象", undefined: "缺失值" } as Record<string, string>)[typeof value] ?? "其他";
+}
+
 export function dataflowResultColumns(rows: Record<string, unknown>[]) {
   const columns = new Set<string>();
   for (const row of rows) {

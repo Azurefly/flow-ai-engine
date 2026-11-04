@@ -1,0 +1,24 @@
+/* 资源字段与样本保留完整内容，长值独立滚动，不撑开整个弹窗。 */
+[data-resource-details-trigger] {height: 40px;}
+[data-resource-details][data-slot="dialog-content"] {display: flex; flex-direction: column; max-height: calc(100dvh - 16px); max-width: min(672px,calc(100dvw - 32px)); gap: 16px; overflow: hidden;}
+[data-resource-details-close] {position: absolute; top: 8px; right: 8px; height: 40px; width: 40px; padding: 0;}
+[data-resource-details] > [data-slot="dialog-header"] {flex-shrink: 0; padding-right: 40px;}
+[data-resource-details] [data-slot="dialog-title"], [data-resource-details] [data-slot="dialog-description"] {min-width: 0; overflow-wrap: anywhere;}
+[data-resource-details] [data-slot="dialog-title"] {max-height: 88px; overflow: auto;}
+[data-resource-details-tabs] {display: flex; flex-shrink: 0; gap: 8px;}
+[data-resource-details-tabs] > button {flex: 1; height: 40px;}
+[data-resource-details-content] {min-height: 0; min-width: 0; flex: 1; overflow-y: auto; overscroll-behavior: contain;}
+[data-resource-details-content] > p {padding: 24px 0; color: var(--muted-foreground);}
+[data-resource-record] {min-width: 0; border: 1px solid var(--border); border-radius: 8px; background: var(--card); padding: 12px;}
+[data-resource-record] + [data-resource-record] {margin-top: 12px;}
+[data-resource-record] h3 {margin-bottom: 8px; font-weight: 600;}
+[data-resource-field] {display: grid; min-width: 0; gap: 4px;}
+[data-resource-field] + [data-resource-field] {margin-top: 8px;}
+[data-resource-field] dt, [data-resource-field] dd {min-width: 0; max-height: 176px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;}
+[data-resource-field] dt {color: var(--muted-foreground);}
+[data-resource-details-footer] {display: flex; flex-shrink: 0; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--border); padding-top: 12px;}
+[data-resource-details-footer] > div {display: flex; gap: 8px;}
+[data-resource-details-footer] button {height: 40px;}
+@media (min-width: 640px) {
+  [data-resource-field] {grid-template-columns: 8rem minmax(0,1fr);}
+}
