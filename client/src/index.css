@@ -147,6 +147,7 @@
 }
 
 :root {
+  color-scheme: light;
   --primary: #315df5;
   --primary-foreground: var(--color-blue-50);
   --sidebar-primary: var(--color-blue-600);
@@ -338,6 +339,7 @@ h2 {
 }
 
 .dark {
+  color-scheme: dark;
   --aiflow-surface-shadow: 0 4px 20px rgb(0 0 0 / 14%);
   --aiflow-surface-shadow-raised: 0 12px 36px rgb(0 0 0 / 25%);
   --aiflow-workspace-glow: radial-gradient(
@@ -1578,20 +1580,10 @@ h2 {
     opacity: 1;
   }
 }
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-::view-transition-new(root) {
-  z-index: 1;
-}
+/* UX：主题动效只作反馈，原页面始终可命中；原生控件跟随上面的color-scheme。 */
+[data-theme-wash] {position: fixed; inset: 0; z-index: 100; pointer-events: none; opacity: 0; background: var(--primary);}
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation-duration: 0.01ms !important;
-  }
+  [data-theme-wash] {display: none;}
 }
 
 /* 组织管理窄屏触控：弹窗表单、树节点和次级动作共享一致的目标尺寸。 */

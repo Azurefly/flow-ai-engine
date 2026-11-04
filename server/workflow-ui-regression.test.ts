@@ -3866,7 +3866,10 @@ it("整体工作台重构保留草稿与授权边界，动效不重建表单", (
   expect(reveal).toContain("animation.cancel()");
   expect(reveal).toContain("prefersReducedMotion");
   expect(reveal).not.toContain("innerHTML");
-  expect(theme).toContain("document.startViewTransition");
+  expect(theme).not.toContain("document.startViewTransition");
+  expect(theme).toContain("flushSync(() => setTheme(next))");
+  const themeFeedback = styleSource.match(/\[data-theme-wash\]\s*\{([^}]+)\}/)?.[1];
+  expect(themeFeedback).toContain("pointer-events: none");
   expect(theme).toContain("prefers-reduced-motion: reduce");
   expect(canvasSource).toContain("nodes={presentedNodes}");
   expect(canvasSource).toContain("静态连接 · 上游");

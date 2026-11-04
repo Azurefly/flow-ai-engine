@@ -40,6 +40,7 @@ export function ThemeProvider({
     return defaultTheme;
   });
   const transitioning = useRef(false);
+  const wash = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -66,11 +67,13 @@ export function ThemeProvider({
           document.documentElement.classList.toggle("dark", next === "dark");
           flushSync(() => setTheme(next));
         };
+        // UX：先更新真实界面；装饰光晕不捕获快照，也不接管导航、输入或弹窗。
+        apply();
+        const layer = wash.current;
         if (
-          !document.startViewTransition ||
+          !layer?.animate ||
           window.matchMedia("(prefers-reduced-motion: reduce)").matches
         ) {
-          apply();
           return;
         }
         transitioning.current = true;
@@ -81,32 +84,20 @@ export function ThemeProvider({
           Math.max(y, innerHeight - y)
         );
         try {
-          const transition = document.startViewTransition(apply);
-          void transition.ready
-            .then(() => {
-              document.documentElement.animate(
-                {
-                  clipPath: [
-                    `circle(0px at ${x}px ${y}px)`,
-                    `circle(${radius}px at ${x}px ${y}px)`,
-                  ],
-                },
-                {
-                  duration: 360,
-                  easing: "cubic-bezier(.2,.8,.2,1)",
-                  pseudoElement: "::view-transition-new(root)",
-                }
-              );
-            })
-            .catch(() => {});
-          void transition.finished
+          const feedback = layer.animate(
+            [
+              { clipPath: `circle(0px at ${x}px ${y}px)`, opacity: 0.12 },
+              { clipPath: `circle(${radius}px at ${x}px ${y}px)`, opacity: 0 },
+            ],
+            { duration: 240, easing: "cubic-bezier(.2,.8,.2,1)" }
+          );
+          void feedback.finished
             .catch(() => {})
             .finally(() => {
               transitioning.current = false;
             });
         } catch {
           transitioning.current = false;
-          apply();
         }
       }
     : undefined;
@@ -114,6 +105,7 @@ export function ThemeProvider({
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
       {children}
+      {switchable && <div ref={wash} data-theme-wash="" aria-hidden="true" />}
     </ThemeContext.Provider>
   );
 }
