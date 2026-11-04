@@ -1,0 +1,16 @@
+/* 结果表的局部排版，不改变应用中的其他表格。 */
+[data-dataflow-result] {min-width: 0; border: 1px solid var(--border); border-radius: 6px; background: var(--card); padding: 12px;}
+[data-dataflow-result] > header {display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px;}
+[data-dataflow-result] h3 {font-size: 14px; line-height: 22px; font-weight: 600; color: var(--foreground);}
+[data-dataflow-result] > header > span,
+[data-dataflow-result] > p {font-size: 13px; line-height: 20px; color: var(--muted-foreground);}
+[data-dataflow-result] > p {margin-bottom: 8px;}
+[data-dataflow-result] [data-result-scroll] {max-width: 100%; overflow-x: auto;}
+[data-dataflow-result] table {width: 100%; min-width: 360px; text-align: left; font-size: 13px; line-height: 20px;}
+[data-dataflow-result] thead {background: var(--muted); color: var(--muted-foreground);}
+[data-dataflow-result] th {white-space: nowrap; font-weight: 500;}
+[data-dataflow-result] th,
+[data-dataflow-result] td {padding: 6px 8px;}
+[data-dataflow-result] tbody tr {border-top: 1px solid var(--border);}
+[data-dataflow-result] td {max-width: 192px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground);}
+[data-dataflow-result] > footer {display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 12px;}

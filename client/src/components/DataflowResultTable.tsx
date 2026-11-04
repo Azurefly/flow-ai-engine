@@ -4,8 +4,8 @@ import {
   dataflowResultPage,
 } from "@shared/dataflow-result-preview";
 import { Button } from "./ui/button";
+import "./dataflow-result-table.css";
 
-const metaClassName = "aiflow-type-meta text-muted-foreground";
 function formatDataflowValue(value: unknown): string {
   if (value === null || value === undefined) return "—";
   const text = typeof value === "string" ? value : JSON.stringify(value);
@@ -31,27 +31,27 @@ export function DataflowResultTable({
       </p>
     );
   return (
-    <section className="min-w-0 rounded-md border border-border bg-card p-3">
-      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="aiflow-type-body font-semibold text-foreground">
+    // UX：结果表的字体、间距与滚动在组件作用域统一，分页和单元格逻辑保留。
+    <section data-dataflow-result="">
+      <header>
+        <h3>
           {title}
         </h3>
-        <span className={metaClassName}>
+        <span>
           第 {preview.page + 1} / {preview.pageCount} 页 · 每页 10 行 · 共{" "}
           {rows.length} 行
         </span>
-      </div>
-      <p className="mb-2 text-xs text-muted-foreground">
+      </header>
+      <p>
         共 {columns.length} 个字段；可横向滚动查看全部字段。
       </p>
-      <div className="max-w-full overflow-x-auto">
-        <table className="w-full min-w-[360px] text-left">
-          <thead className="bg-muted text-sm text-muted-foreground">
+      <div data-result-scroll="">
+        <table>
+          <thead>
             <tr>
               {columns.map(column => (
                 <th
                   key={column}
-                  className="aiflow-type-meta whitespace-nowrap px-2 py-1.5 font-medium"
                 >
                   {column}
                 </th>
@@ -60,7 +60,7 @@ export function DataflowResultTable({
           </thead>
           <tbody>
             {previewRows.map((row: any, rowIndex: number) => (
-              <tr key={rowIndex} className="border-t border-border">
+              <tr key={rowIndex}>
                 {columns.map(column => (
                   <td
                     key={column}
@@ -69,7 +69,6 @@ export function DataflowResultTable({
                         ? row[column]
                         : JSON.stringify(row[column])
                     }
-                    className="aiflow-type-meta max-w-48 truncate px-2 py-1.5 text-foreground"
                   >
                     {formatDataflowValue(row[column])}
                   </td>
@@ -79,7 +78,7 @@ export function DataflowResultTable({
           </tbody>
         </table>
       </div>
-      <div className="mt-3 flex items-center justify-end gap-2">
+      <footer>
         <Button
           type="button"
           variant="outline"
@@ -100,7 +99,7 @@ export function DataflowResultTable({
         >
           下一页
         </Button>
-      </div>
+      </footer>
     </section>
   );
 }

@@ -1,0 +1,13 @@
+/* 实例阅读工作区：样式只作用于数据运行详情及其阅读面板。 */
+[data-run-inspection] > [data-slot="tabs-content"][data-state="inactive"] {display: none;}
+[data-run-inspection] > [data-slot="tabs-list"] {margin-bottom: 4px;}
+[data-run-inspection] > [data-slot="tabs-content"] {min-width: 0;}
+[data-run-inspection] > [data-slot="tabs-content"]:focus-visible {outline: 2px solid var(--ring); outline-offset: 4px;}
+[data-run-inspection] > [data-state="active"] > label {margin-bottom: 12px;}
+[data-run-inspection] > [data-state="active"] > section {margin-bottom: 12px;}
+[data-run-inspection] select {height: 36px; max-width: 100%; border: 1px solid var(--border); border-radius: 6px; background: var(--background); padding: 0 12px;}
+[data-run-inspection] [data-result-raw] {min-width: 0; border: 1px solid var(--border); border-radius: 4px; background: var(--card); padding: 0 12px;}
+[data-run-inspection] [data-result-raw] > button {display: flex; align-items: center; min-height: 44px; width: 100%; text-align: left; font-size: 14px; line-height: 22px; font-weight: 500; color: var(--foreground);}
+[data-runtime-monitor] [data-dataflow-run-detail] {padding: 12px;}
+[data-dataflow-run-detail] > [data-run-summary] {margin: 8px 0; font-size: 13px; line-height: 20px;}
+[data-dataflow-run-detail] > [dataflow-output-summary] {margin-top: 8px;}

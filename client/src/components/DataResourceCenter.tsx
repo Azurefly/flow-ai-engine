@@ -9,6 +9,8 @@ const surfaceClass7 = "aiflow-type-control inline-flex min-h-11 items-center fon
 const surfaceClass8 = "aiflow-type-control grid gap-1 font-medium text-muted-foreground";
 import { dataflowGraphRun } from "@shared/dataflow-run-view";
 import { DataflowResultTable } from "./DataflowResultTable";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import "./dataflow-run-inspection.css";
 import { canProbeDataSource, dataSourceCapability, dataSourceReadiness } from "@shared/data-source-capabilities";
 import {
   builtinDataFunctions,
@@ -1445,33 +1447,6 @@ function DataflowRunOutput({ run }: { run: any }) {
 
   return (
     <div dataflow-output-summary="" className="mt-3 space-y-3">
-      {dataResults.length > 1 && (
-        <label className="aiflow-type-control flex flex-wrap items-center gap-2">
-          结果集
-          <select
-            aria-label="选择运行监控结果集"
-            className="h-11 max-w-full rounded-md border border-border bg-background px-3 min-[1024px]:h-9"
-            value={selectedTerminal}
-            onChange={event => {
-              setSelectedTerminal(Number(event.target.value));
-            }}
-          >
-            {dataResults.map((item, index) => (
-              <option key={index} value={index}>
-                {item.name} · {item.rows.length} 行
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <Suspense fallback={<p role="status">正在加载实例流程图…</p>}>
-        <RunExecutionCanvas key={run.id} run={graphRun} renderDataOutput={record => (
-          Array.isArray(record.outputJson?.rows)
-            ? <DataflowResultTable key={record.id} rows={record.outputJson.rows} title="节点输出预览" />
-            : null
-        )} />
-      </Suspense>
-
       {run.error && (
         <div
           role="alert"
@@ -1480,24 +1455,58 @@ function DataflowRunOutput({ run }: { run: any }) {
           {visibleErrorMessage}
         </div>
       )}
+      {/* UX：阅读视图保留挂载，切换不丢节点、批次、分页与原始数据状态。 */}
+      <Tabs defaultValue="graph" data-run-inspection="">
+        <TabsList aria-label="实例详情阅读视图">
+          <TabsTrigger value="graph">流程画布</TabsTrigger>
+          <TabsTrigger value="results">最终结果</TabsTrigger>
+        </TabsList>
+        <TabsContent value="graph" forceMount>
+          <Suspense fallback={<p role="status">正在加载实例流程图…</p>}>
+            <RunExecutionCanvas key={run.id} run={graphRun} renderDataOutput={record => (
+              Array.isArray(record.outputJson?.rows)
+                ? <DataflowResultTable key={record.id} rows={record.outputJson.rows} title="节点输出预览" />
+                : null
+            )} />
+          </Suspense>
+        </TabsContent>
+        <TabsContent value="results" forceMount>
+          {dataResults.length > 1 && (
+            <label className="aiflow-type-control flex flex-wrap items-center gap-2">
+              结果集
+              <select
+                aria-label="选择运行监控结果集"
+                value={selectedTerminal}
+                onChange={event => {
+                  setSelectedTerminal(Number(event.target.value));
+                }}
+              >
+                {dataResults.map((item, index) => (
+                  <option key={index} value={index}>
+                    {item.name} · {item.rows.length} 行
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {(terminal || lastNode) && <DataflowResultTable key={selectedTerminal} rows={terminalRows} title={terminal ? `最终结果预览 · ${terminal.name}` : "最终结果预览"} />}
 
-      {(terminal || lastNode) && <DataflowResultTable key={selectedTerminal} rows={terminalRows} title={terminal ? `最终结果预览 · ${terminal.name}` : "最终结果预览"} />}
-
-      <div className="min-w-0 rounded border border-border bg-card px-3">
-        <button
-          type="button"
-          aria-expanded={showRaw}
-          className="aiflow-type-control flex min-h-11 w-full items-center text-left font-medium text-foreground"
-          onClick={() => setShowRaw(value => !value)}
-        >
-          {showRaw ? "收起完整原始数据（JSON）" : "查看完整原始数据（JSON）"}
-        </button>
-        {showRaw && (
-          <pre className="aiflow-type-code my-2 max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-3 font-mono text-emerald-200">
-            {rawText}
-          </pre>
-        )}
-      </div>
+          <div data-result-raw="">
+            <button
+              type="button"
+              aria-expanded={showRaw}
+              onClick={() => setShowRaw(value => !value)}
+            >
+              {showRaw ? "收起完整原始数据（JSON）" : "查看完整原始数据（JSON）"}
+            </button>
+            {showRaw && (
+              <pre className="aiflow-type-code my-2 max-h-72 max-w-full overflow-auto whitespace-pre-wrap break-words rounded bg-slate-950 p-3 font-mono text-emerald-200">
+                {rawText}
+              </pre>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -2485,6 +2494,7 @@ export function DataflowRunMonitor({
       {selectedRunId && (
         <section
           className={resourcePanelClassName}
+          data-dataflow-run-detail=""
           aria-label="数据流程运行详情"
         >
           <div className={surfaceClass4}>
@@ -2503,7 +2513,7 @@ export function DataflowRunMonitor({
             <p role="status">正在读取运行详情…</p>
           ) : matchingDetail ? (
             <>
-              <p className="aiflow-type-body my-3 text-muted-foreground">
+              <p data-run-summary="" className="aiflow-type-body my-3 text-muted-foreground">
                 <State value={matchingDetail.status} /> · {matchingDetail.triggerName || "系统用户"} · {formatDataflowTime(matchingDetail.startedAt)} · 耗时 {matchingDetail.durationMs ?? "—"} ms
               </p>
               <DataflowRunOutput key={selectedRunId} run={matchingDetail} />

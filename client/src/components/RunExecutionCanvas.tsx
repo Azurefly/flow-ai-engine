@@ -127,7 +127,8 @@ export default function RunExecutionCanvas({
   const fit = (nodeId?: string) => {
     overview.current = !nodeId;
     const region = viewport.current;
-    if (!api.current || !region) return;
+    // UX：隐藏的阅读面板没有可用尺寸，恢复可见后再由ResizeObserver适配。
+    if (!api.current || !region || !region.clientWidth || !region.clientHeight) return;
     const rects = canvasNodeRects(viewNodes.current);
     const next = getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18);
     const initial = firstView.current && !nodeId ? initialRunViewNode(next.zoom, focusId.current) : undefined;
