@@ -3909,7 +3909,8 @@ function IamCenter({
               </label>
               <p className="mt-2 text-xs text-muted-foreground">默认显示启用账号；查看停用账号请切换状态。</p>
             </div>
-            <div className="p-2">
+            {/* UX：新页、搜索或状态变更从目录顶部开始，筛选与详情状态不受影响。 */}
+            <div className="p-2" key={`${userPage}:${userSearch}:${userStatus}`}>
               {userDirectory.isPending && (
                 <p className={emptyStateClass}>
                   正在读取用户目录…
@@ -4127,7 +4128,7 @@ function IamCenter({
                 />
               </label>
             </div>
-            <div className="p-2">
+            <div className="p-2" key={`${rolePage}:${roleSearch}`}>
               {visibleRoles.map(role => (
                 <div
                   key={role.id}
