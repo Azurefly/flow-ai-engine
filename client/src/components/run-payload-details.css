@@ -1,5 +1,5 @@
 /* 运行字段采用可读字号及必要换行，滚动区域保留完整文本。 */
-[data-run-payload-details] {min-width: 0;}
+[data-run-payload-details] {min-width: 0; container-type: inline-size;}
 [data-run-payload-details] > h4 {margin-bottom: 8px; font-weight: 600; color: var(--foreground);}
 [data-payload-groups] {display: grid; min-width: 0; gap: 8px;}
 [data-payload-groups] > div {min-width: 0;}
@@ -19,6 +19,7 @@
 [data-payload-field] summary {display: flex; min-height: 44px; cursor: pointer; align-items: center; padding: 0 8px; font-weight: 500; color: var(--aiflow-info);}
 [data-payload-field] summary:focus-visible {outline: 2px solid var(--ring); outline-offset: -2px;}
 [data-payload-field] pre {max-height: 192px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border-top: 1px solid var(--border); padding: 8px;}
-@media (min-width: 640px) {
+/* 窄侧栏按自身可用宽度上下排版；不再由整个浏览器窗口误触发双列。 */
+@container (min-width: 480px) {
   [data-payload-field] {grid-template-columns: minmax(112px,.35fr) minmax(0,1fr);}
 }
