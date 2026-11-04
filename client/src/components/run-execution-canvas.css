@@ -25,8 +25,8 @@
 [data-run-canvas-design] [data-run-legend] {position: relative; padding: 8px 16px;}
 [data-run-canvas-design] [data-run-legend] > summary {width: fit-content; cursor: pointer; font-size: 13px; color: var(--muted-foreground);}
 [data-run-canvas-design] [data-run-legend] > div {position: absolute; top: 100%; left: 16px; z-index: 10; width: min(640px, calc(100vw - 80px)); border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: 0 4px 12px #0f172a12;}
-[data-run-canvas-design] [data-run-canvas-body] {min-height: 0; align-items: stretch;}
-[data-run-canvas-design] [aria-label="实例只读流程画布"] {position: relative; min-height: 0; height: 100%; background: var(--background);}
+[data-run-canvas-design] [data-run-canvas-body] {display: grid; min-width: 0; min-height: 0; align-items: stretch; grid-template-columns: minmax(0,1fr) 320px;}
+[data-run-canvas-design] [aria-label="实例只读流程画布"] {position: relative; min-width: 0; min-height: 0; height: 100%; border-block: 1px solid var(--border); border-right: 1px solid var(--border); background: var(--background);}
 [data-run-canvas-design] .run-graph-node {
   position: relative;
   display: block;
@@ -57,7 +57,7 @@
 [data-run-canvas-design] .run-graph-node[data-compact] .run-graph-node-status::before {width: calc(5px / var(--canvas-zoom)); height: calc(5px / var(--canvas-zoom));}
 [data-run-canvas-design] [data-run-node-details] {min-height: 0; height: 100%; padding: 12px 16px; overscroll-behavior: contain; scrollbar-gutter: stable;}
 @media (max-width: 1023px) {
-  [data-run-canvas-design] [data-run-canvas-body] {height: auto !important;}
+  [data-run-canvas-design] [data-run-canvas-body] {height: auto !important; grid-template-columns: minmax(0,1fr);}
   [data-run-canvas-design] [aria-label="实例只读流程画布"] {height: 420px;}
 }
 @media (prefers-reduced-motion: reduce) {

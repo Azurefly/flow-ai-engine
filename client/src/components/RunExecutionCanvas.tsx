@@ -191,17 +191,24 @@ export default function RunExecutionCanvas({
   const approvalGroups = record ? approvalGroupsForRecord(run.approvalGroups ?? [], record) : [];
   const focusId = useRef(active?.id);
   focusId.current = active?.id;
+  const fittedBox = useRef("");
   useEffect(() => {
     if (!ready || !measured) return;
-    fit(overview.current ? undefined : focusId.current);
-  }, [layout, ready, measured, expanded]);
-  useEffect(() => {
     const region = viewport.current;
-    if (!region || !ready || !measured || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => fit(overview.current ? undefined : focusId.current));
+    if (!region) return;
+    // UX：隐藏/恢复不改实际阅读尺寸时，保留用户缩放与平移。
+    const resize = () => {
+      const key = [region.clientWidth, region.clientHeight, layout, expanded].join(":");
+      if (!region.clientWidth || !region.clientHeight || fittedBox.current === key) return;
+      fittedBox.current = key;
+      fit(overview.current ? undefined : focusId.current);
+    };
+    resize();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(resize);
     observer.observe(region);
     return () => observer.disconnect();
-  }, [ready, measured]);
+  }, [layout, ready, measured, expanded]);
   const root = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (focusRequest) {
@@ -298,10 +305,9 @@ export default function RunExecutionCanvas({
           {initialFocus.warning}
         </p>
       )}
-      <div data-run-canvas-body="" className="grid min-w-0 lg:grid-cols-[minmax(0,1fr)_320px]" style={{height: expanded ? "min(78vh,900px)" : "clamp(360px,58vh,640px)"}}>
+      <div data-run-canvas-body="" style={{height: expanded ? "min(78vh,900px)" : "clamp(360px,58vh,640px)"}}>
         <div
           ref={viewport}
-          className="min-w-0 border-y border-border bg-muted/30 lg:border-r"
           role="region"
           aria-label="实例只读流程画布"
         >
