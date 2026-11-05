@@ -18,7 +18,10 @@
 [data-node-config-panel] [data-inspector-tabs] > button { flex:1 1 auto; padding:7px 6px; min-height:34px!important; white-space:nowrap; font-size:13px!important; line-height:20px!important; border-radius:6px; }
 [data-node-config-panel] [data-inspector-tabs] > [aria-selected="true"] { background:var(--accent); color:var(--primary); box-shadow:inset 0 -2px var(--primary); }
 [data-node-config-panel] [data-inspector-section] { padding:16px; }
-[data-node-config-panel] [data-config-fields] { display:grid; gap:18px; }
+[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:18px; }
+[data-node-config-panel] [data-config-fields] > * { min-width:0; }
+[data-node-config-panel] [data-config-fields] p { overflow-wrap:anywhere; }
+[data-node-config-panel] [role="listitem"] > span { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
 [data-node-config-panel] [data-config-fields] > * + * { margin-top:0; }
 [data-node-config-panel] :is(label,legend,[data-config-help],[role="alert"],[role="status"]) { min-width:0; overflow-wrap:anywhere; }
 [data-node-config-panel] [data-config-help] { line-height:22px; color:var(--muted-foreground); }
