@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { execFileSync } from "node:child_process";
 
 const assetsDirectory = join(process.cwd(), "dist", "public", "assets");
 const indexHtmlPath = join(process.cwd(), "dist", "public", "index.html");
@@ -81,6 +82,12 @@ const htmlBytes = Buffer.byteLength(html, "utf8");
 const sizes = assets
   .map(file => {
     const contents = readFileSync(join(assetsDirectory, file));
+    try {
+      execFileSync(process.execPath, ["--check", join(assetsDirectory, file)], { stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      const detail = String(error.stderr ?? "").split(/\r?\n/).find(line => line.startsWith("SyntaxError:"));
+      throw new Error(`JavaScript syntax check failed: ${file}${detail ? ` (${detail})` : ""}`);
+    }
     return {
       file,
       bytes: statSync(join(assetsDirectory, file)).size,
@@ -90,6 +97,7 @@ const sizes = assets
   .sort((left, right) => right.bytes - left.bytes);
 const totalBytes = sizes.reduce((sum, asset) => sum + asset.bytes, 0);
 const totalGzipBytes = sizes.reduce((sum, asset) => sum + asset.gzipBytes, 0);
+console.log(`JavaScript syntax verified: ${assets.length} modules`);
 const oversized = sizes.filter(asset => asset.bytes > maxChunkBytes);
 
 for (const asset of sizes) {

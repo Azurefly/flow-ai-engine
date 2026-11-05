@@ -52,6 +52,12 @@ export function compactStyleConstants(
   type Edit = { start: number; end: number; text: string };
   const edits: Edit[] = [],
     declarations: string[] = [];
+  const identifierPart = /[\w$\\\u0080-\uffff]/;
+  function replacement(name: string, pos: { start: number; end: number }) {
+    // A quoted literal separates tokens; an identifier needs explicit boundaries.
+    return (pos.start && identifierPart.test(code[pos.start - 1]) ? " " : "") + name +
+      (pos.end < code.length && identifierPart.test(code[pos.end]) ? " " : "");
+  }
   function render(nextEdits: Edit[], nextDeclarations: string[]) {
     let output = code;
     for (const edit of [...nextEdits].sort((a, b) => b.start - a.start))
@@ -79,7 +85,7 @@ export function compactStyleConstants(
     const literal = JSON.stringify(value);
     if (
       positions.reduce(
-        (sum, pos) => sum + pos.end - pos.start - name.length,
+        (sum, pos) => sum + pos.end - pos.start - replacement(name, pos).length,
         0
       ) <=
       name.length + literal.length + 8
@@ -87,7 +93,7 @@ export function compactStyleConstants(
       continue;
     const nextEdits = [
       ...edits,
-      ...positions.map(pos => ({ ...pos, text: name })),
+      ...positions.map(pos => ({ ...pos, text: replacement(name, pos) })),
     ];
     const nextDeclarations = [...declarations, `${name}=${literal}`];
     const output = render(nextEdits, nextDeclarations);
@@ -99,5 +105,7 @@ export function compactStyleConstants(
     declarations.push(nextDeclarations[nextDeclarations.length - 1]);
     best = output;
   }
-  return declarations.length ? { code: best, map: null } : null;
+  if (!declarations.length) return null;
+  parse(best);
+  return { code: best, map: null };
 }

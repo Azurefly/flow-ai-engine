@@ -51,3 +51,15 @@ it("跨压缩窗口重复内容被实际共享，结果与业务调用保持一�
   runInNewContext(optimized!.code, after);
   expect(JSON.stringify(after.output)).toBe(JSON.stringify(before.output));
 });
+
+it("压缩后的 case、return 与 in 邻接字符串仍可解析且结果不变", () => {
+  const value = JSON.stringify(style), gap = ";".repeat(40000);
+  const code = `function select(input){switch(input){case${value}:return${value};default:return "other"}}${gap}const b=${value};${gap}globalThis.output=[select(b),select("other"),${value}in{[b]:true}];`;
+  const optimized = compactStyleConstants(code, parseAst);
+  expect(optimized).not.toBeNull();
+  expect(optimized!.code).not.toMatch(/case\$C|return\$C|\$C\w*in\{/);
+  const before: any = {}, after: any = {};
+  runInNewContext(code, before);
+  runInNewContext(optimized!.code, after);
+  expect(JSON.stringify(after.output)).toBe(JSON.stringify(before.output));
+});

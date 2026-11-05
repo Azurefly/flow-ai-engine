@@ -187,14 +187,19 @@ export default defineConfig(({ command }) => {
         renderChunk: {
           order: "post",
           async handler(code) {
+            async function smaller(source: string) {
+              const result = await minify(source, { module: true, ecma: 2020, compress: { passes: 3, ecma: 2020 }, format: { comments: false } });
+              return result.code && Buffer.byteLength(result.code) < Buffer.byteLength(source) && gzipSync(result.code).length <= gzipSync(source).length ? result.code : source;
+            }
             const shared = compactStyleConstants(code, source => this.parse(source));
             const before = shared?.code ?? code;
             // A second pass also compacts Rollup's final wrappers; accept only real savings.
-            const result = await minify(before, { module: true, ecma: 2020, compress: { passes: 3, ecma: 2020 }, format: { comments: false } });
-            if (!result.code || Buffer.byteLength(result.code) >= Buffer.byteLength(before) || gzipSync(result.code).length > gzipSync(before).length) return shared;
-            // Spend at most 18 bytes of the measured gzip saving to share more strings.
+            const compressed = await smaller(before);
+            // Spend at most 24 bytes of the measured gzip saving to share more strings.
             // Each completed chunk remains no larger in raw or gzip than before this pass.
-            return compactStyleConstants(result.code, source => this.parse(source), Math.min(gzipSync(before).length, gzipSync(result.code).length + 18)) ?? { code: result.code, map: null };
+            const factored = compactStyleConstants(compressed, source => this.parse(source), Math.min(gzipSync(before).length, gzipSync(compressed).length + 24));
+            const final = await smaller(factored?.code ?? compressed);
+            return final === code ? null : { code: final, map: null };
           },
         },
       },
