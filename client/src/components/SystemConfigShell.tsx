@@ -35,7 +35,7 @@ const configCardClass = "min-w-0 rounded-lg border border-border bg-card p-4";
 const configValueClass = ("aiflow-type-body font-medium " + mutedToneClass);
 const configDescriptionClass = ("mt-2 text-sm leading-5 " + mutedToneClass);
 
-type Tab = "general" | "approval" | "domain" | "runtime";
+type Tab = "general" | "approval" | "llm" | "domain" | "runtime";
 
 export default function SystemConfigShell() {
   const [tab, setTab] = useState<Tab>("general");
@@ -43,6 +43,7 @@ export default function SystemConfigShell() {
   const items = [
     { id: "general" as const, label: "通用设置", icon: SlidersHorizontal },
     { id: "approval" as const, label: "审批配置", icon: ClipboardCheck },
+    { id: "llm" as const, label: "模型服务", icon: SlidersHorizontal },
     { id: "domain" as const, label: "工作域配置", icon: Workflow },
     { id: "runtime" as const, label: "运行诊断", icon: Activity },
   ];
@@ -156,7 +157,7 @@ export default function SystemConfigShell() {
             className="w-full min-w-0 p-5"
           >
             <SystemSettingsEditor
-              activeKey={tab === "general" || tab === "approval" ? tab : null}
+              activeKey={tab === "general" || tab === "approval" || tab === "llm" ? tab : null}
               onSelectKey={setTab}
             />
             {tab === "domain" && <DomainSettings />}

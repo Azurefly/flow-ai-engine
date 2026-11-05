@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
+import { compactStyleConstants } from "./scripts/build-style-constants";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 // =============================================================================
@@ -178,6 +179,16 @@ export default defineConfig(({ command }) => {
     command === "serve" || process.env.MANUS_RUNTIME_IN_PRODUCTION === "true";
   return {
     plugins: [
+      {
+        name: "compact-style-constants",
+        apply: "build",
+        renderChunk: {
+          order: "post",
+          handler(code) {
+            return compactStyleConstants(code, source => this.parse(source));
+          },
+        },
+      },
       react(),
       tailwindcss(),
       ...(includeManusRuntime
@@ -211,6 +222,13 @@ export default defineConfig(({ command }) => {
           experimentalMinChunkSize: 64 * 1024,
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
+            // Cache shared form and request runtimes together; application pages remain lazy.
+            if (
+              /\/(?:@radix-ui\/[^/]+|@trpc\/[^/]+|@tanstack\/[^/]+|react-remove-scroll[^/]*|react-style-singleton|aria-hidden|tailwind-merge|class-variance-authority|clsx|sonner|cmdk|superjson)\//.test(
+                id.replace(/\\/g, "/")
+              )
+            )
+              return "workspace-runtime";
             // These UI libraries initialize together; keep their dependency closure outside application chunks.
             if (
               id.includes("commonjsHelpers") ||

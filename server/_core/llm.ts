@@ -1,4 +1,8 @@
-import { ENV } from "./env";
+import {
+  resolveLlmConnection,
+  redactLlmError,
+  type LlmConnection,
+} from "../llm-configuration";
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -219,20 +223,6 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveOpenAiBaseUrl = () => {
-  const configured = ENV.llmApiUrl.trim() || "https://api.openai.com";
-  const normalized = configured.replace(/\/+$/, "");
-  return normalized.endsWith("/v1") ? normalized : `${normalized}/v1`;
-};
-
-const resolveApiUrl = () => `${resolveOpenAiBaseUrl()}/chat/completions`;
-
-const assertApiKey = () => {
-  if (!ENV.llmApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
-};
-
 const normalizeResponseFormat = ({
   responseFormat,
   response_format,
@@ -333,7 +323,10 @@ const fetchWithBackoff = async (
 
   for (let attempt = 0; attempt <= RETRY_MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(url, { ...init, ...(signal ? { signal } : {}) });
+      const response = await fetch(url, {
+        ...init,
+        ...(signal ? { signal } : {}),
+      });
       if (response.ok || attempt === RETRY_MAX_RETRIES) {
         return response;
       }
@@ -364,8 +357,11 @@ const fetchWithBackoff = async (
     : new Error("LLM request failed after exhausting retries");
 };
 
-export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+export async function invokeLLM(
+  params: InvokeParams,
+  savedConnection?: LlmConnection
+): Promise<InvokeResult> {
+  const connection = savedConnection ?? (await resolveLlmConnection());
 
   const {
     messages,
@@ -389,8 +385,8 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     messages: messages.map(normalizeMessage),
   };
 
-  if (model) {
-    payload.model = model;
+  if (model || connection.defaultModel) {
+    payload.model = model || connection.defaultModel;
   }
 
   if (tools && tools.length > 0) {
@@ -429,9 +425,13 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
 
   const controller = new AbortController();
-  const timeout = Number.isFinite(timeoutMs) && Number(timeoutMs) > 0
-    ? setTimeout(() => controller.abort(), Math.min(Number(timeoutMs), 120_000))
-    : undefined;
+  const timeout =
+    Number.isFinite(timeoutMs) && Number(timeoutMs) > 0
+      ? setTimeout(
+          () => controller.abort(),
+          Math.min(Number(timeoutMs), 120_000)
+        )
+      : undefined;
   const abortFromCaller = () => controller.abort();
   if (signal) {
     if (signal.aborted) controller.abort();
@@ -443,27 +443,30 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   }
   let response: Response;
   try {
-    response = await fetchWithBackoff(resolveApiUrl(), {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        authorization: `Bearer ${ENV.llmApiKey}`,
+    response = await fetchWithBackoff(
+      `${connection.baseUrl}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${connection.apiKey}`,
+        },
+        body: JSON.stringify(payload),
       },
-      body: JSON.stringify(payload),
-    }, controller.signal);
+      controller.signal
+    );
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `LLM invoke failed: ${response.status} ${response.statusText} – ${redactLlmError(new Error(errorText), connection.apiKey)}`
+      );
+    }
+
+    return (await response.json()) as InvokeResult;
   } finally {
     if (timeout) clearTimeout(timeout);
     signal?.removeEventListener("abort", abortFromCaller);
   }
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-    );
-  }
-
-  return (await response.json()) as InvokeResult;
 }
 
 export type ModelInfo = {
@@ -478,21 +481,39 @@ export type ModelsResponse = {
   data: ModelInfo[];
 };
 
-export async function listLLMModels(): Promise<ModelsResponse> {
-  assertApiKey();
+export async function listLLMModels(
+  savedConnection?: LlmConnection
+): Promise<ModelsResponse> {
+  const connection = savedConnection ?? (await resolveLlmConnection());
+  const url = `${connection.baseUrl}/models`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
 
-  const url = `${resolveOpenAiBaseUrl()}/models`;
-
-  const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.llmApiKey}` },
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `List LLM models failed: ${response.status} ${response.statusText} – ${errorText}`
+  let response: Response;
+  try {
+    response = await fetchWithBackoff(
+      url,
+      {
+        headers: { authorization: `Bearer ${connection.apiKey}` },
+      },
+      controller.signal
     );
-  }
 
-  return (await response.json()) as ModelsResponse;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `List LLM models failed: ${response.status} ${response.statusText} – ${redactLlmError(new Error(errorText), connection.apiKey)}`
+      );
+    }
+
+    const catalog = (await response.json()) as ModelsResponse;
+    if (
+      !Array.isArray(catalog.data) ||
+      catalog.data.some(item => !item || typeof item.id !== "string")
+    )
+      throw new Error("模型目录格式无效，请核对 OpenAI 兼容接口地址。");
+    return catalog;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

@@ -1,5 +1,8 @@
-export type SettingsKey = "general" | "approval";
+export type SettingsKey = "general" | "approval" | "llm";
 export type SettingsForm = {
+  baseUrl: string;
+  defaultModel: string;
+  credentialRef: string;
   platformName: string;
   watermarkEnabled: boolean;
   watermarkText: string;
@@ -12,11 +15,16 @@ export type SettingsDraft = {
   base: SettingsForm;
   form: SettingsForm;
 };
-export const SETTINGS_LABELS = { general: "通用设置", approval: "审批配置" };
+export const SETTINGS_LABELS = { general: "通用设置", approval: "审批配置", llm: "模型服务" };
 const fields: Record<
   SettingsKey,
   { field: keyof SettingsForm; label: string }[]
 > = {
+  llm: [
+    { field: "baseUrl", label: "API 基础地址" },
+    { field: "defaultModel", label: "默认模型 ID" },
+    { field: "credentialRef", label: "服务器凭据引用" },
+  ],
   general: [
     { field: "platformName", label: "平台名称" },
     { field: "watermarkEnabled", label: "系统水印" },
@@ -33,6 +41,9 @@ export function createSettingsDraft(
   token: string
 ): SettingsDraft {
   const base: SettingsForm = {
+    baseUrl: String(raw.baseUrl ?? ""),
+    defaultModel: String(raw.defaultModel ?? ""),
+    credentialRef: String(raw.credentialRef ?? ""),
     platformName: String(raw.platformName ?? "Flow AI Engine"),
     watermarkEnabled: Boolean(raw.watermarkEnabled),
     watermarkText: String(raw.watermarkText ?? ""),
@@ -60,6 +71,7 @@ export function settingsDraftFields(draft: SettingsDraft) {
 }
 export function settingsDraftPayload(draft: SettingsDraft) {
   const value = draft.form;
+  if (draft.key === "llm") return Object.fromEntries(Object.entries(settingsDraftFields(draft)).map(([key, item]) => [key, String(item).trim()]));
   if (draft.key === "approval")
     return {
       requireProjectApproval: value.requireProjectApproval,

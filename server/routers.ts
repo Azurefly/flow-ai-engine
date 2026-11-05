@@ -1,3 +1,5 @@
+import { getLlmServiceStatus } from "./llm-configuration";
+import { checkLlmService } from "./llm-service-check";
 import { cancelDataflowRun } from "./dataflow-run-control";
 import { authorizationAuditPageInput } from "./authorization-audit-pagination";
 import { workflowConfigurationToken } from "./workflow-creation-request";
@@ -1405,13 +1407,15 @@ export const appRouter = router({
   }),
   config: router({
     publicGeneral: publicProcedure.query(() => getPublicGeneralSettings()),
-    runtimeInfo: adminProcedure.query(() => getRuntimeInfo()),
+    runtimeInfo: adminProcedure.query(async () => getRuntimeInfo(await getLlmServiceStatus())),
+    modelService: adminProcedure.query(() => getLlmServiceStatus()),
+    checkModelService: adminProcedure.input(z.object({ mode: z.enum(["models", "chat"]), expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/) })).mutation(({ input }) => checkLlmService(input.mode, input.expectedConfigToken)),
     readiness: adminProcedure.query(() => checkReadiness()),
     settings: adminProcedure.query(() => getP1SystemSettings()),
     updateSetting: adminProcedure
       .input(
         z.object({
-          key: z.enum(["general", "approval"]),
+          key: z.enum(["general", "approval", "llm"]),
           value: z.record(z.string(), z.unknown()),
           expectedConfigToken: z.string().regex(/^[a-f0-9]{64}$/, "请重新读取系统设置后重试。").optional(),
         })

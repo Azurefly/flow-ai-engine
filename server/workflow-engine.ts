@@ -1,3 +1,4 @@
+import { getLlmConfiguration, resolveLlmConnection } from "./llm-configuration";
 import { TRPCError } from "@trpc/server";
 import { aggregateOutcomeCode, assertSigningOutcomes, outcomeDecision, contractOutcomeDecision } from "../shared/operate-signing-outcomes";
 import { resolveMessageCorrelationKey } from "./workflow-message-key";
@@ -1112,10 +1113,11 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   const preparedContext = prepareLlmContext(context, allowSensitiveFields);
   const resolved = asRecord(resolveTemplates(config, preparedContext.context));
   const governance = asRecord(resolved.governance);
-  const catalog = await listLLMModels();
+  const connection = await resolveLlmConnection();
+  const catalog = await listLLMModels(connection);
   const requestedModel =
     typeof resolved.model === "string" ? resolved.model : undefined;
-  const model = resolveRuntimeLlmModel(requestedModel, catalog.data);
+  const model = resolveRuntimeLlmModel(requestedModel || connection.defaultModel || undefined, catalog.data);
   const systemPrompt = String(
     resolved.systemPrompt ?? "你是一名严谨的工作流助手。"
   );
@@ -1206,7 +1208,7 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
       { role: "system", content: systemPrompt },
       { role: "user", content: prompt },
     ],
-  });
+  }, connection);
   const content = response.choices[0]?.message.content;
   const contentText = Array.isArray(content)
     ? content
@@ -5368,5 +5370,6 @@ export async function getWorkflowRun(
 }
 
 export async function getRuntimeModels() {
-  return loadRuntimeModelCatalog(ENV.llmApiKey, listLLMModels);
+  const { connection } = await getLlmConfiguration();
+  return loadRuntimeModelCatalog(connection.apiKey, () => listLLMModels(connection));
 }

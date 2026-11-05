@@ -1,3 +1,4 @@
+import { getLlmServiceStatus } from "./llm-configuration";
 import mysql from "mysql2/promise";
 import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
@@ -21,7 +22,7 @@ function db() {
   return getSharedPool();
 }
 
-export function getCapabilityStatus() {
+export function getCapabilityStatus(llm?: { configured: boolean; message: string }) {
   const worker = getWorkflowWorkerStatus();
   return [
     {
@@ -42,8 +43,8 @@ export function getCapabilityStatus() {
     {
       id: "llm-node",
       label: "LLM 节点",
-      status: ENV.llmApiKey ? "beta" : "disabled",
-      reason: ENV.llmApiKey
+      status: (llm ? llm.configured : ENV.llmApiKey) ? "beta" : "disabled",
+      reason: llm ? llm.message : ENV.llmApiKey
         ? "Provider 已配置，仍需真实模型 E2E。"
         : "OPENAI_API_KEY 未配置。",
     },
@@ -57,7 +58,7 @@ export function getCapabilityStatus() {
   ] as const;
 }
 
-export function getRuntimeInfo() {
+export function getRuntimeInfo(llm?: { configured: boolean; message: string }) {
   return {
     buildId:
       process.env.BUILD_ID ||
@@ -69,7 +70,7 @@ export function getRuntimeInfo() {
     migrationVersion: DATABASE_MIGRATION_VERSION,
     nodeEnv: process.env.NODE_ENV || "development",
     worker: getWorkflowWorkerStatus(),
-    capabilities: getCapabilityStatus(),
+    capabilities: getCapabilityStatus(llm),
   };
 }
 
@@ -191,9 +192,12 @@ export async function checkReadiness() {
   checks.worker = worker.started
     ? { ok: true, message: worker.processing ? "processing" : "idle" }
     : { ok: false, message: "worker is not started" };
+  let llmStatus;
+  try { llmStatus = await getLlmServiceStatus(); }
+  catch { llmStatus = { configured: false, message: "无法读取模型服务配置。" }; }
   if (process.env.LLM_REQUIRED === "true") {
-    if (!ENV.llmApiKey) {
-      checks.llm = { ok: false, message: "OPENAI_API_KEY is required" };
+    if (!llmStatus.configured) {
+      checks.llm = { ok: false, message: llmStatus.message };
     } else {
       try {
         const models = await getRuntimeModels();
@@ -211,6 +215,6 @@ export async function checkReadiness() {
   return {
     ready: Object.values(checks).every(check => check.ok),
     checks,
-    runtime: getRuntimeInfo(),
+    runtime: getRuntimeInfo(llmStatus),
   };
 }

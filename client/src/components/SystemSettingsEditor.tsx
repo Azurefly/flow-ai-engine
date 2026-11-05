@@ -1,3 +1,4 @@
+import ModelServiceFields from "./ModelServiceFields";
 import { useLayoutEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -35,14 +36,14 @@ import {
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-const keys: SettingsKey[] = ["general", "approval"];
+const keys: SettingsKey[] = ["general", "approval", "llm"];
 type DiscardAction = {
   kind: "discard" | "leave" | "reload";
   key?: SettingsKey;
   proceed?: () => void;
 };
 
-/** Remains mounted across configuration categories, retaining both independent drafts. */
+/** Remains mounted across configuration categories, retaining independent drafts. */
 export default function SystemSettingsEditor({
   activeKey,
   onSelectKey,
@@ -199,6 +200,8 @@ export default function SystemSettingsEditor({
     await Promise.all([
       utils.config.settings.fetch(undefined, { staleTime: 0 }),
       utils.config.publicGeneral.invalidate(),
+      utils.config.modelService.invalidate(),
+      utils.workflow.runtimeModels.invalidate(),
     ]);
     setCommitted(null);
     setError(null);
@@ -304,6 +307,7 @@ export default function SystemSettingsEditor({
             <p className="aiflow-type-body max-w-2xl text-muted-foreground">
               {activeKey === "general"
                 ? "设置平台名称和系统水印。切换配置分类会保留填写，保存后才对其他页面生效。"
+                : activeKey === "llm" ? "配置 LLM 节点使用的模型服务。"
                 : "配置项目流程发布前的审核要求与复核规则。改动保存后，由服务端执行发布门禁。"}
             </p>
           </header>
@@ -422,6 +426,8 @@ export default function SystemSettingsEditor({
                       </label>
                     </div>
                   </div>
+                ) : activeKey === "llm" ? (
+                  <ModelServiceFields form={draft.form} onChange={edit} token={draft.token} blocked={changed || conflict || busy || Boolean(committed) || !settings.isSuccess || settings.isFetching} />
                 ) : (
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-3 rounded-xl bg-muted/60 p-4">

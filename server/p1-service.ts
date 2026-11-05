@@ -1776,7 +1776,7 @@ export type ReviewerMode = "project_owner_or_admin" | "independent_reviewer";
 
 export async function getP1SystemSettings(options?: { connection?: mysql.PoolConnection; lock?: boolean }) {
   const [rows] = await (options?.connection ?? db()).query<mysql.RowDataPacket[]>(
-    "SELECT * FROM system_setting WHERE `key` IN ('general','approval')" + (options?.lock ? " FOR SHARE" : "")
+    "SELECT * FROM system_setting WHERE `key` IN ('general','approval','llm')" + (options?.lock ? " FOR SHARE" : "")
   );
   const settings: Record<string, unknown> = { ...defaultSettings };
   rows.forEach(row => {
@@ -1784,6 +1784,7 @@ export async function getP1SystemSettings(options?: { connection?: mysql.PoolCon
   });
   const values = settings as typeof defaultSettings;
   return { ...values, configTokens: {
+    llm: systemSettingConfigToken("llm", values.llm),
     general: systemSettingConfigToken("general", values.general),
     approval: systemSettingConfigToken("approval", values.approval),
   } };
@@ -1806,7 +1807,7 @@ export async function isProjectApprovalRequired(connection?: mysql.PoolConnectio
 
 export async function updateP1SystemSetting(
   user: User,
-  key: "general" | "approval",
+  key: "general" | "approval" | "llm",
   value: JsonRecord,
   expectedConfigToken?: string
 ) {

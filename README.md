@@ -52,6 +52,12 @@ Flow AI Engine 是一个面向业务流程、自动化编排和数据处理的�
 - **AI 与接口集成**：提供 HTTP 调用和兼容 OpenAI API 的模型配置能力。
 - **数据流定时计划**：内置 UTC 调度、常用周期快捷填写、下一次执行时间及启停管理；保存为暂停草稿，修改和删除受版本冲突保护。
 
+## 模型服务配置
+
+管理员进入 **系统配置 → 模型服务**，填写兼容 OpenAI API 的完整基础地址、默认模型 ID 和服务器凭据引用。支持 Gemini 的 `/v1beta/openai` 前缀；不要在基础地址后填写 `/chat/completions` 或 `/models`。保存后分别使用“读取模型”和“测试调用”检查接入，后者会发送固定问候并可能产生少量费用。节点内显式指定的模型优先于系统默认模型。
+
+凭据引用形如 `env:FLOW_SECRET_GEMINI_API_KEY`，对应服务器同名环境变量，或 `FLOW_SECRET_FILE_DIR` 目录中的同名普通文件。环境变量变更需重建应用容器；已有密钥目录中的文件可由服务器维护人员更新。页面、数据库、导出文件和审计不保存 API Key。凭据引用留空时沿用 `OPENAI_API_KEY`（兼容旧 `BUILT_IN_FORGE_API_KEY`）；接口地址留空时沿用服务器 `OPENAI_BASE_URL`（兼容旧 `BUILT_IN_FORGE_API_URL`）。配置只影响后续模型请求，不改写历史运行；目录读取成功不代表流程输出和分支已通过验收。
+
 ## 技术栈
 
 - 前端：React 19、TypeScript、Vite、Tailwind CSS、React Flow、Radix UI。

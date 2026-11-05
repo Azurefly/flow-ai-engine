@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
+import { EMPTY_LLM_SETTINGS, normalizeLlmSettings } from "../shared/llm-settings";
 
-export type SystemSettingKey = "general" | "approval";
+export type SystemSettingKey = "general" | "approval" | "llm";
 export const DEFAULT_SYSTEM_SETTINGS = {
+  llm: EMPTY_LLM_SETTINGS,
   general: {
     platformName: "Flow AI Engine",
     watermarkEnabled: false,
@@ -88,7 +90,7 @@ export function mergeSystemSettingValue(
       throw new Error("开启水印时必须配置水印文本。");
     value.platformName = name;
     value.watermarkText = text;
-  } else {
+  } else if (key === "approval") {
     if (typeof value.requireProjectApproval !== "boolean")
       throw new Error("发布审批状态无效。");
     if (
@@ -98,5 +100,5 @@ export function mergeSystemSettingValue(
     )
       throw new Error("审核人模式无效。");
   }
-  return value;
+  return key === "llm" ? normalizeLlmSettings(value) : value;
 }
