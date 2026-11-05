@@ -1,1 +1,3 @@
 *.sh text eol=lf
+# Migration hashes and release archives must use the same bytes on Windows/Linux.
+drizzle/*.sql text eol=lf
