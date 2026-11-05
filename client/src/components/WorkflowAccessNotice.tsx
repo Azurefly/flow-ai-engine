@@ -58,14 +58,14 @@ export default function WorkflowAccessNotice({
             {state === "denied"
               ? "当前账号无权查看此流程"
               : state === "unavailable"
-                ? "暂时无法确认流程访问权限"
+                ? "暂时无法读取流程内容"
                 : "正在确认流程访问权限…"}
           </h2>
           <p className="aiflow-type-body mt-2 break-words text-muted-foreground">
             {state === "denied"
               ? "登录失效、权限变更或流程不存在。内容已隐藏，请确认登录与授权。"
               : state === "unavailable"
-                ? "权限读取失败，流程内容暂时隐藏。可以重新检查权限；当前填写不会因此被清空。"
+                ? "流程或权限读取失败，内容暂时隐藏。请重新检查；当前填写不会被清空。"
                 : "确认当前流程的查看权限后再显示内容。"}
           </p>
           {retainedDraft && (

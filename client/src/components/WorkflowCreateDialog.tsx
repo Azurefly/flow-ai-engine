@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
+import { workflowReadFailureState } from "@shared/workflow-view-access";
 import {
   initialWorkflowCreationFields,
   workflowCopyName,
@@ -139,6 +140,9 @@ export default function WorkflowCreateDialog({
         !access.isError &&
         access.data.canView &&
         (copying ? access.data.canCopy : access.data.canCreate);
+  const permissionRead = copying && creation.uncertain ? recoveryAccess : access;
+  const permissionDenied = !permitted && (permissionRead.isSuccess ||
+    (permissionRead.isError && workflowReadFailureState(permissionRead.error?.data?.code) === "denied"));
   const latest =
     access.isSuccess && !access.isError ? access.data.source : null;
   const changed =
@@ -320,7 +324,9 @@ export default function WorkflowCreateDialog({
         </div>
         {(!permitted || access.isError) && (
           <p role="alert" className="text-sm text-aiflow-warning">
-            暂时无法确认创建权限，已暂停提交并保留填写。请重新读取权限。
+            {permissionDenied
+              ? "无权创建此流程或来源不可用。填写已保留，请确认授权后重试。"
+              : "暂时无法确认创建权限，已暂停提交并保留填写。请重新读取权限。"}
           </p>
         )}
         {creation.uncertain && (

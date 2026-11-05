@@ -863,15 +863,17 @@ function FlowConsole({
       if (!selectedWorkflowFromList && selectedWorkflowQuery.isPending) return;
       const workflow = selectedWorkflow;
       if (!workflow || workflow.id !== route.workflowId) {
-        replaceWith({ section: "runs", view: "workbench" });
+        // Keep the requested resource visible as an access notice, never a silent redirect.
+        setSelectedWorkflowId(route.workflowId);
+        setSelectedProject(null);
+        setSelectedRunId(route.runId ?? null);
+        canonicalize();
         return;
       }
       setSelectedWorkflowId(workflow.id);
       if (projectLookupId && routeProjectQuery.isPending) return;
       setSelectedProject((routeProjectQuery.data as ProjectRecord | null | undefined) ?? null);
       setSelectedRunId(route.runId ?? null);
-      setSection("runs");
-      setRunView("monitor");
       canonicalize();
       return;
     }
@@ -906,14 +908,14 @@ function FlowConsole({
       return;
     const workflow = selectedWorkflow;
     if (!workflow || workflow.id !== route.workflowId) {
-      replaceWith({ section: "flows", view: "center" });
+      setSelectedWorkflowId(route.workflowId);
+      setSelectedProject(null);
+      canonicalize();
       return;
     }
     const project = (routeProjectQuery.data as ProjectRecord | null | undefined) ?? null;
     setSelectedWorkflowId(workflow.id);
     setSelectedProject(project);
-    setSection("flows");
-    setFlowView(route.view);
     if (route.view === "editor")
       setFlowEditorReturn(
         requestedRoute.editorReturn ?? (project ? "workspace" : "center")

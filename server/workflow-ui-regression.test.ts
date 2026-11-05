@@ -1580,7 +1580,7 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain('label="完整组织路径"');
   });
 
-  it("保留顶层与子页面哈希路由同步、异步权限恢复和安全回退", () => {
+  it("保留哈希路由与异步权限恢复，失权流程停留原入口并显示边界", () => {
     expect(consoleRouteSource).toContain(
       "export const consoleSections: ConsoleSection[]"
     );
@@ -1610,9 +1610,8 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain(
       "!selectedWorkflowFromList && selectedWorkflowQuery.isPending"
     );
-    expect(homeSource).toContain(
-      'if (!workflow || workflow.id !== route.workflowId) { replaceWith({ section: "flows", view: "center" })'
-    );
+    expect(homeSource).not.toContain('if (!workflow || workflow.id !== route.workflowId) { replaceWith(');
+    expect(homeSource.match(/if \(!workflow \|\| workflow.id !== route.workflowId\) \{[^}]*setSelectedWorkflowId\(route.workflowId\)/g)).toHaveLength(2);
     expect(homeSource).toContain("data-aiflow-route-restoring");
     expect(homeSource).toContain(
       'if (!canManageIdentity) { replaceWith({ section: "flows", view: "center" })'
