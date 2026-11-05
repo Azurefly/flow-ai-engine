@@ -196,6 +196,16 @@ it.each([
   ).toBe(true);
 });
 
+it("手工发起只原子入队，HTTP不领取或执行数据节点", async () => {
+  mocks.access.mockResolvedValue({ exists: true, permissions: new Set(["project:workflow:run"]) });
+  const { scheduleAdmission: _admission, ...manual } = input;
+  const submitted = await runDataflow(owner, { ...manual, triggerType: "manual" });
+  expect(submitted).toMatchObject({ status: "queued", output: null });
+  expect(mocks.commit).toHaveBeenCalledOnce();
+  expect(mocks.query.mock.calls.some(([sql]) => String(sql).includes("SKIP LOCKED"))).toBe(false);
+  expect(mocks.poolQuery).not.toHaveBeenCalled();
+});
+
 it("运行、Job 和下一时刻在同一连接中提交，调度发现不执行数据节点", async () => {
   await expect(runDataflow(owner, input)).resolves.toMatchObject({
     status: "queued",

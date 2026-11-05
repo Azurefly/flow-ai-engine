@@ -59,12 +59,15 @@ describe("durable dataflow worker contract", () => {
   });
 
   it("is polled by the process worker instead of relying on request lifetime", () => {
-    expect(workerSource).toContain("runDataflowJobOnce, runDataSourceTestJobOnce");
+    expect(workerSource).toContain("runDataflowJobOnce");
+    expect(workerSource).toContain("runDataSourceTestJobOnce");
     expect(workerSource).toContain(
-      "const dataflowProcessed = await runDataflowJobOnce()"
+      "export async function runDataflowWorkerOnce()"
     );
     expect(workerSource).toContain(
-      "const dataSourceTestProcessed = await runDataSourceTestJobOnce()"
+      "export async function runSourceTestWorkerOnce()"
     );
+    expect(workerSource).toContain("if (dataflowProcessing) return false");
+    expect(workerSource).toContain("if (sourceTestProcessing) return false");
   });
 });

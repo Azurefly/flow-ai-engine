@@ -116,6 +116,15 @@ describe("P2 项目数据资源与数据流", () => {
       viewer = users.find(row => row.username === viewerName);
       const owner = callerFor(admin);
       const readonly = callerFor(viewer);
+      const completeRun = async (input: Parameters<typeof owner.data.run>[0]) => {
+        const submitted = await owner.data.run(input);
+        expect(submitted).toMatchObject({ status: "queued", output: null });
+        await expect(runDataflowJobOnce(submitted.runId)).resolves.toBe(true);
+        const detail = await owner.data.runDetail({ projectId: input.projectId, runId: submitted.runId });
+        expect(detail.status).toBe("success");
+        return { ...submitted, status: detail.status, output: detail.output };
+      };
+
 
       projectId = (
         await owner.project.create({
@@ -338,7 +347,7 @@ describe("P2 项目数据资源与数据流", () => {
         auditStatus: "approved",
       });
       await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId });
-      const run = await owner.data.run({ projectId, workflowId });
+      const run = await completeRun({ projectId, workflowId });
       expect(run.status).toBe("success");
       expect((run.output.terminals[0] as any).rows).toEqual([
         { orderId: "A-01", amount: 12 },
@@ -434,7 +443,7 @@ describe("P2 项目数据资源与数据流", () => {
         auditStatus: "approved",
       });
       await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(joinWorkflowId), id: joinWorkflowId });
-      const joined = await owner.data.run({
+      const joined = await completeRun({
         projectId,
         workflowId: joinWorkflowId,
       });
@@ -554,7 +563,7 @@ describe("P2 项目数据资源与数据流", () => {
           auditStatus: "approved",
         });
         await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(aggregateWorkflowId), id: aggregateWorkflowId });
-        const aggregated = await owner.data.run({
+        const aggregated = await completeRun({
           projectId,
           workflowId: aggregateWorkflowId,
         });
@@ -616,7 +625,7 @@ describe("P2 项目数据资源与数据流", () => {
         auditStatus: "approved",
       });
       await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(sqlWorkflowId), id: sqlWorkflowId });
-      const sqlRun = await owner.data.run({
+      const sqlRun = await completeRun({
         projectId,
         workflowId: sqlWorkflowId,
       });
@@ -672,7 +681,7 @@ describe("P2 项目数据资源与数据流", () => {
         auditStatus: "approved",
       });
       await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(jdbcReadWorkflowId), id: jdbcReadWorkflowId });
-      const jdbcRead = await owner.data.run({
+      const jdbcRead = await completeRun({
         projectId,
         workflowId: jdbcReadWorkflowId,
       });
@@ -802,7 +811,7 @@ describe("P2 项目数据资源与数据流", () => {
         auditStatus: "approved",
       });
       await owner.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(batchWorkflowId), id: batchWorkflowId });
-      const batch = await owner.data.run({
+      const batch = await completeRun({
         projectId,
         workflowId: batchWorkflowId,
       });
@@ -879,6 +888,7 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId: failedWorkflowId,
       });
       expect(retrying.status).toBe("queued");
+      await expect(runDataflowJobOnce(retrying.runId)).resolves.toBe(true);
       const retryRecords = await owner.data.runs({
         projectId,
         workflowId: failedWorkflowId,
@@ -969,14 +979,11 @@ describe("P2 项目数据资源与数据流", () => {
       const faultBucket = `fault:${suffix}`;
       process.env.DATAFLOW_WORKER_FAULT_POINT = "after_nodes_before_complete";
       try {
-        await expect(
-          runDataflow(admin, {
-            projectId,
-            workflowId,
-            triggerType: "schedule",
-            scheduleBucket: faultBucket,
-          })
-        ).rejects.toThrow("Injected dataflow worker crash");
+        const admitted = await runDataflow(admin, {
+          projectId, workflowId, triggerType: "schedule", scheduleBucket: faultBucket,
+        });
+        expect(admitted.status).toBe("queued");
+        await expect(runDataflowJobOnce(admitted.runId)).rejects.toThrow("Injected dataflow worker crash");
       } finally {
         delete process.env.DATAFLOW_WORKER_FAULT_POINT;
       }

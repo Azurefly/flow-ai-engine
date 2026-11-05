@@ -12,7 +12,11 @@ import {
   type WorkflowCheckpoint,
 } from "./workflow-engine";
 import { notifyOwner } from "./_core/notification";
-import { queueDueNativeDataflowsOnce, runDataflowJobOnce, runDataSourceTestJobOnce } from "./p2-service";
+import {
+  queueDueNativeDataflowsOnce,
+  runDataflowJobOnce,
+  runDataSourceTestJobOnce,
+} from "./p2-service";
 
 type WorkflowUser = { id: number; role: "user" | "admin" };
 type JsonRecord = Record<string, unknown>;
@@ -47,6 +51,9 @@ const leaseSeconds = Math.max(
 let pool: mysql.Pool | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 let processing = false;
+let dataflowProcessing = false;
+let sourceTestProcessing = false;
+let stopping = false;
 let lastWorkflowJobClaimed = false;
 
 const state = {
@@ -99,7 +106,41 @@ export function outboxRetryDelaySeconds(attempt: number) {
 }
 
 export function getWorkflowWorkerStatus() {
-  return { ...state, processing };
+  return {
+    ...state,
+    processing: anyChannelProcessing(),
+    channels: {
+      workflow: processing,
+      dataflow: dataflowProcessing,
+      sourceTest: sourceTestProcessing,
+    },
+  };
+}
+
+function anyChannelProcessing() {
+  return processing || dataflowProcessing || sourceTestProcessing;
+}
+
+// Independent bounded channels: a slow data connector must not hold the
+// state/control dispatcher or the source-test queue behind its await.
+export async function runDataflowWorkerOnce() {
+  if (dataflowProcessing) return false;
+  dataflowProcessing = true;
+  try {
+    return await runDataflowJobOnce();
+  } finally {
+    dataflowProcessing = false;
+  }
+}
+
+export async function runSourceTestWorkerOnce() {
+  if (sourceTestProcessing) return false;
+  sourceTestProcessing = true;
+  try {
+    return await runDataSourceTestJobOnce();
+  } finally {
+    sourceTestProcessing = false;
+  }
 }
 
 async function claimNextJob(): Promise<ClaimedJob | null> {
@@ -358,15 +399,15 @@ export async function reconcileExhaustedWorkflowJobs() {
   let recovered = 0;
   for (const row of rows) {
     try {
-    if (
-      await markWorkflowRunFailed(
-        String(row.runId),
-        new Error("工作流任务租约已到期且重试次数耗尽，运行已停止。"),
-        String(row.leaseToken),
-        String(row.id)
+      if (
+        await markWorkflowRunFailed(
+          String(row.runId),
+          new Error("工作流任务租约已到期且重试次数耗尽，运行已停止。"),
+          String(row.leaseToken),
+          String(row.id)
+        )
       )
-    )
-      recovered += 1;
+        recovered += 1;
     } catch (error) {
       state.lastError = `耗尽任务 ${String(row.id)} 收敛失败：${error instanceof Error ? error.message : String(error)}`;
     }
@@ -431,7 +472,13 @@ async function handleJobFailure(job: ClaimedJob, error: unknown) {
         `UPDATE workflow_run_job j JOIN workflow_run r ON r.id=j.runId
             SET j.status='queued',j.lastErrorJson=?,j.availableAt=DATE_ADD(NOW(),INTERVAL ? SECOND),j.leaseToken=NULL,j.leaseExpiresAt=NULL,j.workerId=NULL
           WHERE j.id=? AND j.status='leased' AND j.leaseToken=? AND r.executionLockToken=?`,
-        [JSON.stringify(details), delaySeconds, job.id, job.leaseToken, job.leaseToken]
+        [
+          JSON.stringify(details),
+          delaySeconds,
+          job.id,
+          job.leaseToken,
+          job.leaseToken,
+        ]
       );
       if (!released.affectedRows)
         throw new Error("工作流重试排队时租约已失效。");
@@ -507,8 +554,6 @@ export async function runWorkflowWorkerOnce() {
     const exhaustedJobsReconciled = await reconcileExhaustedWorkflowJobs();
     const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
     const dataflowSchedulesQueued = await queueDueNativeDataflowsOnce();
-    const dataflowProcessed = await runDataflowJobOnce();
-    const dataSourceTestProcessed = await runDataSourceTestJobOnce();
     const job = await claimNextJob();
     if (!job)
       return (
@@ -516,8 +561,6 @@ export async function runWorkflowWorkerOnce() {
         waitsTriggered > 0 ||
         taskSchedulesFired > 0 ||
         dataflowSchedulesQueued > 0 ||
-        dataflowProcessed ||
-        dataSourceTestProcessed ||
         terminalJobsReconciled > 0 ||
         exhaustedJobsReconciled > 0
       );
@@ -541,14 +584,19 @@ export async function drainWorkflowJobs(maxJobs = 100) {
 }
 
 export function wakeWorkflowWorker() {
-  if (process.env.WORKFLOW_WORKER_ENABLED === "false") return;
-  queueMicrotask(
-    () =>
-      void runWorkflowWorkerOnce().catch(error => {
-        state.lastError =
-          error instanceof Error ? error.message : String(error);
-      })
-  );
+  if (stopping || process.env.WORKFLOW_WORKER_ENABLED === "false") return;
+  queueMicrotask(() => {
+    if (stopping) return;
+    for (const [name, poll] of [
+      ["workflow", runWorkflowWorkerOnce],
+      ["dataflow", runDataflowWorkerOnce],
+      ["sourceTest", runSourceTestWorkerOnce],
+    ] as const) {
+      void poll().catch(error => {
+        state.lastError = `${name}: ${error instanceof Error ? error.message : String(error)}`;
+      });
+    }
+  });
 }
 
 export function startWorkflowWorker() {
@@ -558,6 +606,7 @@ export function startWorkflowWorker() {
     !process.env.DATABASE_URL
   )
     return;
+  stopping = false;
   state.started = true;
   timer = setInterval(() => wakeWorkflowWorker(), pollIntervalMs);
   timer.unref?.();
@@ -565,14 +614,18 @@ export function startWorkflowWorker() {
 }
 
 export async function stopWorkflowWorker(timeoutMs = 5000) {
+  stopping = true;
   if (timer) clearInterval(timer);
   timer = undefined;
   state.started = false;
 
   const start = Date.now();
-  while (processing && Date.now() - start < timeoutMs) {
+  while (anyChannelProcessing() && Date.now() - start < timeoutMs) {
     await new Promise(resolve => setTimeout(resolve, 50));
   }
+
+  if (anyChannelProcessing())
+    throw new Error("后台作业仍在执行，停止等待超时；数据库连接保持开启。");
 
   if (pool) {
     await pool.end();

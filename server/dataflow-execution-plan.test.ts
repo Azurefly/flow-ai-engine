@@ -78,7 +78,12 @@ describe("数据流 ExecutionPlan V2 基线", () => {
     );
     expect(source).toContain("assertWorkflowExecutionPlan(");
     expect(source).toContain("job.executionPlan,");
-    expect(source).toContain("await runDataflowJobOnce(runId)");
+    expect(source).toContain("export async function runDataflowJobOnce(");
+    const admission = source.slice(
+      source.indexOf("export async function runDataflow("),
+      source.indexOf("/** Only internal plans")
+    );
+    expect(admission).not.toContain("await runDataflowJobOnce(");
     expect(source).toContain(
       "executionPlanJson,executionPlanHash,executionSource,definitionVersion,requestId"
     );

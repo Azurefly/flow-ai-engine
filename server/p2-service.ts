@@ -2191,27 +2191,15 @@ export async function runDataflow(
   } finally {
     connection.release();
   }
-  if (input.scheduleAdmission)
-    return { runId, status: "queued" as const, output: null };
-  await runDataflowJobOnce(runId);
-  const [runRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT status,outputJson,errorJson FROM dataflow_run WHERE id=? LIMIT 1",
-    [runId]
-  );
-  const persisted = runRows[0];
-  if (persisted?.status === "failed")
-    throw new Error(
-      String(
-        parseJson(persisted.errorJson, { message: "数据流执行失败。" }).message
-      )
-    );
+  // Admission is durable at commit. The process worker owns execution; HTTP
+  // must not wait for node I/O or launch an untracked background promise.
   return {
     runId,
-    status: String(persisted?.status ?? "queued") as
+    status: "queued" as
       | "queued"
       | "running"
       | "success",
-    output: parseJson(persisted?.outputJson, null),
+    output: null,
   };
 }
 
