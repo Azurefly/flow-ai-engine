@@ -38,6 +38,7 @@ export function OperateApprovalEditor({
   return (
     <section
       className="space-y-4 rounded-xl border border-border bg-muted/30 p-4"
+      data-approval-editor=""
       aria-label="审批方式配置"
     >
       <h4 className="text-sm font-semibold">审批方式</h4>
@@ -49,6 +50,7 @@ export function OperateApprovalEditor({
         {modes.map(([mode, label, help]) => (
           <label
             key={mode}
+            data-approval-mode-card=""
             className={`flex cursor-pointer gap-2 rounded-lg border p-3 text-sm ${current.signMode === mode ? "border-primary bg-primary/5" : "border-border bg-background"}`}
           >
             <input

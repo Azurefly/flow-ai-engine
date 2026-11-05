@@ -125,7 +125,7 @@ export function WorkflowOutcomeEditor({
                 onChange={event => update(index, { label: event.target.value })}
               />
             </label>
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+            <div className="node-config-columns grid min-w-0 gap-2 sm:grid-cols-2">
               <label className="grid gap-1 text-sm">
                 结果代号
                 <input

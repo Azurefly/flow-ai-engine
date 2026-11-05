@@ -143,7 +143,7 @@ export function TaskFormSchemaEditor({
                 </Button>
               </div>
             </div>
-            <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+            <div className="node-config-columns grid min-w-0 gap-2 sm:grid-cols-2">
               <label className="grid gap-1 text-xs">
                 显示名称
                 <input
@@ -227,6 +227,7 @@ export function TaskFormSchemaEditor({
                   return (
                     <div
                       key={position}
+                      data-config-pair=""
                       className="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1"
                     >
                       <input

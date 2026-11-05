@@ -75,7 +75,7 @@ export function AggregateMetricEditor({
                 }
               />
             </label>
-            <div className="grid min-w-0 grid-cols-2 gap-2">
+            <div className="node-config-columns grid min-w-0 grid-cols-2 gap-2">
               <label className="aiflow-type-control grid gap-1.5">
                 计算方式
                 <select

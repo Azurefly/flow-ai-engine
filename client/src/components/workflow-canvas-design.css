@@ -58,7 +58,7 @@
 [data-canvas-redesign] [data-workflow-inspector] [role="tab"] {min-width: 0; border: 0; border-radius: 5px; font-size: 13px;}
 [data-canvas-redesign] [data-canvas-assessment] {padding: 4px 12px;}
 @media (min-width: 1024px) {
-  [data-canvas-redesign]:has(> aside):not([data-inspector-mode="compact"]):not([data-inspector-mode="maximized"]) {grid-template-columns: minmax(0, 1fr) 360px;}
+  [data-canvas-redesign]:has(> aside):not([data-inspector-mode="compact"]):not([data-inspector-mode="maximized"]) {grid-template-columns: minmax(0, 1fr) 440px;}
   [data-canvas-redesign] [data-flow-canvas-toolbar] {min-height: 52px; padding: 8px 12px; gap: 8px;}
   [data-canvas-redesign] [data-canvas-icon] {width: 34px; height: 34px; min-height: 34px;}
   [data-canvas-redesign] [data-canvas-palette-trigger] {height: 34px; min-height: 34px;}

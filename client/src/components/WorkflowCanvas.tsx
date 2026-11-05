@@ -3,6 +3,7 @@ const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
 const surfaceClass1 = "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
 import "./workflow-canvas-design.css";
+import "./node-config-panel.css";
 import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
 import { canvasNodeRects, canvasHasDiscreteMove, canvasHasCrowding, readableCanvasLayout, canvasContextIds, canvasConnectionPoints, canvasBounds, canvasViewBounds, roundedCanvasPath } from "./workflow-canvas-geometry";
 import { availableWorkflowReuseResources } from "@shared/workflow-reuse-resources";
@@ -166,7 +167,7 @@ const canvasFieldGroupClass = "grid gap-1.5";
 const canvasCompactLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " + mutedToneClass);
 const canvasStackedLabelClass = ("aiflow-type-control grid gap-1.5 font-medium " + mutedToneClass);
 const canvasSectionTitleClass = "aiflow-type-section-title mb-2 font-semibold text-foreground";
-const canvasNestedCardClass = "grid min-w-0 gap-2 rounded border border-border bg-card p-2";
+const canvasNestedCardClass = "node-config-nested grid min-w-0 gap-2 rounded border border-border bg-card p-2";
 const canvasRemoveFieldClass = ("rounded px-1 " + mutedToneClass + " hover:text-red-600");
 const canvasMutedLabelClass = ("aiflow-type-control font-medium " + mutedToneClass);
 const canvasConfigGridClass = "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3";
@@ -1081,6 +1082,7 @@ function NestedStructuredValueEditor({
         {entries.map(([key, entryValue], index) => (
           <div
             key={key + "-" + index}
+            data-config-pair=""
             className="grid min-w-0 grid-cols-[minmax(72px,.6fr)_minmax(0,1.4fr)_auto] gap-2"
           >
             <input
@@ -1837,7 +1839,7 @@ function StructuredListRow({
             <Trash2 size={14} />
           </button>
         </div>
-        <div className="grid min-w-0 gap-2 sm:grid-cols-2">
+        <div className="node-config-columns grid min-w-0 gap-2 sm:grid-cols-2">
           <label className={canvasFieldLabelClass}>
             路径句柄
             <input
@@ -1914,7 +1916,7 @@ function StructuredListRow({
           <summary className={"aiflow-type-control cursor-pointer px-2 py-3 font-medium " + mutedToneClass}>
             附加数据条件
           </summary>
-          <div className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
+          <div data-config-condition="" className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
             <input
               className={inputClass}
               placeholder="左值"
@@ -1969,7 +1971,7 @@ function StructuredListRow({
     const itemField =
       item && typeof item === "object" ? (item as NodeConfig) : {};
     return (
-      <div className="grid grid-cols-[1fr_1fr_100px_auto_auto] items-center gap-2 rounded border border-border bg-card p-2">
+      <div data-config-legacy-field="" className="grid grid-cols-[1fr_1fr_100px_auto_auto] items-center gap-2 rounded border border-border bg-card p-2">
         <input
           className={inputClass}
           placeholder="字段标识"
@@ -2028,7 +2030,7 @@ function StructuredListRow({
     const pair = item && typeof item === "object" ? (item as NodeConfig) : {};
     const label = fieldKey === "restHeaderParam" ? "请求头" : "GET 参数";
     return (
-      <div className="grid grid-cols-[minmax(88px,.8fr)_minmax(0,1.2fr)_auto] gap-2">
+      <div data-config-pair="" className="grid grid-cols-[minmax(88px,.8fr)_minmax(0,1.2fr)_auto] gap-2">
         <input
           className={inputClass}
           placeholder={`${label}名称`}
@@ -2081,7 +2083,7 @@ function StructuredListRow({
 }
 
 function FieldHelp({ help }: { help: string }) {
-  return <p className={canvasBodyHelpClass}>{help}</p>;
+  return <p data-config-help="" className={canvasBodyHelpClass}>{help}</p>;
 }
 
 type ConfigField = FlowNodeDefinition["fields"][number];
@@ -4599,6 +4601,7 @@ export default function WorkflowCanvas({
       {hasInspectorSelection && (
         <aside
           data-workflow-inspector=""
+          data-node-config-panel=""
           ref={inspectorReveal}
           className={`border-t border-border bg-card lg:border-l lg:border-t-0 ${fullscreen ? "min-h-0 flex flex-col" : ""}`}
         >
@@ -4606,13 +4609,13 @@ export default function WorkflowCanvas({
             data-workflow-inspector-header=""
             className="flex min-h-16 shrink-0 items-center justify-between border-b border-border px-4 py-3"
           >
-            <div className={inspectorMode === "compact" ? "hidden" : "min-w-0"}>
+            <div data-inspector-identity="" className={inspectorMode === "compact" ? "hidden" : "min-w-0"}>
               <h2 data-workflow-inspector-heading="" ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
                 {selectedEdgeId ? "连线配置" : `${selectedDefinition?.label ?? "节点"}配置`}
               </h2>
               {selected && <p className={"aiflow-type-meta mt-0.5 line-clamp-2 break-words " + mutedToneClass} title={String(selected.data.label ?? "")}>{selected.data.label}</p>}
             </div>
-            <div className="ml-auto flex shrink-0 items-center gap-1">
+            <div data-inspector-tools="" className="ml-auto flex shrink-0 items-center gap-1">
               <button type="button" className="mr-1 min-h-11 rounded px-2 text-sm text-aiflow-info hover:bg-muted lg:hidden" onClick={() => {
                 canvasRegionRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? "auto" : "smooth", block: "start" });
                 canvasRegionRef.current?.focus({ preventScroll: true });
@@ -4622,6 +4625,7 @@ export default function WorkflowCanvas({
                 className={`${inspectorToolClass} ${inspectorLocked ? "text-indigo-600" : ""}`}
                 title={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
                 aria-label={inspectorLocked ? "解除面板锁定" : "锁定配置面板"}
+                aria-pressed={inspectorLocked}
                 onClick={() => setInspectorLocked(value => !value)}
               >
                 <LockKeyhole size={15} />
@@ -4662,7 +4666,7 @@ export default function WorkflowCanvas({
                 ref={groupNavigation.contentRef}
                 className={fullscreen ? "min-h-0 overflow-y-auto lg:flex-1" : "max-h-[650px] overflow-y-auto"}
               >
-                <div className="space-y-3 p-4">
+                <div data-inspector-context="" className="space-y-3 p-4">
                   <label className={"grid gap-1.5 text-xs font-medium " + mutedToneClass}>
                     节点名称（画布）
                     <input
@@ -4704,6 +4708,7 @@ export default function WorkflowCanvas({
                 </div>
                 <div
                   role="tablist"
+                  data-inspector-tabs=""
                   ref={groupNavigation.tabsRef}
                   aria-label={`${selectedDefinition.label}配置分类`}
                   className="sticky top-0 z-10 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-1 border-y border-border bg-muted px-3 py-2"
@@ -4742,6 +4747,7 @@ export default function WorkflowCanvas({
                 {activeInspectorGroup && (
                   <section
                     role="tabpanel"
+                    data-inspector-section=""
                     ref={groupNavigation.panelRef}
                     id={`${inspectorTabId}-panel`}
                     aria-labelledby={`${inspectorTabId}-${activeInspectorGroup.label}`}
@@ -4771,7 +4777,7 @@ export default function WorkflowCanvas({
                       </div>
                     )}
                   {selected.data.kind === "operate" && activeInspectorGroup.label === "处理人" && workflowId && (
-                    <div className="mb-4 aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
+                    <div data-participant-preview="" className="mb-4 aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div>
                           <p className="font-semibold">参与人解析预览</p>
@@ -4828,13 +4834,13 @@ export default function WorkflowCanvas({
                       {participantPreview.error &&
                         participantPreview.variables?.config ===
                           selectedConfig && (
-                          <p className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+                          <p data-participant-preview-error="" className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
                             {participantPreview.error.message}
                           </p>
                         )}
                     </div>
                   )}
-                    <div className="space-y-4">
+                    <div data-config-fields="" className="space-y-4">
                       {activeInspectorGroup.fields.map(field => {
                         const fieldValue =
                           selected.data.kind === "router" &&
