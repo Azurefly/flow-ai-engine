@@ -25,7 +25,7 @@ vi.mock("./project-service", () => ({
     permissions: new Set(["project:workflow:edit"]),
   }),
 }));
-import { runDataSourceTestJobOnce, testDataSource } from "./p2-service";
+import { runDataSourceTestJobOnce, testDataSource, updateDataSource } from "./p2-service";
 let claimedStatus = "draft",
   currentStatus = "draft";
 beforeEach(() => {
@@ -138,4 +138,23 @@ it("停用数据源不创建新的测试任务", async () => {
   ).rejects.toThrow("停用");
   expect(mocks.poolQuery).toHaveBeenCalledTimes(1);
   expect(mocks.query).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["verified", { status: "disabled", credentialRef: null }, "disabled", true],
+  ["disabled", { credentialRef: "env:ROTATED_REFERENCE" }, "disabled", true],
+  ["disabled", { status: "draft", credentialRef: "env:ROTATED_REFERENCE" }, "draft", true],
+  ["verified", { connection: { endpoint: "mysql://mysql/fixture" } }, "draft", true],
+  ["verified", { name: "修改显示名称" }, "verified", false],
+] as const)("更新 %s 数据源保留明确停用与验证失效规则：%j", async (status, changes, expected, invalidated) => {
+  mocks.poolQuery.mockImplementation(async (sql: string) => sql.startsWith("SELECT * FROM data_source")
+    ? [[{ id: "source", name: "原名称", status, connectionJson: "{}", credentialRef: "env:PREVIOUS_REFERENCE" }], []]
+    : [{ affectedRows: 1 }, []]);
+  await updateDataSource({ id: 7, role: "admin" }, { projectId: "owned", sourceId: "source", ...changes });
+  const write = mocks.poolQuery.mock.calls.find(([sql]) => sql.startsWith("UPDATE data_source SET name="));
+  expect(write).toBeDefined();
+  expect(write![1][1]).toBe(expected);
+  expect(write![1][4]).toBe(invalidated);
+  expect(write![1].slice(-2)).toEqual(["source", "owned"]);
+  if ("credentialRef" in changes) expect(write![1][3]).toBe(changes.credentialRef);
 });

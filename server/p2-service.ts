@@ -335,11 +335,16 @@ export async function updateDataSource(
   const current = rows[0];
   const configurationChanged =
     input.connection !== undefined || input.credentialRef !== undefined;
+  // 停用优先于重新验证；修改停用源的连接也不能隐式恢复启用。
+  const nextStatus = input.status === "disabled" ||
+    (current.status === "disabled" && input.status !== "draft")
+      ? "disabled"
+      : configurationChanged ? "draft" : (input.status ?? current.status);
   await db().query(
     "UPDATE data_source SET name=?,status=?,connectionJson=?,credentialRef=?,lastTestedAt=CASE WHEN ? THEN NULL ELSE lastTestedAt END,updatedAt=NOW() WHERE id=? AND projectId=?",
     [
       input.name?.trim() || current.name,
-      configurationChanged ? "draft" : (input.status ?? current.status),
+      nextStatus,
       JSON.stringify(input.connection ?? parseJson(current.connectionJson, {})),
       input.credentialRef === undefined
         ? current.credentialRef
