@@ -84,11 +84,11 @@
   [data-node-config-panel] [data-config-pair] > button { grid-column:3; grid-row:1; }
 }
 @media (min-width:1024px) {
-  [data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 420px; }
-  [data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="maximized"] { grid-template-columns:minmax(0,1fr) min(62%,760px); }
+  [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 420px; }
+  [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="maximized"] { grid-template-columns:minmax(0,1fr) min(62%,760px); }
 }
 @media (min-width:1280px) {
-  [data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 480px; }
+  [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 480px; }
 }
 @media (prefers-reduced-motion:reduce) {
   [data-node-config-panel] :is(input,select,textarea,button),
