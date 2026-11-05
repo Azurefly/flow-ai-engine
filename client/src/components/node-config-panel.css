@@ -1,45 +1,56 @@
-/* Node configuration workspace. Scope prevents changes to runtime/task/resource forms. */
-[data-node-config-panel] { min-width:0; color:var(--foreground); }
-[data-node-config-panel] [data-workflow-inspector-header] { gap:8px; flex-wrap:nowrap; padding:10px 14px; min-height:56px; }
-[data-node-config-panel] [data-inspector-identity] { flex:1; min-width:0; }
-[data-node-config-panel] [data-inspector-identity] p { overflow-wrap:anywhere; }
-[data-node-config-panel] [data-inspector-tools] { gap:2px; margin-left:0; }
+/* 节点配置工作区：隔离区域层级、字段密度和长文本规则。 */
+[data-node-config-panel] { min-width:0; color:var(--foreground); background:var(--card); }
+[data-canvas-redesign] > [data-node-config-panel] > [data-workflow-inspector-header]:first-child { gap:12px; flex-wrap:nowrap; padding:14px 16px; min-height:72px; background:var(--card); box-shadow:0 1px 0 var(--border); }
+[data-node-config-panel] [data-inspector-identity] { flex:1; min-width:0; padding-left:10px; border-left:3px solid var(--primary); }
+[data-node-config-panel] [data-workflow-inspector-heading] { font-size:16px!important; line-height:24px!important; }
+[data-node-config-panel] [data-inspector-identity] p { overflow-wrap:anywhere; font-size:13px!important; line-height:20px!important; }
+[data-node-config-panel] [data-inspector-tools] { gap:4px; margin-left:0; }
 [data-node-config-panel] [data-inspector-tools] button[aria-label] { width:28px; min-width:28px!important; height:28px; min-height:28px!important; border-radius:6px; }
-[data-node-config-panel] [data-inspector-tools] button:hover { background:var(--muted); }
+[data-node-config-panel] [data-inspector-tools] button:hover { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-inspector-tools] [aria-pressed="true"] { background:var(--accent); color:var(--primary); }
-[data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; }
-[data-node-config-panel] [data-inspector-context] { padding:12px 16px; }
-[data-node-config-panel] [data-inspector-context] > * + * { margin-top:8px; }
-[data-node-config-panel] [data-canvas-assessment] { padding:8px 10px; border-radius:8px; }
+[data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; background:color-mix(in srgb,var(--muted) 36%,var(--card)); }
+[data-node-config-panel] [data-inspector-context] { padding:16px; background:var(--card); }
+[data-node-config-panel] [data-inspector-context] > * + * { margin-top:10px; }
+[data-node-config-panel] [data-inspector-context] > label { gap:6px; color:var(--foreground); }
+[data-node-config-panel] [data-canvas-assessment] { padding:8px 10px; border-radius:6px; }
 [data-node-config-panel] [data-canvas-assessment] > p:first-child { font-size:13px!important; line-height:20px!important; }
 [data-node-config-panel] [data-canvas-assessment="partial"] { background:var(--aiflow-danger-surface); border-color:var(--aiflow-danger-border); }
-[data-node-config-panel] [data-canvas-assessment] button { min-height:24px!important; }
-[data-node-config-panel] [data-inspector-tabs] { display:flex!important; flex-wrap:wrap; gap:4px; padding:6px 12px; background:var(--card); border-top:0; }
-[data-node-config-panel] [data-inspector-tabs] > button { flex:1 1 auto; padding:7px 6px; min-height:34px!important; white-space:nowrap; font-size:13px!important; line-height:20px!important; border-radius:6px; }
+/* 分类保留原方向键、Home/End和选中状态。 */
+[data-node-config-panel] [data-inspector-tabs] { display:grid!important; grid-template-columns:repeat(auto-fit,minmax(68px,1fr)); gap:4px; padding:8px 12px; background:var(--card); border-top:1px solid var(--border); }
+[data-node-config-panel] [data-inspector-tabs] > button { padding:7px 4px; min-height:36px!important; white-space:normal; overflow-wrap:anywhere; font-size:13px!important; line-height:20px!important; border-radius:6px; }
 [data-node-config-panel] [data-inspector-tabs] > [aria-selected="true"] { background:var(--accent); color:var(--primary); box-shadow:inset 0 -2px var(--primary); }
 [data-node-config-panel] [data-inspector-section] { padding:16px; }
-[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:18px; }
-[data-node-config-panel] [data-config-fields] > * { min-width:0; }
+/* 单张表单卡和轻分隔线；清除旧space-y与grid叠加的外边距。 */
+[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:0; border:1px solid var(--border); border-radius:10px; background:var(--card); }
+[data-node-config-panel] [data-config-fields] > * { min-width:0; margin:0; padding:16px; }
+[data-node-config-panel] [data-config-fields] > * + * { margin:0; border-top:1px solid var(--border); }
 [data-node-config-panel] [data-config-fields] p { overflow-wrap:anywhere; }
-[data-node-config-panel] [role="listitem"] > span { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
-[data-node-config-panel] [data-config-fields] > * + * { margin-top:0; }
 [data-node-config-panel] :is(label,legend,[data-config-help],[role="alert"],[role="status"]) { min-width:0; overflow-wrap:anywhere; }
-[data-node-config-panel] [data-config-help] { line-height:22px; color:var(--muted-foreground); }
-[data-node-config-panel] :is(input:not([type="checkbox"]):not([type="radio"]),select) { min-width:0; max-width:100%; width:100%; min-height:36px!important; height:36px; border-radius:8px; font-size:14px!important; }
-[data-node-config-panel] textarea { min-width:0; max-width:100%; min-height:96px; resize:vertical; border-radius:8px; font-size:14px!important; line-height:22px!important; overflow-wrap:anywhere; }
-[data-node-config-panel] :is(input,select,textarea):focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
+[data-node-config-panel] [data-config-help],
+[data-node-config-panel] [data-config-fields] > div > p.text-muted-foreground:last-child { font-size:13px!important; font-weight:400; line-height:20px!important; color:var(--muted-foreground); }
+[data-node-config-panel] :is(input:not([type="checkbox"]):not([type="radio"]),select) { min-width:0; max-width:100%; width:100%; min-height:38px!important; height:38px; border-radius:6px; font-size:14px!important; line-height:22px; background-color:var(--card); }
+[data-node-config-panel] textarea { min-width:0; max-width:100%; min-height:104px; resize:vertical; border-radius:6px; font-size:14px!important; line-height:22px!important; overflow-wrap:anywhere; }
+[data-node-config-panel] :is(input,select,textarea):not(:disabled):hover { border-color:var(--muted-foreground); }
+[data-node-config-panel] :is(input,select,textarea,button):focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
 [data-node-config-panel] :is(input,select,textarea)[aria-invalid="true"] { border-color:var(--aiflow-danger); }
+[data-node-config-panel] :is(input,select,textarea):disabled { background:var(--muted); color:var(--muted-foreground); cursor:default; }
 [data-node-config-panel] input:is([type="radio"],[type="checkbox"]) { align-self:flex-start; flex:none; width:16px; height:16px!important; min-height:16px!important; max-height:16px; margin-top:3px; accent-color:var(--primary); }
 [data-node-config-panel] button:not([role="tab"]) { min-height:36px!important; }
-[data-node-config-panel] button[role="combobox"] { height:36px; min-height:36px!important; max-width:100%; border-radius:8px; }
+[data-node-config-panel] button[role="combobox"] { height:auto; min-height:38px!important; max-width:100%; border-radius:6px; }
 [data-node-config-panel] [data-canvas-assessment] button { min-height:24px!important; }
+[data-node-config-panel] [data-inspector-tools] button[aria-label] { min-height:28px!important; }
 [data-node-config-panel] button[aria-label^="删除"],
 [data-node-config-panel] button[aria-label^="移除"] { flex:none; min-width:28px; width:28px; height:28px; min-height:28px!important; padding:4px; align-self:start; }
-[data-node-config-panel] [data-inspector-tools] button[aria-label] { min-height:28px!important; }
-[data-node-config-panel] [data-participant-preview] { padding:10px 12px; border-color:var(--border); background:var(--muted); color:var(--foreground); }
-[data-node-config-panel] [data-participant-preview] > div:first-child { gap:8px; align-items:start; }
+[data-node-config-panel] [role="listitem"] > span { max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+[data-node-config-panel] [role="list"] { gap:6px; }
+[data-node-config-panel] [role="status"] { font-size:13px!important; line-height:20px!important; }
+/* 预览位于配置之后，物理DOM顺序与键盘顺序同步。 */
+[data-node-config-panel] [data-participant-preview] { margin:12px 0 0; padding:12px; border-radius:8px; border-color:var(--border); background:var(--card); color:var(--foreground); }
+[data-node-config-panel] [data-participant-preview] > div:first-child { gap:10px; align-items:center; }
+[data-node-config-panel] [data-participant-preview] p { font-size:13px!important; line-height:20px!important; overflow-wrap:anywhere; }
+[data-node-config-panel] [data-participant-preview] > div:first-child > div > p:not(.font-semibold) { color:var(--muted-foreground); }
 [data-node-config-panel] [data-participant-preview] button { min-height:32px!important; }
-[data-node-config-panel] [data-participant-preview-error] { color:var(--aiflow-danger); background:var(--aiflow-danger-surface); border-color:var(--aiflow-danger-border); overflow-wrap:anywhere; }
+[data-node-config-panel] [data-participant-preview-error] { color:var(--aiflow-danger)!important; background:var(--aiflow-danger-surface); border-color:var(--aiflow-danger-border); overflow-wrap:anywhere; }
 [data-node-config-panel] .node-config-nested { padding:12px; border-radius:8px; box-shadow:none; }
 [data-node-config-panel] :is(.node-config-columns,[data-config-condition]) { grid-template-columns:minmax(0,1fr); gap:12px; }
 [data-node-config-panel] [data-config-pair] { grid-template-columns:minmax(0,1fr) 28px; gap:8px; }
@@ -49,26 +60,37 @@
 [data-node-config-panel] [data-config-legacy-field] { grid-template-columns:minmax(0,1fr) 28px; }
 [data-node-config-panel] [data-config-legacy-field] > :not(button) { grid-column:1; }
 [data-node-config-panel] [data-config-legacy-field] > button { grid-column:2; grid-row:1; }
-[data-node-config-panel] [data-approval-editor] { padding:12px; border-radius:8px; background:var(--muted); }
+/* 常规桌面宽度即使用两列审批卡，完整保留说明和条件字段。 */
+[data-node-config-panel] [data-approval-editor] { border-width:1px 0 0; border-radius:0 0 10px 10px; background:transparent; }
 [data-node-config-panel] [data-approval-editor] [role="radiogroup"] { grid-template-columns:minmax(0,1fr); gap:8px; }
-[data-node-config-panel] [data-approval-mode-card] { align-items:flex-start; gap:10px; padding:10px 12px; border-radius:8px; transition:background-color 150ms,border-color 150ms; }
+[data-node-config-panel] [data-approval-mode-card] { align-items:flex-start; gap:8px; padding:10px; border-radius:8px; transition:background-color 150ms,border-color 150ms; }
+[data-node-config-panel] [data-approval-mode-card]:hover { border-color:var(--primary); }
 [data-node-config-panel] [data-approval-mode-card]:focus-within { outline:2px solid var(--ring); outline-offset:2px; }
 [data-node-config-panel] [data-approval-mode-card]:has(input:checked) { background:var(--accent); border-color:var(--primary); }
+[data-node-config-panel] [data-approval-mode-card]:has(input:disabled) { cursor:default; }
 [data-node-config-panel] [data-approval-mode-card] > span { min-width:0; }
-[data-node-config-panel] [data-approval-mode-card] > span > span:first-child { font-size:14px!important; line-height:20px!important; }
-[data-node-config-panel] [data-approval-mode-card] > span > span:last-child { font-size:13px!important; line-height:20px!important; margin-top:2px; overflow-wrap:anywhere; }
+[data-node-config-panel] [data-approval-mode-card] > span > span:first-child { font-size:14px!important; line-height:22px!important; }
+[data-node-config-panel] [data-approval-mode-card] > span > span:last-child { font-size:13px!important; line-height:20px!important; margin-top:4px; overflow-wrap:anywhere; }
 [data-node-config-panel] [data-workflow-inspector-footer] { padding:10px 16px; background:var(--card); }
-@container node-config (min-width:580px) {
-  [data-node-config-panel] .node-config-columns,
+[data-node-config-panel] :is(input,select,textarea,button) { transition:background-color 150ms,border-color 150ms,color 150ms; }
+@container node-config (min-width:360px) {
   [data-node-config-panel] [data-approval-editor] [role="radiogroup"] { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@container node-config (min-width:580px) {
+  [data-node-config-panel] .node-config-columns { grid-template-columns:repeat(2,minmax(0,1fr)); }
   [data-node-config-panel] [data-config-condition] { grid-template-columns:minmax(0,1fr) 120px minmax(0,1fr); }
   [data-node-config-panel] [data-config-pair] { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 28px; }
   [data-node-config-panel] [data-config-pair] > :nth-child(2) { grid-column:2; grid-row:1; }
   [data-node-config-panel] [data-config-pair] > button { grid-column:3; grid-row:1; }
 }
-@media (min-width:1024px) and (max-width:1199px) {
-  [data-canvas-redesign]:has(> [data-node-config-panel]):not([data-inspector-mode="compact"]):not([data-inspector-mode="maximized"]) { grid-template-columns:minmax(0,1fr) 400px; }
+@media (min-width:1024px) {
+  [data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 420px; }
+  [data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="maximized"] { grid-template-columns:minmax(0,1fr) min(62%,760px); }
+}
+@media (min-width:1280px) {
+  [data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 480px; }
 }
 @media (prefers-reduced-motion:reduce) {
+  [data-node-config-panel] :is(input,select,textarea,button),
   [data-node-config-panel] [data-approval-mode-card] { transition:none; }
 }

@@ -65,3 +65,12 @@
 }
 
 [data-run-canvas-design] .run-graph-legend-items {display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 12px 16px; font-size: 13px; line-height: 20px; color: var(--muted-foreground);}
+
+/* 缩略全图保留连线与状态；按需显示分支文字，避免复杂实例标签重叠。 */
+[data-run-canvas-design] .react-flow__edge-textwrapper { pointer-events:none; opacity:clamp(0,calc((var(--canvas-zoom) - .4) * 100),1); transition:opacity 120ms; }
+[data-run-canvas-design] .react-flow__edge:hover .react-flow__edge-textwrapper,
+[data-run-canvas-design] .react-flow__edge:focus .react-flow__edge-textwrapper,
+[data-run-canvas-design] .react-flow__edge.selected .react-flow__edge-textwrapper { opacity:1; }
+@media (prefers-reduced-motion:reduce) {
+  [data-run-canvas-design] .react-flow__edge-textwrapper { transition:none; }
+}

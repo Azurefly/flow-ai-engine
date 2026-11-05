@@ -4762,70 +4762,6 @@ export default function WorkflowCanvas({
                         当前为兼容分支：同意后继续，拒绝即取消实例。切换为显式出口可配置各结果的后续节点。
                       </div>
                     )}
-                  {selected.data.kind === "operate" && activeInspectorGroup.label === "处理人" && workflowId && (
-                    <div data-participant-preview="" className="mb-4 aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div>
-                          <p className="font-semibold">参与人解析预览</p>
-                          <p className="text-aiflow-info">
-                            以当前用户预览；实际运行时重新解析。
-                          </p>
-                        </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          disabled={participantPreview.isPending}
-                          onClick={() =>
-                            participantPreview.mutate({
-                              workflowId,
-                              config: selectedConfig,
-                            })
-                          }
-                        >
-                          {participantPreview.isPending
-                            ? "解析中…"
-                            : "预览候选人"}
-                        </Button>
-                      </div>
-                      {participantPreview.data &&
-                        participantPreview.variables?.config ===
-                          selectedConfig && (
-                          <div className="mt-2 rounded border border-aiflow-info-border bg-card/80 px-2 py-1.5">
-                            <p>
-                              {participantPreview.data.signModeLabel}：
-                              {participantPreview.data.totalApprovers}{" "}
-                              人参与，需{" "}
-                              {participantPreview.data.requiredApprovals}{" "}
-                              人通过。
-                            </p>
-                            <p className="mt-1 break-words">
-                              {participantPreview.data.users
-                                .map(
-                                  (person, index) =>
-                                    `${index + 1}. ${person.name}（${person.username}）`
-                                )
-                                .join("；")}
-                              {participantPreview.data.hasMore &&
-                                "；仅显示前 100 人"}
-                            </p>
-                            {participantPreview.data.fallbackApplied && (
-                              <p className="text-aiflow-warning">
-                                已使用兜底：
-                                {participantPreview.data.fallbackApplied === "owner" ? "流程所有者" : "流程发起人"}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      {participantPreview.error &&
-                        participantPreview.variables?.config ===
-                          selectedConfig && (
-                          <p data-participant-preview-error="" className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
-                            {participantPreview.error.message}
-                          </p>
-                        )}
-                    </div>
-                  )}
                     <div data-config-fields="" className="space-y-4">
                       {activeInspectorGroup.fields.map(field => {
                         const fieldValue =
@@ -5111,6 +5047,70 @@ export default function WorkflowCanvas({
                           />
                         )}
                     </div>
+                  {selected.data.kind === "operate" && activeInspectorGroup.label === "处理人" && workflowId && (
+                    <div data-participant-preview="" className="mb-4 aiflow-type-body rounded-lg border border-aiflow-info-border bg-aiflow-info-surface px-3 py-3 text-blue-900">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="font-semibold">参与人解析预览</p>
+                          <p className="text-aiflow-info">
+                            以当前用户预览；实际运行时重新解析。
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          disabled={participantPreview.isPending}
+                          onClick={() =>
+                            participantPreview.mutate({
+                              workflowId,
+                              config: selectedConfig,
+                            })
+                          }
+                        >
+                          {participantPreview.isPending
+                            ? "解析中…"
+                            : "预览候选人"}
+                        </Button>
+                      </div>
+                      {participantPreview.data &&
+                        participantPreview.variables?.config ===
+                          selectedConfig && (
+                          <div className="mt-2 rounded border border-aiflow-info-border bg-card/80 px-2 py-1.5">
+                            <p>
+                              {participantPreview.data.signModeLabel}：
+                              {participantPreview.data.totalApprovers}{" "}
+                              人参与，需{" "}
+                              {participantPreview.data.requiredApprovals}{" "}
+                              人通过。
+                            </p>
+                            <p className="mt-1 break-words">
+                              {participantPreview.data.users
+                                .map(
+                                  (person, index) =>
+                                    `${index + 1}. ${person.name}（${person.username}）`
+                                )
+                                .join("；")}
+                              {participantPreview.data.hasMore &&
+                                "；仅显示前 100 人"}
+                            </p>
+                            {participantPreview.data.fallbackApplied && (
+                              <p className="text-aiflow-warning">
+                                已使用兜底：
+                                {participantPreview.data.fallbackApplied === "owner" ? "流程所有者" : "流程发起人"}
+                              </p>
+                            )}
+                          </div>
+                        )}
+                      {participantPreview.error &&
+                        participantPreview.variables?.config ===
+                          selectedConfig && (
+                          <p data-participant-preview-error="" className="mt-2 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-red-700">
+                            {participantPreview.error.message}
+                          </p>
+                        )}
+                    </div>
+                  )}
                   </section>
                 )}
                 {!readOnly && isTemplateNodeType(selected.data.kind) && (
