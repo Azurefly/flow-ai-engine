@@ -29,6 +29,9 @@ it("复核使用当前路由身份和前台定时策略，读取失败可明确�
   expect(notice).toContain("重新检查流程权限");
   expect(notice).toContain("当前账号无权查看此流程");
   expect(notice).toContain("本次会话中的未保存修改已保留");
+  expect(home).toContain("errorCode: access.error?.data?.code");
+  expect(home).toContain("workflowReadFailureState(selectedWorkflowQuery.error.data?.code)");
+  expect(notice).toContain("登录失效、权限变更或流程不存在");
 });
 it("已知失权时不提供缓存导出，原草稿由根状态保留", () => {
   const exported = home.slice(

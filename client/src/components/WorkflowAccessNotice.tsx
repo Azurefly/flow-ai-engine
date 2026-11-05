@@ -63,7 +63,7 @@ export default function WorkflowAccessNotice({
           </h2>
           <p className="aiflow-type-body mt-2 break-words text-muted-foreground">
             {state === "denied"
-              ? "查看权限已变化，或流程已不存在。配置、历史内容及缓存信息已隐藏；请联系管理员确认授权。"
+              ? "登录失效、权限变更或流程不存在。内容已隐藏，请确认登录与授权。"
               : state === "unavailable"
                 ? "权限读取失败，流程内容暂时隐藏。可以重新检查权限；当前填写不会因此被清空。"
                 : "确认当前流程的查看权限后再显示内容。"}

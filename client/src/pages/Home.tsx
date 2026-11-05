@@ -83,7 +83,7 @@ import { workflowNumberDraftError } from "@shared/workflow-number-draft";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import WorkflowSubflowSnapshots from "@/components/WorkflowSubflowSnapshots";
 import WorkflowAccessNotice from "@/components/WorkflowAccessNotice";
-import { workflowViewState } from "@shared/workflow-view-access";
+import { workflowReadFailureState, workflowViewState } from "@shared/workflow-view-access";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   Activity,
@@ -755,11 +755,11 @@ function FlowConsole({
     authorizationQueryPolicy(Boolean(effectiveWorkflowId && (editorActive || detailActive || (section === "runs" && runView === "monitor"))))
   );
   const workflowAccessState = workflowViewState({ workflowId: effectiveWorkflowId, accessWorkflowId: accessInput.id,
-    status: access.status, exists: access.data?.exists, permissions: access.data?.permissions });
+    status: access.status, errorCode: access.error?.data?.code, exists: access.data?.exists, permissions: access.data?.permissions });
   const canViewWorkflow = workflowAccessState === "granted";
   const mountedMonitorWorkflowId = useRef<string | null>(null);
   if (canViewWorkflow && section === "runs" && runView === "monitor") mountedMonitorWorkflowId.current = effectiveWorkflowId;
-  const workflowContentState = canViewWorkflow && !selectedWorkflow && selectedWorkflowQuery.isError ? "unavailable" : workflowAccessState;
+  const workflowContentState = canViewWorkflow && !selectedWorkflow && selectedWorkflowQuery.isError ? workflowReadFailureState(selectedWorkflowQuery.error.data?.code) : workflowAccessState;
   const selectedWorkflowDefinition = canViewWorkflow && selectedWorkflow
     ? (decodeJson(selectedWorkflow.definition) as Definition) : null;
   // UX 修复：监控按当前路由选取实例，避免切换流程时短暂查询旧实例；保留原有视图状态。
