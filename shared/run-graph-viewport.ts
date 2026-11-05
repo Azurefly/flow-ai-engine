@@ -1,8 +1,8 @@
 import type { NodeHandle, Position } from "@xyflow/react";
 
-/** Dense overview names are too short to distinguish; begin with the active neighborhood. */
-export function initialRunViewNode(zoom: number, nodeId?: string) {
-  return zoom < 0.4 ? nodeId : undefined;
+/** Only explicit record/task entry points narrow the initial viewport. */
+export function initialRunViewNode(recordNodeId?: string, taskNodeId?: string) {
+  return recordNodeId || taskNodeId || undefined;
 }
 
 /** Read-only nodes have one input and one output at their measured vertical center. */

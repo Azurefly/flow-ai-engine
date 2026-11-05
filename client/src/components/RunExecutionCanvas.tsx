@@ -119,9 +119,9 @@ export default function RunExecutionCanvas({
   const [ready, setReady] = useState(false);
   const [measured, setMeasured] = useState(false);
   const [sizes, setSizes] = useState(new Map<string, { width: number; height: number }>());
-  const [initialFit] = useState(() => runGraphFitOptions(focusRequest?.nodeId ?? (entryTaskId ? initialFocus.nodeId : undefined)));
-  const overview = useRef(!entryTaskId && !focusRequest);
-  const firstView = useRef(true);
+  // Selecting a default detail record must not hide the rest of the instance.
+  const [initialFit] = useState(() => runGraphFitOptions(initialRunViewNode(focusRequest?.nodeId, entryTaskId ? initialFocus.nodeId : undefined)));
+  const overview = useRef(!initialFit.nodes?.length);
   const viewport = useRef<HTMLDivElement | null>(null);
   const viewNodes = useRef<ViewerNode[]>([]);
   const viewEdges = useRef<Edge[]>([]);
@@ -132,9 +132,6 @@ export default function RunExecutionCanvas({
     if (!api.current || !region || !region.clientWidth || !region.clientHeight) return;
     const rects = canvasNodeRects(viewNodes.current);
     const next = getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18);
-    const initial = firstView.current && !nodeId ? initialRunViewNode(next.zoom, focusId.current) : undefined;
-    firstView.current = false;
-    if (initial) { fit(initial); return; }
     void api.current.setViewport(next, { duration: 0 });
   };
   const current = graph.nodes.filter(n =>

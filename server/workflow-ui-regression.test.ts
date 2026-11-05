@@ -376,7 +376,9 @@ describe("工作台只读任务运行详情入口", () => {
 describe("流程设计器界面回归约束", () => {
   it("实例图初始缩放配置稳定，记录定位与展开画布保持阅读意图", () => {
     const graph = source("../client/src/components/RunExecutionCanvas.tsx");
-    expect(graph).toContain("useState(() => runGraphFitOptions(focusRequest?.nodeId ?? (entryTaskId ? initialFocus.nodeId : undefined)))");
+    // Entry policy/geometry are exercised in run-graph-viewport.test.ts;
+    // this contract only requires a stable, once-initialized viewport option.
+    expect(graph).toMatch(/const \[initialFit\] = useState\(\(\) =>/);
     expect(graph).toContain("fitViewOptions={initialFit}");
     expect(graph).toContain("fitViewOptions={overviewFit}");
     expect(graph).toContain("fit(focusRequest.nodeId)");
