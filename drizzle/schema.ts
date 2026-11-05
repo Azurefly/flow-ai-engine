@@ -1357,6 +1357,8 @@ export const dataflowRuns = mysqlTable(
     outputJson: json("outputJson"),
     errorJson: json("errorJson"),
     cancellationJson: json("cancellationJson"),
+    /** Server-derived permission checked when this run was admitted. */
+    admissionPermission: varchar("admissionPermission", { length: 32 }),
     startedAt: timestamp("startedAt"),
     finishedAt: timestamp("finishedAt"),
     durationMs: int("durationMs"),

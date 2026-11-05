@@ -2085,6 +2085,8 @@ export async function runDataflow(
 ) {
   const accessMode =
     input.triggerType === "schedule" || input.mode === "test" ? "edit" : "run";
+  const admissionPermission = accessMode === "edit"
+    ? "project:workflow:edit" : "project:workflow:run";
   await requireProjectAccess(user, input.projectId, accessMode);
   const runId = id();
   let definition: any;
@@ -2117,9 +2119,7 @@ export async function runDataflow(
     );
     if (
       !access.exists ||
-      !access.permissions.has(
-        accessMode === "edit" ? "project:workflow:edit" : "project:workflow:run"
-      )
+      !access.permissions.has(admissionPermission)
     )
       throw new TRPCError({
         code: "FORBIDDEN",
@@ -2179,7 +2179,7 @@ export async function runDataflow(
     }
     const requestId = currentRequestId() ?? null;
     await connection.query(
-      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,executionSource,definitionVersion,requestId,inputJson,triggeredByUserId) VALUES (?,?,?,?,?, 'queued',?,?,?,?,?,?,?,?)",
+      "INSERT INTO dataflow_run (id,projectId,workflowId,triggerType,scheduleBucket,status,definitionSnapshotJson,executionPlanJson,executionPlanHash,executionSource,definitionVersion,requestId,inputJson,triggeredByUserId,admissionPermission) VALUES (?,?,?,?,?, 'queued',?,?,?,?,?,?,?,?,?)",
       [
         runId,
         input.projectId,
@@ -2194,6 +2194,7 @@ export async function runDataflow(
         requestId,
         JSON.stringify(input.data ?? {}),
         user.id,
+        admissionPermission,
       ]
     );
     await connection.query(
@@ -2295,7 +2296,7 @@ export async function listDataflowRuns(
   }
   params.push(Math.min(Math.max(input.limit ?? 60, 1), 200));
   const projection = input.summaryOnly
-    ? "r.id,r.projectId,r.workflowId,r.status,r.triggerType,r.triggeredByUserId,r.durationMs,r.startedAt,r.finishedAt,r.createdAt,r.executionSource,r.definitionVersion"
+    ? "r.id,r.projectId,r.workflowId,r.status,r.triggerType,r.triggeredByUserId,r.durationMs,r.startedAt,r.finishedAt,r.createdAt,r.executionSource,r.admissionPermission,r.definitionVersion"
     : "r.*";
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT ${projection},w.name AS workflowName,u.name AS triggerName FROM dataflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users u ON u.id=r.triggeredByUserId WHERE ${clauses.join(" AND ")} ORDER BY r.createdAt DESC LIMIT ?`,
@@ -2390,7 +2391,7 @@ export async function pageDataflowRuns(
   const limit = Math.min(100, Math.max(1, input.limit ?? 10));
   params.push(limit + 1);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT r.id,r.projectId,r.workflowId,r.status,r.triggerType,r.triggeredByUserId,r.durationMs,r.startedAt,r.finishedAt,r.createdAt,r.executionSource,r.definitionVersion,
+    `SELECT r.id,r.projectId,r.workflowId,r.status,r.triggerType,r.triggeredByUserId,r.durationMs,r.startedAt,r.finishedAt,r.createdAt,r.executionSource,r.admissionPermission,r.definitionVersion,
       DATE_FORMAT(r.createdAt,'%Y-%m-%d %H:%i:%s.%f') AS cursorCreatedAt,w.name AS workflowName,COALESCE(NULLIF(u.name,''),u.username) AS triggerName
      FROM dataflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users u ON u.id=r.triggeredByUserId
      WHERE ${clauses.join(" AND ")} ORDER BY r.createdAt DESC,r.id DESC LIMIT ?`,

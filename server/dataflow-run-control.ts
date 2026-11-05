@@ -13,6 +13,7 @@ type ControlRun = {
   status: unknown;
   triggeredByUserId: unknown;
   executionSource: unknown;
+  admissionPermission?: unknown;
 };
 
 function canControlDataflowRun(
@@ -21,13 +22,17 @@ function canControlDataflowRun(
   run: ControlRun
 ) {
   if (permissions.has("project:manage")) return true;
+  // New runs retain the permission actually checked at admission. Legacy runs
+  // have no mode evidence, so keep their previous conservative scope rule.
+  const requiredPermission = run.admissionPermission ??
+    (run.executionSource === "draft"
+      ? "project:workflow:edit"
+      : "project:workflow:run");
   return (
     Number(run.triggeredByUserId) === userId &&
-    permissions.has(
-      run.executionSource === "draft"
-        ? "project:workflow:edit"
-        : "project:workflow:run"
-    )
+    (requiredPermission === "project:workflow:edit" ||
+      requiredPermission === "project:workflow:run") &&
+    permissions.has(requiredPermission)
   );
 }
 
@@ -105,7 +110,7 @@ export async function cancelDataflowRun(
       [input.runId, input.projectId]
     );
     const [runs] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id,status,triggeredByUserId,executionSource,cancellationJson FROM dataflow_run WHERE id=? AND projectId=? LIMIT 1 FOR UPDATE",
+      "SELECT id,status,triggeredByUserId,executionSource,cancellationJson,admissionPermission FROM dataflow_run WHERE id=? AND projectId=? LIMIT 1 FOR UPDATE",
       [input.runId, input.projectId]
     );
     const run = runs[0];

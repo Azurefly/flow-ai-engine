@@ -245,6 +245,43 @@ it("缺会话或无有效原因时不取得数据库连接", async () => {
     ).rejects.toMatchObject({ code: "BAD_REQUEST" });
   expect(mocks.connect).not.toHaveBeenCalled();
 });
+it("设计者可取消自己以编辑权限测试的已发布计划，提示能力与事务一致", async () => {
+  run.admissionPermission = "project:workflow:edit";
+  const granted = permissions("project:view", "project:workflow:edit");
+  mocks.access.mockResolvedValue({ exists: true, permissions: granted });
+  expect(canCancelDataflowRun(user.id, granted, run)).toBe(true);
+  await expect(cancelDataflowRun(user, input, "session")).resolves.toMatchObject({
+    status: "cancelled",
+  });
+  expect(writes()).toHaveLength(4);
+});
+it.each([
+  ["project:workflow:run", "project:workflow:edit"],
+  ["project:workflow:edit", "project:workflow:run"],
+  ["project:manage", "project:workflow:edit"],
+  ["", "project:workflow:run"],
+])("准入权限%s不能由当前%s替代或被未知元数据放开", async (required, current) => {
+  run.admissionPermission = required;
+  const granted = permissions("project:view", current as ProjectPermission);
+  mocks.access.mockResolvedValue({ exists: true, permissions: granted });
+  expect(canCancelDataflowRun(user.id, granted, run)).toBe(false);
+  await expect(cancelDataflowRun(user, input, "session")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(writes()).toHaveLength(0);
+});
+it("测试运行等待锁后仍重新检查编辑权限，不能沿用过期权限", async () => {
+  run.admissionPermission = "project:workflow:edit";
+  mocks.access.mockResolvedValueOnce({ exists: true, permissions: permissions("project:view", "project:workflow:edit") })
+    .mockResolvedValueOnce({ exists: true, permissions: permissions("project:view") });
+  await expect(cancelDataflowRun(user, input, "session")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(writes()).toHaveLength(0);
+});
+it("同为设计者仍不能取消他人的已发布测试", async () => {
+  run.admissionPermission = "project:workflow:edit";
+  run.triggeredByUserId = 8;
+  mocks.access.mockResolvedValue({ exists: true, permissions: permissions("project:view", "project:workflow:edit") });
+  await expect(cancelDataflowRun(user, input, "session")).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(writes()).toHaveLength(0);
+});
 it("界面能力保留终态/本人/草稿与正式权限边界", () => {
   const own = {
     status: "running",

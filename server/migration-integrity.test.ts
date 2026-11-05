@@ -196,7 +196,7 @@ describe("database migration integrity", () => {
     const journal = JSON.parse(migrationJournal) as {
       entries: Array<{ idx: number; tag: string }>;
     };
-    expect(journal.entries.slice(-20).map(item => item.tag)).toEqual([
+    expect(journal.entries.filter(item => item.idx >= 24).map(item => item.tag)).toEqual([
       "0024_durable_workflow_waits",
       "0025_control_milestones",
       "0026_durable_task_schedules",
@@ -217,8 +217,9 @@ describe("database migration integrity", () => {
       "0041_resource_creation_requests",
       "0042_workflow_creation_requests",
       "0043_dataflow_cancellation",
+      "0044_dataflow_admission_permission",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(43);
+    expect(journal.entries.at(-1)?.idx).toBe(44);
   });
   it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
     const migration = readFileSync(
