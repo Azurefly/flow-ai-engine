@@ -370,7 +370,8 @@ export async function organizationMemberConfiguration(userId: number) {
           status: user.status,
         }
       : null,
-    memberships: memberships as Array<Record<string, any>>,
+    // JSON_OBJECT above always includes unitId; keep that field in the query contract.
+    memberships: memberships as Array<Record<string, any> & { unitId: string }>,
     membershipToken: organizationMembershipToken(userId, memberships),
   };
 }

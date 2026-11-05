@@ -20,6 +20,13 @@ import {
   ResourceDraftRecoveryNotice,
 } from "./ResourceDraftSession";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "./ui/dropdown-menu";
+import "./organization-member-ui.css";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -318,60 +325,80 @@ export default function OrganizationManagementPage({
           <Eye size={13} />
           权限
         </Button>
-        <details className="relative">
-          <summary
-            aria-label={`更多成员操作：${memberIdentity}`}
-            className="aiflow-type-control inline-flex h-11 cursor-pointer list-none items-center rounded-md border border-border px-2.5 text-muted-foreground hover:bg-muted min-[1024px]:h-10"
+        {/* UX：菜单通过Portal避开表格裁切；原按钮、条件和事件继续保留。 */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={`更多成员操作：${memberIdentity}`}
+              className="org-member-trigger"
+            >
+              更多
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            align="end"
+            className="org-member-menu"
+            aria-label={`成员操作：${memberIdentity}`}
           >
-            更多
-          </summary>
-          <div className="absolute right-0 z-20 mt-1 grid min-w-36 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg">
-            <button
-              type="button"
-              aria-label={`编辑岗位：${memberIdentity}`}
-              disabled={busy}
-              className={surfaceClass1}
-              onClick={() =>
-                openDialog({ kind: "member", unit: memberUnit(member), member })
-              }
-            >
-              <Edit3 size={13} />
-              编辑岗位
-            </button>
-            <button
-              type="button"
-              aria-label={`迁移成员：${memberIdentity}`}
-              className={surfaceClass1}
-              disabled={busy}
-              onClick={() => openMoveDialog(member)}
-            >
-              <MoveRight size={13} />
-              迁移
-            </button>
-            {!member.isPrimary && (
+            <DropdownMenuItem asChild disabled={busy}>
               <button
                 type="button"
-                aria-label={`设为主部门：${memberIdentity}`}
+                aria-label={`编辑岗位：${memberIdentity}`}
+                disabled={busy}
+                className={surfaceClass1}
+                onClick={() =>
+                  openDialog({
+                    kind: "member",
+                    unit: memberUnit(member),
+                    member,
+                  })
+                }
+              >
+                <Edit3 size={13} />
+                编辑岗位
+              </button>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild disabled={busy}>
+              <button
+                type="button"
+                aria-label={`迁移成员：${memberIdentity}`}
                 className={surfaceClass1}
                 disabled={busy}
-                onClick={() => setMemberAsPrimary(member)}
+                onClick={() => openMoveDialog(member)}
               >
-                <Star size={13} />
-                设为主部门
+                <MoveRight size={13} />
+                迁移
               </button>
+            </DropdownMenuItem>
+            {!member.isPrimary && (
+              <DropdownMenuItem asChild disabled={busy}>
+                <button
+                  type="button"
+                  aria-label={`设为主部门：${memberIdentity}`}
+                  className={surfaceClass1}
+                  disabled={busy}
+                  onClick={() => setMemberAsPrimary(member)}
+                >
+                  <Star size={13} />
+                  设为主部门
+                </button>
+              </DropdownMenuItem>
             )}
-            <button
-              type="button"
-              aria-label={`从当前部门移除成员：${memberIdentity}`}
-              className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-aiflow-danger hover:bg-aiflow-danger-surface disabled:opacity-50 min-[1024px]:h-10"
-              disabled={busy}
-              onClick={() => removeMemberFromUnit(member)}
-            >
-              <Trash2 size={13} />
-              移除
-            </button>
-          </div>
-        </details>
+            <DropdownMenuItem asChild disabled={busy}>
+              <button
+                type="button"
+                aria-label={`从当前部门移除成员：${memberIdentity}`}
+                className="org-member-danger"
+                disabled={busy}
+                onClick={() => removeMemberFromUnit(member)}
+              >
+                <Trash2 size={13} />
+                移除
+              </button>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     );
   };

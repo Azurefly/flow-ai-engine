@@ -1,0 +1,179 @@
+/* 组织组件作用域：保留完整长名称，表单和Portal菜单共享桌面控件尺度。 */
+.organization-mutation[data-slot="dialog-content"] {
+  max-width: 672px;
+}
+.organization-mutation.organization-unit[data-slot="dialog-content"] {
+  max-width: 768px;
+}
+.organization-mutation p {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.organization-mutation .org-field {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  font-size: 14px;
+  line-height: 22px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.organization-mutation .org-input,
+.organization-mutation .org-select {
+  height: 44px;
+}
+.organization-mutation .org-select {
+  min-width: 0;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  padding: 0 12px;
+}
+.organization-mutation .org-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 22px;
+}
+.organization-mutation .org-check input {
+  margin-top: 4px;
+}
+.organization-mutation .org-user-trigger {
+  height: 44px;
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  text-align: left;
+  font-weight: 400;
+}
+.organization-mutation .org-warning {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--aiflow-warning-border);
+  border-radius: 8px;
+  background: var(--aiflow-warning-surface);
+  padding: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+.organization-mutation .org-memberships {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+.organization-mutation .org-form-grid {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.organization-mutation .org-warning-outline,
+.organization-mutation .org-observed {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--aiflow-warning-border);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 22px;
+}
+.organization-mutation .org-observed {
+  border-color: var(--aiflow-info-border);
+}
+.organization-mutation .org-primary-change > p:first-child {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted-foreground);
+}
+.organization-mutation .org-primary-change > p:nth-child(2) {
+  max-height: 110px;
+  overflow: auto;
+  font-weight: 500;
+}
+.organization-mutation .org-primary-change > p:last-child {
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted-foreground);
+}
+.org-member-trigger {
+  display: inline-flex;
+  height: 40px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0 10px;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+.org-member-trigger:hover,
+.org-member-trigger[data-state="open"] {
+  background: var(--muted);
+  color: var(--foreground);
+}
+.org-member-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.org-member-menu[data-slot="dropdown-menu-content"] {
+  min-width: 160px;
+  padding: 6px;
+}
+.org-member-menu button {
+  height: 40px;
+  width: 100%;
+}
+.org-member-menu .org-member-danger {
+  color: var(--aiflow-danger);
+}
+.org-member-menu .org-member-danger:focus,
+.org-member-menu .org-member-danger:hover {
+  background: var(--aiflow-danger-surface);
+}
+.org-user-search[data-slot="popover-content"] {
+  width: var(--radix-popover-trigger-width);
+  min-width: 256px;
+  padding: 0;
+}
+.org-user-search .org-search-hint,
+.org-user-search .org-search-loading,
+.org-user-search .org-search-error {
+  padding: 16px 12px;
+  color: var(--muted-foreground);
+}
+.org-user-search .org-search-hint {
+  text-align: center;
+}
+.org-user-search .org-search-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.org-user-search .org-search-error {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: var(--aiflow-danger);
+}
+.org-user-search .org-search-footer {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+}
+@media (min-width: 640px) {
+  .organization-mutation .org-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1024px) {
+  .organization-mutation .org-input,
+  .organization-mutation .org-select,
+  .organization-mutation .org-user-trigger {
+    height: 40px;
+  }
+}

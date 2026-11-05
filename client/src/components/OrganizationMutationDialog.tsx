@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { organizationPrimaryPreview } from "@shared/organization-primary-preview";
+import "./organization-member-ui.css";
 import { trpc } from "@/lib/trpc";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import {
@@ -543,11 +545,11 @@ export default function OrganizationMutationDialog({
     }
   }
   const select = (label: string, key: string, options: React.ReactNode) => (
-    <label className="grid min-w-0 gap-1.5 text-sm font-medium">
+    <label className="org-field">
       {label}
       <select
         aria-label={label}
-        className="h-11 min-w-0 rounded-md border border-border bg-card px-3 min-[1024px]:h-10"
+        className="org-select"
         value={text(key)}
         onChange={e =>
           update(
@@ -581,9 +583,8 @@ export default function OrganizationMutationDialog({
     />
   );
   const checkbox = (label: string, key: string) => (
-    <label className="flex items-start gap-2 text-sm">
+    <label className="org-check">
       <input
-        className="mt-1"
         type="checkbox"
         checked={checked(key)}
         onChange={e => update({ [key]: e.target.checked })}
@@ -617,6 +618,21 @@ export default function OrganizationMutationDialog({
       target.kind === "new-user") &&
     draft.attempted &&
     currentMember;
+  // UX：仅用当前账号的有效归属推导提交影响，不改变主部门默认值或写入参数。
+  const primaryPreview =
+    target.kind === "member" &&
+    member.isSuccess &&
+    !member.isError &&
+    !member.isFetching &&
+    !memberChanged &&
+    Number(member.data.user?.id) === memberId &&
+    target.unit
+      ? organizationPrimaryPreview(
+          member.data.memberships,
+          { id: target.unit.id, name: target.unit.name, code: target.unit.code },
+          checked("isPrimary")
+        )
+      : null;
   return (
     <>
       <CreationDialog
@@ -627,7 +643,7 @@ export default function OrganizationMutationDialog({
             ? "维护部门信息；保存失败保留填写，配置变化时先核对。"
             : "操作对象固定为下方所示部门和账号。请核对后提交。"
         }
-        submitLabel={submitLabels[target.kind]}
+        submitLabel={primaryPreview ? `${editingMember ? "保存并" : "加入并"}${primaryPreview.action}` : submitLabels[target.kind]}
         onOpenChange={open => {
           if (!open) close();
         }}
@@ -639,7 +655,7 @@ export default function OrganizationMutationDialog({
           ["remove", "unbind", "delete"].includes(target.kind) ||
           (target.kind === "status" && target.status === "disabled")
         }
-        className={target.kind === "unit" ? "max-w-3xl" : "max-w-2xl"}
+        className={target.kind === "unit" ? "organization-mutation organization-unit" : "organization-mutation"}
       >
         <div className="flex flex-wrap gap-2">
           <Button
@@ -683,7 +699,7 @@ export default function OrganizationMutationDialog({
         {unitChanged && (
           <div
             role="alert"
-            className="grid gap-2 rounded-lg border border-aiflow-warning-border bg-aiflow-warning-surface p-3 text-sm"
+            className="org-warning"
           >
             <p>部门配置已变化，请核对后继续。本次填写不会被自动覆盖。</p>
             {editing &&
@@ -713,8 +729,8 @@ export default function OrganizationMutationDialog({
             </Button>
           </div>
         )}
-        {needsMember && memberId && (
-          <div className="rounded-lg border border-border p-3 text-sm">
+        {needsMember && Boolean(memberId) && (
+          <div className="org-memberships">
             <p>当前部门归属</p>
             {member.isError ? (
               <p role="alert">读取失败，已暂停提交，请重新读取。</p>
@@ -788,7 +804,7 @@ export default function OrganizationMutationDialog({
           </p>
         )}
         {observed && (
-          <div className="grid gap-2 rounded-lg border border-aiflow-info-border p-3 text-sm">
+          <div className="org-observed">
             <p>
               列表中已存在该部门关系。请核对上方岗位与主部门信息；不会重复加入。
             </p>
@@ -799,7 +815,7 @@ export default function OrganizationMutationDialog({
         )}
         {target.kind === "unit" && (
           <>
-            <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+            <div className="org-form-grid">
               {!editing && input("部门编码", "code")}
               {input("部门名称", "name")}
               {select(
@@ -818,7 +834,7 @@ export default function OrganizationMutationDialog({
                     ))}
                 </>
               )}
-              <div className="grid min-w-0 gap-1.5 text-sm font-medium">
+              <div className="org-field">
                 <span>部门负责人</span>
                 <OrganizationUserSelect
                   ariaLabel="部门负责人"
@@ -856,7 +872,7 @@ export default function OrganizationMutationDialog({
                 </div>
               </details>
             </div>
-            <label className="grid gap-1.5 text-sm font-medium">
+            <label className="org-field">
               <span id="organization-unit-description-label">部门说明</span>
               <Textarea
                 aria-labelledby="organization-unit-description-label"
@@ -870,7 +886,7 @@ export default function OrganizationMutationDialog({
         {target.kind === "member" && (
           <>
             {!editingMember && (
-              <div className="grid gap-1.5 text-sm font-medium">
+              <div className="org-field">
                 <span>内部账号</span>
                 <OrganizationUserSelect
                   ariaLabel="内部账号"
@@ -894,6 +910,13 @@ export default function OrganizationMutationDialog({
             )}
             {input("岗位/职务", "title")}
             {checkbox("设为该成员的主部门（驱动直属上级解析）", "isPrimary")}
+            {primaryPreview && (
+              <div className="org-warning org-primary-change" role="status">
+                <p>主部门变更</p>
+                <p>{primaryPreview.before} → {primaryPreview.after}</p>
+                <p>其他部门关系保留；主部门用于直属上级解析。</p>
+              </div>
+            )}
             {currentMember && !editingMember && !draft.attempted && (
               <p role="alert" className="text-sm text-aiflow-warning">
                 该账号已在当前部门，请核对现有岗位，不会覆盖。
@@ -911,7 +934,7 @@ export default function OrganizationMutationDialog({
                 账号已创建，账号信息不可修改；本次仅重试加入部门。
               </p>
             )}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="org-form-grid">
               {input(
                 "登录名",
                 "username",
@@ -931,10 +954,10 @@ export default function OrganizationMutationDialog({
                 "email",
                 Boolean(draft.createdUserId)
               )}
-              <label className="grid gap-1.5 text-sm font-medium">
+              <label className="org-field">
                 账号类型
                 <select
-                  className="h-11 rounded-md border border-border bg-card px-3"
+                  className="org-select"
                   value={text("role")}
                   disabled={Boolean(draft.createdUserId)}
                   onChange={e => update({ role: e.target.value })}
@@ -972,7 +995,7 @@ export default function OrganizationMutationDialog({
             {destination && (
               <div
                 role="alert"
-                className="grid gap-2 rounded-lg border border-aiflow-warning-border p-3 text-sm"
+                className="org-warning-outline"
               >
                 <p>
                   该成员已在目标部门任职（{destination.title || "未配置岗位"}
@@ -987,11 +1010,11 @@ export default function OrganizationMutationDialog({
         )}
         {roleMode && (
           <>
-            <label className="grid gap-1.5 text-sm font-medium">
+            <label className="org-field">
               权限组
               <select
                 aria-label="权限组"
-                className="h-11 min-w-0 rounded-md border border-border bg-card px-3"
+                className="org-select"
                 value={text("roleId")}
                 onChange={e => {
                   update({ roleId: e.target.value });
@@ -1026,7 +1049,7 @@ export default function OrganizationMutationDialog({
                 权限组读取失败，请重新读取。填写仍保留。
               </p>
             )}
-            <div className="rounded-lg border border-border p-3 text-sm">
+            <div className="org-memberships">
               <p className="font-medium">绑定后的权限</p>
               <p>流程权限覆盖全部流程，不限于本部门创建的流程。</p>
               <ul className="mt-2 grid gap-1">
@@ -1149,10 +1172,10 @@ function Field({
   minLength?: number;
 }) {
   return (
-    <label className="aiflow-type-control grid min-w-0 gap-1.5 font-medium text-foreground">
+    <label className="aiflow-type-control org-field">
       {label}
       <Input
-        className="aiflow-type-control h-11 min-[1024px]:h-10"
+        className="aiflow-type-control org-input"
         type={type}
         disabled={disabled}
         required={required}
@@ -1269,7 +1292,7 @@ function OrganizationUserSelect({
           aria-required={required || undefined}
           disabled={!enabled}
           variant="outline"
-          className="aiflow-type-control h-11 w-full min-w-0 justify-between gap-2 px-3 text-left font-normal min-[1024px]:h-10"
+          className="aiflow-type-control org-user-trigger"
         >
           <span className="min-w-0 truncate">{chosenLabel}</span>
           <ChevronsUpDown
@@ -1280,7 +1303,7 @@ function OrganizationUserSelect({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0"
+        className="org-user-search"
       >
         <Command shouldFilter={false}>
           <CommandInput
@@ -1306,19 +1329,19 @@ function OrganizationUserSelect({
               </CommandGroup>
             )}
             {!search.trim() ? (
-              <p className="aiflow-type-body px-3 py-4 text-center text-muted-foreground">
+              <p className="aiflow-type-body org-search-hint">
                 输入姓名、登录名或邮箱开始搜索
               </p>
             ) : loading ? (
               <div
                 role="status"
-                className="aiflow-type-body flex items-center justify-center gap-2 px-3 py-4 text-muted-foreground"
+                className="aiflow-type-body org-search-loading"
               >
                 <Loader2 size={15} className="animate-spin" />
                 正在搜索账号…
               </div>
             ) : directory.isError ? (
-              <div className="aiflow-type-body grid justify-items-center gap-2 px-3 py-4 text-aiflow-danger">
+              <div className="aiflow-type-body org-search-error">
                 <p>{directory.error.message || "账号搜索失败。"}</p>
                 <Button
                   type="button"
@@ -1355,7 +1378,7 @@ function OrganizationUserSelect({
                 {(directory.data?.total ?? 0) > 20 && (
                   <div
                     aria-label="人员搜索分页"
-                    className="grid gap-2 border-t px-3 py-2"
+                    className="org-search-footer"
                   >
                     <p className="aiflow-type-meta leading-5 text-muted-foreground">
                       显示第 {searchPage * 20 + 1}–
