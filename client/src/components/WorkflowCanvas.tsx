@@ -1075,30 +1075,21 @@ function NestedStructuredValueEditor({
   if (value && typeof value === "object") {
     const record = value as NodeConfig;
     const entries = Object.entries(record);
-    const updateEntries = (next: Array<[string, unknown]>) =>
-      onChange(Object.fromEntries(next.filter(([key]) => key.trim())));
     return (
       <div className={canvasNestedCardClass}>
         {entries.map(([key, entryValue], index) => (
           <div
-            key={key + "-" + index}
+            // Keep the row mounted while its editable property name changes.
+            key={index}
             data-config-pair=""
             className="grid min-w-0 grid-cols-[minmax(72px,.6fr)_minmax(0,1.4fr)_auto] gap-2"
           >
-            <input
+            <StructuredPropertyNameInput
               className={inputClass}
-              value={key}
+              propertyKey={key}
+              record={record}
               disabled={disabled}
-              aria-label={"字段 " + key + " 名称"}
-              onChange={event =>
-                updateEntries(
-                  entries.map(([currentKey, currentValue], itemIndex) =>
-                    itemIndex === index
-                      ? [event.target.value, currentValue]
-                      : [currentKey, currentValue]
-                  )
-                )
-              }
+              onChange={onChange}
             />
             <NestedStructuredValueEditor
               value={entryValue}
