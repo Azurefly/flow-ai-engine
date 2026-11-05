@@ -567,7 +567,7 @@ export default function SystemSettingsEditor({
                 className="bg-blue-600 text-white hover:bg-blue-700"
               >
                 {busy && <Loader2 size={15} className="animate-spin" />}
-                {activeKey === "general" ? "保存通用设置" : "保存审批规则"}
+                {{ general: "保存通用设置", approval: "保存审批规则", llm: "保存模型服务" }[activeKey]}
               </Button>
             ) : otherDirty ? (
               <Button disabled={busy} onClick={() => onSelectKey(otherDirty)}>
@@ -585,7 +585,7 @@ export default function SystemSettingsEditor({
         >
           <DialogTitle>查看配置改动</DialogTitle>
           <DialogDescription>
-            以下内容尚未保存。两类配置分别保存，切换分类会保留填写。
+            以下内容尚未保存。各类配置分别保存，切换分类会保留填写。
           </DialogDescription>
           <div className="min-h-0 space-y-3 overflow-y-auto">
             {changes.map(change => (
