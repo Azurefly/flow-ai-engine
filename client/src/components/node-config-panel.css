@@ -4,7 +4,7 @@
 [data-node-config-panel] [data-inspector-identity] { flex:1; min-width:0; }
 [data-node-config-panel] [data-inspector-identity] p { overflow-wrap:anywhere; }
 [data-node-config-panel] [data-inspector-tools] { gap:2px; margin-left:0; }
-[data-node-config-panel] [data-inspector-tools] button { width:28px; min-width:28px!important; height:28px; min-height:28px!important; border-radius:6px; }
+[data-node-config-panel] [data-inspector-tools] button[aria-label] { width:28px; min-width:28px!important; height:28px; min-height:28px!important; border-radius:6px; }
 [data-node-config-panel] [data-inspector-tools] button:hover { background:var(--muted); }
 [data-node-config-panel] [data-inspector-tools] [aria-pressed="true"] { background:var(--accent); color:var(--primary); }
 [data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; }
@@ -32,7 +32,7 @@
 [data-node-config-panel] [data-canvas-assessment] button { min-height:24px!important; }
 [data-node-config-panel] button[aria-label^="删除"],
 [data-node-config-panel] button[aria-label^="移除"] { flex:none; min-width:28px; width:28px; height:28px; min-height:28px!important; padding:4px; align-self:start; }
-[data-node-config-panel] [data-inspector-tools] button { min-height:28px!important; }
+[data-node-config-panel] [data-inspector-tools] button[aria-label] { min-height:28px!important; }
 [data-node-config-panel] [data-participant-preview] { padding:10px 12px; border-color:var(--border); background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-participant-preview] > div:first-child { gap:8px; align-items:start; }
 [data-node-config-panel] [data-participant-preview] button { min-height:32px!important; }
