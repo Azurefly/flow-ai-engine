@@ -969,17 +969,18 @@ function StructuredPropertyNameInput({
         value={draft}
         disabled={disabled}
         aria-label={"字段 " + propertyKey + " 名称"}
-        aria-invalid={Boolean(error)}
+        aria-invalid={!!error}
         onChange={event => {
           setDraft(event.target.value);
           setError("");
         }}
         onBlur={() => {
+          if (draft === propertyKey) return;
           const next = renameConfigProperty(record, propertyKey, draft);
-          if (next === record && draft !== propertyKey) {
+          if (next === record) {
             setError("字段名不能为空或重复，已保留原字段。");
             setDraft(propertyKey);
-          } else if (next !== record) onChange(next);
+          } else onChange(next);
         }}
       />
       {error && (
@@ -1094,23 +1095,17 @@ function NestedStructuredValueEditor({
             <NestedStructuredValueEditor
               value={entryValue}
               disabled={disabled}
-              onChange={next =>
-                updateEntries(
-                  entries.map(([currentKey, currentValue], itemIndex) =>
-                    itemIndex === index
-                      ? [currentKey, next]
-                      : [currentKey, currentValue]
-                  )
-                )
-              }
+              onChange={next => onChange({ ...record, [key]: next })}
             />
             <button
               type="button"
               className={canvasRemoveFieldClass}
               disabled={disabled}
               onClick={() =>
-                updateEntries(
-                  entries.filter((_, itemIndex) => itemIndex !== index)
+                onChange(
+                  Object.fromEntries(
+                    entries.filter((_, itemIndex) => itemIndex !== index)
+                  )
                 )
               }
               aria-label={"删除字段 " + key}
