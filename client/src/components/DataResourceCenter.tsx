@@ -1287,7 +1287,7 @@ function DataflowOperationList({
             {visibleRuns.map(run => (
               <tr key={run.id} className="border-t border-border">
                 <td className="break-words px-3 py-3 font-medium">
-                  {run.workflowName}
+                  <span data-dataflow-flow-name="" title={run.workflowName}>{run.workflowName}</span>
                   <p className={metaClassName} title={run.id}>
                     实例 {String(run.id).slice(0, 8)}
                   </p>
@@ -1312,6 +1312,7 @@ function DataflowOperationList({
                     type="button"
                     variant="outline"
                     size="sm"
+                    aria-label={`查看实例详情：${run.workflowName}（${run.id}）`}
                     aria-expanded={onOpenRun ? undefined : expandedRunId === run.id}
                     onClick={() =>
                       onOpenRun ? onOpenRun(run.id) : setExpandedRunId(current =>

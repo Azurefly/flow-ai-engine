@@ -17,3 +17,5 @@
 [data-runtime-monitor][aria-label="数据流程运行监控"] > div:first-child > button {flex-shrink: 0;}
 [dataflow-run-table] td:last-child > button {display: flex; width: 100%; justify-content: center;}
 [dataflow-run-table] td:last-child > button + button {margin-top: 6px;}
+[dataflow-run-list] > div:first-child > p {overflow-wrap: anywhere;}
+[dataflow-flow-name] {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; max-height: 44px; overflow: hidden; overflow-wrap: anywhere; line-height: 22px;}
