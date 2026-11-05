@@ -1,3 +1,4 @@
+import { IdentifierText } from "@/components/IdentifierText";
 import { authorizationAuditActions, authorizationAuditCategories, auditDateBounds, type AuditCategory } from "@shared/role-audit-event";
 import { IdentityWorkspace } from "@/components/IdentityWorkspace";
 import type { IdentityTab } from "@shared/console-route";
@@ -3273,12 +3274,6 @@ async function copyAuditActionCode(value: string) {
   } catch {
     toast.error("浏览器无法访问剪贴板；可选择操作码后手动复制。");
   }
-}
-
-// UX：完整标识文本仍保留在DOM与title中，前半段可省略，末8个字符始终可辨认。
-function IdentifierText({ value }: { value?: string }) {
-  const characters = Array.from(value ?? "");
-  return <><span>{characters.slice(0, -8).join("")}</span><span>{characters.slice(-8).join("")}</span></>;
 }
 
 function IamCenter({

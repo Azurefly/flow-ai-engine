@@ -1197,9 +1197,11 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain(
       "aria-label={`从当前部门移除成员：${memberIdentity}`}"
     );
-    expect(organizationManagementSource).toContain(
-      'className="aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10"'
-    );
+    expect(organizationManagementSource).toContain('const surfaceClass1 = "org-member-action"');
+    const organizationCss = source("../client/src/components/organization-workbench.css");
+    expect(organizationCss).toContain(".org-member-menu .org-member-action");
+    expect(organizationCss).toContain("font-size: 14px");
+    expect(organizationCss).toContain("height: 40px");
     expect(organizationManagementSource).not.toContain(
       "text-left text-xs text-foreground"
     );
@@ -1260,7 +1262,8 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain(
       'className="mt-1 break-all font-mono'
     );
-    expect(organizationManagementSource).toContain("max-w-[220px] break-words");
+    expect(organizationManagementSource).toContain("data-org-member-role");
+    expect(source("../client/src/components/organization-workbench.css")).toContain("overflow-wrap: anywhere");
     expect(organizationManagementSource).toContain("max-w-full break-all");
   });
 
@@ -1275,24 +1278,21 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain(
       'className="aiflow-type-page-title mt-1 font-semibold text-foreground"'
     );
-    expect(organizationManagementSource).toContain(
-      'className="aiflow-type-body mt-1 break-words text-muted-foreground"'
-    );
-    expect(organizationManagementSource).toContain(
-      'className="aiflow-type-meta mt-1 break-all font-normal text-muted-foreground"'
-    );
+    expect(organizationManagementSource).toContain('className="aiflow-type-meta org-unit-path"');
+    expect(organizationManagementSource).toContain('data-org-member-login=""');
+    expect(organizationManagementSource).toContain('title={member.username}');
+    expect(organizationManagementSource).toContain('<IdentifierText value={member.username} />');
     expect(organizationManagementSource).toContain(
       'className="break-words px-4 py-3 text-muted-foreground"'
     );
-    expect(organizationManagementSource).toContain(
-      'data-organization-member-table'
-    );
-    expect(organizationManagementSource).toContain(
-      'className="aiflow-type-meta mt-1 break-all font-normal text-muted-foreground"'
-    );
+    expect(organizationManagementSource).toContain('data-organization-member-table');
     expect(organizationManagementSource).toContain(
       'className="aiflow-type-body mt-1 text-muted-foreground"'
     );
+    const css = source("../client/src/components/organization-workbench.css");
+    expect(css).toContain("[data-org-member-login]");
+    expect(css).toContain("font-size: 13px");
+    expect(css).toContain("font-size: 14px");
   });
 
   it("组织成员使用服务端筛选和可见总数的稳定分页", () => {

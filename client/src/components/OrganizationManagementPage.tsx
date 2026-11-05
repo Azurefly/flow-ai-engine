@@ -1,13 +1,13 @@
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
-const surfaceClass1 = "aiflow-type-control flex h-11 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-muted disabled:opacity-50 min-[1024px]:h-10";
+const surfaceClass1 = "org-member-action";
 const surfaceClass2 = "aiflow-type-meta font-medium text-muted-foreground";
-const surfaceClass3 = "absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg";
-const surfaceClass4 = "flex h-11 items-center gap-2 rounded px-2.5 text-left text-sm text-foreground hover:bg-muted min-[1024px]:h-10";
-const surfaceClass5 = "p-6 text-center text-sm text-muted-foreground";
-const surfaceClass6 = "aiflow-type-control inline-flex min-h-11 cursor-pointer list-none items-center gap-1 rounded-md border border-border px-3 text-foreground hover:bg-muted";
-const surfaceClass7 = "flex flex-wrap items-center justify-between gap-3";
-const surfaceClass8 = "aiflow-type-body text-muted-foreground";
-const surfaceClass9 = "rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground";
+const surfaceClass3 = "org-unit-menu";
+const surfaceClass4 = "org-unit-action";
+const surfaceClass5 = "org-empty";
+const surfaceClass6 = "org-unit-trigger";
+const surfaceClass7 = "org-toolbar";
+const surfaceClass8 = "aiflow-type-body org-muted";
+const surfaceClass9 = "org-notice";
 import { visibleOrganizationIds } from "../../../shared/organization-tree-visibility";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import {
@@ -27,6 +27,8 @@ import {
   DropdownMenuItem,
 } from "./ui/dropdown-menu";
 import "./organization-member-ui.css";
+import "./organization-workbench.css";
+import { IdentifierText } from "./IdentifierText";
 import { Input } from "@/components/ui/input";
 import {
   Dialog,
@@ -491,24 +493,26 @@ export default function OrganizationManagementPage({
   return (
     <div
       data-aiflow-organization-page=""
+      data-org-embedded={embedded || undefined}
       className={embedded ? "min-w-0" : "aiflow-page-frame bg-background"}
     >
-      <div className={embedded ? "min-w-0 overflow-hidden rounded-xl border border-border bg-card" : "aiflow-page-content overflow-hidden rounded-xl border border-border bg-card shadow-sm"}>
+      <div
+        data-org-shell=""
+        className={embedded ? undefined : "aiflow-page-content shadow-sm"}
+      >
         <header className="flex flex-col gap-4 border-b border-border px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             {!embedded && (
-            <button
-              type="button"
-              className="aiflow-type-control mb-2 flex min-h-11 items-center gap-1 text-aiflow-info hover:underline min-[1024px]:min-h-10"
-              onClick={onBack}
-            >
-              <ArrowLeft size={15} />
-              返回账号与角色
-            </button>
+              <button
+                type="button"
+                className="aiflow-type-control mb-2 flex min-h-11 items-center gap-1 text-aiflow-info hover:underline min-[1024px]:min-h-10"
+                onClick={onBack}
+              >
+                <ArrowLeft size={15} />
+                返回账号与角色
+              </button>
             )}
-            <p className={surfaceClass2}>
-              人员与权限
-            </p>
+            <p className={surfaceClass2}>人员与权限</p>
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               组织架构管理
             </h1>
@@ -586,8 +590,9 @@ export default function OrganizationManagementPage({
             </Button>
           </div>
         )}
-        <div className="grid min-h-[650px] lg:grid-cols-[300px_minmax(0,1fr)]">
+        <div data-org-body="">
           <aside
+            data-org-directory=""
             className={`border-b border-border bg-muted p-3 lg:border-b-0 lg:border-r ${selected && !mobileDirectoryOpen ? "hidden lg:block" : ""}`}
           >
             <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-card px-3 text-muted-foreground min-[1024px]:h-10">
@@ -608,7 +613,13 @@ export default function OrganizationManagementPage({
               />
               显示停用部门
             </label>
-            <div className="mt-3 max-h-[520px] overflow-y-auto">
+            <div
+              data-org-tree=""
+              role="region"
+              aria-label="组织机构目录"
+              tabIndex={0}
+              className="mt-3 max-h-[520px] overflow-y-auto"
+            >
               {organization.isLoading ? (
                 <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
                   <Loader2 size={15} className="animate-spin" />
@@ -639,7 +650,10 @@ export default function OrganizationManagementPage({
                   </div>
                 )}
             </div>
-            <div className="mt-4 rounded-lg border border-border bg-card p-3">
+            <div
+              data-org-membership-note=""
+              className="mt-4 rounded-lg border border-border bg-card p-3"
+            >
               <p className="aiflow-type-section-title font-semibold text-foreground">
                 账号归属提示
               </p>
@@ -650,6 +664,7 @@ export default function OrganizationManagementPage({
             </div>
           </aside>
           <section
+            data-org-detail=""
             className={`min-w-0 p-4 sm:p-6 ${mobileDirectoryOpen ? "hidden lg:block" : ""}`}
           >
             {!selected ? (
@@ -658,7 +673,10 @@ export default function OrganizationManagementPage({
               </div>
             ) : (
               <>
-                <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between">
+                <div
+                  data-org-selection=""
+                  className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-start sm:justify-between"
+                >
                   <div>
                     <Button
                       type="button"
@@ -671,7 +689,10 @@ export default function OrganizationManagementPage({
                       切换部门
                     </Button>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 break-words text-xl font-semibold text-foreground">
+                      <h2
+                        className="aiflow-type-section-title min-w-0 break-words font-semibold text-foreground"
+                        title={selected.name}
+                      >
                         {selected.name}
                       </h2>
                       <span
@@ -683,7 +704,13 @@ export default function OrganizationManagementPage({
                     <p className="mt-1 break-all font-mono text-xs text-aiflow-info">
                       {selected.code}
                     </p>
-                    <p className="aiflow-type-body mt-1 break-words text-muted-foreground">
+                    <p
+                      className="aiflow-type-meta org-unit-path"
+                      title={
+                        selected.displayPath ||
+                        `${selected.name}（${selected.code}）`
+                      }
+                    >
                       {selected.displayPath ||
                         `${selected.name}（${selected.code}）`}
                     </p>
@@ -759,6 +786,7 @@ export default function OrganizationManagementPage({
                 </div>
                 <div
                   role="tablist"
+                  data-org-tabs=""
                   aria-label="组织部门详情"
                   className="mt-5 grid min-w-0 grid-cols-3 gap-1 border-b border-border sm:flex sm:flex-wrap"
                 >
@@ -793,7 +821,10 @@ export default function OrganizationManagementPage({
                   ))}
                 </div>
                 {tab === "overview" && (
-                  <div className="mt-4 grid grid-cols-1 gap-2 min-[448px]:grid-cols-2 xl:grid-cols-3">
+                  <div
+                    data-org-overview=""
+                    className="mt-4 grid grid-cols-1 gap-2 min-[448px]:grid-cols-2 xl:grid-cols-3"
+                  >
                     <Info
                       label="上级部门"
                       value={selected.parentName || "根部门"}
@@ -870,7 +901,7 @@ export default function OrganizationManagementPage({
                   </div>
                 )}
                 {tab === "members" && (
-                  <div className="mt-5">
+                  <div data-org-members="" className="mt-5">
                     <div className={surfaceClass7}>
                       <p className={surfaceClass8}>
                         成员可跨部门任职；主部门用于确定直属上级。
@@ -899,7 +930,10 @@ export default function OrganizationManagementPage({
                         </Button>
                       </div>
                     </div>
-                    <div className="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-muted p-3 sm:flex-row sm:items-center">
+                    <div
+                      data-org-member-filter=""
+                      className="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-muted p-3 sm:flex-row sm:items-center"
+                    >
                       <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 text-muted-foreground min-[1024px]:h-10">
                         <Search size={14} />
                         <Input
@@ -931,7 +965,14 @@ export default function OrganizationManagementPage({
                         正在读取当前范围的成员…
                       </p>
                     )}
-                    <div className="mt-4" data-organization-member-table>
+                    <div
+                      className="mt-4"
+                      data-organization-member-table
+                      role="region"
+                      aria-label="部门成员列表"
+                      tabIndex={0}
+                      key={`${selected.id}:${includeDescendants}:${memberPage}:${memberSearch}`}
+                    >
                       <table className="w-full table-fixed text-left text-sm">
                         <colgroup>
                           <col className="w-[28%]" />
@@ -953,17 +994,29 @@ export default function OrganizationManagementPage({
                               key={member.id}
                               className="border-t border-border"
                             >
-                              <td className="max-w-[220px] break-words px-4 py-3 font-medium text-foreground">
-                                {member.name || member.username}
-                                <OrganizationAccountStatus
-                                  status={member.userStatus}
-                                />
-                                <p className="aiflow-type-meta mt-1 break-all font-normal text-muted-foreground">
-                                  {member.username}
+                              <td data-org-member-identity="">
+                                <span data-org-member-name="">
+                                  <span title={member.name || member.username}>
+                                    {member.name || member.username}
+                                  </span>
+                                  <OrganizationAccountStatus
+                                    status={member.userStatus}
+                                  />
+                                </span>
+                                <p
+                                  data-org-member-login=""
+                                  title={member.username}
+                                >
+                                  <IdentifierText value={member.username} />
                                 </p>
                               </td>
-                              <td className="max-w-[220px] break-words px-4 py-3">
-                                {member.title || "未配置"}
+                              <td>
+                                <p
+                                  data-org-member-role=""
+                                  title={member.title || "未配置"}
+                                >
+                                  {member.title || "未配置"}
+                                </p>
                               </td>
                               <td
                                 className="break-words px-4 py-3 text-muted-foreground"
@@ -1007,7 +1060,10 @@ export default function OrganizationManagementPage({
                       </table>
                     </div>
                     {memberPageInfo && memberPageInfo.total > 0 && (
-                      <div className="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div
+                        data-org-member-pages=""
+                        className="mt-4 flex flex-col gap-3 border-t border-border pt-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
                         <p className={surfaceClass8}>
                           显示 {memberPageInfo.from}–{memberPageInfo.to} 项，共{" "}
                           {memberPageInfo.total} 位成员
@@ -1060,7 +1116,7 @@ export default function OrganizationManagementPage({
                   </div>
                 )}
                 {tab === "permissions" && (
-                  <div className="mt-5">
+                  <div data-org-permissions="" className="mt-5">
                     <div className={surfaceClass7}>
                       <p className={surfaceClass8}>
                         绑定后，部门启用成员按有效期实时继承权限；可选择是否覆盖子部门成员。
@@ -1103,36 +1159,44 @@ export default function OrganizationManagementPage({
                                 : " · 长期有效"}
                             </p>
                           </div>
-                          <details className="relative self-start">
-                            <summary
-                              aria-label={`权限组 ${binding.roleName} 的操作`}
-                              className={surfaceClass6}
-                            >
-                              <MoreHorizontal size={15} />
-                              更多操作
-                              <ChevronDown size={14} />
-                            </summary>
-                            <div className="absolute right-0 z-30 mt-1 grid min-w-40 gap-1 rounded-md border border-border bg-card p-1.5 shadow-lg">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                className="aiflow-type-control flex min-h-11 items-center gap-2 rounded px-2.5 text-left text-aiflow-danger hover:bg-aiflow-danger-surface"
-                                disabled={busy}
-                                onClick={event => {
-                                  event.currentTarget
-                                    .closest("details")
-                                    ?.removeAttribute("open");
-                                  openDialog({
-                                    kind: "unbind",
-                                    unit: selected,
-                                    binding,
-                                  });
-                                }}
+                                aria-label={`权限组 ${binding.roleName} 的操作`}
+                                className={surfaceClass6}
                               >
-                                <Trash2 size={14} />
-                                解绑权限组…
+                                <MoreHorizontal size={15} />
+                                更多操作
+                                <ChevronDown size={14} />
                               </button>
-                            </div>
-                          </details>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="org-member-menu"
+                            >
+                              <DropdownMenuItem asChild disabled={busy}>
+                                <button
+                                  type="button"
+                                  className="aiflow-type-control flex min-h-11 items-center gap-2 rounded px-2.5 text-left text-aiflow-danger hover:bg-aiflow-danger-surface"
+                                  disabled={busy}
+                                  onClick={event => {
+                                    event.currentTarget
+                                      .closest("details")
+                                      ?.removeAttribute("open");
+                                    openDialog({
+                                      kind: "unbind",
+                                      unit: selected,
+                                      binding,
+                                    });
+                                  }}
+                                >
+                                  <Trash2 size={14} />
+                                  解绑权限组…
+                                </button>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       ))}
                       {!selectedBindings.length && (
@@ -1191,10 +1255,7 @@ export default function OrganizationManagementPage({
           ) : roleMemberDetails.data ? (
             <>
               {liveRoleAccount?.status === "disabled" && (
-                <p
-                  role="alert"
-                  className={surfaceClass9}
-                >
+                <p role="alert" className={surfaceClass9}>
                   账号已停用：下方保留角色配置来源，该账号不能登录或执行操作。
                 </p>
               )}
@@ -1267,9 +1328,7 @@ export default function OrganizationManagementPage({
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0 rounded-lg border border-border p-3">
-      <p className={surfaceClass2}>
-        {label}
-      </p>
+      <p className={surfaceClass2}>{label}</p>
       <p className="aiflow-type-body mt-1 break-words font-medium text-foreground">
         {value}
       </p>
