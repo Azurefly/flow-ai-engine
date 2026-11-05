@@ -11,4 +11,5 @@ export async function clearAccountQueries(client: QueryClient) {
   const filters = { predicate: (query: { queryKey: QueryKey }) => !isPublicSessionQuery(query.queryKey) };
   await client.cancelQueries(filters);
   client.removeQueries(filters);
+  client.getMutationCache().clear();
 }

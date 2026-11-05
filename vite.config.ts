@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { compactStyleConstants } from "./scripts/build-style-constants";
+import { minify } from "terser";
+import { gzipSync } from "node:zlib";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 // =============================================================================
@@ -184,8 +186,15 @@ export default defineConfig(({ command }) => {
         apply: "build",
         renderChunk: {
           order: "post",
-          handler(code) {
-            return compactStyleConstants(code, source => this.parse(source));
+          async handler(code) {
+            const shared = compactStyleConstants(code, source => this.parse(source));
+            const before = shared?.code ?? code;
+            // A second pass also compacts Rollup's final wrappers; accept only real savings.
+            const result = await minify(before, { module: true, ecma: 2020, compress: { passes: 3, ecma: 2020 }, format: { comments: false } });
+            if (!result.code || Buffer.byteLength(result.code) >= Buffer.byteLength(before) || gzipSync(result.code).length > gzipSync(before).length) return shared;
+            // Spend at most 18 bytes of the measured gzip saving to share more strings.
+            // Each completed chunk remains no larger in raw or gzip than before this pass.
+            return compactStyleConstants(result.code, source => this.parse(source), Math.min(gzipSync(before).length, gzipSync(result.code).length + 18)) ?? { code: result.code, map: null };
           },
         },
       },
@@ -217,6 +226,7 @@ export default defineConfig(({ command }) => {
       },
       rollupOptions: {
         output: {
+          generatedCode: "es2015",
           onlyExplicitManualChunks: true,
           // Merge tiny shared dependency chunks to reduce request/import overhead.
           experimentalMinChunkSize: 64 * 1024,

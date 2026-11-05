@@ -9,6 +9,8 @@ import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
 import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
+import { AccountDraftSession, openWorkflowDraft, type AccountDraftLease } from "@shared/account-draft-session";
+import { useSessionDraftField } from "@/_core/hooks/useSessionDraftField";
 import { useClientVersionUpdate } from "@/hooks/useClientVersionUpdate";
 import { useContextReveal } from "@/hooks/useContextReveal";
 import { AuthorizationDetailRefresh } from "@/components/AuthorizationDetailRefresh";
@@ -267,7 +269,19 @@ const supportingTextClass = ("mt-1 break-words " + mutedToneClass);
 export default function Home() {
   const utils = trpc.useUtils();
   const me = trpc.auth.me.useQuery(undefined, { refetchInterval: query => query.state.data ? 30_000 : false });
-  const accountQueriesReady = useAccountQueryIsolation(me.data?.id ?? null);
+  const verifiedUserId = me.isError ? null : me.data?.id ?? null;
+  const accountQueriesReady = useAccountQueryIsolation(verifiedUserId);
+  // UX 恢复：草稿只保留在本页内存，重新确认同一账号后才重新挂载。
+  const [drafts] = useState(() => new AccountDraftSession());
+  const [draftLease, setDraftLease] = useState<AccountDraftLease | null>(null);
+  useLayoutEffect(() => { setDraftLease(drafts.activate(verifiedUserId)); }, [drafts, verifiedUserId]);
+  useEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (verifiedUserId === null && drafts.hasRecovery()) { event.preventDefault(); event.returnValue = ""; }
+    };
+    window.addEventListener("beforeunload", unload);
+    return () => window.removeEventListener("beforeunload", unload);
+  }, [drafts, verifiedUserId]);
   const general = trpc.config.publicGeneral.useQuery();
   const [credentials, setCredentials] = useState({
     username: "",
@@ -284,10 +298,13 @@ export default function Home() {
   });
   const logout = trpc.auth.logout.useMutation({
     onSuccess: () => {
+      drafts.clear();
+      setDraftLease(null);
       utils.auth.me.setData(undefined, null);
       void utils.auth.me.invalidate();
       toast.success("已安全退出。");
     },
+    onError: error => toast.error(error.message),
   });
 
   const publicGeneral: PublicGeneral = general.data ?? {
@@ -295,12 +312,14 @@ export default function Home() {
     watermarkEnabled: false,
     watermarkText: "",
   };
-  if (me.isLoading || !accountQueriesReady)
+  if (me.isLoading || !accountQueriesReady || me.isError || (verifiedUserId !== null && drafts.forUser(verifiedUserId) !== draftLease))
     return (
-      <main className={"grid min-h-screen place-items-center bg-card " + mutedToneClass}>
-        <div className="flex items-center gap-3 border border-border bg-card px-4 py-3 text-sm shadow-sm">
+      <main className={"grid min-h-screen place-items-center bg-card p-6 " + mutedToneClass}>
+        <div className="flex max-w-xl items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm shadow-sm">
+          {me.isError ? <><p role="alert">登录状态暂不可用。工作区已隐藏，请保留页面并重试。</p><Button disabled={me.isFetching} onClick={() => void me.refetch()}>重试</Button></> : <>
           <Loader2 className="animate-spin text-aiflow-info" size={16} />
           正在读取流程工作台…
+          </>}
         </div>
       </main>
     );
@@ -312,16 +331,17 @@ export default function Home() {
         setCredentials={setCredentials}
         pending={login.isPending}
         errorMessage={login.error?.message}
+        recoveryNotice={drafts.hasRecovery()}
         onSubmit={() => login.mutate(credentials)}
       />
     );
   return (
-    <ResourceDraftSession key={me.data.id}>
+    <ResourceDraftSession key={draftLease!.generation} store={draftLease!.resources}>
     <FlowConsole
-      key={me.data.id}
+      draftLease={draftLease!}
       user={me.data}
       general={publicGeneral}
-      onLogout={() => logout.mutate()}
+      onLogout={() => { setDraftLease(drafts.reset(me.data!.id)); logout.mutate(); }}
     />
     </ResourceDraftSession>
   );
@@ -333,6 +353,7 @@ function LoginScreen({
   setCredentials,
   pending,
   errorMessage,
+  recoveryNotice,
   onSubmit,
 }: {
   platformName: string;
@@ -340,6 +361,7 @@ function LoginScreen({
   setCredentials: (next: { username: string; password: string }) => void;
   pending: boolean;
   errorMessage?: string;
+  recoveryNotice?: boolean;
   onSubmit: () => void;
 }) {
   return (
@@ -384,6 +406,7 @@ function LoginScreen({
           <p className={"text-sm leading-6 " + mutedToneClass}>
             使用内部账号登录。流程、运行记录和协作授权均按资源级权限隔离。
           </p>
+          {recoveryNotice && <p role="status" className="aiflow-type-body rounded-lg border border-border bg-muted p-3">填写暂存本页，原账号登录后可恢复；切换账号会清空。密码和 API Key 需重填，请勿刷新或关闭。</p>}
           {errorMessage && (
             <div
               role="alert"
@@ -438,10 +461,12 @@ function FlowConsole({
   user,
   general,
   onLogout,
+  draftLease,
 }: {
   user: UserIdentity;
   general: PublicGeneral;
   onLogout: () => void;
+  draftLease: AccountDraftLease;
 }) {
   const { theme, toggleTheme } = useTheme();
   const [commandOpen, setCommandOpen] = useState(false);
@@ -515,13 +540,14 @@ function FlowConsole({
           : null;
     }
   );
-  const [draftDefinition, setDraftDefinition] = useState<Definition | null>(
-    null
-  );
-  const [draftName, setDraftName] = useState("");
+  const [workingEditor] = useState(() => openWorkflowDraft(draftLease, selectedWorkflowId));
+  useLayoutEffect(() => { if (draftLease.isCurrent(workingEditor.epoch)) draftLease.workflow = workingEditor; }, [draftLease, workingEditor]);
+  const [draftDefinition, setDraftDefinition] = useSessionDraftField<Definition | null>(draftLease, workingEditor, "definition");
+  const [draftName, setDraftName] = useSessionDraftField<string>(draftLease, workingEditor, "name");
   const liveDraft = useRef<{ workflowId: string | null; name: string; definition: Definition | null }>({ workflowId: null, name: "", definition: null });
-  const consoleAlive = useRef(true);
-  useEffect(() => { consoleAlive.current = true; return () => { consoleAlive.current = false; }; }, []);
+  const consoleMounted = useRef(true);
+  const consoleAlive = { get current() { return consoleMounted.current && draftLease.isCurrent(workingEditor.epoch); } };
+  useLayoutEffect(() => { consoleMounted.current = true; return () => { consoleMounted.current = false; }; }, []);
   const matchesLiveDraft = useCallback((id: string, definition: Definition) =>
     liveDraft.current.workflowId === id && matchesWorkflowDefinitionSnapshot(JSON.stringify(definition), liveDraft.current.definition), []);
   const persistedDraftSnapshot = useRef<{
@@ -529,14 +555,15 @@ function FlowConsole({
     name: string;
     definitionJson: string;
     definitionVersion: number;
-  } | null>(null);
+  } | null>(workingEditor.base.current);
+  workingEditor.base = persistedDraftSnapshot;
   const pendingUnpublish = useRef<{ id: string; expectedDefinitionVersion: number } | null>(null);
   const [, setDraftBaseRevision] = useState(0);
-  const [draftConflict, setDraftConflict] = useState<{ id: string; message: string } | null>(null);
+  const [draftConflict, setDraftConflict] = useSessionDraftField<{ id: string; message: string } | null>(draftLease, workingEditor, "conflict");
   const [reloadDraftPending, setReloadDraftPending] = useState(false);
   // Do not seed production runs with demo data. The designer input panel lets
   // users add only the fields required by the selected workflow.
-  const [runInput, setRunInput] = useState<Record<string, unknown>>({});
+  const [runInput, setRunInput] = useSessionDraftField<Record<string, unknown>>(draftLease, workingEditor, "runInput");
   const [selectedRunId, setSelectedRunId] = useState<string | null>(
     initialRoute.route.section === "runs" &&
       initialRoute.route.view === "monitor"
@@ -613,6 +640,7 @@ function FlowConsole({
       route: ConsoleRoute,
       options?: { replace?: boolean; editorReturn?: FlowEditorReturn }
     ) => {
+      if (!consoleAlive.current) return false;
       return consoleHistory.current?.navigate(
         formatConsoleRoute(route),
         { aiflowEditorReturn: options?.editorReturn ?? null },
@@ -1281,6 +1309,7 @@ function FlowConsole({
     setReloadDraftPending(true);
     try {
       const workflow = await utils.workflow.get.fetch({ id }, { staleTime: 0 }) as any;
+      if (!consoleAlive.current) return;
       if (!workflow || liveDraft.current.workflowId !== id) throw new Error("流程已切换或不可访问，当前修改已保留。");
       const definition = decodeJson(workflow.definition) as Definition;
       persistedDraftSnapshot.current = { workflowId: id, name: workflow.name, definitionJson: JSON.stringify(definition), definitionVersion: Number(workflow.definitionVersion) };
@@ -1288,8 +1317,8 @@ function FlowConsole({
       setDraftDefinition(definition);
       setDraftConflict(null);
       toast.success("已读取最新流程版本。");
-    } catch (error) { toast.error(error instanceof Error ? error.message : "读取失败，当前修改已保留。"); }
-    finally { setReloadDraftPending(false); }
+    } catch (error) { if (consoleAlive.current) toast.error(error instanceof Error ? error.message : "读取失败，当前修改已保留。"); }
+    finally { if (consoleAlive.current) setReloadDraftPending(false); }
   };
 
   const importDefinition = (event: ChangeEvent<HTMLInputElement>) => {
@@ -1297,6 +1326,7 @@ function FlowConsole({
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
+      if (!consoleAlive.current) return;
       try {
         const parsed = JSON.parse(String(reader.result));
         const imported = (parsed.workflow?.definition ??

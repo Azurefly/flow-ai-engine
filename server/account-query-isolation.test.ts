@@ -14,10 +14,13 @@ it("账号切换清除流程、人员、权限及运行缓存，保留公开配�
   for (const path of paths) client.setQueryData([[path, "get"], { input: 7 }], { oldAccount: true });
   client.setQueryData([["auth", "me"]], { id: 8 });
   client.setQueryData([["config", "publicGeneral"]], { platformName: "Flow" });
+  const mutation = client.getMutationCache().build(client, { mutationFn: async () => null });
+  await mutation.execute({ password: "transient-only" });
   await clearAccountQueries(client);
   for (const path of paths) expect(client.getQueryData([[path, "get"], { input: 7 }])).toBeUndefined();
   expect(client.getQueryData([["auth", "me"]])).toEqual({ id: 8 });
   expect(client.getQueryData([["config", "publicGeneral"]])).toEqual({ platformName: "Flow" });
+  expect(client.getMutationCache().getAll()).toHaveLength(0);
   client.clear();
 });
 it("旧账号延迟响应不能重新填入新账号缓存", async () => {

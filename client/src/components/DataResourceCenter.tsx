@@ -41,6 +41,7 @@ import {
   useResourceDraftPending,
   useResourceDraftSummary,
   useResourceCreation,
+  useResourceDraftView,
 } from "./ResourceDraftSession";
 import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import {
@@ -113,6 +114,7 @@ export default function DataResourceCenter({
     refresh: refreshPermissions,
   } = useContext(ResourceEditContext);
   const utils = trpc.useUtils();
+  const currentView = useResourceDraftView();
   const project = trpc.project.get.useQuery({ projectId });
   const projectName = project.data?.name ?? "当前业务";
   const [tab, setTab] = useResourceDraftState<Tab>(
@@ -196,6 +198,7 @@ export default function DataResourceCenter({
   });
 
   const invalidate = () => {
+    if (!currentView()) return;
     void utils.data.resources.invalidate({ projectId });
     void utils.data.resourceOptions.invalidate({ projectId });
     void utils.data.flows.invalidate({ projectId });
@@ -206,17 +209,20 @@ export default function DataResourceCenter({
     message: string;
     data?: { code?: string } | null;
   }) => {
+    if (!currentView()) return;
     if (error.data?.code === "FORBIDDEN") refreshPermissions();
     toast.error(error.message);
   };
   const reportResourceFormError = (error: {
     data?: { code?: string } | null;
   }) => {
+    if (!currentView()) return;
     if (error.data?.code === "FORBIDDEN") refreshPermissions();
     // Creation dialogs render mutation errors beside the retained fields.
   };
   const createSource = trpc.data.createSource.useMutation({
     onSuccess: () => {
+      if (!currentView()) return;
       invalidate();
       toast.success("数据源保存已确认；请按类型校验登记或测试连接。");
     },
@@ -224,6 +230,7 @@ export default function DataResourceCenter({
   });
   const createAsset = trpc.data.createAsset.useMutation({
     onSuccess: () => {
+      if (!currentView()) return;
       invalidate();
       toast.success("资源探查结果保存已确认。");
     },
@@ -231,6 +238,7 @@ export default function DataResourceCenter({
   });
   const createUdf = trpc.data.createUdf.useMutation({
     onSuccess: () => {
+      if (!currentView()) return;
       setUdfForm({
         name: "",
         udfType: "javascript",
@@ -245,6 +253,7 @@ export default function DataResourceCenter({
   });
   const createTag = trpc.data.createTag.useMutation({
     onSuccess: () => {
+      if (!currentView()) return;
       setTagName("");
       invalidate();
       toast.success("标签保存已确认。");
@@ -253,6 +262,7 @@ export default function DataResourceCenter({
   });
   const createPlugin = trpc.data.createPlugin.useMutation({
     onSuccess: () => {
+      if (!currentView()) return;
       setPluginForm({ name: "", pluginType: "transform", version: "1.0.0" });
       invalidate();
       toast.success("项目插件保存已确认。");

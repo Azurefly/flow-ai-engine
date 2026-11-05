@@ -151,7 +151,7 @@ it("资源填写会话按登录账号重建，整页恢复不恢复服务端权�
     "client/src/components/ProjectWorkspace.tsx",
     "utf8"
   );
-  expect(home).toContain("<ResourceDraftSession key={me.data.id}>");
+  expect(home).toContain("<ResourceDraftSession key={draftLease!.generation} store={draftLease!.resources}>");
   expect(home).toContain("<ResourceDraftRecoveryNotice />");
   expect(session).toContain("new ResourceDraftStore()");
   expect(session).toContain("useSyncExternalStore");

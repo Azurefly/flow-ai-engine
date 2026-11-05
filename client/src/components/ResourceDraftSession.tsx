@@ -37,6 +37,12 @@ function useStore() {
   );
   return store;
 }
+/** Fence callbacks from a console that has lost authentication. */
+export function useResourceDraftView() {
+  const store = useContext(SessionContext);
+  const [generation] = useState(() => store?.generation);
+  return useCallback(() => !store || store.isCurrentView(generation!), [store, generation]);
+}
 export function useResourceDraftState<T>(
   projectId: string,
   category: string,
@@ -45,15 +51,17 @@ export function useResourceDraftState<T>(
   tracked = true
 ): [T, (action: SetStateAction<T>) => void] {
   const store = useStore();
+  const currentView = useResourceDraftView();
   const base = useRef(initial);
   const [local, setLocal] = useState(initial);
   const set = useCallback(
     (action: SetStateAction<T>) => {
+      if (!currentView()) return;
       if (store)
         store.set(projectId, category, key, base.current, action, tracked);
       else setLocal(action);
     },
-    [store, projectId, category, key, tracked]
+    [store, projectId, category, key, tracked, currentView]
   );
   return [
     store ? store.read(projectId, category, key, base.current) : local,
@@ -62,16 +70,18 @@ export function useResourceDraftState<T>(
 }
 export function useResourceDraftPending(projectId: string, category: string) {
   const store = useContext(SessionContext);
+  const currentView = useResourceDraftView();
   return useCallback(
-    () => store?.begin(projectId, category) ?? (() => {}),
-    [store, projectId, category]
+    () => currentView() ? store?.begin(projectId, category) ?? (() => {}) : () => {},
+    [store, projectId, category, currentView]
   );
 }
 export function useResourceDraftReset(projectId: string, category: string) {
   const store = useContext(SessionContext);
+  const currentView = useResourceDraftView();
   return useCallback(
-    () => store?.clearCategory(projectId, category),
-    [store, projectId, category]
+    () => { if (currentView()) store?.clearCategory(projectId, category); },
+    [store, projectId, category, currentView]
   );
 }
 export function useResourceDraftSummary(projectId?: string) {
@@ -102,9 +112,11 @@ export function useResourceCreation<
   const session = useContext(SessionContext);
   const [fallback] = useState(() => new ResourceDraftStore());
   const store = session ?? fallback;
+  const [generation] = useState(() => store.generation);
   useSyncExternalStore(store.subscribe, store.snapshot, noSnapshot);
   const mutateAsync = useCallback(
     async (input: TInput) => {
+      if (!store.isCurrentView(generation)) throw new Error("登录状态已变化，请重新打开表单。");
       if (input.projectId !== projectId)
         throw new Error("保存业务已变化，请重新打开表单。");
       const previous = store.creation(projectId, category);
@@ -118,14 +130,14 @@ export function useResourceCreation<
           ...attempt.payload,
           requestKey: attempt.key,
         } as TInput);
-        store.completeCreation(projectId, category, attempt.key);
+        store.completeCreationForView(projectId, category, attempt.key, generation);
         return result;
       } catch (error) {
         store.failCreation(projectId, category, attempt.key, error);
         throw error;
       }
     },
-    [store, projectId, category, mutation.mutateAsync]
+    [store, projectId, category, mutation.mutateAsync, generation]
   );
   return {
     mutateAsync,
@@ -135,8 +147,8 @@ export function useResourceCreation<
     requestKey: store.creation(projectId, category)?.key,
   };
 }
-export function ResourceDraftSession({ children }: { children: ReactNode }) {
-  const [store] = useState(() => new ResourceDraftStore());
+export function ResourceDraftSession({ children, store: supplied }: { children: ReactNode; store?: ResourceDraftStore }) {
+  const [store] = useState(() => supplied ?? new ResourceDraftStore());
   const [leave, setLeave] = useState<{ proceed: () => void } | null>(null);
   const origin = useRef<HTMLElement | null>(null);
   useSyncExternalStore(store.subscribe, store.snapshot, noSnapshot);
@@ -149,9 +161,10 @@ export function ResourceDraftSession({ children }: { children: ReactNode }) {
       }
     };
     const navigate = (event: Event) => {
+      if (event.defaultPrevented) return;
       const { count, pending } = store.stats();
       if (!count && !pending) {
-        store.clear();
+        store.clearAfterNavigation(event);
         return;
       }
       event.preventDefault();

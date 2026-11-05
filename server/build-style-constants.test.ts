@@ -1,5 +1,6 @@
 import { createRequire } from "node:module";
 import { runInNewContext } from "node:vm";
+import { gzipSync } from "node:zlib";
 import { expect, it } from "vitest";
 import { compactStyleConstants } from "../scripts/build-style-constants";
 const require = createRequire(import.meta.url);
@@ -21,6 +22,18 @@ it("跨作用域去重后，样式、事件调用、对象键、业务返回值�
   expect(Buffer.byteLength(result.code)).toBeLessThanOrEqual(
     Buffer.byteLength(code)
   );
+  expect(gzipSync(result.code).length).toBeLessThanOrEqual(gzipSync(code).length);
+});
+
+it("共享常量始终服从调用方提供的 gzip 上限，保留独立对象和闭包事件值", () => {
+  const code = `let calls=[];const a={className:${JSON.stringify(style)},click:()=>calls.push(1)};const b={className:${JSON.stringify(style)},click:()=>calls.push(2)};a.click();b.click();globalThis.output=[a.className,b.className,calls,a===b];`;
+  const ceiling = gzipSync(code).length + 16;
+  const result = compactStyleConstants(code, parseAst, ceiling) ?? { code };
+  const before: any = {}, after: any = {};
+  runInNewContext(code, before);
+  runInNewContext(result.code, after);
+  expect(JSON.stringify(after.output)).toBe(JSON.stringify(before.output));
+  expect(gzipSync(result.code).length).toBeLessThanOrEqual(ceiling);
 });
 it("不改写依赖路径、导入导出、URL、中文及短字符串", () => {
   const code = `import x from './bg-card text-muted-foreground';export {x};const values=['bg-card','bg-card','bg-card','中文 bg-card text-muted-foreground','https://test/bg-card text-muted-foreground'];`;

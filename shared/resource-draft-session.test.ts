@@ -1,6 +1,75 @@
 import { describe, expect, it } from "vitest";
 import { ResourceDraftStore } from "./resource-draft-session";
 
+it("后注册的离开确认取消导航时不丢配置，允许导航后才清理", async () => {
+  const store = new ResourceDraftStore();
+  const event = { defaultPrevented: false };
+  store.set("system", "settings", "entries", {}, { form: "未保存配置" }, false);
+  store.clearAfterNavigation(event);
+  event.defaultPrevented = true;
+  await Promise.resolve();
+  expect(store.read("system", "settings", "entries", {})).toEqual({ form: "未保存配置" });
+  store.clearAfterNavigation({ defaultPrevented: false });
+  await Promise.resolve();
+  expect(store.read("system", "settings", "entries", {})).toEqual({});
+});
+it("导航事件之后认证已失效时，旧导航不能清掉待恢复填写", async () => {
+  const store = new ResourceDraftStore();
+  store.set("p", "context", "name", "", "保留", false);
+  store.clearAfterNavigation({ defaultPrevented: false });
+  store.invalidateViews();
+  await Promise.resolve();
+  expect(store.read("p", "context", "name", "")).toBe("保留");
+});
+
+it("干净表单和页面位置不提示未保存恢复，独立配置修改仍可恢复", () => {
+  const store = new ResourceDraftStore();
+  store.set("p", "workspace", "view", "process", "resources", false);
+  store.set("system", "settings", "entries", {}, { general: { base: { platformName: "Flow" }, form: { platformName: "Flow" } } }, false);
+  expect(store.hasRecoverableEntries()).toBe(false);
+  store.set("system", "settings", "entries", {}, { general: { base: { platformName: "Flow" }, form: { platformName: "新名称" } } }, false);
+  expect(store.hasRecoverableEntries()).toBe(true);
+  expect(store.stats()).toEqual({ count: 0, pending: 0 });
+});
+
+it("会话失效后旧回调不能清理或覆盖恢复填写，普通清理不废弃当前视图", () => {
+  const store = new ResourceDraftStore(), epoch = store.generation;
+  store.set("p", "sources", "name", "", "保留填写");
+  store.invalidateViews();
+  if (store.isCurrentView(epoch)) store.clear();
+  if (store.isCurrentView(epoch)) store.set("p", "sources", "name", "", "迟到修改");
+  expect(store.read("p", "sources", "name", "")).toBe("保留填写");
+  const current = store.generation;
+  store.clear();
+  expect(store.isCurrentView(current)).toBe(true);
+});
+it("失效期间的创建响应只标为待核对，不重发、不调用完成延续，并释放等待锁", async () => {
+  const store = new ResourceDraftStore(), epoch = store.generation;
+  const attempt = store.prepareCreation("p", "workflow-create", { projectId: "p", name: "提交中" });
+  const finish = store.begin("p", "workflow-create");
+  let reply!: () => void, continuation = false;
+  const response = new Promise<void>(resolve => { reply = resolve; }).then(() => {
+    store.completeCreationForView("p", "workflow-create", attempt.key, epoch);
+    continuation = true;
+  }).finally(finish);
+  store.invalidateViews();
+  reply();
+  await expect(response).rejects.toThrow("登录状态已变化");
+  expect(continuation).toBe(false);
+  expect(store.stats()).toEqual({ count: 1, pending: 0 });
+  const retry = store.prepareCreation("p", "workflow-create", attempt.payload);
+  expect(retry.key).toBe(attempt.key);
+  expect(retry.uncertain).toBe(true);
+  store.completeCreationForView("p", "workflow-create", retry.key, store.generation);
+  expect(store.stats()).toEqual({ count: 0, pending: 0 });
+});
+it("重新认证保留组织普通字段但清空初始密码", () => {
+  const store = new ResourceDraftStore();
+  store.set("organization", "organization-configuration", "user", { fields: { password: "" } }, { fields: { name: "待创建", password: "synthetic-password" } });
+  store.invalidateViews();
+  expect(store.read("organization", "organization-configuration", "user", null)).toEqual({ fields: { name: "待创建", password: "" } });
+});
+
 describe("资源填写会话", () => {
   it("默认读取不登记草稿，页面位置和弹窗不算未保存业务数据", () => {
     const store = new ResourceDraftStore();

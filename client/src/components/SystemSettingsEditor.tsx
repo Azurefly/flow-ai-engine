@@ -1,4 +1,5 @@
 import ModelServiceFields from "./ModelServiceFields";
+import { useResourceDraftState, useResourceDraftView } from "./ResourceDraftSession";
 import { useLayoutEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import {
@@ -57,9 +58,10 @@ export default function SystemSettingsEditor({
     refetchOnWindowFocus: false,
   });
   const mutation = trpc.config.updateSetting.useMutation({ retry: false });
-  const [entries, setEntries] = useState<
+  const currentView = useResourceDraftView();
+  const [entries, setEntries] = useResourceDraftState<
     Partial<Record<SettingsKey, SettingsDraft>>
-  >({});
+  >("system", "settings", "entries", {}, false);
   const [llmKey, setLlmKey] = useState({ value: "", clear: false });
   const keyChanged = Boolean(llmKey.value || llmKey.clear);
   const resetKey = () => setLlmKey({ value: "", clear: false });
@@ -129,6 +131,7 @@ export default function SystemSettingsEditor({
   function restoreFormFocus(key: SettingsKey | null) {
     if (!key) return;
     requestAnimationFrame(() => {
+      if (!currentView()) return;
       if (document.activeElement === document.body)
         document
           .querySelector<HTMLElement>(
@@ -201,18 +204,20 @@ export default function SystemSettingsEditor({
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   async function refreshSaved(key: SettingsKey) {
+    if (!currentView()) return;
     await Promise.all([
       utils.config.settings.fetch(undefined, { staleTime: 0 }),
       utils.config.publicGeneral.invalidate(),
       utils.config.modelService.invalidate(),
       utils.workflow.runtimeModels.invalidate(),
     ]);
+    if (!currentView()) return;
     setCommitted(null);
     setError(null);
     toast.success(`${SETTINGS_LABELS[key]}已保存。`);
   }
   async function save() {
-    if (working.current) return;
+    if (!currentView() || working.current) return;
     const key = committed ?? activeKey;
     if (!key || (!committed && !canSave)) return;
     const current = draftFor(key);
@@ -228,6 +233,7 @@ export default function SystemSettingsEditor({
         const result = key === "llm" && keyChanged
           ? await utils.client.config.updateSetting.mutate({ ...payload, llmCredential: llmKey.clear ? { action: "clear" } : { action: "replace", apiKey: llmKey.value } })
           : await mutation.mutateAsync(payload);
+        if (!currentView()) return;
         if (key === "llm") resetKey();
         acknowledged = true;
         setEntries(values => ({
@@ -238,6 +244,7 @@ export default function SystemSettingsEditor({
       }
       await refreshSaved(key);
     } catch (failure) {
+      if (!currentView()) return;
       if (acknowledged)
         setError({
           key,
@@ -258,18 +265,18 @@ export default function SystemSettingsEditor({
       }
     } finally {
       working.current = false;
-      setBusyKey(null);
-      restoreFormFocus(key);
+      if (currentView()) { setBusyKey(null); restoreFormFocus(key); }
     }
   }
   async function reload(key: SettingsKey) {
-    if (working.current) return;
+    if (!currentView() || working.current) return;
     working.current = true;
     setBusyKey(key);
     try {
       const latest = await utils.config.settings.fetch(undefined, {
         staleTime: 0,
       });
+      if (!currentView()) return;
       if (!latest[key] || !latest.configTokens[key])
         throw new Error("配置读取不完整，当前填写已保留。");
       setEntries(current => ({
@@ -280,6 +287,7 @@ export default function SystemSettingsEditor({
       setConflicts(current => ({ ...current, [key]: false }));
       setError(null);
     } catch (failure) {
+      if (!currentView()) return;
       setError({
         key,
         message:
@@ -289,8 +297,7 @@ export default function SystemSettingsEditor({
       });
     } finally {
       working.current = false;
-      setBusyKey(null);
-      restoreFormFocus(key);
+      if (currentView()) { setBusyKey(null); restoreFormFocus(key); }
     }
   }
   const visibleBar = changes.length > 0 || busy || committed;

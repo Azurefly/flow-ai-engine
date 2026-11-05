@@ -2792,7 +2792,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).not.toContain("JSON.parse(resultText)");
     expect(homeSource).not.toContain("运行输入必须是合法 JSON 对象");
     expect(homeSource).not.toContain("JSON.parse(runInput)");
-    expect(homeSource).toContain("useState<Record<string, unknown>>");
+    expect(homeSource).toContain('useSessionDraftField<Record<string, unknown>>(draftLease, workingEditor, "runInput")');
     expect(homeSource).not.toContain('prompt: "请总结输入内容"');
     expect(source("../client/src/components/WorkflowTestRunModal.tsx")).toContain("onChangeRunInput(parsed.input)");
     expect(processWorkbenchSource).toContain(
@@ -3924,9 +3924,10 @@ it("编译诊断支持定位连线并跳过无位置问题", () => {
   );
 });
 it("账号缓存隔离完成后才渲染工作台并重置页面选择", () => {
-  expect(homeSource).toContain("useAccountQueryIsolation(me.data?.id ?? null)");
+  expect(homeSource).toContain("useAccountQueryIsolation(verifiedUserId)");
+  expect(homeSource).toContain("const verifiedUserId = me.isError ? null : me.data?.id ?? null");
   expect(homeSource).toContain("me.isLoading || !accountQueriesReady");
-  expect(homeSource).toContain("key={me.data.id}");
+  expect(homeSource).toContain("key={draftLease!.generation}");
 });
 it("侧栏流程按服务端十条分页搜索，独立于编辑器路由恢复", () => {
   expect(homeSource).toContain("trpc.workflow.page.useQuery");

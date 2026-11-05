@@ -34,7 +34,8 @@ it("取消发布仅衔接基准，不替换本地画布；卸载后的回执不�
   expect(callback).toContain("!consoleAlive.current");
   expect(callback).not.toContain("setDraftDefinition");
   expect(callback).not.toContain("setDraftName");
-  expect(home).toContain("consoleAlive.current = false");
+  expect(home).toContain("consoleMounted.current = false");
+  expect(home).toContain("consoleMounted.current && draftLease.isCurrent(workingEditor.epoch)");
 });
 it("结果不明时读取实际状态进行核对，核对中锁定关闭与重复请求", () => {
   const checking = home.slice(

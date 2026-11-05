@@ -1,11 +1,12 @@
 import { gzipSync } from "node:zlib";
 
-/** Hoist immutable repeated strings only when both raw and gzip output improve.
+/** Hoist immutable repeated strings within a verified gzip ceiling.
  * Calls, identifiers, property keys, directives and dependency references stay intact.
  */
 export function compactStyleConstants(
   code: string,
-  parse: (code: string) => any
+  parse: (code: string) => any,
+  gzipLimit = gzipSync(code).length
 ) {
   const names = new Set<string>();
   const literals = new Map<string, { start: number; end: number }[]>();
@@ -62,8 +63,7 @@ export function compactStyleConstants(
     );
   }
   let index = 0,
-    best = code,
-    gzipBytes = gzipSync(code).length;
+    best = code;
   const candidates = Array.from(literals.entries())
     .filter(([, positions]) => positions.length >= 2)
     .sort(
@@ -93,12 +93,11 @@ export function compactStyleConstants(
     const output = render(nextEdits, nextDeclarations);
     if (Buffer.byteLength(output) >= Buffer.byteLength(best)) continue;
     const size = gzipSync(output).length;
-    if (size > gzipBytes) continue;
+    if (size > gzipLimit) continue;
     names.add(name);
     edits.push(...nextEdits.slice(edits.length));
     declarations.push(nextDeclarations[nextDeclarations.length - 1]);
     best = output;
-    gzipBytes = size;
   }
   return declarations.length ? { code: best, map: null } : null;
 }

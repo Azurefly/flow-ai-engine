@@ -23,6 +23,29 @@ type DraftEntry = {
 
 /** One authenticated console owns this store; no browser storage or server data. */
 export class ResourceDraftStore {
+  private viewGeneration = 0;
+  get generation() { return this.viewGeneration; }
+  invalidateViews() {
+    this.viewGeneration++;
+    // Re-authentication restores ordinary fields, never an account password.
+    for (const entry of Array.from(this.entries.values())) {
+      if (entry.category !== "organization-configuration") continue;
+      const value = entry.value as { fields?: Record<string, unknown> } | null;
+      if (value?.fields && "password" in value.fields)
+        entry.value = { ...value, fields: { ...value.fields, password: "" } };
+    }
+  }
+  isCurrentView(generation: number) { return this.viewGeneration === generation; }
+  clearAfterNavigation(event: { defaultPrevented: boolean }) {
+    const generation = this.viewGeneration;
+    // Later listeners may cancel the same event (for example, settings drafts).
+    queueMicrotask(() => { if (!event.defaultPrevented && this.isCurrentView(generation)) this.clear(); });
+  }
+  hasRecoverableEntries() {
+    const { count, pending } = this.stats();
+    return Boolean(count || pending || Array.from(this.entries.values()).some(entry =>
+      entry.category === "settings" && Object.values(entry.value as Record<string, { base: unknown; form: unknown }>).some(draft => JSON.stringify(draft.base) !== JSON.stringify(draft.form))));
+  }
   private entries = new Map<string, DraftEntry>();
   private creations = new Map<string, CreationAttempt>();
   private pending = new Map<string, { projectId: string; count: number }>();
@@ -190,6 +213,14 @@ export class ResourceDraftStore {
     if (this.creation(projectId, category)?.key !== key) return;
     this.creations.delete(this.slot(projectId, category, "creation"));
     this.emit();
+  }
+  completeCreationForView(projectId: string, category: string, key: string, generation: number) {
+    if (!this.isCurrentView(generation)) {
+      const error = new Error("登录状态已变化，请重新登录后核对上次保存结果。");
+      this.failCreation(projectId, category, key, error);
+      throw error;
+    }
+    this.completeCreation(projectId, category, key);
   }
   failCreation(
     projectId: string,
