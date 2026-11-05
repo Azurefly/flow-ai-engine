@@ -621,15 +621,18 @@ export default function OrganizationMutationDialog({
   // UX：仅用当前账号的有效归属推导提交影响，不改变主部门默认值或写入参数。
   const primaryPreview =
     target.kind === "member" &&
+    (editingMember || !currentMember) &&
+    !unitChanged &&
+    !inactive &&
     member.isSuccess &&
     !member.isError &&
     !member.isFetching &&
     !memberChanged &&
     Number(member.data.user?.id) === memberId &&
-    target.unit
+    current
       ? organizationPrimaryPreview(
           member.data.memberships,
-          { id: target.unit.id, name: target.unit.name, code: target.unit.code },
+          current,
           checked("isPrimary")
         )
       : null;
