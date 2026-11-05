@@ -60,6 +60,9 @@ export default function SystemSettingsEditor({
   const [entries, setEntries] = useState<
     Partial<Record<SettingsKey, SettingsDraft>>
   >({});
+  const [llmKey, setLlmKey] = useState({ value: "", clear: false });
+  const keyChanged = Boolean(llmKey.value || llmKey.clear);
+  const resetKey = () => setLlmKey({ value: "", clear: false });
   const [busyKey, setBusyKey] = useState<SettingsKey | null>(null);
   const [committed, setCommitted] = useState<SettingsKey | null>(null);
   const [error, setError] = useState<{
@@ -78,17 +81,18 @@ export default function SystemSettingsEditor({
     const existing = entries[key];
     const value = settings.data?.[key];
     const token = settings.data?.configTokens?.[key];
-    if (existing && (settingsDraftDiff(existing).length || busy || committed))
+    if (existing && (settingsDraftDiff(existing).length || (key === "llm" && keyChanged) || busy || committed))
       return existing;
     return value && token ? createSettingsDraft(key, value, token) : existing;
   }
   const dirtyKeys = keys.filter(key => {
     const entry = draftFor(key);
-    return entry && settingsDraftDiff(entry).length;
+    return entry && (settingsDraftDiff(entry).length || (key === "llm" && keyChanged));
   });
-  const changes = dirtyKeys.flatMap(key =>
+  const changes: Array<{ key: SettingsKey; field: string; label: string; before: string | boolean; after: string | boolean }> = dirtyKeys.flatMap(key =>
     settingsDraftDiff(draftFor(key)!).map(change => ({ ...change, key }))
   );
+  if (keyChanged) changes.push({ key: "llm", field: "apiKey", label: "API Key（不导出明文）", before: "不显示", after: llmKey.clear ? "清除已保存 Key" : "更新 Key" });
   const draft = activeKey ? draftFor(activeKey) : undefined;
   const currentToken = activeKey
     ? settings.data?.configTokens?.[activeKey]
@@ -101,7 +105,7 @@ export default function SystemSettingsEditor({
           draft.token !== currentToken &&
           settingsDraftDiff(draft).length))
   );
-  const changed = Boolean(draft && settingsDraftDiff(draft).length);
+  const changed = Boolean(draft && (settingsDraftDiff(draft).length || (activeKey === "llm" && keyChanged)));
   const canSave = Boolean(
     activeKey &&
       changed &&
@@ -219,11 +223,12 @@ export default function SystemSettingsEditor({
     setError(null);
     try {
       if (!acknowledged) {
-        const result = await mutation.mutateAsync({
-          key,
-          value: settingsDraftPayload(current),
-          expectedConfigToken: current.token,
-        });
+        const payload = { key, value: settingsDraftPayload(current), expectedConfigToken: current.token };
+        // Keep transient Key text out of the React Query mutation cache.
+        const result = key === "llm" && keyChanged
+          ? await utils.client.config.updateSetting.mutate({ ...payload, llmCredential: llmKey.clear ? { action: "clear" } : { action: "replace", apiKey: llmKey.value } })
+          : await mutation.mutateAsync(payload);
+        if (key === "llm") resetKey();
         acknowledged = true;
         setEntries(values => ({
           ...values,
@@ -271,6 +276,7 @@ export default function SystemSettingsEditor({
         ...current,
         [key]: createSettingsDraft(key, latest[key], latest.configTokens[key]),
       }));
+      if (key === "llm") resetKey();
       setConflicts(current => ({ ...current, [key]: false }));
       setError(null);
     } catch (failure) {
@@ -427,7 +433,7 @@ export default function SystemSettingsEditor({
                     </div>
                   </div>
                 ) : activeKey === "llm" ? (
-                  <ModelServiceFields form={draft.form} onChange={edit} token={draft.token} blocked={changed || conflict || busy || Boolean(committed) || !settings.isSuccess || settings.isFetching} />
+                  <ModelServiceFields form={draft.form} onChange={edit} credential={llmKey} onCredentialChange={(value, clear = false) => { if (!working.current && !committed) { setLlmKey({ value, clear }); edit(value ? { credentialRef: "" } : {}); } }} token={draft.token} blocked={changed || conflict || busy || Boolean(committed) || !settings.isSuccess || settings.isFetching} />
                 ) : (
                   <div className="grid gap-5 md:grid-cols-2">
                     <div className="space-y-3 rounded-xl bg-muted/60 p-4">
@@ -658,6 +664,7 @@ export default function SystemSettingsEditor({
                       return next;
                     });
                   else setEntries({});
+                  resetKey();
                   setConflicts({});
                   if (!committed) setError(null);
                   action?.proceed?.();

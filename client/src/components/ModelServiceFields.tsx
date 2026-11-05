@@ -9,11 +9,15 @@ export default function ModelServiceFields({
   onChange,
   token,
   blocked,
+  credential,
+  onCredentialChange,
 }: {
   form: SettingsForm;
   onChange: (patch: Partial<SettingsForm>) => void;
   token: string;
   blocked: boolean;
+  credential: { value: string; clear: boolean };
+  onCredentialChange: (value: string, clear?: boolean) => void;
 }) {
   const status = trpc.config.modelService.useQuery(undefined, { retry: false });
   const check = trpc.config.checkModelService.useMutation({
@@ -35,12 +39,6 @@ export default function ModelServiceFields({
               2048,
             ],
             ["defaultModel", "默认模型 ID", "", 200],
-            [
-              "credentialRef",
-              "服务器凭据引用",
-              "env:FLOW_SECRET_GEMINI_API_KEY",
-              144,
-            ],
           ] as const
         ).map(([field, label, placeholder, maxLength]) => (
           <label
@@ -60,8 +58,53 @@ export default function ModelServiceFields({
           </label>
         ))}
       </div>
+      <label className="grid gap-2 text-sm font-medium">
+        API Key
+        <Input
+          className="h-11"
+          type="password"
+          autoComplete="off"
+          spellCheck={false}
+          maxLength={8192}
+          value={credential.value}
+          placeholder={
+            status.data?.hasStoredKey
+              ? "已配置；留空保留，填写新 Key 更新"
+              : "填写大模型调用 Key"
+          }
+          onChange={event => onCredentialChange(event.target.value)}
+        />
+      </label>
+      {status.data?.hasStoredKey && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={credential.clear}
+            onChange={event => onCredentialChange("", event.target.checked)}
+          />
+          清除网页保存的 Key
+        </label>
+      )}
+      <p className="text-sm text-muted-foreground">
+        Key 加密保存，不回显、不导出；更新 Key 将清空高级引用。
+        {location.protocol === "http:" &&
+          "当前为 HTTP，真实 Key 应通过可信网络或 HTTPS 配置。"}
+      </p>
+      <details className="text-sm">
+        <summary>高级配置：服务器凭据引用</summary>
+        <label className="grid gap-2">
+          服务器凭据引用
+          <Input
+            disabled={Boolean(credential.value)}
+            maxLength={144}
+            value={form.credentialRef}
+            placeholder="env:FLOW_SECRET_GEMINI_API_KEY"
+            onChange={event => onChange({ credentialRef: event.target.value })}
+          />
+        </label>
+      </details>
       <p className="text-sm leading-6 text-muted-foreground">
-        填写 API 前缀；凭据填写服务器引用，勿填 Key。留空沿用服务器配置，节点模型优先。
+        Key 留空保留；地址留空沿用服务器。节点模型优先。
       </p>
       <div className="min-w-0 space-y-3 rounded-xl border border-border bg-muted/40 p-4 text-sm leading-6 [overflow-wrap:anywhere]">
         <h2 className="aiflow-type-section-title font-semibold">连接检查</h2>
@@ -69,14 +112,8 @@ export default function ModelServiceFields({
           {status.data?.message ||
             (status.isError ? "状态读取失败，请重试。" : "读取中…")}
         </p>
-        {status.data && (
-          <p>
-            生效地址：{status.data.baseUrl}
-          </p>
-        )}
-        <p className="text-muted-foreground">
-          测试固定问候，可能产生费用。
-        </p>
+        {status.data && <p>生效地址：{status.data.baseUrl}</p>}
+        <p className="text-muted-foreground">测试固定问候，可能产生费用。</p>
         <div className="flex flex-wrap gap-3">
           {(
             [

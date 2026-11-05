@@ -1,7 +1,8 @@
+import { encryptLlmApiKey, type LlmCredentialChange } from "./llm-secret-storage";
 import { taskSummarySelect } from "./task-list-projection";
 import { eligibleDirectoryPage } from "./eligible-directory-page";
 import { TRPCError } from "@trpc/server";
-import { DEFAULT_SYSTEM_SETTINGS as defaultSettings, assertSystemSettingConfigToken, mergeSystemSettingValue, readSystemSettingValue, systemSettingConfigToken } from "./system-setting-config";
+import { DEFAULT_SYSTEM_SETTINGS as defaultSettings, assertSystemSettingConfigToken, mergeSystemSettingValue, publicSystemSettingValue, readSystemSettingValue, systemSettingConfigToken } from "./system-setting-config";
 import {
   businessStateLabelSql,
   businessStateJoinSql,
@@ -1783,7 +1784,7 @@ export async function getP1SystemSettings(options?: { connection?: mysql.PoolCon
     settings[row.key] = parseJson(row.valueJson);
   });
   const values = settings as typeof defaultSettings;
-  return { ...values, configTokens: {
+  return { ...values, llm: publicSystemSettingValue("llm", values.llm) as typeof defaultSettings.llm, configTokens: {
     llm: systemSettingConfigToken("llm", values.llm),
     general: systemSettingConfigToken("general", values.general),
     approval: systemSettingConfigToken("approval", values.approval),
@@ -1809,8 +1810,10 @@ export async function updateP1SystemSetting(
   user: User,
   key: "general" | "approval" | "llm",
   value: JsonRecord,
-  expectedConfigToken?: string
+  expectedConfigToken?: string,
+  llmCredential?: LlmCredentialChange
 ) {
+  if (llmCredential && key !== "llm") throw new TRPCError({ code: "BAD_REQUEST", message: "仅模型服务可更新 API Key。" });
   if (!expectedConfigToken) assertSystemSettingConfigToken(key, expectedConfigToken, null);
   for (let attempt = 0; attempt < 3; attempt++) {
     const connection = await db().getConnection();
@@ -1823,14 +1826,18 @@ export async function updateP1SystemSetting(
       const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT valueJson FROM system_setting WHERE `key`=? FOR UPDATE", [key]);
       const existing = readSystemSettingValue(key, parseJson(rows[0]?.valueJson));
       assertSystemSettingConfigToken(key, expectedConfigToken, existing);
-      const merged = mergeSystemSettingValue(key, existing, value);
+      const merged: Record<string, unknown> = mergeSystemSettingValue(key, existing, value);
+      if (llmCredential?.action === "replace") {
+        merged.encryptedApiKey = encryptLlmApiKey(llmCredential.apiKey);
+        merged.credentialRef = "";
+      } else if (llmCredential?.action === "clear") delete merged.encryptedApiKey;
       const configToken = systemSettingConfigToken(key, merged);
       if (configToken !== expectedConfigToken) {
         await connection.query("INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId),updatedAt=NOW()", [key, JSON.stringify(merged), user.id]);
-        await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "system_setting", resourceId: key, details: { operation: "setting_updated" } }, connection);
+        await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "system_setting", resourceId: key, details: { operation: "setting_updated", ...(llmCredential ? { credentialAction: llmCredential.action } : {}) } }, connection);
       }
       await connection.commit();
-      return { value: merged, configToken };
+      return { value: publicSystemSettingValue(key, merged), configToken };
     } catch (error) {
       await connection.rollback();
       const failure = error as { errno?: number; code?: string };

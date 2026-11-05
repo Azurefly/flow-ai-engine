@@ -38,9 +38,18 @@ else
   sudo -n install -d -o root -g 1000 -m 0750 -- "$SECRET_DIR"
 fi
 
+# Private AES key is created once, outside database backups and source releases.
+# Exclusive creation never overwrites an existing key (which would make stored API keys unreadable).
+LLM_MASTER_KEY="$SECRET_DIR/.llm-master-key"
+if ! sudo -n test -e "$LLM_MASTER_KEY"; then
+  sudo -n dd if=/dev/urandom of="$LLM_MASTER_KEY" bs=32 count=1 conv=excl status=none
+fi
+sudo -n test -f "$LLM_MASTER_KEY" && sudo -n test ! -L "$LLM_MASTER_KEY" || die "LLM encryption key must be a regular file"
+[[ "$(sudo -n stat -c %s -- "$LLM_MASTER_KEY")" == 32 ]] || die "LLM encryption key must contain exactly 32 bytes"
+
 while IFS= read -r -d '' secret_path; do
   secret_name="${secret_path##*/}"
-  [[ "$secret_name" =~ ^FLOW_SECRET_[A-Z0-9_]{2,128}$ ]] || die "Runtime secret filenames must match FLOW_SECRET_*"
+  [[ "$secret_name" == ".llm-master-key" || "$secret_name" =~ ^FLOW_SECRET_[A-Z0-9_]{2,128}$ ]] || die "Runtime secret filenames must match FLOW_SECRET_*"
   sudo -n test -f "$secret_path" || die "Runtime secrets must be regular files"
   sudo -n test ! -L "$secret_path" || die "Runtime secret files must not be symlinks"
   sudo -n chown root:1000 -- "$secret_path"

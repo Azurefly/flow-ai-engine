@@ -237,6 +237,7 @@ export default defineConfig(({ command }) => {
               )
             )
               return "canvas-runtime";
+            if (id.replace(/\\/g, "/").includes("/node_modules/")) return "workspace-runtime";
             if (
               /\/components\/(CustomRoleDialog|SystemRoleAssignmentDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
                 id.replace(/\\/g, "/")

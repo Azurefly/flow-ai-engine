@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ query: vi.fn(), secret: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  query: vi.fn(),
+  secret: vi.fn(),
+  decrypt: vi.fn(),
+}));
 vi.mock("./db", () => ({ getSharedPool: () => ({ query: mocks.query }) }));
+vi.mock("./llm-secret-storage", () => ({
+  decryptLlmApiKey: mocks.decrypt,
+  llmEncryptionReady: () => true,
+}));
 vi.mock("./external-secret", () => ({ resolveExternalSecret: mocks.secret }));
 vi.mock("./_core/env", () => ({
   ENV: { llmApiUrl: "https://legacy.test", llmApiKey: "env-key" },
@@ -39,6 +47,7 @@ beforeEach(() => {
     .mockReset()
     .mockResolvedValue([[{ valueJson: JSON.stringify(settings) }]]);
   mocks.secret.mockReset().mockReturnValue("private-key");
+  mocks.decrypt.mockReset().mockReturnValue("stored-key");
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -79,10 +88,18 @@ it("拒绝把 Key 保存进配置，凭据引用和模型 ID 必须合法", () =
   ).toEqual(settings);
 });
 it("中文地址规范化后可再次读取；编码后超限时拒绝保存", () => {
-  const value = normalizeLlmSettings({ ...settings, baseUrl: "https://relay.test/模型接口" });
+  const value = normalizeLlmSettings({
+    ...settings,
+    baseUrl: "https://relay.test/模型接口",
+  });
   expect(value.baseUrl).toContain("%");
   expect(normalizeLlmSettings(value)).toEqual(value);
-  expect(() => normalizeLlmSettings({ ...settings, baseUrl: "https://relay.test/" + "汉".repeat(300) })).toThrow("编码后最多");
+  expect(() =>
+    normalizeLlmSettings({
+      ...settings,
+      baseUrl: "https://relay.test/" + "汉".repeat(300),
+    })
+  ).toThrow("编码后最多");
 });
 it("模型草稿独立记录差异，提交和导出中仅有引用", () => {
   const draft = createSettingsDraft("llm", {}, "token");
@@ -205,17 +222,48 @@ it("模型目录与实际回复分别报告，测试只发送固定提示", asyn
 
 it("调用及目录超时覆盖响应正文读取，收到响应头后仍可中止", async () => {
   vi.useFakeTimers();
-  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => ({
-    ok: true,
-    json: () => new Promise((_resolve, reject) => {
-      init?.signal?.addEventListener("abort", () => reject(new Error("body aborted")), { once: true });
-    }),
-  }) as Response);
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (_url, init) =>
+      ({
+        ok: true,
+        json: () =>
+          new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener(
+              "abort",
+              () => reject(new Error("body aborted")),
+              { once: true }
+            );
+          }),
+      }) as Response
+  );
   const connection = await resolveLlmConnection();
-  const chat = expect(invokeLLM({ messages: [], timeoutMs: 1000 }, connection)).rejects.toThrow("body aborted");
+  const chat = expect(
+    invokeLLM({ messages: [], timeoutMs: 1000 }, connection)
+  ).rejects.toThrow("body aborted");
   await vi.advanceTimersByTimeAsync(1000);
   await chat;
-  const catalog = expect(listLLMModels(connection)).rejects.toThrow("body aborted");
+  const catalog = expect(listLLMModels(connection)).rejects.toThrow(
+    "body aborted"
+  );
   await vi.advanceTimersByTimeAsync(15_000);
   await catalog;
+});
+
+it("网页密钥仅在服务端解密，公开状态与目录快照不暴露加密内容", async () => {
+  const stored = {
+    ...settings,
+    credentialRef: "",
+    encryptedApiKey: { version: 1, ciphertext: "private-envelope" },
+  };
+  mocks.query.mockResolvedValue([[{ valueJson: stored }]]);
+  const config = await getLlmConfiguration();
+  expect(config.connection.apiKey).toBe("stored-key");
+  expect(config.status.hasStoredKey).toBe(true);
+  expect(JSON.stringify(config.status)).not.toContain("private-envelope");
+  expect(JSON.stringify(config.status)).not.toContain("stored-key");
+  expect(config.configToken).toBe(systemSettingConfigToken("llm", stored));
+  mocks.decrypt.mockImplementation(() => {
+    throw new Error("无法解密");
+  });
+  await expect(resolveLlmConnection()).rejects.toThrow("无法解密");
 });

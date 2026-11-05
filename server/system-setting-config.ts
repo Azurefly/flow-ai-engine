@@ -41,6 +41,11 @@ export function readSystemSettingValue(
       : {}),
   };
 }
+/** Never return the encrypted envelope (or future private fields) to any browser. */
+export function publicSystemSettingValue(key: SystemSettingKey, value: unknown) {
+  const current = readSystemSettingValue(key, value);
+  return key === "llm" ? Object.fromEntries(Object.keys(EMPTY_LLM_SETTINGS).map(field => [field, current[field]])) : current;
+}
 export function systemSettingConfigToken(
   key: SystemSettingKey,
   value: unknown
@@ -100,5 +105,7 @@ export function mergeSystemSettingValue(
     )
       throw new Error("审核人模式无效。");
   }
-  return key === "llm" ? normalizeLlmSettings(value) : value;
+  if (key !== "llm") return value;
+  const normalized = normalizeLlmSettings({ ...publicSystemSettingValue(key, existing), ...patch });
+  return { ...normalized, ...(value.encryptedApiKey ? { encryptedApiKey: value.encryptedApiKey } : {}) };
 }

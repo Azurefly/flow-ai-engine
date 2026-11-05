@@ -1,5 +1,7 @@
-/** Share repeated immutable class strings across modules after minification.
- * Application calls, object keys and dependency paths remain unchanged.
+import { gzipSync } from "node:zlib";
+
+/** Hoist immutable repeated strings only when both raw and gzip output improve.
+ * Calls, identifiers, property keys, directives and dependency references stay intact.
  */
 export function compactStyleConstants(
   code: string,
@@ -13,13 +15,15 @@ export function compactStyleConstants(
     if (
       node.type === "Literal" &&
       typeof node.value === "string" &&
-      node.value.length > 20 &&
-      /^[\x20-\x7e]+$/.test(node.value) &&
-      /\s/.test(node.value) &&
-      /(?:text-|bg-|border-|rounded-|items-|px-|py-)/.test(node.value) &&
-      /^[a-zA-Z0-9_\s:[\]#./%()!>=+,-]+$/.test(node.value) &&
+      node.value.length > 12 &&
+      node.value.length < 8192 &&
+      !/^(?:https?:|file:|assets\/|\.\.?\/)/.test(node.value) &&
+      !/\.(?:js|mjs|cjs|css|wasm)(?:\?|$)/.test(node.value) &&
+      !node.value.includes("__VITE_") &&
       !(parent?.key === node && !parent.computed) &&
       ![
+        "ImportSpecifier",
+        "ExportSpecifier",
         "ImportDeclaration",
         "ImportExpression",
         "ExportNamedDeclaration",
@@ -38,11 +42,36 @@ export function compactStyleConstants(
   }
   const ast = parse(code);
   walk(ast);
-  const edits: { start: number; end: number; text: string }[] = [];
-  const declarations: string[] = [];
-  let index = 0;
-  for (const [value, positions] of Array.from(literals.entries())) {
-    if (positions.length < 3) continue;
+
+  let prologueEnd = 0;
+  for (const statement of ast.body) {
+    if (!statement.directive) break;
+    prologueEnd = statement.end;
+  }
+  type Edit = { start: number; end: number; text: string };
+  const edits: Edit[] = [],
+    declarations: string[] = [];
+  function render(nextEdits: Edit[], nextDeclarations: string[]) {
+    let output = code;
+    for (const edit of [...nextEdits].sort((a, b) => b.start - a.start))
+      output = output.slice(0, edit.start) + edit.text + output.slice(edit.end);
+    return (
+      output.slice(0, prologueEnd) +
+      `;const ${nextDeclarations.join(",")};\n` +
+      output.slice(prologueEnd)
+    );
+  }
+  let index = 0,
+    best = code,
+    gzipBytes = gzipSync(code).length;
+  const candidates = Array.from(literals.entries())
+    .filter(([, positions]) => positions.length >= 2)
+    .sort(
+      (a, b) =>
+        (b[1].length - 1) * Buffer.byteLength(b[0]) -
+        (a[1].length - 1) * Buffer.byteLength(a[0])
+    );
+  for (const [value, positions] of candidates) {
     let name: string;
     do {
       name = `$C${(index++).toString(36)}`;
@@ -56,23 +85,20 @@ export function compactStyleConstants(
       name.length + literal.length + 8
     )
       continue;
+    const nextEdits = [
+      ...edits,
+      ...positions.map(pos => ({ ...pos, text: name })),
+    ];
+    const nextDeclarations = [...declarations, `${name}=${literal}`];
+    const output = render(nextEdits, nextDeclarations);
+    if (Buffer.byteLength(output) >= Buffer.byteLength(best)) continue;
+    const size = gzipSync(output).length;
+    if (size > gzipBytes) continue;
     names.add(name);
-    declarations.push(`${name}=${literal}`);
-    edits.push(...positions.map(pos => ({ ...pos, text: name })));
+    edits.push(...nextEdits.slice(edits.length));
+    declarations.push(nextDeclarations[nextDeclarations.length - 1]);
+    best = output;
+    gzipBytes = size;
   }
-  if (!declarations.length) return null;
-  for (const edit of edits.sort((a, b) => b.start - a.start))
-    code = code.slice(0, edit.start) + edit.text + code.slice(edit.end);
-  let prologueEnd = 0;
-  for (const statement of ast.body) {
-    if (!statement.directive) break;
-    prologueEnd = statement.end;
-  }
-  return {
-    code:
-      code.slice(0, prologueEnd) +
-      `;const ${declarations.join(",")};\n` +
-      code.slice(prologueEnd),
-    map: null,
-  };
+  return declarations.length ? { code: best, map: null } : null;
 }

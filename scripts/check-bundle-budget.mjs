@@ -46,9 +46,11 @@ const maxChunkBytes = 450 * 1024;
 // Explicit dataflow conversion preview stays lazy: measured 1551.63 / 471.99 KiB.
 // Keep bounded total headroom; individual chunks and the HTML shell retain their limits.
 // Source capability hints and disabled resource choices: 1555.44 / 473.43 KiB.
-const maxTotalBytes = 1_557 * 1024;
+// Explicit API Key management adds password entry, retained drafts and secure update/clear UX.
+// Measured with shared-library/constant compaction: <1561 KiB raw / <477 KiB gzip.
+const maxTotalBytes = 1_561 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 475 * 1024;
+const maxTotalGzipBytes = 477 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

@@ -8,7 +8,9 @@ const mocks = vi.hoisted(() => ({
   rollback: vi.fn(),
   release: vi.fn(),
   getConnection: vi.fn(),
+  encrypt: vi.fn(),
 }));
+vi.mock("./llm-secret-storage", () => ({ encryptLlmApiKey: mocks.encrypt }));
 vi.mock("./db", () => ({
   getSharedPool: () => ({
     query: mocks.poolQuery,
@@ -45,6 +47,12 @@ beforeEach(() => {
   deadlocks = 0;
   otherFailure = false;
   mocks.getConnection.mockResolvedValue(connection);
+  mocks.encrypt.mockReturnValue({
+    version: 1,
+    iv: "random-iv",
+    tag: "auth-tag",
+    ciphertext: "encrypted-key",
+  });
   mocks.query.mockImplementation(async (sql: string) => {
     if (otherFailure)
       throw Object.assign(new Error("lock timeout"), { errno: 1205 });
@@ -223,4 +231,119 @@ it("读取设置同时返回独立快照，不把快照混入配置值", async (
     token("approval", settings.approval)
   );
   expect(settings.general).not.toHaveProperty("configToken");
+});
+
+it("模型 Key 与配置/审计原子提交，返回值及审计不含明文和密文", async () => {
+  const result = await updateP1SystemSetting(
+    actor,
+    "llm",
+    {
+      baseUrl: "https://relay.test/v1",
+      defaultModel: "model",
+      credentialRef: "",
+    },
+    systemSettingConfigToken("llm", null),
+    { action: "replace", apiKey: "synthetic-secret" }
+  );
+  const insert = mocks.query.mock.calls.find(call =>
+    call[0].startsWith("INSERT INTO system_setting")
+  );
+  expect(insert?.[1][1]).toContain("encrypted-key");
+  expect(insert?.[1][1]).not.toContain("synthetic-secret");
+  expect(JSON.stringify(result)).not.toContain("encrypted-key");
+  expect(JSON.stringify(result)).not.toContain("synthetic-secret");
+  expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain(
+    "synthetic-secret"
+  );
+  expect(mocks.commit).toHaveBeenCalledOnce();
+});
+it("普通配置保存保留已加密 Key；清除 Key 后不再存储密文", async () => {
+  current = {
+    ...DEFAULT_SYSTEM_SETTINGS.llm,
+    encryptedApiKey: { version: 1, ciphertext: "existing-key" },
+  };
+  const first = await updateP1SystemSetting(
+    actor,
+    "llm",
+    { defaultModel: "next" },
+    systemSettingConfigToken("llm", current)
+  );
+  expect(
+    mocks.query.mock.calls.find(call => call[0].startsWith("INSERT"))?.[1][1]
+  ).toContain("existing-key");
+  expect(JSON.stringify(first)).not.toContain("existing-key");
+  vi.clearAllMocks();
+  await updateP1SystemSetting(
+    actor,
+    "llm",
+    {},
+    systemSettingConfigToken("llm", current),
+    { action: "clear" }
+  );
+  expect(
+    mocks.query.mock.calls.find(call => call[0].startsWith("INSERT"))?.[1][1]
+  ).not.toContain("existing-key");
+});
+it("过期快照、失权或保存失败不可覆盖凭据，原有其他设置不可夹带 Key", async () => {
+  await expect(
+    updateP1SystemSetting(actor, "general", {}, token(), {
+      action: "replace",
+      apiKey: "private",
+    })
+  ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  await expect(
+    updateP1SystemSetting(actor, "llm", {}, "0".repeat(64), {
+      action: "replace",
+      apiKey: "private",
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+  expect(mocks.encrypt).not.toHaveBeenCalled();
+  actorState.role = "user";
+  await expect(
+    updateP1SystemSetting(
+      actor,
+      "llm",
+      {},
+      systemSettingConfigToken("llm", null),
+      { action: "replace", apiKey: "private" }
+    )
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(mocks.encrypt).not.toHaveBeenCalled();
+});
+
+it("任何读取接口都过滤加密内容，配置快照仍绑定密钥版本", async () => {
+  const raw = {
+    ...DEFAULT_SYSTEM_SETTINGS.llm,
+    encryptedApiKey: { version: 1, ciphertext: "private-envelope" },
+  };
+  mocks.poolQuery.mockResolvedValueOnce([
+    [{ key: "llm", valueJson: JSON.stringify(raw) }],
+  ]);
+  const settings = await getP1SystemSettings();
+  expect(JSON.stringify(settings)).not.toContain("private-envelope");
+  expect(settings.configTokens.llm).toBe(systemSettingConfigToken("llm", raw));
+  expect(settings.configTokens.llm).not.toBe(
+    systemSettingConfigToken("llm", DEFAULT_SYSTEM_SETTINGS.llm)
+  );
+});
+
+it("加密存储未就绪时整笔回滚，配置和审计均不写入", async () => {
+  mocks.encrypt.mockImplementation(() => {
+    throw new Error("加密存储未就绪");
+  });
+  await expect(
+    updateP1SystemSetting(
+      actor,
+      "llm",
+      {},
+      systemSettingConfigToken("llm", null),
+      { action: "replace", apiKey: "synthetic" }
+    )
+  ).rejects.toThrow("加密存储未就绪");
+  expect(
+    mocks.query.mock.calls.some(call => call[0].startsWith("INSERT"))
+  ).toBe(false);
+  expect(mocks.audit).not.toHaveBeenCalled();
+  expect(mocks.commit).not.toHaveBeenCalled();
+  expect(mocks.rollback).toHaveBeenCalledOnce();
 });
