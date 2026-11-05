@@ -78,6 +78,12 @@ it("拒绝把 Key 保存进配置，凭据引用和模型 ID 必须合法", () =
     normalizeLlmSettings({ ...settings, baseUrl: settings.baseUrl + "/" })
   ).toEqual(settings);
 });
+it("中文地址规范化后可再次读取；编码后超限时拒绝保存", () => {
+  const value = normalizeLlmSettings({ ...settings, baseUrl: "https://relay.test/模型接口" });
+  expect(value.baseUrl).toContain("%");
+  expect(normalizeLlmSettings(value)).toEqual(value);
+  expect(() => normalizeLlmSettings({ ...settings, baseUrl: "https://relay.test/" + "汉".repeat(300) })).toThrow("编码后最多");
+});
 it("模型草稿独立记录差异，提交和导出中仅有引用", () => {
   const draft = createSettingsDraft("llm", {}, "token");
   draft.form = { ...draft.form, ...settings };

@@ -57,8 +57,11 @@ export function normalizeLlmSettings(
     !/^env:FLOW_SECRET_[A-Z0-9_]{2,128}$/.test(credentialRef)
   )
     throw new Error("凭据引用应为 env:FLOW_SECRET_ 开头的大写名称。");
+  const normalizedBaseUrl = baseUrl ? normalizeLlmBaseUrl(baseUrl) : "";
+  if (normalizedBaseUrl.length > 2048)
+    throw new Error("接口地址编码后最多 2048 个字符，请缩短路径。");
   return {
-    baseUrl: baseUrl ? normalizeLlmBaseUrl(baseUrl) : "",
+    baseUrl: normalizedBaseUrl,
     defaultModel,
     credentialRef,
   };
