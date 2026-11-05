@@ -1,3 +1,6 @@
+import { assertDataflowJobLease, DataflowCancelledError } from "./dataflow-job-lease";
+import { canCancelDataflowRun } from "./dataflow-run-control";
+import { withDataflowConnectorDeadline } from "./dataflow-connector-deadline";
 import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
 import { sortDataflowRows } from "./dataflow-sort-rows";
 import { dataflowRunSnapshot } from "../shared/dataflow-run-view";
@@ -1249,7 +1252,7 @@ async function withMysqlConnector<T>(
     ssl: source.connection.ssl === true ? {} : undefined,
   });
   try {
-    return await run(handle);
+    return await withDataflowConnectorDeadline(handle, () => run(handle));
   } finally {
     await handle.end().catch(() => undefined);
   }
@@ -1368,17 +1371,6 @@ function inferDatasetSchema(output: JsonRecord) {
             ? "array"
             : typeof sample[name],
     }));
-}
-
-async function assertDataflowJobLease(
-  connection: mysql.PoolConnection,
-  ownership: DataflowJobOwnership
-) {
-  const [rows] = await connection.query<mysql.RowDataPacket[]>(
-    "SELECT id FROM dataflow_run_job WHERE id=? AND status='leased' AND leaseToken=? AND leaseExpiresAt>NOW() LIMIT 1 FOR UPDATE",
-    [ownership.id, ownership.leaseToken]
-  );
-  if (!rows[0]) throw new Error("数据流 Job 租约已失效，拒绝提交节点结果。");
 }
 
 async function loadDataflowCheckpoint(runId: string) {
@@ -1812,7 +1804,12 @@ async function runDataflowDefinition(
         artifactId,
       });
     } catch (error) {
-      await db().query(
+      if (error instanceof DataflowCancelledError) throw error;
+      const failureConnection = await db().getConnection();
+      try {
+        await failureConnection.beginTransaction();
+        await assertDataflowJobLease(failureConnection, ownership);
+        await failureConnection.query(
         "UPDATE dataflow_node_run SET status='failed',errorJson=?,finishedAt=NOW(),durationMs=? WHERE runId=? AND nodeId=? AND status='running' AND jobLeaseToken=?",
         [
           JSON.stringify({
@@ -1823,7 +1820,14 @@ async function runDataflowDefinition(
           nodeId,
           ownership.leaseToken,
         ]
-      );
+        );
+        await failureConnection.commit();
+      } catch (failureError) {
+        await failureConnection.rollback();
+        throw failureError;
+      } finally {
+        failureConnection.release();
+      }
       throw error;
     }
   }
@@ -1871,9 +1875,9 @@ async function claimDataflowJob(
     const runFilter = onlyRunId ? " AND j.runId=?" : "";
     if (onlyRunId) params.push(onlyRunId);
     const [rows] = await connection.query<mysql.RowDataPacket[]>(
-      `SELECT j.id,j.runId,j.attempt,j.maxAttempts,r.projectId,r.executionPlanJson,r.executionPlanHash,r.requestId
-         FROM dataflow_run_job j JOIN dataflow_run r ON r.id=j.runId
-        WHERE j.attempt<j.maxAttempts AND r.status IN ('queued','running')${runFilter}
+      `SELECT j.id,j.runId,j.attempt,j.maxAttempts
+         FROM dataflow_run_job j
+        WHERE j.attempt<j.maxAttempts${runFilter}
           AND ((j.status='queued' AND j.availableAt<=NOW()) OR (j.status='leased' AND j.leaseExpiresAt<NOW()))
         ORDER BY j.availableAt,j.createdAt LIMIT 1 FOR UPDATE SKIP LOCKED`,
       params
@@ -1883,6 +1887,20 @@ async function claimDataflowJob(
       await connection.commit();
       return null;
     }
+    const [runRows] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT projectId,status,executionPlanJson,executionPlanHash,requestId FROM dataflow_run WHERE id=? LIMIT 1 FOR UPDATE",
+      [row.runId]
+    );
+    const lockedRun = runRows[0];
+    if (!lockedRun || !["queued", "running"].includes(String(lockedRun.status))) {
+      await connection.query(
+        "UPDATE dataflow_run_job SET status=?,leaseToken=NULL,leaseExpiresAt=NULL,workerId=NULL,finishedAt=NOW() WHERE id=?",
+        [lockedRun?.status === "cancelled" ? "cancelled" : "failed", row.id]
+      );
+      await connection.commit();
+      return null;
+    }
+    Object.assign(row, lockedRun);
     const executionPlanHash = String(row.executionPlanHash ?? "");
     let executionPlan: WorkflowExecutionPlan;
     try {
@@ -1969,6 +1987,7 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
+      await assertDataflowJobLease(connection, job);
       const [completed] = await connection.query<mysql.ResultSetHeader>(
         "UPDATE dataflow_run_job SET status='completed',resultJson=?,leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE id=? AND status='leased' AND leaseToken=?",
         [JSON.stringify(output), job.id, job.leaseToken]
@@ -1989,6 +2008,7 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
       connection.release();
     }
   } catch (error) {
+    if (error instanceof DataflowCancelledError) return;
     if (error instanceof DataflowWorkerInjectedCrash) throw error;
     const details = {
       message: error instanceof Error ? error.message : String(error),
@@ -1996,6 +2016,7 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
+      await assertDataflowJobLease(connection, job);
       const retry = job.attempt < job.maxAttempts;
       const delaySeconds = Math.min(60, 2 ** Math.max(0, job.attempt - 1));
       const [updated] = await connection.query<mysql.ResultSetHeader>(
@@ -2030,6 +2051,7 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
       await connection.commit();
     } catch (failureError) {
       await connection.rollback();
+      if (failureError instanceof DataflowCancelledError) return;
       throw failureError;
     } finally {
       connection.release();
@@ -2307,13 +2329,13 @@ export async function pageDataflowRuns(
     limit?: number;
     cursor?: string;
     search?: string;
-    status?: "queued" | "running" | "success" | "failed";
+    status?: "queued" | "running" | "success" | "failed" | "cancelled";
     trigger?: string;
     createdFrom?: Date;
     createdBefore?: Date;
   }
 ) {
-  await requireProjectAccess(user, input.projectId, "view");
+  const access = await requireProjectAccess(user, input.projectId, "view");
   let after;
   try {
     after = decodeWorkbenchPageCursor(input.cursor, "instance");
@@ -2376,7 +2398,7 @@ export async function pageDataflowRuns(
   );
   const last = rows[Math.min(rows.length, limit) - 1];
   return {
-    items: rows.slice(0, limit).map(({ cursorCreatedAt, ...row }) => row),
+    items: rows.slice(0, limit).map(({ cursorCreatedAt, ...row }) => Object.assign(row, { canCancel: canCancelDataflowRun(user.id, access.permissions, row as any) })),
     hasMore: rows.length > limit,
     nextCursor:
       rows.length > limit
@@ -2393,7 +2415,7 @@ export async function getDataflowRun(
   user: DataflowUser,
   input: { projectId: string; runId: string }
 ) {
-  await requireProjectAccess(user, input.projectId, "view");
+  const access = await requireProjectAccess(user, input.projectId, "view");
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT r.*, w.name AS workflowName, u.name AS triggerName
        FROM dataflow_run r
@@ -2422,6 +2444,8 @@ export async function getDataflowRun(
         ? null
         : Number(r.definitionVersion),
     status: String(r.status),
+    canCancel: canCancelDataflowRun(user.id, access.permissions, r),
+    cancellation: parseJson(r.cancellationJson, null) as { actorUserId: number; actorLabel: string; cancelledAt: string; reason: string } | null,
     durationMs: r.durationMs as number | null,
     startedAt: r.startedAt as Date | null,
     finishedAt: r.finishedAt as Date | null,

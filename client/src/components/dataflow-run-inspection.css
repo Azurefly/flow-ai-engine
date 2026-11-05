@@ -11,3 +11,9 @@
 [data-runtime-monitor] [data-dataflow-run-detail] {padding: 12px;}
 [data-dataflow-run-detail] > [data-run-summary] {margin: 8px 0; font-size: 13px; line-height: 20px;}
 [data-dataflow-run-detail] > [dataflow-output-summary] {margin-top: 8px;}
+/* 桌面布局：长流程名不挤出刷新操作，列表的主次操作保持纵向间距。 */
+[data-runtime-monitor][aria-label="数据流程运行监控"] > div:first-child > div:first-child {min-width: 0; flex: 1 1 24rem;}
+[data-runtime-monitor][aria-label="数据流程运行监控"] > div:first-child p {overflow-wrap: anywhere;}
+[data-runtime-monitor][aria-label="数据流程运行监控"] > div:first-child > button {flex-shrink: 0;}
+[dataflow-run-table] td:last-child > button {display: flex; width: 100%; justify-content: center;}
+[dataflow-run-table] td:last-child > button + button {margin-top: 6px;}

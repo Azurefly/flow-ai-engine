@@ -91,6 +91,7 @@ export const runNodeLabels: Record<string, string> = {
   failed: "失败",
   skipped: "已跳过",
   stopped: "已停止",
+  cancelled: "已取消",
 };
 export function parseRunValue(value: unknown): any {
   if (typeof value !== "string") return value;

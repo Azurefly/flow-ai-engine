@@ -1,3 +1,4 @@
+import { cancelDataflowRun } from "./dataflow-run-control";
 import { authorizationAuditPageInput } from "./authorization-audit-pagination";
 import { workflowConfigurationToken } from "./workflow-creation-request";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
@@ -1114,7 +1115,7 @@ export const appRouter = router({
         projectId: z.string().min(8).max(64), workflowId: z.string().min(8).max(64).optional(),
         limit: z.number().int().min(1).max(100).default(10), cursor: z.string().max(512).optional(),
         search: z.string().trim().max(100).optional(), trigger: z.string().trim().max(80).optional(),
-        status: z.enum(["queued", "running", "success", "failed"]).optional(),
+        status: z.enum(["queued", "running", "success", "failed", "cancelled"]).optional(),
         createdFrom: z.date().optional(), createdBefore: z.date().optional(),
       }))
       .query(({ctx,input}) => pageDataflowRuns(ctx.user,input)),
@@ -1126,6 +1127,9 @@ export const appRouter = router({
         })
       )
       .query(({ ctx, input }) => getDataflowRun(ctx.user, input)),
+    cancelRun: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64), runId: z.string().min(8).max(64), reason: z.string().trim().min(1).max(500) }))
+      .mutation(({ ctx, input }) => cancelDataflowRun(ctx.user, input, parse(ctx.req.headers.cookie ?? "")[FLOW_SESSION_COOKIE])),
     runLineage: protectedProcedure
       .input(
         z.object({

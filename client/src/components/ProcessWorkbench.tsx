@@ -1,3 +1,5 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 import { outcomeDecision, type SigningDecision } from "@shared/operate-signing-outcomes";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,7 +98,7 @@ function badge(status: string) {
   };
   return (
     <span
-      className={`aiflow-type-meta rounded px-1.5 py-0.5 font-semibold ${styles[status] ?? "bg-muted text-muted-foreground"}`}
+      className={`aiflow-type-meta rounded px-1.5 py-0.5 font-semibold ${styles[status] ?? ("bg-muted " + mutedToneClass)}`}
     >
       {formatStatusLabel(status)}
     </span>
@@ -118,11 +120,11 @@ function approvalProgressText(task: any) {
 }
 
 // UX 优化：复用完全相同的样式字符串，保留 DOM 类名、事件和状态分支。
-const statusChipClass = "aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 text-muted-foreground";
-const summaryLabelClass = "aiflow-type-body shrink-0 text-muted-foreground";
-const filterLabelClass = "aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground";
+const statusChipClass = ("aiflow-type-control max-w-full whitespace-normal break-words rounded border border-border bg-card px-1.5 py-0.5 " + mutedToneClass);
+const summaryLabelClass = ("aiflow-type-body shrink-0 " + mutedToneClass);
+const filterLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " + mutedToneClass);
 const summaryRowClass = "flex min-w-0 justify-between gap-2";
-const detailTextClass = "aiflow-type-body mt-1 break-words text-muted-foreground";
+const detailTextClass = ("aiflow-type-body mt-1 break-words " + mutedToneClass);
 
 export default function ProcessWorkbench({ navigationControls }: { navigationControls?: ReactNode }) {
   const utils = trpc.useUtils();
@@ -541,7 +543,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
             className={`hidden border-b border-border px-3 py-3 lg:flex ${sidebarCollapsed ? "justify-center" : ""}`}
           >
             <div className={sidebarCollapsed ? "hidden" : ""}>
-              <p className="aiflow-type-meta font-medium text-muted-foreground">
+              <p className={"aiflow-type-meta font-medium " + mutedToneClass}>
                 运行视图
               </p>
               <h2 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
@@ -567,7 +569,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
           {/* UX 优化：复用原有页签和视图事件，保留导航保护与收起状态。 */}
           {navigationControls}
           <label className="mt-2 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 lg:hidden">
-            <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
+            <span className={"aiflow-type-control whitespace-nowrap font-medium " + mutedToneClass}>
               视图
             </span>
             <select
@@ -600,7 +602,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
                 aria-current={view === item.id ? "page" : undefined}
                 title={sidebarCollapsed ? labels[item.id] : undefined}
                 onClick={() => changeView(item.id)}
-                className={`flex min-h-10 min-w-0 items-center gap-1.5 rounded px-2 py-2 text-left text-sm transition-colors lg:px-3 ${sidebarCollapsed ? "lg:justify-center" : ""} ${view === item.id ? "bg-accent font-semibold text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
+                className={`flex min-h-10 min-w-0 items-center gap-1.5 rounded px-2 py-2 text-left text-sm transition-colors lg:px-3 ${sidebarCollapsed ? "lg:justify-center" : ""} ${view === item.id ? "bg-accent font-semibold text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
               >
                 <item.icon size={16} />
                 <span
@@ -630,7 +632,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
               data-workbench-navigation-help=""
               className="group mt-3 hidden border-t border-border px-2 lg:block"
             >
-              <summary className="aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 font-medium text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500">
+              <summary className={"aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 font-medium " + mutedToneClass + " focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"}>
                 <span>操作说明</span>
                 <ChevronDown
                   aria-hidden="true"
@@ -638,7 +640,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
                   className="shrink-0 transition-transform group-open:rotate-180"
                 />
               </summary>
-              <p className="aiflow-type-body pb-3 text-muted-foreground">
+              <p className={"aiflow-type-body pb-3 " + mutedToneClass}>
                 人工操作由服务端暂停和续跑；移交、退回与批量处理逐项执行，任务仅在当前流程授权范围内可见。
               </p>
             </details>
@@ -664,7 +666,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
             >
               <header className="flex items-start justify-between gap-3 border-b border-border p-4 sm:items-center sm:p-5">
                 <div className="min-w-0">
-                  <p className="aiflow-type-meta hidden font-bold tracking-[.16em] text-muted-foreground sm:block">
+                  <p className={"aiflow-type-meta hidden font-bold tracking-[.16em] " + mutedToneClass + " sm:block"}>
                     PROCESS WORKBENCH
                   </p>
                   <h1
@@ -673,7 +675,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
                   >
                     {labels[view]}
                   </h1>
-                  <p className="aiflow-type-body mt-1 text-muted-foreground">
+                  <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
                     当前视图仅展示具备运行权限的流程实例与人工任务。
                   </p>
                 </div>
@@ -967,12 +969,12 @@ function TaskBatchBar({
         : "批量同意";
   return (
     <div className="grid gap-3 border-b border-border bg-muted px-3 py-3 sm:px-5 lg:grid-cols-[minmax(220px,1fr)_minmax(320px,1.4fr)_auto] lg:items-end">
-      <div className="aiflow-type-body text-muted-foreground">
+      <div className={"aiflow-type-body " + mutedToneClass}>
         已选择 <strong className="text-foreground">{count}</strong>{" "}
         项。批量处理对每项分别进行权限与状态校验，不会跨流程或跨项目执行。
       </div>
       <div className="grid min-w-0 gap-2 sm:grid-cols-[130px_minmax(0,1fr)]">
-        <label className="aiflow-type-control grid gap-1 font-medium text-muted-foreground">
+        <label className={"aiflow-type-control grid gap-1 font-medium " + mutedToneClass}>
           批量决定
           <select
             className="h-11 rounded border border-border bg-card px-2 text-sm"
@@ -1092,7 +1094,7 @@ function Board({
           </button>
         ))}
       </div>
-      <p className="aiflow-type-body mt-2 text-muted-foreground">
+      <p className={"aiflow-type-body mt-2 " + mutedToneClass}>
         “≥”表示已确认数量的下界，“待确认”表示快速扫描暂未确认总量；打开列表可继续核验授权范围。
       </p>
       <section className="mt-5 overflow-hidden rounded-lg border border-border">
@@ -1100,7 +1102,7 @@ function Board({
           <h2 className="aiflow-type-section-title font-semibold text-foreground">
             最近任务
           </h2>
-          <p className="aiflow-type-body mt-1 text-muted-foreground">
+          <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
             包含本人待办、已办和发起的近期任务；待办数只统计当前分配/候选给本人或由本人领取的任务。
           </p>
         </div>
@@ -1121,10 +1123,10 @@ function Board({
                   <p className="aiflow-type-body truncate font-medium text-foreground">
                     {task.workflowName} · {task.nodeName}
                   </p>
-                  <p className="aiflow-type-meta mt-1 tabular-nums text-muted-foreground">
+                  <p className={"aiflow-type-meta mt-1 tabular-nums " + mutedToneClass}>
                     实例 {String(task.runId || "—").slice(0, 8)} · 任务 {String(task.id).slice(0, 8)} · {date(task.createdAt)}
                   </p>
-                  <div className="aiflow-type-body mt-0.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 text-muted-foreground">
+                  <div className={"aiflow-type-body mt-0.5 flex min-w-0 flex-wrap gap-x-3 gap-y-0.5 " + mutedToneClass}>
                     <span className="min-w-0 break-words">
                       发起人 {task.initiatedByName || "内部用户"}
                     </span>
@@ -1142,7 +1144,7 @@ function Board({
             );
           })}
           {!(dashboard?.recent ?? []).length && (
-            <p className="aiflow-type-body p-8 text-center text-muted-foreground">
+            <p className={"aiflow-type-body p-8 text-center " + mutedToneClass}>
               暂无可见流程任务。
             </p>
           )}
@@ -1232,7 +1234,7 @@ function WorkbenchListFilters({
       className="border-b border-border px-4 py-3"
     >
       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1fr)_auto_auto]">
-        <label className="aiflow-type-control col-span-2 grid min-w-0 gap-1 font-medium text-muted-foreground sm:col-span-1">
+        <label className={"aiflow-type-control col-span-2 grid min-w-0 gap-1 font-medium " + mutedToneClass + " sm:col-span-1"}>
           <span>关键词</span>
           <Input
             value={search}
@@ -1249,7 +1251,7 @@ function WorkbenchListFilters({
                 ? `更多筛选，已设置 ${advancedFilterCount} 项`
                 : "更多筛选"
             }
-            className="aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-border bg-card px-3 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className={"aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 rounded-md border border-border bg-card px-3 " + mutedToneClass + " hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"}
           >
             <span>筛选条件</span>
             <span className="flex items-center gap-2">
@@ -1315,7 +1317,7 @@ function WorkbenchListFilters({
         <div
           role="status"
           aria-live="polite"
-          className="aiflow-type-body text-muted-foreground"
+          className={"aiflow-type-body " + mutedToneClass}
         >
           {getWorkbenchListStatusMessage({
             searchPending,
@@ -1326,7 +1328,7 @@ function WorkbenchListFilters({
           })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex h-11 items-center gap-2 whitespace-nowrap text-sm text-muted-foreground lg:h-9">
+          <label className={"flex h-11 items-center gap-2 whitespace-nowrap text-sm " + mutedToneClass + " lg:h-9"}>
             每页
             <select
               aria-label="每页条数"
@@ -1447,7 +1449,7 @@ function TaskList({
                     <dt className={summaryLabelClass}>
                       发起人
                     </dt>
-                    <dd className="min-w-0 truncate text-right text-muted-foreground">
+                    <dd className={"min-w-0 truncate text-right " + mutedToneClass}>
                       {task.initiatedByName || "—"}
                     </dd>
                   </div>
@@ -1455,7 +1457,7 @@ function TaskList({
                     <dt className={summaryLabelClass}>
                       创建时间
                     </dt>
-                    <dd className="min-w-0 break-words text-right tabular-nums text-muted-foreground">
+                    <dd className={"min-w-0 break-words text-right tabular-nums " + mutedToneClass}>
                       {date(task.createdAt)}
                     </dd>
                   </div>
@@ -1516,7 +1518,7 @@ function TaskList({
             )}
           </>
         ) : (
-          <div className="aiflow-type-body rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground md:col-span-2">
+          <div className={"aiflow-type-body rounded-lg border border-dashed border-border p-8 text-center " + mutedToneClass + " md:col-span-2"}>
             {emptyMessage}
           </div>
         )}
@@ -1562,7 +1564,7 @@ function TaskList({
                   <p className="font-medium text-foreground">
                     {task.workflowName}
                   </p>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className={"mt-1 text-sm " + mutedToneClass}>
                     {task.nodeName}
                     {approvalLabel(task) && (
                       <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
@@ -1571,13 +1573,13 @@ function TaskList({
                     )}
                   </p>
                 </td>
-                <td className="aiflow-type-body px-4 py-3 text-muted-foreground">
+                <td className={"aiflow-type-body px-4 py-3 " + mutedToneClass}>
                   {task.initiatedByName || "—"}
                 </td>
                 <td className="px-4 py-3">
                   {badge(task.displayStatus || task.status)}
                 </td>
-                <td className="px-4 py-3 text-sm text-muted-foreground">
+                <td className={"px-4 py-3 text-sm " + mutedToneClass}>
                   {date(task.createdAt)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
@@ -1708,10 +1710,10 @@ function InstanceList({
                 </div>
                 <dl className="aiflow-type-body mt-3 grid gap-1 border-t border-border pt-2">
                   <div className={summaryRowClass}>
-                    <dt className="aiflow-type-meta shrink-0 text-muted-foreground">
+                    <dt className={"aiflow-type-meta shrink-0 " + mutedToneClass}>
                       实例编号
                     </dt>
-                    <dd className="aiflow-type-meta min-w-0 truncate text-right font-mono text-muted-foreground">
+                    <dd className={"aiflow-type-meta min-w-0 truncate text-right font-mono " + mutedToneClass}>
                       {run.id.slice(0, 8)}
                     </dd>
                   </div>
@@ -1719,15 +1721,15 @@ function InstanceList({
                     <dt className={summaryLabelClass}>
                       发起人
                     </dt>
-                    <dd className="aiflow-type-body min-w-0 break-words text-right text-muted-foreground">
+                    <dd className={"aiflow-type-body min-w-0 break-words text-right " + mutedToneClass}>
                       {run.initiatedByName || "—"}
                     </dd>
                   </div>
                   <div className={summaryRowClass}>
-                    <dt className="aiflow-type-meta shrink-0 text-muted-foreground">
+                    <dt className={"aiflow-type-meta shrink-0 " + mutedToneClass}>
                       创建时间
                     </dt>
-                    <dd className="aiflow-type-meta min-w-0 break-words text-right tabular-nums text-muted-foreground">
+                    <dd className={"aiflow-type-meta min-w-0 break-words text-right tabular-nums " + mutedToneClass}>
                       {date(run.createdAt)}
                     </dd>
                   </div>
@@ -1761,7 +1763,7 @@ function InstanceList({
             )}
           </>
         ) : (
-          <div className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground md:col-span-2">
+          <div className={"rounded-lg border border-dashed border-border p-8 text-center text-sm " + mutedToneClass + " md:col-span-2"}>
             {emptyMessage}
           </div>
         )}
@@ -1786,12 +1788,12 @@ function InstanceList({
                   >
                     {run.workflowName.replaceAll("_", "_\u200b")}
                   </p>
-                  <code className="aiflow-type-code mt-1 block truncate whitespace-nowrap text-muted-foreground">
+                  <code className={"aiflow-type-code mt-1 block truncate whitespace-nowrap " + mutedToneClass}>
                     {run.id.slice(0, 8)}
                   </code>
                 </td>
                 <td
-                  className="aiflow-type-body min-w-0 break-words whitespace-normal px-3 py-3 align-top text-muted-foreground"
+                  className={"aiflow-type-body min-w-0 break-words whitespace-normal px-3 py-3 align-top " + mutedToneClass}
                   title={run.initiatedByName || "—"}
                 >
                   {run.initiatedByName || "—"}
@@ -1799,7 +1801,7 @@ function InstanceList({
                 <td className="min-w-0 px-3 py-3 align-top">
                   <InstanceStatus run={run} />
                 </td>
-                <td className="aiflow-type-meta whitespace-nowrap px-3 py-3 text-muted-foreground">
+                <td className={"aiflow-type-meta whitespace-nowrap px-3 py-3 " + mutedToneClass}>
                   {date(run.createdAt)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
@@ -1878,7 +1880,7 @@ function LoadingState({ label }: { label: string }) {
         <p className="aiflow-type-body mt-3 font-medium text-foreground">
           正在读取已启动流程
         </p>
-        <p className="aiflow-type-body mt-1 text-muted-foreground">{label}</p>
+        <p className={"aiflow-type-body mt-1 " + mutedToneClass}>{label}</p>
       </div>
     </div>
   );
@@ -1923,7 +1925,7 @@ function EmptyRow({ colSpan, message }: { colSpan: number; message: string }) {
     <tr>
       <td
         colSpan={colSpan}
-        className="aiflow-type-body p-8 text-center text-muted-foreground"
+        className={"aiflow-type-body p-8 text-center " + mutedToneClass}
       >
         {message}
       </td>
@@ -1952,7 +1954,7 @@ function Table({
             ))}
           </colgroup>
         )}
-        <thead className="bg-muted text-sm font-medium text-muted-foreground">
+        <thead className={"bg-muted text-sm font-medium " + mutedToneClass}>
           <tr>
             {headers.map(header => (
               <th key={header} className="px-4 py-3 font-medium">
@@ -1972,7 +1974,7 @@ function Loading({ colSpan = 5 }: { colSpan?: number }) {
     <tr>
       <td colSpan={colSpan} className="p-8 text-center">
         <Loader2
-          className="mx-auto animate-spin text-muted-foreground"
+          className={"mx-auto animate-spin " + mutedToneClass}
           size={18}
         />
       </td>
@@ -2132,7 +2134,7 @@ function Calendar({
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2 sm:justify-end">
           <span
-            className="aiflow-type-body min-w-0 text-muted-foreground"
+            className={"aiflow-type-body min-w-0 " + mutedToneClass}
             role="status"
             aria-live="polite"
           >
@@ -2157,7 +2159,7 @@ function Calendar({
           )}
         </div>
       </div>
-      <p className="aiflow-type-body text-muted-foreground">
+      <p className={"aiflow-type-body " + mutedToneClass}>
         此日历按任务创建时间归档，不表示计划办理日或截止日。
       </p>
       {loadMoreError && events.length > 0 && (
@@ -2165,7 +2167,7 @@ function Calendar({
           后续任务载入失败，已显示的日历记录仍保留；可重试载入。
         </p>
       )}
-      <p className="aiflow-type-body mb-2 text-muted-foreground">
+      <p className={"aiflow-type-body mb-2 " + mutedToneClass}>
         每天先显示 2 项，更多任务可按需展开；其余月份数据按需载入。
       </p>
       <section
@@ -2173,7 +2175,7 @@ function Calendar({
         aria-label={`${month.getFullYear()}年${month.getMonth() + 1}月流程日程`}
       >
         {agendaDays.length === 0 ? (
-          <p className="aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-8 text-center text-muted-foreground">
+          <p className={"aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-8 text-center " + mutedToneClass}>
             本月暂无流程任务。
           </p>
         ) : (
@@ -2221,7 +2223,7 @@ function Calendar({
                         key={event.id}
                         className="flex items-center gap-3 px-3 py-3"
                       >
-                        <span className="aiflow-type-meta w-12 shrink-0 tabular-nums text-muted-foreground">
+                        <span className={"aiflow-type-meta w-12 shrink-0 tabular-nums " + mutedToneClass}>
                           {Number.isNaN(startAt.getTime())
                             ? "—"
                             : startAt.toLocaleTimeString("zh-CN", {
@@ -2281,7 +2283,7 @@ function Calendar({
                         type="button"
                         aria-controls={`calendar-agenda-${dayKey}`}
                         aria-label={`收起已显示任务到前 ${CALENDAR_DAY_PREVIEW_LIMIT} 项`}
-                        className="min-h-11 w-full px-3 text-sm font-medium text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:w-auto"
+                        className={"min-h-11 w-full px-3 text-sm font-medium " + mutedToneClass + " hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 sm:w-auto"}
                         onClick={() =>
                           setAgendaVisibleLimits(current => ({
                             ...current,
@@ -2308,7 +2310,7 @@ function Calendar({
           {"日一二三四五六".split("").map(day => (
             <div
               key={day}
-              className="border-b border-r border-border bg-muted p-2 text-center font-medium text-muted-foreground"
+              className={"border-b border-r border-border bg-muted p-2 text-center font-medium " + mutedToneClass}
             >
               {day}
             </div>
@@ -2316,7 +2318,7 @@ function Calendar({
           {days.map(day => (
             <section
               key={calendarDayKey(day)}
-              className={`min-h-[88px] border-b border-r border-border p-1 sm:min-h-[104px] sm:p-2 ${day.getMonth() !== month.getMonth() ? "bg-muted text-muted-foreground" : "bg-card"} ${calendarDayKey(day) === selectedDayKey ? "ring-2 ring-inset ring-blue-500" : ""}`}
+              className={`min-h-[88px] border-b border-r border-border p-1 sm:min-h-[104px] sm:p-2 ${day.getMonth() !== month.getMonth() ? ("bg-muted " + mutedToneClass) : "bg-card"} ${calendarDayKey(day) === selectedDayKey ? "ring-2 ring-inset ring-blue-500" : ""}`}
             >
               <button
                 type="button"
@@ -2376,18 +2378,18 @@ function Calendar({
                 {selectedDay.getFullYear()} 年 {selectedDay.getMonth() + 1} 月{" "}
                 {selectedDay.getDate()} 日
               </h3>
-              <p className="mt-0.5 text-sm text-muted-foreground">
+              <p className={"mt-0.5 text-sm " + mutedToneClass}>
                 当天已载入 {selectedEvents.length} 项任务
               </p>
             </div>
             <CalendarDays
               size={18}
-              className="text-muted-foreground"
+              className={mutedToneClass}
               aria-hidden="true"
             />
           </div>
           {selectedEvents.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+            <p className={"px-4 py-8 text-center text-sm " + mutedToneClass}>
               当天没有流程任务
             </p>
           ) : (
@@ -2399,7 +2401,7 @@ function Calendar({
                     key={event.id}
                     className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center"
                   >
-                    <span className="aiflow-type-meta shrink-0 tabular-nums text-muted-foreground">
+                    <span className={"aiflow-type-meta shrink-0 tabular-nums " + mutedToneClass}>
                       {Number.isNaN(startAt.getTime())
                         ? "时间未提供"
                         : startAt.toLocaleTimeString("zh-CN", {
@@ -2429,7 +2431,7 @@ function Calendar({
           {selectedEvents.length > CALENDAR_AGENDA_PAGE_SIZE && (
             <div className="border-t border-border px-4 py-2">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="aiflow-type-meta text-muted-foreground">
+                <span className={"aiflow-type-meta " + mutedToneClass}>
                   已显示 {selectedVisibleLimit} / {selectedEvents.length} 项
                 </span>
                 <div className="flex flex-wrap gap-1">
@@ -2808,16 +2810,16 @@ function TaskDrawer({
               </p>
             )}
             <section className="space-y-2">
-              <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <div className={"flex flex-wrap items-center gap-2 text-xs " + mutedToneClass}>
                 {badge(task.displayStatus || task.status)}
                 {task.dueAt && <span>截止于 {date(task.dueAt)}</span>}
               </div>
-              <p className="text-sm font-medium text-muted-foreground">
+              <p className={"text-sm font-medium " + mutedToneClass}>
                 {taskInstructionLabel}
               </p>
               <p className="task-instruction">{taskInstruction}</p>
               <details>
-                <summary className="task-summary text-muted-foreground">
+                <summary className={"task-summary " + mutedToneClass}>
                   任务信息
                 </summary>
                 <div className="task-info">
@@ -2871,7 +2873,7 @@ function TaskDrawer({
                             {field.label}
                             {field.required ? "（必填）" : "（可选）"}
                             {field.readOnly && (
-                              <span className="ml-2 text-xs text-muted-foreground">
+                              <span className={"ml-2 text-xs " + mutedToneClass}>
                                 只读
                               </span>
                             )}
@@ -3030,7 +3032,7 @@ function TaskDrawer({
                         key={row.key}
                         className="grid gap-1 border-b border-border/60 pb-2 last:border-0 last:pb-0"
                       >
-                        <dt className="text-xs text-muted-foreground">
+                        <dt className={"text-xs " + mutedToneClass}>
                           {row.label}
                         </dt>
                         <dd className="whitespace-pre-wrap break-words text-sm text-foreground">
@@ -3041,7 +3043,7 @@ function TaskDrawer({
                   </dl>
                   {resultView.comment && (
                     <div className="border-t border-border pt-3">
-                      <p className="text-xs text-muted-foreground">处理意见</p>
+                      <p className={"text-xs " + mutedToneClass}>处理意见</p>
                       <p className="mt-1 whitespace-pre-wrap break-words text-sm">
                         {resultView.comment}
                       </p>

@@ -1,0 +1,89 @@
+[data-cancel-trigger] {
+  color: var(--aiflow-danger);
+}
+[data-cancel-dialog] {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  overflow: hidden;
+  font-size: 14px;
+}
+[data-cancel-dialog] [data-slot="dialog-title"] {
+  font-size: 18px;
+  line-height: 26px;
+}
+[data-cancel-dialog] [data-slot="dialog-description"] {
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+[data-cancel-body] {
+  min-height: 0;
+  overflow: auto;
+}
+[data-cancel-body] dl {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px 12px;
+  margin-bottom: 20px;
+}
+[data-cancel-body] dt {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+[data-cancel-body] dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+[data-cancel-body] label {
+  display: grid;
+  gap: 8px;
+}
+[data-cancel-body] textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  max-height: 240px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--background);
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+[data-cancel-body] textarea:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+[data-cancel-counter] {
+  text-align: right;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  margin-top: 4px;
+}
+[data-cancel-body] [role="alert"] {
+  margin-top: 12px;
+  overflow-wrap: anywhere;
+  color: var(--aiflow-danger);
+}
+[data-cancel-dialog] [data-slot="dialog-footer"] {
+  flex: none;
+}
+[data-cancellation-info] {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--muted);
+  padding: 12px;
+  font-size: 14px;
+  line-height: 22px;
+  overflow-wrap: anywhere;
+}
+[data-cancellation-info] p + p {
+  margin-top: 6px;
+  white-space: pre-wrap;
+  max-height: 132px;
+  overflow: auto;
+}

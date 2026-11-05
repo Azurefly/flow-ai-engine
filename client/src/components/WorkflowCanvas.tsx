@@ -1,3 +1,5 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
 const surfaceClass1 = "aiflow-type-control h-11 min-h-11 min-w-0 rounded border border-border bg-card px-2 text-foreground outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted min-[1024px]:h-9 min-[1024px]:min-h-0";
 import "./workflow-canvas-design.css";
@@ -149,27 +151,27 @@ import {
 } from "./workflow-config-editor";
 
 // UX 优化：共享相同样式字符串，保留配置控件及其事件。
-const inspectorToolClass = "flex min-h-9 min-w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const inspectorToolClass = ("flex min-h-9 min-w-9 items-center justify-center rounded-md " + mutedToneClass + " transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring");
 const canvasMenuItemClass = "block w-full px-3 py-2 text-left hover:bg-muted";
-const canvasFieldLabelClass = "aiflow-type-control grid min-w-0 gap-1 text-muted-foreground";
+const canvasFieldLabelClass = ("aiflow-type-control grid min-w-0 gap-1 " + mutedToneClass);
 const canvasSelectClass = "aiflow-type-control h-11 min-h-11 rounded-md border border-border bg-card px-3 font-normal text-foreground outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 min-[1024px]:h-9 min-[1024px]:min-h-0";
 const canvasIconRowClass = "flex items-center gap-1";
 const canvasDangerMenuItemClass = "block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50";
-const canvasRemoveClass = "text-muted-foreground hover:text-red-600";
+const canvasRemoveClass = (mutedToneClass + " hover:text-red-600");
 const canvasCompactControlClass = "aiflow-type-control h-7";
-const canvasMutedTextClass = "text-muted-foreground";
+const canvasMutedTextClass = (mutedToneClass);
 
 const canvasHandleClass = "!h-2 !w-2 !border-2 shadow-none";
 const canvasFieldGroupClass = "grid gap-1.5";
-const canvasCompactLabelClass = "aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground";
-const canvasStackedLabelClass = "aiflow-type-control grid gap-1.5 font-medium text-muted-foreground";
+const canvasCompactLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " + mutedToneClass);
+const canvasStackedLabelClass = ("aiflow-type-control grid gap-1.5 font-medium " + mutedToneClass);
 const canvasSectionTitleClass = "aiflow-type-section-title mb-2 font-semibold text-foreground";
 const canvasNestedCardClass = "grid min-w-0 gap-2 rounded border border-border bg-card p-2";
-const canvasRemoveFieldClass = "rounded px-1 text-muted-foreground hover:text-red-600";
-const canvasMutedLabelClass = "aiflow-type-control font-medium text-muted-foreground";
+const canvasRemoveFieldClass = ("rounded px-1 " + mutedToneClass + " hover:text-red-600");
+const canvasMutedLabelClass = ("aiflow-type-control font-medium " + mutedToneClass);
 const canvasConfigGridClass = "grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3";
-const canvasSectionHelpClass = "aiflow-type-body mt-2 text-muted-foreground";
-const canvasBodyHelpClass = "aiflow-type-body text-muted-foreground";
+const canvasSectionHelpClass = ("aiflow-type-body mt-2 " + mutedToneClass);
+const canvasBodyHelpClass = ("aiflow-type-body " + mutedToneClass);
 const canvasResponsiveButtonClass = "min-h-11 text-sm min-[1024px]:min-h-9";
 const canvasHelpLinkClass = "text-indigo-700 hover:underline";
 const canvasFieldErrorClass = "aiflow-type-body text-red-600";
@@ -365,7 +367,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           <span className="flow-design-node-title block break-words text-sm font-semibold leading-5 text-foreground">
             {nodeData.label}
           </span>
-          <span className="flow-design-node-type aiflow-type-meta mt-0.5 block break-words text-muted-foreground">
+          <span className={"flow-design-node-type aiflow-type-meta mt-0.5 block break-words " + mutedToneClass}>
             {FLOW_NODE_DEFINITIONS[nodeData.kind].label}
           </span>
         </div>
@@ -385,7 +387,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           <span className="rounded-md bg-indigo-50 px-1.5 py-1 text-indigo-700">
             {String(nodeData.config.model || "自动模型")}
           </span>
-          <span className="rounded-md bg-muted px-1.5 py-1 text-muted-foreground">
+          <span className={"rounded-md bg-muted px-1.5 py-1 " + mutedToneClass}>
             {String(llmGovernance.dataClassification || "internal")}
           </span>
           {nodeData.config.outputSchema ? (
@@ -445,7 +447,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
                   {routeName}
                 </span>
                 <span
-                  className="max-w-24 truncate text-muted-foreground"
+                  className={"max-w-24 truncate " + mutedToneClass}
                   title={routeTarget}
                 >
                   → {routeTarget}
@@ -686,7 +688,7 @@ function ConfigFieldEditor({
     </span>
   );
   const inputClass =
-    "aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground min-[1024px]:h-9 min-[1024px]:min-h-0";
+    ("aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:" + mutedToneClass + " min-[1024px]:h-9 min-[1024px]:min-h-0");
   if (nodeKind === "operate" && field.key === "outcomes")
     return (
       <WorkflowOutcomeEditor
@@ -826,7 +828,7 @@ function ConfigFieldEditor({
       <label className={canvasFieldGroupClass}>
         {label}
         <textarea
-          className="min-h-20 w-full rounded-md border border-border bg-card p-2.5 text-sm text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:text-muted-foreground"
+          className={"min-h-20 w-full rounded-md border border-border bg-card p-2.5 text-sm text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:" + mutedToneClass}
           value={draft}
           onChange={event => {
             setDraft(event.target.value);
@@ -1527,7 +1529,7 @@ function OriginalObjectEditor({
             onChange={next => emitChange({ ...record, [spec.key]: next })}
           />
           {spec.help && (
-            <span className="aiflow-type-body font-normal text-muted-foreground">
+            <span className={"aiflow-type-body font-normal " + mutedToneClass}>
               {spec.help}
             </span>
           )}
@@ -1735,7 +1737,7 @@ function StructuredListRow({
     return (
       <div className="grid gap-2 rounded border border-border bg-card p-2">
         <div className="flex items-center justify-between">
-          <span className="aiflow-type-control font-semibold text-muted-foreground">
+          <span className={"aiflow-type-control font-semibold " + mutedToneClass}>
             {!DATA_FIELD_EDITOR_PROFILES[fieldKey] && "原版"}
             {DATA_FIELD_EDITOR_PROFILES[fieldKey]?.label ??
               (fieldKey === "lysz"
@@ -1827,7 +1829,7 @@ function StructuredListRow({
           </span>
           <button
             type="button"
-            className="grid min-h-11 min-w-11 place-items-center text-muted-foreground hover:text-red-600"
+            className={"grid min-h-11 min-w-11 place-items-center " + mutedToneClass + " hover:text-red-600"}
             disabled={disabled}
             onClick={onRemove}
             aria-label="删除路由规则"
@@ -1909,7 +1911,7 @@ function StructuredListRow({
           />
         </label>
         <details className="rounded border border-border bg-muted">
-          <summary className="aiflow-type-control cursor-pointer px-2 py-3 font-medium text-muted-foreground">
+          <summary className={"aiflow-type-control cursor-pointer px-2 py-3 font-medium " + mutedToneClass}>
             附加数据条件
           </summary>
           <div className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
@@ -1999,7 +2001,7 @@ function StructuredListRow({
           <option value="date">日期</option>
           <option value="select">选项</option>
         </select>
-        <label className="aiflow-type-control flex items-center gap-1 text-muted-foreground">
+        <label className={"aiflow-type-control flex items-center gap-1 " + mutedToneClass}>
           <input
             type="checkbox"
             checked={Boolean(itemField.required)}
@@ -3888,7 +3890,7 @@ export default function WorkflowCanvas({
                   >
                     <Plus size={14} />
                     添加节点
-                    <span className="aiflow-type-meta rounded bg-muted px-1.5 py-0.5 font-mono text-muted-foreground">
+                    <span className={"aiflow-type-meta rounded bg-muted px-1.5 py-0.5 font-mono " + mutedToneClass}>
                       {availablePalette.length}
                     </span>
                     <span aria-hidden="true" className={canvasMutedTextClass}>
@@ -3940,7 +3942,7 @@ export default function WorkflowCanvas({
                             <span className="aiflow-type-body block truncate font-semibold text-foreground">
                               {item.label}
                             </span>
-                            <span className="aiflow-type-body mt-0.5 block line-clamp-2 text-muted-foreground">
+                            <span className={"aiflow-type-body mt-0.5 block line-clamp-2 " + mutedToneClass}>
                               {item.description}
                             </span>
                           </span>
@@ -3948,12 +3950,12 @@ export default function WorkflowCanvas({
                       ))}
                     </div>
                   ) : (
-                    <p className="aiflow-type-body mt-3 rounded-md bg-muted p-4 text-center text-muted-foreground">
+                    <p className={"aiflow-type-body mt-3 rounded-md bg-muted p-4 text-center " + mutedToneClass}>
                       没有匹配的节点。
                     </p>
                   )}
                   {(flowType === "state" || flowType === "control") && (
-                    <p className="aiflow-type-body mt-3 border-t border-border pt-2 text-muted-foreground">
+                    <p className={"aiflow-type-body mt-3 border-t border-border pt-2 " + mutedToneClass}>
                       业务资源与物理资源节点尚未接入当前项目。
                     </p>
                   )}
@@ -4021,7 +4023,7 @@ export default function WorkflowCanvas({
                               >
                                 <Save
                                   size={13}
-                                  className="shrink-0 text-muted-foreground"
+                                  className={"shrink-0 " + mutedToneClass}
                                 />
                                 <span className="truncate">{template.name}</span>
                               </Button>
@@ -4062,7 +4064,7 @@ export default function WorkflowCanvas({
                         </section>
                       )}
                       {!visibleTemplates.length && !visibleSubflows.length && (
-                        <p className="aiflow-type-body rounded-md bg-muted p-4 text-center text-muted-foreground">
+                        <p className={"aiflow-type-body rounded-md bg-muted p-4 text-center " + mutedToneClass}>
                           没有匹配的模板或子流程。
                         </p>
                       )}
@@ -4300,7 +4302,7 @@ export default function WorkflowCanvas({
             <button type="button" className="rounded px-2 py-1 hover:bg-muted" title="切换显示布局，不修改已保存坐标" aria-pressed={readingActive} onClick={() => { setCanvasPresentation(readingActive ? "original" : "readable"); window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void fitCanvas(selectedId); })); }}>{readingActive ? "阅读布局" : "原始布局"}</button>
           </div>}
           {!readingActive && canvasHasCrowding(nodes) && <p data-canvas-layout-warning="" role="status" className="absolute bottom-3 left-16 z-10 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">原始节点重叠；切换阅读布局可查看连线，不修改原坐标。</p>}
-          <details className="aiflow-type-control absolute left-3 top-3 z-10 rounded-lg border border-border bg-card/95 text-muted-foreground shadow-sm">
+          <details className={"aiflow-type-control absolute left-3 top-3 z-10 rounded-lg border border-border bg-card/95 " + mutedToneClass + " shadow-sm"}>
             <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 py-2 font-semibold text-foreground">
               画布说明
             </summary>
@@ -4319,7 +4321,7 @@ export default function WorkflowCanvas({
                   结构完整
                 </span>
               </div>
-              <div className="flex flex-wrap gap-3 text-muted-foreground">
+              <div className={"flex flex-wrap gap-3 " + mutedToneClass}>
                 <span className={canvasIconRowClass}>
                   <Move size={13} />
                   画布移动
@@ -4430,7 +4432,7 @@ export default function WorkflowCanvas({
                       </button>
                       <div className="my-1 border-t border-border" />
                       {!readOnly && targetNode.data.kind !== "end" && (
-                        <div className="aiflow-type-control px-3 py-1 font-semibold text-muted-foreground">
+                        <div className={"aiflow-type-control px-3 py-1 font-semibold " + mutedToneClass}>
                           在此节点后添加
                         </div>
                       )}
@@ -4591,7 +4593,7 @@ export default function WorkflowCanvas({
               onFitView={() => { void fitCanvas(); }}
             />
           </ReactFlow>
-          {neighborhood && <p data-workflow-neighborhood="" role="status" className="aiflow-type-meta pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-5rem)] rounded-xl border border-border bg-card/95 px-3 py-2 text-muted-foreground">静态连接 · 上游 {neighborhood.upstream.size} 个 · 下游 {neighborhood.downstream.size} 个</p>}
+          {neighborhood && <p data-workflow-neighborhood="" role="status" className={"aiflow-type-meta pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-5rem)] rounded-xl border border-border bg-card/95 px-3 py-2 " + mutedToneClass}>静态连接 · 上游 {neighborhood.upstream.size} 个 · 下游 {neighborhood.downstream.size} 个</p>}
         </div>
       </section>
       {hasInspectorSelection && (
@@ -4608,7 +4610,7 @@ export default function WorkflowCanvas({
               <h2 data-workflow-inspector-heading="" ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
                 {selectedEdgeId ? "连线配置" : `${selectedDefinition?.label ?? "节点"}配置`}
               </h2>
-              {selected && <p className="aiflow-type-meta mt-0.5 line-clamp-2 break-words text-muted-foreground" title={String(selected.data.label ?? "")}>{selected.data.label}</p>}
+              {selected && <p className={"aiflow-type-meta mt-0.5 line-clamp-2 break-words " + mutedToneClass} title={String(selected.data.label ?? "")}>{selected.data.label}</p>}
             </div>
             <div className="ml-auto flex shrink-0 items-center gap-1">
               <button type="button" className="mr-1 min-h-11 rounded px-2 text-sm text-aiflow-info hover:bg-muted lg:hidden" onClick={() => {
@@ -4661,7 +4663,7 @@ export default function WorkflowCanvas({
                 className={fullscreen ? "min-h-0 overflow-y-auto lg:flex-1" : "max-h-[650px] overflow-y-auto"}
               >
                 <div className="space-y-3 p-4">
-                  <label className="grid gap-1.5 text-xs font-medium text-muted-foreground">
+                  <label className={"grid gap-1.5 text-xs font-medium " + mutedToneClass}>
                     节点名称（画布）
                     <input
                       aria-label="节点名称"
@@ -4684,7 +4686,7 @@ export default function WorkflowCanvas({
                         : selectedConfigState === "editing"
                           ? "结构完整（默认）"
                           : "结构完整"}
-                      <span className="font-normal text-muted-foreground"> · 运行前需预检</span>
+                      <span className={"font-normal " + mutedToneClass}> · 运行前需预检</span>
                       {selected.data.kind === "operate" && readOperateOutcomeMode(selectedConfig) === "legacy_cancel" && (
                         <button type="button" className="ml-2 min-h-11 text-aiflow-warning underline" onClick={() => { setInspectorTab("结果与分支"); groupNavigation.reveal(); }}>兼容分支</button>
                       )}
@@ -4729,7 +4731,7 @@ export default function WorkflowCanvas({
                       className={`aiflow-type-control min-h-9 min-w-0 whitespace-normal rounded-md border px-2 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                         activeInspectorGroup?.label === group.label
                           ? "border-primary/20 bg-accent text-primary"
-                          : "border-transparent text-muted-foreground hover:bg-card hover:text-foreground"
+                          : ("border-transparent " + mutedToneClass + " hover:bg-card hover:text-foreground")
                       }`}
                       onClick={() => { setInspectorTab(group.label); groupNavigation.reveal(); }}
                     >
@@ -4756,7 +4758,7 @@ export default function WorkflowCanvas({
                         )}
                       {selected.data.kind === "operate" &&
                         activeInspectorGroup.label === "高级配置" && (
-                          <p className="mt-2 text-xs text-muted-foreground">
+                          <p className={"mt-2 text-xs " + mutedToneClass}>
                             兼容对象、身份与自动执行配置。请先设置处理人、表单和结果分支。
                           </p>
                         )}
@@ -5177,7 +5179,7 @@ export default function WorkflowCanvas({
                 </div>}
               </div>
             ) : (
-              <div className="m-4 mt-8 rounded-lg border border-dashed border-border bg-muted p-4 text-sm leading-6 text-muted-foreground">
+              <div className={"m-4 mt-8 rounded-lg border border-dashed border-border bg-muted p-4 text-sm leading-6 " + mutedToneClass}>
                 <p className="font-medium text-foreground">暂无配置信息</p>
                 <p className="mt-1">
                   请选择画布中的元件查看配置信息；若无元件，请添加元件。

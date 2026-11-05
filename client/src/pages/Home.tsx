@@ -1,3 +1,5 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 import { IdentifierText } from "@/components/IdentifierText";
 import { authorizationAuditActions, authorizationAuditCategories, auditDateBounds, type AuditCategory } from "@shared/role-audit-event";
 import { IdentityWorkspace } from "@/components/IdentityWorkspace";
@@ -251,16 +253,16 @@ const desktopFieldClass = "h-11 min-[1024px]:h-10";
 const panelFooterClass = "flex items-center justify-between gap-2 border-t border-border px-3 py-2";
 const panelClass = "min-w-0 overflow-hidden rounded-lg border border-border bg-card";
 const identityCodeClass = "aiflow-type-meta mt-0.5 break-all font-mono text-foreground";
-const filterInputClass = "h-11 border-input bg-card text-foreground placeholder:text-muted-foreground focus-visible:ring-[#2d6bea]";
+const filterInputClass = ("h-11 border-input bg-card text-foreground placeholder:" + mutedToneClass + " focus-visible:ring-[#2d6bea]");
 const moduleRailClass = "sticky top-4 min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card";
-const searchIconClass = "pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground";
-const mutedMetaClass = "text-xs text-muted-foreground";
-const mutedTextClass = "text-muted-foreground";
-const compactFilterLabelClass = "mb-1 block text-[10px] text-muted-foreground min-[1024px]:hidden";
-const mutedIconClass = "mr-2 text-muted-foreground";
-const emptyStateClass = "p-8 text-center text-sm text-muted-foreground";
+const searchIconClass = ("pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 " + mutedToneClass);
+const mutedMetaClass = ("text-xs " + mutedToneClass);
+const mutedTextClass = (mutedToneClass);
+const compactFilterLabelClass = ("mb-1 block text-[10px] " + mutedToneClass + " min-[1024px]:hidden");
+const mutedIconClass = ("mr-2 " + mutedToneClass);
+const emptyStateClass = ("p-8 text-center text-sm " + mutedToneClass);
 const sectionTitleClass = "mb-2 font-semibold text-foreground";
-const supportingTextClass = "mt-1 break-words text-muted-foreground";
+const supportingTextClass = ("mt-1 break-words " + mutedToneClass);
 
 export default function Home() {
   const utils = trpc.useUtils();
@@ -295,7 +297,7 @@ export default function Home() {
   };
   if (me.isLoading || !accountQueriesReady)
     return (
-      <main className="grid min-h-screen place-items-center bg-card text-muted-foreground">
+      <main className={"grid min-h-screen place-items-center bg-card " + mutedToneClass}>
         <div className="flex items-center gap-3 border border-border bg-card px-4 py-3 text-sm shadow-sm">
           <Loader2 className="animate-spin text-aiflow-info" size={16} />
           正在读取流程工作台…
@@ -363,7 +365,7 @@ function LoginScreen({
               <Gauge size={21} />
             </div>
             <div>
-              <p className="text-[11px] font-bold tracking-[.16em] text-muted-foreground">
+              <p className={"text-[11px] font-bold tracking-[.16em] " + mutedToneClass}>
                 AI FLOW GRAPH
               </p>
               <h1 className="aiflow-type-page-title mt-0.5 font-semibold text-foreground">
@@ -379,7 +381,7 @@ function LoginScreen({
             onSubmit();
           }}
         >
-          <p className="text-sm leading-6 text-muted-foreground">
+          <p className={"text-sm leading-6 " + mutedToneClass}>
             使用内部账号登录。流程、运行记录和协作授权均按资源级权限隔离。
           </p>
           {errorMessage && (
@@ -391,7 +393,7 @@ function LoginScreen({
               登录失败：{errorMessage}
             </div>
           )}
-          <label className="grid gap-2 text-xs font-medium text-muted-foreground">
+          <label className={"grid gap-2 text-xs font-medium " + mutedToneClass}>
             用户名
             <Input
               className={filterInputClass}
@@ -403,7 +405,7 @@ function LoginScreen({
               required
             />
           </label>
-          <label className="grid gap-2 text-xs font-medium text-muted-foreground">
+          <label className={"grid gap-2 text-xs font-medium " + mutedToneClass}>
             密码
             <Input
               className={filterInputClass}
@@ -424,7 +426,7 @@ function LoginScreen({
             {pending && <Loader2 className="animate-spin" />}登录流程引擎
           </Button>
         </form>
-        <div className="aiflow-type-body border-t border-border bg-muted px-7 py-4 text-muted-foreground">
+        <div className={"aiflow-type-body border-t border-border bg-muted px-7 py-4 " + mutedToneClass}>
           账号由管理员创建；系统不提供公开注册。
         </div>
       </section>
@@ -1386,7 +1388,7 @@ function FlowConsole({
           aria-label="流程工作台"
           title="流程工作台"
           aria-selected={runView === "workbench"}
-          className={`aiflow-module-link w-full ${runView === "workbench" ? "bg-accent font-semibold text-primary" : "text-muted-foreground hover:bg-muted"}`}
+          className={`aiflow-module-link w-full ${runView === "workbench" ? "bg-accent font-semibold text-primary" : (mutedToneClass + " hover:bg-muted")}`}
           onClick={() => navigateRoute({ section: "runs", view: "workbench" })}
         >
           <Gauge size={16} className="shrink-0" />
@@ -1398,7 +1400,7 @@ function FlowConsole({
           aria-label="运行监控"
           title="运行监控"
           aria-selected={runView === "monitor"}
-          className={`aiflow-module-link w-full ${runView === "monitor" ? "bg-accent font-semibold text-primary" : "text-muted-foreground hover:bg-muted"}`}
+          className={`aiflow-module-link w-full ${runView === "monitor" ? "bg-accent font-semibold text-primary" : (mutedToneClass + " hover:bg-muted")}`}
           onClick={() => {
             selectedId &&
               navigateRoute({
@@ -1475,7 +1477,7 @@ function FlowConsole({
         <aside role="status" className="fixed bottom-4 left-4 right-4 z-40 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-aiflow-info-border bg-card p-4 text-sm shadow-lg sm:left-auto sm:max-w-lg">
           <div>
             <p className="font-semibold">工作台已有新版本</p>
-            <p className="mt-1 text-muted-foreground">{isDraftDirty ? "当前流程有未保存修改，请先保存或丢弃修改再刷新。" : "请先提交正在填写的表单，再刷新以使用最新功能。"}</p>
+            <p className={"mt-1 " + mutedToneClass}>{isDraftDirty ? "当前流程有未保存修改，请先保存或丢弃修改再刷新。" : "请先提交正在填写的表单，再刷新以使用最新功能。"}</p>
           </div>
           <Button variant="outline" disabled={isDraftDirty} onClick={() => window.location.reload()}>刷新工作台</Button>
         </aside>
@@ -1519,7 +1521,7 @@ function FlowConsole({
             type="button"
             aria-label="关闭工作区导航"
             onClick={() => setMobileNavOpen(false)}
-            className="absolute top-3 right-3 grid size-11 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            className={"absolute top-3 right-3 grid size-11 place-items-center rounded-md " + mutedToneClass + " transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"}
           >
             <X size={18} />
           </button>
@@ -1538,14 +1540,14 @@ function FlowConsole({
                     navigateSection(item.id);
                     setMobileNavOpen(false);
                   }}
-                  className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium transition-colors ${activeSection === item.id ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium transition-colors ${activeSection === item.id ? "bg-muted text-foreground" : (mutedToneClass + " hover:bg-muted hover:text-foreground")}`}
                 >
                   <item.icon
                     size={17}
                     className={
                       activeSection === item.id
                         ? "text-foreground"
-                        : "text-muted-foreground"
+                        : (mutedToneClass)
                     }
                   />
                   {item.label}
@@ -1561,7 +1563,7 @@ function FlowConsole({
                   setFlowListOpen(true);
                   setMobileNavOpen(false);
                 }}
-                className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className={"flex min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm font-medium " + mutedToneClass + " transition-colors hover:bg-muted hover:text-foreground"}
               >
                 <FolderKanban size={17} className={mutedTextClass} />
                 流程列表
@@ -1569,7 +1571,7 @@ function FlowConsole({
             </div>
           )}
         </nav>
-        <div className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+        <div className={"border-t border-border px-4 py-3 text-xs " + mutedToneClass}>
           <span className="font-medium text-foreground">
             {user.name || user.username || "内部用户"}
           </span>
@@ -1590,7 +1592,7 @@ function FlowConsole({
             <div className="border-b border-border p-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] font-bold tracking-[.18em] text-muted-foreground">
+                  <p className={"text-[10px] font-bold tracking-[.18em] " + mutedToneClass}>
                     PROJECT WORKBENCH
                   </p>
                   <h2 className="mt-1 text-sm font-semibold">流程仓库</h2>
@@ -1612,12 +1614,12 @@ function FlowConsole({
             </div>
             <div className="max-h-[calc(100vh-196px)] overflow-y-auto p-2">
               {workflows.isFetching && (
-                <div className="p-4 text-sm text-muted-foreground">
+                <div className={"p-4 text-sm " + mutedToneClass}>
                   正在读取项目流程…
                 </div>
               )}
               {workflows.isError && <div role="alert" className="p-3 text-sm text-destructive">流程读取失败。<Button variant="outline" size="sm" onClick={() => void workflows.refetch()}>重试</Button></div>}
-              {workflows.isSuccess && !workspaceWorkflows.length && <p className="p-3 text-sm text-muted-foreground">没有匹配的流程。</p>}
+              {workflows.isSuccess && !workspaceWorkflows.length && <p className={"p-3 text-sm " + mutedToneClass}>没有匹配的流程。</p>}
               {workflows.isSuccess && !workflows.isFetching && workspaceWorkflows.map(workflow => {
                 const definition = decodeJson(
                   workflow.definition
@@ -1641,14 +1643,14 @@ function FlowConsole({
                         {workflow.status === "published" ? "已发布" : "草稿"}
                       </span>
                     </div>
-                    <div className="mt-2 flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <div className={"mt-2 flex items-center gap-3 text-[11px] " + mutedToneClass}>
                       <span>{definition?.nodes?.length ?? 0} 节点</span>
                       <span>v{workflow.definitionVersion}</span>
                     </div>
                   </button>
                 );
               })}
-              <div className="flex items-center justify-between gap-2 border-t border-border pt-2 text-xs text-muted-foreground">
+              <div className={"flex items-center justify-between gap-2 border-t border-border pt-2 text-xs " + mutedToneClass}>
                 <Button variant="outline" size="sm" disabled={flowPage === 0 || workflows.isFetching || flowSearch.trim() !== flowSearchValue} onClick={() => setFlowPager({ scope: flowScope, page: flowPage - 1 })}>上一页</Button>
                 <span>第{flowPage + 1}页 · 每页10条</span>
                 <Button variant="outline" size="sm" disabled={!workflows.data?.hasMore || workflows.isFetching || flowSearch.trim() !== flowSearchValue} onClick={() => setFlowPager({ scope: flowScope, page: flowPage + 1 })}>下一页</Button>
@@ -1669,7 +1671,7 @@ function FlowConsole({
               data-aiflow-route-restoring
               role={routeProjectQuery.isError ? "alert" : "status"}
               aria-live="polite"
-              className="grid min-h-[calc(100dvh-64px)] place-items-center p-8 text-sm text-muted-foreground"
+              className={"grid min-h-[calc(100dvh-64px)] place-items-center p-8 text-sm " + mutedToneClass}
             >
               <div className="grid max-w-xl gap-4">
               <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 shadow-sm">
@@ -1736,11 +1738,11 @@ function FlowConsole({
                         >
                           <span className="min-w-0 flex-1 text-left" title={`${selectedProject.name}（${selectedProject.code}）`}>
                             <span className="block truncate font-semibold">{selectedProject.name}</span>
-                            <span className="block truncate text-xs font-normal text-muted-foreground">{selectedProject.code}</span>
+                            <span className={"block truncate text-xs font-normal " + mutedToneClass}>{selectedProject.code}</span>
                           </span>
                           <ChevronDown
                             size={14}
-                            className="shrink-0 text-muted-foreground"
+                            className={"shrink-0 " + mutedToneClass}
                             aria-hidden="true"
                           />
                         </Button>
@@ -1758,7 +1760,7 @@ function FlowConsole({
                           />
                           <CommandList className="max-h-[min(360px,60vh)]">
                             {projects.isFetching || projectSearch.trim() !== projectSearchValue ? (
-                              <p role="status" className="p-3 text-sm text-muted-foreground">正在搜索业务项目…</p>
+                              <p role="status" className={"p-3 text-sm " + mutedToneClass}>正在搜索业务项目…</p>
                             ) : projects.isError ? (
                               <div role="alert" className="p-3 text-sm text-aiflow-danger">搜索失败，请重试。<Button variant="outline" onClick={() => void projects.refetch()}>重试</Button></div>
                             ) : <CommandEmpty>没有匹配的业务项目</CommandEmpty>}
@@ -1784,7 +1786,7 @@ function FlowConsole({
                                       <span className="font-medium">
                                         {project.code}
                                       </span>
-                                      <span className="px-1 text-muted-foreground">
+                                      <span className={"px-1 " + mutedToneClass}>
                                         ·
                                       </span>
                                       <span>{project.name}</span>
@@ -1801,8 +1803,8 @@ function FlowConsole({
                               )}
                             </CommandGroup>
                           </CommandList>
-                          <p className="border-t px-3 py-2 text-xs text-muted-foreground">仅显示当前账号具备查看权限的业务项目</p>
-                          {projects.data?.hasMore && <p className="border-t p-3 text-sm text-muted-foreground">显示前 50 个匹配项目；输入名称或代号以缩小范围。</p>}
+                          <p className={"border-t px-3 py-2 text-xs " + mutedToneClass}>仅显示当前账号具备查看权限的业务项目</p>
+                          {projects.data?.hasMore && <p className={"border-t p-3 text-sm " + mutedToneClass}>显示前 50 个匹配项目；输入名称或代号以缩小范围。</p>}
                         </Command>
                       </PopoverContent>
                     </Popover>)}
@@ -1858,7 +1860,7 @@ function FlowConsole({
                 role={access.isError ? "alert" : "status"}
                 aria-live="polite"
               >
-                <p className="aiflow-type-body text-muted-foreground">
+                <p className={"aiflow-type-body " + mutedToneClass}>
                   {access.isError
                     ? `读取流程权限失败：${access.error.message}`
                     : draftBaseVersion === null && access.data ? "正在准备流程草稿…" : "正在读取流程权限…"}
@@ -2217,7 +2219,7 @@ function FlowConsole({
       {general.watermarkEnabled && general.watermarkText && (
         <div
           aria-hidden="true"
-          className="pointer-events-none fixed inset-0 z-20 grid grid-cols-2 content-around gap-24 overflow-hidden px-12 text-center text-3xl font-bold tracking-[.18em] text-muted-foreground/15 [transform:rotate(-24deg)_scale(1.25)] sm:grid-cols-3"
+          className={"pointer-events-none fixed inset-0 z-20 grid grid-cols-2 content-around gap-24 overflow-hidden px-12 text-center text-3xl font-bold tracking-[.18em] " + mutedToneClass + "/15 [transform:rotate(-24deg)_scale(1.25)] sm:grid-cols-3"}
         >
           {Array.from({ length: 15 }, (_, index) => (
             <span key={index}>{general.watermarkText}</span>
@@ -2458,7 +2460,7 @@ function FlowDesigner({
           <h2 className="mt-4 font-semibold text-foreground">
             选择或创建一个流程
           </h2>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          <p className={"mt-2 text-sm leading-6 " + mutedToneClass}>
             流程仓库显示了你拥有或被授予查看权限的工作流。
           </p>
         </div>
@@ -2639,7 +2641,7 @@ function FlowDesigner({
             align="end"
             className="w-56 max-w-[calc(100vw-2rem)]"
           >
-            <DropdownMenuLabel className="aiflow-type-control text-muted-foreground">
+            <DropdownMenuLabel className={"aiflow-type-control " + mutedToneClass}>
               其他操作
             </DropdownMenuLabel>
             <DropdownMenuItem aria-label="预检流程" onClick={onValidate} disabled={!canPublish || editorBusy}>
@@ -3570,7 +3572,7 @@ function IamCenter({
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="aiflow-type-meta font-medium text-muted-foreground">
+          <p className={"aiflow-type-meta font-medium " + mutedToneClass}>
             系统管理
           </p>
           <h1
@@ -3579,7 +3581,7 @@ function IamCenter({
           >
             {tab === "users" ? "用户账号" : tab === "roles" ? "角色与权限" : "授权审计"}
           </h1>
-          <p className="aiflow-type-body mt-1 text-muted-foreground">
+          <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
             {tab === "users" ? "管理账号与角色，查看有效权限和授权来源。" : tab === "roles" ? "配置角色权限，核对直接绑定与组织继承来源。" : "按操作者、对象与时间追溯授权变更。"}
           </p>
         </div>
@@ -3702,7 +3704,7 @@ function IamCenter({
             }
             required
           />
-          <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
+          <label className={"grid min-w-0 gap-1 text-xs " + mutedToneClass}>
             最多生成
             <Input
               type="number"
@@ -3715,7 +3717,7 @@ function IamCenter({
               required
             />
           </label>
-          <label className="grid min-w-0 gap-1 text-xs text-muted-foreground">
+          <label className={"grid min-w-0 gap-1 text-xs " + mutedToneClass}>
             账号角色
             <select
               className="h-9 min-w-0 rounded-md border border-border bg-card px-2 text-sm"
@@ -3732,7 +3734,7 @@ function IamCenter({
               <option value="admin">管理员</option>
             </select>
           </label>
-          <p className="aiflow-type-body self-end break-words text-muted-foreground md:col-span-2">
+          <p className={"aiflow-type-body self-end break-words " + mutedToneClass + " md:col-span-2"}>
             模型不能提升指定角色；预览不创建账号。
           </p>
         </div>
@@ -3748,7 +3750,7 @@ function IamCenter({
             </div>
             <div className="max-h-[360px] overflow-auto rounded-md border border-indigo-100 bg-card">
               <table className="w-full min-w-[880px] table-fixed text-left">
-                <thead className="sticky top-0 bg-muted text-muted-foreground">
+                <thead className={"sticky top-0 bg-muted " + mutedToneClass}>
                   <tr>
                     <th className="w-10 p-2">
                       <input
@@ -3806,18 +3808,18 @@ function IamCenter({
                       <td className="break-words p-2 font-medium">
                         {account.displayName}
                       </td>
-                      <td className="break-all p-2 text-muted-foreground">
+                      <td className={"break-all p-2 " + mutedToneClass}>
                         {account.email || "—"}
                       </td>
                       <td className="p-2">
                         {account.role === "admin" ? "管理员" : "普通用户"}
                       </td>
-                      <td className="break-words p-2 text-muted-foreground">
+                      <td className={"break-words p-2 " + mutedToneClass}>
                         {account.organizationSuggestion || "—"}
                         <br />
                         {account.managerSuggestion || ""}
                       </td>
-                      <td className="break-words p-2 text-muted-foreground">
+                      <td className={"break-words p-2 " + mutedToneClass}>
                         {account.rationale}
                       </td>
                     </tr>
@@ -3825,7 +3827,7 @@ function IamCenter({
                 </tbody>
               </table>
             </div>
-            <label className="mt-3 grid gap-1 text-xs font-medium text-muted-foreground sm:max-w-md">
+            <label className={"mt-3 grid gap-1 text-xs font-medium " + mutedToneClass + " sm:max-w-md"}>
               统一初始密码（不会发送给大模型）
               <Input
                 type="password"
@@ -3895,7 +3897,7 @@ function IamCenter({
                   }}
                 />
               </label>
-              <label className="mt-3 grid gap-1.5 text-sm text-muted-foreground">
+              <label className={"mt-3 grid gap-1.5 text-sm " + mutedToneClass}>
                 账号状态
                 <select aria-label="账号状态" className="aiflow-type-control min-h-11 rounded-md border border-input bg-card px-3 text-foreground min-[1024px]:min-h-10" value={userStatus} onChange={event => {
                   setUserStatus(event.target.value as typeof userStatus);
@@ -3908,7 +3910,7 @@ function IamCenter({
                   <option value="all">全部账号</option>
                 </select>
               </label>
-              <p className="mt-2 text-xs text-muted-foreground">默认显示启用账号；查看停用账号请切换状态。</p>
+              <p className={"mt-2 text-xs " + mutedToneClass}>默认显示启用账号；查看停用账号请切换状态。</p>
             </div>
             {/* UX：新页、搜索或状态变更从目录顶部开始，筛选与详情状态不受影响。 */}
             <div className="p-2" key={`${userPage}:${userSearch}:${userStatus}`}>
@@ -3944,7 +3946,7 @@ function IamCenter({
                   >
                     <span
                       aria-hidden="true"
-                      className={`grid h-8 w-8 place-items-center rounded-full text-xs font-semibold ${account.status === "active" ? "bg-aiflow-info-surface text-aiflow-info" : "bg-slate-200 text-muted-foreground"}`}
+                      className={`grid h-8 w-8 place-items-center rounded-full text-xs font-semibold ${account.status === "active" ? "bg-aiflow-info-surface text-aiflow-info" : ("bg-slate-200 " + mutedToneClass)}`}
                     >
                       {(account.name || account.username || "?").slice(0, 1)}
                     </span>
@@ -3958,7 +3960,7 @@ function IamCenter({
                         </span>
                         <span
                           data-iam-user-state=""
-                          className={account.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-slate-200 text-muted-foreground"}
+                          className={account.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-slate-200 " + mutedToneClass)}
                         >
                           {account.status === "active" ? "启用" : "停用"}
                         </span>
@@ -3986,7 +3988,7 @@ function IamCenter({
                         size="icon"
                         variant="ghost"
                         aria-label={`更多账号操作：${account.name || account.username || "内部账号"}`}
-                        className="h-11 w-11 shrink-0 text-muted-foreground min-[1024px]:h-10 min-[1024px]:w-10"
+                        className={"h-11 w-11 shrink-0 " + mutedToneClass + " min-[1024px]:h-10 min-[1024px]:w-10"}
                         data-iam-user-more-actions
                       >
                         <MoreHorizontal size={16} />
@@ -4157,7 +4159,7 @@ function IamCenter({
                     </div>
                     <p
                       data-iam-role-code=""
-                      className="aiflow-type-meta mt-0.5 break-words font-mono text-muted-foreground [overflow-wrap:anywhere]"
+                      className={"aiflow-type-meta mt-0.5 break-words font-mono " + mutedToneClass + " [overflow-wrap:anywhere]"}
                       title={role.code}
                     >
                       <IdentifierText value={role.code} />
@@ -4232,7 +4234,7 @@ function IamCenter({
 
       {tab === "audit" && (
         <section className="rounded-lg border border-border bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+          <div className={"flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm " + mutedToneClass}>
             <span>{auditReady && auditQuery.data ? `共 ${auditTotal} 条匹配记录 · 截至 ${formatTime(new Date(auditQuery.data.snapshotBefore - 1))}` : "全部历史记录"}</span>
             <Button variant="ghost" size="sm" onClick={refreshAudit} disabled={auditBusy || Boolean(auditDates.error)} title="刷新查看新记录">刷新审计记录</Button>
           </div>
@@ -4275,7 +4277,7 @@ function IamCenter({
                 )}
               </summary>
               <div className="absolute left-0 z-20 mt-1 grid w-[min(23rem,calc(100vw-4rem))] min-w-0 gap-3 rounded-lg border border-border bg-card p-3 shadow-xl min-[1024px]:left-auto min-[1024px]:right-0 sm:grid-cols-2">
-                <label className="grid min-w-0 gap-1 text-sm text-muted-foreground">
+                <label className={"grid min-w-0 gap-1 text-sm " + mutedToneClass}>
                   起始日期
                   <Input
                     aria-label="审计起始日期"
@@ -4288,7 +4290,7 @@ function IamCenter({
                     }}
                   />
                 </label>
-                <label className="grid min-w-0 gap-1 text-sm text-muted-foreground">
+                <label className={"grid min-w-0 gap-1 text-sm " + mutedToneClass}>
                   结束日期
                   <Input
                     aria-label="审计结束日期"
@@ -4320,7 +4322,7 @@ function IamCenter({
             </Button>
           </div>
           {auditDates.error ? <p role="alert" className="p-4 text-aiflow-danger">{auditDates.error}</p> : auditQuery.isError ? <div role="alert" className="p-4"><p>授权审计读取失败，筛选条件已保留。</p><Button variant="outline" disabled={auditBusy} onClick={() => void auditQuery.refetch()}>重新读取授权审计</Button></div> : auditBusy ? <p role="status" className="p-4">正在读取授权审计…</p> : null}
-          <div className="hidden grid-cols-[150px_minmax(130px,1fr)_minmax(150px,1fr)_minmax(150px,1.1fr)_80px_90px] gap-3 border-b border-border bg-muted px-4 py-2 text-[10px] font-medium text-muted-foreground min-[1024px]:grid">
+          <div className={"hidden grid-cols-[150px_minmax(130px,1fr)_minmax(150px,1fr)_minmax(150px,1.1fr)_80px_90px] gap-3 border-b border-border bg-muted px-4 py-2 text-[10px] font-medium " + mutedToneClass + " min-[1024px]:grid"}>
             <span>时间</span>
             <span>操作者 → 对象</span>
             <span>操作</span>
@@ -4346,7 +4348,7 @@ function IamCenter({
                       <span className={compactFilterLabelClass}>
                         时间
                       </span>
-                      <span className="aiflow-type-meta text-muted-foreground">
+                      <span className={"aiflow-type-meta " + mutedToneClass}>
                         {formatTime(item.createdAt)}
                       </span>
                     </div>
@@ -4356,7 +4358,7 @@ function IamCenter({
                       role="group"
                     >
                       <span
-                        className={`aiflow-type-meta inline-flex rounded-full px-2 py-0.5 ${outcome === "失败" ? "bg-aiflow-danger-surface text-aiflow-danger" : "bg-muted text-muted-foreground"}`}
+                        className={`aiflow-type-meta inline-flex rounded-full px-2 py-0.5 ${outcome === "失败" ? "bg-aiflow-danger-surface text-aiflow-danger" : ("bg-muted " + mutedToneClass)}`}
                       >
                         {outcome}
                       </span>
@@ -4386,7 +4388,7 @@ function IamCenter({
                       {!action && (
                         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
                           <code
-                            className="min-w-0 truncate font-mono text-[10px] text-muted-foreground"
+                            className={"min-w-0 truncate font-mono text-[10px] " + mutedToneClass}
                             title={item.action}
                           >
                             {item.action}
@@ -4402,7 +4404,7 @@ function IamCenter({
                           </button>
                         </div>
                       )}
-                      <span className="mt-0.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                      <span className={"mt-0.5 inline-flex rounded bg-muted px-1.5 py-0.5 text-[10px] " + mutedToneClass}>
                         {auditCategoryLabel(category)}
                       </span>
                     </div>
@@ -4411,14 +4413,14 @@ function IamCenter({
                         资源
                       </span>
                       <span
-                        className="block truncate text-muted-foreground"
+                        className={"block truncate " + mutedToneClass}
                         title={item.resourceType || item.targetUsername || "—"}
                       >
                         {item.resourceType || item.targetUsername || "—"}
                       </span>
                       {item.resourceId && (
                         <code
-                          className="mt-0.5 block truncate font-mono text-[10px] text-muted-foreground"
+                          className={"mt-0.5 block truncate font-mono text-[10px] " + mutedToneClass}
                           title={item.resourceId}
                         >
                           {item.resourceId}
@@ -4469,7 +4471,7 @@ function IamCenter({
                           </dd>
                         </div>
                       </dl>
-                      <pre className="aiflow-type-code mt-3 whitespace-pre-wrap break-words rounded bg-card p-3 text-muted-foreground min-[1024px]:max-h-40 min-[1024px]:overflow-auto">
+                      <pre className={"aiflow-type-code mt-3 whitespace-pre-wrap break-words rounded bg-card p-3 " + mutedToneClass + " min-[1024px]:max-h-40 min-[1024px]:overflow-auto"}>
                         {auditDetailsText(item.detailsJson)}
                       </pre>
                     </div>
@@ -4588,7 +4590,7 @@ function UserAuthorizationPanel({
               <p className="aiflow-type-body break-words font-semibold text-foreground">
                 {data.user.name || data.user.username}
               </p>
-              <p className="break-all font-mono text-muted-foreground">
+              <p className={"break-all font-mono " + mutedToneClass}>
                 {data.user.username}
               </p>
             </div>
@@ -4621,7 +4623,7 @@ function UserAuthorizationPanel({
               <p className={sectionTitleClass}>
                 系统级有效权限（{data.effectivePermissions.length}）
               </p>
-              <p className="mb-2 text-muted-foreground">
+              <p className={"mb-2 " + mutedToneClass}>
                 {data.authorizationSummary}
               </p>
               <div className="grid gap-1.5 sm:grid-cols-2">
@@ -4633,10 +4635,10 @@ function UserAuthorizationPanel({
                     <p className="break-all font-mono text-aiflow-info">
                       {permission.code}
                     </p>
-                    <p className="mt-0.5 break-words text-muted-foreground">
+                    <p className={"mt-0.5 break-words " + mutedToneClass}>
                       {permission.name}
                     </p>
-                    <p className="text-xs break-words text-muted-foreground">{permission.sourceLabels?.join("；")}</p>
+                    <p className={"text-xs break-words " + mutedToneClass}>{permission.sourceLabels?.join("；")}</p>
                   </div>
                 ))}
                 {!data.effectivePermissions.length && (
@@ -4682,7 +4684,7 @@ function RoleAuthorizationPanel({
             <p className="aiflow-type-section-title font-semibold">
               角色权限与绑定用户
             </p>
-            <p className="aiflow-type-body mt-0.5 text-muted-foreground">
+            <p className={"aiflow-type-body mt-0.5 " + mutedToneClass}>
               查看此角色的权限与绑定用户。
             </p>
           </div>
@@ -4763,7 +4765,7 @@ function RoleAuthorizationPanel({
               <p className="mt-1 break-all font-mono text-aiflow-info">
                 {data.role.code}
               </p>
-              <p className="mt-1 break-words leading-5 text-muted-foreground">
+              <p className={"mt-1 break-words leading-5 " + mutedToneClass}>
                 {data.role.description || "未填写角色说明"}
               </p>
               {!assignable && (
@@ -4786,7 +4788,7 @@ function RoleAuthorizationPanel({
                     <p className="break-all font-mono text-aiflow-info">
                       {permission.code}
                     </p>
-                    <p className="mt-0.5 break-words text-muted-foreground">
+                    <p className={"mt-0.5 break-words " + mutedToneClass}>
                       {permission.name}
                     </p>
                   </div>
@@ -4883,7 +4885,7 @@ function RoleDetailGroup({
                   ? "范围：系统全局"
                   : `范围：指定流程 ${role.scopeName || role.scopeId || ""}`}
             </p>
-            <p className="mt-1 text-muted-foreground">
+            <p className={"mt-1 " + mutedToneClass}>
               {role.expiresAt
                 ? `有效至 ${formatTime(role.expiresAt)}`
                 : "长期有效"}
@@ -4926,7 +4928,7 @@ function UserBindingGroup({
                 <p className="break-words font-medium text-foreground">
                   {account.name || account.username}
                 </p>
-                <p className="break-all font-mono text-muted-foreground">
+                <p className={"break-all font-mono " + mutedToneClass}>
                   {account.username}
                 </p>
               </div>
@@ -4941,7 +4943,7 @@ function UserBindingGroup({
                   ? "范围：系统全局"
                   : `范围：指定流程 ${account.scopeId || ""}`}
             </p>
-            <p className="mt-1 text-muted-foreground">
+            <p className={"mt-1 " + mutedToneClass}>
               {account.expiresAt
                 ? `有效至 ${formatTime(account.expiresAt)}`
                 : "长期有效"}

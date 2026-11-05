@@ -53,6 +53,7 @@ const colors: Record<string, string> = {
   waiting: tone("warning"),
   skipped: inactiveColor,
   stopped: inactiveColor,
+  cancelled: inactiveColor,
 };
 function RunNode({ data }: NodeProps<ViewerNode>) {
   const item = data.item as RunRecord;

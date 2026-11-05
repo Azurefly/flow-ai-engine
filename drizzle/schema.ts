@@ -1356,6 +1356,7 @@ export const dataflowRuns = mysqlTable(
     inputJson: json("inputJson").notNull(),
     outputJson: json("outputJson"),
     errorJson: json("errorJson"),
+    cancellationJson: json("cancellationJson"),
     startedAt: timestamp("startedAt"),
     finishedAt: timestamp("finishedAt"),
     durationMs: int("durationMs"),
@@ -1426,7 +1427,7 @@ export const dataflowNodeRuns = mysqlTable(
     nodeId: varchar("nodeId", { length: 120 }).notNull(),
     sequenceNo: int("sequenceNo").notNull(),
     nodeType: varchar("nodeType", { length: 64 }).notNull(),
-    status: mysqlEnum("status", ["running", "success", "failed", "skipped"])
+    status: mysqlEnum("status", ["running", "success", "failed", "skipped", "cancelled"])
       .default("running")
       .notNull(),
     attempt: int("attempt").default(1).notNull(),

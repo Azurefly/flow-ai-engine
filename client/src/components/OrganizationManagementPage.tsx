@@ -1,6 +1,8 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
 const surfaceClass1 = "org-member-action";
-const surfaceClass2 = "aiflow-type-meta font-medium text-muted-foreground";
+const surfaceClass2 = ("aiflow-type-meta font-medium " + mutedToneClass);
 const surfaceClass3 = "org-unit-menu";
 const surfaceClass4 = "org-unit-action";
 const surfaceClass5 = "org-empty";
@@ -416,12 +418,12 @@ export default function OrganizationManagementPage({
       return (
         <div key={unit.id}>
           <div
-            className={`group flex items-center gap-1 rounded-md pr-2 ${selectedId === unit.id ? "bg-accent text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
+            className={`group flex items-center gap-1 rounded-md pr-2 ${selectedId === unit.id ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
             style={{ paddingLeft: `${8 + Math.min(depth, 4) * 16}px` }}
           >
             <button
               type="button"
-              className="grid h-11 w-11 shrink-0 place-items-center text-muted-foreground min-[1024px]:h-10 min-[1024px]:w-10"
+              className={"grid h-11 w-11 shrink-0 place-items-center " + mutedToneClass + " min-[1024px]:h-10 min-[1024px]:w-10"}
               aria-label={`${isExpanded ? "收起" : "展开"}${unit.name}`}
               disabled={!children.length}
               onClick={() =>
@@ -457,14 +459,14 @@ export default function OrganizationManagementPage({
               </span>
               {isDuplicateName && (
                 <span
-                  className="max-w-20 shrink-0 truncate rounded bg-muted px-1 py-0.5 font-mono text-xs text-muted-foreground"
+                  className={"max-w-20 shrink-0 truncate rounded bg-muted px-1 py-0.5 font-mono text-xs " + mutedToneClass}
                   title={unit.code}
                 >
                   {unit.code}
                 </span>
               )}
               {unit.status === "disabled" && (
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className={"shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] " + mutedToneClass}>
                   停用
                 </span>
               )}
@@ -516,7 +518,7 @@ export default function OrganizationManagementPage({
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               组织架构管理
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <p className={"mt-1 text-sm " + mutedToneClass}>
               管理部门、负责人、成员岗位与权限来源，支持流程按直属上级或角色分配任务。
             </p>
           </div>
@@ -595,7 +597,7 @@ export default function OrganizationManagementPage({
             data-org-directory=""
             className={`border-b border-border bg-muted p-3 lg:border-b-0 lg:border-r ${selected && !mobileDirectoryOpen ? "hidden lg:block" : ""}`}
           >
-            <label className="flex h-11 items-center gap-2 rounded-md border border-border bg-card px-3 text-muted-foreground min-[1024px]:h-10">
+            <label className={"flex h-11 items-center gap-2 rounded-md border border-border bg-card px-3 " + mutedToneClass + " min-[1024px]:h-10"}>
               <Search size={14} />
               <Input
                 aria-label="搜索组织机构"
@@ -605,7 +607,7 @@ export default function OrganizationManagementPage({
                 onChange={event => setQuery(event.target.value)}
               />
             </label>
-            <label className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+            <label className={"mt-3 flex items-center gap-2 text-sm " + mutedToneClass}>
               <input
                 type="checkbox"
                 checked={showDisabled}
@@ -621,7 +623,7 @@ export default function OrganizationManagementPage({
               className="mt-3 max-h-[520px] overflow-y-auto"
             >
               {organization.isLoading ? (
-                <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                <div className={"flex items-center gap-2 p-4 text-sm " + mutedToneClass}>
                   <Loader2 size={15} className="animate-spin" />
                   正在读取机构树…
                 </div>
@@ -632,7 +634,7 @@ export default function OrganizationManagementPage({
                 units.length > 0 &&
                 !query.trim() &&
                 visibleIds.size === 0 && (
-                  <p className="p-6 text-sm text-muted-foreground">
+                  <p className={"p-6 text-sm " + mutedToneClass}>
                     暂无启用部门，可勾选“显示停用部门”。
                   </p>
                 )}
@@ -657,7 +659,7 @@ export default function OrganizationManagementPage({
               <p className="aiflow-type-section-title font-semibold text-foreground">
                 账号归属提示
               </p>
-              <p className="aiflow-type-body mt-1 text-muted-foreground">
+              <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
                 未分配部门账号：{unassignedActiveUserCount}{" "}
                 个。成员可属于多个部门，唯一主部门用于直属上级解析。
               </p>
@@ -668,7 +670,7 @@ export default function OrganizationManagementPage({
             className={`min-w-0 p-4 sm:p-6 ${mobileDirectoryOpen ? "hidden lg:block" : ""}`}
           >
             {!selected ? (
-              <div className="grid min-h-[460px] place-items-center text-sm text-muted-foreground">
+              <div className={"grid min-h-[460px] place-items-center text-sm " + mutedToneClass}>
                 请从左侧选择部门，或创建根部门。
               </div>
             ) : (
@@ -696,7 +698,7 @@ export default function OrganizationManagementPage({
                         {selected.name}
                       </h2>
                       <span
-                        className={`rounded-full px-2 py-1 text-xs ${selected.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
+                        className={`rounded-full px-2 py-1 text-xs ${selected.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-muted " + mutedToneClass)}`}
                       >
                         {selected.status === "active" ? "启用" : "停用"}
                       </span>
@@ -810,7 +812,7 @@ export default function OrganizationManagementPage({
                       type="button"
                       role="tab"
                       aria-selected={tab === item.id}
-                      className={`aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1.5 text-center sm:gap-2 sm:px-4 ${tab === item.id ? "border-aiflow-info bg-aiflow-info-surface text-aiflow-info" : "border-transparent text-muted-foreground hover:bg-muted"}`}
+                      className={`aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1.5 text-center sm:gap-2 sm:px-4 ${tab === item.id ? "border-aiflow-info bg-aiflow-info-surface text-aiflow-info" : ("border-transparent " + mutedToneClass + " hover:bg-muted")}`}
                       onClick={() => setTab(item.id)}
                     >
                       <item.icon size={15} />
@@ -891,10 +893,10 @@ export default function OrganizationManagementPage({
                       </div>
                     </details>
                     <div className="rounded-lg border border-border p-4 min-[448px]:col-span-2 xl:col-span-3">
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className={"text-xs font-medium " + mutedToneClass}>
                         部门说明
                       </p>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                      <p className={"mt-2 whitespace-pre-wrap text-sm leading-6 " + mutedToneClass}>
                         {selected.description || "未填写说明"}
                       </p>
                     </div>
@@ -934,7 +936,7 @@ export default function OrganizationManagementPage({
                       data-org-member-filter=""
                       className="mt-4 flex flex-col gap-3 rounded-lg border border-border bg-muted p-3 sm:flex-row sm:items-center"
                     >
-                      <label className="flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 text-muted-foreground min-[1024px]:h-10">
+                      <label className={"flex h-11 min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-card px-3 " + mutedToneClass + " min-[1024px]:h-10"}>
                         <Search size={14} />
                         <Input
                           aria-label="搜索部门成员"
@@ -944,7 +946,7 @@ export default function OrganizationManagementPage({
                           onChange={event => setMemberQuery(event.target.value)}
                         />
                       </label>
-                      <label className="flex min-h-11 shrink-0 items-center gap-2 text-sm text-muted-foreground">
+                      <label className={"flex min-h-11 shrink-0 items-center gap-2 text-sm " + mutedToneClass}>
                         <input
                           type="checkbox"
                           className="h-5 w-5"
@@ -960,7 +962,7 @@ export default function OrganizationManagementPage({
                       <p
                         role="status"
                         aria-live="polite"
-                        className="aiflow-type-body mt-3 text-muted-foreground"
+                        className={"aiflow-type-body mt-3 " + mutedToneClass}
                       >
                         正在读取当前范围的成员…
                       </p>
@@ -980,7 +982,7 @@ export default function OrganizationManagementPage({
                           <col />
                           <col className="w-44" />
                         </colgroup>
-                        <thead className="bg-muted text-sm text-muted-foreground">
+                        <thead className={"bg-muted text-sm " + mutedToneClass}>
                           <tr>
                             <th className="px-4 py-3">成员</th>
                             <th className="px-4 py-3">岗位/职务</th>
@@ -1019,7 +1021,7 @@ export default function OrganizationManagementPage({
                                 </p>
                               </td>
                               <td
-                                className="break-words px-4 py-3 text-muted-foreground"
+                                className={"break-words px-4 py-3 " + mutedToneClass}
                                 title={`部门路径：${member.unitDisplayPath || member.unitName}`}
                               >
                                 <p className="mb-2">
@@ -1030,7 +1032,7 @@ export default function OrganizationManagementPage({
                                     主部门
                                   </span>
                                 ) : (
-                                  <span className="whitespace-nowrap text-xs text-muted-foreground">
+                                  <span className={"whitespace-nowrap text-xs " + mutedToneClass}>
                                     兼任部门
                                   </span>
                                 )}
@@ -1046,7 +1048,7 @@ export default function OrganizationManagementPage({
                               <tr>
                                 <td
                                   colSpan={4}
-                                  className="p-10 text-center text-muted-foreground"
+                                  className={"p-10 text-center " + mutedToneClass}
                                 >
                                   {memberQuery.trim()
                                     ? "没有匹配的成员，请更换关键词。"
@@ -1090,7 +1092,7 @@ export default function OrganizationManagementPage({
                             </Button>
                             <span
                               aria-live="polite"
-                              className="aiflow-type-meta whitespace-nowrap text-muted-foreground"
+                              className={"aiflow-type-meta whitespace-nowrap " + mutedToneClass}
                             >
                               第 {memberPageInfo.page} /{" "}
                               {memberPageInfo.totalPages} 页
@@ -1147,10 +1149,10 @@ export default function OrganizationManagementPage({
                                 {binding.roleCode}
                               </code>
                             </div>
-                            <p className="aiflow-type-body mt-1 text-muted-foreground">
+                            <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
                               {binding.roleDescription || "未填写权限组说明"}
                             </p>
-                            <p className="aiflow-type-body mt-2 text-muted-foreground">
+                            <p className={"aiflow-type-body mt-2 " + mutedToneClass}>
                               {binding.includeDescendants
                                 ? "当前部门及所有子部门成员"
                                 : "仅当前部门直接成员"}
@@ -1200,7 +1202,7 @@ export default function OrganizationManagementPage({
                         </div>
                       ))}
                       {!selectedBindings.length && (
-                        <div className="aiflow-type-body rounded-lg border border-dashed border-border px-4 py-5 text-center text-muted-foreground">
+                        <div className={"aiflow-type-body rounded-lg border border-dashed border-border px-4 py-5 text-center " + mutedToneClass}>
                           当前部门尚未绑定权限组。
                         </div>
                       )}
@@ -1364,11 +1366,11 @@ function RoleSourceList({
                 {role.roleCode}
               </code>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{source(role)}</p>
+            <p className={"mt-1 text-xs " + mutedToneClass}>{source(role)}</p>
           </div>
         ))}
         {!roles.length && (
-          <p className="rounded-md border border-dashed border-border bg-card p-4 text-center text-xs text-muted-foreground">
+          <p className={"rounded-md border border-dashed border-border bg-card p-4 text-center text-xs " + mutedToneClass}>
             {empty}
           </p>
         )}
@@ -1386,7 +1388,7 @@ function OrganizationAccountStatus({ status }: { status: unknown }) {
         : "账号状态未确认";
   return (
     <span
-      className={`aiflow-type-meta ml-2 inline-flex whitespace-nowrap rounded px-1.5 py-0.5 font-normal ${status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
+      className={`aiflow-type-meta ml-2 inline-flex whitespace-nowrap rounded px-1.5 py-0.5 font-normal ${status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-muted " + mutedToneClass)}`}
     >
       {label}
     </span>

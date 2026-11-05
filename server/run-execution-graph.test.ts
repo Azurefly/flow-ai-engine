@@ -37,6 +37,17 @@ const definition = {
     },
   ],
 };
+
+it("取消节点保留真实终态和记录，既有成功产物节点不变", () => {
+  const graph = projectRunGraph({ status: "cancelled", definitionSnapshotJson: definition, nodeRuns: [
+    { id: "n1", nodeId: "start", status: "success", sequenceNo: 0 },
+    { id: "n2", nodeId: "review", status: "cancelled", sequenceNo: 1 },
+  ] });
+  expect(graph.nodes.find(n => n.id === "start")?.status).toBe("success");
+  expect(graph.nodes.find(n => n.id === "review")).toMatchObject({ status: "cancelled", activeCount: 0 });
+  expect(graph.nodes.find(n => n.id === "review")?.records[0].id).toBe("n2");
+  expect(graph.nodes.find(n => n.id === "done")?.status).toBe("idle");
+});
 const run = (extra: Record<string, unknown> = {}) => ({
   id: "run-1",
   status: "waiting",

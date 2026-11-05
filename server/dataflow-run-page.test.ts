@@ -8,6 +8,14 @@ import {
   encodeWorkbenchPageCursor,
 } from "./workbench-pagination";
 const user = { id: 1, role: "user" as const };
+
+it("已取消可筛选，摘要按本人及业务权限返回取消能力", async () => {
+  mocks.access.mockResolvedValue({ exists: true, permissions: new Set(["project:view", "project:workflow:run"]) });
+  mocks.query.mockResolvedValue([[{ id: "r1", status: "running", triggeredByUserId: 1, executionSource: "published_plan" }, { id: "r2", status: "running", triggeredByUserId: 2, executionSource: "published_plan" }, { id: "r3", status: "cancelled", triggeredByUserId: 1, executionSource: "published_plan" }]]);
+  const page = await pageDataflowRuns(user, { projectId: "p", status: "cancelled" });
+  expect(page.items.map(r => r.canCancel)).toEqual([true, false, false]);
+  expect(mocks.query.mock.calls[0][1]).toContain("cancelled");
+});
 beforeEach(() => {
   vi.resetAllMocks();
   mocks.access.mockResolvedValue({

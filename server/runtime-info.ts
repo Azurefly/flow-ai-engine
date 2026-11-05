@@ -4,9 +4,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0042_workflow_creation_requests";
-export const DATABASE_MIGRATION_EPOCH = 1792770412462;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 68;
+export const DATABASE_MIGRATION_VERSION = "0043_dataflow_cancellation";
+export const DATABASE_MIGRATION_EPOCH = 1793846591894;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 70;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -99,7 +99,8 @@ export async function checkReadiness() {
           (table_name='workflow' AND column_name IN ('archivedAt','publishedExecutionPlanJson','publishedExecutionPlanHash')) OR
           (table_name='workflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','flowType','businessKey','currentStateCode','currentStateNodeId','stateVersion','endReason')) OR
           (table_name='workflow_task' AND column_name IN ('approvalOrder','requestId','operationCode','ownerVersion','outcomeHandlesJson')) OR
-          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson')) OR
+          (table_name='dataflow_run' AND column_name IN ('executionPlanJson','executionPlanHash','executionSource','definitionVersion','requestId','checkpointJson','watermarkInputJson','watermarkOutputJson','cancellationJson')) OR
+          (table_name='dataflow_node_run' AND column_name='status' AND column_type='enum(''running'',''success'',''failed'',''skipped'',''cancelled'')') OR
           (table_name='dataflow_schedule' AND column_name IN ('schedulerType','revision','nextRunAt','lastError')) OR
           (table_name='dataflow_node_run' AND column_name IN ('inputArtifactsJson','outputArtifactsJson','metricsJson','jobLeaseToken')) OR
           (table_name='data_source_test_run' AND column_name IN ('status','configHash','leaseToken','errorCategory','evidenceJson')) OR

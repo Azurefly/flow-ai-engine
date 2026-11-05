@@ -1,3 +1,6 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
+import { DataflowCancelControl, DataflowCancellationInfo } from "./DataflowCancelControl";
 import {
   dataflowTerminalResults,
   dataflowResultColumns,
@@ -52,15 +55,15 @@ import {
   Clock,
   HelpCircle,
 } from "lucide-react";
-const inactiveTabClass = "border-transparent text-muted-foreground hover:text-foreground";
+const inactiveTabClass = ("border-transparent " + mutedToneClass + " hover:text-foreground");
 const resultPanelClass = "rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]";
 const nodePanelClass = "rounded-lg border border-border bg-muted/50 overflow-hidden";
 const nodeHeaderClass = "flex items-center justify-between px-3.5 py-2.5 cursor-pointer hover:bg-muted/60 transition-colors";
 const nodeIndexClass = "flex h-5 w-5 items-center justify-center rounded-full bg-aiflow-info-surface text-[10px] font-bold text-aiflow-info";
-const outputLabelClass = "aiflow-type-body mb-1.5 font-semibold text-muted-foreground";
+const outputLabelClass = ("aiflow-type-body mb-1.5 font-semibold " + mutedToneClass);
 const jsonOutputClass = "aiflow-type-code max-h-40 overflow-auto rounded bg-slate-900 p-2.5 font-mono text-emerald-300";
-const payloadLabelClass = "aiflow-type-body mb-1 font-semibold text-muted-foreground";
-const emptyStateClass = "aiflow-type-body py-8 text-center text-muted-foreground";
+const payloadLabelClass = ("aiflow-type-body mb-1 font-semibold " + mutedToneClass);
+const emptyStateClass = ("aiflow-type-body py-8 text-center " + mutedToneClass);
 
 
 interface WorkflowTestRunModalProps {
@@ -207,7 +210,7 @@ export default function WorkflowTestRunModal({
       ),
       refetchInterval: query => {
         const status = (query.state.data as any)?.status;
-        return status === "success" || status === "failed" ? false : 800;
+        return status === "success" || status === "failed" || status === "cancelled" ? false : 800;
       },
     }
   );
@@ -464,7 +467,7 @@ export default function WorkflowTestRunModal({
                     </span>
                   )}
                 </DialogTitle>
-                <DialogDescription className="aiflow-type-body mt-1 text-muted-foreground">
+                <DialogDescription className={"aiflow-type-body mt-1 " + mutedToneClass}>
                   {workflow?.status === "published"
                     ? hasUnpublishedChanges
                       ? `画布有未发布修改；本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。发布新版本后才能按这些修改运行。`
@@ -473,19 +476,20 @@ export default function WorkflowTestRunModal({
                       ? "运行前会先保存当前画布；只有保存成功才会启动运行。"
                       : `本次会按服务端已保存的草稿定义 v${workflow?.definitionVersion ?? 1} 运行。`}{" "}
                 </DialogDescription>
-                {executionPermissionHint && <p role="status" className="mt-2 text-sm text-muted-foreground">{executionPermissionHint}</p>}
+                {executionPermissionHint && <p role="status" className={"mt-2 text-sm " + mutedToneClass}>{executionPermissionHint}</p>}
                 {isDataflow && dataProjectAccess.isError && <Button type="button" variant="outline" size="sm" className="mt-2" disabled={dataProjectAccess.isFetching} onClick={() => void dataProjectAccess.refetch()}>重新加载项目权限</Button>}
               </div>
             </div>
 
             {/* View Mode Switch */}
             <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              {isDataflow && dataflowRunQuery.data && <DataflowCancelControl key={dataflowRunQuery.data.id} run={dataflowRunQuery.data} />}
               {viewMode === "result" && (
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="aiflow-type-control h-11 text-muted-foreground min-[1024px]:h-9"
+                  className={"aiflow-type-control h-11 " + mutedToneClass + " min-[1024px]:h-9"}
                   onClick={() => setViewMode("config")}
                 >
                   <SlidersHorizontal size={13} className="mr-1.5" />
@@ -506,6 +510,7 @@ export default function WorkflowTestRunModal({
             </div>
           </div>
 
+          {isDataflow && <DataflowCancellationInfo cancellation={dataflowRunQuery.data?.cancellation} />}
           {/* Status banner when in result view */}
           {viewMode === "result" && (
             <div className="mt-3 flex flex-col gap-3 rounded-lg border border-border/80 bg-card p-2.5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
@@ -545,13 +550,13 @@ export default function WorkflowTestRunModal({
                     <span>{isStateflow ? "状态流转异常阻断" : "运行失败"}</span>
                   </div>
                 ) : (
-                  <div className="aiflow-type-body font-medium text-muted-foreground">
+                  <div className={"aiflow-type-body font-medium " + mutedToneClass}>
                     {currentRun?.status === "terminated" ? "运行已终止" : currentRun?.status === "cancelled" ? "运行已取消" : "尚未发起运行"}
                   </div>
                 )}
 
                 {activeRunId && (
-                  <span className="aiflow-type-meta rounded bg-muted px-2 py-0.5 font-mono text-muted-foreground">
+                  <span className={"aiflow-type-meta rounded bg-muted px-2 py-0.5 font-mono " + mutedToneClass}>
                     ID: {activeRunId.slice(0, 8)}
                   </span>
                 )}
@@ -572,7 +577,7 @@ export default function WorkflowTestRunModal({
                 )}
                 {currentRun?.durationMs !== undefined &&
                   currentRun?.durationMs !== null && (
-                    <span className="aiflow-type-meta text-muted-foreground">
+                    <span className={"aiflow-type-meta " + mutedToneClass}>
                       耗时:{" "}
                       <strong className="text-foreground">
                         {String(currentRun.durationMs)} ms
@@ -629,7 +634,7 @@ export default function WorkflowTestRunModal({
                       />
                       配置运行输入
                     </h3>
-                    <p className="aiflow-type-body mt-0.5 text-muted-foreground">
+                    <p className={"aiflow-type-body mt-0.5 " + mutedToneClass}>
                       业务编号请选择文本以保留前导零；可明确选择数值、布尔或
                       JSON。自动识别会保留带前导零或超出安全整数范围的编号。
                     </p>
@@ -650,7 +655,7 @@ export default function WorkflowTestRunModal({
 
                 <div className="mt-4 space-y-2.5">
                   {!inputRows.length && (
-                    <div className="aiflow-type-body rounded border border-dashed border-border bg-muted p-4 text-center text-muted-foreground">
+                    <div className={"aiflow-type-body rounded border border-dashed border-border bg-muted p-4 text-center " + mutedToneClass}>
                       当前未配置输入字段。确认流程无需额外输入后，可发起本次实际运行。
                     </div>
                   )}
@@ -712,7 +717,7 @@ export default function WorkflowTestRunModal({
                       <button
                         type="button"
                         aria-label={`删除输入字段 ${row.key || index + 1}`}
-                        className="aiflow-type-control col-start-3 row-start-1 flex h-11 min-h-11 w-11 items-center justify-center rounded text-muted-foreground sm:col-start-4 transition-colors hover:bg-red-50 hover:text-red-600 min-[1024px]:h-9 min-[1024px]:min-h-0 min-[1024px]:w-9"
+                        className={"aiflow-type-control col-start-3 row-start-1 flex h-11 min-h-11 w-11 items-center justify-center rounded " + mutedToneClass + " sm:col-start-4 transition-colors hover:bg-red-50 hover:text-red-600 min-[1024px]:h-9 min-[1024px]:min-h-0 min-[1024px]:w-9"}
                         onClick={() =>
                           updateInputRows(
                             inputRows.filter((_, i) => i !== index)
@@ -754,7 +759,7 @@ export default function WorkflowTestRunModal({
                 />
                 <section aria-label="本次运行条件" className="mt-4 space-y-2 rounded-lg border border-border p-3 text-sm">
                   <Button type="button" variant="outline" disabled={!canExecute || isRunning || readinessRequest.isPending || inputErrors.length > 0} onClick={() => void checkConditions().catch(error => setReadinessError(error.message))}>{readinessRequest.isPending ? "正在检查…" : "检查运行条件"}</Button>
-                  <p className="text-muted-foreground">只读检查已保存版本与本次输入，不执行节点或外部请求；运行前保存草稿后会复查。</p>
+                  <p className={mutedToneClass}>只读检查已保存版本与本次输入，不执行节点或外部请求；运行前保存草稿后会复查。</p>
                   {readinessError && <p role="alert">{readinessError}</p>}
                   {currentReadiness && <div role="status" className="space-y-2">
                     <p>v{currentReadiness.definitionVersion} · {currentReadiness.executionSource === "published_plan" ? "已发布快照" : "已保存定义"} · {!currentReadiness.canStart ? "存在阻断项，未创建实例" : currentReadiness.checks.some(item => item.status === "deferred") ? "部分条件待运行时确认" : "当前检查未发现阻断项"}</p>
@@ -770,7 +775,7 @@ export default function WorkflowTestRunModal({
                       </li>;
                     })}</ul>}
                     {currentReadiness.checks.length > 0 && <details><summary>处理人检查 · {currentReadiness.checks.length} 项</summary>{currentReadiness.checks.map(item => <p key={item.nodeId}>{item.name}：{item.message}</p>)}</details>}
-                    <p className="text-muted-foreground">动态条件和外部服务在执行时再校验，不保证所有分支成功。</p>
+                    <p className={mutedToneClass}>动态条件和外部服务在执行时再校验，不保证所有分支成功。</p>
                   </div>}
                 </section>
                 <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-end">
@@ -865,7 +870,7 @@ export default function WorkflowTestRunModal({
                     currentRun?.nodeRuns?.length ||
                       dataflowLineageQuery.data?.artifacts?.length
                   ) && (
-                    <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] text-muted-foreground">
+                    <span className={"rounded bg-muted px-1.5 py-0.2 text-[10px] " + mutedToneClass}>
                       {currentRun?.nodeRuns?.length ||
                         dataflowLineageQuery.data?.artifacts?.length}{" "}
                       节点
@@ -916,7 +921,7 @@ export default function WorkflowTestRunModal({
 
                   {/* Loading State */}
                   {isRunning && !currentRun?.output && (
-                    <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+                    <div className={"flex flex-col items-center justify-center py-16 " + mutedToneClass}>
                       <Loader2
                         size={32}
                         className="animate-spin text-blue-500 mb-3"
@@ -924,7 +929,7 @@ export default function WorkflowTestRunModal({
                       <p className="text-sm font-medium text-foreground">
                         正在执行流程算子计算…
                       </p>
-                      <p className="aiflow-type-body mt-1 text-muted-foreground">
+                      <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
                         系统正在处理流转数据并生成各算子输出，请稍候
                       </p>
                     </div>
@@ -960,13 +965,13 @@ export default function WorkflowTestRunModal({
                           <span className="text-xs font-semibold text-foreground">
                             输出内容
                             {isDataflow && dataResults.length === 1 && (
-                              <span className="ml-2 font-normal text-muted-foreground">
+                              <span className={"ml-2 font-normal " + mutedToneClass}>
                                 {dataResults[0].name}
                               </span>
                             )}
                           </span>
                           {outputRows && (
-                            <span className="text-xs text-muted-foreground">
+                            <span className={"text-xs " + mutedToneClass}>
                               (共 {outputRows.length} 行记录)
                             </span>
                           )}
@@ -980,7 +985,7 @@ export default function WorkflowTestRunModal({
                                 className={`flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                   resultDisplayMode === "table"
                                     ? "bg-card text-aiflow-info shadow-xs"
-                                    : "text-muted-foreground hover:text-foreground"
+                                    : (mutedToneClass + " hover:text-foreground")
                                 }`}
                                 onClick={() => setResultDisplayMode("table")}
                               >
@@ -992,7 +997,7 @@ export default function WorkflowTestRunModal({
                                 className={`flex items-center gap-1 rounded px-2.5 py-1 text-[11px] font-medium transition-colors ${
                                   resultDisplayMode === "json"
                                     ? "bg-card text-aiflow-info shadow-xs"
-                                    : "text-muted-foreground hover:text-foreground"
+                                    : (mutedToneClass + " hover:text-foreground")
                                 }`}
                                 onClick={() => setResultDisplayMode("json")}
                               >
@@ -1006,7 +1011,7 @@ export default function WorkflowTestRunModal({
                             type="button"
                             variant="outline"
                             size="sm"
-                            className="h-7 text-xs text-muted-foreground"
+                            className={"h-7 text-xs " + mutedToneClass}
                             onClick={() => handleCopyJson(currentRun.output)}
                           >
                             {copied ? (
@@ -1027,9 +1032,9 @@ export default function WorkflowTestRunModal({
                         <div className="space-y-2">
                           <div className="overflow-x-auto rounded border border-border max-h-[360px]">
                             <table className="w-full text-left text-xs">
-                              <thead className="sticky top-0 z-10 bg-muted text-sm text-muted-foreground">
+                              <thead className={"sticky top-0 z-10 bg-muted text-sm " + mutedToneClass}>
                                 <tr>
-                                  <th className="px-3 py-2 w-12 text-muted-foreground font-mono">
+                                  <th className={"px-3 py-2 w-12 " + mutedToneClass + " font-mono"}>
                                     #
                                   </th>
                                   {outputColumns.map(col => (
@@ -1052,7 +1057,7 @@ export default function WorkflowTestRunModal({
                                         key={rowIndex}
                                         className="hover:bg-aiflow-info-surface/40 transition-colors"
                                       >
-                                        <td className="px-3 py-2 text-muted-foreground font-mono text-[11px]">
+                                        <td className={"px-3 py-2 " + mutedToneClass + " font-mono text-[11px]"}>
                                           {rowIndex + 1}
                                         </td>
                                         {outputColumns.map(col => {
@@ -1084,7 +1089,7 @@ export default function WorkflowTestRunModal({
                                                   className={
                                                     val
                                                       ? "text-aiflow-success font-semibold"
-                                                      : "text-muted-foreground"
+                                                      : (mutedToneClass)
                                                   }
                                                 >
                                                   {String(val)}
@@ -1107,7 +1112,7 @@ export default function WorkflowTestRunModal({
                             </table>
                           </div>
                           {totalOutputPages > 1 && (
-                            <div className="flex items-center justify-between px-1 py-1 text-xs text-muted-foreground border-t border-border pt-2">
+                            <div className={"flex items-center justify-between px-1 py-1 text-xs " + mutedToneClass + " border-t border-border pt-2"}>
                               <span>
                                 显示第 {(outputPage - 1) * OUTPUT_PAGE_SIZE + 1}{" "}
                                 ~{" "}
@@ -1130,7 +1135,7 @@ export default function WorkflowTestRunModal({
                                 >
                                   上一页
                                 </Button>
-                                <span className="font-mono text-xs px-1 text-muted-foreground">
+                                <span className={"font-mono text-xs px-1 " + mutedToneClass}>
                                   {outputPage} / {totalOutputPages}
                                 </span>
                                 <Button
@@ -1164,7 +1169,7 @@ export default function WorkflowTestRunModal({
                     !currentRun?.output &&
                     !runError &&
                     !currentRun?.error && (
-                      <div className="aiflow-type-body py-12 text-center text-muted-foreground">
+                      <div className={"aiflow-type-body py-12 text-center " + mutedToneClass}>
                         本次运行未返回结构化输出，请查看“算子执行明细”。
                       </div>
                     )}
@@ -1174,7 +1179,7 @@ export default function WorkflowTestRunModal({
               {/* Tab 2: Execution Steps / Node Details */}
               {activeTab === "steps" && (
                 <div className={resultPanelClass}>
-                  <p className="aiflow-type-body mb-3 text-muted-foreground">
+                  <p className={"aiflow-type-body mb-3 " + mutedToneClass}>
                     按照流程拓扑顺序记录各算子的实际执行状态、耗时与输入输出数据：
                   </p>
 
@@ -1222,7 +1227,7 @@ export default function WorkflowTestRunModal({
                                 <span className="text-xs font-semibold text-foreground">
                                   {nodeInfo?.name || item.nodeId}
                                 </span>
-                                <code className="text-[10px] bg-slate-200 text-muted-foreground px-1.5 py-0.5 rounded uppercase">
+                                <code className={"text-[10px] bg-slate-200 " + mutedToneClass + " px-1.5 py-0.5 rounded uppercase"}>
                                   {item.nodeType || nodeInfo?.type}
                                 </code>
                               </div>
@@ -1236,19 +1241,19 @@ export default function WorkflowTestRunModal({
                                   )}
                                 {item.durationMs !== undefined &&
                                   item.durationMs !== null && (
-                                    <span className="text-xs text-muted-foreground font-mono">
+                                    <span className={"text-xs " + mutedToneClass + " font-mono"}>
                                       {item.durationMs} ms
                                     </span>
                                   )}
                                 {isExpanded ? (
                                   <ChevronDown
                                     size={15}
-                                    className="text-muted-foreground"
+                                    className={mutedToneClass}
                                   />
                                 ) : (
                                   <ChevronRight
                                     size={15}
-                                    className="text-muted-foreground"
+                                    className={mutedToneClass}
                                   />
                                 )}
                               </div>
@@ -1300,7 +1305,7 @@ export default function WorkflowTestRunModal({
                                 {artifact?.schema &&
                                   artifact.schema.length > 0 && (
                                     <div>
-                                      <p className="text-[11px] font-semibold text-muted-foreground mb-1">
+                                      <p className={"text-[11px] font-semibold " + mutedToneClass + " mb-1"}>
                                         字段 Schema
                                       </p>
                                       <div className="flex flex-wrap gap-1.5">
@@ -1351,24 +1356,24 @@ export default function WorkflowTestRunModal({
                                 <span className="aiflow-type-body font-semibold text-foreground">
                                   {node.nodeName || node.nodeId}
                                 </span>
-                                <code className="text-[10px] bg-slate-200 text-muted-foreground px-1.5 py-0.5 rounded">
+                                <code className={"text-[10px] bg-slate-200 " + mutedToneClass + " px-1.5 py-0.5 rounded"}>
                                   {node.nodeType}
                                 </code>
                               </div>
 
                               <div className="flex items-center gap-3">
-                                <span className="text-xs text-muted-foreground font-mono">
+                                <span className={"text-xs " + mutedToneClass + " font-mono"}>
                                   {node.durationMs ?? 0} ms
                                 </span>
                                 {isExpanded ? (
                                   <ChevronDown
                                     size={15}
-                                    className="text-muted-foreground"
+                                    className={mutedToneClass}
                                   />
                                 ) : (
                                   <ChevronRight
                                     size={15}
-                                    className="text-muted-foreground"
+                                    className={mutedToneClass}
                                   />
                                 )}
                               </div>
@@ -1424,7 +1429,7 @@ export default function WorkflowTestRunModal({
               {activeTab === "input" && (
                 <div className={resultPanelClass}>
                   <div className="flex items-center justify-between mb-3">
-                    <p className="aiflow-type-body text-muted-foreground">
+                    <p className={"aiflow-type-body " + mutedToneClass}>
                       本次运行提交的输入字段：
                     </p>
                     <Button
@@ -1455,7 +1460,7 @@ export default function WorkflowTestRunModal({
 
         {/* Modal Footer */}
         <div className="flex shrink-0 items-center gap-3 border-t border-border bg-muted px-4 py-3 sm:px-6">
-          <div className="aiflow-type-meta flex min-w-0 flex-1 flex-col gap-0.5 text-muted-foreground">
+          <div className={"aiflow-type-meta flex min-w-0 flex-1 flex-col gap-0.5 " + mutedToneClass}>
             <span
               className="block truncate font-mono"
               title={workflow?.name || "当前流程"}

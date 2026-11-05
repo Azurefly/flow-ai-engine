@@ -1,33 +1,35 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
-const surfaceClass1 = "aiflow-type-meta text-muted-foreground";
-const surfaceClass2 = "aiflow-type-body mt-1 text-muted-foreground";
+const surfaceClass1 = ("aiflow-type-meta " + mutedToneClass);
+const surfaceClass2 = ("aiflow-type-body mt-1 " + mutedToneClass);
 const surfaceClass3 = "aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left text-foreground hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50 min-[1280px]:min-h-0";
 const surfaceClass4 = "overflow-hidden rounded-lg border border-border bg-card shadow-2xs";
 const surfaceClass5 = "aiflow-type-control h-11 min-[1280px]:h-9";
-const surfaceClass6 = "aiflow-type-control grid gap-1 text-muted-foreground";
-const surfaceClass7 = "aiflow-type-control grid gap-1 font-medium text-muted-foreground";
-const surfaceClass8 = "aiflow-type-body font-normal text-muted-foreground";
-const surfaceClass9 = "aiflow-type-control font-medium text-muted-foreground";
-const surfaceClass10 = "aiflow-type-body text-muted-foreground";
-const surfaceClass11 = "aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground";
+const surfaceClass6 = ("aiflow-type-control grid gap-1 " + mutedToneClass);
+const surfaceClass7 = ("aiflow-type-control grid gap-1 font-medium " + mutedToneClass);
+const surfaceClass8 = ("aiflow-type-body font-normal " + mutedToneClass);
+const surfaceClass9 = ("aiflow-type-control font-medium " + mutedToneClass);
+const surfaceClass10 = ("aiflow-type-body " + mutedToneClass);
+const surfaceClass11 = ("aiflow-type-meta font-bold tracking-[.16em] " + mutedToneClass);
 const surfaceClass12 = "aiflow-type-page-title mt-1 font-semibold text-foreground";
 const surfaceClass13 = "min-h-11 text-sm min-[1024px]:min-h-10";
-const surfaceClass14 = "aiflow-type-body -mt-2 leading-5 text-muted-foreground";
+const surfaceClass14 = ("aiflow-type-body -mt-2 leading-5 " + mutedToneClass);
 const surfaceClass15 = "aiflow-type-body font-semibold text-foreground";
 const surfaceClass16 = "aiflow-type-meta mt-0.5 tabular-nums text-foreground";
 const surfaceClass17 = "h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9";
-const surfaceClass18 = "py-8 text-center text-sm text-muted-foreground";
+const surfaceClass18 = ("py-8 text-center text-sm " + mutedToneClass);
 const surfaceClass19 = "aiflow-type-body font-medium text-foreground";
 const surfaceClass20 = "grid gap-1.5 text-sm text-foreground";
 const surfaceClass21 = "aiflow-type-body flex flex-col gap-1 border-b border-border bg-muted/70 px-4 py-3 font-semibold sm:flex-row sm:items-center sm:justify-between";
-const surfaceClass22 = "aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal text-muted-foreground";
-const surfaceClass23 = "aiflow-type-body leading-5 font-normal text-muted-foreground";
+const surfaceClass22 = ("aiflow-type-meta rounded-full bg-card px-2 py-0.5 font-normal " + mutedToneClass);
+const surfaceClass23 = ("aiflow-type-body leading-5 font-normal " + mutedToneClass);
 const surfaceClass24 = "shrink-0 transition-transform group-open:rotate-180";
 const surfaceClass25 = "grid min-w-0 gap-3 border-t border-border bg-muted p-4 sm:grid-cols-2";
 const surfaceClass26 = "h-11 min-w-0 rounded border border-border bg-card px-2 text-sm text-foreground";
 const surfaceClass27 = "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between";
 const surfaceClass28 = "aiflow-type-control inline-flex min-h-11 items-center gap-1.5 rounded px-2.5 font-medium text-aiflow-danger hover:bg-aiflow-danger-surface hover:text-aiflow-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 min-[1280px]:min-h-9";
-const surfaceClass29 = "aiflow-type-body p-6 text-center text-muted-foreground";
+const surfaceClass29 = ("aiflow-type-body p-6 text-center " + mutedToneClass);
 import { workflowReviewSnapshot } from "@shared/workflow-review-snapshot";
 import { roleExpiryInput } from "@shared/role-expiry";
 import { projectCapabilities } from "@shared/project-capabilities";
@@ -93,7 +95,7 @@ const DataResourceCenter = lazy(() => import("./DataResourceCenter"));
 const ProjectArchiveDialog = lazy(() => import("./ProjectArchiveDialog"));
 const WorkflowReviewDialog = lazy(() => import("./WorkflowReviewDialog"));
 const projectInfoValueClass = "aiflow-type-body mt-0.5 break-words text-foreground";
-const projectFieldLabelClass = "aiflow-type-control block space-y-1 font-medium text-muted-foreground";
+const projectFieldLabelClass = ("aiflow-type-control block space-y-1 font-medium " + mutedToneClass);
 const projectSummaryClass = "flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 font-medium text-aiflow-info marker:content-none hover:bg-aiflow-info-surface/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 [&::-webkit-details-marker]:hidden";
 
 export type ProjectRecord = {
@@ -639,7 +641,7 @@ function BusinessCenterView({
 
   const pagination =
     (
-      <div className="aiflow-type-meta flex flex-col gap-2 border-t border-border/80 bg-card px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+      <div className={"aiflow-type-meta flex flex-col gap-2 border-t border-border/80 bg-card px-4 py-3 " + mutedToneClass + " sm:flex-row sm:items-center sm:justify-between"}>
         <span aria-live="polite">
           显示第 {total ? (currentPage - 1) * pageSize + 1 : 0}–
           {Math.min(currentPage * pageSize, total)} 项，共 {total} 个业务项目
@@ -699,7 +701,7 @@ function BusinessCenterView({
       <div className="aiflow-page-content">
         <header className="mb-4 flex flex-col gap-3 border-b border-border/80 pb-3 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
-            <p className="aiflow-type-meta mb-0.5 text-muted-foreground">
+            <p className={"aiflow-type-meta mb-0.5 " + mutedToneClass}>
               流程设计 / 业务项目
             </p>
             <h1 className="aiflow-type-page-title font-semibold tracking-tight text-foreground">
@@ -744,7 +746,7 @@ function BusinessCenterView({
                   disabled
                   aria-label="同步 BDP 配置，未配置连接，暂不可用"
                   title="当前未配置受管 BDP 连接，无法同步外部业务配置。"
-                  className="aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left text-muted-foreground disabled:cursor-not-allowed min-[1280px]:min-h-0"
+                  className={"aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left " + mutedToneClass + " disabled:cursor-not-allowed min-[1280px]:min-h-0"}
                 >
                   同步 BDP 配置 · 未配置连接
                 </button>
@@ -767,9 +769,9 @@ function BusinessCenterView({
         <section className={surfaceClass4}>
           <div className="border-b border-border bg-muted/70 p-3 sm:p-4">
             <div className="aiflow-type-section-title mb-2 flex items-center gap-2 font-semibold text-foreground">
-              <FolderKanban size={15} className="text-muted-foreground" />
+              <FolderKanban size={15} className={mutedToneClass} />
               业务列表
-              <span className="aiflow-type-meta font-normal text-muted-foreground">
+              <span className={"aiflow-type-meta font-normal " + mutedToneClass}>
                 （{total}）
               </span>
             </div>
@@ -854,14 +856,14 @@ function BusinessCenterView({
                 </label>
               </div>
             )}
-            <p className="aiflow-type-body mt-2 text-muted-foreground">
+            <p className={"aiflow-type-body mt-2 " + mutedToneClass}>
               仅展示当前账号有权查看的业务项目；筛选不会扩大访问范围。
             </p>
             {filterError && <p role="alert" className="mt-2 text-sm text-aiflow-danger">{filterError}</p>}
           </div>
 
           {queryState.loading ? (
-            <div data-business-list-loading="" role="status" className="aiflow-type-body flex items-center gap-2 p-6 text-muted-foreground">
+            <div data-business-list-loading="" role="status" className={"aiflow-type-body flex items-center gap-2 p-6 " + mutedToneClass}>
               <Loader2 className="animate-spin" size={16} />正在读取当前账号可见的业务项目…
             </div>
           ) : queryState.error ? (
@@ -871,12 +873,12 @@ function BusinessCenterView({
               <span>{queryState.hasData ? "刷新失败，当前显示上次成功读取的业务列表。" : "业务列表暂时无法加载；这不代表当前没有可访问的业务项目。"}</span>
               <Button variant="outline" onClick={queryState.retry}>重试</Button>
             </div>
-          ) : queryState.refreshing && <p role="status" className="aiflow-type-body px-4 py-2 text-muted-foreground">正在刷新业务列表…</p>}
+          ) : queryState.refreshing && <p role="status" className={"aiflow-type-body px-4 py-2 " + mutedToneClass}>正在刷新业务列表…</p>}
 
           <div data-business-table-desktop="">
             <div className="overflow-x-auto">
               <table className="aiflow-type-body w-full min-w-[720px] table-fixed text-left">
-                <thead className="aiflow-type-control bg-muted font-medium text-muted-foreground">
+                <thead className={"aiflow-type-control bg-muted font-medium " + mutedToneClass}>
                   <tr>
                     <th className="aiflow-type-control w-[36%] px-4 py-3">
                       业务名称 / 代号
@@ -908,7 +910,7 @@ function BusinessCenterView({
                         >
                           {project.name}
                         </p>
-                        <p className="aiflow-type-meta mt-0.5 truncate font-mono text-muted-foreground">
+                        <p className={"aiflow-type-meta mt-0.5 truncate font-mono " + mutedToneClass}>
                           {project.code}
                         </p>
                       </td>
@@ -917,7 +919,7 @@ function BusinessCenterView({
                           ? "—"
                           : project.workflowCount}
                       </td>
-                      <td className="aiflow-type-body px-4 py-3 text-muted-foreground">
+                      <td className={"aiflow-type-body px-4 py-3 " + mutedToneClass}>
                         {project.domainCode ? (
                           <span
                             className="block truncate"
@@ -930,7 +932,7 @@ function BusinessCenterView({
                           "未归属"
                         )}
                       </td>
-                      <td className="aiflow-type-meta px-4 py-3 font-mono tabular-nums text-muted-foreground">
+                      <td className={"aiflow-type-meta px-4 py-3 font-mono tabular-nums " + mutedToneClass}>
                         {project.createdAt
                           ? new Date(project.createdAt).toLocaleDateString(
                               "zh-CN"
@@ -961,7 +963,7 @@ function BusinessCenterView({
                     <tr>
                       <td
                         colSpan={5}
-                        className="aiflow-type-body px-4 py-12 text-center text-muted-foreground"
+                        className={"aiflow-type-body px-4 py-12 text-center " + mutedToneClass}
                       >
                         没有符合条件的业务项目。请调整筛选条件，或重置筛选。
                       </td>
@@ -1144,7 +1146,7 @@ function BusinessCenterView({
               <DirectoryRetry name="人员" onRetry={userDirectory.retry} />
             )}
           </div>
-          <div className="aiflow-type-body rounded border border-aiflow-info-border bg-aiflow-info-surface/60 p-2.5 text-muted-foreground">
+          <div className={"aiflow-type-body rounded border border-aiflow-info-border bg-aiflow-info-surface/60 p-2.5 " + mutedToneClass}>
             <strong>权限隔离保护：</strong>
             创建人默认拥有该业务所有权（Owner）；所选可见人与可见部门成员拥有查看与协作权；超级管理员（Super
             Admin）拥有全局全量业务查看权。
@@ -1291,7 +1293,7 @@ export function ProjectWorkspace({
                 sidebarCollapsed ? "展开项目工作区导航" : "收起项目工作区导航"
               }
               title={sidebarCollapsed ? "展开导航" : "收起导航"}
-              className="inline-flex min-h-11 min-w-11 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+              className={"inline-flex min-h-11 min-w-11 items-center justify-center rounded " + mutedToneClass + " hover:bg-muted hover:text-foreground"}
               onClick={() => setSidebarCollapsed(value => !value)}
             >
               {sidebarCollapsed ? (
@@ -1309,12 +1311,12 @@ export function ProjectWorkspace({
               >
                 {project.name.replaceAll("_", "_\u200b")}
               </h2>
-              <p className="aiflow-type-meta hidden font-mono text-muted-foreground lg:block">
+              <p className={"aiflow-type-meta hidden font-mono " + mutedToneClass + " lg:block"}>
                 {project.code}
               </p>
             </>
           )}
-          <p className="aiflow-type-meta mt-2 hidden text-center font-mono text-muted-foreground lg:block">
+          <p className={"aiflow-type-meta mt-2 hidden text-center font-mono " + mutedToneClass + " lg:block"}>
             {sidebarCollapsed ? project.code.slice(0, 4) : ""}
           </p>
         </div>
@@ -1336,7 +1338,7 @@ export function ProjectWorkspace({
                 };
                 if (requestConsoleNavigation(proceed)) proceed();
               }}
-              className={`aiflow-type-control flex min-h-11 min-w-0 items-center rounded-md px-2.5 text-left transition-colors ${sidebarCollapsed ? "justify-center" : "gap-2"} ${view === item.id ? "bg-muted font-semibold text-foreground" : "text-muted-foreground hover:bg-muted"}`}
+              className={`aiflow-type-control flex min-h-11 min-w-0 items-center rounded-md px-2.5 text-left transition-colors ${sidebarCollapsed ? "justify-center" : "gap-2"} ${view === item.id ? "bg-muted font-semibold text-foreground" : (mutedToneClass + " hover:bg-muted")}`}
             >
               <item.icon size={15} />
               {!sidebarCollapsed && (
@@ -1345,7 +1347,7 @@ export function ProjectWorkspace({
                     {item.label}
                   </span>
                   {item.id === "members" && (
-                    <span className="aiflow-type-meta shrink-0 rounded bg-card/70 px-1.5 text-muted-foreground tabular-nums">
+                    <span className={"aiflow-type-meta shrink-0 rounded bg-card/70 px-1.5 " + mutedToneClass + " tabular-nums"}>
                       {new Set((members.data ?? []).map(member => member.userId)).size}
                     </span>
                   )}
@@ -1417,7 +1419,7 @@ export function ProjectWorkspace({
         )}
         {view === "resources" && (
           <ResourceEditContext.Provider value={{ ...capabilities, refreshing: access.isFetching || members.isFetching, refresh: () => void refreshAccess() }}>
-            <Suspense fallback={<p role="status" className="aiflow-type-body py-4 text-muted-foreground">正在加载资源配置中心…</p>}>
+            <Suspense fallback={<p role="status" className={"aiflow-type-body py-4 " + mutedToneClass}>正在加载资源配置中心…</p>}>
               <DataResourceCenter projectId={project.id} onOpenWorkflow={onOpenWorkflow} />
             </Suspense>
           </ResourceEditContext.Provider>
@@ -1606,14 +1608,14 @@ function ServiceEndpointCenter({
         {loading && (
           <div
             role="status"
-            className="aiflow-type-body p-8 text-center text-muted-foreground"
+            className={"aiflow-type-body p-8 text-center " + mutedToneClass}
           >
             正在加载服务端点…
           </div>
         )}
         {!loading && !endpoints.length && (
           <div className="flex min-h-28 items-center justify-center p-5 sm:p-8">
-            <p className="aiflow-type-body max-w-md text-center leading-6 text-muted-foreground">
+            <p className={"aiflow-type-body max-w-md text-center leading-6 " + mutedToneClass}>
               尚未登记服务端点。项目控制流程中的 HTTP/REST/METHOD
               节点将无法发布。
             </p>
@@ -1623,7 +1625,7 @@ function ServiceEndpointCenter({
         {!loading && endpoints.length > 0 && (
           <div className="overflow-x-auto">
             <table className="aiflow-type-body min-w-[980px] w-full text-left">
-              <thead className="aiflow-type-body bg-muted text-muted-foreground">
+              <thead className={"aiflow-type-body bg-muted " + mutedToneClass}>
                 <tr>
                   <th className="px-4 py-3 whitespace-nowrap">EndpointRef</th>
                   <th className="px-4 py-3 whitespace-nowrap">名称</th>
@@ -1648,17 +1650,17 @@ function ServiceEndpointCenter({
                     <td className="px-4 py-3 whitespace-nowrap">
                       {renderTargetEnvironment(endpoint)}
                     </td>
-                    <td className="aiflow-type-body max-w-[340px] truncate px-4 py-3 font-mono text-muted-foreground">
+                    <td className={"aiflow-type-body max-w-[340px] truncate px-4 py-3 font-mono " + mutedToneClass}>
                       {endpoint.baseUrl}
                     </td>
-                    <td className="aiflow-type-body px-4 py-3 text-muted-foreground whitespace-nowrap">
+                    <td className={"aiflow-type-body px-4 py-3 " + mutedToneClass + " whitespace-nowrap"}>
                       {endpoint.hasSecretRef
                         ? `${endpoint.authScheme || "原值"} · ${endpoint.authHeaderName || "Authorization"}`
                         : "无密钥"}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
-                        className={`aiflow-type-meta rounded px-2 py-1 ${endpoint.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
+                        className={`aiflow-type-meta rounded px-2 py-1 ${endpoint.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-muted " + mutedToneClass)}`}
                       >
                         {endpoint.status === "active" ? "启用" : "停用"}
                       </span>
@@ -1791,7 +1793,7 @@ function ServiceEndpointCenter({
               <p className={surfaceClass15}>
                 认证请求配置
               </p>
-              <p className="aiflow-type-body mt-1 leading-5 text-muted-foreground">
+              <p className={"aiflow-type-body mt-1 leading-5 " + mutedToneClass}>
                 调用时使用引用的密钥，按以下方式添加认证请求头。
               </p>
             </div>
@@ -1829,11 +1831,11 @@ function ServiceEndpointCenter({
             </div>
           </div>
         ) : (
-          <p className="aiflow-type-body rounded-lg border border-dashed border-border bg-muted px-3 py-2 leading-5 text-muted-foreground">
+          <p className={"aiflow-type-body rounded-lg border border-dashed border-border bg-muted px-3 py-2 leading-5 " + mutedToneClass}>
             未填写密钥引用：调用不附加认证请求头。
           </p>
         )}
-        <p className="aiflow-type-body leading-5 text-muted-foreground">
+        <p className={"aiflow-type-body leading-5 " + mutedToneClass}>
           保存后，在流程节点中填写端点引用名（EndpointRef）和相对路径。
         </p>
       </CreationDialog>
@@ -2249,7 +2251,7 @@ function ProcessCenter({
         className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="min-w-0">
-          <p className="aiflow-type-body hidden text-muted-foreground sm:block">
+          <p className={"aiflow-type-body hidden " + mutedToneClass + " sm:block"}>
             管理当前业务内的流程生命周期
           </p>
           <h1 className="aiflow-type-page-title mt-0.5 font-semibold tracking-tight text-foreground">
@@ -2266,7 +2268,7 @@ function ProcessCenter({
           >
             <Upload
               size={13}
-              className="hidden text-muted-foreground sm:block"
+              className={"hidden " + mutedToneClass + " sm:block"}
             />
             上传仓库
           </Button>
@@ -2294,7 +2296,7 @@ function ProcessCenter({
                 collisionPadding={12}
                 className="w-[min(18rem,calc(100vw-1.5rem))] p-3"
               >
-                <label className="aiflow-type-control grid gap-1.5 font-medium text-muted-foreground">
+                <label className={"aiflow-type-control grid gap-1.5 font-medium " + mutedToneClass}>
                   选择流程
                   <select
                     aria-label="选择流程查看审批记录"
@@ -2387,7 +2389,7 @@ function ProcessCenter({
           </Button>
         </div>
         <details className="border-t border-border px-3 py-2">
-          <summary className="aiflow-type-control inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 sm:min-h-0">
+          <summary className={"aiflow-type-control inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-medium " + mutedToneClass + " hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 sm:min-h-0"}>
             {advancedFilterCount > 0
               ? "更多筛选（已启用 " + advancedFilterCount + " 项）"
               : "更多筛选"}{" "}
@@ -2437,7 +2439,7 @@ function ProcessCenter({
       <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <div className="overflow-x-auto" role="region" aria-label="业务流程列表" tabIndex={0}>
           <table className="w-full min-w-[960px] text-left">
-            <thead className="bg-muted text-sm font-medium text-muted-foreground">
+            <thead className={"bg-muted text-sm font-medium " + mutedToneClass}>
               <tr>
                 <th className="px-4 py-3">流程</th>
                 <th className="px-4 py-3 whitespace-nowrap">类型</th>
@@ -2464,7 +2466,7 @@ function ProcessCenter({
                     </p>
                     {getOptionalWorkflowDescription(workflow.description) && (
                       <p
-                        className="aiflow-type-body mt-1 line-clamp-2 break-words text-muted-foreground"
+                        className={"aiflow-type-body mt-1 line-clamp-2 break-words " + mutedToneClass}
                         title={getOptionalWorkflowDescription(
                           workflow.description
                         )}
@@ -2479,7 +2481,7 @@ function ProcessCenter({
                         "inline-flex rounded px-2.5 py-1 text-xs " +
                         (flowTypeStyle[
                           workflow.flowType as keyof typeof flowTypeStyle
-                        ] ?? "bg-muted text-muted-foreground")
+                        ] ?? ("bg-muted " + mutedToneClass))
                       }
                     >
                       {displayFlowType(workflow.flowType)}
@@ -2504,13 +2506,13 @@ function ProcessCenter({
                       className={
                         workflow.status === "published"
                           ? "inline-flex rounded border border-aiflow-info-border bg-aiflow-info-surface px-2.5 py-1 text-xs text-aiflow-info"
-                          : "inline-flex rounded border border-border px-2.5 py-1 text-xs text-muted-foreground"
+                          : ("inline-flex rounded border border-border px-2.5 py-1 text-xs " + mutedToneClass)
                       }
                     >
                       {workflow.status === "published" ? "已发布" : "未发布"}
                     </span>
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap text-xs tabular-nums text-muted-foreground">
+                  <td className={"px-4 py-3 whitespace-nowrap text-xs tabular-nums " + mutedToneClass}>
                     {formatDate(workflow.updatedAt)}
                   </td>
                   <td className="min-w-[170px] px-3 py-3 text-right">
@@ -2525,7 +2527,7 @@ function ProcessCenter({
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-4 py-14 text-center text-sm text-muted-foreground"
+                    className={"px-4 py-14 text-center text-sm " + mutedToneClass}
                   >
                     <WorkflowListEmptyState
                       countMismatch={workflowCountMismatch}
@@ -2542,7 +2544,7 @@ function ProcessCenter({
           </table>
         </div>
 
-        <footer className="aiflow-type-meta flex flex-col gap-2 border-t border-border bg-card px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+        <footer className={"aiflow-type-meta flex flex-col gap-2 border-t border-border bg-card px-4 py-3 " + mutedToneClass + " sm:flex-row sm:items-center sm:justify-between"}>
           <span aria-live="polite">
             显示第 {workflows.length ? (currentPage - 1) * pageSize + 1 : 0}–
             {Math.min(currentPage * pageSize, workflows.length)} 条，共{" "}
@@ -2677,11 +2679,11 @@ function ProcessCenter({
                         ? "审核通过"
                         : "审核驳回"}
                   </p>
-                  <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                  <p className={"aiflow-type-meta mt-1 " + mutedToneClass}>
                     {Number.isSafeInteger(Number(entry.details?.definitionVersion)) && Number(entry.details?.definitionVersion) > 0
                       ? `定义 v${Number(entry.details?.definitionVersion)}` : "旧记录未提供版本"}
                   </p>
-                  <p className="aiflow-type-meta mt-1 text-muted-foreground">
+                  <p className={"aiflow-type-meta mt-1 " + mutedToneClass}>
                     {entry.actorName || entry.actorUsername || "系统"} ·{" "}
                     {formatDate(entry.createdAt)}
                   </p>
@@ -2782,7 +2784,7 @@ function ProcessLaunchDialog({
           {!allowed && (
             <div
               role="alert"
-              className="aiflow-type-body space-y-2 text-muted-foreground"
+              className={"aiflow-type-body space-y-2 " + mutedToneClass}
             >
               <p>
                 此流程当前无法发起，可能是权限或发布状态已变化。填写内容已保留，可刷新后继续。
@@ -3379,7 +3381,7 @@ function ProjectMembers({
                   <Building2 size={15} />
                   {grantUnit.isPending ? "正在保存…" : "保存部门授权"}
                 </Button>
-                <p className="aiflow-type-meta text-muted-foreground sm:col-span-2">
+                <p className={"aiflow-type-meta " + mutedToneClass + " sm:col-span-2"}>
                   同一部门只保留一个业务角色；再次保存会更新该部门的角色，其当前成员共同继承。
                 </p>
               </fieldset>
@@ -3408,7 +3410,7 @@ function ProjectMembers({
                   <p className={surfaceClass19}>
                     {item.unitName || item.unitCode}
                   </p>
-                  <p className="aiflow-type-meta mt-0.5 font-mono text-muted-foreground">
+                  <p className={"aiflow-type-meta mt-0.5 font-mono " + mutedToneClass}>
                     部门代号：{item.unitCode} · 授权时间：
                     {formatDate(item.createdAt)}
                   </p>
@@ -3610,7 +3612,7 @@ function ProjectMembers({
                   />
                   <p
                     id="project-member-expiry-help"
-                    className="text-sm text-muted-foreground"
+                    className={"text-sm " + mutedToneClass}
                     role={expiryError ? "alert" : undefined}
                   >
                     {expiryError || "填写整数小时；留空表示长期有效。"}
@@ -3657,7 +3659,7 @@ function ProjectMembers({
                   <p className={surfaceClass19}>
                     {member.name || member.username}
                   </p>
-                  <p className="aiflow-type-meta mt-0.5 text-muted-foreground">
+                  <p className={"aiflow-type-meta mt-0.5 " + mutedToneClass}>
                     {member.username} · 生效：{formatDate(member.effectiveFrom)}{" "}
                     · 到期：
                     {member.expiresAt ? formatDate(member.expiresAt) : "长期"}

@@ -1,7 +1,9 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
-const surfaceClass1 = "aiflow-type-body mt-1 text-muted-foreground";
-const surfaceClass2 = "aiflow-type-meta rounded bg-muted px-1.5 py-0.5 text-muted-foreground";
-const surfaceClass3 = "grid h-[560px] place-items-center p-8 text-center text-sm leading-6 text-muted-foreground";
+const surfaceClass1 = ("aiflow-type-body mt-1 " + mutedToneClass);
+const surfaceClass2 = ("aiflow-type-meta rounded bg-muted px-1.5 py-0.5 " + mutedToneClass);
+const surfaceClass3 = ("grid h-[560px] place-items-center p-8 text-center text-sm leading-6 " + mutedToneClass);
 const surfaceClass4 = "w-full rounded px-2 py-1.5 text-left hover:bg-muted";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,7 +112,7 @@ function FlowBadge({ type }: { type: string }) {
   };
   return (
     <span
-      className={`aiflow-type-meta rounded px-1.5 py-0.5 ${styles[type] ?? "bg-muted text-muted-foreground"}`}
+      className={`aiflow-type-meta rounded px-1.5 py-0.5 ${styles[type] ?? ("bg-muted " + mutedToneClass)}`}
     >
       {labels[type] ?? type}
     </span>
@@ -360,7 +362,7 @@ export default function WorkflowWarehouse({
         <div
           role="status"
           aria-live="polite"
-          className="flex min-h-80 items-center justify-center gap-2 rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground"
+          className={"flex min-h-80 items-center justify-center gap-2 rounded-lg border border-border bg-card p-8 text-sm " + mutedToneClass}
         >
           <Loader2 size={16} className="animate-spin" />
           正在读取当前账号可见的业务项目…
@@ -379,7 +381,7 @@ export default function WorkflowWarehouse({
             <p className="text-sm font-semibold text-foreground">
               业务列表暂时无法加载
             </p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            <p className={"mt-2 text-sm leading-6 " + mutedToneClass}>
               这不代表当前没有可访问的业务项目。请检查连接后重试。
             </p>
             <Button type="button" className="mt-4" onClick={onRetryProjects}>
@@ -394,7 +396,7 @@ export default function WorkflowWarehouse({
   if (!currentProject)
     return (
       <div className={warehouseFrameClass}>
-        <div className="grid min-h-80 place-items-center rounded-lg border border-dashed border-input bg-card p-10 text-center text-sm text-muted-foreground">
+        <div className={"grid min-h-80 place-items-center rounded-lg border border-dashed border-input bg-card p-10 text-center text-sm " + mutedToneClass}>
           暂无可访问项目；请先在流程设计中创建或加入一个业务项目。
         </div>
       </div>
@@ -408,7 +410,7 @@ export default function WorkflowWarehouse({
       <div className="aiflow-page-content">
         <div className="mb-4 flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="aiflow-type-meta font-medium text-muted-foreground">
+            <p className={"aiflow-type-meta font-medium " + mutedToneClass}>
               流程与版本
             </p>
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
@@ -451,7 +453,7 @@ export default function WorkflowWarehouse({
                   </span>
                   <ChevronsUpDown
                     size={16}
-                    className="shrink-0 text-muted-foreground"
+                    className={"shrink-0 " + mutedToneClass}
                     aria-hidden="true"
                   />
                 </Button>
@@ -470,7 +472,7 @@ export default function WorkflowWarehouse({
                   />
                   <CommandList>
                     {projectResults.isFetching || projectQuery.trim() !== projectSearchValue ? (
-                      <p role="status" className="p-3 text-sm text-muted-foreground">正在搜索业务项目…</p>
+                      <p role="status" className={"p-3 text-sm " + mutedToneClass}>正在搜索业务项目…</p>
                     ) : projectResults.isError ? (
                       <div role="alert" className="p-3 text-sm text-aiflow-danger">搜索失败，请重试。<Button variant="outline" onClick={() => void projectResults.refetch()}>重试</Button></div>
                     ) : projectSearch.totalMatches === 0 ? (
@@ -517,7 +519,7 @@ export default function WorkflowWarehouse({
                     )}
                   </CommandList>
                   {projectSearch.hasMore && (
-                    <p className="aiflow-type-body border-t px-3 py-2 text-muted-foreground">
+                    <p className={"aiflow-type-body border-t px-3 py-2 " + mutedToneClass}>
                       显示前 50 个匹配项目；继续输入名称或代号以缩小范围。
                     </p>
                   )}
@@ -568,7 +570,7 @@ export default function WorkflowWarehouse({
         {warehouse.isLoading && (
           <div
             role="status"
-            className="mb-4 flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground"
+            className={"mb-4 flex items-center gap-2 rounded-lg border border-border bg-card p-4 text-sm " + mutedToneClass}
           >
             <Loader2 size={16} className="animate-spin" />
             正在读取流程仓库…
@@ -578,7 +580,7 @@ export default function WorkflowWarehouse({
           <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <div className="border-b border-border p-4">
               <h2 className="font-semibold text-foreground">可恢复归档流程</h2>
-              <p className="mt-1 text-sm text-muted-foreground">
+              <p className={"mt-1 text-sm " + mutedToneClass}>
                 归档不会删除版本、运行和审计记录；存在活动运行的流程不能归档。
               </p>
             </div>
@@ -588,7 +590,7 @@ export default function WorkflowWarehouse({
                   <p className="text-sm font-semibold text-foreground">
                     归档流程加载失败
                   </p>
-                  <p className="mt-1 break-words text-sm text-muted-foreground">
+                  <p className={"mt-1 break-words text-sm " + mutedToneClass}>
                     {archivedWorkflows.error.message}
                   </p>
                   <Button
@@ -606,7 +608,7 @@ export default function WorkflowWarehouse({
               {archivedWorkflows.isLoading && (
                 <div
                   role="status"
-                  className="flex items-center justify-center gap-2 p-8 text-sm text-muted-foreground"
+                  className={"flex items-center justify-center gap-2 p-8 text-sm " + mutedToneClass}
                 >
                   <Loader2 size={16} className="animate-spin" />
                   正在读取归档流程…
@@ -650,7 +652,7 @@ export default function WorkflowWarehouse({
                         恢复流程
                       </Button>
                     ) : (
-                      <span className="text-sm text-muted-foreground">
+                      <span className={"text-sm " + mutedToneClass}>
                         仅流程所有者或管理员可恢复
                       </span>
                     )}
@@ -659,7 +661,7 @@ export default function WorkflowWarehouse({
               {!archivedWorkflows.isLoading &&
                 !archivedWorkflows.isError &&
                 !restorableWorkflows.length && (
-                  <div className="p-10 text-center text-sm text-muted-foreground">
+                  <div className={"p-10 text-center text-sm " + mutedToneClass}>
                     当前项目暂无可恢复归档流程。
                   </div>
                 )}
@@ -698,7 +700,7 @@ export default function WorkflowWarehouse({
                     <div className="relative min-w-0 flex-1">
                       <Search
                         size={14}
-                        className="absolute left-2.5 top-2.5 text-muted-foreground"
+                        className={"absolute left-2.5 top-2.5 " + mutedToneClass}
                       />
                       <Input
                         className="aiflow-type-control h-11 min-h-11 pl-8 min-[1024px]:h-9 min-[1024px]:min-h-0"
@@ -751,12 +753,12 @@ export default function WorkflowWarehouse({
                 </div>
                 <div className="max-h-[620px] overflow-y-auto p-2">
                   <button
-                    className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-accent text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
+                    className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
                     onClick={() => setSelectedFolderId(null)}
                   >
                     <ArchiveRestore size={15} />
                     根目录{" "}
-                    <span className="aiflow-type-meta ml-auto text-muted-foreground">
+                    <span className={"aiflow-type-meta ml-auto " + mutedToneClass}>
                       {workflows.filter(workflow => !workflow.folderId).length}
                     </span>
                   </button>
@@ -864,7 +866,7 @@ export default function WorkflowWarehouse({
                           </p>
                         </div>
                         <p
-                          className="aiflow-type-body mt-1 line-clamp-2 break-words text-muted-foreground"
+                          className={"aiflow-type-body mt-1 line-clamp-2 break-words " + mutedToneClass}
                           title={workflow.description || "未填写流程简介"}
                         >
                           {workflow.description || "未填写流程简介"}
@@ -901,7 +903,7 @@ export default function WorkflowWarehouse({
                       {workflow.canArchive && (
                         <button
                           type="button"
-                          className="aiflow-type-control inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded px-2 text-muted-foreground hover:bg-aiflow-warning-surface hover:text-aiflow-warning min-[1024px]:h-9 min-[1024px]:min-h-0"
+                          className={"aiflow-type-control inline-flex h-11 min-h-11 shrink-0 items-center gap-1 rounded px-2 " + mutedToneClass + " hover:bg-aiflow-warning-surface hover:text-aiflow-warning min-[1024px]:h-9 min-[1024px]:min-h-0"}
                           title={`归档流程 ${workflow.name}`}
                           aria-label={`归档流程 ${workflow.name}`}
                           onClick={() =>
@@ -923,7 +925,7 @@ export default function WorkflowWarehouse({
                             className="mx-auto text-slate-300"
                             size={30}
                           />
-                          <p className="mt-3 text-sm text-muted-foreground">
+                          <p className={"mt-3 text-sm " + mutedToneClass}>
                             {keyword ? "没有搜到任何数据" : "该目录暂无流程。"}
                           </p>
                         </div>
@@ -941,14 +943,14 @@ export default function WorkflowWarehouse({
                       流程简介
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="aiflow-type-meta text-muted-foreground">
+                      <span className={"aiflow-type-meta " + mutedToneClass}>
                         只读流程图
                       </span>
                       <button
                         type="button"
                         ref={returnToWorkflowListRef}
                         aria-label="返回流程列表"
-                        className="aiflow-type-control inline-flex min-h-11 items-center gap-1 rounded px-2 text-muted-foreground hover:bg-muted xl:hidden"
+                        className={"aiflow-type-control inline-flex min-h-11 items-center gap-1 rounded px-2 " + mutedToneClass + " hover:bg-muted xl:hidden"}
                         onClick={() => setSelectedWorkflowId(null)}
                         title="返回流程列表"
                       >
@@ -958,7 +960,7 @@ export default function WorkflowWarehouse({
                       <button
                         type="button"
                         aria-label="收起预览"
-                        className="hidden rounded px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground xl:inline-flex"
+                        className={"hidden rounded px-1.5 py-0.5 text-xs " + mutedToneClass + " hover:bg-muted hover:text-foreground xl:inline-flex"}
                         onClick={() => setSelectedWorkflowId(null)}
                         title="收起预览"
                       >
@@ -984,7 +986,7 @@ export default function WorkflowWarehouse({
                             </span>
                           </div>
                         </div>
-                        <p className="aiflow-type-body mt-2 line-clamp-4 break-words text-muted-foreground">
+                        <p className={"aiflow-type-body mt-2 line-clamp-4 break-words " + mutedToneClass}>
                           {selectedDetail.description || "未填写流程简介"}
                         </p>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -1099,7 +1101,7 @@ export default function WorkflowWarehouse({
             目录简介
             <Textarea value={folderDescription} onChange={event => setFolderDescription(event.target.value)} maxLength={2000} disabled={updateFolder.isPending} rows={5} />
           </label>
-          <p className="text-sm text-muted-foreground">{folderDescription.length}/2000</p>
+          <p className={"text-sm " + mutedToneClass}>{folderDescription.length}/2000</p>
         </CreationDialog>
         {importOpened && <Suspense fallback={<p role="status">正在加载导入预检…</p>}><WarehouseImportDialog key={`${currentUserId}:${activeProjectId}`} open={importOpen} userId={currentUserId} projectId={activeProjectId} projectName={currentProject.name} folderId={selectedFolderId} folderName={selectedFolder?.name || "根目录"} onClose={() => setImportOpen(false)} onImported={invalidate}/></Suspense>}
         <Dialog
@@ -1227,7 +1229,7 @@ function FolderTree({
   return (
     <div>
       <div
-        className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-accent text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
+        className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
       >
         <button
           className="flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 text-left"
@@ -1259,7 +1261,7 @@ function FolderTree({
               type="button"
               aria-label={`${folder.name} 的目录操作`}
               title="目录操作"
-              className="rounded p-1 text-muted-foreground opacity-0 hover:bg-card hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+              className={"rounded p-1 " + mutedToneClass + " opacity-0 hover:bg-card hover:text-foreground group-hover:opacity-100 focus:opacity-100"}
               onClick={() => setMenuOpen(value => !value)}
             >
               <MoreHorizontal size={14} />

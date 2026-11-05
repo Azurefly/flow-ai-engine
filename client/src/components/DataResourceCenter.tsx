@@ -1,12 +1,15 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
+import { DataflowCancelControl, DataflowCancellationInfo } from "./DataflowCancelControl";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
 const surfaceClass1 = "h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm";
-const surfaceClass2 = "aiflow-type-body mt-1 text-muted-foreground";
-const surfaceClass3 = "bg-muted text-sm font-medium text-muted-foreground";
+const surfaceClass2 = ("aiflow-type-body mt-1 " + mutedToneClass);
+const surfaceClass3 = ("bg-muted text-sm font-medium " + mutedToneClass);
 const surfaceClass4 = "flex flex-wrap items-center justify-between gap-2";
-const surfaceClass5 = "mt-1 text-sm leading-5 text-muted-foreground";
-const surfaceClass6 = "aiflow-type-body break-words rounded bg-muted px-2 py-1.5 text-muted-foreground";
+const surfaceClass5 = ("mt-1 text-sm leading-5 " + mutedToneClass);
+const surfaceClass6 = ("aiflow-type-body break-words rounded bg-muted px-2 py-1.5 " + mutedToneClass);
 const surfaceClass7 = "aiflow-type-control inline-flex min-h-11 items-center font-medium text-aiflow-info hover:underline md:min-h-0";
-const surfaceClass8 = "aiflow-type-control grid gap-1 font-medium text-muted-foreground";
+const surfaceClass8 = ("aiflow-type-control grid gap-1 font-medium " + mutedToneClass);
 import { dataflowGraphRun } from "@shared/dataflow-run-view";
 import { DataflowResultTable } from "./DataflowResultTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
@@ -79,8 +82,8 @@ import { toast } from "sonner";
 
 const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
 
-const metaClassName = "aiflow-type-meta text-muted-foreground";
-const mutedCellClassName = "px-4 py-3 text-xs text-muted-foreground";
+const metaClassName = ("aiflow-type-meta " + mutedToneClass);
+const mutedCellClassName = ("px-4 py-3 text-xs " + mutedToneClass);
 const nowrapCellClassName = "px-4 py-3 whitespace-nowrap";
 const resourcePanelClassName = "rounded-lg border border-border bg-card p-4";
 const resourceTitleClassName =
@@ -513,13 +516,13 @@ export default function DataResourceCenter({
       <div data-resource-center="">
         <ResourceDraftGuard projectId={projectId}>
           <div className="mb-5 border-b border-border pb-4">
-            <p className="aiflow-type-meta font-bold tracking-[.16em] text-muted-foreground">
+            <p className={"aiflow-type-meta font-bold tracking-[.16em] " + mutedToneClass}>
               PROJECT RESOURCE CENTER
             </p>
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               资源配置中心
             </h1>
-            <p className="aiflow-type-body mt-1 max-w-3xl text-muted-foreground">
+            <p className={"aiflow-type-body mt-1 max-w-3xl " + mutedToneClass}>
               管理当前业务的数据源、资源目录、函数、标签和插件。凭据只保存环境密钥引用；登记成功不代表连接或查询权限已验证。
             </p>
           </div>
@@ -527,7 +530,7 @@ export default function DataResourceCenter({
             <p
               role="note"
               data-resource-readonly=""
-              className="aiflow-type-body mb-4 rounded-lg border border-border bg-muted px-4 py-3 text-muted-foreground"
+              className={"aiflow-type-body mb-4 rounded-lg border border-border bg-muted px-4 py-3 " + mutedToneClass}
             >
               {canRun
                 ? "可查看资源并发起已发布的数据流程；资源编辑和调度管理需要业务设计权限。"
@@ -538,7 +541,7 @@ export default function DataResourceCenter({
             data-resource-category-mobile=""
             className="mb-4 grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-3 lg:hidden"
           >
-            <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
+            <span className={"aiflow-type-control whitespace-nowrap font-medium " + mutedToneClass}>
               资源类别
             </span>
             <select
@@ -568,13 +571,13 @@ export default function DataResourceCenter({
                 aria-current={tab === item.id ? "page" : undefined}
                 onClick={() => setTab(item.id)}
                 title={item.label}
-                className={`aiflow-type-control flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2 py-2 transition-colors sm:px-3 ${tab === item.id ? "border-aiflow-info-border bg-accent font-semibold text-aiflow-info" : "border-border bg-card text-muted-foreground hover:bg-muted"}`}
+                className={`aiflow-type-control flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2 py-2 transition-colors sm:px-3 ${tab === item.id ? "border-aiflow-info-border bg-accent font-semibold text-aiflow-info" : ("border-border bg-card " + mutedToneClass + " hover:bg-muted")}`}
               >
                 <item.icon className="shrink-0" size={15} />
                 <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
                   {item.label}
                 </span>
-                <span className="aiflow-type-meta min-w-6 shrink-0 rounded bg-card/70 px-1.5 text-center text-muted-foreground">
+                <span className={"aiflow-type-meta min-w-6 shrink-0 rounded bg-card/70 px-1.5 text-center " + mutedToneClass}>
                   {item.count ?? "…"}
                 </span>
               </button>
@@ -584,7 +587,7 @@ export default function DataResourceCenter({
             <div
               role="status"
               data-resource-loading=""
-              className="rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground"
+              className={"rounded-lg border border-border bg-card p-8 text-sm " + mutedToneClass}
             >
               正在读取当前资源类别…
             </div>
@@ -888,7 +891,7 @@ export default function DataResourceCenter({
                     </td>
                     <td className="max-w-[300px] px-4 py-3">
                       <p
-                        className="aiflow-type-body line-clamp-2 break-words text-muted-foreground"
+                        className={"aiflow-type-body line-clamp-2 break-words " + mutedToneClass}
                         title={udf.description || undefined}
                       >
                         {udf.description || "—"}
@@ -965,7 +968,7 @@ export default function DataResourceCenter({
                     </span>
                   ))}
                   {!(resources.data?.tags ?? []).length && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className={"text-sm " + mutedToneClass}>
                       尚未创建标签。
                     </span>
                   )}
@@ -1052,7 +1055,7 @@ export default function DataResourceCenter({
                   <tr key={plugin.id}>
                     <Cell primary={plugin.name} secondary="项目级插件" />
                     <td className={mutedCellClassName}>{plugin.pluginType}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                    <td className={"px-4 py-3 font-mono text-xs " + mutedToneClass}>
                       {plugin.version}
                     </td>
                     <td className="px-4 py-3">
@@ -1112,6 +1115,7 @@ function DataflowOperationList({
         | "running"
         | "success"
         | "failed"
+        | "cancelled"
         | undefined,
       createdFrom: applied.from
         ? new Date(`${applied.from}T00:00:00`)
@@ -1206,7 +1210,7 @@ function DataflowOperationList({
               }
             >
               <option value="">全部状态</option>
-              {["queued", "running", "success", "failed"].map(v => (
+              {["queued", "running", "success", "failed", "cancelled"].map(v => (
                 <option key={v} value={v}>
                   {
                     {
@@ -1214,6 +1218,7 @@ function DataflowOperationList({
                       running: "运行中",
                       success: "成功",
                       failed: "失败",
+                      cancelled: "已取消",
                     }[v]
                   }
                 </option>
@@ -1295,7 +1300,7 @@ function DataflowOperationList({
                 </td>
                 <td className="px-3 py-3 aiflow-type-meta">
                   {formatDataflowTime(run.startedAt ?? run.createdAt)}
-                  <p className="mt-1 text-muted-foreground">
+                  <p className={"mt-1 " + mutedToneClass}>
                     {formatDataflowTime(run.finishedAt)}
                   </p>
                 </td>
@@ -1316,13 +1321,14 @@ function DataflowOperationList({
                   >
                     {expandedRunId === run.id ? "收起" : "实例详情"}
                   </Button>
+                  <DataflowCancelControl run={run} />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       ) : (
-        <p role="status" className="p-8 text-center text-muted-foreground">
+        <p role="status" className={"p-8 text-center " + mutedToneClass}>
           未找到匹配的运行记录。
         </p>
       )}
@@ -1360,7 +1366,7 @@ function DataflowOperationList({
               <p className="text-sm font-semibold text-foreground">
                 运行详情 · {String(expandedRun.id).slice(0, 8)}
               </p>
-              <p className="aiflow-type-meta mt-1 text-muted-foreground">
+              <p className={"aiflow-type-meta mt-1 " + mutedToneClass}>
                 触发人：{expandedRun.triggerName || "系统用户"} · 耗时：
                 {expandedRun.durationMs === null ||
                 expandedRun.durationMs === undefined
@@ -1387,13 +1393,13 @@ function DataflowOperationList({
                 </Button>
               </div>
             ) : detail.isLoading ? (
-              <p role="status" className="mt-3 text-sm text-muted-foreground">
+              <p role="status" className={"mt-3 text-sm " + mutedToneClass}>
                 正在读取运行详情…
               </p>
             ) : detail.data ? (
               <DataflowRunOutput key={expandedRun.id} run={detail.data} />
             ) : (
-              <p role="status" className="mt-3 text-sm text-muted-foreground">
+              <p role="status" className={"mt-3 text-sm " + mutedToneClass}>
                 运行记录不存在或已无法访问。
               </p>
             )}
@@ -1447,7 +1453,8 @@ function DataflowRunOutput({ run }: { run: any }) {
 
   return (
     <div dataflow-output-summary="" className="mt-3 space-y-3">
-      {run.error && (
+      <DataflowCancellationInfo cancellation={run.cancellation} />
+      {run.error && run.status !== "cancelled" && (
         <div
           role="alert"
           className="rounded-md border border-aiflow-danger-border bg-aiflow-danger-surface px-3 py-2 text-sm text-aiflow-danger"
@@ -1589,7 +1596,7 @@ function ResourceForm({
         {title}
       </Button>
       {dirty && (
-        <p className="aiflow-type-meta text-muted-foreground">
+        <p className={"aiflow-type-meta " + mutedToneClass}>
           有未保存填写，重新打开可继续编辑。
         </p>
       )}
@@ -1634,7 +1641,7 @@ function ResourceField({
   children: React.ReactNode;
 }) {
   return (
-    <label className="aiflow-type-control grid min-w-0 gap-1 font-medium text-muted-foreground [&_input]:h-11 [&_select]:h-11 sm:[&_input]:h-10 sm:[&_select]:h-10">
+    <label className={"aiflow-type-control grid min-w-0 gap-1 font-medium " + mutedToneClass + " [&_input]:h-11 [&_select]:h-11 sm:[&_input]:h-10 sm:[&_select]:h-10"}>
       <span>{label}</span>
       {children}
     </label>
@@ -1839,7 +1846,7 @@ function DataflowWorkspace({
             <Button
               type="button"
               size="sm"
-              className="min-h-11 w-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100 sm:h-8 sm:min-h-0 sm:w-auto"
+              className={"min-h-11 w-full bg-blue-600 text-white hover:bg-blue-700 disabled:bg-muted disabled:" + mutedToneClass + " disabled:opacity-100 sm:h-8 sm:min-h-0 sm:w-auto"}
               disabled={!flow || flow.status !== "published" || runPending}
               aria-describedby="dataflow-execution-warning"
               title={
@@ -1869,12 +1876,12 @@ function DataflowWorkspace({
             type="button"
             aria-current={section === item.id ? "page" : undefined}
             onClick={() => setSection(item.id)}
-            className={`aiflow-type-control inline-flex min-h-11 min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-2 transition-colors last:col-span-2 md:min-h-0 md:justify-start md:px-3 ${section === item.id ? "border-blue-600 font-semibold text-aiflow-info" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+            className={`aiflow-type-control inline-flex min-h-11 min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-2 transition-colors last:col-span-2 md:min-h-0 md:justify-start md:px-3 ${section === item.id ? "border-blue-600 font-semibold text-aiflow-info" : ("border-transparent " + mutedToneClass + " hover:text-foreground")}`}
           >
             <item.icon size={15} />
             {item.label}
             {item.id === "schedules" && (
-              <span className="rounded bg-muted px-1.5 text-[10px] text-muted-foreground">
+              <span className={"rounded bg-muted px-1.5 text-[10px] " + mutedToneClass}>
                 {schedules.length}
               </span>
             )}
@@ -1942,12 +1949,12 @@ function DataflowWorkspace({
                 </div>
                 {flow && <State value={flow.status} />}
               </div>
-              <div className="aiflow-type-meta mt-3 flex flex-wrap gap-x-5 gap-y-1 text-muted-foreground">
+              <div className={"aiflow-type-meta mt-3 flex flex-wrap gap-x-5 gap-y-1 " + mutedToneClass}>
                 <span>画布节点：{flow?.definition?.nodes?.length ?? 0}</span>
                 <span>累计运行：{flow?.dataflowRunCount ?? 0}</span>
                 <span>项目数据流：{flows.length}</span>
               </div>
-              <p className="aiflow-type-body mt-3 border-t border-border pt-3 text-muted-foreground">
+              <p className={"aiflow-type-body mt-3 border-t border-border pt-3 " + mutedToneClass}>
                 资源中心不提供模拟算子按钮。节点编排、保存和画布导出均在受权限控制的流程设计器中完成。
               </p>
             </section>
@@ -1955,7 +1962,7 @@ function DataflowWorkspace({
             <details className="rounded-lg border border-border bg-card">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium text-foreground">
                 <span>资源引用</span>
-                <span className="aiflow-type-meta font-normal text-muted-foreground">
+                <span className={"aiflow-type-meta font-normal " + mutedToneClass}>
                   数据资源 {assets.length} · 函数 {udfs.length}
                 </span>
               </summary>
@@ -1974,7 +1981,7 @@ function DataflowWorkspace({
                       ))}
                     </ul>
                   ) : (
-                    <p className="aiflow-type-body mt-2 text-muted-foreground">
+                    <p className={"aiflow-type-body mt-2 " + mutedToneClass}>
                       尚无可引用的数据资源。
                     </p>
                   )}
@@ -2008,7 +2015,7 @@ function DataflowWorkspace({
                       ))}
                     </ul>
                   ) : (
-                    <p className="aiflow-type-body mt-2 text-muted-foreground">
+                    <p className={"aiflow-type-body mt-2 " + mutedToneClass}>
                       尚无可引用的函数资源。
                     </p>
                   )}
@@ -2129,7 +2136,7 @@ function DataflowWorkspace({
                       读取最新计划并替换填写
                     </Button>
                   )}
-                  <label className="aiflow-type-control grid gap-1 text-muted-foreground">
+                  <label className={"aiflow-type-control grid gap-1 " + mutedToneClass}>
                     快速填写计划（UTC）
                     <select
                       className="h-11 rounded-md border border-border bg-card px-2 text-sm sm:h-9"
@@ -2152,7 +2159,7 @@ function DataflowWorkspace({
                   </label>
                   {schedulesByWorkflow.get(scheduleForm.workflowId)?.status ===
                     "active" && (
-                    <p className="text-sm text-muted-foreground">
+                    <p className={"text-sm " + mutedToneClass}>
                       修改前请先暂停当前计划。
                     </p>
                   )}
@@ -2161,7 +2168,7 @@ function DataflowWorkspace({
                 <div
                   role="status"
                   dataflow-schedule-empty=""
-                  className="aiflow-type-body mt-3 rounded-md border border-dashed border-input bg-muted px-3 py-3 text-muted-foreground"
+                  className={"aiflow-type-body mt-3 rounded-md border border-dashed border-input bg-muted px-3 py-3 " + mutedToneClass}
                 >
                   当前没有已发布数据流。发布后再创建调度，不显示可保存的 Cron
                   输入。
@@ -2193,7 +2200,7 @@ function DataflowWorkspace({
                     <td className="px-4 py-3">
                       <State value={item.status} />
                     </td>
-                    <td className="aiflow-type-code px-4 py-3 font-mono text-muted-foreground">
+                    <td className={"aiflow-type-code px-4 py-3 font-mono " + mutedToneClass}>
                       {item.cronExpression} UTC
                       <p className="mt-1 whitespace-normal font-sans text-xs">
                         {scheduleDetails(item)}
@@ -2210,7 +2217,7 @@ function DataflowWorkspace({
               })}
             </ResourceTable>
           ) : (
-            <div className="aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-5 text-center text-muted-foreground">
+            <div className={"aiflow-type-body rounded-lg border border-dashed border-input bg-card px-4 py-5 text-center " + mutedToneClass}>
               尚未配置定时调度。
             </div>
           )}
@@ -2265,7 +2272,7 @@ function ResourceTable({
           </table>
         </div>
       ) : (
-        <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+        <p className={"px-4 py-8 text-center text-sm " + mutedToneClass}>
           {empty}
         </p>
       )}
@@ -2279,7 +2286,7 @@ function Cell({ primary, secondary }: { primary: string; secondary?: string }) {
       <p className="font-medium text-foreground">{primary}</p>
       {secondary && (
         <p
-          className="aiflow-type-body mt-0.5 line-clamp-2 max-w-[320px] break-words text-muted-foreground"
+          className={"aiflow-type-body mt-0.5 line-clamp-2 max-w-[320px] break-words " + mutedToneClass}
           title={secondary}
         >
           {secondary}
@@ -2298,7 +2305,7 @@ function State({ value }: { value: string }) {
     "approved",
   ].includes(value)
     ? "bg-aiflow-success-surface text-aiflow-success"
-    : ["failed", "disabled"].includes(value)
+    : ["failed", "disabled", "cancelled"].includes(value)
       ? "bg-muted text-muted-foreground"
       : "bg-aiflow-warning-surface text-aiflow-warning";
   const labels: Record<string, string> = {
@@ -2313,6 +2320,7 @@ function State({ value }: { value: string }) {
     failed: "失败",
     running: "运行中",
     queued: "排队中",
+    cancelled: "已取消",
     paused: "已暂停",
   };
   return (
@@ -2501,9 +2509,12 @@ export function DataflowRunMonitor({
             <h2 className="aiflow-type-section-title font-semibold" title={selectedRunId}>
               实例详情 · {selectedRunId.slice(0, 8)}
             </h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {matchingDetail && <DataflowCancelControl key={matchingDetail.id} run={matchingDetail} />}
             <Button variant="ghost" onClick={onClearSelection}>
               返回运行记录
             </Button>
+            </div>
           </div>
           {detail.isError ? (
             <p role="alert" className="mt-3 text-destructive">
@@ -2513,7 +2524,7 @@ export function DataflowRunMonitor({
             <p role="status">正在读取运行详情…</p>
           ) : matchingDetail ? (
             <>
-              <p data-run-summary="" className="aiflow-type-body my-3 text-muted-foreground">
+              <p data-run-summary="" className={"aiflow-type-body my-3 " + mutedToneClass}>
                 <State value={matchingDetail.status} /> · {matchingDetail.triggerName || "系统用户"} · {formatDataflowTime(matchingDetail.startedAt)} · 耗时 {matchingDetail.durationMs ?? "—"} ms
               </p>
               <DataflowRunOutput key={selectedRunId} run={matchingDetail} />

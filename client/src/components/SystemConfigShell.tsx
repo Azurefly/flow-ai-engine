@@ -1,3 +1,5 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CreationDialog } from "@/components/CreationDialog";
@@ -30,8 +32,8 @@ const configActionClass = "aiflow-type-control h-11 min-h-11 min-[1024px]:h-10 m
 const configCellClass = "px-4 py-3 whitespace-nowrap";
 const configLabelClass = "aiflow-type-control grid gap-1 font-medium text-foreground";
 const configCardClass = "min-w-0 rounded-lg border border-border bg-card p-4";
-const configValueClass = "aiflow-type-body font-medium text-muted-foreground";
-const configDescriptionClass = "mt-2 text-sm leading-5 text-muted-foreground";
+const configValueClass = ("aiflow-type-body font-medium " + mutedToneClass);
+const configDescriptionClass = ("mt-2 text-sm leading-5 " + mutedToneClass);
 
 type Tab = "general" | "approval" | "domain" | "runtime";
 
@@ -64,7 +66,7 @@ export default function SystemConfigShell() {
             className={`hidden items-start border-b border-border px-3 py-3 lg:flex ${collapsed ? "justify-center" : "justify-between"}`}
           >
             <div className={collapsed ? "hidden" : "block"}>
-              <p className="aiflow-type-meta font-medium text-muted-foreground">
+              <p className={"aiflow-type-meta font-medium " + mutedToneClass}>
                 管理工作空间
               </p>
               <h2 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
@@ -89,7 +91,7 @@ export default function SystemConfigShell() {
             data-system-config-mobile-select=""
             className="grid min-h-11 min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 px-3 py-2 lg:hidden"
           >
-            <span className="aiflow-type-control whitespace-nowrap font-medium text-muted-foreground">
+            <span className={"aiflow-type-control whitespace-nowrap font-medium " + mutedToneClass}>
               配置
             </span>
             <select
@@ -118,7 +120,7 @@ export default function SystemConfigShell() {
                 aria-current={tab === item.id ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
                 onClick={() => setTab(item.id)}
-                className={`flex h-11 min-w-0 items-center gap-2 rounded px-3 text-left text-sm min-[1024px]:h-10 ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-accent font-semibold text-aiflow-info" : "text-muted-foreground hover:bg-muted"}`}
+                className={`flex h-11 min-w-0 items-center gap-2 rounded px-3 text-left text-sm min-[1024px]:h-10 ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-accent font-semibold text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
               >
                 <item.icon size={16} />
                 <span className={collapsed ? "lg:hidden" : "truncate"}>
@@ -135,9 +137,9 @@ export default function SystemConfigShell() {
           >
             <nav
               aria-label="系统配置路径"
-              className="flex items-center gap-1.5 text-xs text-muted-foreground"
+              className={"flex items-center gap-1.5 text-xs " + mutedToneClass}
             >
-              <span className="text-muted-foreground">系统配置 /</span>
+              <span className={mutedToneClass}>系统配置 /</span>
               <h2
                 id="system-config-active-tab"
                 className="aiflow-type-control inline-flex items-center gap-1.5 font-semibold text-foreground"
@@ -176,7 +178,7 @@ function RuntimeStatus() {
   });
   if (runtime.isLoading)
     return (
-      <p className="text-sm text-muted-foreground">
+      <p className={"text-sm " + mutedToneClass}>
         正在读取运行身份与能力状态…
       </p>
     );
@@ -301,7 +303,7 @@ function RuntimeStatus() {
             </p>
           </div>
           <Activity
-            className="shrink-0 text-muted-foreground"
+            className={"shrink-0 " + mutedToneClass}
             size={18}
             aria-hidden="true"
           />
@@ -317,7 +319,7 @@ function RuntimeStatus() {
             <span className="rounded-full bg-aiflow-warning-surface px-2 py-1 text-aiflow-warning">
               实验阶段 {experimentalCount}
             </span>
-            <span className="rounded-full bg-muted px-2 py-1 text-muted-foreground">
+            <span className={"rounded-full bg-muted px-2 py-1 " + mutedToneClass}>
               不可用 {disabledCount}
             </span>
             {unknownCount > 0 && (
@@ -339,7 +341,7 @@ function RuntimeStatus() {
           <h3 className="aiflow-type-section-title font-semibold text-foreground">
             能力与验收边界
           </h3>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className={"mt-1 text-sm " + mutedToneClass}>
             状态来自服务端能力清单；只有完成对应验收后，才能将能力标记为可生产使用。
           </p>
         </div>
@@ -349,7 +351,7 @@ function RuntimeStatus() {
               key={group.key}
               className="border-b border-border last:border-b-0"
             >
-              <h4 className="bg-muted px-4 py-2 text-sm font-semibold text-muted-foreground">
+              <h4 className={"bg-muted px-4 py-2 text-sm font-semibold " + mutedToneClass}>
                 {group.title} · {group.items.length}
               </h4>
               <div className="divide-y divide-border">
@@ -375,7 +377,7 @@ function RuntimeStatus() {
                               : "状态待确认"}
                       </span>
                     </div>
-                    <p className="text-sm leading-5 text-muted-foreground">
+                    <p className={"text-sm leading-5 " + mutedToneClass}>
                       {capability.reason}
                     </p>
                   </article>
@@ -384,7 +386,7 @@ function RuntimeStatus() {
             </div>
           ))
         ) : (
-          <p className="p-4 text-sm text-muted-foreground">
+          <p className={"p-4 text-sm " + mutedToneClass}>
             服务端尚未返回能力状态。
           </p>
         )}
@@ -435,7 +437,7 @@ function RuntimeDetail({ label, value }: { label: string; value: string }) {
   };
   return (
     <div className="min-w-0">
-      <dt className="text-muted-foreground">{label}</dt>
+      <dt className={mutedToneClass}>{label}</dt>
       <dd className="mt-1 flex min-w-0 items-start gap-2">
         <code className="aiflow-type-code min-w-0 flex-1 select-all break-all text-foreground">
           {value || "—"}
@@ -506,7 +508,7 @@ function DomainSettings() {
       {domains.isLoading && (
         <div
           role="status"
-          className="mt-5 rounded-lg border border-border p-6 text-sm text-muted-foreground"
+          className={"mt-5 rounded-lg border border-border p-6 text-sm " + mutedToneClass}
         >
           正在读取工作域列表…
         </div>
@@ -532,11 +534,11 @@ function DomainSettings() {
           data-work-domain-empty=""
           className="mt-5 rounded-lg border border-dashed border-input bg-muted/70 px-4 py-8 text-center"
         >
-          <Workflow className="mx-auto text-muted-foreground" size={24} />
+          <Workflow className={"mx-auto " + mutedToneClass} size={24} />
           <h3 className="aiflow-type-card-title mt-3 font-semibold text-foreground">
             尚未配置工作域
           </h3>
-          <p className="aiflow-type-body mx-auto mt-1 max-w-sm leading-5 text-muted-foreground">
+          <p className={"aiflow-type-body mx-auto mt-1 max-w-sm leading-5 " + mutedToneClass}>
             创建工作域后，可按业务归属组织项目；当前尚无关联项目数据。
           </p>
         </div>
@@ -560,23 +562,23 @@ function DomainSettings() {
                     </code>
                   </div>
                   <span
-                    className={`shrink-0 rounded px-2 py-1 text-xs ${domain.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
+                    className={`shrink-0 rounded px-2 py-1 text-xs ${domain.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-muted " + mutedToneClass)}`}
                   >
                     {domain.status === "active" ? "启用" : "停用"}
                   </span>
                 </div>
-                <p className="mt-3 break-words text-sm text-muted-foreground">
+                <p className={"mt-3 break-words text-sm " + mutedToneClass}>
                   {domain.description || "未填写说明"}
                 </p>
                 <dl className="aiflow-type-body mt-3 grid grid-cols-2 gap-3 border-t border-border pt-3">
                   <div className="min-w-0">
-                    <dt className="text-muted-foreground">创建人</dt>
+                    <dt className={mutedToneClass}>创建人</dt>
                     <dd className="mt-1 break-words text-foreground">
                       {domain.creatorName || domain.creatorUsername || "—"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">关联项目</dt>
+                    <dt className={mutedToneClass}>关联项目</dt>
                     <dd className="mt-1 text-foreground">
                       {Number(domain.projectCount || 0)} 个
                     </dd>
@@ -597,7 +599,7 @@ function DomainSettings() {
           </div>
           <div className="mt-5 hidden overflow-x-auto min-[1024px]:block">
             <table className="w-full min-w-[720px] text-left text-sm">
-              <thead className="bg-muted text-sm text-muted-foreground">
+              <thead className={"bg-muted text-sm " + mutedToneClass}>
                 <tr>
                   <th className={configCellClass}>代号</th>
                   <th className={configCellClass}>名称 / 说明</th>
@@ -617,19 +619,19 @@ function DomainSettings() {
                       <p className="font-medium text-foreground">
                         {domain.name}
                       </p>
-                      <p className="mt-1 text-sm text-muted-foreground">
+                      <p className={"mt-1 text-sm " + mutedToneClass}>
                         {domain.description || "未填写说明"}
                       </p>
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                    <td className={"px-4 py-3 text-sm " + mutedToneClass}>
                       {domain.creatorName || domain.creatorUsername || "—"}
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                    <td className={"px-4 py-3 text-sm " + mutedToneClass}>
                       {Number(domain.projectCount || 0)}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded px-2 py-1 text-xs ${domain.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-muted text-muted-foreground"}`}
+                        className={`rounded px-2 py-1 text-xs ${domain.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-muted " + mutedToneClass)}`}
                       >
                         {domain.status === "active" ? "启用" : "停用"}
                       </span>
@@ -766,7 +768,7 @@ function Header({
   return (
     <div className="flex flex-col gap-3 border-b border-border pb-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
-        <p className="text-[11px] font-bold tracking-[.16em] text-muted-foreground">
+        <p className={"text-[11px] font-bold tracking-[.16em] " + mutedToneClass}>
           {eyebrow}
         </p>
         <h1
@@ -775,7 +777,7 @@ function Header({
         >
           {title}
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+        <p className={"mt-2 max-w-2xl text-sm leading-6 " + mutedToneClass}>
           {description}
         </p>
       </div>

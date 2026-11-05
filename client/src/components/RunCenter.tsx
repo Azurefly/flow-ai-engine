@@ -1,3 +1,5 @@
+// Reuse one static class token; emitted class values and handlers are unchanged.
+const mutedToneClass = "text-muted-foreground";
 import { nodeExecutionEntries } from "@shared/node-execution-entries";
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import {
@@ -38,14 +40,14 @@ import { workflowRunControlAllowed, type WorkflowRunControlCapabilities } from "
 const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
 
 // UX 优化：共享相同样式字符串，保持 DOM 类名与事件不变。
-const supportingMetaClass = "aiflow-type-meta mt-1 text-muted-foreground";
+const supportingMetaClass = ("aiflow-type-meta mt-1 " + mutedToneClass);
 const timeClass = "aiflow-type-meta font-mono tabular-nums";
 const compactButtonClass = "aiflow-type-control h-11 lg:h-9";
 const paginationButtonClass = "h-11 flex-1 lg:h-9 lg:flex-none";
 const labelClass = "font-medium text-foreground";
-const metricHintClass = "mt-2 text-muted-foreground";
+const metricHintClass = ("mt-2 " + mutedToneClass);
 const errorTextClass = "text-sm text-destructive";
-const mutedMetaClass = "aiflow-type-meta text-muted-foreground";
+const mutedMetaClass = ("aiflow-type-meta " + mutedToneClass);
 const filterSelectClass = "aiflow-type-control h-11 min-w-0 rounded border border-border bg-card px-2 lg:h-9";
 const refreshButtonClass = "aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none";
 
@@ -324,7 +326,7 @@ export default function RunCenter({
   if (!viewAllowed) return blockedContent ?? null;
   if (!workflowId)
     return (
-      <div className="aiflow-type-body grid min-h-[calc(100dvh-64px)] place-items-center p-8 text-center text-muted-foreground">
+      <div className={"aiflow-type-body grid min-h-[calc(100dvh-64px)] place-items-center p-8 text-center " + mutedToneClass}>
         <div>
           <Clock3 className="mx-auto" size={30} />
           <p className="mt-3">请先在流程仓库选择一个可查看的流程。</p>
@@ -348,7 +350,7 @@ export default function RunCenter({
           >
             运行分析、失败告警与节点日志
           </h1>
-          <p className="aiflow-type-body mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 text-muted-foreground">
+          <p className={"aiflow-type-body mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-1 " + mutedToneClass}>
             <span className="shrink-0">当前流程：</span>
             <span
               className="min-w-0 max-w-full break-words font-medium text-foreground"
@@ -358,7 +360,7 @@ export default function RunCenter({
               {(workflowName || "未命名流程").replaceAll("_", "_\u200b")}
             </span>
             <code
-              className="aiflow-type-meta shrink-0 font-mono text-muted-foreground"
+              className={"aiflow-type-meta shrink-0 font-mono " + mutedToneClass}
               title={`流程编号：${workflowId}`}
             >
               · {workflowId.slice(0, 8)}
@@ -550,7 +552,7 @@ export default function RunCenter({
           fullWidthOnMobile
         />
       </div>
-      <details className="aiflow-type-body rounded-lg border border-border bg-card px-3 py-2 text-muted-foreground">
+      <details className={"aiflow-type-body rounded-lg border border-border bg-card px-3 py-2 " + mutedToneClass}>
         <summary className="aiflow-type-control min-h-7 cursor-pointer font-medium text-foreground">
           更多指标
         </summary>
@@ -572,15 +574,15 @@ export default function RunCenter({
         </div>
       </details>
       {workflowAlerts.length === 0 && !alerts.isLoading ? (
-        <div className="aiflow-type-body flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5 text-muted-foreground shadow-2xs">
+        <div className={"aiflow-type-body flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5 " + mutedToneClass + " shadow-2xs"}>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
             <CheckCircle2 size={14} className="text-aiflow-success" />
             <span className={labelClass}>失败告警</span>
-            <span className="text-muted-foreground">
+            <span className={mutedToneClass}>
               当前筛选范围内无告警记录
             </span>
           </div>
-          <span className="aiflow-type-meta font-mono text-muted-foreground">
+          <span className={"aiflow-type-meta font-mono " + mutedToneClass}>
             0 未读
           </span>
         </div>
@@ -599,7 +601,7 @@ export default function RunCenter({
             {alerts.isLoading ? (
               <p
                 role="status"
-                className="aiflow-type-body p-4 text-center text-muted-foreground"
+                className={"aiflow-type-body p-4 text-center " + mutedToneClass}
               >
                 正在读取失败告警…
               </p>
@@ -607,7 +609,7 @@ export default function RunCenter({
               workflowAlerts.map((alert: any) => (
                 <div
                   key={alert.id}
-                  className={`aiflow-type-body flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center ${alert.readAt ? "text-muted-foreground" : "text-foreground"}`}
+                  className={`aiflow-type-body flex flex-col gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center ${alert.readAt ? (mutedToneClass) : "text-foreground"}`}
                 >
                   <div className="min-w-0 flex-1">
                     <p className="break-words font-medium">{alert.summary}</p>
@@ -661,7 +663,7 @@ export default function RunCenter({
             <span>运行记录</span>
             {runs.isFetching && (
               <Loader2
-                className="animate-spin text-muted-foreground"
+                className={"animate-spin " + mutedToneClass}
                 size={14}
               />
             )}
@@ -674,7 +676,7 @@ export default function RunCenter({
                 className={`w-full border-b border-border p-4 text-left hover:bg-muted ${selectedRun?.id === run.id || selectedRunId === run.id ? "bg-aiflow-info-surface" : ""}`}
               >
                 <div className="flex justify-between gap-2">
-                  <code className="aiflow-type-code font-mono text-muted-foreground">
+                  <code className={"aiflow-type-code font-mono " + mutedToneClass}>
                     {run.id.slice(0, 8)}
                   </code>
                   <span
@@ -683,7 +685,7 @@ export default function RunCenter({
                     {formatRunStatus(run.status)}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-muted-foreground">
+                <div className={"mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 " + mutedToneClass}>
                   <span className={timeClass}>
                     {formatTime(run.createdAt)}
                   </span>
@@ -699,12 +701,12 @@ export default function RunCenter({
               </button>
             ))}
             {!runs.isFetching && !workflowRuns.length && (
-              <p className="aiflow-type-body p-6 text-center text-muted-foreground">
+              <p className={"aiflow-type-body p-6 text-center " + mutedToneClass}>
                 当前筛选条件下尚无运行记录。
               </p>
             )}
           </div>
-          <div className="aiflow-type-control flex flex-col gap-2 border-t border-border px-4 py-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className={"aiflow-type-control flex flex-col gap-2 border-t border-border px-4 py-3 " + mutedToneClass + " sm:flex-row sm:items-center sm:justify-between"}>
             <span aria-live="polite">
               第 {historyCursorStack.length} 页 · 本页 {workflowRuns.length} 条
             </span>
@@ -752,7 +754,7 @@ export default function RunCenter({
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="aiflow-type-meta font-bold tracking-[.18em] text-muted-foreground">
+                <p className={"aiflow-type-meta font-bold tracking-[.18em] " + mutedToneClass}>
                   RUN {(selectedRunId ?? runDetail?.id ?? "").slice(0, 8)}
                 </p>
                 <h3 className="aiflow-type-section-title mt-1 font-semibold">
@@ -834,7 +836,7 @@ export default function RunCenter({
                   )}
               </div>
             </div>
-            {controlCapabilities?.disabledReason && <p role="status" data-run-controls-readonly="" className="mt-3 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">{controlCapabilities.disabledReason}</p>}
+            {controlCapabilities?.disabledReason && <p role="status" data-run-controls-readonly="" className={"mt-3 rounded-md border border-border bg-muted p-3 text-sm " + mutedToneClass}>{controlCapabilities.disabledReason}</p>}
             {runDetail && (
               <dl
                 aria-label="运行状态摘要"
@@ -855,7 +857,7 @@ export default function RunCenter({
             {selectedRunLoading && !selectedRun ? (
               <div
                 role="status"
-                className="aiflow-type-body mt-5 grid min-h-32 place-items-center text-muted-foreground"
+                className={"aiflow-type-body mt-5 grid min-h-32 place-items-center " + mutedToneClass}
               >
                 正在读取运行节点详情…
               </div>
@@ -910,7 +912,7 @@ export default function RunCenter({
                   </p>
                 </div>
                 {!nodeEntries.length && (
-                  <p className="aiflow-type-body text-muted-foreground">
+                  <p className={"aiflow-type-body " + mutedToneClass}>
                     暂无节点执行记录。
                   </p>
                 )}
@@ -928,13 +930,13 @@ export default function RunCenter({
                     >
                       <summary className="aiflow-type-body flex min-w-0 cursor-pointer list-none items-center justify-between gap-3">
                         <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                          <span className="aiflow-type-meta shrink-0 tabular-nums text-muted-foreground">
+                          <span className={"aiflow-type-meta shrink-0 tabular-nums " + mutedToneClass}>
                             {orderLabel}
                           </span>
                           <span className="min-w-0 break-words">
                             {node.nodeName || node.nodeId}
                           </span>
-                          <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-muted-foreground">
+                          <span className={"aiflow-type-meta rounded bg-card px-2 py-0.5 " + mutedToneClass}>
                             {workflowNodeTypeLabel(node.nodeType)}
                           </span>
                           <span
@@ -948,18 +950,18 @@ export default function RunCenter({
                             </span>
                           )}
                           {node.nodeName && node.nodeName !== node.nodeId && (
-                            <code className="aiflow-type-code min-w-0 max-w-full break-words text-muted-foreground [overflow-wrap:anywhere]">
+                            <code className={"aiflow-type-code min-w-0 max-w-full break-words " + mutedToneClass + " [overflow-wrap:anywhere]"}>
                               {node.nodeId}
                             </code>
                           )}
                         </span>
-                        <span className="aiflow-type-meta shrink-0 text-muted-foreground">
+                        <span className={"aiflow-type-meta shrink-0 " + mutedToneClass}>
                           {formatRunDuration(node.durationMs)}
                         </span>
                         <ChevronDown
                           aria-hidden="true"
                           size={14}
-                          className="shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                          className={"shrink-0 " + mutedToneClass + " transition-transform group-open:rotate-180"}
                         />
                       </summary>
                       <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
@@ -1034,7 +1036,7 @@ export default function RunCenter({
                 : "停止后不再继续推进该实例；已执行动作不会撤销，历史记录会保留。"}
             </DialogDescription>
           </DialogHeader>
-          <p className="break-all text-sm text-muted-foreground">
+          <p className={"break-all text-sm " + mutedToneClass}>
             运行编号：{controlDialog?.runId}
           </p>
           {controlDialog?.action === "terminate" && (
