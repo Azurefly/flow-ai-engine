@@ -103,7 +103,7 @@ export default function SystemSettingsEditor({
         (draft &&
           currentToken &&
           draft.token !== currentToken &&
-          settingsDraftDiff(draft).length))
+          (settingsDraftDiff(draft).length || (activeKey === "llm" && keyChanged))))
   );
   const changed = Boolean(draft && (settingsDraftDiff(draft).length || (activeKey === "llm" && keyChanged)));
   const canSave = Boolean(
@@ -489,7 +489,7 @@ export default function SystemSettingsEditor({
               >
                 <CheckCircle2 size={15} />
                 {changed
-                  ? `有 ${settingsDraftDiff(draft).length} 项未保存修改`
+                  ? `有 ${changes.filter(change => change.key === activeKey).length} 项未保存修改`
                   : "当前配置已同步"}
               </p>
             </form>
@@ -523,7 +523,7 @@ export default function SystemSettingsEditor({
                   aria-pressed={key === activeKey}
                 >
                   {SETTINGS_LABELS[key]} ·{" "}
-                  {settingsDraftDiff(draftFor(key)!).length}
+                  {changes.filter(change => change.key === key).length}
                 </Button>
               ))}
             </div>
