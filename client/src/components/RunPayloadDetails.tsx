@@ -6,6 +6,8 @@ import "./run-payload-details.css";
 
 type FieldRow = { field: string; value: string; fullValue?: string };
 const FIELD_PREVIEW_LIMIT = 1600;
+const DEPTH_PREVIEW = "内容层级较深，已收起";
+const sectionTitleClass = "aiflow-type-section-title";
 
 function flattenFields(
   value: unknown,
@@ -16,7 +18,7 @@ function flattenFields(
   if (rows.length >= 80) return rows;
   if (value === null || value === undefined) return rows;
   if (depth >= 6) {
-    rows.push({ field: prefix || "值", value: "内容层级较深，已收起" });
+    rows.push({ field: prefix || "值", value: DEPTH_PREVIEW });
     return rows;
   }
   if (Array.isArray(value)) {
@@ -55,6 +57,7 @@ function PayloadFields({
   value?: unknown;
   rows?: FieldRow[];
 }) {
+  const [showFull, setShowFull] = React.useState(false);
   const rows = fields ?? flattenFields(value);
   if (!rows.length) return null;
   return (
@@ -82,10 +85,17 @@ function PayloadFields({
           </dd>
         </div>
       ))}
-      {rows.length === 80 && (
-        <p className="aiflow-type-body px-3 py-2 text-muted-foreground">
-          字段较多，仅展示前 80 项。
-        </p>
+      {/* 摘要超出层级或字段上限时，按需展示原数据，不截断真实值。 */}
+      {value !== undefined && (rows.length === 80 || rows.some(row => row.value === DEPTH_PREVIEW)) && (
+        <div data-payload-field="">
+          <dt>{rows.length === 80 ? "字段较多，仅展示前 80 项。" : DEPTH_PREVIEW}</dt>
+          <dd>
+            <details onToggle={event => setShowFull(event.currentTarget.open)}>
+              <summary>查看完整数据（JSON）</summary>
+              {showFull && <pre className="aiflow-type-code">{JSON.stringify(value, null, 2)}</pre>}
+            </details>
+          </dd>
+        </div>
       )}
     </dl>
   );
@@ -130,7 +140,7 @@ export function RunPayloadDetails({
     const error = runErrorPreview(value);
     return (
       <section data-run-payload-details>
-        <h4 className="aiflow-type-section-title">
+        <h4 className={sectionTitleClass}>
           {title}
         </h4>
         <div data-payload-groups="">
@@ -173,7 +183,7 @@ export function RunPayloadDetails({
     });
     return (
       <section data-run-payload-details>
-        <h4 className="aiflow-type-section-title">{title}</h4>
+        <h4 className={sectionTitleClass}>{title}</h4>
         <PayloadFields
           rows={[
             { field: "办理结果", value: view.outcome || "未提供" },
@@ -211,7 +221,7 @@ export function RunPayloadDetails({
 
   return (
     <section data-run-payload-details>
-      <h4 className="aiflow-type-section-title">
+      <h4 className={sectionTitleClass}>
         {title}
       </h4>
       <div data-payload-groups="">
