@@ -1937,8 +1937,8 @@ describe("流程设计器界面回归约束", () => {
       "2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]"
     );
     expect(runCenterSource).not.toContain("max-h-[650px] overflow-y-auto");
-    expect(runPayloadDetailsSource).toContain(
-      "whitespace-pre-wrap break-words"
+    expect(source("../client/src/components/run-payload-details.css")).toMatch(
+      /\[data-payload-field\] pre \{[^}]*white-space: pre-wrap;[^}]*overflow-wrap: anywhere;/
     );
     expect(homeSource).toContain("compileCheck={compileCheck}");
     expect(homeSource).toContain("流程预检通过");
@@ -3179,12 +3179,13 @@ describe("流程设计器界面回归约束", () => {
 
   it("运行节点详情对字段值、说明和展开控件使用统一字号语义", () => {
     expect(runPayloadDetailsSource).toContain(
-      'className="aiflow-type-section-title"'
+      'const sectionTitleClass = "aiflow-type-section-title";'
     );
     expect(runPayloadDetailsSource).toContain('className="aiflow-type-meta" title={row.field}');
     expect(runPayloadDetailsSource).toContain('data-payload-preview=""');
     expect(runPayloadDetailsSource).toContain('className="aiflow-type-body"');
-    expect(runPayloadDetailsSource).toContain('className="aiflow-type-code whitespace-pre-wrap break-words"');
+    expect(runPayloadDetailsSource.match(/className=\{sectionTitleClass\}/g)).toHaveLength(3);
+    expect(runPayloadDetailsSource).toContain('className="aiflow-type-code"');
     const fieldStyles = source("../client/src/components/run-payload-details.css");
     expect(fieldStyles).toContain("overflow-wrap: anywhere");
     expect(fieldStyles).toContain("max-height: 176px");

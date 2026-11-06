@@ -61,7 +61,10 @@ function PayloadFields({
   const rows = fields ?? flattenFields(value);
   if (!rows.length) return null;
   return (
-    <dl data-payload-fields="">
+    // 全文区域保留原生空格键展开/滚动，避免画布的全局按键处理截获。
+    <dl data-payload-fields="" onKeyDown={event => {
+      if (event.key === " ") event.stopPropagation();
+    }}>
       {rows.map((row, index) => (
         <div
           key={`${row.field}-${index}`}
@@ -77,7 +80,7 @@ function PayloadFields({
                 <summary className="aiflow-type-control">
                   查看完整内容（{row.fullValue.length} 字符）
                 </summary>
-                <pre className="aiflow-type-code whitespace-pre-wrap break-words">
+                <pre className="aiflow-type-code">
                   {row.fullValue}
                 </pre>
               </details>
