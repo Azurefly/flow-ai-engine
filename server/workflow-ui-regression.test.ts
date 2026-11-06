@@ -2941,7 +2941,7 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("rows={1}");
     expect(homeSource).toContain("max-h-24 w-full min-w-0 resize-none");
     expect(homeSource).toContain("[overflow-wrap:anywhere]");
-    expect(homeSource).toContain("Math.min(field.scrollHeight, 96)");
+    expect(homeSource).toContain("Math.min(field.scrollHeight + field.offsetHeight - field.clientHeight, 96)");
     expect(homeSource).toContain('title={name || "双击或聚焦以编辑流程名称"}');
     expect(styleSource).toContain(":is(h1, [data-aiflow-page-title])");
     expect(styleSource).toContain(".editor-primary-actions > button");

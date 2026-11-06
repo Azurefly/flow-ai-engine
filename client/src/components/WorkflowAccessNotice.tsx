@@ -82,7 +82,11 @@ export default function WorkflowAccessNotice({
           variant="outline"
           className="min-h-11 max-w-full whitespace-normal"
           disabled={refreshing}
-          onClick={onRetry}
+          onClick={() => {
+            // 重试按钮禁用前保留键盘焦点，避免焦点落回页面。
+            heading.current?.focus({ preventScroll: true });
+            onRetry();
+          }}
         >
           {refreshing ? "正在重新检查…" : "重新检查流程权限"}
         </Button>

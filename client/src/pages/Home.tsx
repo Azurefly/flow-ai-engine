@@ -2374,7 +2374,8 @@ function FlowDesigner({
     if (!field) return;
     const resize = () => {
       field.style.height = "auto";
-      field.style.height = `${Math.min(field.scrollHeight, 96)}px`;
+      // 包含边框高度，避免单行标题出现多余滚动条；长标题仍保留高度上限。
+      field.style.height = `${Math.min(field.scrollHeight + field.offsetHeight - field.clientHeight, 96)}px`;
     };
     resize();
     let width = field.clientWidth;
