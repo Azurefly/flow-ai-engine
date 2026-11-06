@@ -373,7 +373,7 @@ export default function RunExecutionCanvas({
           )}
         </div>
         <aside
-          className="min-w-0 overflow-y-auto p-4"
+          className="nokey min-w-0 overflow-y-auto p-4"
           style={{ maxHeight: expanded ? "min(78vh,900px)" : "640px" }}
           data-run-node-details
           role="region"

@@ -1,5 +1,6 @@
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
+const resourceCellClassName = "px-4 py-3";
 import { DataflowCancelControl, DataflowCancellationInfo } from "./DataflowCancelControl";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
 const surfaceClass1 = "h-9 w-full min-w-0 rounded border border-border bg-card px-2 text-sm";
@@ -716,7 +717,7 @@ export default function DataResourceCenter({
                       }
                     />
                     <td className={mutedCellClassName}><p>{dataSourceCapability(source.sourceType).label}</p><p className="mt-1 max-w-xs whitespace-normal text-sm leading-5">{dataSourceReadiness(source).message}</p></td>
-                    <td className="px-4 py-3">
+                    <td className={resourceCellClassName}>
                       <State value={source.status} />
                     </td>
                     <td className={mutedCellClassName}>
@@ -755,7 +756,7 @@ export default function DataResourceCenter({
                     {asset.schema?.length ?? 0} 字段 ·{" "}
                     {asset.sample?.length ?? 0} 行样本
                   </td>
-                  <td className="px-4 py-3">
+                  <td className={resourceCellClassName}>
                     <State value={asset.status} />
                   </td>
                   <td className="px-4 py-3 text-right">
@@ -907,7 +908,7 @@ export default function DataResourceCenter({
                         {udf.description || "—"}
                       </p>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={resourceCellClassName}>
                       <State value={udf.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -1068,7 +1069,7 @@ export default function DataResourceCenter({
                     <td className={"px-4 py-3 font-mono text-xs " + mutedToneClass}>
                       {plugin.version}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className={resourceCellClassName}>
                       <State value={plugin.status} />
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -1488,7 +1489,8 @@ function DataflowRunOutput({ run }: { run: any }) {
             )} />
           </Suspense>
         </TabsContent>
-        <TabsContent value="results" forceMount>
+        {/* 原生阅读控件不参与画布的全局快捷键。 */}
+        <TabsContent value="results" forceMount className="nokey">
           {dataResults.length > 1 && (
             <label className="aiflow-type-control flex flex-wrap items-center gap-2">
               结果集
@@ -2208,7 +2210,7 @@ function DataflowWorkspace({
                           : "当前流程尚未发布"
                       }
                     />
-                    <td className="px-4 py-3">
+                    <td className={resourceCellClassName}>
                       <State value={item.status} />
                     </td>
                     <td className={"aiflow-type-code px-4 py-3 font-mono " + mutedToneClass}>
@@ -2293,7 +2295,7 @@ function ResourceTable({
 
 function Cell({ primary, secondary }: { primary: string; secondary?: string }) {
   return (
-    <td className="px-4 py-3">
+    <td className={resourceCellClassName}>
       <p className="font-medium text-foreground">{primary}</p>
       {secondary && (
         <p
