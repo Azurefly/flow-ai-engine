@@ -526,10 +526,7 @@ export default function DataResourceCenter({
     >
       <div data-resource-center="">
         <ResourceDraftGuard projectId={projectId}>
-          <div className="mb-5 border-b border-border pb-4">
-            <p className={"aiflow-type-meta font-bold tracking-[.16em] " + mutedToneClass}>
-              PROJECT RESOURCE CENTER
-            </p>
+          <div className="management-page-header">
             <h1 className="aiflow-type-page-title mt-1 font-semibold text-foreground">
               资源配置中心
             </h1>
@@ -582,7 +579,7 @@ export default function DataResourceCenter({
                 aria-current={tab === item.id ? "page" : undefined}
                 onClick={() => setTab(item.id)}
                 title={item.label}
-                className={`aiflow-type-control flex min-h-11 min-w-0 items-center gap-2 rounded-md border px-2 py-2 transition-colors sm:px-3 ${tab === item.id ? "border-aiflow-info-border bg-accent font-semibold text-aiflow-info" : ("border-border bg-card " + mutedToneClass + " hover:bg-muted")}`}
+                className={`resource-category-tab ${tab === item.id ? "is-active" : mutedToneClass}`}
               >
                 <item.icon className="shrink-0" size={15} />
                 <span className="min-w-0 flex-1 truncate whitespace-nowrap text-left">
@@ -2265,7 +2262,7 @@ function ResourceTable({
           tabIndex={0}
           className="overflow-x-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500"
         >
-          <table className="w-full min-w-[620px] text-left text-sm [&_thead_th:first-child]:sticky [&_thead_th:first-child]:left-0 [&_thead_th:first-child]:z-20 [&_thead_th:first-child]:bg-muted [&_tbody_td:first-child]:sticky [&_tbody_td:first-child]:left-0 [&_tbody_td:first-child]:z-10 [&_tbody_td:first-child]:bg-card">
+          <table className="resource-catalog-table">
             <thead className={surfaceClass3}>
               <tr>
                 {visibleColumns.map(column => (

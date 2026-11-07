@@ -1,0 +1,135 @@
+/* 桌面管理页面共用层级，仅作用于明确标记的管理组件。 */
+.management-page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px 24px;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.management-page-header > div:first-child { flex: 1; min-width: 260px; }
+.management-page-header h1 { margin: 0; font-size: 20px; line-height: 28px; }
+.management-page-header p { max-width: 80ch; line-height: 22px; overflow-wrap: anywhere; }
+.management-page-header > button { flex-shrink: 0; }
+.management-page-header > h1 { flex-basis: 100%; }
+[data-resource-center] > .management-page-header { display: block; }
+.management-page-header > div:first-child > p:first-child:not(:last-child) { margin-bottom: 4px; }
+
+/* 授权目录采用并列分区，填写和授权记录留在各自分区内。 */
+[data-project-authorizations] { display: grid; align-items: start; gap: 20px; }
+[data-project-authorizations] > * { margin-block: 0; min-width: 0; }
+[data-project-authorizations] > .authorization-header { display: grid; grid-column: 1 / -1; gap: 8px; }
+.authorization-header > p { max-width: 100ch; }
+.authorization-header > div { margin-top: 8px; gap: 8px 16px; }
+.authorization-header > div > p { flex: 1; }
+[data-project-authorizations] > section { border-radius: 12px; box-shadow: 0 2px 6px rgb(15 23 42 / 3%); }
+[data-project-authorizations] > section > div:first-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 20px;
+  background: var(--card);
+}
+[data-project-authorizations] > section > div:first-child > span:first-child { font-size: 15px; line-height: 24px; }
+[data-project-authorizations] > section > div:first-child > span:last-child { font-size: 13px; line-height: 20px; }
+[data-project-permission-grant] > summary { padding: 12px 20px; background: var(--muted); }
+[data-project-permission-grant] > form { padding: 20px; gap: 16px; background: var(--card); }
+[data-project-permission-grant] > form > p { overflow-wrap: anywhere; }
+[data-project-permission-list] > div { align-items: flex-start; padding: 16px 20px; gap: 12px; }
+[data-project-permission-list] > div > div:first-child { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+[data-project-permission-list] > div > div:last-child { flex-shrink: 0; flex-wrap: wrap; gap: 8px; }
+[data-project-permission-list] > p { padding: 32px 20px; line-height: 24px; }
+
+/* 资源分类与数据表形成连续的内容层级。 */
+[data-resource-category-desktop] { gap: 4px; padding: 0 0 4px; border-bottom: 1px solid var(--border); }
+.resource-category-tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 22px;
+  transition: background-color 150ms, color 150ms;
+}
+.resource-category-tab:hover { background: var(--muted); color: var(--foreground); }
+.resource-category-tab.is-active { color: var(--accent-foreground); background: var(--accent); font-weight: 600; }
+.resource-category-tab > span:last-child { background: var(--card); font-size: 12px; }
+[data-resource-center] [data-resource-editor]:not([hidden]) {
+  display: grid;
+  grid-template-columns: minmax(0,1fr) auto;
+  align-items: center;
+  gap: 12px 20px;
+  margin-bottom: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  box-shadow: none;
+}
+[data-resource-editor] > :is(form,fieldset,section,details) { grid-column: 1 / -1; }
+[data-resource-editor] > div:first-child { min-width: 0; }
+[data-resource-editor] > button { justify-self: end; margin: 0; }
+[data-resource-editor] > p { grid-column: 1 / -1; }
+.resource-catalog-table { width: 100%; min-width: 620px; text-align: left; font-size: 14px; }
+.resource-catalog-table :is(th,td):first-child { position: sticky; left: 0; z-index: 1; max-width: 320px; overflow-wrap: anywhere; background: var(--card); }
+.resource-catalog-table thead th:first-child { z-index: 2; background: var(--muted); }
+.resource-catalog-table tbody td:first-child > p:first-child { font-weight: 600; line-height: 22px; }
+.resource-catalog-table tbody tr + tr { border-top: 1px solid var(--border); }
+.resource-catalog-table tbody tr:hover > td { background: var(--muted); }
+
+/* 端点名称与引用名在同一单元格，长 URL 完整展示。 */
+.endpoint-environment-note { margin-top: 12px; padding: 10px 14px; border-left: 3px solid var(--aiflow-warning-border); border-radius: 4px; background: var(--aiflow-warning-surface); color: var(--aiflow-warning); font-size: 13px; }
+.endpoint-table { width: 100%; min-width: 820px; table-layout: fixed; text-align: left; font-size: 14px; line-height: 22px; }
+.endpoint-table :is(th,td) { padding: 14px 16px; vertical-align: top; }
+.endpoint-table th:first-child { width: 22%; }
+.endpoint-table th:nth-child(2) { width: 136px; }
+.endpoint-table th:nth-child(3) { width: 28%; }
+.endpoint-table th:nth-child(5), .endpoint-table th:nth-child(6) { width: 76px; }
+.endpoint-table tbody tr:hover { background: var(--muted); }
+.endpoint-name { font-weight: 600; overflow-wrap: anywhere; }
+.endpoint-reference { margin-top: 4px; color: var(--muted-foreground); font: 13px/20px var(--font-mono,monospace); overflow-wrap: anywhere; }
+.endpoint-table .endpoint-address { color: var(--muted-foreground); font-family: var(--font-mono,monospace); font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
+.endpoint-table td:nth-child(4) { white-space: normal; overflow-wrap: anywhere; }
+
+/* 系统配置使用横向分类，内容区域获得完整桌面宽度。 */
+@media (min-width: 1024px) {
+  [data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: minmax(0,1fr); align-content: start; gap: 20px; }
+  [data-aiflow-system-config] [data-system-config-navigation] { display: flex; align-items: center; gap: 20px; padding: 12px 16px; box-shadow: none; }
+  [data-aiflow-system-config] [data-system-config-nav-header] { flex-shrink: 0; align-items: center; gap: 16px; padding: 0; border: 0; }
+  [data-system-config-nav-header] h2 { margin: 0; font-size: 16px; }
+  [data-aiflow-system-config] [data-system-config-tabs] { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: 0; }
+  [data-aiflow-system-config] [data-system-config-tabs] button { height: 40px; padding: 8px 16px; border-radius: 6px; box-shadow: none; }
+  [data-aiflow-system-config] [data-system-config-tabs] button[aria-current="page"] { background: var(--accent); color: var(--accent-foreground); }
+  [data-aiflow-system-config] > div[data-navigation-collapsed="true"] > aside { padding: 12px 16px; }
+  [data-aiflow-system-config] > div[data-navigation-collapsed="true"] > aside > div:first-child { padding: 0; }
+  [data-aiflow-system-config] [data-system-config-content] { padding: 24px; }
+  [data-project-authorizations] { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  [data-project-permission-grant] > form { grid-template-columns: minmax(0,1fr); }
+  [data-project-permission-grant] > form > * { grid-column: 1 / -1; }
+  [data-project-permission-list] > div { flex-direction: column; }
+  :is([data-project-authorizations],[data-resource-center],[data-project-service-endpoints]) button { min-height: 36px; }
+  :is([data-project-authorizations],[data-resource-center],[data-project-service-endpoints]) :is(input,select) { min-height: 38px; }
+}
+@media (min-width: 1680px) {
+  [data-project-permission-grant] > form { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  [data-project-permission-grant] > form > label { grid-column: auto; }
+  [data-project-permission-list] > div { flex-direction: row; }
+}
+
+/* 仓库与运行页沿用同一字号和表格节奏。 */
+[data-aiflow-warehouse] .management-page-header > div:last-child { align-items: center; }
+[data-runtime-monitor] [data-aiflow-context-header] { padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+[data-runtime-monitor] [data-aiflow-page-title] { font-size: 20px; line-height: 28px; }
+:is([data-aiflow-warehouse],[data-runtime-monitor]) table :is(th,td) { line-height: 22px; }
+:is([data-aiflow-warehouse],[data-runtime-monitor]) table tbody tr:hover { background: var(--muted); }
+:is([data-project-authorizations],[data-resource-center],[data-project-service-endpoints],[data-system-config-tabs]) :is(button,summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .resource-category-tab { transition: none; }
+}

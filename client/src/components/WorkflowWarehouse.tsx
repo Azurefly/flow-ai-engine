@@ -408,7 +408,7 @@ export default function WorkflowWarehouse({
       className="aiflow-page-frame bg-background"
     >
       <div className="aiflow-page-content">
-        <div className="mb-4 flex flex-col gap-3 border-b border-border pb-4 lg:flex-row lg:items-end lg:justify-between">
+        <div className="management-page-header">
           <div>
             <p className={"aiflow-type-meta font-medium " + mutedToneClass}>
               流程与版本

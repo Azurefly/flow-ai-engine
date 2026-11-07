@@ -1579,11 +1579,8 @@ function ServiceEndpointCenter({
   };
   return (
     <div data-project-service-endpoints="">
-      <div className="mb-5 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 shadow-sm sm:flex-row sm:items-end sm:justify-between">
+      <div className="management-page-header">
         <div>
-          <p className={surfaceClass11}>
-            PROJECT SERVICE CATALOG
-          </p>
           <h1 className={surfaceClass12}>
             服务端点
           </h1>
@@ -1591,7 +1588,7 @@ function ServiceEndpointCenter({
             项目流程只能通过这里登记的域名访问外部服务；SecretRef
             只引用运行环境密钥。
           </p>
-          <p className="aiflow-type-body mt-2 max-w-3xl rounded-md border border-aiflow-warning-border bg-aiflow-warning-surface px-3 py-2 text-aiflow-warning">
+          <p className="endpoint-environment-note">
             目标环境是识别标签，不会隔离网络或改变运行目标。调用前仍需确认地址、流程权限和实际副作用。
           </p>
         </div>
@@ -1625,11 +1622,10 @@ function ServiceEndpointCenter({
 
         {!loading && endpoints.length > 0 && (
           <div className="overflow-x-auto">
-            <table className="aiflow-type-body min-w-[980px] w-full text-left">
+            <table className="endpoint-table">
               <thead className={"aiflow-type-body bg-muted " + mutedToneClass}>
                 <tr>
-                  <th className="px-4 py-3 whitespace-nowrap">EndpointRef</th>
-                  <th className="px-4 py-3 whitespace-nowrap">名称</th>
+                  <th className="px-4 py-3 whitespace-nowrap">名称 / EndpointRef</th>
                   <th className="px-4 py-3 whitespace-nowrap">目标环境</th>
                   <th className="px-4 py-3 whitespace-nowrap">允许地址</th>
                   <th className="px-4 py-3 whitespace-nowrap">认证</th>
@@ -1642,16 +1638,14 @@ function ServiceEndpointCenter({
               <tbody>
                 {endpoints.map(endpoint => (
                   <tr key={endpoint.id} className="border-t border-border">
-                    <td className="aiflow-type-meta px-4 py-3 font-mono font-semibold text-aiflow-info whitespace-nowrap">
-                      {endpoint.refCode}
-                    </td>
-                    <td className="px-4 py-3 text-foreground whitespace-nowrap">
-                      {endpoint.name}
+                    <td>
+                      <p className="endpoint-name">{endpoint.name}</p>
+                      <p className="endpoint-reference">{endpoint.refCode}</p>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {renderTargetEnvironment(endpoint)}
                     </td>
-                    <td className={"aiflow-type-body max-w-[340px] truncate px-4 py-3 font-mono " + mutedToneClass}>
+                    <td className="endpoint-address">
                       {endpoint.baseUrl}
                     </td>
                     <td className={"aiflow-type-body px-4 py-3 " + mutedToneClass + " whitespace-nowrap"}>
@@ -3181,10 +3175,7 @@ function ProjectMembers({
 
   return (
     <div data-project-authorizations="" aria-busy={busy} className="space-y-6">
-      <div className="border-b border-border pb-4">
-        <p className={surfaceClass11}>
-          人员与权限
-        </p>
+      <div className="management-page-header authorization-header">
         <h1 className={surfaceClass12}>
           业务成员与部门授权
         </h1>

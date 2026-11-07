@@ -7,6 +7,7 @@ import superjson from "superjson";
 import App from "./App";
 import { refreshAccountIdentity } from "./lib/account-query-isolation";
 import "./index.css";
+import "./components/management-pages.css";
 
 const queryClient = new QueryClient();
 

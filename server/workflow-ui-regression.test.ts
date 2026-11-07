@@ -3335,8 +3335,16 @@ describe("流程设计器界面回归约束", () => {
       'projectFieldLabelClass = "aiflow-type-control block space-y-1 font-medium text-muted-foreground"'
     );
     expect(projectWorkspaceSource).toContain(
-      'className="aiflow-type-body min-w-[980px] w-full text-left"'
+      'className="endpoint-table"'
     );
+    expect(projectWorkspaceSource).toContain('className="endpoint-reference"');
+    expect(projectWorkspaceSource).toContain('className="endpoint-address"');
+    const managementStyles = source("../client/src/components/management-pages.css");
+    expect(managementStyles).toContain(".endpoint-table { width: 100%; min-width: 820px; table-layout: fixed;");
+    expect(managementStyles).toContain("white-space: normal; overflow-wrap: anywhere;");
+    expect(managementStyles).toContain('[data-resource-editor]:not([hidden])');
+    expect(managementStyles).toContain('[data-project-authorizations] > .authorization-header');
+    expect(managementStyles).toContain('[data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: minmax(0,1fr);');
     expect(projectWorkspaceSource).toContain(
       'pattern="[A-Za-z][A-Za-z0-9_]{1,63}"'
     );
