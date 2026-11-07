@@ -16,7 +16,16 @@
 [data-access-branches] > span {min-width: 0; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--card); text-align: center; font-size: 13px; line-height: 20px; overflow-wrap: anywhere;}
 [data-access-relationship] :is(button,summary):focus-visible {outline: 2px solid var(--ring); outline-offset: 2px;}
 @media (min-width: 1024px) {
-  [data-iam-user-workbench], [data-iam-role-workbench] {height: calc(100dvh - 208px); min-height: 420px; gap: 16px; align-items: stretch;}
+  /* 顶部分区导航释放整列空间，账号目录与权限详情形成稳定的双栏工作区。 */
+  [data-aiflow-identity-page] > .aiflow-split-layout,
+  [data-aiflow-identity-page] > .aiflow-split-layout[data-navigation-collapsed="true"] { grid-template-columns:minmax(0,1fr); }
+  [data-aiflow-identity-page] [data-identity-navigation] { display:flex; align-items:center; flex-wrap:wrap; gap:8px 20px; padding:6px 12px; border-radius:10px; }
+  [data-aiflow-identity-page] [data-identity-navigation] > div { border-bottom:0; padding:0 8px; gap:16px; }
+  [data-aiflow-identity-page] [data-identity-navigation] h2 { font-size:14px; line-height:22px; }
+  [data-aiflow-identity-page] [data-identity-navigation] nav { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0; }
+  [data-aiflow-identity-page] [data-identity-navigation] .aiflow-module-link { min-height:36px; padding:8px 14px; }
+  [data-aiflow-identity-page] [data-identity-navigation] .aiflow-module-link[aria-current="page"] { box-shadow:none; }
+  [data-iam-user-workbench], [data-iam-role-workbench] {height: calc(100dvh - 280px); min-height: 420px; gap: 20px; align-items: stretch;}
   :is([data-iam-user-workbench],[data-iam-role-workbench]) > section {min-height: 0; height: 100%; position: static;}
   :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:first-child {display: grid; grid-template-rows: auto minmax(0,1fr) auto;}
   :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:first-child > div:nth-child(2) {min-height: 0; overflow-y: auto; overscroll-behavior: contain;}
@@ -38,7 +47,7 @@
   [data-iam-role-row] .role-classification {grid-row: 2; grid-column: 2; align-self: center;}
   [data-iam-user-row] > button:focus-visible {outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 4px;}
   /* 目录采用连续行，选中状态统一落在整行，避免多层灰色卡片。 */
-  :is([data-iam-user-row],[data-iam-role-row]) { margin-bottom:0; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; padding:10px 8px; transition:background-color 150ms; }
+  :is([data-iam-user-row],[data-iam-role-row]) { margin-bottom:0; border:0; border-bottom:1px solid var(--border); border-radius:0; background:transparent; padding:14px 10px; transition:background-color 150ms; }
   :is([data-iam-user-row],[data-iam-role-row]):hover { background:var(--muted); }
   :is([data-iam-user-row],[data-iam-role-row]):has(> button[aria-pressed="true"]) { border-radius:6px; background:var(--accent); box-shadow:inset 3px 0 var(--primary); }
   [data-iam-role-row] > button { border:0; background:transparent; padding:0 4px; }
@@ -47,8 +56,16 @@
   [data-iam-user-workbench] > section:first-child > div:first-child > p { font-size:13px; line-height:20px; }
 }
 @media (min-width:1280px) {
-  [data-iam-user-workbench], [data-iam-role-workbench] { grid-template-columns:minmax(320px,34%) minmax(0,1fr); }
+  [data-iam-user-workbench], [data-iam-role-workbench] { grid-template-columns:clamp(320px,27vw,380px) minmax(0,1fr); }
 }
+[data-aiflow-identity-page] [data-iam-detail-scroll] { padding:20px 24px; }
+[data-aiflow-identity-page] [data-iam-detail-scroll] > div > div:first-child { padding-bottom:16px; border-bottom:1px solid var(--border); }
+[data-aiflow-identity-page] [data-iam-detail-scroll] > div > div:first-child > p:first-child { font-size:16px; line-height:24px; }
+[data-aiflow-identity-page] [data-iam-detail-scroll] > div > div:first-child > p { overflow-wrap:anywhere; }
+[data-aiflow-identity-page] [data-access-details-target] { scroll-margin-block:16px; padding-top:4px; }
+[data-aiflow-identity-page] [data-access-counts] > button { border:0; border-radius:6px; background:var(--muted); }
+[data-aiflow-identity-page] [data-access-counts] > button:hover,
+[data-aiflow-identity-page] [data-access-counts] > button[aria-pressed="true"] { background:var(--accent); color:var(--primary); }
 /* 两个授权入口共用的弹窗只通过语义标记调整，保持提交与草稿保护。 */
 [data-slot="dialog-content"]:has([data-system-role-assignment]) { width:min(640px,calc(100vw - 48px)); max-width:640px; }
 [data-system-role-assignment] fieldset > div.auth-label { padding:12px; border-radius:8px; background:var(--muted); color:var(--muted-foreground); }

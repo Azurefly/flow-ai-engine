@@ -80,13 +80,24 @@
 [data-canvas-redesign] [data-canvas-assessment]:not([data-canvas-assessment="partial"]) {background: var(--muted); border-color: var(--border);}
 [data-canvas-redesign] [data-canvas-more] {width: auto !important; padding-inline: 8px; gap: 4px;}
 
-/* 优化核心：创建入口、编辑工具、节点定位具有稳定的视觉分组。 */
-[data-canvas-redesign] [data-flow-node-palette] { display:flex; flex-wrap:wrap; gap:6px; padding-right:10px; margin-right:4px; border-right:1px solid var(--border); }
+/* 优化核心：工具栏分成创建资源与编辑定位两组，弹层沿用原焦点与键盘行为。 */
+[data-canvas-redesign] [data-flow-node-palette] { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-right:12px; margin-right:4px; border-right:1px solid var(--border); }
 [data-canvas-redesign] [data-flow-node-palette] > button:first-child { border-color:var(--aiflow-info-border); background:var(--accent); color:var(--primary); }
-[data-canvas-redesign] [data-flow-canvas-actions] > select { flex:1; min-width:140px; max-width:260px; }
+[data-canvas-redesign] .canvas-action-group { display:flex; flex:1; min-width:0; flex-wrap:wrap; align-items:center; gap:4px; }
+[data-canvas-redesign] [data-flow-canvas-actions] > select { flex:1; min-width:120px; max-width:none; }
+[data-canvas-redesign] [data-flow-canvas-actions] > button { flex-shrink:0; }
+[data-canvas-redesign] [data-flow-canvas-actions] > span { background:var(--border); }
 [data-canvas-redesign] .react-flow__controls { overflow:hidden; border:1px solid var(--border); border-radius:8px; box-shadow:0 2px 8px #0f172a08; }
 [data-canvas-redesign] .react-flow__controls-button { width:32px; height:32px; background:var(--card); border-color:var(--border); color:var(--foreground); fill:currentColor; }
 [data-canvas-redesign] .react-flow__controls-button:hover { background:var(--accent); }
 [data-canvas-redesign] .react-flow__controls-button:focus-visible { outline:2px solid var(--ring); outline-offset:-3px; }
 [data-canvas-redesign] .react-flow__minimap { overflow:hidden; border:1px solid var(--border); border-radius:8px; box-shadow:none; }
 [data-canvas-redesign] [data-flow-canvas-viewport] > details > summary { border:1px solid var(--border); border-radius:6px; box-shadow:none; }
+@media (min-width:1024px) {
+  [data-canvas-redesign] [data-flow-canvas-toolbar] { gap:8px; padding:10px 12px; }
+  [data-canvas-redesign] [data-flow-node-palette] { flex-shrink:0; }
+  [data-canvas-redesign] .canvas-action-group { flex-basis:320px; }
+  [data-canvas-redesign] .react-flow__controls { display:flex; bottom:4px; left:4px; }
+  [data-canvas-redesign] .react-flow__controls-button { border-bottom:0; border-right:1px solid var(--border); }
+  [data-canvas-redesign] .react-flow__controls-button:last-child { border-right:0; }
+}

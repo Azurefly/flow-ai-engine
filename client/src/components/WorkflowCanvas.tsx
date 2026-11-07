@@ -4063,7 +4063,7 @@ export default function WorkflowCanvas({
             </div>
           )}
           {showCanvasActions && (
-            <div data-flow-canvas-actions="" className="contents">
+            <div data-flow-canvas-actions="" className="canvas-action-group">
               {!readOnly && (
                 <>
                   <Button
@@ -4719,10 +4719,10 @@ export default function WorkflowCanvas({
                       aria-selected={
                         activeInspectorGroup?.label === group.label
                       }
-                      className={`aiflow-type-control min-h-9 min-w-0 whitespace-normal rounded-md border px-2 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                      className={`node-config-tab ${
                         activeInspectorGroup?.label === group.label
-                          ? "border-primary/20 bg-accent text-primary"
-                          : ("border-transparent " + mutedToneClass + " hover:bg-card hover:text-foreground")
+                          ? "is-active"
+                          : mutedToneClass
                       }`}
                       onClick={() => { setInspectorTab(group.label); groupNavigation.reveal(); }}
                     >
