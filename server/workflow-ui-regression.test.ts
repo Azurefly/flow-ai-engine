@@ -3342,7 +3342,8 @@ describe("流程设计器界面回归约束", () => {
     const managementStyles = source("../client/src/components/management-pages.css");
     expect(managementStyles).toContain(".endpoint-table { width: 100%; min-width: 820px; table-layout: fixed;");
     expect(managementStyles).toContain("white-space: normal; overflow-wrap: anywhere;");
-    expect(managementStyles).toContain('[data-resource-editor]:not([hidden])');
+    expect(managementStyles).toContain('.resource-create-panel):not([hidden])');
+    expect(managementStyles).toContain('section[data-resource-editor] { grid-template-columns: minmax(0,1fr);');
     expect(managementStyles).toContain('[data-project-authorizations] > .authorization-header');
     expect(managementStyles).toContain('[data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: minmax(0,1fr);');
     expect(projectWorkspaceSource).toContain(

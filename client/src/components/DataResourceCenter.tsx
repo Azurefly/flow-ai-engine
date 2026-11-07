@@ -1587,7 +1587,7 @@ function ResourceForm({
   };
   if (!canEdit && !open) return null;
   return (
-    <div className="grid h-fit min-w-0 gap-3 rounded-lg border border-aiflow-info-border bg-card p-4 shadow-sm">
+    <div className="resource-create-panel">
       <div>
         <p className="font-semibold text-foreground">{title}</p>
         <p className={surfaceClass2}>
