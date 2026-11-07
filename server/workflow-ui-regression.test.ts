@@ -4136,6 +4136,7 @@ it("人员目录默认启用并按服务端状态筛选，切换后重置分页�
   expect(homeSource).toContain('data-iam-directory-filters=""');
   const userSearchInput = homeSource.slice(homeSource.indexOf('aria-label="搜索用户"'));
   expect(userSearchInput.slice(0, 300)).toContain('maxLength={160}');
+  expect(userSearchInput.slice(0, 600)).toContain('setUserSearch(event.target.value.slice(0, 160))');
   expect(filter).toContain('<option value="active">启用账号</option>');
   expect(filter).toContain('<option value="disabled">停用账号</option>');
   expect(filter).toContain('<option value="all">全部账号</option>');

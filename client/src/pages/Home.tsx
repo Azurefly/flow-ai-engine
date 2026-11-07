@@ -3927,7 +3927,7 @@ function IamCenter({
                   placeholder="搜索名称、账号或邮箱"
                   value={userSearch}
                   onChange={event => {
-                    setUserSearch(event.target.value);
+                    setUserSearch(event.target.value.slice(0, 160));
                     setUserPage(0);
                   }}
                 />
