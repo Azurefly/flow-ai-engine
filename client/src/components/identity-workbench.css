@@ -25,6 +25,7 @@
   [data-aiflow-identity-page] [data-identity-navigation] nav { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin:0; }
   [data-aiflow-identity-page] [data-identity-navigation] .aiflow-module-link { min-height:36px; padding:8px 14px; }
   [data-aiflow-identity-page] [data-identity-navigation] .aiflow-module-link[aria-current="page"] { box-shadow:none; }
+  [data-aiflow-identity-page] [data-identity-navigation] .aiflow-module-link[aria-current="page"]::before { display:none; }
   [data-iam-user-workbench], [data-iam-role-workbench] {height: calc(100dvh - 280px); min-height: 420px; gap: 20px; align-items: stretch;}
   :is([data-iam-user-workbench],[data-iam-role-workbench]) > section {min-height: 0; height: 100%; position: static;}
   :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:first-child {display: grid; grid-template-rows: auto minmax(0,1fr) auto;}
@@ -54,6 +55,13 @@
   [data-iam-role-row] .role-classification > span { background:var(--card); border:1px solid var(--border); }
   [data-iam-user-workbench] > section:first-child > div:first-child > label:has(select) { grid-template-columns:auto minmax(0,1fr); align-items:center; gap:12px; }
   [data-iam-user-workbench] > section:first-child > div:first-child > p { font-size:13px; line-height:20px; }
+  [data-iam-user-workbench] > section:first-child > [data-iam-directory-filters] { display:grid; grid-template-columns:minmax(0,1fr) 112px; gap:12px; }
+  [data-iam-directory-filters] > div { grid-column:1 / -1; }
+  [data-iam-user-workbench] > section:first-child > [data-iam-directory-filters] > label { display:block; margin:0; }
+  [data-iam-directory-filters] select { width:100%; min-width:0; padding-inline:8px; }
+  [data-iam-user-workbench] > section:nth-child(2) > div:first-child > div:first-child { display:flex; flex-wrap:wrap; align-items:center; gap:4px 16px; }
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:nth-child(2) > div:first-child { justify-content:flex-start; gap:8px; }
+  :is([data-iam-user-workbench],[data-iam-role-workbench]) > section:nth-child(2) > div:first-child > div:first-child { flex:1; }
 }
 @media (min-width:1280px) {
   [data-iam-user-workbench], [data-iam-role-workbench] { grid-template-columns:clamp(320px,27vw,380px) minmax(0,1fr); }

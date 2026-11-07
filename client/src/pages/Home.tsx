@@ -3904,7 +3904,7 @@ function IamCenter({
           className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]"
         >
           <section className={panelClass}>
-            <div className="border-b border-border p-4">
+            <div data-iam-directory-filters="" className="border-b border-border p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">用户目录</p>
                 <span className={mutedMetaClass}>
@@ -3932,7 +3932,7 @@ function IamCenter({
                 />
               </label>
               <label className={"mt-3 grid gap-1.5 text-sm " + mutedToneClass}>
-                账号状态
+                <span className="sr-only">账号状态</span>
                 <select aria-label="账号状态" className="aiflow-type-control min-h-11 rounded-md border border-input bg-card px-3 text-foreground min-[1024px]:min-h-10" value={userStatus} onChange={event => {
                   setUserStatus(event.target.value as typeof userStatus);
                   setUserPage(0);
@@ -3944,7 +3944,6 @@ function IamCenter({
                   <option value="all">全部账号</option>
                 </select>
               </label>
-              <p className={"mt-2 text-xs " + mutedToneClass}>默认显示启用账号；查看停用账号请切换状态。</p>
             </div>
             {/* UX：新页、搜索或状态变更从目录顶部开始，筛选与详情状态不受影响。 */}
             <div className="p-2" key={`${userPage}:${userSearch}:${userStatus}`}>

@@ -97,7 +97,9 @@
   [data-canvas-redesign] [data-flow-canvas-toolbar] { gap:8px; padding:10px 12px; }
   [data-canvas-redesign] [data-flow-node-palette] { flex-shrink:0; }
   [data-canvas-redesign] .canvas-action-group { flex-basis:320px; }
-  [data-canvas-redesign] .react-flow__controls { display:flex; bottom:4px; left:4px; }
+  [data-canvas-redesign] .react-flow__controls { display:flex; flex-direction:row; bottom:4px; left:4px; }
   [data-canvas-redesign] .react-flow__controls-button { border-bottom:0; border-right:1px solid var(--border); }
   [data-canvas-redesign] .react-flow__controls-button:last-child { border-right:0; }
+  [data-canvas-redesign] [data-workflow-neighborhood] { bottom:64px; left:16px; max-width:calc(100% - 240px); }
+  [data-canvas-redesign] [data-canvas-layout-warning] { bottom:104px; left:16px; max-width:calc(100% - 240px); }
 }

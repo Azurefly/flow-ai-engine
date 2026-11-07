@@ -4133,7 +4133,18 @@ it("人员目录默认启用并按服务端状态筛选，切换后重置分页�
   expect(filter.slice(0, 700)).toContain("setUserPage(0)");
   expect(filter.slice(0, 700)).toContain("setSelectedUserId(null)");
   expect(homeSource).not.toContain("mobileUserDetailsOpen");
-  expect(homeSource).toContain("默认显示启用账号；查看停用账号请切换状态。");
+  expect(homeSource).toContain('data-iam-directory-filters=""');
+  expect(filter).toContain('<option value="active">启用账号</option>');
+  expect(filter).toContain('<option value="disabled">停用账号</option>');
+  expect(filter).toContain('<option value="all">全部账号</option>');
+});
+it("桌面画布缩放横排且提示避开控件，权限分类使用整行导航", () => {
+  const canvasStyles = source("../client/src/components/workflow-canvas-design.css");
+  const identityStyles = source("../client/src/components/identity-workbench.css");
+  expect(canvasStyles).toContain('.react-flow__controls { display:flex; flex-direction:row;');
+  expect(canvasStyles).toContain('[data-workflow-neighborhood] { bottom:64px;');
+  expect(identityStyles).toContain('[data-aiflow-identity-page] > .aiflow-split-layout');
+  expect(identityStyles).toContain('grid-template-columns:minmax(0,1fr);');
 });
 it("流程角色目录变化保留原选择但阻止失效角色提交", () => {
   expect(authorizationSource).toContain("authorizationQueryPolicy(true)");
