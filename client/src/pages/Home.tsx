@@ -3922,6 +3922,7 @@ function IamCenter({
                 />
                 <Input
                   aria-label="搜索用户"
+                  maxLength={160}
                   className="min-h-11 min-w-0 pl-9 min-[1024px]:min-h-0"
                   placeholder="搜索名称、账号或邮箱"
                   value={userSearch}

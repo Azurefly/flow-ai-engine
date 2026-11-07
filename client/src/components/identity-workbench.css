@@ -73,7 +73,8 @@
 [data-aiflow-identity-page] [data-access-details-target] { scroll-margin-block:16px; padding-top:4px; }
 [data-aiflow-identity-page] [data-access-counts] > button { border:0; border-radius:6px; background:var(--muted); }
 [data-aiflow-identity-page] [data-access-counts] > button:hover,
-[data-aiflow-identity-page] [data-access-counts] > button[aria-pressed="true"] { background:var(--accent); color:var(--primary); }
+[data-aiflow-identity-page] [data-access-counts] > button[aria-pressed="true"] { background:var(--accent); color:var(--accent-foreground); }
+.dark [data-aiflow-identity-page] button.text-primary { color:var(--aiflow-info); }
 /* 两个授权入口共用的弹窗只通过语义标记调整，保持提交与草稿保护。 */
 [data-slot="dialog-content"]:has([data-system-role-assignment]) { width:min(640px,calc(100vw - 48px)); max-width:640px; }
 [data-system-role-assignment] fieldset > div.auth-label { padding:12px; border-radius:8px; background:var(--muted); color:var(--muted-foreground); }

@@ -1479,7 +1479,7 @@ h2 {
   }
   [data-aiflow-primary-nav] > a[aria-current="page"] {
     background: var(--accent);
-    color: var(--primary);
+    color: var(--accent-foreground);
     font-weight: 600;
   }
   [data-aiflow-primary-nav] > a svg {
@@ -1678,7 +1678,7 @@ select {
   transition: background-color 160ms, color 160ms;
 }
 .aiflow-module-link:hover { background: var(--muted); color: var(--foreground); }
-.aiflow-module-link[aria-current="page"] { background: var(--accent); color: var(--primary); }
+.aiflow-module-link[aria-current="page"] { background: var(--accent); color: var(--accent-foreground); }
 .aiflow-module-link[aria-current="page"]::before {
   content: ""; position: absolute; left: 0; width: 3px; height: 18px;
   border-radius: 3px; background: var(--primary);
