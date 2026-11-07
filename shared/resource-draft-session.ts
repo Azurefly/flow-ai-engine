@@ -38,8 +38,19 @@ export class ResourceDraftStore {
   isCurrentView(generation: number) { return this.viewGeneration === generation; }
   clearAfterNavigation(event: { defaultPrevented: boolean }) {
     const generation = this.viewGeneration;
+    const entries = Array.from(this.entries);
+    const creations = Array.from(this.creations);
     // Later listeners may cancel the same event (for example, settings drafts).
-    queueMicrotask(() => { if (!event.defaultPrevented && this.isCurrentView(generation)) this.clear(); });
+    queueMicrotask(() => {
+      if (event.defaultPrevented || !this.isCurrentView(generation)) return;
+      // Navigation callbacks may already have written the destination's state.
+      // Only remove unchanged entries captured before those callbacks ran.
+      for (const [key, entry] of entries)
+        if (this.entries.get(key) === entry) this.entries.delete(key);
+      for (const [key, attempt] of creations)
+        if (this.creations.get(key) === attempt) this.creations.delete(key);
+      this.emit();
+    });
   }
   hasRecoverableEntries() {
     const { count, pending } = this.stats();

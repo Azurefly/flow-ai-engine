@@ -1,6 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { ResourceDraftStore } from "./resource-draft-session";
 
+it("业务导航清理旧状态后保留本次选择，三个入口可连续往返", async () => {
+  const store = new ResourceDraftStore();
+  for (const view of ["members", "resources", "services", "process", "resources", "members"]) {
+    store.set("p", "sources", "open", false, true, false);
+    store.clearAfterNavigation({ defaultPrevented: false });
+    store.set("p", "workspace", "view", "process", view, false);
+    await Promise.resolve();
+    expect(store.read("p", "workspace", "view", "process")).toBe(view);
+    expect(store.read("p", "sources", "open", false)).toBe(false);
+    expect(store.stats()).toEqual({ count: 0, pending: 0 });
+  }
+});
+
+it("离开旧页面的延后清理保留目标页面新建的填写与请求", async () => {
+  const store = new ResourceDraftStore();
+  store.clearAfterNavigation({ defaultPrevented: false });
+  store.set("p", "tags", "name", "", "新页面填写");
+  const attempt = store.prepareCreation("p", "tags", { projectId: "p", name: "新页面填写" });
+  await Promise.resolve();
+  expect(store.read("p", "tags", "name", "")).toBe("新页面填写");
+  expect(store.creation("p", "tags")?.key).toBe(attempt.key);
+});
+
 it("后注册的离开确认取消导航时不丢配置，允许导航后才清理", async () => {
   const store = new ResourceDraftStore();
   const event = { defaultPrevented: false };
