@@ -1408,7 +1408,7 @@ function FlowConsole({
       <div
         data-aiflow-run-view-tabs
         role="tablist"
-        aria-orientation="vertical"
+        aria-orientation="horizontal"
         aria-label="已启动流程视图"
         className="grid gap-1"
       >

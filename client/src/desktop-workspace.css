@@ -56,12 +56,12 @@
   [data-workbench-navigation-help] { flex-basis: 100%; margin: 0; padding: 0; }
   [data-workbench-navigation-help] summary { min-height: 32px; width: fit-content; gap: 8px; }
   [data-workbench-content] { grid-column: 1 / -1; }
-  [data-workbench-navigation] [data-aiflow-run-view-tabs] { display: flex; gap: 4px; margin: 0; border-right: 1px solid var(--border); padding-right: 16px; }
-  [data-workbench-navigation] [data-aiflow-run-view-tabs] button { min-height: 38px; margin: 0; }
+  [data-workbench-navigation] [data-aiflow-run-view-tabs] { display: flex; flex-shrink: 0; gap: 4px; margin: 0; border-right: 1px solid var(--border); padding-right: 16px; }
+  [data-workbench-navigation] [data-aiflow-run-view-tabs] button { width: auto; min-height: 38px; margin: 0; white-space: nowrap; }
   [data-runs-monitor-workspace] > .aiflow-split-layout { grid-template-columns: minmax(0,1fr); }
   [data-runs-monitor-workspace] > .aiflow-split-layout > aside { position: static; padding: 8px 16px; }
   [data-runs-monitor-workspace] [data-aiflow-run-view-tabs] { display: flex; gap: 8px; }
-  [data-runs-monitor-workspace] [data-aiflow-run-view-tabs] button { margin: 0; }
+  [data-runs-monitor-workspace] [data-aiflow-run-view-tabs] button { width: auto; margin: 0; white-space: nowrap; }
 }
 
 /* 阅读区只保留一层主体容器，表头、筛选和正文通过留白区分。 */
@@ -138,6 +138,7 @@
 .flow-type-badge[data-flow-type="state"] { background: var(--aiflow-info-surface); color: var(--aiflow-info); }
 .flow-type-badge[data-flow-type="control"] { background: var(--aiflow-special-surface); color: var(--aiflow-special); }
 .flow-type-badge[data-flow-type="data"] { background: var(--aiflow-success-surface); color: var(--aiflow-success); }
+[data-workbench-instance-name] ~ code { display: inline-block; margin: 4px 0 0; vertical-align: middle; }
 :is([data-system-config-content],[data-workbench-panel],[data-project-authorizations]) :is(h1,h2,h3,legend) { overflow-wrap: anywhere; }
 [data-aiflow-console] :is(button,a,summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
 [data-workspace-header] :is(button,a):focus-visible { outline-color: #b6c9ff; }

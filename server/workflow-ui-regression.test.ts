@@ -680,13 +680,13 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("--aiflow-type-body: 0.875rem;");
     expect(styleSource).toContain("--aiflow-leading-code: 1.3125rem;");
     expect(styleSource).toContain("--aiflow-type-section: 1rem;");
-    expect(styleSource).toContain("--aiflow-type-page-title: 1.375rem;");
+    expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem;");
     expect(styleSource).toContain("--aiflow-type-display: 1.5rem;");
     expect(styleSource).toContain("--aiflow-leading-meta: 1.125rem;");
     expect(styleSource).toContain("--aiflow-leading-control: 1.25rem;");
     expect(styleSource).toContain("--aiflow-leading-body: 1.375rem;");
     expect(styleSource).toContain("--aiflow-leading-section: 1.5rem;");
-    expect(styleSource).toContain("--aiflow-leading-page-title: 1.875rem;");
+    expect(styleSource).toContain("--aiflow-leading-page-title: 1.75rem;");
     expect(styleSource).toContain("--aiflow-leading-display: 2rem;");
     expect(styleSource).toContain(
       "font-size: var(--aiflow-type-control) !important;"
@@ -3085,7 +3085,7 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("--aiflow-type-control: 0.875rem;");
     expect(styleSource).toContain("--aiflow-type-body: 0.875rem;");
     expect(styleSource).toContain("--aiflow-type-section: 1rem;");
-    expect(styleSource).toContain("--aiflow-type-page-title: 1.375rem;");
+    expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem;");
     expect(styleSource).toContain("--aiflow-type-display: 1.5rem;");
     expect(styleSource).toContain("font-family: var(--aiflow-font-sans);");
     expect(styleSource).toContain(
@@ -4266,4 +4266,16 @@ it("阅读投影隔离于持久化，拖动和整理仍可连同显示模式一�
   expect(edge).toContain("interactionWidth={24 / zoom}");
   expect(edge).toContain('markerWidth={9 / zoom}');
   expect(edge).toContain("strokeWidth: (emphasized ? 3 : 2) / zoom");
+});
+
+
+describe("桌面工作空间样式优先级", () => {
+  it("顶栏品牌色不受旧白色强制覆盖，横向页签保持单行", () => {
+    const desktop = source("../client/src/desktop-workspace.css");
+    expect(styleSource).not.toMatch(/\[data-aiflow-console\] > header\s*\{[^}]*!important/);
+    expect(desktop).toContain("background: var(--aiflow-topbar)");
+    expect(desktop).toContain("flex-shrink: 0; gap: 4px");
+    expect(desktop).toContain("white-space: nowrap");
+    expect(homeSource).toContain('aria-orientation="horizontal"');
+  });
 });

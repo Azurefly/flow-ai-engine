@@ -166,7 +166,7 @@
     #eef2ff 0,
     transparent 65%
   );
-  /* Console type scale: meta 13, body/controls 14, section 16, dialog 18, page 22, display 24px. */
+  /* Console type scale: meta 13, body/controls 14, section 16, dialog 18, page 20, display 24px. */
   --aiflow-font-sans:
     "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
     system-ui, sans-serif;
@@ -176,7 +176,7 @@
   --aiflow-type-code: 0.875rem;
   --aiflow-type-section: 1rem;
   --aiflow-type-dialog-title: 1.125rem;
-  --aiflow-type-page-title: 1.375rem;
+  --aiflow-type-page-title: 1.25rem;
   --aiflow-type-display: 1.5rem;
   --aiflow-leading-meta: 1.125rem;
   --aiflow-leading-control: 1.25rem;
@@ -184,7 +184,7 @@
   --aiflow-leading-body: 1.375rem;
   --aiflow-leading-section: 1.5rem;
   --aiflow-leading-dialog-title: 1.625rem;
-  --aiflow-leading-page-title: 1.875rem;
+  --aiflow-leading-page-title: 1.75rem;
   --aiflow-leading-display: 2rem;
   --aiflow-page-gutter: 1.5rem;
   --aiflow-content-max: 1440px;
@@ -693,35 +693,6 @@ h2 {
 /* 数据资源页面用结构化表单替代历史 JSON 文本表单。 */
 [data-resource-center] form:has(textarea) {
   display: none;
-}
-
-/* Workspace surfaces share the same light, soft-edged visual language. */
-[data-aiflow-console] > header {
-  border-color: var(--border) !important;
-  background: var(--card) !important;
-  color: var(--foreground) !important;
-  box-shadow: none !important;
-}
-
-[data-aiflow-console] > header .text-slate-100,
-[data-aiflow-console] > header .text-slate-300,
-[data-aiflow-console] > header .text-slate-400 {
-  color: var(--muted-foreground) !important;
-}
-
-[data-aiflow-console] > header .text-blue-300 {
-  color: var(--aiflow-info) !important;
-}
-
-[data-aiflow-console] > header button:hover {
-  background: var(--accent) !important;
-  color: var(--aiflow-info) !important;
-}
-
-[data-aiflow-console] > header button.border-blue-400 {
-  border-color: var(--aiflow-info) !important;
-  background: var(--accent) !important;
-  color: var(--aiflow-info) !important;
 }
 
 [data-aiflow-console] .shadow-sm,
