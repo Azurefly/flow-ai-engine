@@ -2280,6 +2280,9 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("runId: monitorRunId ??");
     expect(homeSource).toContain("selectedRunId={monitorRunId}");
     expect(homeSource).toContain('selectedWorkflow.flowType !== "data" && monitorRunId');
+    const queryStart = homeSource.indexOf("const runDetail = trpc.workflow.runDetail.useQuery");
+    const queryOptions = homeSource.slice(queryStart, homeSource.indexOf("retry: false", queryStart));
+    expect(queryOptions).toContain('requestedRoute.route.section === "runs" && requestedRoute.route.view === "monitor"');
   });
 
   it("保留主要工作区、项目工作区和独立系统配置入口", () => {

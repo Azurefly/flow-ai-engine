@@ -20,7 +20,8 @@
   --aiflow-canvas-dot: #344157;
 }
 [data-run-canvas-design] > header {display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 16px; border-bottom: 1px solid var(--border); padding: 12px 16px; align-items: center;}
-[data-run-canvas-design] > header p {font-size: 13px !important; line-height: 20px !important;}
+[data-run-canvas-design] > header h3 {font-size:var(--aiflow-type-section); line-height:var(--aiflow-leading-section); font-weight:600; color:var(--foreground);}
+[data-run-canvas-design] > header p {margin-top:4px; font-size: 13px !important; line-height: 20px !important; color:var(--muted-foreground);}
 [data-run-canvas-design] > header button {height: 34px; min-height: 34px; border-radius: 6px;}
 [data-run-canvas-design] [data-run-legend] {position: relative; grid-column: 1 / -1; padding: 0;}
 [data-run-canvas-design] [data-run-legend] > summary {width: fit-content; cursor: pointer; font-size: 13px; color: var(--muted-foreground);}

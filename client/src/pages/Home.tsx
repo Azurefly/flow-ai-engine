@@ -798,6 +798,7 @@ function FlowConsole({
   );
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, {
     enabled: Boolean(
+      requestedRoute.route.section === "runs" && requestedRoute.route.view === "monitor" &&
       canViewWorkflow && selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data" && monitorRunId
     ),
     retry: false,

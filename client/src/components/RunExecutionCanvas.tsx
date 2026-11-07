@@ -230,10 +230,10 @@ export default function RunExecutionCanvas({
     >
       <header className="run-graph-header">
         <div>
-          <h3 className="aiflow-type-section-title font-semibold text-foreground">
+          <h3>
             实例流程图
           </h3>
-          <p className="aiflow-type-body mt-1 text-muted-foreground">
+          <p>
             {graph.hasSnapshot ? "基于本次运行快照" : "仅有节点执行记录"} · {graph.nodes.length} 个节点 ·{" "}
             {current.filter(n => n.activeCount).length} 处进行中
           </p>
