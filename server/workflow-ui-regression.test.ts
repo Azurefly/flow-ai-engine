@@ -3346,6 +3346,7 @@ describe("流程设计器界面回归约束", () => {
     expect(managementStyles).toContain('section[data-resource-editor] { grid-template-columns: minmax(0,1fr);');
     expect(managementStyles).toContain('[data-project-authorizations] > .authorization-header');
     expect(managementStyles).toContain('[data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: minmax(0,1fr);');
+    expect(source("../client/src/index.css")).toContain('[data-aiflow-project-workspace] > aside nav button[aria-current="page"] { color: var(--accent-foreground);');
     expect(projectWorkspaceSource).toContain(
       'pattern="[A-Za-z][A-Za-z0-9_]{1,63}"'
     );

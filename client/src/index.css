@@ -1505,7 +1505,7 @@ h2 {
     font-weight: 500;
   }
   [data-aiflow-project-workspace] > aside nav button[aria-current="page"] {
-    color: var(--primary);
+    color: var(--accent-foreground);
     background: var(--accent);
   }
   [data-aiflow-project-workspace]
@@ -1518,7 +1518,7 @@ h2 {
     height: 18px;
     width: 3px;
     border-radius: 3px;
-    background: var(--primary);
+    background: var(--accent-foreground);
   }
   .aiflow-business-picker {
     margin-top: 12px;
