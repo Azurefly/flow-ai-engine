@@ -16,8 +16,8 @@
 [data-node-config-panel] [data-canvas-assessment] > p:first-child { font-size:13px!important; line-height:20px!important; }
 [data-node-config-panel] [data-canvas-assessment="partial"] { background:var(--aiflow-danger-surface); border-color:var(--aiflow-danger-border); }
 /* 分类保留原方向键、Home/End和选中状态。 */
-[data-node-config-panel] [data-inspector-tabs] { display:grid!important; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); gap:4px; padding:8px 16px; background:var(--card); border-top:0; }
-[data-node-config-panel] [data-inspector-tabs] > button { padding:7px 4px; min-height:36px!important; white-space:normal; overflow-wrap:anywhere; font-size:13px!important; line-height:20px!important; border-radius:6px; }
+[data-node-config-panel] [data-inspector-tabs] { display:flex!important; flex-wrap:wrap; gap:4px; padding:8px 16px; background:var(--card); border-top:0; }
+[data-node-config-panel] [data-inspector-tabs] > button { flex:1 0 108px; padding:7px 4px; min-height:36px!important; white-space:normal; overflow-wrap:anywhere; font-size:13px!important; line-height:20px!important; border-radius:6px; }
 [data-node-config-panel] [data-inspector-tabs] > [aria-selected="true"] { background:var(--accent); color:var(--primary); box-shadow:none; }
 [data-node-config-panel] [data-inspector-section] { padding:20px; }
 /* 优化核心：单层表单用间距组织字段，避免面板内继续嵌套卡片。 */
@@ -84,6 +84,13 @@
   [data-node-config-panel] [data-config-pair] > button { grid-column:3; grid-row:1; }
 }
 @media (min-width:1024px) {
+  /* 收起后仍能识别配置对象，展开、恢复与锁定操作沿用原按钮。 */
+  [data-canvas-redesign][data-inspector-mode="compact"] [data-inspector-identity] { display:block; }
+  [data-canvas-redesign][data-inspector-mode="compact"] [data-inspector-identity] p { display:none; }
+  [data-canvas-redesign][data-inspector-mode="compact"] > [data-node-config-panel] > [data-workflow-inspector-header] { min-height:48px; padding-block:8px; }
+  [data-canvas-redesign][data-inspector-mode="normal"] [data-inspector-tools] [aria-label="恢复配置面板"],
+  [data-canvas-redesign][data-inspector-mode="maximized"] [data-inspector-tools] [aria-label="最大化面板"],
+  [data-canvas-redesign][data-inspector-mode="compact"] [data-inspector-tools] [aria-label="最小化面板"] { background:var(--accent); color:var(--primary); }
   [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 420px; }
   [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="maximized"] { grid-template-columns:minmax(0,1fr) min(62%,760px); }
 }

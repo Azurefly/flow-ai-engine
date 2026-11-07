@@ -83,7 +83,7 @@
 /* 优化核心：创建入口、编辑工具、节点定位具有稳定的视觉分组。 */
 [data-canvas-redesign] [data-flow-node-palette] { display:flex; flex-wrap:wrap; gap:6px; padding-right:10px; margin-right:4px; border-right:1px solid var(--border); }
 [data-canvas-redesign] [data-flow-node-palette] > button:first-child { border-color:var(--aiflow-info-border); background:var(--accent); color:var(--primary); }
-[data-canvas-redesign] [data-flow-canvas-toolbar] > select { flex:1; min-width:140px; max-width:260px; }
+[data-canvas-redesign] [data-flow-canvas-actions] > select { flex:1; min-width:140px; max-width:260px; }
 [data-canvas-redesign] .react-flow__controls { overflow:hidden; border:1px solid var(--border); border-radius:8px; box-shadow:0 2px 8px #0f172a08; }
 [data-canvas-redesign] .react-flow__controls-button { width:32px; height:32px; background:var(--card); border-color:var(--border); color:var(--foreground); fill:currentColor; }
 [data-canvas-redesign] .react-flow__controls-button:hover { background:var(--accent); }
