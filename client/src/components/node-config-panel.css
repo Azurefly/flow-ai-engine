@@ -1,29 +1,29 @@
 /* 节点配置工作区：隔离区域层级、字段密度和长文本规则。 */
 [data-node-config-panel] { min-width:0; color:var(--foreground); background:var(--card); }
-[data-canvas-redesign] > [data-node-config-panel] > [data-workflow-inspector-header]:first-child { gap:12px; flex-wrap:nowrap; padding:14px 16px; min-height:72px; background:var(--card); box-shadow:0 1px 0 var(--border); }
-[data-node-config-panel] [data-inspector-identity] { flex:1; min-width:0; padding-left:10px; border-left:3px solid var(--primary); }
+[data-canvas-redesign] > [data-node-config-panel] > [data-workflow-inspector-header]:first-child { gap:12px; flex-wrap:nowrap; padding:12px 20px; min-height:64px; background:var(--card); box-shadow:0 1px 0 var(--border); }
+[data-node-config-panel] [data-inspector-identity] { flex:1; min-width:0; padding-left:0; }
 [data-node-config-panel] [data-workflow-inspector-heading] { font-size:16px!important; line-height:24px!important; }
 [data-node-config-panel] [data-inspector-identity] p { overflow-wrap:anywhere; font-size:13px!important; line-height:20px!important; }
 [data-node-config-panel] [data-inspector-tools] { gap:4px; margin-left:0; }
 [data-node-config-panel] [data-inspector-tools] button[aria-label] { width:28px; min-width:28px!important; height:28px; min-height:28px!important; border-radius:6px; }
 [data-node-config-panel] [data-inspector-tools] button:hover { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-inspector-tools] [aria-pressed="true"] { background:var(--accent); color:var(--primary); }
-[data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; background:color-mix(in srgb,var(--muted) 36%,var(--card)); }
-[data-node-config-panel] [data-inspector-context] { padding:16px; background:var(--card); }
+[data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; background:var(--card); }
+[data-node-config-panel] [data-inspector-context] { padding:16px 20px 12px; background:var(--card); }
 [data-node-config-panel] [data-inspector-context] > * + * { margin-top:10px; }
 [data-node-config-panel] [data-inspector-context] > label { gap:6px; color:var(--foreground); }
 [data-node-config-panel] [data-canvas-assessment] { padding:8px 10px; border-radius:6px; }
 [data-node-config-panel] [data-canvas-assessment] > p:first-child { font-size:13px!important; line-height:20px!important; }
 [data-node-config-panel] [data-canvas-assessment="partial"] { background:var(--aiflow-danger-surface); border-color:var(--aiflow-danger-border); }
 /* 分类保留原方向键、Home/End和选中状态。 */
-[data-node-config-panel] [data-inspector-tabs] { display:grid!important; grid-template-columns:repeat(auto-fit,minmax(68px,1fr)); gap:4px; padding:8px 12px; background:var(--card); border-top:1px solid var(--border); }
+[data-node-config-panel] [data-inspector-tabs] { display:grid!important; grid-template-columns:repeat(auto-fit,minmax(108px,1fr)); gap:4px; padding:8px 16px; background:var(--card); border-top:0; }
 [data-node-config-panel] [data-inspector-tabs] > button { padding:7px 4px; min-height:36px!important; white-space:normal; overflow-wrap:anywhere; font-size:13px!important; line-height:20px!important; border-radius:6px; }
-[data-node-config-panel] [data-inspector-tabs] > [aria-selected="true"] { background:var(--accent); color:var(--primary); box-shadow:inset 0 -2px var(--primary); }
-[data-node-config-panel] [data-inspector-section] { padding:16px; }
-/* 单张表单卡和轻分隔线；清除旧space-y与grid叠加的外边距。 */
-[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:0; border:1px solid var(--border); border-radius:10px; background:var(--card); }
-[data-node-config-panel] [data-config-fields] > * { min-width:0; margin:0; padding:16px; }
-[data-node-config-panel] [data-config-fields] > * + * { margin:0; border-top:1px solid var(--border); }
+[data-node-config-panel] [data-inspector-tabs] > [aria-selected="true"] { background:var(--accent); color:var(--primary); box-shadow:none; }
+[data-node-config-panel] [data-inspector-section] { padding:20px; }
+/* 优化核心：单层表单用间距组织字段，避免面板内继续嵌套卡片。 */
+[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; border:0; border-radius:0; background:var(--card); }
+[data-node-config-panel] [data-config-fields] > * { min-width:0; margin:0; padding:0; }
+[data-node-config-panel] [data-config-fields] > * + * { margin:0; }
 [data-node-config-panel] [data-config-fields] p { overflow-wrap:anywhere; }
 [data-node-config-panel] :is(label,legend,[data-config-help],[role="alert"],[role="status"]) { min-width:0; overflow-wrap:anywhere; }
 [data-node-config-panel] [data-config-help],
@@ -61,7 +61,7 @@
 [data-node-config-panel] [data-config-legacy-field] > :not(button) { grid-column:1; }
 [data-node-config-panel] [data-config-legacy-field] > button { grid-column:2; grid-row:1; }
 /* 常规桌面宽度即使用两列审批卡，完整保留说明和条件字段。 */
-[data-node-config-panel] [data-approval-editor] { border-width:1px 0 0; border-radius:0 0 10px 10px; background:transparent; }
+[data-node-config-panel] [data-approval-editor] { padding-top:20px; border-width:1px 0 0; border-radius:0; background:transparent; }
 [data-node-config-panel] [data-approval-editor] [role="radiogroup"] { grid-template-columns:minmax(0,1fr); gap:8px; }
 [data-node-config-panel] [data-approval-mode-card] { align-items:flex-start; gap:8px; padding:10px; border-radius:8px; transition:background-color 150ms,border-color 150ms; }
 [data-node-config-panel] [data-approval-mode-card]:hover { border-color:var(--primary); }
@@ -88,7 +88,7 @@
   [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="maximized"] { grid-template-columns:minmax(0,1fr) min(62%,760px); }
 }
 @media (min-width:1280px) {
-  [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) 480px; }
+  [data-workflow-editor][data-canvas-redesign]:has(> [data-node-config-panel])[data-inspector-mode="normal"] { grid-template-columns:minmax(0,1fr) clamp(420px,33vw,480px); }
 }
 @media (prefers-reduced-motion:reduce) {
   [data-node-config-panel] :is(input,select,textarea,button),

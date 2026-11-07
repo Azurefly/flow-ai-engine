@@ -238,7 +238,7 @@ export default function RunExecutionCanvas({
             {current.filter(n => n.activeCount).length} 处进行中
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div data-run-canvas-actions="" className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -272,20 +272,21 @@ export default function RunExecutionCanvas({
             {expanded ? "收起画布" : "展开画布"}
           </Button>
         </div>
+        {/* 阅读说明与视图操作归入同一工具区，画布直接接续工具栏。 */}
+        <details data-run-legend="">
+          <summary>图例与阅读说明</summary>
+        <div className="run-graph-legend-items">
+          {Object.entries(runNodeLabels).map(([key, label]) => (
+            <span key={key} className="inline-flex items-center gap-1">
+              <i className={`h-3 w-3 rounded border ${colors[key]}`} />
+              {label}
+            </span>
+          ))}
+          <span>{run.flowType === "data" ? "灰线：快照依赖；节点颜色：执行状态。" : "灰线：定义；蓝线：已确认。"}</span>
+          <span>节点视图包含上下游，全图浏览完整依赖。</span>
+        </div>
+        </details>
       </header>
-      <details data-run-legend="">
-        <summary>图例与阅读说明</summary>
-      <div className="run-graph-legend-items">
-        {Object.entries(runNodeLabels).map(([key, label]) => (
-          <span key={key} className="inline-flex items-center gap-1">
-            <i className={`h-3 w-3 rounded border ${colors[key]}`} />
-            {label}
-          </span>
-        ))}
-        <span>{run.flowType === "data" ? "灰线：快照依赖；节点颜色：执行状态。" : "灰线：定义；蓝线：已确认。"}</span>
-        <span>节点视图包含上下游，全图浏览完整依赖。</span>
-      </div>
-      </details>
       {!layout && canvasHasCrowding(nodes) && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">原始布局重叠，请切换自动排布（不修改快照）。</p>}
       {graph.warning && (
         <p

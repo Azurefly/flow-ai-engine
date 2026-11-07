@@ -1,9 +1,9 @@
 /* Desktop canvas foundations are isolated from lists, forms and runtime graphs. */
 [data-canvas-redesign] {
-  --aiflow-canvas-edge: #71839b;
+  --aiflow-canvas-edge: #64748b;
   --aiflow-canvas-selected: #315efb;
   --aiflow-canvas-return: #ad771c;
-  --aiflow-canvas-dot: #d9e0ea;
+  --aiflow-canvas-dot: #cbd5e1;
   --canvas-zoom: 1;
   box-shadow: none;
 }
@@ -25,11 +25,11 @@
   border: 1px solid var(--border);
   border-radius: 10px !important;
   background: var(--card);
-  box-shadow: 0 2px 5px #0f172a08;
+  box-shadow: 0 2px 4px #0f172a08, 0 8px 20px #0f172a04;
   transition: border-color 150ms, box-shadow 150ms;
 }
 [data-canvas-redesign] .flow-design-node:hover {border-color: var(--aiflow-canvas-edge); box-shadow: 0 4px 12px #0f172a10;}
-[data-canvas-redesign] .flow-design-node.is-selected {box-shadow: 0 0 0 2px var(--aiflow-canvas-selected);}
+[data-canvas-redesign] .flow-design-node.is-selected {border-color: var(--aiflow-canvas-selected); box-shadow: 0 0 0 3px color-mix(in srgb,var(--aiflow-canvas-selected) 16%,transparent);}
 [data-canvas-redesign] .flow-design-node-row {width: 100%; gap: 10px;}
 [data-canvas-redesign] .flow-design-node [data-flow-node-glyph] {width: 30px; height: 30px; border-radius: 8px; box-shadow: none;}
 [data-canvas-redesign] .flow-design-node-title {font-size: max(14px, calc(12px / var(--canvas-zoom))) !important; line-height: 1.4 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
@@ -59,11 +59,11 @@
 [data-canvas-redesign] [data-canvas-assessment] {padding: 4px 12px;}
 @media (min-width: 1024px) {
   [data-canvas-redesign]:has(> aside):not([data-inspector-mode="compact"]):not([data-inspector-mode="maximized"]) {grid-template-columns: minmax(0, 1fr) 440px;}
-  [data-canvas-redesign] [data-flow-canvas-toolbar] {min-height: 52px; padding: 8px 12px; gap: 8px;}
+  [data-canvas-redesign] [data-flow-canvas-toolbar] {min-height: 52px; padding: 8px 12px; gap: 6px;}
   [data-canvas-redesign] [data-canvas-icon] {width: 34px; height: 34px; min-height: 34px;}
   [data-canvas-redesign] [data-canvas-palette-trigger] {height: 34px; min-height: 34px;}
-  [data-aiflow-designer]:has([data-canvas-redesign]) {padding: 12px 16px;}
-  [data-aiflow-designer]:has([data-canvas-redesign]) .editor-command-bar {top: var(--workspace-header-height, 56px); padding: 8px 0; margin-bottom: 8px; border: 0; border-radius: 0; gap: 16px;}
+  [data-aiflow-designer]:has([data-canvas-redesign]) {padding: 0 20px 16px;}
+  [data-aiflow-designer]:has([data-canvas-redesign]) .editor-command-bar {top: var(--workspace-header-height, 56px); padding: 12px 0; margin-bottom: 8px; border: 0; border-radius: 0; gap: 16px;}
   [data-aiflow-designer]:has([data-canvas-redesign]) .editor-command-bar [data-aiflow-page-title] {font-size: 18px !important; line-height: 26px !important; min-height: 34px;}
   [data-aiflow-designer]:has([data-canvas-redesign]) .editor-notice {margin-bottom: 8px;}
 }
@@ -79,3 +79,14 @@
 [data-canvas-redesign] [data-canvas-compat-fields][open] > summary {margin-bottom: 10px;}
 [data-canvas-redesign] [data-canvas-assessment]:not([data-canvas-assessment="partial"]) {background: var(--muted); border-color: var(--border);}
 [data-canvas-redesign] [data-canvas-more] {width: auto !important; padding-inline: 8px; gap: 4px;}
+
+/* 优化核心：创建入口、编辑工具、节点定位具有稳定的视觉分组。 */
+[data-canvas-redesign] [data-flow-node-palette] { display:flex; flex-wrap:wrap; gap:6px; padding-right:10px; margin-right:4px; border-right:1px solid var(--border); }
+[data-canvas-redesign] [data-flow-node-palette] > button:first-child { border-color:var(--aiflow-info-border); background:var(--accent); color:var(--primary); }
+[data-canvas-redesign] [data-flow-canvas-toolbar] > select { flex:1; min-width:140px; max-width:260px; }
+[data-canvas-redesign] .react-flow__controls { overflow:hidden; border:1px solid var(--border); border-radius:8px; box-shadow:0 2px 8px #0f172a08; }
+[data-canvas-redesign] .react-flow__controls-button { width:32px; height:32px; background:var(--card); border-color:var(--border); color:var(--foreground); fill:currentColor; }
+[data-canvas-redesign] .react-flow__controls-button:hover { background:var(--accent); }
+[data-canvas-redesign] .react-flow__controls-button:focus-visible { outline:2px solid var(--ring); outline-offset:-3px; }
+[data-canvas-redesign] .react-flow__minimap { overflow:hidden; border:1px solid var(--border); border-radius:8px; box-shadow:none; }
+[data-canvas-redesign] [data-flow-canvas-viewport] > details > summary { border:1px solid var(--border); border-radius:6px; box-shadow:none; }

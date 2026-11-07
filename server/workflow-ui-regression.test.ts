@@ -2851,7 +2851,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toMatch(
       /setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);\s*invalidate\(\);/
     );
-    expect(styleSource).toContain("--aiflow-section-gap: 1.25rem;");
+    expect(styleSource).toContain("--aiflow-section-gap: 1rem;");
     expect(processWorkbenchRunTabSource).toContain('aria-label="实例详情路径"');
     expect(processWorkbenchRunTabSource).toContain("返回工作台");
     expect(processWorkbenchRunTabSource).toContain(

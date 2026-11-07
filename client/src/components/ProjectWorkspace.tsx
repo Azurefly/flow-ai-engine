@@ -699,7 +699,7 @@ function BusinessCenterView({
       className="aiflow-page-frame min-w-0 bg-background"
     >
       <div className="aiflow-page-content">
-        <header className="mb-4 flex flex-col gap-3 border-b border-border/80 pb-3 sm:flex-row sm:items-end sm:justify-between">
+        <header className="business-page-heading">
           <div className="min-w-0">
             <p className={"aiflow-type-meta mb-0.5 " + mutedToneClass}>
               流程设计 / 业务项目
@@ -767,7 +767,8 @@ function BusinessCenterView({
         </header>
 
         <section className={surfaceClass4}>
-          <div className="border-b border-border bg-muted/70 p-3 sm:p-4">
+          {/* 桌面列表将标题与范围选择并排，查询和反馈各占完整一行。 */}
+          <div data-business-list-toolbar="" className="border-b border-border bg-muted/70 p-3 sm:p-4">
             <div className="aiflow-type-section-title mb-2 flex items-center gap-2 font-semibold text-foreground">
               <FolderKanban size={15} className={mutedToneClass} />
               业务列表
