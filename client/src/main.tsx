@@ -5,7 +5,7 @@ import { httpBatchLink, TRPCClientError } from "@trpc/client";
 import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
-import { startLogin } from "./const";
+import { refreshAccountIdentity } from "./lib/account-query-isolation";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -38,7 +38,7 @@ export function installOptionalAnalytics(
 
 installOptionalAnalytics();
 
-const redirectToLoginIfUnauthorized = (error: unknown) => {
+const confirmSessionIfUnauthorized = (error: unknown) => {
   if (!(error instanceof TRPCClientError)) return;
   if (typeof window === "undefined") return;
 
@@ -46,13 +46,14 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  startLogin();
+  // 站内账号沿用 Home 的登录与内存草稿恢复，不跳转到旧 OAuth 页面。
+  void refreshAccountIdentity(queryClient);
 };
 
 queryClient.getQueryCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.query.state.error;
-    redirectToLoginIfUnauthorized(error);
+    confirmSessionIfUnauthorized(error);
     console.error("[API Query Error]", error);
   }
 });
@@ -60,7 +61,7 @@ queryClient.getQueryCache().subscribe(event => {
 queryClient.getMutationCache().subscribe(event => {
   if (event.type === "updated" && event.action.type === "error") {
     const error = event.mutation.state.error;
-    redirectToLoginIfUnauthorized(error);
+    confirmSessionIfUnauthorized(error);
     console.error("[API Mutation Error]", error);
   }
 });

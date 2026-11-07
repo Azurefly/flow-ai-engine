@@ -1,6 +1,6 @@
 import { QueryClient } from "@tanstack/react-query";
 import { expect, it } from "vitest";
-import { clearAccountQueries, isPublicSessionQuery } from "../client/src/lib/account-query-isolation";
+import { clearAccountQueries, isPublicSessionQuery, refreshAccountIdentity } from "../client/src/lib/account-query-isolation";
 it("仅保留身份和公开平台配置，不保留其他权限查询", () => {
   expect(isPublicSessionQuery([["auth", "me"], { type: "query" }])).toBe(true);
   expect(isPublicSessionQuery([["config", "publicGeneral"]])).toBe(true);
@@ -34,5 +34,43 @@ it("旧账号延迟响应不能重新填入新账号缓存", async () => {
   expect(client.getQueryData(key)).toBeUndefined();
   await clearAccountQueries(client);
   expect(client.getQueryData(key)).toBeUndefined();
+  client.clear();
+});
+it("未登录错误重新确认站内身份，仅刷新身份接口，不读取业务或公开配置", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const key = [["auth", "me"], { type: "query" }];
+  let calls = 0;
+  client.setQueryDefaults(key, { queryFn: async () => { calls++; return null; } });
+  client.setQueryData(key, { id: 8 });
+  client.setQueryData([["workflow", "get"]], { retained: true });
+  client.setQueryData([["config", "publicGeneral"]], { platformName: "Flow" });
+  await refreshAccountIdentity(client);
+  expect(calls).toBe(1);
+  expect(client.getQueryData(key)).toBeNull();
+  expect(client.getQueryData([["workflow", "get"]])).toEqual({ retained: true });
+  expect(client.getQueryData([["config", "publicGeneral"]])).toEqual({ platformName: "Flow" });
+  client.clear();
+});
+it("多个失效响应复用同一次身份确认，不取消在途请求，也不误清新账号", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const key = [["auth", "me"], { type: "query" }];
+  let calls = 0, reply!: (user: { id: number }) => void;
+  client.setQueryDefaults(key, { queryFn: () => { calls++; return new Promise(resolve => { reply = resolve; }); } });
+  client.setQueryData(key, { id: 8 });
+  const confirmations = [refreshAccountIdentity(client), refreshAccountIdentity(client), refreshAccountIdentity(client)];
+  expect(calls).toBe(1);
+  reply({ id: 9 });
+  await Promise.all(confirmations);
+  expect(client.getQueryData(key)).toEqual({ id: 9 });
+  client.clear();
+});
+it("身份确认网络故障不冒充退出，不从全局错误订阅器抛出新异常", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const key = [["auth", "me"], { type: "query" }];
+  client.setQueryDefaults(key, { queryFn: async () => { throw new Error("identity unavailable"); } });
+  client.setQueryData(key, { id: 8 });
+  await expect(refreshAccountIdentity(client)).resolves.toBeUndefined();
+  expect(client.getQueryData(key)).toEqual({ id: 8 });
+  expect(client.getQueryState(key)?.status).toBe("error");
   client.clear();
 });
