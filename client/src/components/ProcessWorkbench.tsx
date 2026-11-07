@@ -26,6 +26,7 @@ import { visibleTaskFormErrors } from "@shared/task-form-feedback";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
 import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
+import { FlowTypeBadge } from "./FlowTypeBadge";
 import { trpc } from "@/lib/trpc";
 import {
   CALENDAR_AGENDA_PAGE_SIZE,
@@ -543,9 +544,6 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
             className={`hidden border-b border-border px-3 py-3 lg:flex ${sidebarCollapsed ? "justify-center" : ""}`}
           >
             <div className={sidebarCollapsed ? "hidden" : ""}>
-              <p className={"aiflow-type-meta font-medium " + mutedToneClass}>
-                运行视图
-              </p>
               <h2 className="aiflow-type-section-title mt-1 font-semibold text-foreground">
                 已启动流程
               </h2>
@@ -666,9 +664,6 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
             >
               <header className="flex items-start justify-between gap-3 border-b border-border p-4 sm:items-center sm:p-5">
                 <div className="min-w-0">
-                  <p className={"aiflow-type-meta hidden font-bold tracking-[.16em] " + mutedToneClass + " sm:block"}>
-                    PROCESS WORKBENCH
-                  </p>
                   <h1
                     data-aiflow-page-title=""
                     className="aiflow-type-page-title font-semibold text-foreground sm:mt-1"
@@ -1123,6 +1118,7 @@ function Board({
                   <p className="aiflow-type-body truncate font-medium text-foreground">
                     {task.workflowName} · {task.nodeName}
                   </p>
+                  <FlowTypeBadge type={task.flowType} />
                   <p className={"aiflow-type-meta mt-1 tabular-nums " + mutedToneClass}>
                     实例 {String(task.runId || "—").slice(0, 8)} · 任务 {String(task.id).slice(0, 8)} · {date(task.createdAt)}
                   </p>
@@ -1431,6 +1427,7 @@ function TaskList({
                     <h3 className="aiflow-type-body break-words font-semibold text-foreground">
                       {task.workflowName || "未命名流程"}
                     </h3>
+                    <FlowTypeBadge type={task.flowType} />
                     <p className={detailTextClass}>
                       {task.nodeName || "未命名任务节点"}
                     </p>
@@ -1564,6 +1561,7 @@ function TaskList({
                   <p className="font-medium text-foreground">
                     {task.workflowName}
                   </p>
+                  <FlowTypeBadge type={task.flowType} />
                   <p className={"mt-1 text-sm " + mutedToneClass}>
                     {task.nodeName}
                     {approvalLabel(task) && (
@@ -1706,6 +1704,7 @@ function InstanceList({
                   </h3>
                 </div>
                 <div className="mt-2">
+                  <FlowTypeBadge type={run.flowType} />
                   <InstanceStatus run={run} />
                 </div>
                 <dl className="aiflow-type-body mt-3 grid gap-1 border-t border-border pt-2">
@@ -1788,6 +1787,7 @@ function InstanceList({
                   >
                     {run.workflowName.replaceAll("_", "_\u200b")}
                   </p>
+                  <FlowTypeBadge type={run.flowType} />
                   <code className={"aiflow-type-code mt-1 block truncate whitespace-nowrap " + mutedToneClass}>
                     {run.id.slice(0, 8)}
                   </code>
@@ -1992,6 +1992,7 @@ function calendarDayKey(value: Date) {
 type CalendarEvent = {
   id: string;
   title: string;
+  flowType?: string | null;
   start: string | Date;
   status?: string;
 };
@@ -2236,6 +2237,7 @@ function Calendar({
                           <p className="line-clamp-2 break-words text-sm text-foreground">
                             {event.title || "未命名任务"}
                           </p>
+                          <FlowTypeBadge type={event.flowType} />
                           {event.status && (
                             <span className="mt-1 inline-flex">
                               {badge(String(event.status))}
@@ -2345,6 +2347,7 @@ function Calendar({
                       title={event.title}
                       className="aiflow-type-control truncate rounded bg-aiflow-info-surface px-1 py-0.5 text-left text-aiflow-info hover:bg-aiflow-info-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     >
+                      <FlowTypeBadge type={event.flowType} />
                       {event.title}
                     </button>
                   ))}
@@ -2413,6 +2416,7 @@ function Calendar({
                     <span className="min-w-0 flex-1 break-words text-sm text-foreground">
                       {event.title || "未命名任务"}
                     </span>
+                    <FlowTypeBadge type={event.flowType} />
                     {event.status && badge(String(event.status))}
                     <Button
                       type="button"
@@ -2751,6 +2755,7 @@ function TaskDrawer({
             <DialogTitle className="task-title">
               {task?.workflowName || "正在读取任务…"}
             </DialogTitle>
+            <FlowTypeBadge type={task?.flowType} />
             <DialogDescription className="task-subtitle">
               {task?.nodeName}
               {approvalLabel(task) && (

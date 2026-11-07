@@ -387,9 +387,6 @@ function LoginScreen({
               <Gauge size={21} />
             </div>
             <div>
-              <p className={"text-[11px] font-bold tracking-[.16em] " + mutedToneClass}>
-                AI FLOW GRAPH
-              </p>
               <h1 className="aiflow-type-page-title mt-0.5 font-semibold text-foreground">
                 {platformName} 控制台
               </h1>
@@ -2121,6 +2118,7 @@ function FlowConsole({
                           projectId={selectedWorkflow?.projectId}
                           workflowId={effectiveWorkflowId}
                           workflowName={selectedWorkflow?.name}
+                          flowType={selectedWorkflow?.flowType}
                           selectedRunId={monitorRunId}
                           selectedRun={runDetail.data ?? null}
                           selectedRunLoading={runDetail.isLoading}

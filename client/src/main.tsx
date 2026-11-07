@@ -8,6 +8,7 @@ import App from "./App";
 import { refreshAccountIdentity } from "./lib/account-query-isolation";
 import "./index.css";
 import "./components/management-pages.css";
+import "./desktop-workspace.css";
 
 const queryClient = new QueryClient();
 

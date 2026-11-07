@@ -1,9 +1,9 @@
 /* Desktop canvas foundations are isolated from lists, forms and runtime graphs. */
 [data-canvas-redesign] {
-  --aiflow-canvas-edge: #64748b;
+  --aiflow-canvas-edge: #526782;
   --aiflow-canvas-selected: #315efb;
   --aiflow-canvas-return: #ad771c;
-  --aiflow-canvas-dot: #cbd5e1;
+  --aiflow-canvas-dot: #d7dfeb;
   --canvas-zoom: 1;
   box-shadow: none;
 }
@@ -25,7 +25,7 @@
   border: 1px solid var(--border);
   border-radius: 10px !important;
   background: var(--card);
-  box-shadow: 0 2px 4px #0f172a08, 0 8px 20px #0f172a04;
+  box-shadow: 0 2px 4px #0f172a08, 0 8px 24px #0f172a08;
   transition: border-color 150ms, box-shadow 150ms;
 }
 [data-canvas-redesign] .flow-design-node:hover {border-color: var(--aiflow-canvas-edge); box-shadow: 0 4px 12px #0f172a10;}
@@ -82,7 +82,8 @@
 
 /* 优化核心：工具栏分成创建资源与编辑定位两组，弹层沿用原焦点与键盘行为。 */
 [data-canvas-redesign] [data-flow-node-palette] { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-right:12px; margin-right:4px; border-right:1px solid var(--border); }
-[data-canvas-redesign] [data-flow-node-palette] > button:first-child { border-color:var(--aiflow-info-border); background:var(--accent); color:var(--primary); }
+[data-canvas-redesign] [data-flow-node-palette] > button:first-child { border-color:var(--primary); background:var(--primary); color:var(--primary-foreground); }
+[data-canvas-redesign] [data-flow-node-palette] > button:first-child > span { color:inherit; background:#ffffff20; }
 [data-canvas-redesign] .canvas-action-group { display:flex; flex:1; min-width:0; flex-wrap:wrap; align-items:center; gap:4px; }
 [data-canvas-redesign] [data-flow-canvas-actions] > select { flex:1; min-width:120px; max-width:none; }
 [data-canvas-redesign] [data-flow-canvas-actions] > button { flex-shrink:0; }

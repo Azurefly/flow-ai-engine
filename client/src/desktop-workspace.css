@@ -1,0 +1,146 @@
+/* 桌面设计系统。仅匹配产品语义区域，画布几何、业务状态和表单事件由原组件管理。 */
+:root {
+  --aiflow-page-gutter: 24px;
+  --aiflow-content-max: 1600px;
+  --aiflow-surface-radius: 12px;
+  --aiflow-surface-shadow: 0 2px 8px rgb(23 37 61 / 4%);
+  --aiflow-surface-shadow-raised: 0 16px 48px rgb(23 37 61 / 12%);
+  --aiflow-topbar: #17243c;
+  --aiflow-topbar-text: #d5deed;
+}
+
+/* 一级导航与页面内容使用明确的明暗层级，选中、悬停、键盘焦点各自可辨。 */
+[data-aiflow-console] > [data-workspace-header] {
+  background: var(--aiflow-topbar);
+  border-bottom-color: transparent;
+  color: var(--aiflow-topbar-text);
+  box-shadow: 0 2px 8px rgb(15 23 42 / 10%);
+}
+[data-workspace-header] [data-aiflow-brand-name] { color: #fff; font-size: 15px; letter-spacing: -.2px; }
+[data-workspace-header] [data-workspace-brand-mark] { background: #526df5; border-radius: 8px; }
+[data-workspace-header] [data-aiflow-primary-nav] > a { color: var(--aiflow-topbar-text); min-height: 40px; padding-inline: 16px; }
+[data-workspace-header] [data-aiflow-primary-nav] > a:hover { background: #ffffff0f; color: #fff; }
+[data-workspace-header] [data-aiflow-primary-nav] > a[aria-current="page"] { background: #ffffff18; color: #fff; box-shadow: inset 0 -2px #9ab3ff; }
+[data-workspace-header] :is([data-workspace-search-trigger],[data-aiflow-theme-toggle]) { color: var(--aiflow-topbar-text); background: transparent; border-color: #ffffff26; }
+[data-workspace-header] :is([data-workspace-search-trigger],[data-aiflow-theme-toggle]):hover { color: #fff; background: #ffffff18; }
+[data-workspace-header] kbd { color: inherit; background: #ffffff12; border-color: #ffffff26; }
+[data-workspace-header] [data-workspace-avatar] { background: #ffffff18; color: #fff; border-color: #ffffff26; }
+
+/* 二级导航横向排列。业务选择、分区和内容区各占一层，长业务名不挤压操作。 */
+@media (min-width: 1024px) {
+  [data-aiflow-project-workspace] { display: flex; flex-direction: column; min-height: calc(100dvh - var(--workspace-header-height)); }
+  [data-aiflow-project-workspace] > aside,
+  [data-aiflow-project-workspace][data-navigation-collapsed="true"] > aside {
+    display: flex; width: 100%; min-width: 0; align-items: center; gap: 24px;
+    padding: 12px 24px; border-right: 0; border-bottom: 1px solid var(--border);
+  }
+  [data-aiflow-project-workspace] > aside > div:first-child { display: flex; flex: 0 1 400px; min-width: 0; align-items: center; gap: 12px; padding: 0; border: 0; }
+  [data-aiflow-project-workspace] > aside > div:first-child > div:first-child { flex-shrink: 0; gap: 4px; }
+  [data-aiflow-project-workspace] > aside > div:first-child > p:empty { display: none; }
+  [data-aiflow-project-workspace] .aiflow-business-picker { flex: 1; min-width: 0; margin: 0; padding: 8px 12px; border: 1px solid var(--border); background: var(--card); }
+  [data-aiflow-project-workspace] > aside nav { display: flex; flex: 1; flex-wrap: wrap; gap: 4px; padding: 0; border: 0; }
+  [data-aiflow-project-workspace] > aside nav button { min-height: 40px; padding: 10px 16px; border-radius: 6px; gap: 8px; }
+  [data-aiflow-project-workspace] > aside nav button[aria-current="page"]::before { display: none; }
+  [data-aiflow-project-workspace] > aside nav button[aria-current="page"] { box-shadow: inset 0 -2px var(--accent-foreground); }
+  [data-aiflow-project-workspace][data-navigation-collapsed="true"] > aside > div:first-child { flex: 0 0 auto; }
+  [data-aiflow-project-workspace] > section { width: 100%; max-width: 1600px; margin-inline: auto; padding: 20px 28px 32px; }
+  [data-aiflow-project-workspace] > section > div { max-width: none; }
+
+  /* 运行页沿用顶部导航，详情打开时保持原有导航隐藏条件。 */
+  [data-workbench-layout], [data-workbench-layout][data-navigation-collapsed="true"] { grid-template-columns: minmax(0,1fr); gap: 20px; }
+  [data-workbench-layout] > [data-workbench-navigation]:not(.hidden) { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 20px; padding: 12px 16px; }
+  [data-workbench-navigation] [data-workbench-nav-header] { align-items: center; gap: 16px; border: 0; padding: 0; }
+  [data-workbench-nav-header] h2 { margin: 0; font-size: 16px; }
+  [data-workbench-navigation] [data-workbench-view-navigation] { display: flex; flex: 1; flex-wrap: wrap; gap: 4px; margin: 0; }
+  [data-workbench-view-navigation] button { min-height: 38px; padding: 8px 12px; gap: 8px; }
+  [data-workbench-navigation-help] { flex-basis: 100%; margin: 0; padding: 0; }
+  [data-workbench-navigation-help] summary { min-height: 32px; width: fit-content; gap: 8px; }
+  [data-workbench-content] { grid-column: 1 / -1; }
+  [data-workbench-navigation] [data-aiflow-run-view-tabs] { display: flex; gap: 4px; margin: 0; border-right: 1px solid var(--border); padding-right: 16px; }
+  [data-workbench-navigation] [data-aiflow-run-view-tabs] button { min-height: 38px; margin: 0; }
+  [data-runs-monitor-workspace] > .aiflow-split-layout { grid-template-columns: minmax(0,1fr); }
+  [data-runs-monitor-workspace] > .aiflow-split-layout > aside { position: static; padding: 8px 16px; }
+  [data-runs-monitor-workspace] [data-aiflow-run-view-tabs] { display: flex; gap: 8px; }
+  [data-runs-monitor-workspace] [data-aiflow-run-view-tabs] button { margin: 0; }
+}
+
+/* 阅读区只保留一层主体容器，表头、筛选和正文通过留白区分。 */
+.management-page-header { margin-bottom: 20px; padding-bottom: 16px; }
+.management-page-header h1, .business-page-heading h1 { font-weight: 650; letter-spacing: -.4px; }
+[data-aiflow-business-center] section,
+[data-workbench-panel],
+[data-aiflow-warehouse] > div > .grid > :is(aside,section),
+[data-system-config-content],
+[data-aiflow-identity-page] :is([data-iam-user-workbench],[data-iam-role-workbench]) > section {
+  border-radius: 12px; box-shadow: var(--aiflow-surface-shadow); border-color: var(--border);
+}
+[data-business-list-toolbar] { background: var(--card); padding: 18px 20px; }
+[data-aiflow-business-center] table :is(th,td) { padding: 14px 20px; }
+[data-project-workflow-row] > td { padding-block: 16px; }
+[data-workspace-process-center] > [data-aiflow-context-header] { padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+[data-resource-category-desktop] { gap: 8px; padding-bottom: 12px; }
+.resource-category-tab { padding-inline: 16px; }
+.resource-catalog-table thead th, .endpoint-table thead th { font-size: 13px; font-weight: 600; color: var(--muted-foreground); background: var(--muted); }
+.resource-catalog-table :is(th,td) { padding: 14px 18px; }
+.resource-catalog-table td { vertical-align: top; }
+[data-project-authorizations] > section > div:first-child { border-bottom: 1px solid var(--border); }
+[data-project-permission-grant] > summary { background: transparent; color: var(--accent-foreground); }
+[data-project-permission-grant][open] > summary { background: var(--accent); }
+
+/* 人员目录与详情保持稳定的主从关系，分区导航使用一致的选中标记。 */
+[data-aiflow-identity-page] [data-identity-navigation],
+[data-aiflow-system-config] [data-system-config-navigation] { border-radius: 10px; box-shadow: none; }
+[data-identity-navigation] .aiflow-module-link[aria-current="page"],
+[data-system-config-tabs] button[aria-current="page"] { box-shadow: inset 0 -2px var(--accent-foreground) !important; }
+[data-iam-user-workbench] > section:first-child > div:first-child,
+[data-iam-role-workbench] > section:first-child > div:first-child { background: var(--card); padding: 16px; }
+[data-iam-user-row], [data-iam-role-row] { padding-inline: 16px; }
+[data-aiflow-identity-page] [data-iam-detail-scroll] { padding: 24px; }
+[data-access-counts] > button { min-height: 60px; }
+[data-org-directory], [data-org-detail] { border-radius: 10px; }
+[data-org-selection] { padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+[data-org-tabs] { gap: 8px; }
+[data-settings-change-bar] { border-radius: 10px; box-shadow: var(--aiflow-surface-shadow-raised); }
+
+/* 详情、版本治理、运行画布与抽屉共用阅读节奏。 */
+[data-aiflow-process-detail-page] > header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
+[data-aiflow-process-detail-page] > header h1 { overflow-wrap: anywhere; }
+.gov-panel { border-radius: 12px; box-shadow: var(--aiflow-surface-shadow); }
+.gov-toolbar, .gov-header { padding: 16px 20px; }
+.gov-footer { padding: 12px 20px; }
+[data-run-canvas-design] { border-radius: 12px; box-shadow: var(--aiflow-surface-shadow); }
+[data-run-canvas-design] > header { padding: 16px 20px; }
+[data-run-node-details] { padding: 20px; border-top: 1px solid var(--border); }
+.task-header, .task-actions { padding: 20px 24px; }
+.task-header { background: var(--muted); }
+.task-title { font-size: 18px; line-height: 28px; }
+
+/* 弹层保持原焦点管理、提交行为和滚动容器，统一文字与边界。 */
+[data-slot="dialog-content"]:not([data-task-drawer]),
+[data-slot="alert-dialog-content"] { border-radius: 14px; border-color: var(--border); box-shadow: 0 24px 80px #0f172a33; }
+[data-slot="dialog-title"], [data-slot="alert-dialog-title"] { font-size: 18px; line-height: 28px; padding-right: 28px; overflow-wrap: anywhere; }
+[data-slot="dialog-description"], [data-slot="alert-dialog-description"] { font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
+[data-slot="dialog-footer"], [data-slot="alert-dialog-footer"] { padding-top: 16px; border-top: 1px solid var(--border); gap: 8px; }
+[data-slot="popover-content"], [data-slot="dropdown-menu-content"] { border-radius: 10px; box-shadow: var(--aiflow-surface-shadow-raised); }
+[data-slot="dropdown-menu-item"] { min-height: 36px; border-radius: 6px; }
+
+/* 登录页采用同一品牌颜色，表单与说明各自有明确边界。 */
+[data-aiflow-login] { background: var(--background); }
+[data-login-card] { border-radius: 16px; box-shadow: var(--aiflow-surface-shadow-raised); }
+[data-login-introduction] { padding: 40px; border-left: 3px solid var(--primary); }
+[data-login-introduction] h2 { font-size: clamp(28px,3vw,40px); line-height: 1.4; letter-spacing: -1px; }
+[data-login-card] form input { min-height: 44px; }
+[data-login-card] form label { color: var(--foreground); }
+[data-login-flow-illustration] { box-shadow: none; }
+
+/* 长文案换行限于内容区域，标识符仍由原完整查看组件承担。 */
+.flow-type-badge { display: inline-flex; flex-shrink: 0; align-items: center; margin: 4px 8px 0 0; padding: 2px 8px; border-radius: 5px; background: var(--muted); color: var(--muted-foreground); font-size: 13px; line-height: 20px; font-weight: 500; white-space: nowrap; }
+.flow-type-badge[data-flow-type="state"] { background: var(--aiflow-info-surface); color: var(--aiflow-info); }
+.flow-type-badge[data-flow-type="control"] { background: var(--aiflow-special-surface); color: var(--aiflow-special); }
+.flow-type-badge[data-flow-type="data"] { background: var(--aiflow-success-surface); color: var(--aiflow-success); }
+:is([data-system-config-content],[data-workbench-panel],[data-project-authorizations]) :is(h1,h2,h3,legend) { overflow-wrap: anywhere; }
+[data-aiflow-console] :is(button,a,summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+[data-workspace-header] :is(button,a):focus-visible { outline-color: #b6c9ff; }
+@media (prefers-reduced-motion: reduce) {
+  [data-aiflow-console] *, [data-aiflow-login] * { scroll-behavior: auto; }
+}

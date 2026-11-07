@@ -3014,12 +3014,12 @@ describe("流程设计器界面回归约束", () => {
   it("参考设计的稳定导航与柔和卡片保留真实说明和画布能力", () => {
     expect(homeSource).toContain('data-aiflow-console=""');
     expect(homeSource).toContain('data-aiflow-designer=""');
-    expect(homeSource).toContain("AI FLOW GRAPH");
+    expect(homeSource).toContain("{platformName} 控制台");
     expect(homeSource).not.toContain("NEBULA BUSINESS ENGINE");
     expect(styleSource).not.toContain(
       "[data-aiflow-designer] textarea.h-20.font-mono"
     );
-    expect(homeSource).toContain("AI FLOW GRAPH");
+    expect(homeSource).toContain("{platformName} 控制台");
     expect(homeSource).toContain("bg-background");
     expect(homeSource).not.toContain("NEBULA INSPIRED · V3");
     expect(canvasSource).toContain('data-aiflow-workflow-canvas=""');

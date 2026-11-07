@@ -3,6 +3,7 @@ import { trpc } from "@/lib/trpc";
 import { RunDetailContent } from "./WorkflowGovernanceRunDetail";
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { runDetailRefreshInterval } from "@shared/run-detail-refresh";
+import { FlowTypeBadge } from "./FlowTypeBadge";
 
 export function ProcessWorkbenchRunTab({
   runId,
@@ -67,6 +68,7 @@ export function ProcessWorkbenchRunTab({
               className="aiflow-type-body mt-2 break-words font-medium text-foreground"
             >
               {workflowName.replaceAll("_", "_\u200b")}
+              <FlowTypeBadge type={run.flowType} />
             </p>
           )}
           <details className="aiflow-type-meta mt-1 text-muted-foreground">

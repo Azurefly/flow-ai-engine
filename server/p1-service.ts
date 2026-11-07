@@ -1765,6 +1765,7 @@ export async function getTaskCalendar(
     items: page.items.map((task: any) => ({
       id: task.id,
       title: `${task.workflowName} · ${task.nodeName}`,
+      flowType: task.flowType,
       start: task.createdAt,
       status: task.status,
       workflowId: task.workflowId,

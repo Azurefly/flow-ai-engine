@@ -9,7 +9,7 @@
 [data-node-config-panel] [data-inspector-tools] button:hover { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-inspector-tools] [aria-pressed="true"] { background:var(--accent); color:var(--accent-foreground); }
 [data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; background:var(--card); }
-[data-node-config-panel] [data-inspector-context] { padding:12px 20px; background:var(--card); }
+[data-node-config-panel] [data-inspector-context] { padding:16px 20px; background:var(--muted); }
 [data-node-config-panel] [data-inspector-context] > * + * { margin-top:8px; }
 [data-node-config-panel] [data-inspector-context] > label { gap:6px; color:var(--foreground); }
 [data-node-config-panel] [data-canvas-assessment] { padding:5px 10px; border-radius:6px; border-width:0 0 0 2px; }
@@ -20,7 +20,7 @@
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab { flex:1 0 auto; padding:11px 5px; min-height:42px!important; min-width:0; white-space:nowrap; font-size:13px!important; font-weight:500; line-height:20px!important; border:0; border-bottom:2px solid transparent; border-radius:0; background:transparent; transition:color 150ms,background-color 150ms,border-color 150ms; }
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab:hover { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab.is-active { background:transparent; color:var(--accent-foreground); border-bottom-color:var(--accent-foreground); box-shadow:none; }
-[data-node-config-panel] [data-inspector-section] { padding:20px; }
+[data-node-config-panel] [data-inspector-section] { padding:24px 20px; }
 /* 优化核心：单层表单用间距组织字段，避免面板内继续嵌套卡片。 */
 [data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; border:0; border-radius:0; background:var(--card); }
 [data-node-config-panel] [data-config-fields] > * { min-width:0; margin:0; padding:0; }

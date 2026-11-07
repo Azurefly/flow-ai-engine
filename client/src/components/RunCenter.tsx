@@ -1,3 +1,4 @@
+import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 import { nodeExecutionEntries } from "@shared/node-execution-entries";
@@ -69,6 +70,7 @@ function decodeJson(value: unknown) {
 export default function RunCenter({
   workflowId,
   workflowName,
+  flowType,
   selectedRunId,
   selectedRun,
   selectedRunLoading,
@@ -82,6 +84,7 @@ export default function RunCenter({
   projectId?: string | null;
   workflowId: string | null;
   workflowName?: string | null;
+  flowType?: string | null;
   selectedRunId: string | null;
   selectedRun: any;
   selectedRunLoading: boolean;
@@ -359,6 +362,7 @@ export default function RunCenter({
             >
               {(workflowName || "未命名流程").replaceAll("_", "_\u200b")}
             </span>
+            <FlowTypeBadge type={flowType} />
             <code
               className={"aiflow-type-meta shrink-0 font-mono " + mutedToneClass}
               title={`流程编号：${workflowId}`}

@@ -1,3 +1,4 @@
+import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 const resourceCellClassName = "px-4 py-3";
@@ -2459,6 +2460,7 @@ export function DataflowRunMonitor({
   projectId?: string | null;
   workflowId: string | null;
   workflowName?: string | null;
+  flowType?: string | null;
   selectedRunId: string | null;
   selectedRun?: any;
   selectedRunLoading?: boolean;
@@ -2495,6 +2497,7 @@ export function DataflowRunMonitor({
           </h1>
           <p className={surfaceClass2}>
             {workflowName} · 完整历史查询与运行详情
+            <FlowTypeBadge type="data" />
           </p>
         </div>
         <Button
