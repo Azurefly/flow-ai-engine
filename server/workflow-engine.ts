@@ -1728,7 +1728,7 @@ async function executeNode(
       };
     }
     case "llm":
-      return { output: await executeLlmNode(config, context) };
+      return { output: await executeLlmNode(config, context), route: "default" };
     case "subflow": {
       if (!allowSubflow) throw new Error("子流程不允许嵌套调用。");
       if (!subflowOwnerUserId) throw new Error("子流程缺少流程所有者上下文。");
