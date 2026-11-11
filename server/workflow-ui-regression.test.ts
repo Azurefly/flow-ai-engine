@@ -4074,7 +4074,7 @@ it("全屏包含节点检查器，面板有独立滚动且窄屏可返回画布"
   expect(canvasSource).toContain(
     "document.fullscreenElement === editorRegionRef.current"
   );
-  expect(canvasSource).toContain("editorRegionRef.current.requestFullscreen()");
+  expect(canvasSource).toContain("editor.requestFullscreen()");
   expect(canvasSource).not.toContain(
     "canvasRegionRef.current.requestFullscreen()"
   );

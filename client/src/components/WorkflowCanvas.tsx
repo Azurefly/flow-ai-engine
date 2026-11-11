@@ -2269,7 +2269,9 @@ export default function WorkflowCanvas({
     CanvasNode,
     Edge
   > | null>(null);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const fullscreen = nativeFullscreen || workspaceExpanded;
   const [nodePaletteSearch, setNodePaletteSearch] = useState("");
   const [reuseSearch, setReuseSearch] = useState("");
   const lastInitialFitKeyRef = useRef<string | null>(null);
@@ -2662,11 +2664,28 @@ export default function WorkflowCanvas({
 
   useEffect(() => {
     const syncFullscreen = () =>
-      setFullscreen(document.fullscreenElement === editorRegionRef.current);
+      setNativeFullscreen(document.fullscreenElement === editorRegionRef.current);
     document.addEventListener("fullscreenchange", syncFullscreen);
     return () =>
       document.removeEventListener("fullscreenchange", syncFullscreen);
   }, []);
+
+  useEffect(() => {
+    if (!workspaceExpanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const exitExpandedWorkspace = (event: KeyboardEvent) => {
+      // Let an open menu or dialog consume Escape before leaving the canvas.
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      if (document.querySelector('[role="dialog"], [role="menu"], [role="listbox"]')) return;
+      setWorkspaceExpanded(false);
+    };
+    window.addEventListener("keydown", exitExpandedWorkspace);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", exitExpandedWorkspace);
+    };
+  }, [workspaceExpanded]);
 
   useEffect(() => {
     const inspect = (event?: Event) => {
@@ -3671,12 +3690,28 @@ export default function WorkflowCanvas({
   };
 
   const toggleFullscreen = async () => {
-    if (!editorRegionRef.current) return;
+    const editor = editorRegionRef.current;
+    if (!editor) return;
+    if (workspaceExpanded) {
+      setWorkspaceExpanded(false);
+      return;
+    }
+    if (document.fullscreenElement) {
+      try {
+        await document.exitFullscreen();
+      } catch {
+        toast.error("无法退出浏览器全屏，请按 Esc 退出。");
+      }
+      return;
+    }
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else await editorRegionRef.current.requestFullscreen();
-    } catch (err) {
-      console.warn("[WorkflowCanvas] Fullscreen toggle failed:", err);
+      await editor.requestFullscreen();
+    } catch {
+      // Embedded browsers may deny native fullscreen. Keep the canvas usable.
+      if (editor.isConnected && editorRegionRef.current === editor) {
+        setWorkspaceExpanded(true);
+        toast.info("已铺满工作区，可按 Esc 或点击退出全屏恢复。");
+      }
     }
   };
 
@@ -3840,9 +3875,10 @@ export default function WorkflowCanvas({
       data-canvas-redesign=""
       data-reading-layout={readingActive ? "true" : "false"}
       data-workflow-editor={compactReadOnlyPreview ? undefined : ""}
-      data-editor-viewport={viewportFit ? "true" : undefined}
+      data-editor-viewport={viewportFit && !workspaceExpanded ? "true" : undefined}
+      data-workspace-expanded={workspaceExpanded ? "true" : undefined}
       data-inspector-mode={inspectorMode}
-      style={editorViewportStyle}
+      style={workspaceExpanded ? { position: "fixed", inset: 0, zIndex: 40, height: "100dvh", width: "100%" } : editorViewportStyle}
       className={`grid min-w-0 max-w-full grid-cols-1 bg-card ${fullscreen ? `h-[100dvh] min-h-0 overflow-y-auto lg:overflow-hidden ${hasInspectorSelection && inspectorMode === "compact" ? "lg:grid-rows-[minmax(0,1fr)_auto]" : "lg:grid-rows-[minmax(0,1fr)]"}` : `${canvasMinHeight} overflow-hidden rounded-xl border border-border shadow-2xs`} ${
         !hasInspectorSelection || inspectorMode === "compact"
           ? ""
