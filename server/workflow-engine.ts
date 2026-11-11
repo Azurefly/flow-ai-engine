@@ -42,6 +42,7 @@ import https from "node:https";
 import { isIP } from "node:net";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
+import { readWorkflowNodeHistory } from "./workflow-node-history";
 import {
   decodeWorkflowRunHistoryCursor,
   encodeWorkflowRunHistoryCursor,
@@ -5328,10 +5329,7 @@ export async function getWorkflowRun(
   );
   const run = runRows[0];
   if (!run) return null;
-  const [nodeRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT * FROM workflow_node_run WHERE runId=? ORDER BY createdAt ASC,sequenceNo ASC,id ASC",
-    [runId]
-  );
+  const nodeRows = await readWorkflowNodeHistory(db(), runId);
   const [transitionRows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT * FROM workflow_state_transition WHERE runId=? ORDER BY sequenceNo ASC",
     [runId]
