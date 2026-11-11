@@ -1,10 +1,12 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ get: vi.fn() }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), update: vi.fn(), compile: vi.fn() }));
 vi.mock("./workflow-service", async () => ({
   ...(await vi.importActual<typeof import("./workflow-service")>(
     "./workflow-service"
   )),
   getWorkflow: mocks.get,
+  updateWorkflow: mocks.update,
+  compileWorkflowDraft: mocks.compile,
 }));
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
@@ -37,4 +39,24 @@ it("数据库故障仍保留原始错误，不误报为无权限", async () => {
     code: "INTERNAL_SERVER_ERROR",
     message: failure.message,
   });
+});
+
+const deniedMutations = [
+  ["编译", () => caller.workflow.compile({ id: "workflow-test" })],
+  ["保存", () => caller.workflow.update({ id: "workflow-test", name: "采购示例", expectedDefinitionVersion: 2 })],
+  ["发布", () => caller.workflow.publish({ id: "workflow-test", expectedDefinitionVersion: 2 })],
+  ["取消发布", () => caller.workflow.unpublish({ id: "workflow-test", expectedDefinitionVersion: 2 })],
+] as const;
+
+it.each(deniedMutations)("无权%s统一返回 FORBIDDEN，不误报服务器故障", async (_name, invoke) => {
+  mocks.update.mockResolvedValue(null);
+  mocks.compile.mockResolvedValue(null);
+  await expect(invoke()).rejects.toMatchObject({ code: "FORBIDDEN" });
+});
+
+it.each(deniedMutations)("%s遇到数据库故障时仍返回内部错误", async (_name, invoke) => {
+  const failure = new Error("database unavailable");
+  mocks.update.mockRejectedValue(failure);
+  mocks.compile.mockRejectedValue(failure);
+  await expect(invoke()).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR", message: failure.message });
 });

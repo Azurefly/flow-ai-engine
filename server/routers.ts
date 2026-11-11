@@ -1639,7 +1639,7 @@ export const appRouter = router({
           ctx.user,
           input.definition
         );
-        if (!result) throw new Error("流程不存在或无发布权限。");
+        if (!result) throw new TRPCError({ code: "FORBIDDEN", message: "流程不存在或无发布权限。" });
         return result;
       }),
     runReadiness: protectedProcedure
@@ -1709,7 +1709,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const workflow = await updateWorkflow(input.id, ctx.user, input);
-        if (!workflow) throw new Error("流程不存在或无编辑权限。");
+        if (!workflow) throw new TRPCError({ code: "FORBIDDEN", message: "流程不存在或无编辑权限。" });
         return workflow;
       }),
     publish: protectedProcedure
@@ -1728,7 +1728,7 @@ export const appRouter = router({
           publish: true,
           expectedDefinitionVersion: input.expectedDefinitionVersion,
         });
-        if (!workflow) throw new Error("流程不存在或无发布权限。");
+        if (!workflow) throw new TRPCError({ code: "FORBIDDEN", message: "流程不存在或无发布权限。" });
         return workflow;
       }),
     unpublish: protectedProcedure
@@ -1738,7 +1738,7 @@ export const appRouter = router({
           unpublish: true,
           expectedDefinitionVersion: input.expectedDefinitionVersion,
         });
-        if (!workflow) throw new Error("流程不存在或无取消发布权限。");
+        if (!workflow) throw new TRPCError({ code: "FORBIDDEN", message: "流程不存在或无取消发布权限。" });
         return workflow;
       }),
     duplicate: protectedProcedure
