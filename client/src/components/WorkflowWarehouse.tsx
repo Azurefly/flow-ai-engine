@@ -754,6 +754,7 @@ export default function WorkflowWarehouse({
                 <div className="max-h-[620px] overflow-y-auto p-2">
                   <button
                     className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
+                    aria-pressed={!selectedFolderId}
                     onClick={() => setSelectedFolderId(null)}
                   >
                     <ArchiveRestore size={15} />
@@ -828,6 +829,7 @@ export default function WorkflowWarehouse({
                   {visibleWorkflows.map(workflow => (
                     <div
                       key={workflow.id}
+                      data-selection-row=""
                       className={`flex items-start gap-1.5 p-2 transition-colors sm:gap-3 sm:p-3 ${selectedWorkflowId === workflow.id ? "bg-aiflow-info-surface" : "hover:bg-muted"}`}
                     >
                       <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded hover:bg-muted">
@@ -852,6 +854,7 @@ export default function WorkflowWarehouse({
                           else workflowRowRefs.current.delete(workflow.id);
                         }}
                         className="min-w-0 flex-1 py-1 text-left"
+                        aria-pressed={selectedWorkflowId === workflow.id}
                         aria-label={`查看流程 ${workflow.name}`}
                         title={workflow.name}
                         onClick={() => setSelectedWorkflowId(workflow.id)}
@@ -1229,11 +1232,13 @@ function FolderTree({
   return (
     <div>
       <div
+        data-selection-row=""
         className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
       >
         <button
           className="flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 text-left"
           style={{ paddingLeft: `${8 + level * 16}px` }}
+          aria-pressed={selectedId === folder.id}
           onClick={() => onSelect(folder.id)}
         >
           {children.length ? (

@@ -118,6 +118,7 @@ export default function SystemConfigShell() {
               <button
                 key={item.id}
                 type="button"
+                data-selection="tab"
                 aria-current={tab === item.id ? "page" : undefined}
                 title={collapsed ? item.label : undefined}
                 onClick={() => setTab(item.id)}

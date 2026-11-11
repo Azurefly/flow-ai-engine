@@ -91,6 +91,7 @@ export function WorkspaceHeader({
               href={formatConsoleRoute(
                 primaryWorkspaceRoute(item.id, systemRootView)
               )}
+              data-selection="tab"
               aria-current={activeSection === item.id ? "page" : undefined}
               onClick={event => {
                 if (shouldHandlePrimaryNavigationClick(event)) {

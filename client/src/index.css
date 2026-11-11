@@ -1448,11 +1448,6 @@ h2 {
     background: var(--muted);
     color: var(--foreground);
   }
-  [data-aiflow-primary-nav] > a[aria-current="page"] {
-    background: var(--accent);
-    color: var(--accent-foreground);
-    font-weight: 600;
-  }
   [data-aiflow-primary-nav] > a svg {
     width: 16px;
     height: 16px;
@@ -1474,22 +1469,6 @@ h2 {
     position: relative;
     min-height: 40px;
     font-weight: 500;
-  }
-  [data-aiflow-project-workspace] > aside nav button[aria-current="page"] {
-    color: var(--accent-foreground);
-    background: var(--accent);
-  }
-  [data-aiflow-project-workspace]
-    > aside
-    nav
-    button[aria-current="page"]::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    height: 18px;
-    width: 3px;
-    border-radius: 3px;
-    background: var(--accent-foreground);
   }
   .aiflow-business-picker {
     margin-top: 12px;
@@ -1649,16 +1628,10 @@ select {
   transition: background-color 160ms, color 160ms;
 }
 .aiflow-module-link:hover { background: var(--muted); color: var(--foreground); }
-.aiflow-module-link[aria-current="page"] { background: var(--accent); color: var(--accent-foreground); }
-.aiflow-module-link[aria-current="page"]::before {
-  content: ""; position: absolute; left: 0; width: 3px; height: 18px;
-  border-radius: 3px; background: var(--primary);
-}
 
 /* UX 优化：限定运行工作区样式范围，保留运行控件及其事件。 */
 [data-runs-monitor-content] > [data-runtime-monitor] { padding: 0; }
 [data-runs-monitor-content] [data-aiflow-context-header] { background-image: none; box-shadow: none; border-radius: 0; }
-[data-aiflow-run-view-tabs] [aria-selected="true"] { background: var(--accent); color: var(--primary); }
 @media (min-width: 1024px) {
   [data-workbench-layout][data-navigation-collapsed="true"] [data-aiflow-run-view-tabs] button { justify-content: center; }
   [data-workbench-layout][data-navigation-collapsed="true"] [data-aiflow-run-view-tabs] button > span { display: none; }
@@ -1671,9 +1644,8 @@ select {
 [data-business-list-toolbar] > :nth-child(n+3) { grid-column:1 / -1; margin-top:0; }
 [data-business-list-toolbar] > p { font-size:var(--aiflow-type-meta); }
 [data-business-list-toolbar] [aria-pressed] { border-color:transparent; box-shadow:none; }
-[data-business-list-toolbar] [aria-pressed="true"] { background:var(--accent); color:var(--primary); }
 [data-aiflow-console] [data-slot="button"] { transition:background-color 150ms,border-color 150ms,color 150ms,box-shadow 150ms; }
-[data-aiflow-console] [data-slot="button"]:active:not(:disabled) { box-shadow:inset 0 1px 2px #0f172a12; }
+[data-aiflow-console] [data-slot="button"]:active:not(:disabled):not([aria-pressed]):not([role="tab"]) { box-shadow:inset 0 1px 2px #0f172a12; }
 [data-aiflow-console] [data-slot="button"]:focus-visible,
 [data-aiflow-primary-nav] > a:focus-visible { outline:2px solid var(--ring); outline-offset:3px; }
 @media (min-width:1024px) {

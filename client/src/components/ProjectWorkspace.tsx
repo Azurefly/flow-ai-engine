@@ -1329,6 +1329,7 @@ export function ProjectWorkspace({
             <button
               key={item.id}
               type="button"
+              data-selection="tab"
               aria-current={view === item.id ? "page" : undefined}
               title={sidebarCollapsed ? item.label : undefined}
               onClick={() => {

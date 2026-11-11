@@ -1565,6 +1565,7 @@ function FlowConsole({
               <li key={item.id}>
                 <button
                   type="button"
+                  data-selection="tab"
                   aria-current={activeSection === item.id ? "page" : undefined}
                   onClick={() => {
                     navigateSection(item.id);

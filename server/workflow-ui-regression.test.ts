@@ -3346,7 +3346,7 @@ describe("流程设计器界面回归约束", () => {
     expect(managementStyles).toContain('section[data-resource-editor] { grid-template-columns: minmax(0,1fr);');
     expect(managementStyles).toContain('[data-project-authorizations] > .authorization-header');
     expect(managementStyles).toContain('[data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: minmax(0,1fr);');
-    expect(source("../client/src/index.css")).toContain('[data-aiflow-project-workspace] > aside nav button[aria-current="page"] { color: var(--accent-foreground);');
+    expect(source("../client/src/selection-states.css")).toContain("background: var(--selection-surface)");
     expect(projectWorkspaceSource).toContain(
       'pattern="[A-Za-z][A-Za-z0-9_]{1,63}"'
     );
@@ -4158,7 +4158,7 @@ it("桌面画布缩放横排且提示避开控件，权限分类使用整行导�
   expect(canvasStyles).toContain('[data-workflow-neighborhood] { bottom:64px;');
   expect(identityStyles).toContain('[data-aiflow-identity-page] > .aiflow-split-layout');
   expect(identityStyles).toContain('grid-template-columns:minmax(0,1fr);');
-  expect(source("../client/src/index.css")).toContain('.aiflow-module-link[aria-current="page"] { background: var(--accent); color: var(--accent-foreground); }');
+    expect(source("../client/src/selection-states.css")).toContain("background: var(--selection-surface)");
 });
 it("流程角色目录变化保留原选择但阻止失效角色提交", () => {
   expect(authorizationSource).toContain("authorizationQueryPolicy(true)");

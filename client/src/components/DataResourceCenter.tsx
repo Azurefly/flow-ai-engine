@@ -577,6 +577,7 @@ export default function DataResourceCenter({
               <button
                 key={item.id}
                 type="button"
+                data-selection="tab"
                 aria-current={tab === item.id ? "page" : undefined}
                 onClick={() => setTab(item.id)}
                 title={item.label}
@@ -1885,6 +1886,7 @@ function DataflowWorkspace({
           <button
             key={item.id}
             type="button"
+            data-selection="tab"
             aria-current={section === item.id ? "page" : undefined}
             onClick={() => setSection(item.id)}
             className={`aiflow-type-control inline-flex min-h-11 min-w-0 items-center justify-center gap-2 border-b-2 px-2 py-2 transition-colors last:col-span-2 md:min-h-0 md:justify-start md:px-3 ${section === item.id ? "border-blue-600 font-semibold text-aiflow-info" : ("border-transparent " + mutedToneClass + " hover:text-foreground")}`}

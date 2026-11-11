@@ -1,0 +1,111 @@
+/* Selection is persistent; hover, press feedback and keyboard focus remain distinct.
+   Inset strokes and absolute indicators never change control or canvas geometry. */
+:root {
+  --selection-surface: #eaf0ff;
+  --selection-surface-hover: #dfe8ff;
+  --selection-text: #2449b5;
+  --selection-stroke: #a5b9f0;
+  --selection-indicator: #315df5;
+  --selection-highlight: #ffffffb3;
+  --selection-focus: #315df5;
+}
+.dark {
+  --selection-surface: #233757;
+  --selection-surface-hover: #2b4268;
+  --selection-text: #c0d4ff;
+  --selection-stroke: #536fa6;
+  --selection-indicator: #91b4ff;
+  --selection-highlight: #ffffff0d;
+  --selection-focus: #a8c4ff;
+}
+/* The primary navigation has a dark surface in both themes. */
+[data-workspace-header] {
+  --selection-surface: #2c4168;
+  --selection-surface-hover: #354e7a;
+  --selection-text: #ffffff;
+  --selection-stroke: #637fae;
+  --selection-indicator: #b7ceff;
+  --selection-highlight: #ffffff12;
+  --selection-focus: #c0d4ff;
+}
+
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+  button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]) {
+  position: relative;
+  transition: background-color 160ms ease, color 160ms ease,
+    box-shadow 160ms ease, border-color 160ms ease;
+}
+
+/* Shared selected surface also applies to controls rendered in dialog portals. */
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+  button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]):is(
+  [aria-selected="true"], [aria-current="page"], [aria-pressed="true"], [data-state="on"]
+) {
+  background: var(--selection-surface);
+  color: var(--selection-text);
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--selection-stroke), inset 0 2px 0 var(--selection-highlight);
+}
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+  button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]):is(
+  [aria-selected="true"], [aria-current="page"], [aria-pressed="true"], [data-state="on"]
+):hover:not(:disabled):not([aria-disabled="true"]) {
+  background: var(--selection-surface-hover);
+  color: var(--selection-text);
+}
+
+/* Page and content tabs add a short, non-color-only position marker. */
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link)::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  bottom: 2px;
+  left: calc(50% - 12px);
+  width: 24px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--selection-indicator);
+  opacity: 0;
+  transform: scaleX(.5);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link):is(
+  [aria-selected="true"], [aria-current="page"]
+)::after { opacity: 1; transform: scaleX(1); }
+
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+  button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]):focus-visible {
+  outline: 2px solid var(--selection-focus);
+  outline-offset: 3px;
+  z-index: 1;
+}
+:root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+  button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]):is(:disabled, [aria-disabled="true"]) {
+  opacity: .45;
+  cursor: not-allowed;
+}
+
+/* Directory selection belongs to the whole row, not a second card inside it. */
+:root :is([data-iam-user-row], [data-iam-role-row], [data-selection-row]):has(> button[aria-pressed="true"]) {
+  background: var(--selection-surface);
+  box-shadow: inset 3px 0 var(--selection-indicator);
+}
+:root :is([data-iam-user-row], [data-iam-role-row], [data-selection-row]) > button[aria-pressed="true"] {
+  --selection-surface: transparent;
+  --selection-surface-hover: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+    button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]),
+  :root :is([role="tab"], [data-selection="tab"], .aiflow-module-link)::after { transition: none !important; }
+}
+@media (forced-colors: active) {
+  :root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
+    button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]):is(
+    [aria-selected="true"], [aria-current="page"], [aria-pressed="true"], [data-state="on"]
+  ) { outline: 2px solid Highlight; outline-offset: -2px; }
+  :root :is([role="tab"], [data-selection="tab"], .aiflow-module-link)::after { background: Highlight; }
+}

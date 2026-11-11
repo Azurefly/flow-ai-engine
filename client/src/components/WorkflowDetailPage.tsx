@@ -157,7 +157,7 @@ export function WorkflowDetailPage({
             <TabsTrigger
               key={section.value}
               value={section.value}
-              className="aiflow-type-control h-10 min-w-0 whitespace-normal rounded-none border-b-2 border-transparent px-2 text-muted-foreground shadow-none data-[state=active]:border-blue-600 data-[state=active]:bg-transparent data-[state=active]:font-semibold data-[state=active]:text-aiflow-info data-[state=active]:shadow-none sm:px-4"
+              className="aiflow-type-control h-10 min-w-0 whitespace-normal rounded-md border-transparent px-2 text-muted-foreground sm:px-4"
             >
               {section.label}
             </TabsTrigger>

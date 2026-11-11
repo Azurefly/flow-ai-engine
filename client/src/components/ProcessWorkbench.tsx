@@ -597,6 +597,7 @@ export default function ProcessWorkbench({ navigationControls }: { navigationCon
                 key={item.id}
                 type="button"
                 aria-label={labels[item.id]}
+                data-selection="tab"
                 aria-current={view === item.id ? "page" : undefined}
                 title={sidebarCollapsed ? labels[item.id] : undefined}
                 onClick={() => changeView(item.id)}

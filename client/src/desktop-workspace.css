@@ -20,7 +20,6 @@
 [data-workspace-header] [data-workspace-brand-mark] { background: #526df5; border-radius: 8px; }
 [data-workspace-header] [data-aiflow-primary-nav] > a { color: var(--aiflow-topbar-text); min-height: 40px; padding-inline: 16px; }
 [data-workspace-header] [data-aiflow-primary-nav] > a:hover { background: #ffffff0f; color: #fff; }
-[data-workspace-header] [data-aiflow-primary-nav] > a[aria-current="page"] { background: #ffffff18; color: #fff; box-shadow: inset 0 -2px #9ab3ff; }
 [data-workspace-header] :is([data-workspace-search-trigger],[data-aiflow-theme-toggle]) { color: var(--aiflow-topbar-text); background: transparent; border-color: #ffffff26; }
 [data-workspace-header] :is([data-workspace-search-trigger],[data-aiflow-theme-toggle]):hover { color: #fff; background: #ffffff18; }
 [data-workspace-header] kbd { color: inherit; background: #ffffff12; border-color: #ffffff26; }
@@ -40,8 +39,6 @@
   [data-aiflow-project-workspace] .aiflow-business-picker { flex: 1; min-width: 0; margin: 0; padding: 8px 12px; border: 1px solid var(--border); background: var(--card); }
   [data-aiflow-project-workspace] > aside nav { display: flex; flex: 1; flex-wrap: wrap; gap: 4px; padding: 0; border: 0; }
   [data-aiflow-project-workspace] > aside nav button { min-height: 40px; padding: 10px 16px; border-radius: 6px; gap: 8px; }
-  [data-aiflow-project-workspace] > aside nav button[aria-current="page"]::before { display: none; }
-  [data-aiflow-project-workspace] > aside nav button[aria-current="page"] { box-shadow: inset 0 -2px var(--accent-foreground); }
   [data-aiflow-project-workspace][data-navigation-collapsed="true"] > aside > div:first-child { flex: 0 0 auto; }
   [data-aiflow-project-workspace] > section { width: 100%; max-width: 1600px; margin-inline: auto; padding: 20px 28px 32px; }
   [data-aiflow-project-workspace] > section > div { max-width: none; }
@@ -90,8 +87,6 @@
 /* 人员目录与详情保持稳定的主从关系，分区导航使用一致的选中标记。 */
 [data-aiflow-identity-page] [data-identity-navigation],
 [data-aiflow-system-config] [data-system-config-navigation] { border-radius: 10px; box-shadow: none; }
-[data-identity-navigation] .aiflow-module-link[aria-current="page"],
-[data-system-config-tabs] button[aria-current="page"] { box-shadow: inset 0 -2px var(--accent-foreground) !important; }
 [data-iam-user-workbench] > section:first-child > div:first-child,
 [data-iam-role-workbench] > section:first-child > div:first-child { background: var(--card); padding: 16px; }
 [data-iam-user-row], [data-iam-role-row] { padding-inline: 16px; }

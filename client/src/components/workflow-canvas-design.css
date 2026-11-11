@@ -47,7 +47,6 @@
 [data-canvas-redesign] .react-flow__edge.selected {z-index: 2;}
 [data-canvas-redesign] [data-canvas-view-controls] {box-shadow: 0 2px 8px #0f172a08;}
 [data-canvas-redesign] [data-canvas-view-controls] button {min-height: 30px; padding-inline: 10px; font-size: 13px; transition: background-color 150ms, color 150ms;}
-[data-canvas-redesign] [data-canvas-view-controls] button[aria-pressed="true"] {background: var(--accent); color: var(--aiflow-canvas-selected);}
 [data-canvas-redesign] [data-canvas-view-controls] button:disabled {opacity: .4; cursor: default;}
 [data-canvas-redesign] [data-canvas-view-controls] button:focus-visible {outline: 2px solid var(--aiflow-canvas-selected); outline-offset: 2px;}
 [data-canvas-redesign] [data-flow-canvas-viewport] > details > summary {min-height: 38px; padding: 8px 12px; font-size: 13px; font-weight: 500;}
