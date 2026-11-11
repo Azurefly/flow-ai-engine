@@ -18,7 +18,7 @@ describe("统一工作空间视觉与动效", () => {
   it("内容面板使用共享圆角和主题阴影，保留清晰的字号层级", () => {
     expect(css).toContain("--aiflow-surface-radius: 0.75rem;");
     expect(css).toContain("--aiflow-type-control: 0.875rem;");
-    expect(css).toContain("--aiflow-type-page-title: 1.375rem;");
+    expect(css).toContain("--aiflow-type-page-title: 1.25rem;");
     expect(css).toContain("box-shadow: var(--aiflow-surface-shadow);");
     expect(css.match(/--aiflow-workspace-glow:/g)).toHaveLength(2);
     expect(css).not.toMatch(

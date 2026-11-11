@@ -9,7 +9,7 @@ it("正文、控件与辅助信息全站共享字号，首页没有额外放大�
   expect(css).toContain("--aiflow-type-meta: 0.8125rem;");
   expect(css).toContain("--aiflow-type-section: 1rem;");
   expect(css).toContain("--aiflow-type-dialog-title: 1.125rem;");
-  expect(css).toContain("--aiflow-type-page-title: 1.375rem;");
+  expect(css).toContain("--aiflow-type-page-title: 1.25rem;");
   expect(css).not.toMatch(
     /\[data-aiflow-business-center\] \.aiflow-type-(body|meta)\s*\{/
   );
