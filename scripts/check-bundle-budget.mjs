@@ -53,9 +53,11 @@ const maxChunkBytes = 450 * 1024;
 // previous release 1560.96 / 476.94 KiB; new UI adds about 11 / 5 KiB.
 // Keep bounded total headroom; the 450 KiB per-chunk and HTML caps remain fixed.
 // Paged role members and service-node sections: measured 1576.21 / 483.89 KiB.
-const maxTotalBytes = 1_578 * 1024;
+// Visual node-value selection replaces raw template entry across existing editors.
+// Measured increment is about 12 KiB raw / 4 KiB gzip; chunk and HTML caps stay fixed.
+const maxTotalBytes = 1_590 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 485 * 1024;
+const maxTotalGzipBytes = 489 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

@@ -514,8 +514,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_578 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 485 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_590 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 489 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2098,13 +2098,13 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain('label: "人员与操作"');
     expect(canvasSource).toContain('label: "流程参与方显示"');
     expect(canvasSource).toContain("operate: OPERATE_CONFIG_GROUPS");
-    expect(canvasSource).toContain('label: "兼容规则"');
+    expect(canvasSource).toContain('label: "已有旧规则"');
     expect(canvasSource).toContain('label: "分支规则"');
     expect(canvasSource).toContain("流程身份（逗号分隔）");
     expect(canvasSource).toContain("请从此路径句柄连线到目标状态节点");
     expect(canvasSource).toContain("默认路径");
     expect(canvasSource).toContain('label: "调用配置"');
-    expect(canvasSource).toContain('label: "迁移兼容"');
+    expect(canvasSource).not.toContain('label: "迁移兼容"');
     expect(canvasSource).toContain(
       'keys: ["subflowId", "input", "executionMode"]'
     );
@@ -2558,7 +2558,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain(
       '["restHeaderParam", "restGetBodyParam"].includes(fieldKey)'
     );
-    expect(canvasSource).toContain("GET 参数");
+    expect(canvasSource).toContain("查询参数");
     expect(canvasSource).toContain("添加字段");
     expect(canvasSource).toContain("添加一项");
     expect(canvasSource).not.toContain("function JsonField");
@@ -3802,7 +3802,7 @@ it("路由默认展示实际分支规则，并解释兼容规则执行优先级"
     groups.indexOf('label: "基础信息"')
   );
   expect(groups.indexOf('label: "基础信息"')).toBeLessThan(
-    groups.indexOf('label: "兼容规则"')
+    groups.indexOf('label: "已有旧规则"')
   );
   expect(canvasSource).toContain("兼容字段不覆盖已有规则");
   expect(canvasSource).toContain("未配置分支规则时使用兼容规则");

@@ -359,7 +359,7 @@ const conditionOperators = [
 ];
 
 const templateHelp =
-  "支持 {{input.field}}、{{vars.field}} 与 {{nodes.节点ID.字段}}，不执行任意表达式。";
+  "可填写固定内容，或点击“引用流程数据”选择输入、变量和上游结果。";
 
 const readLimitField: NodeField = {
   key: "maxRows",
@@ -449,15 +449,15 @@ const referenceHttpFields: NodeField[] = [
   },
   {
     key: "secretRef",
-    label: "SecretRef",
-    help: "仅保存外部密钥引用，不保存密钥值；必须与项目端点登记的引用一致。",
+    label: "认证凭据引用",
+    help: "由项目服务端点统一管理，选择端点后自动同步。",
     kind: "text",
   },
   {
     key: "restApi",
     aliases: ["endpoint", "url"],
     label: "接口地址",
-    help: `${templateHelp} 服务端拒绝本机、私有网段、凭据 URL 与非标准端口。`,
+    help: "填写接口路径，例如 /orders。需要订单编号等动态内容时，可插入流程数据。",
     kind: "template",
     required: true,
   },
@@ -465,34 +465,21 @@ const referenceHttpFields: NodeField[] = [
     key: "restHeaderParam",
     aliases: ["headers"],
     label: "请求头",
-    help: "可填键值列表或 JSON 对象；Host、Connection、Content-Length 不可设置。",
+    help: "逐项填写名称和值；认证信息由服务端点提供。Host、Connection、Content-Length 不可设置。",
     kind: "json",
   },
   {
     key: "restGetBodyParam",
-    label: "GET 入参",
-    help: "查询参数以键值列表附加到接口地址。",
+    label: "地址查询参数",
+    help: "例如名称为 orderId，值引用流程输入中的订单编号。适用于所有请求方法。",
     kind: "json",
   },
   {
     key: "restJsonParam",
     aliases: ["body"],
     label: "请求体",
-    help: "支持 JSON 文本、结构化请求体和模板变量。",
+    help: "添加接口要求的字段，并为每个字段填写固定值或选择流程数据。",
     kind: "json",
-  },
-  {
-    key: "restAttributeMap",
-    label: "执行与校验设置",
-    help: "兼容迁移配置；旧校验脚本不会执行。",
-    kind: "json",
-    required: true,
-  },
-  {
-    key: "restScriptCode",
-    label: "响应校验脚本",
-    help: "迁移用脚本仅保存，不会执行。",
-    kind: "textarea",
   },
   {
     key: "timeout",
@@ -584,7 +571,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "initialVariables",
         label: "初始变量",
-        help: "流程启动时写入 vars 的 JSON 对象。",
+        help: "添加流程中需要保存的变量，可设置固定初始值或引用启动输入。",
         kind: "json",
         required: true,
       },
@@ -599,7 +586,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     fields: [
       {
         key: "resultTemplate",
-        label: "结果模板",
+        label: "输出结果",
         help: templateHelp,
         kind: "template",
         required: true,
@@ -1051,7 +1038,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "表单字段",
-        help: "数组项包含 key、label、type、required，可选 placeholder、defaultValue、options。",
+        help: "逐项填写字段标识、显示名称、类型，并选择是否必填。",
         kind: "json",
         required: true,
       },
@@ -1095,8 +1082,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
       {
         key: "correlationKey",
-        label: "相关键",
-        help: "例如 {{input.businessKey}} 解析为订单编号；结果须为 1 至 255 个字符的文本或安全整数。发送消息时使用解析后的值；并行等待使用不同相关键。",
+        label: "消息匹配标识",
+        help: "选择订单编号等业务字段，用于匹配发送给此流程的消息。发送方须使用相同值；并行等待应使用不同值。",
         kind: "template",
         required: true,
       },
@@ -1194,7 +1181,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "mappings",
         label: "字段映射",
-        help: "数据流逐行生成新对象：{{input.字段}} 或 {{字段}} 引用当前行；其他流程使用输入、变量和节点输出。",
+        help: "添加输出字段，为每个字段选择来源。数据流程逐行读取当前记录，其他流程可引用启动输入、变量和上游结果。",
         kind: "json",
         required: true,
       },
@@ -1215,7 +1202,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     fields: [
       {
         key: "left",
-        label: "左值",
+        label: "待判断的数据",
         help: templateHelp,
         kind: "template",
         required: true,
@@ -1230,8 +1217,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
       {
         key: "right",
-        label: "右值",
-        help: "可使用 JSON 标量或模板。",
+        label: "比较值",
+        help: "填写比较目标，选择正确的文字、数字或是／否类型，也可引用流程数据。",
         kind: "json",
       },
       {
@@ -1352,57 +1339,6 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
     },
     fields: [
       {
-        key: "zlcxz",
-        label: "兼容流程引用",
-        help: "迁移时选择当前所有者的已启用私有子流程。",
-        kind: "json",
-        required: true,
-      },
-      {
-        key: "nodeDh",
-        label: "子流程代号",
-        help: "代号仅允许字母和数字。",
-        kind: "text",
-        required: true,
-      },
-      {
-        key: "sfgqzlc",
-        label: "挂起主流程（兼容字段）",
-        help: "始终同步等待已发布的子流程快照。",
-        kind: "boolean",
-        required: true,
-      },
-      {
-        key: "zlcfqf",
-        label: "子流程发起方（兼容字段）",
-        help: "兼容收发方定义；使用父流程输入映射。",
-        kind: "select",
-        required: true,
-        options: [
-          { value: "sender", label: "基于发送方" },
-          { value: "receiver", label: "基于接收方" },
-        ],
-      },
-      {
-        key: "gdtj",
-        label: "更多条件（兼容字段）",
-        help: "旧条件代码不执行。",
-        kind: "json",
-      },
-      {
-        key: "zlcrk",
-        label: "子流程入口（兼容字段）",
-        help: "当前请使用下方“传入数据”作为权威入口映射。",
-        kind: "json",
-        required: true,
-      },
-      {
-        key: "zlcck",
-        label: "子流程出口（兼容字段）",
-        help: "结果写入节点 result，旧出口数组不执行。",
-        kind: "json",
-      },
-      {
         key: "executionMode",
         label: "执行模式",
         help: "当前仅支持同步等待发布时固定的子流程快照。",
@@ -1412,8 +1348,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
       {
         key: "subflowId",
-        label: "当前子流程标识",
-        help: "当前安全运行时使用；必须属于流程所有者且已启用。",
+        label: "调用的子流程",
+        help: "选择已启用的私有子流程，主流程将等待它执行完成。",
         kind: "text",
         required: true,
       },
@@ -1605,8 +1541,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "filterValue",
         label: "筛选值",
-        help: templateHelp,
-        kind: "template",
+        help: "填写要匹配的固定值，按文字比较；此处不解析动态数据引用。",
+        kind: "text",
       },
     ],
   },
@@ -1661,7 +1597,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "派生字段",
-        help: "引用使用 {{字段名}}；也可填数字、true/false 或固定文本。",
+        help: "为新字段选择当前行中的数据，或填写固定内容。",
         kind: "json",
         required: true,
       },
@@ -1773,7 +1709,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "fields",
         label: "排序字段",
-        help: "按顺序填写 field 和 direction（asc 升序、desc 降序），字符串默认升序。兼容旧 order；两者并存时需一致。",
+        help: "依次选择排序字段和升序或降序。前面的字段优先参与排序。",
         kind: "json",
         required: true,
       },

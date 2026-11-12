@@ -23,5 +23,4 @@ export const SERVICE_NODE_CONFIG_GROUPS = [
     ],
   },
   { label: "节点标识", keys: ["nodeDh", "restmc"] },
-  { label: "兼容配置", keys: ["restAttributeMap", "restScriptCode"] },
 ];

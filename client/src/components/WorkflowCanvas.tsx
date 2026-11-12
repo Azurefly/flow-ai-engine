@@ -18,6 +18,9 @@ import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { useEditorViewport } from "@/hooks/useEditorViewport";
 import { useInspectorGroupNavigation } from "@/hooks/useInspectorGroupNavigation";
 import { SERVICE_NODE_CONFIG_GROUPS } from "@shared/service-node-config-groups";
+import { nodeValueSources, usesNodeValueReferences } from "@shared/node-value-reference";
+import { visibleNodeConfigFields, hasRetiredHttpValidation, removeRetiredHttpValidation } from "@shared/node-config-visibility";
+import { NodeValueEditor, NodeValueSources } from "./NodeValueEditor";
 import {
   dataflowInputFields,
   usesDataflowInputFieldSuggestions,
@@ -66,6 +69,7 @@ import {
   useRef,
   useState,
   useId,
+  useContext,
 } from "react";
 import { toast } from "sonner";
 import {
@@ -673,7 +677,7 @@ function ConfigFieldEditor({
   operateConfig?: NodeConfig;
   onChange: (value: unknown) => void;
 }) {
-  const effectiveValue = value ?? fallback;
+  const effectiveValue = value === undefined ? fallback : value;
   // Keep a local editing draft while committing accepted text on every input.
   // The parent key still resets drafts when switching nodes or fields.
   const scalarValue =
@@ -825,6 +829,14 @@ function ConfigFieldEditor({
         <FieldHelp help={field.help} />
       </label>
     );
+  if ((field.kind === "template" || (field.kind === "textarea" && usesNodeValueReferences(nodeKind, field.key))) && (effectiveValue === null || typeof effectiveValue !== "object"))
+    return <div className={canvasFieldGroupClass}>
+      {label}
+      <NodeValueEditor value={effectiveValue} disabled={disabled} label={field.label} multiline={field.kind === "textarea"} textOnly={!["condition", "end"].includes(nodeKind ?? "")} onChange={onChange}/>
+      <FieldHelp help={field.help}/>
+    </div>;
+  if (nodeKind === "subflow" && field.key === "input" && (effectiveValue === null || typeof effectiveValue !== "object"))
+    return <div className={canvasFieldGroupClass}>{label}<NodeValueEditor singleReference value={effectiveValue} disabled={disabled} label={field.label} onChange={onChange}/><FieldHelp help="传入一组字段数据；默认使用流程启动输入。"/><div className="node-value-actions"><button type="button" disabled={disabled} onClick={() => onChange({})}>改为逐项填写字段</button></div></div>;
   if (field.kind === "textarea")
     return (
       <label className={canvasFieldGroupClass}>
@@ -919,6 +931,7 @@ function configFieldValue(
   config: NodeConfig
 ) {
   const direct = config[field.key];
+  if (field.key === "restGetBodyParam" && direct == null && isConfigRecord(config.restAttributeMap)) return config.restAttributeMap.restEntryParam;
   if (direct !== undefined && direct !== null && direct !== "") return direct;
   for (const alias of field.aliases ?? []) {
     const value = config[alias];
@@ -997,10 +1010,14 @@ function NestedStructuredValueEditor({
   value,
   disabled,
   onChange,
+  allowReferences = false,
+  label = "字段值",
 }: {
   value: unknown;
   disabled: boolean;
   onChange: (value: unknown) => void;
+  allowReferences?: boolean;
+  label?: string;
 }) {
   const inputClass =
     surfaceClass1;
@@ -1015,6 +1032,8 @@ function NestedStructuredValueEditor({
             <NestedStructuredValueEditor
               value={item}
               disabled={disabled}
+              allowReferences={allowReferences}
+              label={`${label}第${index + 1}项`}
               onChange={next =>
                 onChange(
                   value.map((current, itemIndex) =>
@@ -1096,6 +1115,8 @@ function NestedStructuredValueEditor({
             <NestedStructuredValueEditor
               value={entryValue}
               disabled={disabled}
+              allowReferences={allowReferences}
+              label={`${key}的值`}
               onChange={next => onChange({ ...record, [key]: next })}
             />
             <button
@@ -1153,6 +1174,7 @@ function NestedStructuredValueEditor({
       </div>
     );
   }
+  if (allowReferences) return <NodeValueEditor value={value} disabled={disabled} label={label} onChange={onChange}/>;
   return (
     <input
       className={inputClass}
@@ -1565,8 +1587,13 @@ function StructuredValueEditor({
   routeTargetLabels?: Record<string, string>;
   onChange: (value: unknown) => void;
 }) {
+  const allowReferences = usesNodeValueReferences(nodeKind, field.key) || field.kind === "template";
+  const wholeValueReference = ["restJsonParam", "body", "input", "resultTemplate", "left", "right"].includes(field.key);
+  if (allowReferences && typeof value === "string" && /^[\[{]/.test(value.trim()) && !value.trim().startsWith("{{")) {
+    try { const parsed = JSON.parse(value); if (parsed && typeof parsed === "object") value = parsed; } catch { /* Keep text bodies losslessly. */ }
+  }
   const isList = Array.isArray(value);
-  const list = isList ? value : [];
+  const list: unknown[] = Array.isArray(value) ? value : [];
   const editorKey = dataFieldEditorKey(nodeKind, field.key);
   const isSpecializedList =
     isList &&
@@ -1682,12 +1709,16 @@ function StructuredValueEditor({
         <NestedStructuredValueEditor
           value={value}
           disabled={disabled}
+          allowReferences={allowReferences}
+          label={field.label}
           onChange={onChange}
         />
       )}
       <FieldHelp
         help={field.help.replace(/JSON (对象|数组|标量)/g, "结构化字段")}
       />
+      {allowReferences && wholeValueReference && value !== null && typeof value === "object" && <details className="node-value-replace"><summary>用流程数据替换整组字段</summary><p className="node-value-hint">选择后将替换上方整组配置，可用画布“撤销”恢复。</p><NodeValueEditor referenceOnly value="" disabled={disabled} label={`${field.label}整体`} onChange={onChange}/></details>}
+      {allowReferences && wholeValueReference && (value === null || typeof value !== "object") && <div className="node-value-actions"><button type="button" disabled={disabled} onClick={() => onChange({})}>改为逐项填写字段</button>{field.key !== "input" && <button type="button" disabled={disabled} onClick={() => onChange([])}>改为列表</button>}</div>}
     </fieldset>
   );
 }
@@ -1707,6 +1738,7 @@ function StructuredListRow({
   onChange: (value: unknown) => void;
   onRemove: () => void;
 }) {
+  const valueSources = useContext(NodeValueSources);
   const inputClass =
     surfaceClass1;
   const originalSpecs =
@@ -1754,7 +1786,15 @@ function StructuredListRow({
             <Trash2 size={14} />
           </button>
         </div>
-        {originalSpecs.map(spec => (
+        {originalSpecs.map(spec => fieldKey === "data_derive" && spec.key === "expression" ? (
+          <div key={spec.key} className={canvasCompactLabelClass}>
+            <span>字段取值</span>
+            <NodeValueSources.Provider value={[{ key: "", label: "当前行数据", fields: valueSources.find(source => source.key === "input")?.fields ?? [], hint: "选择当前记录中的字段。" }]}>
+              <NodeValueEditor value={String(record.expression ?? "")} disabled={disabled} textOnly singleField label="派生字段取值" onChange={value => onChange({ ...record, expression: String(value) })}/>
+            </NodeValueSources.Provider>
+            <p className="node-value-hint">引用一个现有字段，或填写固定内容。纯数字按数字处理，true／false 按是／否处理。</p>
+          </div>
+        ) : (
           <label
             key={spec.key}
             className={canvasCompactLabelClass}
@@ -1904,18 +1944,7 @@ function StructuredListRow({
             附加数据条件
           </summary>
           <div data-config-condition="" className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
-            <input
-              className={inputClass}
-              placeholder="左值"
-              value={String(condition.left ?? "")}
-              disabled={disabled}
-              onChange={event =>
-                onChange({
-                  ...route,
-                  condition: { ...condition, left: event.target.value },
-                })
-              }
-            />
+            <NodeValueEditor value={condition.left ?? ""} disabled={disabled} label="待判断的数据" onChange={left => onChange({ ...route, condition: { ...condition, left } })}/>
             <select
               className={inputClass}
               value={String(condition.operator ?? "equals")}
@@ -1934,21 +1963,7 @@ function StructuredListRow({
               <option value="greaterThan">大于</option>
               <option value="lessThan">小于</option>
             </select>
-            <input
-              className={inputClass}
-              placeholder="右值"
-              value={String(condition.right ?? "")}
-              disabled={disabled}
-              onChange={event =>
-                onChange({
-                  ...route,
-                  condition: {
-                    ...condition,
-                    right: structuredValue(event.target.value),
-                  },
-                })
-              }
-            />
+            <NodeValueEditor value={condition.right ?? ""} disabled={disabled} label="比较值" onChange={right => onChange({ ...route, condition: { ...condition, right } })}/>
           </div>
         </details>
       </div>
@@ -2015,7 +2030,7 @@ function StructuredListRow({
   }
   if (["restHeaderParam", "restGetBodyParam"].includes(fieldKey)) {
     const pair = item && typeof item === "object" ? (item as NodeConfig) : {};
-    const label = fieldKey === "restHeaderParam" ? "请求头" : "GET 参数";
+    const label = fieldKey === "restHeaderParam" ? "请求头" : "查询参数";
     return (
       <div data-config-pair="" className="grid grid-cols-[minmax(88px,.8fr)_minmax(0,1.2fr)_auto] gap-2">
         <input
@@ -2026,16 +2041,7 @@ function StructuredListRow({
           aria-label={`${label}名称`}
           onChange={event => onChange({ ...pair, key: event.target.value })}
         />
-        <input
-          className={inputClass}
-          placeholder={`${label}值`}
-          value={String(pair.value ?? "")}
-          disabled={disabled}
-          aria-label={`${label}值`}
-          onChange={event =>
-            onChange({ ...pair, value: structuredValue(event.target.value) })
-          }
-        />
+        <NodeValueEditor value={pair.value ?? ""} disabled={disabled} label={`${label}值`} onChange={value => onChange({ ...pair, value })}/>
         <button
           type="button"
           className={canvasRemoveClass}
@@ -2149,7 +2155,7 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
       keys: ["nodeDh", "lymc", "gbms", "parallelJoinNodeId"],
     },
     {
-      label: "兼容规则",
+      label: "已有旧规则",
       keys: ["lysz"],
     },
   ],
@@ -2157,10 +2163,6 @@ const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
     {
       label: "调用配置",
       keys: ["subflowId", "input", "executionMode"],
-    },
-    {
-      label: "迁移兼容",
-      keys: ["zlcxz", "nodeDh", "sfgqzlc", "zlcfqf", "gdtj", "zlcrk", "zlcck"],
     },
   ],
 };
@@ -2191,14 +2193,14 @@ function configFieldGroups(
     fields: group.keys
       .map(key => byKey.get(key))
       .filter((field): field is ConfigField => Boolean(field)),
-  }));
+  })).filter(group => group.fields.length > 0);
   const groupedKeys = new Set(definitions.flatMap(group => group.keys));
   const remaining = fields.filter(field => !groupedKeys.has(field.key));
   return remaining.length
     ? [
         ...groups,
         {
-          label: "其他兼容配置",
+          label: "其他设置",
           keys: [],
           fields: remaining,
         },
@@ -2835,13 +2837,17 @@ export default function WorkflowCanvas({
     selected && selectedDefinition
       ? configFieldGroups(
           selected.data.kind,
-          selectedDefinition.fields,
+          visibleNodeConfigFields(selected.data.kind, selectedDefinition.fields, selectedConfig, Boolean(projectId), flowType),
           selectedConfig
         )
       : [];
   const activeInspectorGroup =
     selectedFieldGroups.find(group => group.label === inspectorTab) ??
     selectedFieldGroups[0];
+  const valueSources = useMemo(() => nodeValueSources(
+    selectedId ?? "", nodes.map(node => ({ id: node.id, type: node.data.kind, name: String(node.data.label), config: node.data.config })), edges, flowType,
+    flowType === "data" ? dataflowInputFields(selectedId ?? "", nodes.map(node => ({ id: node.id, kind: node.data.kind, config: node.data.config })), edges, resourceOptions.data?.assets ?? []) : [],
+  ), [selectedId, nodes, edges, flowType, resourceOptions.data?.assets]);
   const inspectorDisabled = readOnly || inspectorLocked;
   const nodeMap = useMemo(
     () => new Map(nodes.map(node => [node.id, node])),
@@ -4769,6 +4775,7 @@ export default function WorkflowCanvas({
                   ))}
                 </div>}
                 {activeInspectorGroup && (
+                  <NodeValueSources.Provider value={valueSources}>
                   <section
                     role={selectedFieldGroups.length > 1 ? "tabpanel" : "region"}
                     data-inspector-section=""
@@ -4779,9 +4786,9 @@ export default function WorkflowCanvas({
                     className="min-w-0 px-4 py-4"
                   >
                       {(["rest", "method"].includes(selected.data.kind)) && activeInspectorGroup.label === "节点标识" && <p className="node-config-section-note">用于业务识别和接口执行；画布显示名称仅影响节点在画布中的标题。</p>}
-                      {(["rest", "method"].includes(selected.data.kind)) && activeInspectorGroup.label === "兼容配置" && <p className="node-config-section-note">保留导入流程的兼容字段。响应校验脚本仅保存，不会执行。</p>}
+                      {(["rest", "method"].includes(selected.data.kind)) && hasRetiredHttpValidation(selectedConfig) && <div className="node-value-legacy-notice" role="status"><p>此节点含已停用的旧响应校验，运行前需移除。请求参数和其他设置会保留；可用画布“撤销”恢复。</p><button type="button" disabled={inspectorDisabled} onClick={() => updateSelected({ config: removeRetiredHttpValidation(selectedConfig) })}>移除旧响应校验</button></div>}
                       {selected.data.kind === "router" &&
-                        activeInspectorGroup.label === "兼容规则" && (
+                        activeInspectorGroup.label === "已有旧规则" && (
                           <p className={canvasSectionHelpClass}>
                             {Array.isArray(selected.data.config.routes) &&
                             selected.data.config.routes.length
@@ -4804,6 +4811,7 @@ export default function WorkflowCanvas({
                       </div>
                     )}
                     <div data-config-fields="" className="space-y-4">
+                      {flowType === "data" && ["start", "end"].includes(selected.data.kind) && <p className="node-value-hint">{selected.data.kind === "start" ? "数据流程从已连接的数据源读取记录；在资源或查询节点中选择数据。此节点无需额外配置。" : "自动输出已连接上游的数据记录，无需填写结果模板。"}</p>}
                       {activeInspectorGroup.fields.map(field => {
                         const fieldValue =
                           selected.data.kind === "router" &&
@@ -4949,7 +4957,7 @@ export default function WorkflowCanvas({
                                       ...field,
                                       label: "项目服务端点",
                                       required: true,
-                                      help: "选择端点后同步凭据引用。填写相对路径，如 /orders；端点在项目“服务端点”中登记。",
+                                      help: "选择端点后自动使用其认证配置。填写接口路径，例如 /orders；服务地址和认证由项目“服务端点”统一管理。",
                                     }
                                   : field
                             }
@@ -5153,6 +5161,7 @@ export default function WorkflowCanvas({
                     </div>
                   )}
                   </section>
+                  </NodeValueSources.Provider>
                 )}
                 {!readOnly && isTemplateNodeType(selected.data.kind) && (
                   <div className="p-4 pt-0">
