@@ -24,7 +24,8 @@
 .node-value-editor { display:grid; min-width:0; gap:8px; }
 .node-value-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted-foreground); font-size:12px; }
 .node-value-heading > span { flex:none; white-space:nowrap; }
-[data-node-config-panel] .node-value-heading select { flex:none; width:110px; min-width:0; height:30px; min-height:30px!important; font-size:12px!important; }
+/* 留足文字内容高度，避免固定高度减去内边距后裁掉原生 select 的选中项。 */
+[data-node-config-panel] .node-value-heading select { flex:none; width:110px; min-width:0; height:38px; min-height:38px!important; padding-block:4px; font-size:14px!important; line-height:22px!important; }
 .node-value-control { width:100%; min-width:0; padding:7px 10px; border:1px solid var(--border); border-radius:6px; color:var(--foreground); background:var(--card); font-weight:400; }
 .node-value-reference { display:grid; grid-template-columns:minmax(0,1fr) 28px; gap:6px; border:1px solid var(--aiflow-info-border); border-radius:7px; background:var(--aiflow-info-surface); padding:6px 8px; }
 .node-value-reference > button:first-child { display:grid; min-width:0; gap:2px; text-align:left; padding:2px 0; }
