@@ -148,232 +148,242 @@ export function NodeValueEditor({
           )}
         </div>
       )}
-      {!referenceOnly &&
-        (!hasReferences && fixedType === "boolean" ? (
-          <select
-            className={control}
-            aria-label={label}
-            value={String(value)}
-            disabled={disabled}
-            onChange={event => commit(event.target.value === "true")}
-          >
-            <option value="true">是</option>
-            <option value="false">否</option>
-          </select>
-        ) : !hasReferences && fixedType === "null" ? (
-          <p className="node-value-hint">不提供值。</p>
-        ) : !hasReferences && fixedType === "number" ? (
-          <input
-            className={control}
-            type="number"
-            step="any"
-            aria-label={label}
-            value={numberDraft}
-            disabled={disabled}
-            onChange={event => {
-              setNumberDraft(event.target.value);
-              // Keep invalid drafts visible and in the definition, so preflight cannot silently use an old number.
-              const next =
-                event.target.value === "" ? "" : Number(event.target.value);
-              emitted.current = next;
-              onChange(next);
-            }}
-            onBlur={() => {
-              if (numberDraft === "") commit("");
-            }}
-          />
-        ) : (
-          (parts.length
-            ? parts
-            : [{ kind: "text", value: String(value ?? "") } as ValuePart]
-          ).map((part, index) => {
-            if (part.kind === "reference") {
-              const location = referenceLocation(part.path, sources);
-              const fieldLabel =
-                location?.source.fields.find(
-                  item => item.value === location.field
-                )?.label ?? location?.field;
+      <div className="node-value-body">
+        {!referenceOnly &&
+          (!hasReferences && fixedType === "boolean" ? (
+            <select
+              className={control}
+              aria-label={label}
+              value={String(value)}
+              disabled={disabled}
+              onChange={event => commit(event.target.value === "true")}
+            >
+              <option value="true">是</option>
+              <option value="false">否</option>
+            </select>
+          ) : !hasReferences && fixedType === "null" ? (
+            <p className="node-value-hint">不提供值。</p>
+          ) : !hasReferences && fixedType === "number" ? (
+            <input
+              className={control}
+              type="number"
+              step="any"
+              aria-label={label}
+              value={numberDraft}
+              disabled={disabled}
+              onChange={event => {
+                setNumberDraft(event.target.value);
+                // Keep invalid drafts visible and in the definition, so preflight cannot silently use an old number.
+                const next =
+                  event.target.value === "" ? "" : Number(event.target.value);
+                emitted.current = next;
+                onChange(next);
+              }}
+              onBlur={() => {
+                if (numberDraft === "") commit("");
+              }}
+            />
+          ) : (
+            (parts.length
+              ? parts
+              : [{ kind: "text", value: String(value ?? "") } as ValuePart]
+            ).map((part, index) => {
+              if (part.kind === "reference") {
+                const location = referenceLocation(part.path, sources);
+                const fieldLabel =
+                  location?.source.fields.find(
+                    item => item.value === location.field
+                  )?.label ?? location?.field;
+                return (
+                  <div className="node-value-reference" key={index}>
+                    <button
+                      type="button"
+                      disabled={disabled}
+                      aria-label={`修改${label}的数据引用${index + 1}`}
+                      onClick={() => openPicker(index)}
+                    >
+                      <strong>
+                        {location?.source.label ?? "已有数据引用"}
+                      </strong>
+                      <span>
+                        {location ? fieldLabel || "全部数据" : part.path}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`移除${label}的数据引用${index + 1}`}
+                      disabled={disabled}
+                      onClick={() =>
+                        changeParts(
+                          parts.filter((_, partIndex) => partIndex !== index)
+                        )
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    {!location && (
+                      <p className="node-value-hint">
+                        此来源未在当前上游目录中，原引用已保留；可重新选择。
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+              if (singleReference)
+                return (
+                  <p key={index} className="node-value-hint">
+                    请选择包含字段的一组数据，或改为逐项填写字段；此处不使用文字拼接。
+                  </p>
+                );
+              const props = {
+                className: control,
+                "aria-label": hasReferences
+                  ? `${label}文字${index + 1}`
+                  : label,
+                value: part.value,
+                disabled,
+                onChange: (
+                  event: React.ChangeEvent<
+                    HTMLInputElement | HTMLTextAreaElement
+                  >
+                ) => {
+                  const next = parts.length ? [...parts] : [part];
+                  next[index] = { kind: "text", value: event.target.value };
+                  // Pasted old templates become readable reference cards too.
+                  if (event.target.value.includes("{{"))
+                    commit(writeValueParts(next));
+                  else changeParts(next);
+                },
+              };
               return (
-                <div className="node-value-reference" key={index}>
-                  <button
-                    type="button"
-                    disabled={disabled}
-                    aria-label={`修改${label}的数据引用${index + 1}`}
-                    onClick={() => openPicker(index)}
-                  >
-                    <strong>{location?.source.label ?? "已有数据引用"}</strong>
-                    <span>
-                      {location ? fieldLabel || "全部数据" : part.path}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`移除${label}的数据引用${index + 1}`}
-                    disabled={disabled}
-                    onClick={() =>
-                      changeParts(
-                        parts.filter((_, partIndex) => partIndex !== index)
-                      )
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                  {!location && (
-                    <p className="node-value-hint">
-                      此来源未在当前上游目录中，原引用已保留；可重新选择。
-                    </p>
+                <div className="node-value-text" key={index}>
+                  {multiline ? <textarea {...props} /> : <input {...props} />}
+                  {hasReferences && (
+                    <button
+                      type="button"
+                      aria-label={`删除${label}的文字${index + 1}`}
+                      disabled={disabled}
+                      onClick={() =>
+                        changeParts(
+                          parts.filter((_, partIndex) => partIndex !== index)
+                        )
+                      }
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   )}
                 </div>
               );
-            }
-            if (singleReference)
-              return (
-                <p key={index} className="node-value-hint">
-                  请选择包含字段的一组数据，或改为逐项填写字段；此处不使用文字拼接。
-                </p>
-              );
-            const props = {
-              className: control,
-              "aria-label": hasReferences ? `${label}文字${index + 1}` : label,
-              value: part.value,
-              disabled,
-              onChange: (
-                event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-              ) => {
-                const next = parts.length ? [...parts] : [part];
-                next[index] = { kind: "text", value: event.target.value };
-                // Pasted old templates become readable reference cards too.
-                if (event.target.value.includes("{{"))
-                  commit(writeValueParts(next));
-                else changeParts(next);
-              },
-            };
-            return (
-              <div className="node-value-text" key={index}>
-                {multiline ? <textarea {...props} /> : <input {...props} />}
-                {hasReferences && (
-                  <button
-                    type="button"
-                    aria-label={`删除${label}的文字${index + 1}`}
-                    disabled={disabled}
-                    onClick={() =>
-                      changeParts(
-                        parts.filter((_, partIndex) => partIndex !== index)
-                      )
-                    }
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </div>
-            );
-          })
-        ))}
-      {editing === null ? (
-        <div className="node-value-actions">
-          {!((singleField || singleReference) && hasReferences) && (
-            <button
-              type="button"
-              disabled={disabled || !sources.length}
-              onClick={() => openPicker(-1)}
-            >
-              <Plus size={13} />
-              {hasReferences ? "继续插入数据" : "引用流程数据"}
-            </button>
-          )}
-          {hasReferences && !singleField && !singleReference && (
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => setParts([...parts, { kind: "text", value: "" }])}
-            >
-              <Plus size={13} />
-              添加文字
-            </button>
-          )}
-        </div>
-      ) : (
-        <div
-          className="node-value-picker"
-          role="group"
-          aria-label={`${label}数据来源`}
-        >
-          <label>
-            数据来源
-            <select
-              className={control}
-              value={sourceKey}
-              disabled={disabled}
-              onChange={event => {
-                setSourceKey(event.target.value);
-                setField("");
-                setPickerError("");
-              }}
-            >
-              {sources.map(item => (
-                <option key={item.key} value={item.key}>
+            })
+          ))}
+        {editing === null ? (
+          <div className="node-value-actions">
+            {!((singleField || singleReference) && hasReferences) && (
+              <button
+                type="button"
+                disabled={disabled || !sources.length}
+                onClick={() => openPicker(-1)}
+              >
+                <Plus size={13} />
+                {hasReferences ? "继续插入数据" : "引用流程数据"}
+              </button>
+            )}
+            {hasReferences && !singleField && !singleReference && (
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() =>
+                  setParts([...parts, { kind: "text", value: "" }])
+                }
+              >
+                <Plus size={13} />
+                添加文字
+              </button>
+            )}
+          </div>
+        ) : (
+          <div
+            className="node-value-picker"
+            role="group"
+            aria-label={`${label}数据来源`}
+          >
+            <label>
+              数据来源
+              <select
+                className={control}
+                value={sourceKey}
+                disabled={disabled}
+                onChange={event => {
+                  setSourceKey(event.target.value);
+                  setField("");
+                  setPickerError("");
+                }}
+              >
+                {sources.map(item => (
+                  <option key={item.key} value={item.key}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              读取字段
+              <input
+                className={control}
+                value={field}
+                disabled={disabled}
+                list={`${id}-fields`}
+                placeholder={
+                  singleField ? "选择或填写字段名称" : "留空使用全部数据"
+                }
+                onChange={event => {
+                  setField(event.target.value);
+                  setPickerError("");
+                }}
+              />
+            </label>
+            <datalist id={`${id}-fields`}>
+              {source?.fields.map(item => (
+                <option key={item.value} value={item.value}>
                   {item.label}
                 </option>
               ))}
-            </select>
-          </label>
-          <label>
-            读取字段
-            <input
-              className={control}
-              value={field}
-              disabled={disabled}
-              list={`${id}-fields`}
-              placeholder={
-                singleField ? "选择或填写字段名称" : "留空使用全部数据"
-              }
-              onChange={event => {
-                setField(event.target.value);
-                setPickerError("");
-              }}
-            />
-          </label>
-          <datalist id={`${id}-fields`}>
-            {source?.fields.map(item => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </datalist>
-          {source?.fields.length ? (
-            <div className="node-value-suggestions" aria-label="可选字段">
-              {source.fields.slice(0, 12).map(item => (
-                <button
-                  type="button"
-                  disabled={disabled}
-                  key={item.value}
-                  onClick={() => setField(item.value)}
-                >
-                  {item.label}
-                </button>
-              ))}
+            </datalist>
+            {source?.fields.length ? (
+              <div className="node-value-suggestions" aria-label="可选字段">
+                {source.fields.slice(0, 12).map(item => (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    key={item.value}
+                    onClick={() => setField(item.value)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <p className="node-value-hint">
+              {source?.hint || "选择字段，或填写实际字段名称。"}{" "}
+              {!singleField && "嵌套字段例如 body.orderId，无需填写大括号。"}
+            </p>
+            {pickerError && <p role="alert">{pickerError}</p>}
+            <div className="node-value-actions">
+              <button
+                type="button"
+                className="node-value-apply"
+                disabled={disabled}
+                onClick={applyReference}
+              >
+                使用此数据
+              </button>
+              <button type="button" onClick={() => setEditing(null)}>
+                取消
+              </button>
             </div>
-          ) : null}
-          <p className="node-value-hint">
-            {source?.hint || "选择字段，或填写实际字段名称。"}{" "}
-            {!singleField && "嵌套字段例如 body.orderId，无需填写大括号。"}
-          </p>
-          {pickerError && <p role="alert">{pickerError}</p>}
-          <div className="node-value-actions">
-            <button
-              type="button"
-              className="node-value-apply"
-              disabled={disabled}
-              onClick={applyReference}
-            >
-              使用此数据
-            </button>
-            <button type="button" onClick={() => setEditing(null)}>
-              取消
-            </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

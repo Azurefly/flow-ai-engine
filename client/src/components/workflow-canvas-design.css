@@ -13,7 +13,7 @@
   --aiflow-canvas-return: #f1c175;
   --aiflow-canvas-dot: #344157;
 }
-[data-canvas-redesign] [data-flow-canvas-viewport] {background: var(--background);}
+[data-canvas-redesign] [data-flow-canvas-viewport] {background: var(--background); container:flow-canvas / inline-size;}
 [data-canvas-redesign] .flow-design-node {
   position: relative;
   display: flex;
@@ -83,7 +83,7 @@
 [data-canvas-redesign] [data-flow-node-palette] { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-right:12px; margin-right:4px; border-right:1px solid var(--border); }
 [data-canvas-redesign] [data-flow-node-palette] > button:first-child { border-color:var(--primary); background:var(--primary); color:var(--primary-foreground); }
 [data-canvas-redesign] [data-flow-node-palette] > button:first-child > span { color:inherit; background:#ffffff20; }
-[data-canvas-redesign] .canvas-action-group { display:flex; flex:1; min-width:0; flex-wrap:wrap; align-items:center; gap:4px; }
+[data-canvas-redesign] .canvas-action-group { display:flex; flex:1 1 320px; min-width:0; flex-wrap:wrap; align-items:center; gap:4px; }
 [data-canvas-redesign] [data-flow-canvas-actions] > select { flex:1; min-width:120px; max-width:none; }
 [data-canvas-redesign] [data-flow-canvas-actions] > button { flex-shrink:0; }
 [data-canvas-redesign] [data-flow-canvas-actions] > span { background:var(--border); }
@@ -93,6 +93,14 @@
 [data-canvas-redesign] .react-flow__controls-button:focus-visible { outline:2px solid var(--ring); outline-offset:-3px; }
 [data-canvas-redesign] .react-flow__minimap { overflow:hidden; border:1px solid var(--border); border-radius:8px; box-shadow:none; }
 [data-canvas-redesign] [data-flow-canvas-viewport] > details > summary { border:1px solid var(--border); border-radius:6px; box-shadow:none; }
+/* 侧栏和配置面板也会压缩画布，缩略图按画布宽度收起，而非按窗口宽度判断。 */
+@container flow-canvas (max-width:899px) {
+  [data-canvas-redesign] .react-flow__minimap { display:none; }
+  [data-canvas-redesign] :is([data-workflow-neighborhood],[data-canvas-layout-warning]) { max-width:calc(100% - 32px); }
+}
+@media (max-width:480px) {
+  [data-canvas-redesign] [data-flow-node-palette] { flex-basis:100%; padding-right:0; margin-right:0; border-right:0; }
+}
 @media (min-width:1024px) {
   [data-canvas-redesign] [data-flow-canvas-toolbar] { gap:8px; padding:10px 12px; }
   [data-canvas-redesign] [data-flow-node-palette] { flex-shrink:0; }

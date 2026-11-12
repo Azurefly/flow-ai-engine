@@ -21,7 +21,7 @@
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab:hover:not([aria-selected="true"]) { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-inspector-section] { padding:18px 20px; }
 .node-config-section-note {margin-bottom:16px; font-size:12px; line-height:19px; color:var(--muted-foreground);}
-.node-value-editor { display:grid; min-width:0; gap:8px; }
+.node-value-editor, .node-value-body { display:grid; min-width:0; gap:8px; }
 .node-value-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted-foreground); font-size:12px; }
 .node-value-heading > span { flex:none; white-space:nowrap; }
 /* 留足文字内容高度，避免固定高度减去内边距后裁掉原生 select 的选中项。 */
@@ -116,6 +116,10 @@
   [data-node-config-panel] [data-config-pair] { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 28px; }
   [data-node-config-panel] [data-config-pair] > :nth-child(2) { grid-column:2; grid-row:1; }
   [data-node-config-panel] [data-config-pair] > button { grid-column:3; grid-row:1; }
+  /* 类型标题独占首行；名称、值和删除操作共享下一行，兼容固定值与数据引用。 */
+  [data-node-config-panel] [data-config-pair]:has(> .node-value-editor > .node-value-heading) { grid-template-rows:auto auto; }
+  [data-node-config-panel] [data-config-pair]:has(> .node-value-editor > .node-value-heading) > .node-value-editor { grid-row:1 / 3; grid-template-rows:subgrid; }
+  [data-node-config-panel] [data-config-pair]:has(> .node-value-editor > .node-value-heading) > :is(:first-child,button) { grid-row:2; align-self:start; }
 }
 @media (max-width:480px) {
   [data-canvas-redesign] > [data-node-config-panel] > [data-workflow-inspector-header]:first-child { flex-wrap:wrap; gap:8px; }
