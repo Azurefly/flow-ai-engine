@@ -513,8 +513,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_561 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 477 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_574 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 483 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -1418,13 +1418,11 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain("data-iam-user-more-actions");
     expect(homeSource).toContain('data-iam-account-status-action=""');
     expect(homeSource).toContain('data-iam-role-row=""');
-    expect(homeSource).toContain("aria-pressed={selectedRoleId === Number(role.id)}");
-    expect(homeSource).toContain("onClick={() => setSelectedRoleId(Number(role.id))}");
+    expect(homeSource).toContain('aria-label="角色列表"');
+    expect(homeSource).toContain("setSelectedRoleId(Number(role.id));setRoleDetailOpen(true);");
     expect(homeSource).toContain("查看权限与角色");
     expect(homeSource).toContain("新增单个账号");
-    expect(homeSource).toContain(
-      "aiflow-type-body min-w-0 break-words font-semibold text-foreground"
-    );
+    expect(homeSource).toContain('className="identity-role-name"');
     expect(homeSource).toContain(
       'data-role-origin={Number(role.isSystem) ? "builtin" : "custom"}'
     );
@@ -1446,10 +1444,10 @@ describe("流程设计器界面回归约束", () => {
     expect(homeSource).toContain('aria-label="搜索用户"');
     expect(homeSource).toContain('aria-label="搜索角色"');
     expect(homeSource).toContain(
-      "aiflow-type-meta mt-0.5 break-words font-mono text-muted-foreground [overflow-wrap:anywhere]"
+      'className="identity-account-code"'
     );
     expect(homeSource).toContain(
-      "filteredUsers.some(account => Number(account.id) === selectedUserId)"
+      "setSelectedUserId(id); setUserDetailOpen(true);"
     );
     expect(homeSource).toContain(
       "filteredRoles.some(role => Number(role.id) === selectedRoleId)"
@@ -3777,10 +3775,10 @@ it("运行错误使用显式类型展示原因和折叠堆栈，不再标为业�
 
 it("系统用户与角色详情仅在当前视图轮询，支持刷新且不展示其他身份缓存", () => {
   expect(homeSource).toContain(
-    'authorizationQueryPolicy(tab === "users" && selectedUserId !== null)'
+    'authorizationQueryPolicy(tab === "users" && userDetailOpen && selectedUserId !== null)'
   );
   expect(homeSource).toContain(
-    'authorizationQueryPolicy(tab === "roles" && selectedRoleId !== null)'
+    'authorizationQueryPolicy(tab === "roles" && roleDetailOpen && selectedRoleId !== null)'
   );
   expect(homeSource).toContain(
     "Number(details.data?.user?.id) === selectedUserId"
@@ -4143,7 +4141,7 @@ it("人员目录默认启用并按服务端状态筛选，切换后重置分页�
   expect(filter.slice(0, 700)).toContain("setUserPage(0)");
   expect(filter.slice(0, 700)).toContain("setSelectedUserId(null)");
   expect(homeSource).not.toContain("mobileUserDetailsOpen");
-  expect(homeSource).toContain('data-iam-directory-filters=""');
+  expect(homeSource).toContain('className="identity-list-filters"');
   const userSearchInput = homeSource.slice(homeSource.indexOf('aria-label="搜索用户"'));
   expect(userSearchInput.slice(0, 300)).toContain('maxLength={160}');
   expect(userSearchInput.slice(0, 600)).toContain('setUserSearch(event.target.value.slice(0, 160))');

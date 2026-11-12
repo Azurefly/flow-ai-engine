@@ -75,6 +75,8 @@ const OrganizationMutationDialog = lazy(
   () => import("./OrganizationMutationDialog")
 );
 
+const SystemRoleAssignmentDialog = lazy(() => import("./SystemRoleAssignmentDialog"));
+
 type Unit = Record<string, any> & {
   id: string;
   code: string;
@@ -122,6 +124,8 @@ export default function OrganizationManagementPage({
     null
   );
   const [receipt, setReceipt] = useState(false);
+  const [createdUserReceipt,setCreatedUserReceipt] = useState<{userId:number;label:string}|null>(null);
+  const [assignmentTarget,setAssignmentTarget] = useResourceDraftState<import("./SystemRoleAssignmentDialog").SystemRoleTarget|null>("iam","system-authorization","dialog",null,false);
   const openDialog = (target: OrganizationTarget) => {
     if (!busy && !dialogTarget) {
       setReceipt(false);
@@ -272,13 +276,16 @@ export default function OrganizationManagementPage({
   };
   const saved = (value?: {
     createdId?: string;
+    createdUserId?: number;
+    userLabel?: string;
     deletedId?: string;
     parentId?: string | null;
   }) => {
     setReceipt(true);
+    setCreatedUserReceipt(value?.createdUserId ? {userId:value.createdUserId,label:value.userLabel || "新用户"} : null);
     if (value?.createdId) {
       pendingSelection.current = { id: value.createdId, from: selectedId };
-      setTab("overview");
+      setTab("members");
       setQuery("");
       setMobileDirectoryOpen(false);
     }
@@ -329,6 +336,7 @@ export default function OrganizationManagementPage({
           <Eye size={13} />
           权限
         </Button>
+        <Button size="sm" variant="link" disabled={member.userStatus !== "active"} onClick={() => setAssignmentTarget({mode:"user",userId:String(member.userId),userLabel:memberIdentity})}>分配角色</Button>
         {/* UX：菜单通过Portal避开表格裁切；原按钮、条件和事件继续保留。 */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -562,14 +570,12 @@ export default function OrganizationManagementPage({
             </div>
           </details>
         </header>
-        {receipt && (
-          <p
-            role="status"
-            className="m-4 rounded-lg border border-aiflow-success-border bg-aiflow-success-surface p-3 text-sm"
-          >
-            组织配置已保存{organization.isFetching ? "，正在刷新列表。" : "。"}
-          </p>
-        )}
+        {receipt && <div className="identity-next-step m-4" role="status">
+          <Check size={20}/><div><strong>{createdUserReceipt ? `${createdUserReceipt.label} 已创建并加入部门` : "部门配置已保存"}</strong><p>{createdUserReceipt ? "继续分配个人角色，或查看部门继承权限。" : "继续添加成员，或为部门绑定可继承的角色。"}</p></div>
+          {createdUserReceipt ? <Button onClick={() => setAssignmentTarget({mode:"user",userId:String(createdUserReceipt.userId),userLabel:createdUserReceipt.label})}>分配用户角色</Button> : <Button disabled={busy || organization.isFetching || selected?.status !== "active"} onClick={() => openDialog({kind:"new-user",unit:selected})}>在此部门新增用户</Button>}
+          <Button variant="outline" disabled={busy || organization.isFetching || selected?.status !== "active"} onClick={() => openDialog({kind:"role",unit:selected})}>绑定部门角色</Button>
+          <Button variant="ghost" onClick={() => setReceipt(false)}>完成</Button>
+        </div>}
         {tab === "members" && membersPageQuery.isError && (
           <div
             role="alert"
@@ -1300,6 +1306,7 @@ export default function OrganizationManagementPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {assignmentTarget && <Suspense fallback={<p role="status">正在加载角色授权表单…</p>}><SystemRoleAssignmentDialog target={assignmentTarget} onClose={() => {setAssignmentTarget(null);void refresh();}}/></Suspense>}
       {dialogTarget && (
         <Suspense
           fallback={

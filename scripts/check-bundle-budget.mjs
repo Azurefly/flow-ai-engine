@@ -49,9 +49,12 @@ const maxChunkBytes = 450 * 1024;
 // Source capability hints and disabled resource choices: 1555.44 / 473.43 KiB.
 // Explicit API Key management adds password entry, retained drafts and secure update/clear UX.
 // Measured with shared-library/constant compaction: <1561 KiB raw / <477 KiB gzip.
-const maxTotalBytes = 1_561 * 1024;
+// Department directory, aligned identity tables and recoverable account onboarding:
+// previous release 1560.96 / 476.94 KiB; new UI adds about 11 / 5 KiB.
+// Keep bounded total headroom; the 450 KiB per-chunk and HTML caps remain fixed.
+const maxTotalBytes = 1_574 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 477 * 1024;
+const maxTotalGzipBytes = 483 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

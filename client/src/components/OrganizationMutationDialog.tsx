@@ -50,6 +50,8 @@ type Props = {
   onRead: () => Promise<unknown>;
   onSaved: (value?: {
     createdId?: string;
+    createdUserId?: number;
+    userLabel?: string;
     deletedId?: string;
     parentId?: string | null;
   }) => void;
@@ -465,6 +467,7 @@ export default function OrganizationMutationDialog({
         });
         result = { deletedId: id, parentId: target.unit?.parentUnitId };
       }
+      if (target.kind === "new-user" && acknowledgedUserId) result = {createdUserId: acknowledgedUserId, userLabel: `${text("name")}（${text("username")}）`};
       setDraft(initial);
       onClose();
       onSaved(result);
@@ -1269,7 +1272,7 @@ function OrganizationUserSelect({
     const id = String(user.id);
     const label = user.name
       ? `${user.name}（${user.username}）`
-      : user.username;
+      : user.username || `用户 ${id}`;
     setSelectedUser({ id, label });
     onChange(id, label);
     setSearch("");

@@ -2,6 +2,8 @@
 const mutedToneClass = "text-muted-foreground";
 import { IdentifierText } from "@/components/IdentifierText";
 import { authorizationAuditActions, authorizationAuditCategories, auditDateBounds, type AuditCategory } from "@shared/role-audit-event";
+import { IdentityDepartmentDirectory, type IdentityUnit } from "@/components/IdentityDepartmentDirectory";
+import type { OrganizationTarget } from "@shared/organization-form";
 import { IdentityWorkspace } from "@/components/IdentityWorkspace";
 import type { IdentityTab } from "@shared/console-route";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
@@ -137,6 +139,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
+const OrganizationMutationDialog = lazy(() => import("@/components/OrganizationMutationDialog"));
 const SystemRoleAssignmentDialog = lazy(() => import("@/components/SystemRoleAssignmentDialog"));
 const DataflowConfigConversionDialog = lazy(() => import("@/components/DataflowConfigConversionDialog"));
 const WorkflowRoleBindingsDialog = lazy(
@@ -1136,17 +1139,7 @@ function FlowConsole({
   });
   const refreshUserQueries = () => { void utils.iam.invalidate(); };
   const createUser = trpc.iam.createUser.useMutation({
-    onSuccess: () => {
-      setUserForm({
-        username: "",
-        name: "",
-        password: "",
-        email: "",
-        role: "user",
-      });
-      refreshUserQueries();
-      toast.success("内部账号已创建。");
-    },
+    onSuccess: () => { refreshUserQueries(); },
     onError: error => toast.error(error.message),
   });
   const updateUserStatus = trpc.iam.updateUserStatus.useMutation({
@@ -3335,7 +3328,7 @@ function IamCenter({
   changingStatus: boolean;
   form: InternalUserForm;
   setForm: (next: InternalUserForm) => void;
-  onCreate: () => Promise<unknown>;
+  onCreate: () => Promise<{ userId: number }>;
   creating: boolean;
   onToggleStatus: (id: number, status: "active" | "disabled", version: number) => Promise<unknown>;
   aiForm: AiInternalUserForm;
@@ -3360,6 +3353,26 @@ function IamCenter({
   const rolePageSize = 10;
   const auditPageSize = 10;
   const [normalDialogOpen, setNormalDialogOpen] = useState(false);
+  const [userDetailOpen, setUserDetailOpen] = useState(false);
+  const [roleDetailOpen, setRoleDetailOpen] = useState(false);
+  const [unitFilter, setUnitFilter] = useState("");
+  const [accountUnitId, setAccountUnitId] = useResourceDraftState("iam", "user-onboarding", "department", "", false);
+  const [createdAccount, setCreatedAccount] = useResourceDraftState<{userId: number; username: string; name: string; unitId: string} | null>("iam", "user-onboarding", "created-account", null);
+  const [accountReceipt, setAccountReceipt] = useState<{userId: number; username: string; name: string} | null>(null);
+  const [departmentReceipt, setDepartmentReceipt] = useState<string | null>(null);
+  const [organizationTarget, setOrganizationTarget] = useResourceDraftState<OrganizationTarget | null>("organization", "context", "identity-dialog", null, false);
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const onboardingLock = useRef(false);
+  const beginOnboarding = useResourceDraftPending("iam", "user-onboarding");
+  const departmentsQuery = trpc.config.organizationDirectory.useQuery(undefined, authorizationQueryPolicy(tab === "users"));
+  const departmentUnits = (departmentsQuery.isSuccess && !departmentsQuery.isError ? departmentsQuery.data.units : []) as unknown as IdentityUnit[];
+  const selectedDepartment = departmentUnits.find(unit => unit.id === unitFilter);
+  const openCreateUser = () => {
+    if (!createdAccount) setAccountUnitId(selectedDepartment?.status === "active" ? selectedDepartment.id : "");
+    setNormalError(""); setNormalDialogOpen(true);
+  };
+  const showUser = (id: number) => { setSelectedUserId(id); setUserDetailOpen(true); };
+
   const [statusTarget, setStatusTarget] = useState<any>(null);
   const [statusError, setStatusError] = useState("");
   const [statusBusy, setStatusBusy] = useState(false);
@@ -3424,6 +3437,8 @@ function IamCenter({
   const userDirectory = trpc.iam.userDirectory.useQuery(
     {
       search: userSearch.trim(),
+      unitId: unitFilter && unitFilter !== "unassigned" ? unitFilter : undefined,
+      unassigned: unitFilter === "unassigned",
       status: userStatus === "all" ? undefined : userStatus,
       offset: userPage * userPageSize,
       limit: userPageSize,
@@ -3436,11 +3451,11 @@ function IamCenter({
   const utils = trpc.useUtils();
   const userDetails = trpc.iam.userAuthorizationDetails.useQuery(
     { userId: selectedUserId ?? 1 },
-    authorizationQueryPolicy(tab === "users" && selectedUserId !== null)
+    authorizationQueryPolicy(tab === "users" && userDetailOpen && selectedUserId !== null)
   );
   const roleDetails = trpc.iam.roleAuthorizationDetails.useQuery(
     { roleId: selectedRoleId ?? 1 },
-    authorizationQueryPolicy(tab === "roles" && selectedRoleId !== null)
+    authorizationQueryPolicy(tab === "roles" && roleDetailOpen && selectedRoleId !== null)
   );
   const refreshRoleQueries = () => Promise.all([
     utils.iam.invalidate(), utils.auth.me.invalidate(),
@@ -3486,30 +3501,8 @@ function IamCenter({
   const selectedRole = roles.find(role => Number(role.id) === selectedRoleId);
 
   useEffect(() => {
-    if (!userDirectory.isSuccess) return;
-    if (userPage >= userPageCount) {
-      setUserPage(userPageCount - 1);
-      return;
-    }
-    const first = filteredUsers[0];
-    if (
-      first &&
-      !filteredUsers.some(account => Number(account.id) === selectedUserId)
-    ) {
-
-      setSelectedUserId(Number(first.id));
-    }
-    if (!first && selectedUserId !== null) {
-
-      setSelectedUserId(null);
-    }
-  }, [
-    filteredUsers,
-    selectedUserId,
-    userDirectory.isSuccess,
-    userPage,
-    userPageCount,
-  ]);
+    if (userDirectory.isSuccess && userPage >= userPageCount) setUserPage(userPageCount - 1);
+  }, [userDirectory.isSuccess, userPage, userPageCount]);
 
   useEffect(() => {
     if (!filteredRoles.length) {
@@ -3533,13 +3526,36 @@ function IamCenter({
   }, [aiPreview]);
 
   const submitNormalUser = async () => {
-    setNormalError("");
+    if (onboardingLock.current) return;
+    onboardingLock.current = true; setOnboardingBusy(true); setNormalError("");
+    const finish = beginOnboarding();
+    let account = createdAccount;
     try {
-      await onCreate();
-      setNormalDialogOpen(false);
+      if (!account) {
+        const identity = { username: form.username, name: form.name, unitId: accountUnitId };
+        const result = await onCreate();
+        account = { ...identity, userId: result.userId };
+        setCreatedAccount(account);
+        setForm({ ...form, password: "" });
+      }
+      if (account.unitId) {
+        const current = await utils.config.organizationMemberConfiguration.fetch({ userId: account.userId }, { staleTime: 0 });
+        if (!current.memberships.some(row => row.unitId === account!.unitId)) {
+          await utils.client.config.assignOrganizationMember.mutate({
+            userId: account.userId, unitId: account.unitId, isPrimary: true,
+            expectedMembershipToken: current.membershipToken, onlyIfAbsent: true,
+          });
+        }
+      }
+      setAccountReceipt(account); setDepartmentReceipt(null);
+      setUserSearch(""); setUserStatus("active"); setUserPage(0); setUnitFilter(account.unitId);
+      setCreatedAccount(null); setNormalDialogOpen(false);
+      setForm({ username: "", name: "", password: "", email: "", role: "user" });
+      void Promise.allSettled([utils.iam.invalidate(), utils.config.organizationDirectory.invalidate(), utils.config.organizationMembersPage.invalidate()]);
+      toast.success(account.unitId ? "用户已创建并加入部门。" : "用户已创建。");
     } catch (error) {
-      setNormalError(error instanceof Error ? error.message : "创建账号失败，请重试。");
-    }
+      setNormalError((account ? "账号已创建，加入部门尚未完成。重试只会继续加入部门。" : "") + (error instanceof Error ? error.message : "保存失败，请重试。"));
+    } finally { onboardingLock.current = false; setOnboardingBusy(false); finish(); }
   };
 
   const submitAiUser = async () => {
@@ -3619,21 +3635,25 @@ function IamCenter({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {tab === "users" && <DropdownMenu>
+          {tab === "users" && <>
+            <Button variant="outline" disabled={!departmentsQuery.isSuccess || departmentsQuery.isError} onClick={() => setOrganizationTarget({kind:"unit", mode:selectedDepartment ? "child" : "root", unit:selectedDepartment})}><Plus size={15}/>新增部门</Button>
+            <Button onClick={openCreateUser}><Plus size={15}/>{createdAccount ? "继续完成用户" : "新增用户"}</Button>
+            <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
-                aria-label="新增账号"
+                variant="outline"
+                aria-label="更多创建方式"
                 className="min-h-11 min-[1024px]:min-h-0"
                 data-iam-account-create-menu
               >
                 <Plus size={15} />
-                新增账号
+                更多创建方式
                 <ChevronDown size={14} />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => { setNormalError(""); setNormalDialogOpen(true); }}>
+              <DropdownMenuItem onClick={openCreateUser}>
                 <Plus size={14} />
                 新增单个账号
               </DropdownMenuItem>
@@ -3649,11 +3669,27 @@ function IamCenter({
                 AI 辅助批量创建
               </DropdownMenuItem>
             </DropdownMenuContent>
-          </DropdownMenu>}
+          </DropdownMenu></>}
           {tab === "roles" && <Button onClick={() => setRoleEditor({ mode: "create" })}><Plus size={15} />新增角色</Button>}
         </div>
       </div>
 
+      {tab === "users" && accountReceipt && <div className="identity-next-step" role="status">
+        <CheckCircle2 size={20}/><div><strong>{accountReceipt.name || accountReceipt.username} 已创建</strong><p>可继续分配个人角色，或查看部门继承与最终生效的权限。</p></div>
+        <Button onClick={() => setAssignmentTarget({mode:"user", userId:String(accountReceipt.userId), userLabel:`${accountReceipt.name}（${accountReceipt.username}）`})}>分配角色</Button>
+        <Button variant="outline" onClick={() => showUser(accountReceipt.userId)}>查看有效权限</Button>
+        <Button variant="ghost" size="icon" aria-label="关闭创建成功提示" onClick={() => setAccountReceipt(null)}><X size={16}/></Button>
+      </div>}
+      {tab === "users" && departmentReceipt && <div className="identity-next-step" role="status">
+        <CheckCircle2 size={20}/><div><strong>部门已创建</strong><p>继续添加成员，或为部门绑定可继承的角色。</p></div>
+        <Button disabled={departmentsQuery.isFetching} onClick={openCreateUser}>在此部门新增用户</Button>
+        <Button variant="outline" disabled={!selectedDepartment || departmentsQuery.isFetching} onClick={() => setOrganizationTarget({kind:"role", unit:selectedDepartment})}>绑定部门角色</Button>
+        <Button variant="ghost" size="icon" aria-label="关闭部门创建提示" onClick={() => setDepartmentReceipt(null)}><X size={16}/></Button>
+      </div>}
+      {organizationTarget && <Suspense fallback={<p role="status">正在加载部门表单…</p>}><OrganizationMutationDialog target={organizationTarget} units={departmentUnits} bindings={departmentsQuery.data?.roleBindings ?? []} reading={departmentsQuery.isFetching} onClose={() => setOrganizationTarget(null)} onRead={() => departmentsQuery.refetch()} onSaved={value => {
+        if (value?.createdId) {setUnitFilter(value.createdId); setAccountUnitId(value.createdId); setDepartmentReceipt(value.createdId); setAccountReceipt(null); setUserPage(0);setUserSearch("");}
+        void Promise.allSettled([utils.config.organizationDirectory.invalidate(),utils.iam.invalidate()]);
+      }}/></Suspense>}
       <CreationDialog open={!!statusTarget} onOpenChange={open => { if (!open) setStatusTarget(null); }}
         title={`确认${statusAction}账号`}
         description={statusAction === "停用" ? "停用会退出所有会话，不能办理任务，授权与记录保留。" : "启用需重新登录，有效权限恢复。"}
@@ -3679,19 +3715,23 @@ function IamCenter({
         open={normalDialogOpen}
         onOpenChange={setNormalDialogOpen}
         title="新增内部账号"
-        description="填写账号信息和初始密码。"
-        submitLabel="创建账号"
-        pending={creating}
+        description="填写账号、选择归属部门；创建完成后可继续分配角色。"
+        submitLabel={createdAccount ? accountUnitId ? "继续加入部门" : "完成（暂不分配部门）" : accountUnitId ? "创建并加入部门" : "创建账号"}
+        cancelLabel={createdAccount ? "稍后继续" : "取消"}
+        pending={creating || onboardingBusy}
+        submitDisabled={!!accountUnitId && (!departmentsQuery.isSuccess || departmentsQuery.isError || !departmentUnits.some(unit => unit.id === accountUnitId && unit.status === "active"))}
         errorMessage={normalError}
         onSubmit={submitNormalUser}
       >
+        {createdAccount && <p role="status" className="identity-partial-notice">账号 {createdAccount.username} 已创建。此处继续加入部门，不会重复创建账号。</p>}
+        <fieldset disabled={!!createdAccount} className="grid gap-3 sm:grid-cols-2">
         {internalAccountFields.map(({ key, label, ...props }) => (
           <label key={key} className="grid gap-1.5 text-sm font-medium text-foreground">
             {label}
             <Input {...props} className="h-11" autoFocus={key === "username"}
               autoComplete={key === "password" ? "new-password" : "off"}
               value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })}
-              required={key !== "email"} />
+              required={!createdAccount && key !== "email"} />
           </label>
         ))}
         <label className="grid gap-1.5 text-sm font-medium text-foreground">
@@ -3710,6 +3750,16 @@ function IamCenter({
           <option value="admin">管理员</option>
         </select>
         </label>
+        </fieldset>
+        <label className="grid gap-1.5 text-sm font-medium">归属部门
+          <select aria-label="新用户归属部门" className="h-11 rounded-md border border-border bg-card px-2" value={accountUnitId} onChange={event => {setAccountUnitId(event.target.value);if(createdAccount)setCreatedAccount({...createdAccount,unitId:event.target.value});}}>
+            {accountUnitId && !departmentUnits.some(unit => unit.id === accountUnitId && unit.status === "active") && <option value={accountUnitId} disabled>原部门不可用，请重新选择</option>}
+            <option value="">暂不分配部门</option>
+            {departmentUnits.filter(unit => unit.status === "active").map(unit => <option key={unit.id} value={unit.id}>{unit.displayPath || unit.name}（{unit.code}）</option>)}
+          </select>
+        </label>
+        {departmentsQuery.isError && <p role="alert">部门目录读取失败。可暂不分配部门，或关闭窗口后重新读取部门。</p>}
+        <p className="text-sm text-muted-foreground">加入部门后可继承部门角色；个人额外权限在创建完成后分配。</p>
       </CreationDialog>
 
       <CreationDialog
@@ -3898,122 +3948,31 @@ function IamCenter({
 
 
       {tab === "users" && (
-        <div
-          data-iam-user-workbench
-          className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]"
-        >
-          <section className={panelClass}>
-            <div data-iam-directory-filters="" className="border-b border-border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">用户目录</p>
-                <span className={mutedMetaClass}>
-                  {userDirectory.isPending
-                    ? "正在读取…"
-                    : userTotal
-                      ? `${userPage * userPageSize + 1}–${Math.min((userPage + 1) * userPageSize, userTotal)} / ${userTotal}`
-                      : "0 / 0"}
-                </span>
-              </div>
-              <label className="relative mt-3 block min-w-0">
-                <Search
-                  className={searchIconClass}
-                  size={14}
-                />
-                <Input
-                  aria-label="搜索用户"
-                  maxLength={160}
-                  className="min-h-11 min-w-0 pl-9 min-[1024px]:min-h-0"
-                  placeholder="搜索名称、账号或邮箱"
-                  value={userSearch}
-                  onChange={event => {
-                    setUserSearch(event.target.value.slice(0, 160));
-                    setUserPage(0);
-                  }}
-                />
-              </label>
-              <label className={"mt-3 grid gap-1.5 text-sm " + mutedToneClass}>
-                <span className="sr-only">账号状态</span>
-                <select aria-label="账号状态" className="aiflow-type-control min-h-11 rounded-md border border-input bg-card px-3 text-foreground min-[1024px]:min-h-10" value={userStatus} onChange={event => {
-                  setUserStatus(event.target.value as typeof userStatus);
-                  setUserPage(0);
-                  setSelectedUserId(null);
-
-                }}>
-                  <option value="active">启用账号</option>
-                  <option value="disabled">停用账号</option>
-                  <option value="all">全部账号</option>
+        <div data-iam-user-workbench data-identity-table-layout>
+          <IdentityDepartmentDirectory units={departmentUnits} selected={unitFilter} onSelect={id => {setUnitFilter(id);setUserPage(0);setDepartmentReceipt(null);}} loading={departmentsQuery.isPending} error={departmentsQuery.error?.message} onRetry={() => void departmentsQuery.refetch()} onCreate={() => setOrganizationTarget({kind:"unit",mode:selectedDepartment ? "child" : "root",unit:selectedDepartment})}/>
+          <section className="identity-list-panel">
+            <div className="identity-list-toolbar">
+              <div><h2>{selectedDepartment?.name || (unitFilter === "unassigned" ? "未分配部门" : "全部用户")}</h2><p>{selectedDepartment ? "直属成员" : "账号目录"} · {userDirectory.isPending ? "正在读取…" : `共 ${userTotal} 人`}</p></div>
+              <div className="identity-list-filters">
+                <label className="relative"><Search className={searchIconClass} size={15}/><Input aria-label="搜索用户" maxLength={160} className="pl-9" placeholder="搜索姓名、账号或邮箱" value={userSearch} onChange={event => {setUserSearch(event.target.value.slice(0, 160));setUserPage(0);}}/></label>
+                <select aria-label="账号状态" value={userStatus} onChange={event => {setUserStatus(event.target.value as typeof userStatus);setUserPage(0);setSelectedUserId(null);setUserDetailOpen(false);}}>
+                  <option value="active">启用账号</option><option value="disabled">停用账号</option><option value="all">全部账号</option>
                 </select>
-              </label>
+              </div>
             </div>
-            {/* UX：新页、搜索或状态变更从目录顶部开始，筛选与详情状态不受影响。 */}
-            <div className="p-2" key={`${userPage}:${userSearch}:${userStatus}`}>
-              {userDirectory.isPending && (
-                <p className={emptyStateClass}>
-                  正在读取用户目录…
-                </p>
-              )}
-              {userDirectory.isError && (
-                <div className="p-6 text-center text-sm text-aiflow-danger">
-                  <p>用户目录读取失败：{userDirectory.error.message}</p>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-3"
-                    onClick={() => void userDirectory.refetch()}
-                  >
-                    重试
-                  </Button>
-                </div>
-              )}
-              {filteredUsers.map(account => (
-                <div
-                  key={account.id}
-                  data-iam-user-row=""
-                  className={`mb-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border px-2 py-1.5 ${selectedUserId === Number(account.id) ? "border-aiflow-info-border bg-aiflow-info-surface" : "border-transparent bg-muted hover:border-border"}`}
-                >
-                  <button
-                    type="button"
-                    aria-pressed={selectedUserId === Number(account.id)}
-                    className="grid min-w-0 grid-cols-[2rem_minmax(0,1fr)] items-center gap-2 text-left"
-                    onClick={() => setSelectedUserId(Number(account.id))}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`grid h-8 w-8 place-items-center rounded-full text-xs font-semibold ${account.status === "active" ? "bg-aiflow-info-surface text-aiflow-info" : ("bg-slate-200 " + mutedToneClass)}`}
-                    >
-                      {(account.name || account.username || "?").slice(0, 1)}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="flex min-w-0 items-center gap-1.5">
-                        <span
-                          data-iam-user-name=""
-                          title={account.name || account.username}
-                        >
-                          {account.name || account.username}
-                        </span>
-                        <span
-                          data-iam-user-state=""
-                          className={account.status === "active" ? "bg-aiflow-success-surface text-aiflow-success" : ("bg-slate-200 " + mutedToneClass)}
-                        >
-                          {account.status === "active" ? "启用" : "停用"}
-                        </span>
-                      </span>
-                      <span
-                        data-iam-user-login=""
-                        title={account.username}
-                      >
-                        <IdentifierText value={account.username} />
-                      </span>
-                      <span
-                        data-iam-user-meta=""
-                        title={formatTime(account.lastSignedIn)}
-                      >
-                        {account.role === "admin" ? "系统管理员" : "普通用户"}
-                        <span aria-hidden="true"> · </span>
-                        最近登录 {formatTime(account.lastSignedIn)}
-                      </span>
-                    </span>
-                  </button>
+            <div className="identity-table-scroll">
+              <table className="identity-table" aria-label="用户列表">
+                <thead><tr><th scope="col">用户 / 账号</th><th scope="col">归属部门</th><th scope="col">账号类型</th><th scope="col">状态</th><th scope="col">最近登录</th><th scope="col">操作</th></tr></thead>
+                <tbody>
+                  {userDirectory.isPending && <tr><td colSpan={6} className="identity-table-empty" role="status">正在读取用户目录…</td></tr>}
+                  {userDirectory.isError && <tr><td colSpan={6} className="identity-table-empty"><p role="alert">用户目录读取失败：{userDirectory.error.message}</p><Button variant="outline" onClick={() => void userDirectory.refetch()}>重试</Button></td></tr>}
+                  {userDirectory.isSuccess && filteredUsers.map(account => <tr key={account.id} data-iam-user-row="">
+                    <td><button className="identity-person" onClick={() => showUser(Number(account.id))} aria-label={`查看用户权限：${account.name || account.username}`}><span className="identity-avatar" aria-hidden="true">{(account.name || account.username || "?").slice(0,1)}</span><span><strong>{account.name || account.username}</strong><span className="identity-account-code" title={account.username || undefined}>{account.username || "未设置登录名"}</span></span></button></td>
+                    <td><div className="identity-department-labels">{account.departments.length ? account.departments.map((department: any) => <span key={department.unitId} title={departmentUnits.find(unit => unit.id === department.unitId)?.displayPath || department.unitName}>{department.unitName}{department.isPrimary ? <small>主</small> : null}{department.unitStatus !== "active" ? "（停用）" : ""}</span>) : <span className="text-muted-foreground">未分配</span>}</div></td>
+                    <td>{account.role === "admin" ? "系统管理员" : "普通用户"}</td>
+                    <td><span className="identity-status" data-active={account.status === "active"}>{account.status === "active" ? "启用" : "停用"}</span></td>
+                    <td className="identity-date">{formatTime(account.lastSignedIn)}</td>
+                    <td><div className="identity-row-actions"><Button variant="link" onClick={() => setAssignmentTarget({mode:"user",userId:String(account.id),userLabel:`${account.name || account.username}（${account.username}）`})} disabled={account.status !== "active"}>分配角色</Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -4029,16 +3988,15 @@ function IamCenter({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        className="min-[1024px]:hidden"
                         onClick={() => {
-                          setSelectedUserId(Number(account.id));
+                          showUser(Number(account.id));
 
                         }}
                       >
                         <Eye size={14} />
                         查看权限与角色
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator className="min-[1024px]:hidden" />
+                      <DropdownMenuSeparator />
                       <DropdownMenuItem
                         data-iam-account-status-action=""
                         className={
@@ -4053,13 +4011,11 @@ function IamCenter({
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                </div>
-              ))}
-              {userDirectory.isSuccess && !filteredUsers.length && (
-                <p className={emptyStateClass}>
-                  没有匹配的内部用户。
-                </p>
-              )}
+                    </div></td>
+                  </tr>)}
+                  {userDirectory.isSuccess && !filteredUsers.length && <tr><td colSpan={6} className="identity-table-empty"><UsersRound size={28}/><strong>暂无匹配的用户</strong><p>{selectedDepartment ? "在此部门新增用户，或调整筛选条件。" : "新增用户，或调整搜索与状态筛选。"}</p><Button variant="outline" onClick={openCreateUser}>新增用户</Button></td></tr>}
+                </tbody>
+              </table>
             </div>
             {userDirectory.isSuccess && userTotal > userPageSize && (
               <div className="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm">
@@ -4089,15 +4045,12 @@ function IamCenter({
               </div>
             )}
           </section>
-          <section className={moduleRailClass}>
-            <UserAuthorizationPanel
-              selectedUserId={selectedUserId}
-              details={userDetails}
-              onAssign={openUserAssignment}
-              onRevoke={requestRoleRevoke}
-              revoking={revokeRole.isPending}
-            />
-          </section>
+          <Dialog open={userDetailOpen} onOpenChange={setUserDetailOpen}>
+            <DialogContent className="identity-detail-dialog sm:max-w-3xl">
+              <DialogHeader><DialogTitle>用户权限与来源</DialogTitle><DialogDescription>查看当前用户的直接角色、部门继承角色和最终有效权限。</DialogDescription></DialogHeader>
+              <UserAuthorizationPanel selectedUserId={selectedUserId} details={userDetails} onAssign={openUserAssignment} onRevoke={requestRoleRevoke} revoking={revokeRole.isPending}/>
+            </DialogContent>
+          </Dialog>
 
           <Dialog
             open={pendingRevokeRoleId !== null}
@@ -4136,18 +4089,18 @@ function IamCenter({
 
       {tab === "roles" && (
         <div
-          data-iam-role-workbench
+          data-iam-role-workbench data-identity-table-layout
           className="grid min-w-0 gap-5 min-[1024px]:grid-cols-[280px_minmax(0,1fr)]"
         >
           <section className={panelClass}>
-            <div className="border-b border-border p-4">
-              <div className="flex items-center justify-between gap-2">
+            <div className="identity-list-toolbar">
+              <div className="flex items-center gap-3">
                 <p className="font-semibold">角色列表</p>
                 <span className={mutedMetaClass}>
                   {filteredRoles.length} / {roles.length}
                 </span>
               </div>
-              <label className="relative mt-3 block min-w-0">
+              <label className="relative block min-w-0 w-72 max-w-full">
                 <Search
                   className={searchIconClass}
                   size={14}
@@ -4164,48 +4117,17 @@ function IamCenter({
                 />
               </label>
             </div>
-            <div className="p-2" key={`${rolePage}:${roleSearch}`}>
-              {visibleRoles.map(role => (
-                <div
-                  key={role.id}
-                  data-iam-role-row=""
-                  className="mb-1 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-1 rounded-md border border-transparent bg-muted p-1.5 hover:border-border"
-                >
-                  <button
-                    type="button"
-                    aria-pressed={selectedRoleId === Number(role.id)}
-                    className={`min-w-0 rounded border px-2 py-1.5 text-left ${selectedRoleId === Number(role.id) ? "border-aiflow-info-border bg-aiflow-info-surface" : "border-transparent hover:bg-card"}`}
-                    onClick={() => setSelectedRoleId(Number(role.id))}
-                  >
-                    <div className="flex min-w-0 items-center justify-between gap-2">
-                      <p
-                        data-iam-role-name=""
-                        className="aiflow-type-body min-w-0 break-words font-semibold text-foreground"
-                        title={role.name}
-                      >
-                        {role.name}
-                      </p>
-                      <span className="role-classification">
-                        <span data-role-scope={role.scope}>{role.scope === "system" ? "系统级" : role.scope === "workflow" ? "流程级" : role.scope}</span>
-                        <span data-role-origin={Number(role.isSystem) ? "builtin" : "custom"}>{Number(role.isSystem) ? "内置" : "自定义"}</span>
-                      </span>
-                    </div>
-                    <p
-                      data-iam-role-code=""
-                      className={"aiflow-type-meta mt-0.5 break-words font-mono " + mutedToneClass + " [overflow-wrap:anywhere]"}
-                      title={role.code}
-                    >
-                      <IdentifierText value={role.code} />
-                    </p>
-                  </button>
-
-                </div>
-              ))}
-              {!filteredRoles.length && (
-                <p className={emptyStateClass}>
-                  没有匹配的角色。
-                </p>
-              )}
+            <div className="identity-table-scroll">
+              <table className="identity-table" aria-label="角色列表"><thead><tr><th scope="col">角色 / 编码</th><th scope="col">说明</th><th scope="col">适用范围</th><th scope="col">来源</th><th scope="col">操作</th></tr></thead><tbody>
+                {visibleRoles.map(role => <tr key={role.id} data-iam-role-row="">
+                  <td><button className="identity-role-name" onClick={() => {setSelectedRoleId(Number(role.id));setRoleDetailOpen(true);}}><strong>{role.name}</strong><span className="identity-account-code">{role.code}</span></button></td>
+                  <td className="identity-description">{role.description || "未填写说明"}</td>
+                  <td><span data-role-scope={role.scope}>{role.scope === "system" ? "系统级" : role.scope === "workflow" ? "流程级" : role.scope}</span></td>
+                  <td><span data-role-origin={Number(role.isSystem) ? "builtin" : "custom"}>{Number(role.isSystem) ? "内置" : "自定义"}</span></td>
+                  <td><div className="identity-row-actions"><Button variant="link" onClick={() => {setSelectedRoleId(Number(role.id));setRoleDetailOpen(true);}}>查看权限</Button><Button variant="link" disabled={role.scope !== "system"} title={role.scope !== "system" ? "流程角色需在具体流程中分配" : undefined} onClick={() => setAssignmentTarget({mode:"role",roleCode:role.code,roleName:role.name,configToken:role.configToken})}>分配用户</Button></div></td>
+                </tr>)}
+                {!filteredRoles.length && <tr><td colSpan={5} className="identity-table-empty">没有匹配的角色。</td></tr>}
+              </tbody></table>
             </div>
             {filteredRoles.length > rolePageSize && (
               <div className={panelFooterClass}>
@@ -4250,7 +4172,7 @@ function IamCenter({
               </div>
             )}
           </section>
-          <section className={moduleRailClass}>
+          <Dialog open={roleDetailOpen} onOpenChange={setRoleDetailOpen}><DialogContent className="identity-detail-dialog sm:max-w-3xl"><DialogHeader><DialogTitle>{selectedRole?.name || "角色权限详情"}</DialogTitle><DialogDescription>查看角色权限、直接成员与部门继承来源。</DialogDescription></DialogHeader>
             <RoleAuthorizationPanel
               details={roleDetails}
               selectedRole={selectedRole}
@@ -4260,7 +4182,8 @@ function IamCenter({
                 setRoleEditor({ mode, role });
               }}
             />
-          </section>
+</DialogContent></Dialog>
+
 
         </div>
       )}

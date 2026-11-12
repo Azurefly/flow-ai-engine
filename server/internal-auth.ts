@@ -157,11 +157,14 @@ export async function listUsers() {
   );
   return rows;
 }
+type DirectoryUser = Pick<User, "id" | "username" | "name" | "email" | "role" | "status" | "lastSignedIn" | "createdAt"> & { statusVersion: number };
 export async function listUsersPage(input: {
   search: string;
   offset: number;
   limit: number;
   status?: "active" | "disabled";
+  unitId?: string;
+  unassigned?: boolean;
 }) {
   const search = input.search.trim().toLowerCase();
   const conditions: string[] = [];
@@ -176,17 +179,32 @@ export async function listUsersPage(input: {
     conditions.push("status=?");
     queryArgs.push(input.status);
   }
+  if (input.unitId) {
+    conditions.push("EXISTS (SELECT 1 FROM organization_membership om WHERE om.userId=users.id AND om.unitId=?)");
+    queryArgs.push(input.unitId);
+  } else if (input.unassigned) {
+    conditions.push("NOT EXISTS (SELECT 1 FROM organization_membership om WHERE om.userId=users.id)");
+  }
   const where = conditions.length ? ` WHERE ${conditions.join(" AND ")}` : "";
   const [countRows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT COUNT(*) AS total FROM users${where}`,
     queryArgs
   );
   const total = Number(countRows[0]?.total ?? 0);
-  const [items] = await db().query<mysql.RowDataPacket[]>(
+  const [items] = await db().query<(mysql.RowDataPacket & DirectoryUser)[]>(
     `SELECT id,username,name,email,role,status,tokenVersion AS statusVersion,lastSignedIn,createdAt FROM users${where} ORDER BY createdAt DESC, id DESC LIMIT ? OFFSET ?`,
     [...queryArgs, input.limit, input.offset]
   );
-  return { items, total, offset: input.offset, limit: input.limit };
+  const memberships = items.length
+    ? (await db().query<mysql.RowDataPacket[]>(
+        "SELECT om.userId,om.unitId,om.isPrimary,ou.name AS unitName,ou.status AS unitStatus FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId WHERE om.userId IN (?) ORDER BY om.isPrimary DESC,ou.sortOrder,ou.code",
+        [items.map(item => item.id)]
+      ))[0]
+    : [];
+  return {
+    items: items.map(item => ({ ...item, departments: memberships.filter(row => Number(row.userId) === Number(item.id)) })),
+    total, offset: input.offset, limit: input.limit,
+  };
 }
 export type UserCreationAudit = {
   actorUserId: number;

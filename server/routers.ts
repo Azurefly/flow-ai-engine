@@ -327,6 +327,8 @@ export const appRouter = router({
           offset: z.number().int().min(0).max(1_000_000).default(0),
           limit: z.number().int().min(1).max(100).default(20),
           status: z.enum(["active", "disabled"]).optional(),
+          unitId: z.string().uuid().optional(),
+          unassigned: z.boolean().optional(),
         })
       )
       .query(({ input }) => listUsersPage(input)),

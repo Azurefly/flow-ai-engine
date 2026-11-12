@@ -22,7 +22,7 @@ it("账号字段有持久标签、客户端范围检查和独立的初始密码�
   expect(home).toContain(
     'autoComplete={key === "password" ? "new-password" : "off"}'
   );
-  expect(home).toContain('required={key !== "email"}');
+  expect(home).toContain('required={!createdAccount && key !== "email"}');
   expect(home).toContain("minLength: 3, maxLength: 64");
   expect(home).toContain("minLength: 12, maxLength: 256");
 });
@@ -33,8 +33,12 @@ it("普通账号提交捕获失败并把提示保留在弹窗中，不关闭表�
     home.indexOf("const submitAiUser = async")
   );
   expect(handler).toContain("catch (error)");
-  expect(handler).toContain("setNormalError(error instanceof Error");
-  expect(handler).not.toContain("setForm(");
+  const failure = handler.slice(handler.indexOf("catch (error)"));
+  expect(failure).toContain("setNormalError(");
+  expect(failure).not.toContain("setForm(");
+  expect(handler).toContain("if (!account)");
+  expect(handler).toContain("setCreatedAccount(account)");
+  expect(handler).toContain("expectedMembershipToken: current.membershipToken");
   expect(home).toContain("errorMessage={normalError}");
 });
 
