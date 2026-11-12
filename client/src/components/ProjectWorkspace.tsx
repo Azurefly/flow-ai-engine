@@ -1653,6 +1653,7 @@ function ServiceEndpointCenter({
                       {endpoint.hasSecretRef
                         ? `${endpoint.authScheme || "原值"} · ${endpoint.authHeaderName || "Authorization"}`
                         : "无密钥"}
+                      {endpoint.hasSecretRef && endpoint.secretConfigured === false && <p className="mt-1 whitespace-normal text-aiflow-danger">密钥尚未配置，请联系部署管理员</p>}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
@@ -1730,7 +1731,7 @@ function ServiceEndpointCenter({
             type="url"
             placeholder="https://api.example.com/v1/"
             maxLength={2048}
-            title="仅允许 HTTP/HTTPS；不能包含用户名或密码，且端口只能为 80 或 443"
+            title="仅允许无内嵌凭据的 HTTP/HTTPS；默认使用 80/443，其他端口需部署管理员授权准确源站"
             value={form.baseUrl}
             onChange={event =>
               setForm({ ...form, baseUrl: event.target.value })
@@ -1783,6 +1784,7 @@ function ServiceEndpointCenter({
             }
           />
         </label>
+        <p className="text-xs text-muted-foreground">密钥引用不会创建密钥。请由部署管理员在应用环境或挂载的密钥目录中配置同名 FLOW_SECRET_* 值；保存后列表会显示是否已配置。</p>
         {form.secretRef.trim() ? (
           <div className="rounded-lg border border-border bg-muted p-3">
             <div className="mb-3">

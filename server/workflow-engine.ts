@@ -69,6 +69,9 @@ import { resolveWorkflowExecutionSource } from "../shared/workflow-execution-sou
 import { assertRunPreflightRevision } from "./workflow-run-revision";
 import { invokeLLM, listLLMModels, type ModelInfo } from "./_core/llm";
 import { ENV } from "./_core/env";
+import { httpResponseDiagnostic, httpTransportDiagnostic } from "./http-request-diagnostic";
+import { withHttpClientIdentity } from "./http-client-headers";
+import { assertAllowedHttpPort } from "./http-target-policy";
 import { loadRuntimeModelCatalog } from "./runtime-model-catalog";
 import { currentRequestId } from "./_core/http-security";
 import {
@@ -581,8 +584,7 @@ async function resolveSafeHttpTarget(rawUrl: string) {
     throw new Error("HTTP 节点仅支持 http 或 https 协议。");
   if (url.username || url.password)
     throw new Error("HTTP 节点 URL 不允许包含凭据。");
-  if (url.port && !["80", "443"].includes(url.port))
-    throw new Error("HTTP 节点仅允许 80 或 443 端口。");
+  assertAllowedHttpPort(url);
   const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
     host === "localhost" ||
@@ -630,7 +632,7 @@ function requestPinnedHttp(input: {
         port: input.url.port || (input.url.protocol === "https:" ? 443 : 80),
         path: `${input.url.pathname}${input.url.search}`,
         method: input.method,
-        headers: input.headers,
+        headers: withHttpClientIdentity(input.headers),
         servername: input.url.hostname,
         lookup: ((
           _hostname: string,
@@ -862,7 +864,7 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
     headers: safeHeaders,
     body: ["GET", "DELETE"].includes(method) ? undefined : serializedBody,
     timeoutMs,
-  });
+  }).catch(error => { throw httpTransportDiagnostic(error); });
   const bytes = response.bytes;
   const text = new TextDecoder().decode(bytes);
   const contentType = response.headers["content-type"] ?? "";
@@ -876,7 +878,7 @@ async function executeHttpNode(config: JsonRecord, context: JsonRecord) {
   }
   if (response.status < 200 || response.status >= 300)
     throw new Error(
-      `HTTP 节点请求失败：${response.status} ${response.statusText}`
+      httpResponseDiagnostic(response.status, response.statusText)
     );
   return {
     status: response.status,

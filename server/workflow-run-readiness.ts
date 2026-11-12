@@ -1,3 +1,4 @@
+import { inspectWorkflowServiceConfiguration } from "./workflow-service-readiness";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
 import { getWorkflow, hasWorkflowPermission } from "./workflow-service";
@@ -298,6 +299,7 @@ export async function inspectWorkflowRunReadiness(
       );
       checks = participants.checks;
       issues.push(...participants.diagnostics);
+      issues.push(...await inspectWorkflowServiceConfiguration(workflow.projectId, plan.definition));
     }
   }
   return {

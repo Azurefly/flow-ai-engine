@@ -11,6 +11,7 @@ import {
   type RunInputRow,
   type RunInputKind,
 } from "@shared/run-input-editor";
+import { appendMissingWorkflowInputs, workflowInputSuggestions } from "@shared/workflow-input-suggestions";
 import { useState, useMemo, useEffect, useRef } from "react";
 import { workflowLoopDraftError } from "@shared/workflow-loop-policy-draft";
 import {
@@ -137,6 +138,7 @@ export default function WorkflowTestRunModal({
   };
 
   const [inputRows, setInputRows] = useState<RunInputRow[]>([]);
+  const suggestedInputs = useMemo(() => workflowInputSuggestions(definition), [definition]);
   const emittedInput = useRef<Record<string, unknown> | null>(null);
   const inputSession = useRef<string | null>(null);
   useEffect(() => {
@@ -653,6 +655,10 @@ export default function WorkflowTestRunModal({
                   </Button>
                 </div>
 
+                <div className="mt-3 space-y-2 text-xs text-muted-foreground">
+                  <Button type="button" variant="outline" size="sm" disabled={!suggestedInputs.some(row => !inputRows.some(existing => existing.key.trim() === row.key))} onClick={() => updateInputRows(appendMissingWorkflowInputs(inputRows, suggestedInputs))}>从流程引用补充输入字段</Button>
+                  <p>根据流程中的 input 引用补充待填写字段，不覆盖已有值。开始节点的初始变量属于 vars，在运行时初始化，无需重复填写。</p>
+                </div>
                 <div className="mt-4 space-y-2.5">
                   {!inputRows.length && (
                     <div className={"aiflow-type-body rounded border border-dashed border-border bg-muted p-4 text-center " + mutedToneClass}>

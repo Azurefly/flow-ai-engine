@@ -1,3 +1,5 @@
+import { resolveExternalSecret } from "./external-secret";
+import { assertAllowedHttpPort } from "./http-target-policy";
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
@@ -53,8 +55,7 @@ export function normalizeServiceEndpointDefinition(input: {
     url.password
   )
     throw new Error("Endpoint 仅允许无内嵌凭据的 HTTP/HTTPS 地址。");
-  if (url.port && !["80", "443"].includes(url.port))
-    throw new Error("Endpoint 仅允许 80 或 443 端口。");
+  assertAllowedHttpPort(url);
   const secretRef = input.secretRef?.trim() || null;
   if (secretRef && !SECRET_REF.test(secretRef))
     throw new Error("SecretRef 仅允许引用 env:FLOW_SECRET_* 环境变量。");
@@ -105,6 +106,7 @@ export async function listProjectServiceEndpoints(
         : row.allowedHostsJson,
     allowedHostsJson: undefined,
     hasSecretRef: Boolean(row.secretRef),
+    secretConfigured: !row.secretRef || (() => { try { resolveExternalSecret(String(row.secretRef)); return true; } catch { return false; } })(),
     secretRef: row.secretRef ? String(row.secretRef) : null,
   }));
 }

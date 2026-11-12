@@ -2786,6 +2786,7 @@ function FlowDesigner({
           <EditorNotice label="发布条件" summary={publicationGate.reason} data-workflow-publication-gate="" role={publicationGate.kind === "unavailable" || publicationGate.kind === "version" ? "alert" : "status"} open={publicationGate.kind === "unavailable" || publicationGate.kind === "version"}>
               <p className="min-w-0 break-words">{publicationGate.reason}</p>
               <div className="flex shrink-0 flex-wrap gap-2">
+                {workflow.projectId && <Button asChild variant="outline" className="min-h-11"><a href={formatConsoleRoute({section:"flows",view:"workspace",projectId:workflow.projectId})} target="_blank" rel="noopener noreferrer">打开项目流程中心审核（新标签页）</a></Button>}
                 {publicationGate.kind === "version" && (
                   <Button
                     type="button"

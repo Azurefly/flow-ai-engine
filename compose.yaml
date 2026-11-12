@@ -59,6 +59,8 @@ services:
       IMAGE_ID: ${IMAGE_ID:-not-injected}
       WORKFLOW_WORKER_ENABLED: ${WORKFLOW_WORKER_ENABLED:-true}
       DATA_CONNECTOR_ALLOWED_HOSTS: ${DATA_CONNECTOR_ALLOWED_HOSTS:-mysql}
+      # Comma-separated exact public origins for self-hosted HTTP services.
+      FLOW_HTTP_ALLOWED_ORIGINS: ${FLOW_HTTP_ALLOWED_ORIGINS:-}
       FLOW_SECRET_FILE_DIR: /run/flow-secrets
       FLOW_RETAINED_ASSETS_DIR: /run/flow-assets
     depends_on:

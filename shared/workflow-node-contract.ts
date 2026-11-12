@@ -143,7 +143,7 @@ export function assertOperateOutcomes(config: NodeConfig) {
 // Independent copies preserve target order and mutation boundaries.
 const commonTargets1: readonly FlowNodeType[] = ["state","router","rest","method","form","transform","condition","http","llm","subflow","end"];
 const commonTargets2: readonly FlowNodeType[] = ["state","operate","router","rest","method","form","transform","condition","http","llm","subflow","end"];
-const commonTargets3: readonly FlowNodeType[] = ["state","operate","router","form","transform","condition","http","llm","subflow","end"];
+const commonTargets3: readonly FlowNodeType[] = ["state","operate","router","rest","method","form","transform","condition","http","llm","subflow","end"];
 const commonTargets4: readonly FlowNodeType[] = ["transform","filter","map","project","derive","join","union","aggregate","sort","deduplicate","quality_gate","edit_sql","udf","sink","output","end"];
 
 /** Shared source/target contract used by both the designer and publish-time validation. */
@@ -2421,7 +2421,7 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
           attributes.valid === "true")
       ) {
         throw new Error(
-          `${referenceType} 节点启用了尚未隔离迁移的原版响应校验脚本，当前禁止执行。`
+          `${referenceType} 节点启用了尚未隔离迁移的原版响应校验脚本，当前禁止执行。请打开该节点配置，点击“移除旧响应校验”，再使用条件节点处理响应结果。`
         );
       }
       break;

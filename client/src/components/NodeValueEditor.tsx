@@ -384,6 +384,7 @@ export function NodeValueEditor({
           </div>
         )}
       </div>
+      {multiline && textOnly && <details className="mt-2 min-w-0 rounded border border-border p-2 text-xs"><summary className="cursor-pointer">查看{label}完整模板</summary><p className="mt-2 text-muted-foreground">引用会在运行时替换为实际数据，此处展示将保存的完整内容。</p><pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words">{String(value ?? "")}</pre></details>}
     </div>
   );
 }

@@ -55,9 +55,11 @@ const maxChunkBytes = 450 * 1024;
 // Paged role members and service-node sections: measured 1576.21 / 483.89 KiB.
 // Visual node-value selection replaces raw template entry across existing editors.
 // Measured increment is about 12 KiB raw / 4 KiB gzip; chunk and HTML caps stay fixed.
-const maxTotalBytes = 1_590 * 1024;
+// Issue-triage fixes: catalog selection, governance form, input suggestions and guided navigation.
+// Measured 1599.30 KiB raw / 491.76 KiB gzip; keep bounded headroom and existing chunk/HTML caps.
+const maxTotalBytes = 1_601 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 489 * 1024;
+const maxTotalGzipBytes = 493 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

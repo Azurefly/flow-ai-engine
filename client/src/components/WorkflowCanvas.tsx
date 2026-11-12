@@ -120,6 +120,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { trpc } from "@/lib/trpc";
 import { selectWorkflowEndpoint } from "./workflow-endpoint-selection";
+import { formatConsoleRoute } from "@shared/console-route";
+import { nextWorkflowNodePosition } from "@shared/workflow-node-placement";
+import { LlmGovernanceEditor } from "./LlmGovernanceEditor";
 import { canConnectCanvasNodes } from "./workflow-canvas-connections";
 import { AggregateMetricEditor } from "./aggregate-metric-editor";
 import {
@@ -367,7 +370,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           style={{ backgroundColor: appearance.color }}
         />
       )}
-      <div className="flow-design-node-row flex items-center gap-3">
+      <div className={`flow-design-node-row flex items-center gap-3 ${nodeData.kind === "condition" ? "pr-12" : ""}`}>
         <NodeTypeGlyph icon={appearance.icon} color={appearance.color} />
         <div className="min-w-0 flex-1">
           <span className="flow-design-node-title block break-words text-sm font-semibold leading-5 text-foreground">
@@ -463,6 +466,7 @@ function FlowNodeCard({ id, data, selected }: NodeProps) {
           })}
         </div>
       )}
+      {nodeData.kind === "condition" && handles.map((id, index) => <span key={`label-${id}`} className="aiflow-type-meta pointer-events-none absolute right-2 max-w-12 -translate-y-1/2 truncate rounded bg-card px-1 font-semibold" style={{ top: `${((index + 1) / (handles.length + 1)) * 100}%` }} title={`${index === 0 ? "成立" : "不成立"}分支：${id}`}>{index === 0 ? "成立" : "不成立"}</span>)}
       {handles.map((id, index) => {
         const isApproved = id === "approved";
         const isRejected = id === "rejected";
@@ -695,6 +699,8 @@ function ConfigFieldEditor({
   );
   const inputClass =
     ("aiflow-type-control h-11 min-h-11 w-full rounded-md border border-border bg-card px-2.5 text-foreground outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted disabled:" + mutedToneClass + " min-[1024px]:h-9 min-[1024px]:min-h-0");
+  if (nodeKind === "llm" && field.key === "governance")
+    return <LlmGovernanceEditor value={effectiveValue} disabled={disabled} onChange={onChange} />;
   if (nodeKind === "operate" && field.key === "outcomes")
     return (
       <WorkflowOutcomeEditor
@@ -2278,7 +2284,9 @@ export default function WorkflowCanvas({
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const fullscreen = nativeFullscreen || workspaceExpanded;
   const [nodePaletteSearch, setNodePaletteSearch] = useState("");
+  const [nodeCategory, setNodeCategory] = useState("all");
   const [reuseSearch, setReuseSearch] = useState("");
+  useEffect(() => setNodeCategory("all"), [flowType]);
   const lastInitialFitKeyRef = useRef<string | null>(null);
   const participantPreview = trpc.workflow.previewParticipants.useMutation();
   const editorRegionRef = useRef<HTMLDivElement>(null);
@@ -2763,6 +2771,7 @@ export default function WorkflowCanvas({
     { enabled: Boolean(projectId && selectedServiceNode) }
   );
   const endpointChoices = serviceEndpoints.data ?? [];
+  const runtimeModels = trpc.workflow.runtimeModels.useQuery(undefined, { enabled: selected?.data.kind === "llm", staleTime: 60_000, retry: false });
   const selectedResourceKey =
     selected && flowType === "data"
       ? (
@@ -2986,6 +2995,16 @@ export default function WorkflowCanvas({
     setInspectorTab(selectedFieldGroups[0]?.label ?? "");
   }, [selectedId]);
 
+  const insertionCenter = () => {
+    const rect = flowViewportRef.current?.getBoundingClientRect();
+    return rect && reactFlow ? reactFlow.screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }) : { x: 400, y: 240 };
+  };
+  const revealAddedNode = (id: string) => {
+    setSelectedId(id);
+    setSelectedEdgeId(null);
+    setInspectorMode("normal");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void fitCanvas(id); }));
+  };
   const addNode = (item: (typeof palette)[number]) => {
     if (readOnly) return;
     if (!isFlowNodeAllowed(flowType, item.type)) {
@@ -2995,13 +3014,11 @@ export default function WorkflowCanvas({
     pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
     setNodes(current =>
-      current.concat({
+      current.map(node => ({ ...node, selected: false })).concat({
+        selected: true,
         id: `${item.type}-${suffix}`,
         type: "workflowNode",
-        position: {
-          x: 260 + current.length * 26,
-          y: 100 + (current.length % 4) * 95,
-        },
+        position: nextWorkflowNodePosition(current, insertionCenter()),
         data: {
           label: item.label,
           kind: item.type,
@@ -3009,6 +3026,7 @@ export default function WorkflowCanvas({
         },
       })
     );
+    revealAddedNode(`${item.type}-${suffix}`);
   };
 
   const addReusableNode = (input: {
@@ -3024,13 +3042,11 @@ export default function WorkflowCanvas({
     pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
     setNodes(current =>
-      current.concat({
+      current.map(node => ({ ...node, selected: false })).concat({
+        selected: true,
         id: `${input.type}-${suffix}`,
         type: "workflowNode",
-        position: {
-          x: 260 + current.length * 26,
-          y: 100 + (current.length % 4) * 95,
-        },
+        position: nextWorkflowNodePosition(current, insertionCenter()),
         data: {
           label: input.label,
           kind: input.type,
@@ -3038,9 +3054,7 @@ export default function WorkflowCanvas({
         },
       })
     );
-    setSelectedId(`${input.type}-${suffix}`);
-    setSelectedEdgeId(null);
-    setInspectorMode("normal");
+    revealAddedNode(`${input.type}-${suffix}`);
   };
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
@@ -3186,8 +3200,10 @@ export default function WorkflowCanvas({
         !source ||
         !target ||
         !canConnectCanvasNodes(source, target, edges, flowType)
-      )
+      ) {
+        toast.error("无法建立此连线：请检查节点类型、已有出口和重复连线。开始节点只能向外连接，结束节点只能接收连线。");
         return;
+      }
       pushHistory();
       const nextEdge = {
         ...connection,
@@ -3852,11 +3868,10 @@ export default function WorkflowCanvas({
     isFlowNodeAllowed(flowType, item.type)
   );
   const normalizedNodeSearch = nodePaletteSearch.trim().toLowerCase();
-  const visiblePalette = availablePalette.filter(
-    item =>
-      !normalizedNodeSearch ||
-      item.label.toLowerCase().includes(normalizedNodeSearch) ||
-      item.description.toLowerCase().includes(normalizedNodeSearch)
+  const categoryFor = (type: NodeKind) => ["http", "rest", "method", "llm"].includes(type) ? "service" : ["state", "operate", "form"].includes(type) ? "human" : ["start", "end", "condition", "router", "wait", "message_catch", "milestone", "subflow"].includes(type) ? "control" : "data";
+  const visiblePalette = availablePalette.filter(item =>
+    (nodeCategory === "all" || categoryFor(item.type) === nodeCategory) &&
+    (!normalizedNodeSearch || item.label.toLowerCase().includes(normalizedNodeSearch) || item.description.toLowerCase().includes(normalizedNodeSearch))
   );
   const {
     availableTemplates,
@@ -3948,8 +3963,9 @@ export default function WorkflowCanvas({
                       onChange={event => setNodePaletteSearch(event.target.value)}
                     />
                   </label>
+                  <label className={canvasStackedLabelClass}>节点分类<select className={canvasSelectClass} value={nodeCategory} onChange={event => setNodeCategory(event.target.value)}><option value="all">全部节点</option>{[["control","流程控制"],["service","服务与 AI"],["human","人员与表单"],["data","数据处理"]].filter(([id]) => availablePalette.some(item => categoryFor(item.type) === id)).map(([id,label]) => <option key={id} value={id}>{label}</option>)}</select></label>
                   <p className={canvasSectionHelpClass}>
-                    拖拽或单击添加节点。
+                    拖拽或单击添加节点；新增后会自动定位，请按所需顺序连线。
                   </p>
                   {visiblePalette.length ? (
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -4710,6 +4726,9 @@ export default function WorkflowCanvas({
                       }
                     />
                   </label>
+                  <p className="text-xs text-muted-foreground">修改立即应用到当前画布；请使用顶部“保存草稿”或“发布新版本”提交。</p>
+                  {selectedServiceNode && projectId && <a className="block text-xs text-aiflow-info underline" href={formatConsoleRoute({section:"flows",view:"workspace",projectId})} target="_blank" rel="noopener noreferrer">打开项目中心 → 服务端点（新标签页）</a>}
+                  {selected.data.kind === "llm" && <a className="block text-xs text-aiflow-info underline" href={formatConsoleRoute({section:"system",view:"config"})} target="_blank" rel="noopener noreferrer">打开系统配置 → 模型服务（新标签页）</a>}
                   <div
                     data-canvas-assessment={selectedConfigState}
                     className={`rounded-lg border px-3 py-2 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-aiflow-info-border bg-aiflow-info-surface" : "border-aiflow-success-border bg-aiflow-success-surface"}`}
@@ -4866,7 +4885,9 @@ export default function WorkflowCanvas({
                           );
                         }
                         const runtimeOptions =
-                          field.key === "parallelJoinNodeId"
+                          selected.data.kind === "llm" && field.key === "model"
+                            ? (runtimeModels.data ?? []).map(model => ({ value: model.id, label: model.id }))
+                            : field.key === "parallelJoinNodeId"
                             ? nodes
                                 .filter(
                                   node =>
@@ -4996,7 +5017,9 @@ export default function WorkflowCanvas({
                             }
                             runtimeOptions={runtimeOptions}
                             runtimePlaceholder={
-                              field.key === "parallelJoinNodeId"
+                              selected.data.kind === "llm" && field.key === "model"
+                                ? runtimeModels.isLoading ? "正在加载模型目录…" : runtimeModels.data?.length ? "使用目录默认模型" : "暂无模型，请在系统配置中配置模型服务"
+                                : field.key === "parallelJoinNodeId"
                                 ? "请选择有两条入线的汇聚节点"
                                 : projectId && field.key === selectedResourceKey
                                   ? resourceOptions.isLoading
@@ -5021,14 +5044,18 @@ export default function WorkflowCanvas({
                                         : undefined
                             }
                             runtimeError={
-                              projectId && field.key === selectedResourceKey
+                              selected.data.kind === "llm" && field.key === "model"
+                                ? runtimeModels.error?.message || (String(fieldValue ?? "") && runtimeModels.isSuccess && !runtimeModels.data.some(model => model.id === fieldValue) ? "当前模型已不在运行目录中，请重新选择。" : undefined)
+                                : projectId && field.key === selectedResourceKey
                                 ? resourceOptions.error?.message
                                 : field.key === "endpointRef" && projectId
-                                  ? serviceEndpoints.error?.message
+                                  ? serviceEndpoints.error?.message || (endpointChoices.find(endpoint => endpoint.refCode === selectedConfig.endpointRef)?.secretConfigured === false ? "端点密钥尚未配置，请联系部署管理员注入密钥；运行前检查也会提示此问题。" : undefined)
                                   : undefined
                             }
                             onRetryOptions={
-                              projectId && field.key === selectedResourceKey
+                              selected.data.kind === "llm" && field.key === "model"
+                                ? () => void runtimeModels.refetch()
+                                : projectId && field.key === selectedResourceKey
                                 ? () => void resourceOptions.refetch()
                                 : field.key === "endpointRef" && projectId
                                   ? () => void serviceEndpoints.refetch()

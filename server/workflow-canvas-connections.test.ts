@@ -7,6 +7,10 @@ const node = (id: string, kind: FlowNodeType) => ({
 });
 
 describe("画布多分支连线", () => {
+  it.each(["http", "llm"] as const)("%s 可以直接连接 REST 和方法节点", sourceKind => {
+    for (const targetKind of ["rest", "method"] as const)
+      expect(canConnectCanvasNodes(node("source", sourceKind), node("target", targetKind), [], "control")).toBe(true);
+  });
   it("控制流程可创建受上限保护的同节点返回线，数据流程保持无环", () => {
     const router = node("route", "router");
     expect(canConnectCanvasNodes(router, router, [], "control")).toBe(true);

@@ -21,6 +21,7 @@ export function useInspectorGroupNavigation(scope: string | null) {
     if (frame.current !== null) window.cancelAnimationFrame(frame.current);
     frame.current = null;
   }, [scope]);
+  useEffect(() => { contentRef.current?.scrollTo({ top: 0, behavior: "auto" }); }, [scope]);
   const reveal = () => {
     if (frame.current !== null) window.cancelAnimationFrame(frame.current);
     frame.current = window.requestAnimationFrame(() => {
