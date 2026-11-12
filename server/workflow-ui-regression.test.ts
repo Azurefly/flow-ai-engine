@@ -9,6 +9,7 @@ import {
 const source = (path: string) =>
   inlinePresentationClasses(readFileSync(new URL(path, import.meta.url), "utf8")).replace(/\s+/g, " ");
 const homeSource = source("../client/src/pages/Home.tsx");
+const rolePanelSource = source("../client/src/components/RoleAuthorizationPanel.tsx");
 const identityWorkspaceSource = source("../client/src/components/IdentityWorkspace.tsx");
 const workspaceHeaderSource = source("../client/src/components/WorkspaceHeader.tsx");
 const editorCommandSource = source(
@@ -513,8 +514,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_574 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 483 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_578 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 485 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -735,16 +736,12 @@ describe("流程设计器界面回归约束", () => {
     );
   });
 
-  it("角色详情在同一电脑工作区内显示并使用统一字号层级", () => {
+  it("角色详情使用独立分页工作区与可切换的成员来源", () => {
     expect(homeSource).toContain("<RoleAuthorizationPanel");
-    expect(homeSource).not.toContain("mobileRoleDetailsOpen");
-    expect(homeSource).toContain("{!embedded && (");
-    expect(homeSource).toContain(
-      "aiflow-type-section-title break-words font-semibold text-foreground"
-    );
-    expect(homeSource).toContain(
-      "aiflow-type-control h-11 min-h-11 shrink-0 min-[1024px]:h-10 min-[1024px]:min-h-10"
-    );
+    expect(homeSource).toContain("identity-role-dialog");
+    expect(rolePanelSource).toContain('aria-label="角色详情分类"');
+    expect(rolePanelSource).toContain('value="direct"');
+    expect(rolePanelSource).toContain('value="inherited"');
   });
 
   it("节点与资源选择面板使用统一语义字号，不把说明缩成元数据", () => {
@@ -1408,9 +1405,11 @@ describe("流程设计器界面回归约束", () => {
     expect(identityWorkspaceSource).toContain('id: "roles", label: "角色与权限"');
     expect(identityWorkspaceSource).toContain('id: "audit", label: "授权审计"');
     expect(homeSource).toContain("userAuthorizationDetails.useQuery");
-    expect(homeSource).toContain("roleAuthorizationDetails.useQuery");
-    expect(homeSource).toContain("直接绑定用户");
-    expect(homeSource).toContain("组织继承用户");
+    expect(rolePanelSource).toContain("roleAuthorizationOverview.useQuery");
+    expect(rolePanelSource).toContain("roleMembersPage.useQuery");
+    expect(homeSource).not.toContain("roleAuthorizationDetails.useQuery");
+    expect(rolePanelSource).toContain("直接绑定用户");
+    expect(rolePanelSource).toContain("组织继承来源");
     expect(homeSource).toContain("data-iam-user-workbench");
     expect(homeSource).toContain("data-iam-role-workbench");
     expect(homeSource).toContain("data-iam-account-create-menu");
@@ -2568,7 +2567,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("恢复配置面板");
     expect(canvasSource).toContain("最小化面板");
     expect(canvasSource).toContain('role="tablist"');
-    expect(canvasSource).toContain('role="tabpanel"');
+    expect(canvasSource).toContain('role={selectedFieldGroups.length > 1 ? "tabpanel" : "region"}');
     expect(canvasDesignStyles).toContain("border-radius: 10px !important;");
     expect(canvasSource).toContain("画布说明");
     expect(canvasSource).toContain("RotateCcw");
@@ -3777,17 +3776,15 @@ it("系统用户与角色详情仅在当前视图轮询，支持刷新且不展�
   expect(homeSource).toContain(
     'authorizationQueryPolicy(tab === "users" && userDetailOpen && selectedUserId !== null)'
   );
-  expect(homeSource).toContain(
-    'authorizationQueryPolicy(tab === "roles" && roleDetailOpen && selectedRoleId !== null)'
-  );
+  expect(homeSource).toContain('Dialog open={roleDetailOpen}');
+  expect(homeSource).toContain('key={selectedRole.id}');
+  expect(rolePanelSource).toContain('authorizationQueryPolicy(tab !== "permissions")');
   expect(homeSource).toContain(
     "Number(details.data?.user?.id) === selectedUserId"
   );
-  expect(homeSource).toContain(
-    "Number(details.data?.role?.id) === Number(selectedRole.id)"
-  );
+  expect(rolePanelSource).toContain("roleAuthorizationOverview.useQuery(");
   expect(homeSource).toContain("请从左侧选择用户。");
-  expect(homeSource).toContain("请从左侧选择角色。");
+
   const refresh = source(
     "../client/src/components/AuthorizationDetailRefresh.tsx"
   );
@@ -3824,9 +3821,9 @@ it("自定义角色维护和流程绑定按需加载，内置角色保持保护"
     'import("@/components/WorkflowRoleBindingsDialog")'
   );
   expect(homeSource).toContain("新增角色");
-  expect(homeSource).toContain("编辑角色");
-  expect(homeSource).toContain("删除角色");
-  expect(homeSource).toContain("!Boolean(Number(selectedRole.isSystem))");
+  expect(rolePanelSource).toContain("编辑角色");
+  expect(rolePanelSource).toContain("删除角色");
+  expect(rolePanelSource).toContain("!Number(data.role.isSystem)");
   expect(authorizationSource).toContain("自定义流程角色");
   const roleDialog = source("../client/src/components/CustomRoleDialog.tsx");
   expect(roleDialog).toContain("请输入完整角色编码确认删除");

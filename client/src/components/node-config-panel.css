@@ -8,19 +8,21 @@
 [data-node-config-panel] [data-inspector-tools] button[aria-label] { width:28px; min-width:28px!important; height:28px; min-height:28px!important; border-radius:6px; }
 [data-node-config-panel] [data-inspector-tools] button:hover:not([aria-pressed="true"]) { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-workflow-inspector-content] { container:node-config / inline-size; background:var(--card); }
-[data-node-config-panel] [data-inspector-context] { padding:16px 20px; background:var(--muted); }
+[data-node-config-panel] [data-inspector-context] { padding:12px 20px; background:var(--card); }
 [data-node-config-panel] [data-inspector-context] > * + * { margin-top:8px; }
 [data-node-config-panel] [data-inspector-context] > label { gap:6px; color:var(--foreground); }
 [data-node-config-panel] [data-canvas-assessment] { padding:5px 10px; border-radius:6px; border-width:0 0 0 2px; }
 [data-node-config-panel] [data-canvas-assessment] > p:first-child { font-size:13px!important; line-height:20px!important; }
-[data-node-config-panel] [data-canvas-assessment="partial"] { background:var(--aiflow-danger-surface); border-color:var(--aiflow-danger-border); }
+[data-node-config-panel] [data-canvas-assessment="partial"] { background:var(--aiflow-warning-surface); border-color:var(--aiflow-warning-border); }
+[data-node-config-panel] [data-canvas-assessment="partial"] [role="status"] {color:var(--aiflow-warning); font-size:12px!important; line-height:18px!important;}
 /* 优化核心：配置分类稳定为一行，保留原方向键、Home/End和选中状态。 */
-[data-node-config-panel] [data-inspector-tabs] { display:flex!important; flex-wrap:wrap; gap:0; padding:0 12px; background:var(--card); border-block:1px solid var(--border); }
+[data-node-config-panel] [data-inspector-tabs] { display:flex!important; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; gap:4px; padding:6px 12px; background:var(--card); border-block:1px solid var(--border); }
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab { flex:1 0 auto; padding:11px 5px; min-height:42px!important; min-width:0; white-space:nowrap; font-size:13px!important; font-weight:500; line-height:20px!important; border:0; border-bottom:2px solid transparent; border-radius:6px; transition:color 150ms,background-color 150ms,border-color 150ms; }
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab:hover:not([aria-selected="true"]) { background:var(--muted); color:var(--foreground); }
-[data-node-config-panel] [data-inspector-section] { padding:24px 20px; }
+[data-node-config-panel] [data-inspector-section] { padding:18px 20px; }
+.node-config-section-note {margin-bottom:16px; font-size:12px; line-height:19px; color:var(--muted-foreground);}
 /* 优化核心：单层表单用间距组织字段，避免面板内继续嵌套卡片。 */
-[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:20px; border:0; border-radius:0; background:var(--card); }
+[data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; border:0; border-radius:0; background:var(--card); }
 [data-node-config-panel] [data-config-fields] > * { min-width:0; margin:0; padding:0; }
 [data-node-config-panel] [data-config-fields] > * + * { margin:0; }
 [data-node-config-panel] [data-config-fields] p { overflow-wrap:anywhere; }

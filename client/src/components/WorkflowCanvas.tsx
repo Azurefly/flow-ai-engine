@@ -17,6 +17,7 @@ import { Input } from "./ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { useEditorViewport } from "@/hooks/useEditorViewport";
 import { useInspectorGroupNavigation } from "@/hooks/useInspectorGroupNavigation";
+import { SERVICE_NODE_CONFIG_GROUPS } from "@shared/service-node-config-groups";
 import {
   dataflowInputFields,
   usesDataflowInputFieldSuggestions,
@@ -2076,6 +2077,8 @@ type ConfigField = FlowNodeDefinition["fields"][number];
 type ConfigGroup = { label: string; keys: string[] };
 
 const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
+  rest: SERVICE_NODE_CONFIG_GROUPS,
+  method: SERVICE_NODE_CONFIG_GROUPS,
   join: [
     {
       label: "输入数据",
@@ -4635,7 +4638,7 @@ export default function WorkflowCanvas({
               <h2 data-workflow-inspector-heading="" ref={inspectorHeadingRef} tabIndex={-1} className="scroll-mt-20 text-sm font-semibold text-foreground focus:outline-none">
                 {selectedEdgeId ? "连线配置" : `${selectedDefinition?.label ?? "节点"}配置`}
               </h2>
-              {selected && <p className={"aiflow-type-meta mt-0.5 line-clamp-2 break-words " + mutedToneClass} title={String(selected.data.label ?? "")}>{selected.data.label}</p>}
+              {selected && selected.data.label !== selectedDefinition?.label && <p className={"aiflow-type-meta mt-0.5 line-clamp-2 break-words " + mutedToneClass} title={String(selected.data.label ?? "")}>{selected.data.label}</p>}
             </div>
             <div data-inspector-tools="" className="ml-auto flex shrink-0 items-center gap-1">
               <button type="button" className="mr-1 min-h-11 rounded px-2 text-sm text-aiflow-info hover:bg-muted lg:hidden" onClick={() => {
@@ -4690,7 +4693,7 @@ export default function WorkflowCanvas({
               >
                 <div data-inspector-context="" className="space-y-3 p-4">
                   <label className={"grid gap-1.5 text-xs font-medium " + mutedToneClass}>
-                    节点名称（画布）
+                    画布显示名称
                     <input
                       aria-label="节点名称"
                       className="h-9 rounded-lg border border-border px-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 disabled:bg-muted"
@@ -4706,13 +4709,12 @@ export default function WorkflowCanvas({
                     className={`rounded-lg border px-3 py-2 ${selectedConfigState === "partial" ? "border-red-200 bg-red-50" : selectedConfigState === "editing" ? "border-aiflow-info-border bg-aiflow-info-surface" : "border-aiflow-success-border bg-aiflow-success-surface"}`}
                   >
                     <p className="text-xs font-semibold text-foreground">
-                      {selectedDefinition.label} ·{" "}
                       {selectedConfigState === "partial"
-                        ? "未完全配置"
+                        ? "待完善"
                         : selectedConfigState === "editing"
                           ? "结构完整（默认）"
                           : "结构完整"}
-                      <span className={"font-normal " + mutedToneClass}> · 运行前需预检</span>
+                      <span className={"font-normal " + mutedToneClass}> · 运行前统一预检</span>
                       {selected.data.kind === "operate" && readOperateOutcomeMode(selectedConfig) === "legacy_cancel" && (
                         <button type="button" className="ml-2 min-h-11 text-aiflow-warning underline" onClick={() => { setInspectorTab("结果与分支"); groupNavigation.reveal(); }}>兼容分支</button>
                       )}
@@ -4728,7 +4730,7 @@ export default function WorkflowCanvas({
                     )}
                   </div>
                 </div>
-                <div
+                {selectedFieldGroups.length > 1 && <div
                   role="tablist"
                   data-inspector-tabs=""
                   ref={groupNavigation.tabsRef}
@@ -4765,16 +4767,19 @@ export default function WorkflowCanvas({
                       {group.label}
                     </button>
                   ))}
-                </div>
+                </div>}
                 {activeInspectorGroup && (
                   <section
-                    role="tabpanel"
+                    role={selectedFieldGroups.length > 1 ? "tabpanel" : "region"}
                     data-inspector-section=""
                     ref={groupNavigation.panelRef}
                     id={`${inspectorTabId}-panel`}
-                    aria-labelledby={`${inspectorTabId}-${activeInspectorGroup.label}`}
+                    aria-labelledby={selectedFieldGroups.length > 1 ? `${inspectorTabId}-${activeInspectorGroup.label}` : undefined}
+                    aria-label={selectedFieldGroups.length === 1 ? activeInspectorGroup.label : undefined}
                     className="min-w-0 px-4 py-4"
                   >
+                      {(["rest", "method"].includes(selected.data.kind)) && activeInspectorGroup.label === "节点标识" && <p className="node-config-section-note">用于业务识别和接口执行；画布显示名称仅影响节点在画布中的标题。</p>}
+                      {(["rest", "method"].includes(selected.data.kind)) && activeInspectorGroup.label === "兼容配置" && <p className="node-config-section-note">保留导入流程的兼容字段。响应校验脚本仅保存，不会执行。</p>}
                       {selected.data.kind === "router" &&
                         activeInspectorGroup.label === "兼容规则" && (
                           <p className={canvasSectionHelpClass}>

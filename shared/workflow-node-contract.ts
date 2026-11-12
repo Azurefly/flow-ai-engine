@@ -424,8 +424,8 @@ const referenceHttpFields: NodeField[] = [
   },
   {
     key: "restmc",
-    label: "节点名称",
-    help: "接口节点的业务名称，与画布名称分别设置。",
+    label: "接口业务名称",
+    help: "标识本次接口调用的业务用途，例如“查询订单状态”。",
     kind: "text",
     required: true,
   },
@@ -477,7 +477,7 @@ const referenceHttpFields: NodeField[] = [
   {
     key: "restJsonParam",
     aliases: ["body"],
-    label: "POST 请求体",
+    label: "请求体",
     help: "支持 JSON 文本、结构化请求体和模板变量。",
     kind: "json",
   },

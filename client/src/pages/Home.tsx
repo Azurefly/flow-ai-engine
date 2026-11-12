@@ -1,3 +1,4 @@
+import RoleAuthorizationPanel from "@/components/RoleAuthorizationPanel";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 import { IdentifierText } from "@/components/IdentifierText";
@@ -3453,10 +3454,6 @@ function IamCenter({
     { userId: selectedUserId ?? 1 },
     authorizationQueryPolicy(tab === "users" && userDetailOpen && selectedUserId !== null)
   );
-  const roleDetails = trpc.iam.roleAuthorizationDetails.useQuery(
-    { roleId: selectedRoleId ?? 1 },
-    authorizationQueryPolicy(tab === "roles" && roleDetailOpen && selectedRoleId !== null)
-  );
   const refreshRoleQueries = () => Promise.all([
     utils.iam.invalidate(), utils.auth.me.invalidate(),
     utils.workflow.invalidate(),
@@ -4052,38 +4049,7 @@ function IamCenter({
             </DialogContent>
           </Dialog>
 
-          <Dialog
-            open={pendingRevokeRoleId !== null}
-            onOpenChange={open => {
-              if (!open && !revokeRole.isPending) requestRoleRevoke(null);
-            }}
-          >
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>撤销直接角色授权</DialogTitle>
-                <DialogDescription>将从“{revokeTarget?.userLabel}”移除“{revokeTarget?.roleName}”在“{revokeTarget?.scopeLabel}”的直接授权；其他授权来源继续生效。</DialogDescription>
-              </DialogHeader>
-              {revokeError&&<p role="alert" className="aiflow-type-body text-destructive">{revokeError}</p>}
-              <div className="flex justify-end gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={revokeRole.isPending}
-                  onClick={() => requestRoleRevoke(null)}
-                >
-                  取消
-                </Button>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  disabled={!pendingRevokeRoleId || revokeRole.isPending}
-                  onClick={() => void confirmRoleRevoke()}
-                >
-                  {revokeRole.isPending ? "正在撤销…" : "确认撤销"}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+
         </div>
       )}
 
@@ -4172,21 +4138,58 @@ function IamCenter({
               </div>
             )}
           </section>
-          <Dialog open={roleDetailOpen} onOpenChange={setRoleDetailOpen}><DialogContent className="identity-detail-dialog sm:max-w-3xl"><DialogHeader><DialogTitle>{selectedRole?.name || "角色权限详情"}</DialogTitle><DialogDescription>查看角色权限、直接成员与部门继承来源。</DialogDescription></DialogHeader>
-            <RoleAuthorizationPanel
-              details={roleDetails}
-              selectedRole={selectedRole}
+          <Dialog open={roleDetailOpen} onOpenChange={setRoleDetailOpen}><DialogContent className="identity-detail-dialog identity-role-dialog sm:max-w-5xl"><DialogHeader><DialogTitle>{selectedRole?.name || "角色权限详情"}</DialogTitle><DialogDescription>查看角色权限、直接成员与部门继承来源。</DialogDescription></DialogHeader>
+            {selectedRole && <RoleAuthorizationPanel
+              key={selectedRole.id}
+              roleId={Number(selectedRole.id)}
               onAssign={openRoleAssignment}
-              onManage={(mode, role) => {
-
-                setRoleEditor({ mode, role });
+              onManage={(mode, role) => setRoleEditor({ mode, role })}
+              onRevoke={record => {
+                if (roleWriteLock.current) return;
+                setRevokeError("");
+                setRevokeTarget({ id: record.assignmentId, userId: record.userId,
+                  userLabel: record.name || record.username, roleName: record.roleName,
+                  scopeLabel: record.scopeType === "system" ? "系统范围" : `流程 ${record.scopeId}` });
               }}
-            />
+            />}
 </DialogContent></Dialog>
 
 
         </div>
       )}
+
+          <Dialog
+            open={pendingRevokeRoleId !== null}
+            onOpenChange={open => {
+              if (!open && !revokeRole.isPending) requestRoleRevoke(null);
+            }}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>撤销直接角色授权</DialogTitle>
+                <DialogDescription>将从“{revokeTarget?.userLabel}”移除“{revokeTarget?.roleName}”在“{revokeTarget?.scopeLabel}”的直接授权；其他授权来源继续生效。</DialogDescription>
+              </DialogHeader>
+              {revokeError&&<p role="alert" className="aiflow-type-body text-destructive">{revokeError}</p>}
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={revokeRole.isPending}
+                  onClick={() => requestRoleRevoke(null)}
+                >
+                  取消
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={!pendingRevokeRoleId || revokeRole.isPending}
+                  onClick={() => void confirmRoleRevoke()}
+                >
+                  {revokeRole.isPending ? "正在撤销…" : "确认撤销"}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
 
       {tab === "audit" && (
         <section className="rounded-lg border border-border bg-card">
@@ -4609,184 +4612,6 @@ function UserAuthorizationPanel({
   );
 }
 
-function RoleAuthorizationPanel({
-  details,
-  selectedRole,
-  onAssign,
-  onManage,
-  embedded = false,
-}: {
-  details: any;
-  selectedRole: any;
-  onAssign: () => void;
-  onManage: (mode: "edit" | "delete", role: any) => void;
-  embedded?: boolean;
-}) {
-  const reveal = useContextReveal<HTMLDivElement>(selectedRole?.id);
-  const groups = useRef<(HTMLDivElement | null)[]>([]);
-  const data =
-    selectedRole?.id &&
-    Number(details.data?.role?.id) === Number(selectedRole.id)
-      ? details.data
-      : null;
-  const assignable = selectedRole?.scope === "system";
-  return (
-    <>
-      <div
-        className={`flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border ${embedded ? "pb-3" : "px-4 py-3"}`}
-      >
-        {!embedded && (
-          <div className="min-w-0">
-            <p className="aiflow-type-section-title font-semibold">
-              角色权限与绑定用户
-            </p>
-            <p className={"aiflow-type-body mt-0.5 " + mutedToneClass}>
-              查看此角色的权限与绑定用户。
-            </p>
-          </div>
-        )}
-        {selectedRole && !Boolean(Number(selectedRole.isSystem)) && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!data || details.isFetching}
-              onClick={() =>
-                onManage("edit", {
-                  ...data.role,
-                  permissions: data.permissions.map(
-                    (permission: any) => permission.code
-                  ),
-                })
-              }
-            >
-              编辑角色
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!data || details.isFetching}
-              onClick={() =>
-                onManage("delete", {
-                  ...data.role,
-                  permissions: data.permissions.map(
-                    (permission: any) => permission.code
-                  ),
-                })
-              }
-            >
-              删除角色
-            </Button>
-          </div>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          className="aiflow-type-control h-11 min-h-11 shrink-0 min-[1024px]:h-10 min-[1024px]:min-h-10"
-          disabled={!data || details.isLoading || !assignable}
-          onClick={onAssign}
-        >
-          <Plus size={13} />
-          {selectedRole?.scope === "workflow" ? "流程内绑定" : "绑定用户"}
-        </Button>
-      </div>
-      <AuthorizationDetailRefresh
-        query={details}
-        label="刷新角色权限详情"
-        disabled={!selectedRole?.id}
-        embedded={embedded}
-      />
-      <div
-        ref={reveal}
-        data-iam-detail-scroll=""
-        className={`${embedded ? "pt-4" : "max-h-[620px] overflow-y-auto p-4"} aiflow-type-body`}
-      >
-        {!selectedRole?.id && (
-          <p className={mutedTextClass}>请从左侧选择角色。</p>
-        )}
-        {selectedRole?.id && details.isLoading && (
-          <p className={mutedTextClass}>正在读取角色绑定…</p>
-        )}
-        {selectedRole?.id && details.error && (
-          <p className="break-words text-aiflow-danger">
-            {details.error.message}
-          </p>
-        )}
-        {data && (
-          <div className="space-y-5">
-            <div>
-              <p className="aiflow-type-section-title break-words font-semibold text-foreground">
-                {data.role.name}
-              </p>
-              <p className="mt-1 break-all font-mono text-aiflow-info">
-                {data.role.code}
-              </p>
-              <p className={"mt-1 break-words leading-5 " + mutedToneClass}>
-                {data.role.description || "未填写角色说明"}
-              </p>
-              {!assignable && (
-                <p className="mt-2 rounded-md bg-aiflow-warning-surface px-3 py-2 leading-5 text-aiflow-warning">
-                  流程范围角色需在对应流程的成员权限页绑定，避免跨流程误授权。
-                </p>
-              )}
-            </div>
-            <AccessRelationshipOverview identity={selectedRole.id} label={data.role.name} nodes={[{ label: "权限清单", count: data.permissions.length }, { label: "直接绑定记录", count: data.directUsers.length }, { label: "组织继承记录", count: data.inheritedUsers.length }]} onSelect={index => focusAccessGroup(groups.current[index])} />
-            <div ref={element => { groups.current[0] = element; }} tabIndex={-1} data-access-details-target="">
-              <p className={sectionTitleClass}>
-                权限清单（{data.permissions.length}）
-              </p>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {data.permissions.map((permission: any) => (
-                  <div
-                    key={permission.code}
-                    className="min-w-0 rounded-md border border-border bg-muted p-2"
-                  >
-                    <p className="break-all font-mono text-aiflow-info">
-                      {permission.code}
-                    </p>
-                    <p className={"mt-0.5 break-words " + mutedToneClass}>
-                      {permission.name}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div ref={element => { groups.current[1] = element; }} tabIndex={-1} data-access-details-target="">
-            <UserBindingGroup
-              title="直接绑定用户"
-              users={data.directUsers}
-              source="直接授权"
-            />
-            </div>
-            <div ref={element => { groups.current[2] = element; }} tabIndex={-1} data-access-details-target="">
-            <UserBindingGroup
-              title="组织继承用户"
-              users={data.inheritedUsers}
-              source="组织继承"
-            />
-            </div>
-            {data.organizationUnits.length > 0 && (
-              <div>
-                <p className={sectionTitleClass}>绑定组织</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {data.organizationUnits.map((unit: any) => (
-                    <span
-                      key={unit.id}
-                      className="max-w-full break-words rounded-full bg-aiflow-special-surface px-2.5 py-1 text-aiflow-special"
-                    >
-                      {unit.name} · {unit.code}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
 function RoleDetailGroup({
   title,
   roles,
@@ -4854,64 +4679,6 @@ function RoleDetailGroup({
           </div>
         ))}
         {!roles.length && <p className={mutedTextClass}>无</p>}
-      </div>
-    </div>
-  );
-}
-
-function UserBindingGroup({
-  title,
-  users,
-  source,
-}: {
-  title: string;
-  users: any[];
-  source: string;
-}) {
-  return (
-    <div>
-      <p className={sectionTitleClass}>
-        {title}（{users.length}）
-      </p>
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        {users.map((account, index) => (
-          <div
-            key={`${account.userId}-${account.assignmentId || account.unitId || index}`}
-            className="min-w-0 rounded-md border border-border p-2"
-          >
-            <div className="flex min-w-0 items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="break-words font-medium text-foreground">
-                  {account.name || account.username}
-                </p>
-                <p className={"break-all font-mono " + mutedToneClass}>
-                  {account.username}
-                </p>
-              </div>
-              <span className="shrink-0 rounded-full bg-aiflow-special-surface px-2 py-0.5 text-[10px] text-aiflow-special">
-                {source}
-              </span>
-            </div>
-            <p className={supportingTextClass}>
-              {account.unitName
-                ? `组织：${account.unitName}`
-                : account.scopeType === "system"
-                  ? "范围：系统全局"
-                  : `范围：指定流程 ${account.scopeId || ""}`}
-            </p>
-            <p className={"mt-1 " + mutedToneClass}>
-              {account.expiresAt
-                ? `有效至 ${formatTime(account.expiresAt)}`
-                : "长期有效"}
-            </p>
-            {account.note && (
-              <p className={supportingTextClass}>
-                授权备注：{account.note}
-              </p>
-            )}
-          </div>
-        ))}
-        {!users.length && <p className={mutedTextClass}>无</p>}
       </div>
     </div>
   );

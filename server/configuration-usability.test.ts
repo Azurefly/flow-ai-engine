@@ -43,7 +43,7 @@ it("普通账号提交捕获失败并把提示保留在弹窗中，不关闭表�
 });
 
 it("审批预览和兼容提示位于对应分组，字段与选项定义保持不变", () => {
-  const panel = canvas.slice(canvas.indexOf('role="tabpanel"'));
+  const panel = canvas.slice(canvas.indexOf('data-inspector-section=""'));
   expect(panel).toContain(
     'activeInspectorGroup.label === "处理人" && workflowId'
   );
@@ -51,7 +51,7 @@ it("审批预览和兼容提示位于对应分组，字段与选项定义保持�
   expect(panel).toContain(
     'fallbackApplied === "owner" ? "流程所有者" : "流程发起人"'
   );
-  expect(canvas.slice(0, canvas.indexOf('role="tabpanel"'))).not.toContain(
+  expect(canvas.slice(0, canvas.indexOf('data-inspector-section=""'))).not.toContain(
     "参与人解析预览"
   );
 });
@@ -60,7 +60,7 @@ it("配置分组保持可见，并提供关联的面板和标准键盘切换", (
   expect(canvas).toContain("sticky top-0 z-10 grid");
   expect(canvas).toContain("aria-controls={`${inspectorTabId}-panel`}");
   expect(canvas).toContain(
-    "aria-labelledby={`${inspectorTabId}-${activeInspectorGroup.label}`}"
+    "aria-labelledby={selectedFieldGroups.length > 1 ? `${inspectorTabId}-${activeInspectorGroup.label}` : undefined}"
   );
   expect(canvas).toContain(
     "tabIndex={activeInspectorGroup?.label === group.label ? 0 : -1}"

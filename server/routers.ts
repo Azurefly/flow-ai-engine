@@ -1,4 +1,5 @@
 import { getLlmServiceStatus } from "./llm-configuration";
+import { getRoleAuthorizationOverview, listRoleMembersPage, roleMemberPageInput } from "./role-member-directory";
 import { checkLlmService } from "./llm-service-check";
 import { cancelDataflowRun } from "./dataflow-run-control";
 import { authorizationAuditPageInput } from "./authorization-audit-pagination";
@@ -454,6 +455,12 @@ export const appRouter = router({
     roleAuthorizationDetails: iamManageProcedure
       .input(z.object({ roleId: z.number().int().positive() }))
       .query(({ input }) => getRoleAuthorizationDetails(input.roleId)),
+    roleAuthorizationOverview: iamManageProcedure
+      .input(z.object({ roleId: z.number().int().positive() }))
+      .query(({ input }) => getRoleAuthorizationOverview(input.roleId)),
+    roleMembersPage: iamManageProcedure
+      .input(roleMemberPageInput)
+      .query(({ input }) => listRoleMembersPage(input)),
     assignSystemRole: iamManageProcedure
       .input(
         z.object({
