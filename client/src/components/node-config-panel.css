@@ -23,7 +23,8 @@
 .node-config-section-note {margin-bottom:16px; font-size:12px; line-height:19px; color:var(--muted-foreground);}
 .node-value-editor { display:grid; min-width:0; gap:8px; }
 .node-value-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted-foreground); font-size:12px; }
-[data-node-config-panel] .node-value-heading select { width:auto; min-width:90px; height:30px; min-height:30px!important; font-size:12px!important; }
+.node-value-heading > span { flex:none; white-space:nowrap; }
+[data-node-config-panel] .node-value-heading select { flex:none; width:110px; min-width:0; height:30px; min-height:30px!important; font-size:12px!important; }
 .node-value-control { width:100%; min-width:0; padding:7px 10px; border:1px solid var(--border); border-radius:6px; color:var(--foreground); background:var(--card); font-weight:400; }
 .node-value-reference { display:grid; grid-template-columns:minmax(0,1fr) 28px; gap:6px; border:1px solid var(--aiflow-info-border); border-radius:7px; background:var(--aiflow-info-surface); padding:6px 8px; }
 .node-value-reference > button:first-child { display:grid; min-width:0; gap:2px; text-align:left; padding:2px 0; }
@@ -51,11 +52,16 @@
 [data-node-config-panel] [data-config-fields] { display:grid; grid-template-columns:minmax(0,1fr); gap:16px; border:0; border-radius:0; background:var(--card); }
 [data-node-config-panel] [data-config-fields] > * { min-width:0; margin:0; padding:0; }
 [data-node-config-panel] [data-config-fields] > * + * { margin:0; }
+/* 原生 legend 位于 fieldset 边框上；扁平分组同时移除旧边框和底色，统一左对齐。 */
+[data-node-config-panel] [data-config-fields] > fieldset { border:0; border-radius:0; background:transparent; }
+[data-node-config-panel] [data-config-fields] > fieldset > legend { padding:0 0 10px; }
 [data-node-config-panel] [data-config-fields] p { overflow-wrap:anywhere; }
 [data-node-config-panel] :is(label,legend,[data-config-help],[role="alert"],[role="status"]) { min-width:0; overflow-wrap:anywhere; }
 [data-node-config-panel] [data-config-help],
 [data-node-config-panel] [data-config-fields] > div > p.text-muted-foreground:last-child { font-size:13px!important; font-weight:400; line-height:20px!important; color:var(--muted-foreground); }
-[data-node-config-panel] :is(input:not([type="checkbox"]):not([type="radio"]),select) { min-width:0; max-width:100%; width:100%; min-height:38px!important; height:38px; border-radius:6px; font-size:14px!important; line-height:22px; background-color:var(--card); }
+/* 分开选择器，避免 :is() 将输入框的高优先级传给 select，覆盖紧凑类型选择器。 */
+[data-node-config-panel] input:not([type="checkbox"]):not([type="radio"]),
+[data-node-config-panel] select { min-width:0; max-width:100%; width:100%; min-height:38px!important; height:38px; border-radius:6px; font-size:14px!important; line-height:22px; background-color:var(--card); }
 [data-node-config-panel] textarea { min-width:0; max-width:100%; min-height:104px; resize:vertical; border-radius:6px; font-size:14px!important; line-height:22px!important; overflow-wrap:anywhere; }
 [data-node-config-panel] :is(input,select,textarea):not(:disabled):hover { border-color:var(--muted-foreground); }
 [data-node-config-panel] :is(input,select,textarea,button):focus-visible { outline:2px solid var(--ring); outline-offset:2px; }
@@ -109,6 +115,11 @@
   [data-node-config-panel] [data-config-pair] { grid-template-columns:minmax(0,1fr) minmax(0,1fr) 28px; }
   [data-node-config-panel] [data-config-pair] > :nth-child(2) { grid-column:2; grid-row:1; }
   [data-node-config-panel] [data-config-pair] > button { grid-column:3; grid-row:1; }
+}
+@media (max-width:480px) {
+  [data-canvas-redesign] > [data-node-config-panel] > [data-workflow-inspector-header]:first-child { flex-wrap:wrap; gap:8px; }
+  [data-node-config-panel] [data-inspector-identity] { flex-basis:100%; }
+  [data-node-config-panel] [data-inspector-tools] { margin-left:auto; }
 }
 @media (min-width:1024px) {
   /* 收起后仍能识别配置对象，展开、恢复与锁定操作沿用原按钮。 */
