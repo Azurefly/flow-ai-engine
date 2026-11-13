@@ -128,7 +128,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(styleSource).toContain("--aiflow-leading-code: 1.3125rem");
       expect(styleSource).toContain("--aiflow-leading-body: 1.375rem");
       expect(styleSource).toContain("--aiflow-leading-section: 1.5rem");
-      expect(styleSource).toContain("--aiflow-leading-page-title: 1.875rem");
+      expect(styleSource).toContain("--aiflow-leading-dialog-title: 1.625rem");
+      expect(styleSource).toContain("--aiflow-leading-page-title: 1.75rem");
       expect(styleSource).toContain("--aiflow-leading-display: 2rem");
       const legacyTypographyRules = styleSource.slice(
         styleSource.indexOf("/* Legacy utility compatibility"),
@@ -163,7 +164,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "line-height: var(--aiflow-leading-body) !important"
       );
       expect(styleSource).toContain("--aiflow-type-section: 1rem");
-      expect(styleSource).toContain("--aiflow-type-page-title: 1.375rem");
+      expect(styleSource).toContain("--aiflow-type-dialog-title: 1.125rem");
+      expect(styleSource).toContain("--aiflow-type-page-title: 1.25rem");
       expect(styleSource).toContain("--aiflow-type-display: 1.5rem");
       expect(notFoundSource).toContain(
         'className="aiflow-type-display mb-2 font-bold text-foreground"'
@@ -410,11 +412,15 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(workflowTestRunSource).toContain(
         "aiflow-type-code max-h-[350px] overflow-auto rounded-lg bg-slate-950 p-4 font-mono text-blue-300"
       );
-      expect(
-        readFileSync("client/src/components/RunPayloadDetails.tsx", "utf8")
-      ).toContain(
-        "aiflow-type-code max-h-48 overflow-auto whitespace-pre-wrap break-words border-t border-border p-2"
-      );
+      const payloadSource = readFileSync("client/src/components/RunPayloadDetails.tsx", "utf8");
+      expect(payloadSource).toContain('<pre className="aiflow-type-code">');
+      expect(payloadSource).toContain('import "./run-payload-details.css"');
+      const payloadPreStyle = readFileSync("client/src/components/run-payload-details.css", "utf8")
+        .match(/\[data-payload-field\] pre\s*\{([^}]*)\}/)?.[1];
+      for (const declaration of [
+        "max-height: 192px", "overflow: auto", "white-space: pre-wrap",
+        "overflow-wrap: anywhere", "border-top: 1px solid var(--border)", "padding: 8px",
+      ]) expect(payloadPreStyle).toContain(declaration);
       expect(
         readFileSync("client/src/components/DataResourceCenter.tsx", "utf8")
       ).toContain("aiflow-type-code my-2 max-h-72 max-w-full overflow-auto");

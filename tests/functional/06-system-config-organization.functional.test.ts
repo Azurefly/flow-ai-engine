@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { inlinePresentationClasses } from "../presentation-source";
 import { TestResultCollector } from "./helpers/test-harness";
 import { mergeSystemSettingValue } from "../../server/system-setting-config";
 import { adminProcedure, router } from "../../server/_core/trpc";
@@ -102,13 +103,13 @@ describe("功能测试 - 模块 6：系统配置与组织架构 (System Config &
   describe("组织架构管理（OrganizationManagementPage）交互与层级树维护", () => {
     it("电脑端成员表保持操作列可见并收起长部门路径", () => {
       const start = performance.now();
-      const source = readFileSync(
+      const source = inlinePresentationClasses(readFileSync(
         new URL(
           "../../client/src/components/OrganizationManagementPage.tsx",
           import.meta.url
         ),
         "utf8"
-      );
+      ));
 
       expect(source).toContain(
         'selected && !mobileDirectoryOpen ? "hidden lg:block" : ""'

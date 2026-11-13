@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
+import { inlinePresentationClasses } from "../presentation-source";
 import { WORKBENCH_STATUS_LABELS } from "../../shared/workbench-list-status";
 import { TestResultCollector } from "./helpers/test-harness";
 
@@ -228,13 +229,13 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
 
     it("流程列表默认每页10条并统一主要表格字号", () => {
       const start = performance.now();
-      const source = readFileSync(
+      const source = inlinePresentationClasses(readFileSync(
         new URL(
           "../../client/src/components/ProcessWorkbench.tsx",
           import.meta.url
         ),
         "utf8"
-      );
+      ));
 
       expect(source).toContain("const [pageSize, setPageSize] = useState(10);");
       expect(source.match(/limit: pageSize/g)).toHaveLength(2);
