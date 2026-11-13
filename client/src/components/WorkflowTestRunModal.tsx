@@ -17,6 +17,7 @@ import { workflowLoopDraftError } from "@shared/workflow-loop-policy-draft";
 import {
   Dialog,
   DialogContent,
+  DialogClose,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -55,6 +56,7 @@ import {
   UserCheck,
   Clock,
   HelpCircle,
+  X,
 } from "lucide-react";
 const inactiveTabClass = ("border-transparent " + mutedToneClass + " hover:text-foreground");
 const resultPanelClass = "rounded-b-lg border border-t-0 border-border bg-card p-4 shadow-sm min-h-[300px]";
@@ -421,7 +423,7 @@ export default function WorkflowTestRunModal({
 
   return (
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent onCloseAutoFocus={event => {
+      <DialogContent showCloseButton={false} onCloseAutoFocus={event => {
         const target = pendingDiagnosticTarget.current;
         if (!target) return;
         event.preventDefault();
@@ -430,86 +432,100 @@ export default function WorkflowTestRunModal({
       }} className="w-[calc(100vw-1rem)] max-w-5xl sm:max-w-5xl max-h-[calc(100dvh-1rem)] min-h-0 flex flex-col p-0 overflow-hidden border-border shadow-2xl">
         {/* Modal Header */}
         <DialogHeader className="shrink-0 border-b border-border bg-muted/70 px-4 py-3 sm:px-5">
-          <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex min-w-0 items-start gap-3">
-              <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-2xs ${
-                  isStateflow
-                    ? "bg-emerald-600"
-                    : isDataflow
-                      ? "bg-violet-600"
-                      : "bg-blue-600"
-                }`}
-              >
-                {isStateflow ? <Compass size={17} /> : <Play size={17} />}
-              </div>
-              <div className="min-w-0">
-                <DialogTitle className="aiflow-type-dialog-title flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground">
-                  <span>
-                    {isStateflow
-                      ? "状态流程运行"
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex min-w-0 items-start gap-3">
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white shadow-2xs ${
+                    isStateflow
+                      ? "bg-emerald-600"
                       : isDataflow
-                        ? "数据流程运行"
-                        : "控制流程运行"}
-                  </span>
-                  <span className="aiflow-type-meta rounded border border-border/60 bg-muted px-2 py-0.5 font-medium text-foreground">
-                    {isStateflow
-                      ? "业务状态与人工办理"
-                      : isDataflow
-                        ? "数据处理与结果输出"
-                        : "系统动作与条件分支"}
-                  </span>
-                  {workflow?.status === "published" ? (
-                    <span className="aiflow-type-meta rounded border border-aiflow-success-border/60 bg-aiflow-success-surface px-2 py-0.5 font-medium text-aiflow-success">
-                      已发布态
+                        ? "bg-violet-600"
+                        : "bg-blue-600"
+                  }`}
+                >
+                  {isStateflow ? <Compass size={17} /> : <Play size={17} />}
+                </div>
+                <div className="min-w-0">
+                  <DialogTitle className="aiflow-type-dialog-title flex min-w-0 flex-wrap items-center gap-2 font-semibold text-foreground">
+                    <span>
+                      {isStateflow
+                        ? "状态流程运行"
+                        : isDataflow
+                          ? "数据流程运行"
+                          : "控制流程运行"}
                     </span>
-                  ) : (
-                    <span className="aiflow-type-meta rounded border border-aiflow-warning-border/60 bg-aiflow-warning-surface px-2 py-0.5 font-medium text-aiflow-warning">
-                      当前草稿
+                    <span className="aiflow-type-meta rounded border border-border/60 bg-muted px-2 py-0.5 font-medium text-foreground">
+                      {isStateflow
+                        ? "业务状态与人工办理"
+                        : isDataflow
+                          ? "数据处理与结果输出"
+                          : "系统动作与条件分支"}
                     </span>
-                  )}
-                </DialogTitle>
-                <DialogDescription className={"aiflow-type-body mt-1 " + mutedToneClass}>
-                  {workflow?.status === "published"
-                    ? hasUnpublishedChanges
-                      ? `画布有未发布修改；本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。发布新版本后才能按这些修改运行。`
-                      : `本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。`
-                    : onSaveDraft
-                      ? "运行前会先保存当前画布；只有保存成功才会启动运行。"
-                      : `本次会按服务端已保存的草稿定义 v${workflow?.definitionVersion ?? 1} 运行。`}{" "}
-                </DialogDescription>
-                {executionPermissionHint && <p role="status" className={"mt-2 text-sm " + mutedToneClass}>{executionPermissionHint}</p>}
-                {isDataflow && dataProjectAccess.isError && <Button type="button" variant="outline" size="sm" className="mt-2" disabled={dataProjectAccess.isFetching} onClick={() => void dataProjectAccess.refetch()}>重新加载项目权限</Button>}
+                    {workflow?.status === "published" ? (
+                      <span className="aiflow-type-meta rounded border border-aiflow-success-border/60 bg-aiflow-success-surface px-2 py-0.5 font-medium text-aiflow-success">
+                        已发布态
+                      </span>
+                    ) : (
+                      <span className="aiflow-type-meta rounded border border-aiflow-warning-border/60 bg-aiflow-warning-surface px-2 py-0.5 font-medium text-aiflow-warning">
+                        当前草稿
+                      </span>
+                    )}
+                  </DialogTitle>
+                  <DialogDescription className={"aiflow-type-body mt-1 " + mutedToneClass}>
+                    {workflow?.status === "published"
+                      ? hasUnpublishedChanges
+                        ? `画布有未发布修改；本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。发布新版本后才能按这些修改运行。`
+                        : `本次会执行已发布版本 v${workflow.definitionVersion ?? 1}。`
+                      : onSaveDraft
+                        ? "运行前会先保存当前画布；只有保存成功才会启动运行。"
+                        : `本次会按服务端已保存的草稿定义 v${workflow?.definitionVersion ?? 1} 运行。`}{" "}
+                  </DialogDescription>
+                  {executionPermissionHint && <p role="status" className={"mt-2 text-sm " + mutedToneClass}>{executionPermissionHint}</p>}
+                  {isDataflow && dataProjectAccess.isError && <Button type="button" variant="outline" size="sm" className="mt-2" disabled={dataProjectAccess.isFetching} onClick={() => void dataProjectAccess.refetch()}>重新加载项目权限</Button>}
+                </div>
               </div>
-            </div>
 
-            {/* View Mode Switch */}
-            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-              {isDataflow && dataflowRunQuery.data && <DataflowCancelControl key={dataflowRunQuery.data.id} run={dataflowRunQuery.data} />}
-              {viewMode === "result" && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className={"aiflow-type-control h-11 " + mutedToneClass + " min-[1024px]:h-9"}
-                  onClick={() => setViewMode("config")}
-                >
-                  <SlidersHorizontal size={13} className="mr-1.5" />
-                  配置初始上下文
-                </Button>
-              )}
-              {viewMode === "config" && currentRun && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="aiflow-type-control h-11 border-aiflow-info-border bg-aiflow-info-surface/50 text-aiflow-info min-[1024px]:h-9"
-                  onClick={() => setViewMode("result")}
-                >
-                  查看运行轨迹
-                </Button>
-              )}
+              {/* View Mode Switch */}
+              <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                {isDataflow && dataflowRunQuery.data && <DataflowCancelControl key={dataflowRunQuery.data.id} run={dataflowRunQuery.data} />}
+                {viewMode === "result" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={"aiflow-type-control h-11 " + mutedToneClass + " min-[1024px]:h-9"}
+                    onClick={() => setViewMode("config")}
+                  >
+                    <SlidersHorizontal size={13} className="mr-1.5" />
+                    配置初始上下文
+                  </Button>
+                )}
+                {viewMode === "config" && currentRun && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="aiflow-type-control h-11 border-aiflow-info-border bg-aiflow-info-surface/50 text-aiflow-info min-[1024px]:h-9"
+                    onClick={() => setViewMode("result")}
+                  >
+                    查看运行轨迹
+                  </Button>
+                )}
+              </div>
             </div>
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 shrink-0 min-[1024px]:h-9 min-[1024px]:w-9"
+                aria-label="关闭对话框"
+                title="关闭对话框"
+              >
+                <X size={16} aria-hidden="true" />
+              </Button>
+            </DialogClose>
           </div>
 
           {isDataflow && <DataflowCancellationInfo cancellation={dataflowRunQuery.data?.cancellation} />}

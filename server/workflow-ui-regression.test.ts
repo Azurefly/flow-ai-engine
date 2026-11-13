@@ -406,6 +406,24 @@ describe("流程设计器界面回归约束", () => {
     expect(monitor).toContain("nodeConfig={snapshotNodes.find");
     expect(monitor).not.toContain("group.nodeId === node.nodeId");
   });
+  it("运行弹窗关闭按钮独占布局空间，不与标题或操作区绝对定位重叠", () => {
+    const header = runModalSource.split("<DialogHeader ")[1]?.split("</DialogHeader>")[0];
+    expect(runModalSource).toContain("<DialogContent showCloseButton={false}");
+    expect(header).toContain('className="flex min-w-0 items-start gap-3"');
+    expect(header).toContain('className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"');
+    expect(header).toContain('className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end"');
+    expect(header).toMatch(/<\/div> <\/div> <DialogClose asChild>/);
+    expect(header?.match(/<DialogClose\b/g)).toHaveLength(1);
+    expect(header).not.toMatch(/\babsolute\b/);
+  });
+  it("运行弹窗使用原生关闭语义、中文名称和窄屏44px触控区", () => {
+    const close = runModalSource.split("<DialogClose asChild>")[1]?.split("</DialogClose>")[0];
+    expect(close).toContain('type="button"');
+    expect(close).toContain('aria-label="关闭对话框"');
+    expect(close).toContain("h-11 w-11 shrink-0");
+    expect(close).toContain('<X size={16} aria-hidden="true" />');
+    expect(runModalSource).toContain("onOpenChange={handleDialogOpenChange}");
+  });
   it("运行阻断问题可返回对应配置，关闭对话框后焦点进入配置面板", () => {
     expect(runModalSource).toContain('aria-label="运行阻断问题"');
     expect(runModalSource).toContain("workflowDiagnosticTarget(issue.location, definition)");
