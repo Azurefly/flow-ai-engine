@@ -140,3 +140,13 @@
 @media (prefers-reduced-motion: reduce) {
   [data-aiflow-console] *, [data-aiflow-login] * { scroll-behavior: auto; }
 }
+
+/* Keep navigation reachable before the full desktop links fit. */
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-workspace-header] [data-aiflow-primary-nav] { display: none; }
+  [data-workspace-header] [data-aiflow-mobile-nav-trigger] { display: grid; flex-shrink: 0; }
+}
+@media (max-width: 639px) {
+  [data-business-list-toolbar] { grid-template-columns: minmax(0, 1fr); }
+  [data-business-list-toolbar] > :first-child { white-space: nowrap; }
+}

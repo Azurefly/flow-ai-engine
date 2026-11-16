@@ -18,6 +18,7 @@ import { ResourcePermissionNotice } from "./ResourcePermissionNotice";
 import { Plus, Trash2 } from "lucide-react";
 import { useContext } from "react";
 import { toast } from "sonner";
+import { readResourceSample } from "@shared/resource-sample";
 
 type ResourceMutation = {
   mutateAsync: (input: any) => Promise<unknown>;
@@ -159,15 +160,7 @@ export function StructuredResourceForm({
           name: asset.name,
           assetType: asset.assetType,
           schema: schemaRows.filter(row => row.name.trim()),
-          sample: sampleRows.some(row => row.key.trim())
-            ? [
-                Object.fromEntries(
-                  sampleRows
-                    .filter(row => row.key.trim())
-                    .map(row => [row.key, row.value])
-                ),
-              ]
-            : [],
+          sample: readResourceSample(schemaRows, sampleRows),
         });
         setAsset({ name: "", sourceId: "", assetType: "dataset" });
         setSchemaRows([{ name: "", type: "string" }]);
@@ -331,7 +324,7 @@ export function StructuredResourceForm({
         />
         <RowEditor
           title="一行样本"
-          helpText="样本行可选。内联资源在执行时读取样本；外部资源的样本仅供说明，不会替代实际读取。"
+          helpText="样本行可选。样本值按字段结构转换：number 填数值，boolean 填 true 或 false，string 保留原文。内联资源执行时读取样本；外部资源的样本仅供说明，不会替代实际读取。"
           emptyMessage="未添加样本行。"
           rows={sampleRows}
           onAdd={() => setSampleRows(rows => [...rows, { key: "", value: "" }])}

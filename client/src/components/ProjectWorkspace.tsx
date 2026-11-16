@@ -2387,7 +2387,7 @@ function ProcessCenter({
           </Button>
         </div>
         <details className="border-t border-border px-3 py-2">
-          <summary className={"aiflow-type-control inline-flex min-h-11 w-fit cursor-pointer list-none items-center font-medium " + mutedToneClass + " hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 sm:min-h-0"}>
+          <summary className={"aiflow-type-control inline-flex min-h-11 w-fit cursor-pointer list-none items-center gap-1.5 font-medium " + mutedToneClass + " hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 sm:min-h-0"}>
             {advancedFilterCount > 0
               ? "更多筛选（已启用 " + advancedFilterCount + " 项）"
               : "更多筛选"}{" "}
@@ -2444,7 +2444,7 @@ function ProcessCenter({
                 <th className="px-4 py-3 whitespace-nowrap">审核</th>
                 <th className="px-4 py-3 whitespace-nowrap">发布状态</th>
                 <th className="px-4 py-3 whitespace-nowrap">更新时间</th>
-                <th className="px-4 py-3 text-right">操作</th>
+                <th className="sticky right-0 z-10 bg-muted px-4 py-3 text-right">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -2513,7 +2513,7 @@ function ProcessCenter({
                   <td className={"px-4 py-3 whitespace-nowrap text-xs tabular-nums " + mutedToneClass}>
                     {formatDate(workflow.updatedAt)}
                   </td>
-                  <td className="min-w-[170px] px-3 py-3 text-right">
+                  <td className="sticky right-0 bg-card min-w-[170px] px-3 py-3 text-right">
                     <div className="flex items-center justify-end gap-2 whitespace-nowrap">
                       {renderPrimaryActions(workflow, "table")}
                       {renderMoreActions(workflow, "table")}
