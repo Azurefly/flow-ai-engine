@@ -105,6 +105,16 @@ function FactSection({ run }: { run: any }) {
                   ? `#${item.sequenceNo}`
                   : `${item.milestoneCode} · ${item.category}`}
               </p>
+              {state && parse(item.payloadJson)?.model === "participant-v1" && (
+                <ul className="mt-2 space-y-1 aiflow-type-body">
+                  {(parse(item.payloadJson).changes ?? []).map((change: any) => (
+                    <li key={change.userId}>
+                      {run.participantCards?.find((card: any) => card.userId === change.userId)?.userName || `用户 ${change.userId}`}
+                      {" · "}{change.before?.stateName || "首次参与"} → {change.after.stateName}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <time className="aiflow-type-meta text-muted-foreground">
               {formatTime(state ? item.createdAt : item.occurredAt)}
@@ -212,6 +222,22 @@ export function RunDetailContent({
         />
       </Suspense>
       <RunPayloadDetails title="实例错误" value={run.errorJson} kind="error" />
+      {run.participantCards?.length > 0 && (
+        <section>
+          <h3 className="aiflow-type-section-title font-semibold">参与人状态</h3>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2" data-participant-state-cards="">
+            {run.participantCards.map((card: any) => (
+              <article key={card.userId} className="min-w-0 rounded-lg border border-border p-3">
+                <p className="break-words font-medium">{card.userName || `用户 ${card.userId}`}</p>
+                <p className="mt-1 break-words aiflow-type-body">{card.stateName}</p>
+                <p className="mt-1 break-words aiflow-type-meta text-muted-foreground">
+                  {(parse(card.availableOperationsJson) ?? []).map((operation: any) => operation.name).join("、") || "暂无可用操作"}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
       <FactSection run={run} />
       <section>
         <h3 className="aiflow-type-section-title font-semibold text-foreground">

@@ -1,3 +1,6 @@
+import { isParticipantStateDefinition, PARTICIPANT_STATE_MODEL } from "@shared/participant-state";
+import { createParticipantStateExample } from "@shared/participant-state-example";
+import { ParticipantOperationEditor } from "./ParticipantOperationEditor";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
@@ -13,6 +16,7 @@ import {
   type TemplateNodeType,
 } from "@shared/workflow-template";
 import { CanvasNameDialog } from "./CanvasNameDialog";
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from "./ui/alert-dialog";
 import { Input } from "./ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
 import { useEditorViewport } from "@/hooks/useEditorViewport";
@@ -144,6 +148,7 @@ import {
   type FlowNodeType,
   type FlowType,
   type NodeConfig,
+  type NodeField,
   validateNodeConfig,
 } from "@shared/workflow-node-contract";
 import { isFlowNodeAllowed } from "@shared/flow-profile-contract";
@@ -205,7 +210,7 @@ type CanvasContextMenu = {
   edgeId?: string;
 } | null;
 type CanvasPresentation = "auto" | "readable" | "original";
-type HistorySnapshot = { nodes: CanvasNode[]; edges: Edge[]; presentation?: CanvasPresentation };
+type HistorySnapshot = { nodes: CanvasNode[]; edges: Edge[]; presentation?: CanvasPresentation; settings?: Definition["settings"] };
 
 const nodeAppearance: Record<NodeKind, { icon: typeof Play; color: string }> = {
   start: { icon: Play, color: "#10b981" },
@@ -2334,6 +2339,7 @@ export default function WorkflowCanvas({
   const inspectorRevealFrameRef = useRef<number | null>(null);
   const flowViewportRef = useRef<HTMLDivElement>(null);
   const baseRef = useRef<Definition>(initial);
+  const participantMode = isParticipantStateDefinition(baseRef.current);
   const appliedDefinitionRef = useRef("");
   const emittedDefinitionRef = useRef("");
   const appliedWorkflowRef = useRef<string | undefined>(undefined);
@@ -2421,6 +2427,7 @@ export default function WorkflowCanvas({
         nodes: structuredClone(n),
         edges: structuredClone(e),
         presentation,
+        settings: structuredClone(baseRef.current.settings),
       };
       pastRef.current = [...pastRef.current.slice(-29), snapshot];
       futureRef.current = [];
@@ -2437,8 +2444,10 @@ export default function WorkflowCanvas({
       nodes: structuredClone(latestNodesRef.current),
       edges: structuredClone(latestEdgesRef.current),
       presentation: presentationRef.current,
+      settings: structuredClone(baseRef.current.settings),
     };
     futureRef.current = [currentSnapshot, ...futureRef.current.slice(0, 29)];
+    if (previous.settings) baseRef.current = { ...baseRef.current, settings: previous.settings };
     setCanvasPresentation(previous.presentation ?? "auto");
     setNodes(previous.nodes);
     setEdges(previous.edges);
@@ -2463,8 +2472,10 @@ export default function WorkflowCanvas({
       nodes: structuredClone(latestNodesRef.current),
       edges: structuredClone(latestEdgesRef.current),
       presentation: presentationRef.current,
+      settings: structuredClone(baseRef.current.settings),
     };
     pastRef.current = [...pastRef.current.slice(-29), currentSnapshot];
+    if (next.settings) baseRef.current = { ...baseRef.current, settings: next.settings };
     setCanvasPresentation(next.presentation ?? "auto");
     setNodes(next.nodes);
     setEdges(next.edges);
@@ -2843,10 +2854,11 @@ export default function WorkflowCanvas({
     : null;
   const selectedConfigState = selectedConfigAssessment?.state;
   const selectedFieldGroups =
+    participantMode && selected?.data.kind === "operate" ? [{ label: "操作配置", fields: [] as NodeField[] }] :
     selected && selectedDefinition
       ? configFieldGroups(
           selected.data.kind,
-          visibleNodeConfigFields(selected.data.kind, selectedDefinition.fields, selectedConfig, Boolean(projectId), flowType),
+          visibleNodeConfigFields(selected.data.kind, selectedDefinition.fields, selectedConfig, Boolean(projectId), flowType).filter(field => !participantMode || (selected.data.kind !== "state" || !["bdjs", "jdgycz", "ywcz", "flowStatus", "bdym"].includes(field.key)) && (selected.data.kind !== "router" || !["gbms", "parallelJoinNodeId", "lysz"].includes(field.key))),
           selectedConfig
         )
       : [];
@@ -3865,7 +3877,7 @@ export default function WorkflowCanvas({
   }, [reactFlow, fullscreen, fitCanvas, readOnly, pushHistory, prefersReducedMotion, onDefinitionChange]);
 
   const availablePalette = palette.filter(item =>
-    isFlowNodeAllowed(flowType, item.type)
+    isFlowNodeAllowed(flowType, item.type) && (!participantMode || ["start", "end", "state", "operate", "router"].includes(item.type))
   );
   const normalizedNodeSearch = nodePaletteSearch.trim().toLowerCase();
   const categoryFor = (type: NodeKind) => ["http", "rest", "method", "llm"].includes(type) ? "service" : ["state", "operate", "form"].includes(type) ? "human" : ["start", "end", "condition", "router", "wait", "message_catch", "milestone", "subflow"].includes(type) ? "control" : "data";
@@ -3925,6 +3937,30 @@ export default function WorkflowCanvas({
           data-flow-canvas-toolbar=""
           className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border bg-card p-2"
         >
+          {flowType === "state" && !compactReadOnlyPreview && <label className="flex min-h-9 items-center gap-2 px-2 text-xs">状态模式
+            <select aria-label="状态运行模式" className="min-h-9 rounded border border-border bg-card px-2" disabled={readOnly}
+              value={participantMode ? PARTICIPANT_STATE_MODEL : "legacy"} onChange={event => {
+                pushHistory();
+                baseRef.current = { ...baseRef.current, settings: { ...baseRef.current.settings, stateModel: event.target.value } };
+                setNodes(current => [...current]);
+              }}>
+              <option value="legacy">节点推进</option><option value={PARTICIPANT_STATE_MODEL}>参与人状态</option>
+            </select>
+          </label>}
+          {participantMode && !readOnly && <AlertDialog>
+            <AlertDialogTrigger asChild><button type="button" className="min-h-9 rounded px-2 text-xs hover:bg-muted">载入提交与撤回示例</button></AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader><AlertDialogTitle>载入提交与撤回示例</AlertDialogTitle>
+                <AlertDialogDescription>示例将替换当前画布，可通过撤销恢复。保存后可继续配置参与人、路由条件和个人状态。</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel>取消</AlertDialogCancel><AlertDialogAction onClick={() => {
+                pushHistory();
+                const example = createParticipantStateExample();
+                baseRef.current = { ...baseRef.current, settings: { ...baseRef.current.settings, ...example.settings } };
+                setNodes(toFlowNodes(example)); setEdges(toFlowEdges(example));
+              }}>载入示例</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>}
           {!readOnly && (
             <div data-flow-node-palette="" className="contents">
               <Popover
@@ -4794,7 +4830,11 @@ export default function WorkflowCanvas({
                   ))}
                 </div>}
                 {activeInspectorGroup && (
-                  <NodeValueSources.Provider value={valueSources}>
+                  <NodeValueSources.Provider value={participantMode ? [...valueSources,
+                    { key: "participant", label: "被评估参与人", fields: ["userId", "stateCode", "stateName", "isActor", "isReceiver", "isRelationSender", "isRelationReceiver"].map(value => ({ value, label: value })) },
+                    { key: "action", label: "本次操作", fields: ["actorUserId", "receiverUserIds", "result", "relation"].map(value => ({ value, label: value })) },
+                    { key: "result", label: "本次办理表单", fields: [] },
+                  ] : valueSources}>
                   <section
                     role={selectedFieldGroups.length > 1 ? "tabpanel" : "region"}
                     data-inspector-section=""
@@ -4830,6 +4870,18 @@ export default function WorkflowCanvas({
                       </div>
                     )}
                     <div data-config-fields="" className="space-y-4">
+                      {participantMode && selected.data.kind === "operate" && <ParticipantOperationEditor
+                        targets={selectedRouteTargetLabels}
+                        config={selectedConfig} workflowId={workflowId} disabled={inspectorDisabled} readOnly={readOnly}
+                        onChange={config => updateSelected({ config })} />}
+                      {participantMode && selected.data.kind === "state" && <p className="text-xs text-muted-foreground">参与人在此状态停留。连接操作节点即可授予持卡人对应操作，全部人员进入终态后实例完成。</p>}
+                      {participantMode && selected.data.kind === "router" && <label className="grid gap-1 text-sm">人员未命中规则时
+                        <select className={canvasSelectClass} disabled={inspectorDisabled} value={String(selectedConfig.unmatched ?? "keep")}
+                          onChange={event => updateConfigField("unmatched", event.target.value)}>
+                          <option value="keep">保持原状态</option><option value="error">阻止本次操作</option>
+                        </select><span className="text-xs text-muted-foreground">actor、receiver、relation_sender、relation_receiver 表示本次操作关系。条件可引用被评估参与人的当前状态。</span>
+                      </label>}
+
                       {flowType === "data" && ["start", "end"].includes(selected.data.kind) && <p className="node-value-hint">{selected.data.kind === "start" ? "数据流程从已连接的数据源读取记录；在资源或查询节点中选择数据。此节点无需额外配置。" : "自动输出已连接上游的数据记录，无需填写结果模板。"}</p>}
                       {activeInspectorGroup.fields.map(field => {
                         const fieldValue =

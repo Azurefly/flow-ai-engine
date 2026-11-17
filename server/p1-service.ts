@@ -1,5 +1,7 @@
 import { encryptLlmApiKey, type LlmCredentialChange } from "./llm-secret-storage";
 import { taskSummarySelect } from "./task-list-projection";
+import { participantTaskBinding } from "../shared/participant-state";
+import { replayParticipantTask } from "./participant-state-runtime";
 import { eligibleDirectoryPage } from "./eligible-directory-page";
 import { TRPCError } from "@trpc/server";
 import { DEFAULT_SYSTEM_SETTINGS as defaultSettings, assertSystemSettingConfigToken, mergeSystemSettingValue, publicSystemSettingValue, readSystemSettingValue, systemSettingConfigToken } from "./system-setting-config";
@@ -98,6 +100,7 @@ export function isCurrentTaskOperation(input: {
         nodeId?: unknown;
         assignedUserId?: unknown;
         candidateUserIdsJson?: unknown;
+        payloadJson?: unknown;
       }
     | mysql.RowDataPacket;
   state?: { sourceNodeId?: unknown } | mysql.RowDataPacket;
@@ -110,16 +113,18 @@ export function isCurrentTaskOperation(input: {
         .filter(id => Number.isInteger(id) && id > 0)
     : candidateIds(input.task as mysql.RowDataPacket);
   if (!assigned && candidates.length === 0) return false;
+  const binding = participantTaskBinding(input.task.payloadJson);
   if (
     !input.state ||
-    String(input.state.sourceNodeId ?? "") !== String(input.task.nodeId)
+    String(input.state.sourceNodeId ?? "") !== String(binding?.stateNodeId ?? input.task.nodeId)
   )
     return false;
   return input.operations.some(item => {
     const operation =
       item && typeof item === "object" ? (item as Record<string, unknown>) : {};
     return (
-      String(operation.taskId ?? operation.id ?? "") === String(input.task.id)
+      String(operation.taskId ?? operation.id ?? "") === String(input.task.id) &&
+      (!binding || Number(operation.cardVersion) === binding.cardVersion)
     );
   });
 }
@@ -173,6 +178,7 @@ async function taskReassignmentState(
     (task.approvalGroupId && task.groupStatus !== "waiting")
   )
     return { eligible: false, reason: null };
+  if (participantTaskBinding(task.payloadJson ?? task.payload)) return { eligible: false, reason: "个人状态操作由持卡人执行。" };
   const owners = currentTaskHandlerIds(task);
   if (owners.length) {
     const [rows] = await (connection ?? db()).query<mysql.RowDataPacket[]>(
@@ -628,6 +634,10 @@ export async function executeWorkflowTask(
       code: "NOT_FOUND",
       message: "人工任务不存在或无访问权限。",
     });
+  if (participantTaskBinding(task.payloadJson ?? task.payload) && task.status === "completed") {
+    const replay = await replayParticipantTask(task, user.id, validateWorkflowTaskSubmission(task, result));
+    if (replay) return { ...replay, canViewRun: task.canViewRun === true };
+  }
   if (
     task.status !== "pending" &&
     (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id)
@@ -655,6 +665,10 @@ export async function completeWorkflowTask(
       code: "NOT_FOUND",
       message: "人工任务不存在或无访问权限。",
     });
+  if (participantTaskBinding(task.payloadJson ?? task.payload) && task.status === "completed") {
+    const replay = await replayParticipantTask(task, user.id, validateWorkflowTaskSubmission(task, result));
+    if (replay) return { ...replay, canViewRun: task.canViewRun === true };
+  }
   if (!(await canAccessTask(user, task, true)))
     throw new TRPCError({ code: "FORBIDDEN", message: "无权完成该人工任务。" });
   if (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id)
@@ -955,6 +969,8 @@ export async function handoverWorkflowTask(
   )
     throw new Error(`仅当前处理人可${actionLabel}已领取任务。 `);
   if (!input.recovery) await assertCurrentTaskOperation(user, task);
+  if (participantTaskBinding(task.payloadJson ?? task.payload))
+    throw new Error("个人状态操作由持卡人执行，请通过流程中配置的转交操作变更参与人。");
   const target = await getEligibleAssignee(task, input.targetUserId);
   const currentOwnerId =
     Number(task.claimedByUserId ?? task.assignedUserId ?? 0) ||
@@ -1233,6 +1249,8 @@ export async function addWorkflowTaskSigner(
   if (!task.approvalGroupId)
     throw new Error("单人任务不支持动态加签，请先在流程定义中启用或签/会签。 ");
   await assertCurrentTaskOperation(user, task);
+  if (participantTaskBinding(task.payloadJson ?? task.payload))
+    throw new Error("个人状态操作由持卡人执行，请通过流程中配置的转交操作变更参与人。");
   const target = await getEligibleAssignee(task, input.targetUserId);
   const newTaskId = randomUUID();
   const connection = await db().getConnection();

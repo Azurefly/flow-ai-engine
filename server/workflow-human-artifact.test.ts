@@ -30,7 +30,7 @@ vi.mock("./db", () => {
       return [state.prepared === undefined ? [] : [state.prepared]];
     if (sql.includes("SELECT LAST_INSERT_ID()"))
       return [[{ sequenceNo: state.sequence }]];
-    if (sql.startsWith("SELECT id,payloadJson FROM workflow_task")) {
+    if (sql.startsWith("SELECT id,payloadJson,status FROM workflow_task")) {
       const rows = state.artifacts
         .filter(
           entry =>

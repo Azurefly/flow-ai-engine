@@ -273,7 +273,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         started.runId
       );
       expect(employeeWaiting).toMatchObject({
-        displayStatus: "等待审核",
+        participantStatusName: "等待审核",
         availableOperations: [],
       });
       expect(
@@ -283,7 +283,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         await callerFor(supervisor).task.instances({ view: "all" }),
         started.runId
       );
-      expect(supervisorWaiting).toMatchObject({ displayStatus: "待审批" });
+      expect(supervisorWaiting).toMatchObject({ participantStatusName: "待审批" });
       expect(supervisorWaiting.availableOperations).toEqual([
         {
           taskId: started.taskId,
@@ -332,7 +332,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         started.runId
       );
       expect(supervisorApproved).toMatchObject({
-        displayStatus: "已审核",
+        participantStatusName: "已审核",
         availableOperations: [],
       });
       const employeeManagerWaiting = findRun(
@@ -340,7 +340,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         started.runId
       );
       expect(employeeManagerWaiting).toMatchObject({
-        displayStatus: "直接上级审核通过，待经理通过",
+        participantStatusName: "直接上级审核通过，待经理通过",
         availableOperations: [],
       });
       expect(
@@ -381,7 +381,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         started.runId
       );
       expect(managerApproved).toMatchObject({
-        displayStatus: "已审核",
+        participantStatusName: "已审核",
         availableOperations: [],
       });
       const employeeApproved = findRun(
@@ -389,7 +389,7 @@ describe("原版人员级状态模型：员工请假、直属上级和经理逐�
         started.runId
       );
       expect(employeeApproved).toMatchObject({
-        displayStatus: "申请通过",
+        participantStatusName: "申请通过",
         availableOperations: [],
       });
 

@@ -1,3 +1,7 @@
+import { getPath, interpolate, resolveTemplates, compareCondition, selectRouterRoutes } from "./workflow-routing";
+import { isParticipantStateDefinition } from "../shared/participant-state";
+import { initializeParticipantStateRun, completeParticipantStateTask } from "./participant-state-runtime";
+export { interpolate, resolveTemplates, selectRouterRoutes, selectRouterRoute } from "./workflow-routing";
 import { getLlmConfiguration, resolveLlmConnection } from "./llm-configuration";
 import { TRPCError } from "@trpc/server";
 import { aggregateOutcomeCode, assertSigningOutcomes, outcomeDecision, contractOutcomeDecision } from "../shared/operate-signing-outcomes";
@@ -56,7 +60,6 @@ import {
 } from "../shared/reference-operate-config";
 import {
   normalizeReferenceRouterConfig,
-  type NormalizedRouterRule,
 } from "../shared/reference-router-config";
 import {
   readConditionHandles,
@@ -490,50 +493,6 @@ function readJson(value: unknown): unknown {
   }
 }
 
-function getPath(context: unknown, path: string): unknown {
-  const segments = path
-    .trim()
-    .replace(/^\$\.?/, "")
-    .split(".")
-    .filter(Boolean);
-  let value: unknown = context;
-  for (const segment of segments) {
-    if (Array.isArray(value) && /^\d+$/.test(segment))
-      value = value[Number(segment)];
-    else if (value && typeof value === "object")
-      value = (value as JsonRecord)[segment];
-    else return undefined;
-  }
-  return value;
-}
-
-/** Resolves {{input.topic}} and {{nodes.http-1.body.title}} without executing arbitrary expressions. */
-export function interpolate(value: unknown, context: JsonRecord): unknown {
-  if (typeof value !== "string") return value;
-  const exact = value.match(/^\s*\{\{\s*([^}]+?)\s*\}\}\s*$/);
-  if (exact) return getPath(context, exact[1]);
-  return value.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, path: string) => {
-    const resolved = getPath(context, path);
-    return resolved === undefined || resolved === null
-      ? ""
-      : typeof resolved === "string"
-        ? resolved
-        : JSON.stringify(resolved);
-  });
-}
-
-export function resolveTemplates(value: unknown, context: JsonRecord): unknown {
-  if (Array.isArray(value))
-    return value.map(item => resolveTemplates(item, context));
-  if (value && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value as JsonRecord).map(([key, item]) => [
-        key,
-        resolveTemplates(item, context),
-      ])
-    );
-  return interpolate(value, context);
-}
 
 function blockedIp(address: string) {
   if (isIP(address) === 4) {
@@ -1285,149 +1244,7 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   };
 }
 
-function compareCondition(left: unknown, operator: string, right: unknown) {
-  switch (operator) {
-    case "equals":
-      return left === right;
-    case "notEquals":
-      return left !== right;
-    case "contains":
-      return typeof left === "string"
-        ? left.includes(String(right ?? ""))
-        : Array.isArray(left)
-          ? left.includes(right)
-          : false;
-    case "exists":
-      return left !== undefined && left !== null && left !== "";
-    case "greaterThan":
-      return Number(left) > Number(right);
-    case "lessThan":
-      return Number(left) < Number(right);
-    default:
-      throw new Error(`条件节点不支持操作符：${operator}`);
-  }
-}
 
-function routerRuleMatches(
-  rule: NormalizedRouterRule,
-  context: JsonRecord,
-  roleKeys: string[]
-) {
-  if (rule.hasUnsafeCode)
-    throw new Error("路由规则包含原版任意代码，必须迁移为安全条件后才能运行。");
-  const hasRoleFilter = rule.roleKeys.length > 0;
-  const roleMatched =
-    !hasRoleFilter || rule.roleKeys.some(role => roleKeys.includes(role));
-  const hasConditions = rule.conditions.length > 0;
-  const conditionsMatched =
-    !hasConditions ||
-    rule.conditions.every(condition =>
-      compareCondition(
-        interpolate(condition.left, context),
-        condition.operator,
-        interpolate(condition.right, context)
-      )
-    );
-  if (rule.relation === "or" && (hasRoleFilter || hasConditions)) {
-    return (
-      (hasRoleFilter && roleMatched) || (hasConditions && conditionsMatched)
-    );
-  }
-  return roleMatched && conditionsMatched;
-}
-
-/**
- * 按原版语义为每个当前人员分别匹配路由。非广播模式每人只进入首个命中分支，
- * 广播模式允许同一人员进入多个分支；权重越大越优先，-1 为默认规则。
- */
-export function selectRouterRoutes(
-  config: JsonRecord,
-  context: JsonRecord,
-  participantUserIds: number[] = [],
-  roleKeysByUser: Map<number, string[]> = new Map()
-) {
-  const resolved = asRecord(resolveTemplates(config, context));
-  const normalized = normalizeReferenceRouterConfig(resolved);
-  const participants = Array.from(
-    new Set(participantUserIds.filter(id => Number.isInteger(id) && id > 0))
-  );
-  const assignments = new Map<
-    string,
-    { handle: string; targetNodeId: string; userIds: number[] }
-  >();
-  const addAssignment = (
-    rule: Pick<NormalizedRouterRule, "handle" | "targetNodeId">,
-    userId: number
-  ) => {
-    const key = `${rule.handle}\u0000${rule.targetNodeId}`;
-    const current = assignments.get(key) ?? {
-      handle: rule.handle,
-      targetNodeId: rule.targetNodeId,
-      userIds: [],
-    };
-    if (!current.userIds.includes(userId)) current.userIds.push(userId);
-    assignments.set(key, current);
-  };
-
-  if (participants.length) {
-    const ordinaryRules = normalized.rules.filter(rule => !rule.isDefault);
-    const defaultRule = normalized.rules.find(rule => rule.isDefault);
-    for (const userId of participants) {
-      const roles = Array.from(
-        new Set(["default", ...(roleKeysByUser.get(userId) ?? [])])
-      );
-      let matched = false;
-      for (const rule of ordinaryRules) {
-        if (!routerRuleMatches(rule, context, roles)) continue;
-        matched = true;
-        addAssignment(rule, userId);
-        if (!normalized.broadcast) break;
-      }
-      if (!matched) {
-        const fallback = defaultRule ?? {
-          handle: String(interpolate(normalized.defaultRoute, context)),
-          targetNodeId: "",
-        };
-        addAssignment(fallback, userId);
-      }
-    }
-  } else {
-    const matches = normalized.rules.filter(
-      rule => !rule.isDefault && routerRuleMatches(rule, context, ["default"])
-    );
-    const fallback = normalized.rules.find(rule => rule.isDefault) ?? {
-      handle: String(interpolate(normalized.defaultRoute, context)),
-      targetNodeId: "",
-    };
-    const selected = matches.length
-      ? normalized.broadcast
-        ? matches
-        : matches.slice(0, 1)
-      : [fallback];
-    for (const rule of selected)
-      assignments.set(`${rule.handle}\u0000${rule.targetNodeId}`, {
-        handle: rule.handle,
-        targetNodeId: rule.targetNodeId,
-        userIds: [],
-      });
-  }
-
-  const selectedBranches = Array.from(assignments.values());
-  return {
-    broadcast: normalized.broadcast,
-    rules: normalized.rules,
-    selectedBranches,
-    selectedRoutes: Array.from(
-      new Set(selectedBranches.map(branch => branch.handle))
-    ),
-    selectedRoute: selectedBranches[0]?.handle ?? normalized.defaultRoute,
-  };
-}
-
-/** 兼容旧调用方的单一路由返回结构。 */
-export function selectRouterRoute(config: JsonRecord, context: JsonRecord) {
-  return selectRouterRoutes(config, context);
-}
 
 async function executeInlineDefinition(
   definition: Definition,
@@ -2230,6 +2047,7 @@ export async function executePreparedWorkflowRun(input: {
   )
     throw new Error(`流程运行已结束：${run.status}。`);
   const definition = readJson(run.definitionSnapshotJson) as Definition;
+  if (isParticipantStateDefinition(definition)) return initializeParticipantStateRun(input.runId, input.leaseToken);
   const persistedContext = asRecord(readJson(run.contextJson));
   const context = input.checkpoint?.context
     ? asRecord(input.checkpoint.context)
@@ -3320,14 +3138,16 @@ export async function executeRunSegment(input: {
     }
     if (node.type === "operate" && asRecord(input.context.runtime).atomicHumanTaskVersion === 1) {
       const [existingTasks] = await db().query<mysql.RowDataPacket[]>(
-        "SELECT id,payloadJson FROM workflow_task WHERE runId=? AND nodeId=? AND executionKey=? AND status IN ('pending','claimed') ORDER BY createdAt,id LIMIT 1",
+        "SELECT id,payloadJson,status FROM workflow_task WHERE runId=? AND nodeId=? AND executionKey=? ORDER BY status IN ('pending','claimed') DESC,createdAt,id LIMIT 1",
         [input.runId, node.id, workflowTaskExecutionKey(asRecord(input.context.runtime), activeTokens)]
       );
       if (existingTasks[0]) {
         restoreHumanCreationRuntime(input.context, readJson(existingTasks[0].payloadJson));
         parallel?.queue.shift();
         await persistCheckpoint({ queue: [...input.queue], context: input.context, finalOutput, currentNodeId: null });
-        if (parallel) continue;
+        // A converging branch can revisit this occurrence after its decision was committed.
+        // The decision already enqueued successors, so consuming it again must not recreate work.
+        if (parallel || ["completed", "cancelled"].includes(String(existingTasks[0].status))) continue;
         return { status: "waiting", taskId: String(existingTasks[0].id) };
       }
     }
@@ -4301,6 +4121,14 @@ export async function resumeWorkflowTask(input: {
       task.contextJson = lockedRuns[0].contextJson;
       task.definitionSnapshotJson = lockedRuns[0].definitionSnapshotJson;
       task.startedAt = lockedRuns[0].startedAt;
+    }
+    if (isParticipantStateDefinition(readJson(task.definitionSnapshotJson))) {
+      const result = await completeParticipantStateTask(connection, {
+        taskId: input.taskId, actorUserId: input.completedBy.id, runId: String(task.runId),
+        result: validateWorkflowTaskSubmission(task, normalizedResult),
+      });
+      await connection.commit();
+      return result;
     }
     if (
       task.status !== "claimed" ||
@@ -5331,6 +5159,13 @@ export async function getWorkflowRun(
   );
   const run = runRows[0];
   if (!run) return null;
+  const [participantCards] = isParticipantStateDefinition(readJson(run.definitionSnapshotJson))
+    ? await db().query<mysql.RowDataPacket[]>(
+        `SELECT ps.userId,ps.stateCode,ps.stateName,ps.stateColor,ps.availableOperationsJson,
+          COALESCE(NULLIF(u.name,''),u.username) AS userName
+          FROM workflow_participant_state ps LEFT JOIN users u ON u.id=ps.userId
+          WHERE ps.runId=? ORDER BY ps.userId`, [runId])
+    : [[]];
   const nodeRows = await readWorkflowNodeHistory(db(), runId);
   const [transitionRows] = await db().query<mysql.RowDataPacket[]>(
     "SELECT * FROM workflow_state_transition WHERE runId=? ORDER BY sequenceNo ASC",
@@ -5353,6 +5188,7 @@ export async function getWorkflowRun(
   );
   return {
     ...run,
+    participantCards,
     taskActivities,
     workflowId: String(run.workflowId),
     currentStateName:

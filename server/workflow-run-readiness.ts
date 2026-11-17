@@ -1,4 +1,5 @@
 import { inspectWorkflowServiceConfiguration } from "./workflow-service-readiness";
+import { isParticipantStateDefinition } from "../shared/participant-state";
 import { TRPCError } from "@trpc/server";
 import { getSharedPool } from "./db";
 import { getWorkflow, hasWorkflowPermission } from "./workflow-service";
@@ -36,6 +37,10 @@ export async function inspectRunParticipants(
 ) {
   const checks: ParticipantCheck[] = [];
   const diagnostics: WorkflowCompileDiagnostic[] = [];
+  if (isParticipantStateDefinition(definition)) return {
+    checks: definition.nodes.filter(node => node.type === "operate").map(node => ({ nodeId: node.id, name: node.name,
+      status: "deferred" as const, message: "由当前状态卡持有人办理，接收人在提交事务中校验。" })), diagnostics,
+  };
   const previews = new Map<string, ReturnType<typeof previewOperateApproval>>();
   // A shared first human node is unavoidable only when every side-effect-free path reaches it.
   const immediate = new Set<string>();

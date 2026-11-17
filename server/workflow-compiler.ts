@@ -1,4 +1,6 @@
 import { TRPCError } from "@trpc/server";
+import { isParticipantStateDefinition } from "../shared/participant-state";
+import { participantStateExecutionPlan, validateParticipantStateGraph } from "./participant-state-compiler";
 import { createHash } from "node:crypto";
 import {
   getFlowProfile,
@@ -76,7 +78,8 @@ export type WorkflowExecutionPlan = {
     | "1.5.0"
     | "1.6.0"
     | "1.7.0"
-    | "1.8.0";
+    | "1.8.0"
+    | "1.9.0";
   profile?: {
     flowType: FlowType;
     profileVersion: number;
@@ -282,6 +285,7 @@ export function analyzeWorkflowDefinition(
   const profile = getFlowProfile(options.flowType);
   const diagnostics: WorkflowCompileDiagnostic[] = [];
   const value = definition as WorkflowDefinition;
+  const participantMode = isParticipantStateDefinition(value);
   if (!value || !Array.isArray(value.nodes) || !Array.isArray(value.edges)) {
     return {
       ok: false,
@@ -302,6 +306,10 @@ export function analyzeWorkflowDefinition(
       })
     );
   }
+  if (value.settings?.stateModel !== undefined && value.settings.stateModel !== "legacy" && !participantMode)
+    diagnostics.push(diagnostic("WF_STATE_MODEL_INVALID", "状态运行模式无效。"));
+  if (participantMode && options.flowType !== "state")
+    diagnostics.push(diagnostic("WF_STATE_MODEL_PROFILE", "参与人状态模式仅适用于状态流程。"));
 
   const seenNodeIds = new Set<string>();
   for (const rawNode of value.nodes) {
@@ -376,7 +384,7 @@ export function analyzeWorkflowDefinition(
     }
     if (executable) {
       if (
-        node.type === "operate" &&
+        !participantMode && node.type === "operate" &&
         String(node.config.assigneeMode ?? "") === "none"
       ) {
         diagnostics.push(
@@ -530,6 +538,14 @@ export function analyzeWorkflowDefinition(
     validEdges.push(edge);
     outgoing.get(edge.sourceNodeId)?.push(edge);
     incoming.get(edge.targetNodeId)?.push(edge);
+  }
+
+  if (participantMode) {
+    if (executable && !diagnostics.length) diagnostics.push(...validateParticipantStateGraph(value));
+    if (diagnostics.length) return { ok: false, diagnostics };
+    const definition = normalizedDefinition(value);
+    const plan = participantStateExecutionPlan(definition);
+    return { ok: true, diagnostics: [], definition, plan, planHash: hashWorkflowExecutionPlan(plan) };
   }
 
   const dataTerminals = validNodes.filter(

@@ -2,6 +2,7 @@
 const mutedToneClass = "text-muted-foreground";
 import { outcomeDecision, type SigningDecision } from "@shared/operate-signing-outcomes";
 import { Button } from "@/components/ui/button";
+import { participantTaskBinding } from "@shared/participant-state";
 import {
   taskFormInputValue,
   taskFormFieldErrors,
@@ -3063,7 +3064,7 @@ function TaskDrawer({
                 </div>
               </div>
             )}
-            {(canManage || canReassign) && (
+            {(canManage || canReassign) && !participantTaskBinding(task.payloadJson ?? task.payload) && (
               <details
                 data-task-assignment=""
                 open={canReassign || undefined}
@@ -3245,6 +3246,11 @@ function TaskDrawer({
               </details>
             )}
           </fieldset>
+        )}
+        {canManage && participantTaskBinding(task.payloadJson ?? task.payload) && task.status === "claimed" && (
+          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={onReturn}>
+            退回待处理
+          </Button>
         )}
         {canManage && (
           <footer data-task-actions="" className="task-actions">
