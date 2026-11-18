@@ -1671,13 +1671,15 @@ function StructuredValueEditor({
                     ? { connect: { id: "", text: "", yId: "" }, end: "" }
                     : "");
   const originalObject = ORIGINAL_OBJECT_FIELD_SPECS[field.key];
+  const routeList = isList && field.key === "routes";
   return (
-    <fieldset className="grid gap-2 rounded-md border border-border bg-muted p-2.5">
-      <legend className="px-1 text-xs font-semibold text-foreground">
+    <fieldset data-route-rules={routeList ? "" : undefined} className="grid gap-2 rounded-md border border-border bg-muted p-2.5">
+      <legend className={routeList ? "route-list-title aiflow-type-dialog-title" : "px-1 text-xs font-semibold text-foreground"}>
         {field.required && <i className="mr-1 not-italic text-red-500">*</i>}
         {field.label}
+        {routeList && <small>{list.length} 条分支</small>}
       </legend>
-      {isList && field.key === "routes" ? (
+      {routeList ? (
         <RouteListEditor items={list} disabled={disabled} targets={routeTargetLabels}
           context={participantRouting} onChange={updateList} />
       ) : isDataflowFieldList(nodeKind, field.key) ? (
@@ -1760,7 +1762,7 @@ function RouteListEditor({ items, disabled, targets, context, onChange }: {
     return <section className="grid min-w-0 gap-3" data-route-detail="" aria-label="分支详情">
       <header className="rule-context">
         <button type="button" className="rule-link" onClick={() => select(null)}>‹ 全部分支（{items.length}）</button>
-        <strong>{rule.name}</strong><span>流向　{target(rule)}</span>
+        <h3 className="aiflow-type-dialog-title">{rule.name}</h3><span>流向　{target(rule)}</span>
         {!targets?.[rule.handle] && !rule.targetNodeId && <span className="aiflow-type-control">请从此路径句柄连线到目标状态节点</span>}
       </header>
       <StructuredListRow key={index} fieldKey="routes" item={items[index]} disabled={disabled}
