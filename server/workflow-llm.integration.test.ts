@@ -41,7 +41,7 @@ describe("工作流引擎真实 LLM 节点集成", () => {
     const [users] = await pool.query<mysql.RowDataPacket[]>("SELECT id,role FROM users WHERE status='active' ORDER BY CASE WHEN role='admin' THEN 0 ELSE 1 END,id LIMIT 1");
     const user = users[0];
     expect(user).toBeTruthy();
-    await pool.query("INSERT INTO workflow (id,ownerUserId,name,status,definitionVersion,definitionJson) VALUES (?,?,?,'published',1,?)", [workflowId, user.id, "工作流引擎 LLM 集成测试", JSON.stringify(definition)]);
+    await pool.query("INSERT INTO workflow (id,ownerUserId,name,flowType,status,definitionVersion,definitionJson) VALUES (?,?,?,'control','published',1,?)", [workflowId, user.id, "工作流引擎 LLM 集成测试", JSON.stringify(definition)]);
     await pool.query("INSERT INTO workflow_member (id,workflowId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)", [randomUUID(), workflowId, user.id, user.id]);
     const result = await executeWorkflow({ workflowId, triggeredBy: { id: user.id, role: user.role }, workflowInput: { name: "LLM 集成测试" } });
     runId = result.runId;
