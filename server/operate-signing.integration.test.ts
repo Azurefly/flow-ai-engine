@@ -298,7 +298,7 @@ describe("原版操作节点或签和会签运行语义", () => {
         [orTodos[0][0].id]
       );
       expect(uncompleted[0]).toMatchObject({
-        status: "claimed",
+        status: "pending",
         resultJson: null,
       });
       const orRejected: any = await settleWorkflowCommand(

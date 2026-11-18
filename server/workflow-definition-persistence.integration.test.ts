@@ -371,7 +371,15 @@ describe("流程定义 JSON 导入导出与持久化", () => {
         node => node.id === "subflow"
       );
       if (!expectedSubflowNode) throw new Error("期望定义缺少子流程节点。");
-      expectedSubflowNode.config.subflowId = subflowId;
+      const [library] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT name,updatedAt,definitionJson FROM workflow_subflow WHERE id=?", [subflowId]
+      );
+      Object.assign(expectedSubflowNode.config, {
+        subflowId, executionMode: "sync_snapshot", resolvedSubflowId: subflowId,
+        resolvedSubflowName: library[0].name,
+        resolvedSubflowUpdatedAt: new Date(library[0].updatedAt).toISOString(),
+        resolvedSubflowDefinition: library[0].definitionJson,
+      });
       expect(reloaded.definition).toEqual(expectedImported);
       expect(reimported).toEqual(expectedImported);
       expect((copy as any).definition).toEqual(expectedImported);

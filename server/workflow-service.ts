@@ -320,6 +320,7 @@ export async function listWorkflows(user: WorkflowUser, options?: {
            )
          )`;
   const params: unknown[] = canViewAll ? [] : [user.id, user.id, user.id, user.id, user.id, user.id];
+  query += " AND (w.projectId IS NULL OR EXISTS (SELECT 1 FROM flow_project parent WHERE parent.id=w.projectId AND parent.status='active'))";
   if (options?.projectId) {
     query += " AND w.projectId=?";
     params.push(options.projectId);

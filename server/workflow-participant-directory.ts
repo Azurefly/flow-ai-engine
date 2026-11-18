@@ -30,6 +30,10 @@ export async function searchWorkflowParticipants(
       message: "无权配置此流程的处理人。",
     });
   const selectedIds = Array.from(new Set(input.selectedIds));
+  const orderedSelected = (options: SearchSelectOption[]) => {
+    const byId = new Map(options.map(option => [option.value, option]));
+    return selectedIds.flatMap(id => byId.get(id) ?? []);
+  };
   if (selectedIds.length > 100 || input.query.length > 100)
     throw new TRPCError({
       code: "BAD_REQUEST",
@@ -116,7 +120,7 @@ export async function searchWorkflowParticipants(
     });
     return {
       items: matches.slice(0, 50).map(option),
-      selected: selected.map(option),
+      selected: orderedSelected(selected.map(option)),
       hasMore: matches.length > 50,
     };
   }
@@ -146,7 +150,7 @@ export async function searchWorkflowParticipants(
   });
   return {
     items: matches.slice(0, 50).map(option),
-    selected: selected.map(option),
+    selected: orderedSelected(selected.map(option)),
     hasMore: matches.length > 50,
   };
 }

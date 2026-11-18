@@ -278,7 +278,9 @@ export async function getWorkflowAccess(
   const executor = options?.connection ?? db();
   const shareLock = options?.lock ? " FOR SHARE" : "";
   const [workflowRows] = await executor.query<mysql.RowDataPacket[]>(
-    `SELECT ownerUserId,projectId FROM workflow WHERE id=? LIMIT 1${shareLock}`,
+    `SELECT ownerUserId,projectId,
+            (SELECT p.status FROM flow_project p WHERE p.id=workflow.projectId${shareLock}) AS projectStatus
+       FROM workflow WHERE id=? LIMIT 1${shareLock}`,
     [workflowId]
   );
   const workflow = workflowRows[0];
@@ -289,10 +291,14 @@ export async function getWorkflowAccess(
       memberRoles: [] as WorkflowMemberRole[],
       projectRoles: [] as ProjectMemberRole[],
     };
+  const permissionsForProject = (permissions: Set<WorkflowPermission>) =>
+    workflow.projectStatus === "archived"
+      ? new Set<WorkflowPermission>(permissions.has("workflow:view") ? ["workflow:view"] : [])
+      : permissions;
   if (user.role === "admin" || workflow.ownerUserId === user.id) {
     return {
       exists: true,
-      permissions: new Set<WorkflowPermission>(WORKFLOW_PERMISSIONS),
+      permissions: permissionsForProject(new Set(WORKFLOW_PERMISSIONS)),
       memberRoles: ["owner"] as WorkflowMemberRole[],
       projectRoles: [] as ProjectMemberRole[],
     };
@@ -340,7 +346,7 @@ export async function getWorkflowAccess(
     if (WORKFLOW_PERMISSIONS.includes(permission as WorkflowPermission))
       permissions.add(permission as WorkflowPermission);
   }
-  return { exists: true, permissions, memberRoles, projectRoles };
+  return { exists: true, permissions: permissionsForProject(permissions), memberRoles, projectRoles };
 }
 
 export async function hasWorkflowPermission(user: { id: number; role: "user" | "admin" }, workflowId: string, permission: WorkflowPermission) {

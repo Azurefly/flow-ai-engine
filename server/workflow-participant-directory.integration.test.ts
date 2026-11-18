@@ -12,7 +12,7 @@ test("流程编辑者可搜索和回显处理人，查看者和撤权用户无�
   const tag = `picker_${randomUUID().slice(0, 8)}`;
   let workflowId: string | undefined;
   const ids: number[] = [];
-  const unitIds = [randomUUID(), randomUUID()];
+  const unitIds = [randomUUID(), randomUUID()].sort().reverse();
   const caller = (user: any) =>
     appRouter.createCaller({
       user,

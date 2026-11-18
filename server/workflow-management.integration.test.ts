@@ -144,7 +144,8 @@ describe("流程仓库管理", () => {
           userId: member.id,
           role: "viewer",
         })
-      ).rejects.toThrow("无权管理流程成员");
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
+      expect(await listWorkflowMembers(sourceId)).toEqual(members);
       await expect(
         (ownerCaller.workflow.run as any)({
           workflowId: sourceId,

@@ -5,7 +5,7 @@ import mysql from "mysql2/promise";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
-import { deleteDataflowSchedule, handleDataflowScheduleCallback } from "./p2-service";
+import { deleteDataflowSchedule, handleDataflowScheduleCallback, runDataflowJobOnce } from "./p2-service";
 import * as heartbeat from "./_core/heartbeat";
 import { sdk } from "./_core/sdk";
 
@@ -69,6 +69,8 @@ describe("P2 托管计划可信回调", () => {
     const second = responseCapture();
     await handleDataflowScheduleCallback({ path: "/api/scheduled/dataflow" } as any, second.res);
     expect(second.result).toMatchObject({ code: 200, body: { ok: true, duplicate: true, runId: first.result.body.runId } });
+    await expect(runDataflowJobOnce(first.result.body.runId)).resolves.toBe(true);
+    await expect(runDataflowJobOnce(first.result.body.runId)).resolves.toBe(false);
     const [runs] = await pool.query<mysql.RowDataPacket[]>("SELECT * FROM dataflow_run WHERE workflowId=? AND triggerType='schedule'", [workflowId]);
     expect(runs).toHaveLength(1);
     expect(runs[0].status).toBe("success");

@@ -224,16 +224,17 @@ run(
     await pool.query("UPDATE flow_project SET status='archived' WHERE id=?", [
       projectId,
     ]);
-    expect(
-      (await getWorkflowAccess(employee, workflowId)).permissions.size
-    ).toBe(0);
+    expect([...(await getWorkflowAccess(employee, workflowId)).permissions]).toEqual(["workflow:view"]);
+    expect([...(await getWorkflowAccess(admin, workflowId)).permissions]).toEqual(["workflow:view"]);
     expect(
       (await listWorkflows(employee)).some(row => row.id === workflowId)
     ).toBe(false);
     await pool.query("UPDATE workflow SET archivedAt=NOW() WHERE id=?", [
       workflowId,
     ]);
-    expect(await listArchivedWorkflows(employee, projectId)).toEqual([]);
+    expect(await listArchivedWorkflows(employee, projectId)).toEqual([
+      expect.objectContaining({ id: workflowId, canRestore: false }),
+    ]);
   },
   30_000
 );
