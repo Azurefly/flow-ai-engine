@@ -110,6 +110,11 @@ export const assistantToolDefinitions: Tool[] = [
     taskQuery
   ),
   tool(
+    "listMyCompletedTasks",
+    "查询登录客户本人已经办理完成的任务（我的已办），会话有项目时仅查该项目。每条结果含完成时间和任务详情入口。",
+    taskQuery
+  ),
+  tool(
     "searchWorkflows",
     "搜索登录客户可见的流程，返回匹配的流程与详情入口。",
     workflowQuery
@@ -146,7 +151,7 @@ export type AssistantToolProposal = Preview &
   );
 type ToolLink = { label: string; href: string };
 type PreparedTool =
-  | { kind: "read"; result: unknown; links: ToolLink[] }
+  | { kind: "read"; message: string; result: unknown; links: ToolLink[] }
   | { kind: "proposal"; proposal: AssistantToolProposal };
 type Context = { projectId?: string | null };
 function bad(message: string): never {
@@ -391,10 +396,11 @@ export async function prepareAssistantTool(
   args: unknown,
   context: Context
 ): Promise<PreparedTool> {
-  if (name === "listMyTasks") {
+  if (name === "listMyTasks" || name === "listMyCompletedTasks") {
     const input = parse(taskQuery, args);
+    const completed = name === "listMyCompletedTasks";
     const rows = await listWorkflowTasks(actor, {
-      view: "todo",
+      view: completed ? "done" : "todo",
       projectId: context.projectId ?? undefined,
       summaryOnly: true,
       limit: input.limit ?? 10,
@@ -405,17 +411,17 @@ export async function prepareAssistantTool(
       workflowId: String(row.workflowId),
       workflowName: String(row.workflowName),
       status: String(row.status),
-      dueAt: row.dueAt ?? null,
+      ...(completed ? { completedAt: row.completedAt ?? null } : { dueAt: row.dueAt ?? null }),
     }));
     const links = result.map(task => ({
-      label: task.workflowName + " · " + task.nodeName + " · 打开待办",
+      label: task.workflowName + " · " + task.nodeName + (completed ? " · 查看已办" : " · 打开待办"),
       href: formatConsoleRoute({
         section: "runs",
         view: "workbench",
         taskId: task.id,
       }),
     }));
-    return { kind: "read", result, links };
+    return { kind: "read", message: completed ? "已查询我的已办。" : "已查询我的待办。", result, links };
   }
   if (name === "searchWorkflows") {
     const input = parse(workflowQuery, args);
@@ -434,6 +440,7 @@ export async function prepareAssistantTool(
     }));
     return {
       kind: "read",
+      message: "已查询可见流程。",
       result,
       links: result.map(item => ({
         label: item.name,

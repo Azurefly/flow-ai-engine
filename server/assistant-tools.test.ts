@@ -225,6 +225,22 @@ describe("对话业务工具", () => {
     });
     expect(JSON.stringify(flows)).not.toContain("不要返回");
   });
+  it("已办以本人和当前项目查询，返回完成时间与工作台入口", async () => {
+    const completedAt = "2026-11-18T12:00:00Z";
+    services.listWorkflowTasks.mockResolvedValue([{
+      id: "done01", nodeName: "复核", workflowName: "采购", workflowId: "flow01",
+      status: "completed", completedAt, resultJson: { comment: "内部意见" },
+    }]);
+    const completed = await prepareAssistantTool(user, "listMyCompletedTasks", { limit: 3 }, context);
+    expect(services.listWorkflowTasks).toHaveBeenCalledWith(user, {
+      view: "done", projectId, summaryOnly: true, limit: 3,
+    });
+    expect(completed).toEqual({
+      kind: "read", message: "已查询我的已办。",
+      result: [{ id: "done01", nodeName: "复核", workflowName: "采购", workflowId: "flow01", status: "completed", completedAt }],
+      links: [{ label: "采购 · 复核 · 查看已办", href: "#/runs/workbench/task/done01" }],
+    });
+  });
   it("配置预览仅供管理员使用，保存委托给带版本检查的业务事务", async () => {
     await expect(
       prepareAssistantTool(user, "updateWatermark", { enabled: false }, context)

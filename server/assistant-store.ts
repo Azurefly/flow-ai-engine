@@ -21,12 +21,13 @@ export const assistantConfigSchema = z
       .array(
         z.enum([
           "listMyTasks",
+          "listMyCompletedTasks",
           "searchWorkflows",
           "createWorkflowDraft",
           "updateWatermark",
         ])
       )
-      .max(4),
+      .max(5),
     enabled: z.boolean(),
     roles: z
       .array(z.enum(["user", "admin"]))

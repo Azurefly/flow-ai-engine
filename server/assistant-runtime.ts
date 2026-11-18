@@ -349,10 +349,7 @@ export async function runAssistantTurn(
               result = prepared.result;
               events.push({
                 role: "assistant",
-                content:
-                  name === "listMyTasks"
-                    ? "已查询我的待办。"
-                    : "已查询可见流程。",
+                content: prepared.message,
                 links: prepared.links,
               });
             }

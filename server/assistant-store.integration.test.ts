@@ -61,8 +61,23 @@ suite("全局助手 MySQL 持久化", () => {
     await closeSharedPool();
   });
 
+  it("授予已办工具后仅新对话取得该权限，撤回后已有对话也随之失效", async () => {
+    const pendingOnly: AssistantConfig = { ...defaultConfig, tools: ["listMyTasks"] };
+    const a = await agent(pendingOnly);
+    await publishAssistantConfig(admin, 1, a.agentId);
+    const previous = await createAssistantSession(user, false, undefined, null, a.agentId);
+    await saveAssistantDraft(admin, 1, { ...pendingOnly, tools: ["listMyTasks", "listMyCompletedTasks"] }, a.agentId);
+    await publishAssistantConfig(admin, 2, a.agentId);
+    expect((await getAssistantSession(user, previous.id)).config.tools).toEqual(["listMyTasks"]);
+    const current = await createAssistantSession(user, false, undefined, null, a.agentId);
+    expect(current.config.tools).toContain("listMyCompletedTasks");
+    await saveAssistantDraft(admin, 2, pendingOnly, a.agentId);
+    await publishAssistantConfig(admin, 3, a.agentId);
+    expect((await getAssistantSession(user, current.id)).config.tools).toEqual(["listMyTasks"]);
+  });
+
   it("内置已发布助手仅启用只读工具，新草稿先由管理员试聊", async () => {
-    expect(defaultConfig.tools).toEqual(["listMyTasks", "searchWorkflows"]);
+    expect(defaultConfig.tools).toEqual(["listMyTasks", "searchWorkflows", "listMyCompletedTasks"]);
     const a = await agent();
     expect(a.published).toBeNull();
     await expect(

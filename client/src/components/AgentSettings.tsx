@@ -14,6 +14,7 @@ type Config = inferRouterInputs<AppRouter>["assistant"]["saveDraft"]["config"];
 type Entry = inferRouterOutputs<AppRouter>["assistant"]["adminAgents"][number];
 const toolLabels = {
   listMyTasks: "查看我的待办",
+  listMyCompletedTasks: "查看我的已办",
   searchWorkflows: "查找流程",
   createWorkflowDraft: "创建流程草稿",
   updateWatermark: "修改系统水印",
@@ -23,7 +24,7 @@ const initialConfig: Config = {
   greeting: "你希望我帮你处理什么？",
   instructions: "帮助客户查询待办和流程。缺少必要信息时向客户询问。",
   model: "",
-  tools: ["listMyTasks", "searchWorkflows"],
+  tools: ["listMyTasks", "listMyCompletedTasks", "searchWorkflows"],
   enabled: true,
   roles: ["user", "admin"],
   projectIds: [],

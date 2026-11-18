@@ -82,6 +82,7 @@ describe("Agent conversation execution with scripted model responses", () => {
     ];
     deps.prepare.mockResolvedValue({
       kind: "read",
+      message: "已查询可见流程。",
       result: { count: 1 },
       links,
     });
@@ -106,6 +107,14 @@ describe("Agent conversation execution with scripted model responses", () => {
         t => t.function.name === "updateWatermark"
       )
     ).toBe(false);
+  });
+  it("keeps completed-task access separate from pending-task access", async () => {
+    const deps = scripted(reply("", { name: "listMyCompletedTasks", args: {} }), reply("无法查询。"));
+    const restricted = { ...session, config: { ...session.config, tools: ["listMyTasks" as const] } };
+    const change = await runAssistantTurn(actor, restricted, "我的已办有哪些？", deps);
+    expect(deps.model.mock.calls[0][0].tools?.map(item => item.function.name)).not.toContain("listMyCompletedTasks");
+    expect(deps.prepare).not.toHaveBeenCalled();
+    expect(change.task.status).toBe("failed");
   });
   it("pauses for information and uses prior answers on the following turn", async () => {
     const first = scripted(

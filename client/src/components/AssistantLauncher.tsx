@@ -77,9 +77,10 @@ export function AssistantLauncher({
                 aria-label="管理 Agent"
                 title="管理 Agent"
                 className="rounded-md p-2 hover:bg-muted"
-                onClick={() =>
-                  onNavigate({ section: "system", view: "agents" })
-                }
+                onClick={() => {
+                  setOpen(false);
+                  onNavigate({ section: "system", view: "agents" });
+                }}
               >
                 <Settings2 size={18} />
               </button>

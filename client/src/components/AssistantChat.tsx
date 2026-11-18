@@ -371,6 +371,10 @@ export default function AssistantChat({
                     ? list.error.message
                     : "当前页面暂无可用助手。请联系管理员配置并发布。"}
             </p>
+            {!trial && list.isError && (
+              <button type="button" className="assistant-link" disabled={list.isFetching}
+                onClick={() => void list.refetch()}>重新加载助手</button>
+            )}
           </div>
         )}
         {(session?.messages ?? []).map((item, index) => (
