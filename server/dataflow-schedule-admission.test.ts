@@ -132,7 +132,7 @@ it("进入事务后重新读取有效业务权限，外部预检允许不等于�
   expect(
     mocks.query.mock.calls.some(([sql]) => /^(INSERT|UPDATE)/.test(sql))
   ).toBe(false);
-  expect(mocks.access.mock.calls[1][2]).toMatchObject({ lock: true });
+  expect(mocks.access.mock.calls[1][2]).toMatchObject({ lock: "shared" });
   expect(mocks.access.mock.calls[1][2].connection.query).toBe(mocks.query);
 });
 
@@ -188,7 +188,7 @@ it.each([
       { projectId: input.projectId, workflowId: input.workflowId, mode }
     )
   ).resolves.toMatchObject({ status: "queued" });
-  expect(mocks.access.mock.calls[1][2]).toMatchObject({ lock: true });
+  expect(mocks.access.mock.calls[1][2]).toMatchObject({ lock: "shared" });
   expect(
     mocks.query.mock.calls.some(([sql]) =>
       String(sql).startsWith("INSERT INTO dataflow_run ")

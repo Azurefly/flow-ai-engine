@@ -42,7 +42,7 @@ it.each([
   expect(bound("admissionPermission")).toBe(expected);
   expect(bound("executionSource")).toBe("published_plan");
   expect(JSON.parse(bound("inputJson"))).toEqual(data);
-  expect(mocks.access.mock.calls.at(-1)?.[2]).toMatchObject({ lock: true });
+  expect(mocks.access.mock.calls.at(-1)?.[2]).toMatchObject({ lock: "shared" });
   expect(mocks.commit).toHaveBeenCalledOnce();
   expect(mocks.rollback).not.toHaveBeenCalled();
 });

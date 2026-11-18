@@ -59,7 +59,7 @@ const executableDefinition: Definition = executableStateFixture({
       position: { x: 540, y: 0 },
       config: {
         defaultRoute: "default",
-        routes: [{ code: "default", target: "end" }],
+        routes: [{ code: "default", target: "fixture-terminal" }],
       },
     },
     {

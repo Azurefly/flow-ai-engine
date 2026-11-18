@@ -1952,9 +1952,9 @@ export async function submitWorkflowRun(input: {
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
-    if (workflow.projectId) await lockActiveProject(connection, String(workflow.projectId));
+    if (workflow.projectId) await lockActiveProject(connection, String(workflow.projectId), "share");
     const [lockedWorkflowRows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT archivedAt,flowType,status,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR UPDATE",
+      "SELECT archivedAt,flowType,status,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR SHARE",
       [input.workflowId]
     );
     if (!lockedWorkflowRows[0]) throw new Error("流程不存在。");

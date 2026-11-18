@@ -18,6 +18,7 @@ import {
 import { initializeParticipantStateRun } from "./participant-state-runtime";
 import { settleWorkflowCommand } from "./workflow-command-test-support";
 import { getWorkflowRun } from "./workflow-engine";
+import { lockActiveProject } from "./project-lifecycle-lock";
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip;
 suite("参与人状态真实数据库与正常办理入口", () => {
@@ -598,4 +599,24 @@ suite("参与人状态真实数据库与正常办理入口", () => {
       )
     ).toBe(true);
   }, 30000);
+  it("并发准入共享业务锁，同时阻止归档写锁穿过未提交的准入事务", async () => {
+    const connections = await Promise.all([pool.getConnection(), pool.getConnection(), pool.getConnection()]);
+    const [first, second, archival] = connections;
+    try {
+      await Promise.all(connections.map(connection => connection.beginTransaction()));
+      await lockActiveProject(first, projectId, "share");
+      await lockActiveProject(second, projectId, "share");
+      await expect(archival.query("SELECT id FROM flow_project WHERE id=? FOR UPDATE NOWAIT", [projectId]))
+        .rejects.toMatchObject({ code: "ER_LOCK_NOWAIT" });
+      await first.commit();
+      await second.commit();
+      await expect(lockActiveProject(archival, projectId)).resolves.toBeUndefined();
+    } finally {
+      await Promise.all(connections.map(async connection => {
+        await connection.rollback();
+        connection.release();
+      }));
+    }
+  });
+
 });

@@ -145,12 +145,12 @@ it("唤醒并行启动有界通道，重复唤醒不重复领取忙任务", asyn
   mocks.sourceTest.mockReturnValue(source.promise);
   worker.wakeWorkflowWorker();
   await Promise.resolve();
-  expect(mocks.dataflow).toHaveBeenCalledOnce();
+  expect(mocks.dataflow).toHaveBeenCalledTimes(4);
   expect(mocks.sourceTest).toHaveBeenCalledOnce();
   await vi.waitFor(() => expect(mocks.schedules).toHaveBeenCalledOnce());
   worker.wakeWorkflowWorker();
   await Promise.resolve();
-  expect(mocks.dataflow).toHaveBeenCalledOnce();
+  expect(mocks.dataflow).toHaveBeenCalledTimes(4);
   expect(mocks.sourceTest).toHaveBeenCalledOnce();
 });
 
@@ -170,4 +170,34 @@ it("正常停机等待源测试结束，而不是只等待状态/控制通道", 
   await stopping;
   expect(stopped).toBe(true);
   expect(worker.getWorkflowWorkerStatus().processing).toBe(false);
+});
+
+it("批次中一个作业失败时仍等待其他租约持有者结束", async () => {
+  vi.stubEnv("WORKFLOW_WORKER_ENABLED", "true");
+  const blocked = hold();
+  mocks.dataflow.mockRejectedValueOnce(new Error("one job failed"));
+  mocks.dataflow.mockReturnValueOnce(blocked.promise);
+  worker.wakeWorkflowWorker();
+  await vi.waitFor(() => expect(mocks.dataflow).toHaveBeenCalledTimes(4));
+  await expect(worker.stopWorkflowWorker(0)).rejects.toThrow("仍在执行");
+  expect(worker.getWorkflowWorkerStatus().channels.dataflow).toBe(true);
+  blocked.resolve(false);
+  await vi.waitFor(() => {
+    expect(worker.getWorkflowWorkerStatus().channels.dataflow).toBe(false);
+    expect(worker.getWorkflowWorkerStatus().lastError).toContain(
+      "one job failed"
+    );
+  });
+});
+
+it("后台批次完成后继续领取积压任务，无需等待下一秒轮询", async () => {
+  vi.stubEnv("WORKFLOW_WORKER_ENABLED", "true");
+  vi.stubEnv("DATABASE_URL", "mysql://unused:test@localhost/unused");
+  mocks.dataflow.mockResolvedValueOnce(true);
+  worker.startWorkflowWorker();
+  await vi.waitFor(() => expect(mocks.dataflow).toHaveBeenCalledTimes(8), {
+    timeout: 500,
+    interval: 5,
+  });
+  expect(worker.getWorkflowWorkerStatus().channels.dataflow).toBe(false);
 });

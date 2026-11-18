@@ -48,6 +48,12 @@ const leaseSeconds = Math.max(
   30,
   Number(process.env.WORKFLOW_WORKER_LEASE_SECONDS ?? 120)
 );
+const configuredConcurrency = Number(
+  process.env.WORKFLOW_WORKER_CONCURRENCY ?? 4
+);
+const workerConcurrency = Number.isInteger(configuredConcurrency)
+  ? Math.min(8, Math.max(1, configuredConcurrency))
+  : 4;
 let pool: mysql.Pool | undefined;
 let timer: ReturnType<typeof setInterval> | undefined;
 let processing = false;
@@ -124,10 +130,27 @@ function anyChannelProcessing() {
 // Independent bounded channels: a slow data connector must not hold the
 // state/control dispatcher or the source-test queue behind its await.
 export async function runDataflowWorkerOnce() {
+  return runDataflowWorkerBatch(1);
+}
+
+async function runWorkerBatch(
+  poll: (index: number) => Promise<boolean>,
+  concurrency: number
+) {
+  // Wait for every lease holder before releasing a channel, including on failure.
+  const results = await Promise.allSettled(
+    Array.from({ length: concurrency }, (_, index) => poll(index))
+  );
+  const failure = results.find(result => result.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+  return results.some(result => result.status === "fulfilled" && result.value);
+}
+
+async function runDataflowWorkerBatch(concurrency: number) {
   if (dataflowProcessing) return false;
   dataflowProcessing = true;
   try {
-    return await runDataflowJobOnce();
+    return await runWorkerBatch(() => runDataflowJobOnce(), concurrency);
   } finally {
     dataflowProcessing = false;
   }
@@ -541,6 +564,10 @@ export async function processClaimedWorkflowJob(job: ClaimedJob) {
 }
 
 export async function runWorkflowWorkerOnce() {
+  return runWorkflowWorkerBatch(1);
+}
+
+async function runWorkflowWorkerBatch(concurrency: number) {
   if (processing) return false;
   processing = true;
   state.processing = true;
@@ -554,19 +581,32 @@ export async function runWorkflowWorkerOnce() {
     const exhaustedJobsReconciled = await reconcileExhaustedWorkflowJobs();
     const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
     const dataflowSchedulesQueued = await queueDueNativeDataflowsOnce();
-    const job = await claimNextJob();
-    if (!job)
-      return (
-        outboxProcessed ||
-        waitsTriggered > 0 ||
-        taskSchedulesFired > 0 ||
-        dataflowSchedulesQueued > 0 ||
-        terminalJobsReconciled > 0 ||
-        exhaustedJobsReconciled > 0
-      );
-    lastWorkflowJobClaimed = true;
-    await processClaimedWorkflowJob(job);
-    return true;
+    const jobs: ClaimedJob[] = [];
+    // Claims lock both the job and run. Claim in order before executing the batch
+    // so competing range scans cannot deadlock with each other's lease updates.
+    let jobsProcessed = false;
+    try {
+      for (let index = 0; index < concurrency; index += 1) {
+        const job = await claimNextJob();
+        if (!job) break;
+        jobs.push(job);
+        lastWorkflowJobClaimed = true;
+      }
+    } finally {
+      jobsProcessed = await runWorkerBatch(async index => {
+        await processClaimedWorkflowJob(jobs[index]);
+        return true;
+      }, jobs.length);
+    }
+    return (
+      jobsProcessed ||
+      outboxProcessed ||
+      waitsTriggered > 0 ||
+      taskSchedulesFired > 0 ||
+      dataflowSchedulesQueued > 0 ||
+      terminalJobsReconciled > 0 ||
+      exhaustedJobsReconciled > 0
+    );
   } finally {
     processing = false;
     state.processing = false;
@@ -588,13 +628,19 @@ export function wakeWorkflowWorker() {
   queueMicrotask(() => {
     if (stopping) return;
     for (const [name, poll] of [
-      ["workflow", runWorkflowWorkerOnce],
-      ["dataflow", runDataflowWorkerOnce],
+      ["workflow", () => runWorkflowWorkerBatch(workerConcurrency)],
+      ["dataflow", () => runDataflowWorkerBatch(workerConcurrency)],
       ["sourceTest", runSourceTestWorkerOnce],
     ] as const) {
-      void poll().catch(error => {
-        state.lastError = `${name}: ${error instanceof Error ? error.message : String(error)}`;
-      });
+      void poll()
+        .then(processed => {
+          if (processed && state.started && !stopping) {
+            setImmediate(wakeWorkflowWorker).unref();
+          }
+        })
+        .catch(error => {
+          state.lastError = `${name}: ${error instanceof Error ? error.message : String(error)}`;
+        });
     }
   });
 }

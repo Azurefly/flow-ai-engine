@@ -141,7 +141,7 @@ describe("原始项目工作区 P0", () => {
       });
       await expect(
         outsiderCaller.project.workflows({ projectId })
-      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         designerCaller.project.createWorkflow({
           projectId,
@@ -190,7 +190,7 @@ describe("原始项目工作区 P0", () => {
           name: "越权更新",
           description: "不应写入",
         })
-      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         designerCaller.project.updateWorkflowInfo({
           expectedConfigToken: (await designerCaller.workflow.get({ id: workflowId }))?.infoConfigToken,
@@ -223,9 +223,15 @@ describe("原始项目工作区 P0", () => {
         projectId,
         fields: { nameChanged: true, descriptionChanged: true },
       });
+      // Match the designer flow: persist the normalized draft before requesting review.
+      await designerCaller.workflow.update({
+        id: workflowId,
+        expectedDefinitionVersion: await workflowRevisionForTest(workflowId),
+        definition: (await designerCaller.workflow.get({ id: workflowId }))!.definition,
+      });
       await expect(
         designerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
-      ).rejects.toThrow("当前审批规则要求项目流程通过审核后才能发布");
+      ).rejects.toThrow("审核后才能发布");
       await ownerCaller.project.auditWorkflow({ ...(await workflowReviewForTest(workflowId)),
         projectId,
         workflowId,
@@ -242,7 +248,7 @@ describe("原始项目工作区 P0", () => {
       ).toBe(true);
       await expect(
         outsiderCaller.project.workflowAudit({ projectId, workflowId })
-      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         designerCaller.workflow.publish({ expectedDefinitionVersion: await workflowRevisionForTest(workflowId), id: workflowId })
       ).resolves.toMatchObject({
@@ -315,7 +321,7 @@ describe("原始项目工作区 P0", () => {
       });
       await expect(
         designerCaller.project.resetWorkflowAudit({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId })
-      ).rejects.toThrow("项目不存在或当前账号无权执行此操作");
+      ).rejects.toMatchObject({ code: "FORBIDDEN" });
       await expect(
         ownerCaller.project.resetWorkflowAudit({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId })
       ).resolves.toBe(true);
@@ -352,7 +358,7 @@ describe("原始项目工作区 P0", () => {
       ).toBe(true);
       await expect(
         ownerCaller.project.resetWorkflowAudit({ ...(await workflowReviewForTest(workflowId)), projectId, workflowId })
-      ).rejects.toThrow("仅可重置当前项目中未发布且已驳回的流程");
+      ).rejects.toThrow("仅可将已驳回的草稿重置为待审核");
       const folder = await ownerCaller.project.createFolder({
         projectId,
         name: "已发布流程",

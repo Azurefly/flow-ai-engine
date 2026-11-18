@@ -80,12 +80,12 @@ export async function ensureProjectUnitTable() {
   projectUnitTableInitialized = true;
 }
 
-export async function getProjectAccess(user: ProjectUser, projectId: string, options?: { includeArchived?: boolean; connection?: mysql.PoolConnection; lock?: boolean }) {
+export async function getProjectAccess(user: ProjectUser, projectId: string, options?: { includeArchived?: boolean; connection?: mysql.PoolConnection; lock?: boolean | "shared" }) {
   if (!options?.connection) await ensureProjectUnitTable();
   const executor = options?.connection ?? db();
   const shareLock = options?.lock ? " FOR SHARE" : "";
   const [projects] = await executor.query<mysql.RowDataPacket[]>(
-    `SELECT ownerUserId,status FROM flow_project WHERE id=? LIMIT 1${options?.lock ? " FOR UPDATE" : ""}`,
+    `SELECT ownerUserId,status FROM flow_project WHERE id=? LIMIT 1${options?.lock === "shared" ? " FOR SHARE" : options?.lock ? " FOR UPDATE" : ""}`,
     [projectId]
   );
   const project = projects[0];

@@ -1063,7 +1063,8 @@ describe("P2 项目数据资源与数据流", () => {
         workflowId,
         status: "paused",
         cronExpression: "0 0 9 * * *",
-        taskConfigured: false,
+        schedulerType: "internal",
+        taskConfigured: true,
       });
     },
     90_000

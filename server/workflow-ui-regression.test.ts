@@ -2486,11 +2486,11 @@ describe("流程设计器界面回归约束", () => {
     expect(workflowServiceSource).toContain("canRestore");
     expect(workflowEngineSource).toContain("已归档流程不能发起运行");
     expect(workflowEngineSource).toContain(
-      "SELECT archivedAt,flowType,status,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR UPDATE"
+      "SELECT archivedAt,flowType,status,definitionVersion FROM workflow WHERE id=? LIMIT 1 FOR SHARE"
     );
     expect(projectServiceSource).toContain("archivedAt IS NULL");
     expect(dataflowServiceSource).toContain(
-      "archivedAt IS NULL LIMIT 1 FOR UPDATE"
+      "archivedAt IS NULL LIMIT 1 FOR SHARE"
     );
     expect(canvasSource).toContain("取消高亮");
     expect(canvasSource).toContain("保存为图片");

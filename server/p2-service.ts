@@ -2102,7 +2102,7 @@ export async function runDataflow(
     await connection.beginTransaction();
     // 等待事务锁后重新核对账号、会话及授权，与其他业务写操作使用相同锁顺序。
     const [actors] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR UPDATE",
+      "SELECT id,role,status,tokenVersion FROM users WHERE id=? FOR SHARE",
       [user.id]
     );
     const actor = actors[0];
@@ -2116,11 +2116,11 @@ export async function runDataflow(
         code: "FORBIDDEN",
         message: "登录状态已变化，请刷新权限后重新发起。",
       });
-    await lockActiveProject(connection, input.projectId);
+    await lockActiveProject(connection, input.projectId, "share");
     const access = await getProjectAccess(
       { id: Number(actor.id), role: actor.role === "admin" ? "admin" : "user" },
       input.projectId,
-      { connection, lock: true }
+      { connection, lock: "shared" }
     );
     if (
       !access.exists ||
@@ -2131,7 +2131,7 @@ export async function runDataflow(
         message: "业务权限已变化，当前账号不能发起此数据流程。",
       });
     const [workflows] = await connection.query<mysql.RowDataPacket[]>(
-      "SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND archivedAt IS NULL LIMIT 1 FOR UPDATE",
+      "SELECT * FROM workflow WHERE id=? AND projectId=? AND flowType='data' AND archivedAt IS NULL LIMIT 1 FOR SHARE",
       [input.workflowId, input.projectId]
     );
     const workflow = workflows[0];
