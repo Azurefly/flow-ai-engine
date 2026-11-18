@@ -1726,3 +1726,42 @@ export const authorizationAuditLogs = mysqlTable(
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+export const assistantAgents = mysqlTable("assistant_agent", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  draftJson: json("draftJson").notNull(),
+  draftVersion: int("draftVersion").notNull(),
+  publishedJson: json("publishedJson"),
+  publishedVersion: int("publishedVersion").default(0).notNull(),
+  updatedByUserId: int("updatedByUserId").references(() => users.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export const assistantSessions = mysqlTable("assistant_session", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  ownerUserId: int("ownerUserId").notNull().references(() => users.id, { onDelete: "cascade" }),
+  agentId: varchar("agentId", { length: 64 }).notNull().references(() => assistantAgents.id),
+  trial: boolean("trial").notNull(),
+  title: varchar("title", { length: 160 }).notNull(),
+  projectId: varchar("projectId", { length: 64 }),
+  workflowId: varchar("workflowId", { length: 64 }),
+  configVersion: int("configVersion").notNull(),
+  configJson: json("configJson").notNull(),
+  revision: int("revision").default(0).notNull(),
+  taskJson: json("taskJson"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, table => [index("assistant_session_owner_idx").on(table.ownerUserId, table.trial, table.updatedAt)]);
+
+export const assistantTurns = mysqlTable("assistant_turn", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  sessionId: varchar("sessionId", { length: 36 }).notNull().references(() => assistantSessions.id, { onDelete: "cascade" }),
+  requestId: varchar("requestId", { length: 100 }).notNull(),
+  payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+  revision: int("revision").notNull(),
+  messagesJson: json("messagesJson").notNull(),
+  taskJson: json("taskJson"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [
+  unique("assistant_turn_request_unique").on(table.sessionId, table.requestId),
+  unique("assistant_turn_revision_unique").on(table.sessionId, table.revision),
+]);

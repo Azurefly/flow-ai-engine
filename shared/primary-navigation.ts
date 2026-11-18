@@ -1,5 +1,9 @@
 import type { ConsoleRoute, ConsoleSection } from "./console-route";
 
+export function isIdentityWorkspaceView(view: Extract<ConsoleRoute, { section: "system" }>["view"]) {
+  return view === "identity" || view === "organization";
+}
+
 /** Route targets are shared by native links and guarded in-page navigation. */
 export function primaryWorkspaceRoute(
   section: ConsoleSection | "identity",

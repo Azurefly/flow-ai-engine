@@ -88,7 +88,6 @@
 /* Directory selection belongs to the whole row, not a second card inside it. */
 :root :is([data-iam-user-row], [data-iam-role-row], [data-selection-row]):has(> button[aria-pressed="true"]) {
   background: var(--selection-surface);
-  box-shadow: inset 3px 0 var(--selection-indicator);
 }
 :root :is([data-iam-user-row], [data-iam-role-row], [data-selection-row]) > button[aria-pressed="true"] {
   --selection-surface: transparent;

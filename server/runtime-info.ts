@@ -5,9 +5,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0044_dataflow_admission_permission";
-export const DATABASE_MIGRATION_EPOCH = 1793854866104;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 71;
+export const DATABASE_MIGRATION_VERSION = "0045_assistant_sessions";
+export const DATABASE_MIGRATION_EPOCH = 1795003187500;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 78;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -91,7 +91,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run','resource_creation_request','workflow_creation_request')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run','resource_creation_request','workflow_creation_request','assistant_agent','assistant_session','assistant_turn')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -108,6 +108,9 @@ export async function checkReadiness() {
           (table_name='resource_creation_request' AND column_name IN ('id','actorUserId','projectId','resourceKind','requestKeyHash','payloadHash','resourceId','createdAt')) OR
           (table_name='workflow_creation_request' AND column_name IN ('id','actorUserId','projectId','requestKind','requestKeyHash','payloadHash','workflowId','createdAt')) OR
           (table_name='project_service_endpoint' AND column_name='targetEnvironment') OR
+          (table_name='assistant_agent' AND column_name IN ('draftVersion','publishedVersion')) OR
+          (table_name='assistant_session' AND column_name IN ('ownerUserId','revision','configJson')) OR
+          (table_name='assistant_turn' AND column_name IN ('requestId','payloadHash')) OR
           (table_name='flow_project' AND column_name='lifecycleVersion') OR
           (table_name='workflow_milestone' AND column_name='executionKey') OR
           (table_name='workflow_state_transition' AND column_name IN ('nodeId','executionKey')) OR
@@ -138,6 +141,7 @@ export async function checkReadiness() {
           OR (table_name='dataflow_dataset_artifact' AND index_name='dataflow_dataset_artifact_run_node_unique')
           OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
           OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')
+          OR (table_name='assistant_turn' AND index_name IN ('assistant_turn_revision_unique','assistant_turn_request_unique'))
           OR (table_name='resource_creation_request' AND index_name='resource_creation_request_identity_unique')
           OR (table_name='workflow_creation_request' AND index_name='workflow_creation_request_identity_unique')
         )`
@@ -169,9 +173,9 @@ export async function checkReadiness() {
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 15 &&
+      Number(tableRows[0]?.count ?? 0) === 18 &&
       Number(columnRows[0]?.count ?? 0) === DATABASE_REQUIRED_COLUMN_COUNT &&
-      Number(indexRows[0]?.count ?? 0) === 19 &&
+      Number(indexRows[0]?.count ?? 0) === 21 &&
       Number(projectUnitCollationRows[0]?.count ?? 0) === 3 &&
       Number(creationIndexRows[0]?.count ?? 0) === 4 &&
       Number(workflowCreationIndexRows[0]?.count ?? 0) === 2;

@@ -39,6 +39,8 @@ export type Message = {
   content: MessageContent | MessageContent[];
   name?: string;
   tool_call_id?: string;
+  tool_calls?: ToolCall[];
+  reasoning_content?: string;
 };
 
 export type Tool = {
@@ -101,6 +103,7 @@ export type InvokeResult = {
       role: Role;
       content: string | Array<TextContent | ImageContent | FileContent>;
       tool_calls?: ToolCall[];
+      reasoning_content?: string;
     };
     finish_reason: string | null;
   }>;
@@ -152,6 +155,15 @@ const normalizeContentPart = (
 
 const normalizeMessage = (message: Message) => {
   const { role, name, tool_call_id } = message;
+
+  if (role === "assistant" && message.tool_calls?.length) {
+    return {
+      role,
+      content: message.content,
+      tool_calls: message.tool_calls,
+      ...(message.reasoning_content === undefined ? {} : { reasoning_content: message.reasoning_content }),
+    };
+  }
 
   if (role === "tool" || role === "function") {
     const content = ensureArray(message.content)

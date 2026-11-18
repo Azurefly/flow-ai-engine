@@ -17,7 +17,7 @@ it("身份与组织入口按有效能力开放，普通身份管理员不进入�
   expect(home).toContain('systemView === "identity" && canManageIdentity');
   expect(home).toContain("if (!canManageIdentity)");
   expect(home).toContain(
-    'route.view === "config" && systemRootView === "identity"'
+    '!isIdentityWorkspaceView(route.view) && systemRootView === "identity"'
   );
   expect(home).toContain("...(canManageIdentity");
   expect(home).toMatch(/user\.role === "admin" &&\s+systemView === "config"/);

@@ -6,10 +6,10 @@ export type ConsoleRoute =
   | { section: "flows"; view: "center" }
   | { section: "flows"; view: "workspace"; projectId: string }
   | { section: "flows"; view: "detail" | "editor"; workflowId: string }
-  | { section: "runs"; view: "workbench" }
+  | { section: "runs"; view: "workbench"; taskId?: string }
   | { section: "runs"; view: "monitor"; workflowId: string; runId?: string }
   | { section: "warehouse" }
-  | { section: "system"; view: "config" | "organization" }
+  | { section: "system"; view: "config" | "organization" | "agents" }
   | { section: "system"; view: "identity"; identityTab?: IdentityTab };
 
 export const consoleSections: ConsoleSection[] = [
@@ -48,6 +48,10 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
       return { section: "flows", view, workflowId };
   }
   if (parts[0] === "runs") {
+    if (parts.length === 4 && parts[1] === "workbench" && parts[2] === "task") {
+      const taskId = decodeRouteId(parts[3]);
+      if (taskId) return { section: "runs", view: "workbench", taskId };
+    }
     if (parts.length === 1 || (parts.length === 2 && parts[1] === "workbench"))
       return { section: "runs", view: "workbench" };
     if ((parts.length === 3 || parts.length === 4) && parts[1] === "monitor") {
@@ -65,6 +69,8 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
   if (parts.length === 1 && parts[0] === "warehouse")
     return { section: "warehouse" };
   if (parts[0] === "system") {
+    if (parts.length === 2 && parts[1] === "agents")
+      return { section: "system", view: "agents" };
     if (parts.length === 1 || (parts.length === 2 && parts[1] === "config"))
       return { section: "system", view: "config" };
     if (parts.length === 2 && parts[1] === "identity")
@@ -89,7 +95,8 @@ export function formatConsoleRoute(route: ConsoleRoute): string {
     return `#/flows/workflow/${encodeURIComponent(route.workflowId)}/${route.view}`;
   }
   if (route.section === "runs") {
-    if (route.view === "workbench") return "#/runs/workbench";
+    if (route.view === "workbench") return route.taskId
+      ? `#/runs/workbench/task/${encodeURIComponent(route.taskId)}` : "#/runs/workbench";
     const base = `#/runs/monitor/${encodeURIComponent(route.workflowId)}`;
     return route.runId ? `${base}/${encodeURIComponent(route.runId)}` : base;
   }
@@ -99,5 +106,6 @@ export function formatConsoleRoute(route: ConsoleRoute): string {
       ? `#/system/identity/${route.identityTab}`
       : "#/system/identity";
   if (route.view === "organization") return "#/system/organization";
+  if (route.view === "agents") return "#/system/agents";
   return "#/system";
 }

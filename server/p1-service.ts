@@ -11,7 +11,8 @@ import {
   recordedBusinessStateNameSql,
   presentProcessInstance,
 } from "./process-instance-state";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { canonicalResourcePayload, resourceRequestKeyPattern } from "../shared/resource-creation";
 import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasWorkflowPermission, recordAuthorizationAudit } from "./iam-service";
@@ -1837,10 +1838,19 @@ export async function updateP1SystemSetting(
   key: "general" | "approval" | "llm",
   value: JsonRecord,
   expectedConfigToken?: string,
-  llmCredential?: LlmCredentialChange
+  llmCredential?: LlmCredentialChange,
+  watermarkConfirmationId?: string
 ) {
   if (llmCredential && key !== "llm") throw new TRPCError({ code: "BAD_REQUEST", message: "仅模型服务可更新 API Key。" });
   if (!expectedConfigToken) assertSystemSettingConfigToken(key, expectedConfigToken, null);
+  if (watermarkConfirmationId !== undefined &&
+      (!resourceRequestKeyPattern.test(watermarkConfirmationId) || key !== "general" ||
+       Object.keys(value).some(field => !["watermarkEnabled", "watermarkText"].includes(field)))) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: "水印确认请求无效。" });
+  }
+  const payloadHash = watermarkConfirmationId
+    ? createHash("sha256").update(canonicalResourcePayload({ expectedConfigToken, value })).digest("hex")
+    : undefined;
   for (let attempt = 0; attempt < 3; attempt++) {
     const connection = await db().getConnection();
     let retry = false;
@@ -1851,6 +1861,19 @@ export async function updateP1SystemSetting(
       if (!actor || actor.role !== "admin" || actor.status !== "active" || (user.tokenVersion !== undefined && Number(actor.tokenVersion) !== user.tokenVersion)) throw new TRPCError({ code: "FORBIDDEN", message: "当前账号无权维护系统设置，请刷新权限后重试。" });
       const [rows] = await connection.query<mysql.RowDataPacket[]>("SELECT valueJson FROM system_setting WHERE `key`=? FOR UPDATE", [key]);
       const existing = readSystemSettingValue(key, parseJson(rows[0]?.valueJson));
+      if (watermarkConfirmationId) {
+        // The actor row serializes confirmations with the same actor and proposal ID.
+        const [receipts] = await connection.query<mysql.RowDataPacket[]>(
+          "SELECT detailsJson->>'$.payloadHash' AS payloadHash FROM authorization_audit_log WHERE actorUserId=? AND requestId=? AND resourceType='system_setting' AND resourceId=? AND detailsJson->>'$.operation'='assistant_watermark_confirmed' LIMIT 1",
+          [user.id, watermarkConfirmationId, key]
+        );
+        if (receipts[0]) {
+          if (receipts[0].payloadHash !== payloadHash)
+            throw new TRPCError({ code: "CONFLICT", message: "确认编号已用于另一份水印提案。" });
+          await connection.commit();
+          return { value: publicSystemSettingValue(key, existing), configToken: systemSettingConfigToken(key, existing), replayed: true };
+        }
+      }
       assertSystemSettingConfigToken(key, expectedConfigToken, existing);
       const merged: Record<string, unknown> = mergeSystemSettingValue(key, existing, value);
       if (llmCredential?.action === "replace") {
@@ -1860,7 +1883,15 @@ export async function updateP1SystemSetting(
       const configToken = systemSettingConfigToken(key, merged);
       if (configToken !== expectedConfigToken) {
         await connection.query("INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId),updatedAt=NOW()", [key, JSON.stringify(merged), user.id]);
-        await recordAuthorizationAudit({ actorUserId: user.id, action: "user_updated", resourceType: "system_setting", resourceId: key, details: { operation: "setting_updated", ...(llmCredential ? { credentialAction: llmCredential.action } : {}) } }, connection);
+      }
+      if (configToken !== expectedConfigToken || watermarkConfirmationId) {
+        await recordAuthorizationAudit({
+          actorUserId: user.id, action: "user_updated", resourceType: "system_setting", resourceId: key,
+          requestId: watermarkConfirmationId,
+          details: watermarkConfirmationId
+            ? { operation: "assistant_watermark_confirmed", payloadHash }
+            : { operation: "setting_updated", ...(llmCredential ? { credentialAction: llmCredential.action } : {}) },
+        }, connection);
       }
       await connection.commit();
       return { value: publicSystemSettingValue(key, merged), configToken };

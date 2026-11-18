@@ -8,6 +8,7 @@ import type { OrganizationTarget } from "@shared/organization-form";
 import { IdentityWorkspace } from "@/components/IdentityWorkspace";
 import type { IdentityTab } from "@shared/console-route";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
+import { AssistantLauncher } from "@/components/AssistantLauncher";
 import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
 import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
@@ -69,6 +70,7 @@ import {
 } from "../../../shared/console-route";
 import { shouldConfirmWorkflowNavigation } from "../../../shared/workflow-navigation";
 import {
+  isIdentityWorkspaceView,
   primaryWorkspaceRoute,
 } from "@shared/primary-navigation";
 import { createGuardedConsoleHistory, type GuardedConsoleHistory, type ConsoleHistoryEntry } from "@shared/guarded-console-history";
@@ -179,6 +181,7 @@ const ProjectWorkspace = lazy(() =>
 const WorkflowWarehouse = lazy(() => import("@/components/WorkflowWarehouse"));
 const ResourceAccessDiagnosticDialog = lazy(() => import("@/components/ResourceAccessDiagnosticDialog"));
 const SystemConfigShell = lazy(() => import("@/components/SystemConfigShell"));
+const AgentSettings = lazy(() => import("@/components/AgentSettings"));
 const OrganizationManagementPage = lazy(
   () => import("@/components/OrganizationManagementPage")
 );
@@ -494,7 +497,7 @@ function FlowConsole({
     initialRoute.route.section
   );
   const [systemView, setSystemView] = useState<
-    "config" | "identity" | "organization"
+    "config" | "identity" | "organization" | "agents"
   >(
     initialRoute.route.section === "system" ? initialRoute.route.view : "config"
   );
@@ -838,7 +841,7 @@ function FlowConsole({
         replaceWith({ section: "flows", view: "center" });
         return;
       }
-      if (route.view === "config" && systemRootView === "identity") {
+      if (!isIdentityWorkspaceView(route.view) && systemRootView === "identity") {
         replaceWith({ section: "system", view: "identity" });
         return;
       }
@@ -1374,8 +1377,9 @@ function FlowConsole({
     ...(canManageIdentity ? [{ id: "identity" as const, label: "用户与权限", icon: UsersRound }] : []),
     ...(user.role === "admin" ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }] : []),
   ];
-  const activeSection = section === "system" && systemView !== "config" ? "identity" : section;
-  const workspaceLabel = businessFocused ? "业务工作区" : editorActive ? "流程设计器" : detailActive ? "流程详情" : nav.find(item => item.id === activeSection)?.label || "工作区";
+  const activeSection = section === "system" && isIdentityWorkspaceView(systemView) ? "identity" : section;
+  const agentSettingsActive = section === "system" && systemView === "agents" && user.role === "admin";
+  const workspaceLabel = agentSettingsActive ? "Agent 配置" : businessFocused ? "业务工作区" : editorActive ? "流程设计器" : detailActive ? "流程详情" : nav.find(item => item.id === activeSection)?.label || "工作区";
 
   const workspaceWorkflows = selectedProject
     ? workflowItems.filter(
@@ -1457,6 +1461,9 @@ function FlowConsole({
       data-editor-active={editorActive}
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
+      {!agentSettingsActive && <AssistantLauncher key={user.id} isAdmin={user.role === "admin"}
+        userId={user.id} onNavigate={navigateRoute} context={{ projectId: routeProjectId ?? (routeWorkflowId && canViewWorkflow ? selectedWorkflow?.projectId : undefined) ?? undefined,
+          workflowId: canViewWorkflow ? routeWorkflowId ?? undefined : undefined }} />}
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
         <WorkspaceCommandDialog target={commandTarget} canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />
       </Suspense>}
@@ -2092,7 +2099,9 @@ function FlowConsole({
           {section === "runs" && !routeRestoring && (
             <div>
               {runView === "workbench" ? (
-                <ProcessWorkbench navigationControls={runNavigation} />
+                <ProcessWorkbench navigationControls={runNavigation}
+                  routeTaskId={requestedRoute.route.section === "runs" && requestedRoute.route.view === "workbench" ? requestedRoute.route.taskId : undefined}
+                  onClearTaskRoute={() => navigateRoute({ section: "runs", view: "workbench" }, { replace: true })} />
               ) : (
                 <div
                   data-runs-monitor-workspace
@@ -2159,7 +2168,8 @@ function FlowConsole({
             systemView === "config" && (
               <SystemConfigShell />
             )}
-          {section === "system" && canManageIdentity && systemView !== "config" && (
+          {agentSettingsActive && <AgentSettings userId={user.id} onNavigate={navigateRoute} />}
+          {section === "system" && canManageIdentity && isIdentityWorkspaceView(systemView) && (
             <IdentityWorkspace active={systemView === "organization" ? "organization" : identityTab} onNavigate={navigateRoute}>
               {systemView === "organization" ? (
                 <OrganizationManagementPage embedded onBack={() => navigateRoute({ section: "system", view: "identity" })} />

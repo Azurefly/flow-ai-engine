@@ -54,9 +54,9 @@ describe("runtime identity and readiness contract", () => {
     expect(info).toHaveProperty("buildTime");
     expect(info).toHaveProperty("imageId");
     expect(info.migrationVersion).toBe(DATABASE_MIGRATION_VERSION);
-    expect(DATABASE_MIGRATION_VERSION).toBe("0044_dataflow_admission_permission");
-    expect(DATABASE_MIGRATION_EPOCH).toBe(1793854866104);
-    expect(DATABASE_REQUIRED_COLUMN_COUNT).toBe(71);
+    expect(DATABASE_MIGRATION_VERSION).toBe("0045_assistant_sessions");
+    expect(DATABASE_MIGRATION_EPOCH).toBe(1795003187500);
+    expect(DATABASE_REQUIRED_COLUMN_COUNT).toBe(78);
     expect(migrationJournal.entries.at(-1)).toMatchObject({
       tag: DATABASE_MIGRATION_VERSION,
       when: DATABASE_MIGRATION_EPOCH,

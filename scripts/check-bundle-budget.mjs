@@ -61,9 +61,10 @@ const maxChunkBytes = 450 * 1024;
 // Composable personnel conditions: measured 1618.67 KiB raw / 497.71 KiB gzip.
 // Dense graph navigation and on-demand configuration: 1621.01 KiB raw / 498.21 KiB gzip.
 // Branch lists, single-condition editing and node summaries add about 11 KiB raw / 5 KiB gzip.
-const maxTotalBytes = 1_634 * 1024;
+// Agent configuration, recoverable conversations and task links: 1652.74 KiB raw / 510.02 KiB gzip.
+const maxTotalBytes = 1_654 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 504 * 1024;
+const maxTotalGzipBytes = 511 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

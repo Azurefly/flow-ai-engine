@@ -128,11 +128,18 @@ const filterLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " 
 const summaryRowClass = "flex min-w-0 justify-between gap-2";
 const detailTextClass = ("aiflow-type-body mt-1 break-words " + mutedToneClass);
 
-export default function ProcessWorkbench({ navigationControls }: { navigationControls?: ReactNode }) {
+export default function ProcessWorkbench({ navigationControls, routeTaskId, onClearTaskRoute }: {
+  navigationControls?: ReactNode; routeTaskId?: string; onClearTaskRoute?: () => void;
+}) {
   const utils = trpc.useUtils();
   const [view, setView] = useState<View>("board");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [localTaskId, setLocalTaskId] = useState<string | null>(null);
+  const selectedTaskId = routeTaskId ?? localTaskId;
+  const setSelectedTaskId = (id: string | null) => {
+    setLocalTaskId(id);
+    if (routeTaskId && id !== routeTaskId) onClearTaskRoute?.();
+  };
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [runEntryTask, setRunEntryTask] = useState<{ runId: string; taskId: string } | null>(null);
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);

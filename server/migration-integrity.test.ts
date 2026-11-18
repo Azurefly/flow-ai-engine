@@ -218,8 +218,9 @@ describe("database migration integrity", () => {
       "0042_workflow_creation_requests",
       "0043_dataflow_cancellation",
       "0044_dataflow_admission_permission",
+      "0045_assistant_sessions",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(44);
+    expect(journal.entries.at(-1)?.idx).toBe(45);
   });
   it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
     const migration = readFileSync(

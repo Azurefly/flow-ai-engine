@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, it } from "vitest";
+import { isIdentityWorkspaceView } from "../shared/primary-navigation";
 const home = readFileSync(
   new URL("../client/src/pages/Home.tsx", import.meta.url),
   "utf8"
@@ -10,7 +11,8 @@ const system = readFileSync(
 );
 it("用户与权限位于主导航，组织与账号页使用同一个主导航选中项", () => {
   expect(home).toContain('id: "identity" as const, label: "用户与权限"');
-  expect(home).toContain('systemView !== "config" ? "identity" : section');
+  expect(home).toContain('isIdentityWorkspaceView(systemView) ? "identity" : section');
+  expect((["identity","organization","config","agents"] as const).map(isIdentityWorkspaceView)).toEqual([true,true,false,false]);
   expect(readFileSync(new URL("../client/src/components/WorkspaceHeader.tsx", import.meta.url), "utf8")).toContain(
     'aria-current={activeSection === item.id ? "page" : undefined}'
   );
@@ -20,6 +22,6 @@ it("用户与权限位于主导航，组织与账号页使用同一个主导航�
   expect(system).not.toContain('id: "access"');
   expect(system).not.toContain("function AccessSettings");
   expect(home).toContain("<IdentityWorkspace");
-  expect(home).toContain('canManageIdentity && systemView !== "config"');
+  expect(home).toContain('canManageIdentity && isIdentityWorkspaceView(systemView)');
   expect(readFileSync(new URL("../client/src/components/IdentityWorkspace.tsx", import.meta.url), "utf8")).toContain('aria-label="用户与权限分类"');
 });

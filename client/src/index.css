@@ -862,11 +862,6 @@ h2 {
   padding: 10px 12px;
 }
 
-[data-system-config-navigation] nav button[class*="bg-accent"] {
-  box-shadow: inset 3px 0 var(--aiflow-info);
-  background: var(--accent);
-}
-
 [data-aiflow-system-config] section {
   border: 1px solid var(--border);
 }

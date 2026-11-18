@@ -22,6 +22,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { assistantRouter } from "./assistant-router";
 import {
   adminProcedure,
   iamManageProcedure,
@@ -248,6 +249,7 @@ function assertWorkflowRunController(
 
 export const appRouter = router({
   system: systemRouter,
+  assistant: assistantRouter,
   auth: router({
     bootstrapStatus: publicProcedure.query(async () => {
       await ensureBootstrapAdmin();

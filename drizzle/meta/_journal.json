@@ -316,6 +316,13 @@
       "when": 1793854866104,
       "tag": "0044_dataflow_admission_permission",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1795003187500,
+      "tag": "0045_assistant_sessions",
+      "breakpoints": true
     }
   ]
 }

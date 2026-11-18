@@ -12,6 +12,7 @@ describe("console hash routes", () => {
     { section: "flows", view: "detail", workflowId: "workflow_1234" },
     { section: "flows", view: "editor", workflowId: "workflow_1234" },
     { section: "runs", view: "workbench" },
+    { section: "runs", view: "workbench", taskId: "task_123456" },
     { section: "runs", view: "monitor", workflowId: "workflow_1234" },
     {
       section: "runs",
@@ -21,6 +22,7 @@ describe("console hash routes", () => {
     },
     { section: "warehouse" },
     { section: "system", view: "config" },
+    { section: "system", view: "agents" },
     { section: "system", view: "identity" },
     { section: "system", view: "identity", identityTab: "users" },
     { section: "system", view: "identity", identityTab: "roles" },
@@ -53,10 +55,12 @@ describe("console hash routes", () => {
     "#/flows/workflow/workflow_1234/delete",
     "#/flows/workflow/bad%2Fid/editor",
     "#/runs/monitor/workflow_1234/bad%2Frun",
+    "#/runs/workbench/task/short",
     "#/system/identity/extra",
     "#/system/identity/roles/delete",
     "#/system/identity/%2Faudit",
     "#/system/organization/extra",
+    "#/system/agents/extra",
   ])("falls back for malformed or unsupported route %s", hash => {
     expect(parseConsoleRoute(hash)).toEqual({
       section: "flows",
