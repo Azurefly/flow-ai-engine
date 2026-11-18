@@ -25,7 +25,7 @@ export function CanvasConnectionEdge({ id, source, target, sourceX, sourceY, tar
     {visibleLabel && (
       <g transform={`translate(${labelX} ${labelY}) scale(${1 / zoom})`}>
         <EdgeText x={0} y={0} label={visibleLabel}
-          labelStyle={{ ...labelStyle, fill: "var(--foreground)", fontSize: 12 }}
+          labelStyle={{ ...labelStyle, fill: "var(--foreground)", fontSize: 12, textRendering: "geometricPrecision" }}
           labelBgPadding={[6, 4]} labelBgBorderRadius={5}
           labelBgStyle={{ fill: "var(--card)", fillOpacity: 0.98 }} />
       </g>
