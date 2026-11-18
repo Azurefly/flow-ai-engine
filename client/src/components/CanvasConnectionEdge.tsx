@@ -1,4 +1,4 @@
-import { BaseEdge, useStore, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeText, useStore, type EdgeProps } from "@xyflow/react";
 import { useId, useMemo } from "react";
 import { canvasConnectionPoints, canvasEdgeLabelAnchor, roundedCanvasPath, type CanvasRect } from "./workflow-canvas-geometry";
 
@@ -20,6 +20,15 @@ export function CanvasConnectionEdge({ id, source, target, sourceX, sourceY, tar
   return <>
     <defs><marker id={marker} markerUnits="userSpaceOnUse" viewBox="0 0 12 12" refX="12" refY="6" markerWidth={9 / zoom} markerHeight={9 / zoom} orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill={color} /></marker></defs>
     {label && <title>{String(label)}</title>}
-    <BaseEdge id={id} path={path} interactionWidth={24 / zoom} markerEnd={`url(#${marker})`} style={{ ...style, stroke: color, strokeWidth: (emphasized ? 3 : 2) / zoom, strokeDasharray: data?.loop ? `${7 / zoom} ${5 / zoom}` : undefined }} label={visibleLabel} labelX={labelX} labelY={labelY} labelStyle={{ ...labelStyle, fill: "var(--foreground)", fontSize: 12 / zoom }} labelBgPadding={[6 / zoom, 4 / zoom]} labelBgBorderRadius={5 / zoom} labelBgStyle={{ fill: "var(--card)", fillOpacity: 0.98 }} />
+    <BaseEdge id={id} path={path} interactionWidth={24 / zoom} markerEnd={`url(#${marker})`} style={{ ...style, stroke: color, strokeWidth: (emphasized ? 3 : 2) / zoom, strokeDasharray: data?.loop ? `${7 / zoom} ${5 / zoom}` : undefined }} />
+    {/* EdgeText measures on label changes. Scale the measured text and background together. */}
+    {visibleLabel && (
+      <g transform={`translate(${labelX} ${labelY}) scale(${1 / zoom})`}>
+        <EdgeText x={0} y={0} label={visibleLabel}
+          labelStyle={{ ...labelStyle, fill: "var(--foreground)", fontSize: 12 }}
+          labelBgPadding={[6, 4]} labelBgBorderRadius={5}
+          labelBgStyle={{ fill: "var(--card)", fillOpacity: 0.98 }} />
+      </g>
+    )}
   </>;
 }
