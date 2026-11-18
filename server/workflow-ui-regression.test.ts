@@ -2100,7 +2100,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(canvasSource).toContain("handlePaletteDragStart");
     expect(canvasSource).toContain("handleCanvasDrop");
-    expect(canvasSource).toContain("selectionOnDrag={!readOnly}");
+    expect(canvasSource).toContain("selectionOnDrag={!readOnly && !globalLayout}");
     expect(canvasSource).toContain('contextMenu.kind === "group"');
     expect(canvasSource).toContain("横向对齐");
     expect(canvasSource).toContain("竖向对齐");

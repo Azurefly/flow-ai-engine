@@ -32,7 +32,8 @@ export function readableCanvasLayout<T extends LayoutNode>(nodes: T[], edges: re
     outgoing.get(edge.source)!.push(edge.target);
   const color = new Map<string, number>(), forward = new Map(nodes.map(n => [n.id, [] as string[]]));
   // Iterative DFS removes only display back-edges; all logical edges remain in the model.
-  for (const root of nodes) {
+  const entries = nodes.filter(node => (node.data as { kind?: string } | undefined)?.kind === "start");
+  for (const root of [...entries, ...nodes]) {
     if (color.has(root.id)) continue;
     const stack = [{ id: root.id, index: 0 }]; color.set(root.id, 1);
     while (stack.length) {
@@ -57,13 +58,28 @@ export function readableCanvasLayout<T extends LayoutNode>(nodes: T[], edges: re
   const buckets = new Map<number, T[]>();
   for (const node of nodes) { const r = rank.get(node.id)!; const bucket = buckets.get(r) ?? []; bucket.push(node); buckets.set(r, bucket); }
   const columns = Array.from(buckets).sort((a, b) => a[0] - b[0]);
+  // Order branches from both ends: siblings that meet again stay together.
+  const order = new Map<string, number>();
+  function record(column: T[]) {
+    column.forEach((node, index) => order.set(node.id, (index + .5) / column.length));
+  }
+  columns.forEach(([, column]) => record(column));
+  function align(column: T[], connections: Map<string, string[]>) {
+    const centers = new Map(column.map(node => {
+      const adjacent = connections.get(node.id)!;
+      const center = adjacent.length ? adjacent.reduce((sum, id) => sum + order.get(id)!, 0) / adjacent.length : order.get(node.id)!;
+      return [node.id, center];
+    }));
+    column.sort((a, b) => centers.get(a.id)! - centers.get(b.id)!);
+    record(column);
+  }
+  for (let i = columns.length - 2; i >= 0; i--) align(columns[i][1], forward);
+  for (let i = 1; i < columns.length; i++) align(columns[i][1], incoming);
   const sizes = new Map(canvasNodeRects(nodes).map(n => [n.id, n]));
   const heights = columns.map(([, column]) => column.reduce((sum, n) => sum + sizes.get(n.id)!.height, 0) + (column.length - 1) * 64);
   const height = Math.max(...heights), positions = new Map<string, CanvasPoint>();
   let x = 40;
   columns.forEach(([, column], index) => {
-    const center = (n: T) => { const parents = incoming.get(n.id)!; return parents.length ? parents.reduce((sum, id) => sum + (positions.get(id)?.y ?? 0), 0) / parents.length : 0; };
-    column.sort((a, b) => center(a) - center(b));
     let y = 40 + (height - heights[index]) / 2;
     for (const node of column) { positions.set(node.id, { x, y }); y += sizes.get(node.id)!.height + 64; }
     x += Math.max(...column.map(n => sizes.get(n.id)!.width)) + 128;

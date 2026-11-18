@@ -11,6 +11,19 @@ function crossesBody(points: { x: number; y: number }[], r: ReturnType<typeof ca
   });
 }
 describe("画布阅读布局与连线可见性", () => {
+  it("从起点展开带回路的旧定义，即使节点数组从后续操作开始", () => {
+    const graph = ["review", "end", "draft", "start"].map(id => ({
+      ...node(id), data: { kind: id === "start" ? "start" : "operate" },
+    }));
+    const links = [
+      { source: "start", target: "draft" }, { source: "draft", target: "review" },
+      { source: "review", target: "draft" }, { source: "review", target: "end" },
+    ];
+    const before = JSON.stringify(graph);
+    const placed = readableCanvasLayout(graph, links).sort((a, b) => a.position.x - b.position.x);
+    expect(placed.map(n => n.id)).toEqual(["start", "draft", "review", "end"]);
+    expect(JSON.stringify(graph)).toBe(before);
+  });
   it("短分支标签留在两节点之间，回退标签沿外侧长通道显示", () => {
     const rects = canvasNodeRects([node("a", 40, 40), node("b", 376, 40)]);
     const points = canvasConnectionPoints({ x: 252, y: 70 }, { x: 372, y: 84 }, rects, "a", "b");
