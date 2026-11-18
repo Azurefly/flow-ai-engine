@@ -99,6 +99,16 @@ describe("人工操作结果连线同步", () => {
 });
 
 describe("画布路由连线同步", () => {
+  it("只改审核条件时保留其他分支、已有目标字段和原版映射", () => {
+    const routes = ["finance", "legal"].map(handle => ({ handle, targetNodeId: handle + "_state" }));
+    const before = { routes, lysz: [] };
+    const edges = routes.map(route => ({ source: "router", sourceHandle: route.handle, target: route.targetNodeId }));
+    const requested = { ...before, routes: [{ ...routes[0], participantCondition: { kind: "identity", identity: "isActor" } }, routes[1]] };
+    const result = updateRouterConnections("router", before, requested, edges);
+    expect(result.config).toBe(requested);
+    expect(result.edges).toBe(edges);
+  });
+
   it("未显式填写句柄的原版规则沿用运行时句柄，断线后保持稳定", () => {
     const config = {
       lysz: [

@@ -6,10 +6,13 @@ import {
 } from "@shared/participant-route-condition";
 import { NodeValueEditor } from "./NodeValueEditor";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
+import { useState } from "react";
+import { availableCounts, conditionOperations, conditionText, isGroup, readApprovalCount, withApprovalCount } from "@shared/approval-condition-presentation";
 
 export type ParticipantRoutingEditorContext = {
   workflowId?: string;
   readOnly: boolean;
+  nodeNames: Record<string, string>;
   states: Array<{ value: string; label: string }>;
 };
 
@@ -36,30 +39,82 @@ export function ParticipantRouteConditionEditor({
   disabled: boolean;
   onChange: (value: ParticipantRouteCondition | undefined) => void;
 }) {
+  const [path, setPath] = useState<number[]>([]);
+  const [fields, setFields] = useState(false);
+  const navigate = (next: number[]) => { setPath(next); setFields(false); };
+  const parents: Extract<ParticipantRouteCondition, { kind: "group" }>[] = [];
+  let current = value;
+  for (const index of path) {
+    if (!isGroup(current) || index >= current.conditions.length) break;
+    parents.push(current);
+    current = current.conditions[index];
+  }
+  const address = path.slice(0, parents.length);
+  function change(next: ParticipantRouteCondition | undefined) {
+    let result = next;
+    for (let i = parents.length - 1; i >= 0; i--) {
+      const parent = parents[i];
+      const children = parent.conditions.slice();
+      children.splice(address[i], 1, ...(result === undefined ? [] : [result]));
+      result = { ...parent, conditions: children };
+    }
+    onChange(result);
+    if (!next) navigate(address.slice(0, -1));
+  }
+  const count = readApprovalCount(current);
+  const group = isGroup(current) ? current : undefined;
+  const name = (item: unknown) => conditionText(item, context.nodeNames);
   if (value === undefined)
     return (
       <button
         type="button"
         className="min-h-10 rounded border border-border px-3 text-sm"
         disabled={disabled}
-        onClick={() => onChange(createParticipantRouteCondition("group"))}
+        onClick={() => { navigate([]); onChange(createParticipantRouteCondition("group")); }}
       >
         配置人员组合条件
       </button>
     );
   return (
     <section aria-label="人员组合条件" className="grid min-w-0 gap-2">
-      <p className="text-xs text-muted-foreground">
-        对本次受影响人员逐一判断。组合条件与已有身份、附加数据条件同时满足时进入此分支。
-      </p>
-      <ConditionRow
-        value={value}
+      {parents.length > 0 && <button type="button" className="rule-link" onClick={() => navigate(address.slice(0, -1))}>‹ 上一级条件</button>}
+      {parents.length > 0 && <small className="node-value-hint">{parents.map((parent, i) =>
+        `${parent.negate ? "取反 · " : ""}${parent.match === "all" ? "全部" : "任一"}满足 / 第 ${address[i] + 1} 项`).join(" › ")}</small>}
+      <strong className="rule-heading">{name(current)}</strong>
+      {count && !fields ? <>
+        <p className="node-value-hint">参与人员编号　{count.ids.join("、")}</p>
+        <label className="grid gap-1 text-sm">至少通过人数
+          <select className={control} disabled={disabled || count.votes.length === 1} value={count.required}
+            onChange={event => change(withApprovalCount(count, Number(event.target.value)))}>
+            {availableCounts(count).map(n => <option key={n} value={n}>{n} 人</option>)}
+          </select>
+        </label>
+        <button className="rule-link" type="button" onClick={() => setFields(true)}>查看原始条件</button>
+      </> : <>
+      {group && <div className="rule-list">
+        {group.conditions.map((item, index) => {
+          const vote = readApprovalCount(item);
+          const title = vote ? context.nodeNames[vote.node] || vote.node : isGroup(item) && conditionOperations(item, context.nodeNames);
+          const description = vote ? `${vote.votes.length} 人中至少 ${vote.required} 人通过` : name(item);
+          return <button type="button" className="rule-list-item"
+            key={index} onClick={() => navigate([...address, index])}>
+            <span>{title ? <><strong>{title}</strong><small>{description}</small></> : description}</span><span aria-hidden="true">›</span>
+          </button>;
+        })}
+      </div>}
+      <button type="button" className="rule-link" onClick={() => setFields(!fields)}>
+        {fields ? "收起设置" : group ? "编辑条件组" : "编辑此条件"}
+      </button>
+      {fields && <ConditionRow
+        key={address.join(".")}
+        value={current}
         context={context}
         disabled={disabled}
-        path="条件"
-        onChange={onChange}
-        onRemove={() => onChange(undefined)}
-      />
+        path={["条件", ...address.map(i => i + 1)].join(".")}
+        onChange={change}
+        onRemove={() => change(undefined)}
+      />}
+      </>}
     </section>
   );
 }
@@ -126,11 +181,11 @@ function ConditionRow({
     );
   return (
     <fieldset
-      className="grid min-w-0 gap-3 rounded border border-border bg-card p-3"
+      className="grid min-w-0 gap-3"
       disabled={disabled}
       aria-label={path}
     >
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
+      <div className="rule-controls">
         <select
           aria-label={`${path}类型`}
           className={control + " flex-1"}
@@ -160,10 +215,10 @@ function ConditionRow({
         <button
           type="button"
           className="min-h-10 px-2 text-sm text-muted-foreground"
-          aria-label={`删除${path}`}
+          aria-label={`删除${path}${kind === "group" ? "整组" : ""}`}
           onClick={onRemove}
         >
-          删除
+          {kind === "group" ? "删除条件组" : "删除此条件"}
         </button>
       </div>
       {condition.kind === "group" && (
@@ -179,32 +234,6 @@ function ConditionRow({
               <option value="any">任一满足（或）</option>
             </select>
           </label>
-          {(Array.isArray(condition.conditions)
-            ? condition.conditions
-            : []
-          ).map((child, index, children) => (
-            <ConditionRow
-              key={index}
-              value={child}
-              context={context}
-              disabled={disabled}
-              path={`${path}.${index + 1}`}
-              onChange={next =>
-                update({
-                  conditions: children.map((item, current) =>
-                    current === index ? next : item
-                  ),
-                })
-              }
-              onRemove={() =>
-                update({
-                  conditions: children.filter(
-                    (_, current) => current !== index
-                  ),
-                })
-              }
-            />
-          ))}
           <div className="flex flex-wrap gap-2">
             {(["identity", "group"] as const).map(nextKind => (
               <button

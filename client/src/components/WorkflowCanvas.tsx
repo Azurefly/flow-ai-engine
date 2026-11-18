@@ -32,6 +32,7 @@ import {
   usesDataflowInputFieldSuggestions,
 } from "../../../shared/dataflow-input-fields";
 import { OperateApprovalEditor } from "./OperateApprovalEditor";
+import { NodeConfigurationSummary } from "./NodeConfigurationSummary";
 import { DataflowFieldListEditor } from "./DataflowFieldListEditor";
 import { NodeNumberInput } from "./NodeNumberInput";
 import { isDataflowFieldList } from "@shared/dataflow-field-list";
@@ -62,7 +63,8 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { normalizeReferenceRouterConfig } from "@shared/reference-router-config";
+import { normalizeReferenceRouterConfig, normalizeReferenceRouterRule } from "@shared/reference-router-config";
+import { conditionText } from "@shared/approval-condition-presentation";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
 import { hasCanvasInspectorSelection, readWorkflowLoopLimit } from "./workflow-canvas-viewport";
@@ -1620,7 +1622,7 @@ function StructuredValueEditor({
   const editorKey = dataFieldEditorKey(nodeKind, field.key);
   const isSpecializedList =
     isList &&
-    (["routes", "fields", "restHeaderParam", "restGetBodyParam"].includes(
+    (["fields", "restHeaderParam", "restGetBodyParam"].includes(
       field.key
     ) ||
       Boolean(
@@ -1630,13 +1632,7 @@ function StructuredValueEditor({
   const updateList = (next: unknown[]) => onChange(next);
   const newListItem =
     newDataFieldItem(editorKey) ??
-    (field.key === "routes"
-      ? {
-          handle: "route",
-          label: "新分支",
-          condition: { left: "{{input.value}}", operator: "equals", right: "" },
-        }
-      : field.key === "fields"
+    (field.key === "fields"
         ? { key: "field", label: "字段名称", type: "text", required: false }
         : ["restHeaderParam", "restGetBodyParam"].includes(field.key)
           ? { key: "", value: "" }
@@ -1681,7 +1677,10 @@ function StructuredValueEditor({
         {field.required && <i className="mr-1 not-italic text-red-500">*</i>}
         {field.label}
       </legend>
-      {isDataflowFieldList(nodeKind, field.key) ? (
+      {isList && field.key === "routes" ? (
+        <RouteListEditor items={list} disabled={disabled} targets={routeTargetLabels}
+          context={participantRouting} onChange={updateList} />
+      ) : isDataflowFieldList(nodeKind, field.key) ? (
         <DataflowFieldListEditor
           value={value}
           disabled={disabled}
@@ -1696,8 +1695,6 @@ function StructuredValueEditor({
               fieldKey={editorKey}
               item={item}
               disabled={disabled}
-              routeTargetLabels={routeTargetLabels}
-              participantRouting={participantRouting}
               onChange={next =>
                 updateList(
                   list.map((current, itemIndex) =>
@@ -1747,11 +1744,60 @@ function StructuredValueEditor({
   );
 }
 
+function RouteListEditor({ items, disabled, targets, context, onChange }: {
+  items: unknown[]; disabled: boolean; targets?: Record<string, string>;
+  context?: ParticipantRoutingEditorContext; onChange: (items: unknown[]) => void;
+}) {
+  const [selection, select] = useState<{ handle: string; proposed?: string; index: number } | null>(null);
+  const rows = items.map((item, index) => ({ rule: normalizeReferenceRouterRule(item, index), index }));
+  const active = selection && (rows.find(row => row.index === selection.index &&
+    (row.rule.handle === selection.handle || row.rule.handle === selection.proposed))
+    ?? rows.find(row => row.rule.handle === selection.handle));
+  const target = (rule: typeof rows[number]["rule"]) => targets?.[rule.handle] ||
+    context?.nodeNames[rule.targetNodeId] || rule.targetNodeId || "未连接目标";
+  if (active) {
+    const { rule, index } = active;
+    return <section className="grid min-w-0 gap-3" data-route-detail="" aria-label="分支详情">
+      <header className="rule-context">
+        <button type="button" className="rule-link" onClick={() => select(null)}>‹ 全部分支（{items.length}）</button>
+        <strong>{rule.name}</strong><span>流向　{target(rule)}</span>
+        {!targets?.[rule.handle] && !rule.targetNodeId && <span className="aiflow-type-control">请从此路径句柄连线到目标状态节点</span>}
+      </header>
+      <StructuredListRow key={index} fieldKey="routes" item={items[index]} disabled={disabled}
+        participantRouting={context}
+        onChange={next => {
+          select({ handle: rule.handle, proposed: normalizeReferenceRouterRule(next, index).handle, index });
+          onChange(items.map((original, i) => i === index ? next : original));
+        }}
+        onRemove={() => { select(null); onChange(items.filter((_, i) => i !== index)); }} />
+    </section>;
+  }
+  return <div className="grid gap-2">
+    <div className="rule-list" aria-label="全部分支">
+      {rows.sort((a, b) => Number(a.rule.isDefault) - Number(b.rule.isDefault) ||
+        b.rule.priority - a.rule.priority || a.rule.createdAt - b.rule.createdAt).map(({ rule, index }) => (
+        <button type="button" key={index} className="rule-list-item" onClick={() => select({ handle: rule.handle, index })}>
+          <span><strong>{rule.name}</strong><small>{rule.isDefault ? "默认分支 · " : ""}流向　{target(rule)}</small></span>
+          <span aria-hidden="true">›</span>
+        </button>
+      ))}
+    </div>
+    <Button type="button" size="sm" variant="outline" className="w-fit" disabled={disabled}
+      onClick={() => {
+        const handles = new Set(rows.map(row => row.rule.handle));
+        let id = items.length + 1;
+        while (handles.has(`route-${id}`)) id++;
+        const handle = `route-${id}`;
+        select({ handle, index: items.length });
+        onChange([...items, { handle, label: "新分支", condition: { left: "{{input.value}}", operator: "equals", right: "" } }]);
+      }}><Plus size={14}/> 添加分支</Button>
+  </div>;
+}
+
 function StructuredListRow({
   fieldKey,
   item,
   disabled,
-  routeTargetLabels,
   participantRouting,
   onChange,
   onRemove,
@@ -1759,7 +1805,6 @@ function StructuredListRow({
   fieldKey: string;
   item: unknown;
   disabled: boolean;
-  routeTargetLabels?: Record<string, string>;
   participantRouting?: ParticipantRoutingEditorContext;
   onChange: (value: unknown) => void;
   onRemove: () => void;
@@ -1864,11 +1909,11 @@ function StructuredListRow({
     );
   }
   if (fieldKey === "routes") {
-    const route = item && typeof item === "object" ? (item as NodeConfig) : {};
-    const targetLabel =
-      routeTargetLabels?.[String(route.handle ?? route.code ?? "default")] ??
-      route.targetNodeId ??
-      route.target;
+    const wrapper = item && typeof item === "object" ? item as NodeConfig : {};
+    const wrapped = !!wrapper.route && typeof wrapper.route === "object" && Object.keys(wrapper.route).length > 0;
+    const route = wrapped ? wrapper.route as NodeConfig : wrapper;
+    const save = (next: NodeConfig) => onChange(wrapped ? { ...wrapper, route: next } : next);
+    const effective = normalizeReferenceRouterRule(wrapper, 0);
     const condition =
       route.condition && typeof route.condition === "object"
         ? (route.condition as NodeConfig)
@@ -1876,43 +1921,50 @@ function StructuredListRow({
     const roleKeys = Array.isArray(route.roleKeys)
       ? route.roleKeys.map(String)
       : [];
+    const inherited = wrapped && route.participantCondition == null && wrapper.participantCondition !== undefined;
+    const arrayField = ["conditions", "tjsz"].find(key => Array.isArray(route[key]) || Array.isArray(wrapper[key]));
+    const arrayInWrapper = arrayField && !Array.isArray(route[arrayField]);
     return (
-      <ConfigDisclosure title={`${String(route.label || route.handle || "新分支")} → ${String(targetLabel || "未连接目标")}`}>
-        <div className="grid min-w-0 gap-3 p-2">
+        <div className="grid min-w-0 gap-3">
+          {participantRouting && <ParticipantRouteConditionEditor
+            value={effective.participantCondition} context={participantRouting} disabled={disabled}
+            onChange={participantCondition => inherited
+              ? onChange({ ...wrapper, participantCondition })
+              : save({ ...route, participantCondition })}
+          />}
+          {effective.roleKeys.length > 0 && <p className="node-value-hint">流程身份　{effective.roleKeys.join("、")}</p>}
+          {effective.conditions.length > 0 && <div className="rule-data-summary">
+            {effective.conditions.map((item, i) => <p key={i}>{conditionText({ ...item, kind: "data" }, participantRouting?.nodeNames ?? {})}</p>)}
+          </div>}
+          <ConfigDisclosure title="修改分支名称">
           <label className={canvasFieldLabelClass}>
             路径名称
             <input
               className={inputClass}
               placeholder="例如 员工路径"
-              value={String(route.label ?? "")}
+              value={String(route.routerRuleName ?? route.label ?? "")}
               disabled={disabled}
               onChange={event =>
-                onChange({ ...route, label: event.target.value })
+                save({ ...route, label: event.target.value, ...(route.routerRuleName !== undefined && { routerRuleName: event.target.value }) })
               }
             />
           </label>
-          <label className={canvasFieldLabelClass}>
-            目标节点
-            <span className="aiflow-type-control flex min-h-11 items-center rounded border border-border bg-muted px-2 text-foreground">
-              {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}
-            </span>
-          </label>
-          {participantRouting && <ParticipantRouteConditionEditor
-            value={route.participantCondition} context={participantRouting} disabled={disabled}
-            onChange={participantCondition => onChange({ ...route, participantCondition })}
-          />}
+          </ConfigDisclosure>
           <details className="rounded border border-border bg-muted">
             <summary className={"aiflow-type-control cursor-pointer px-2 py-3 font-medium " + mutedToneClass}>
-              附加数据条件
+              附加数据条件{effective.conditions.length > 0 && `（${effective.conditions.length} 项）`}
             </summary>
+            {arrayField && !Object.keys(condition).length ? <NestedStructuredValueEditor
+              label="附加数据条件" disabled={disabled} allowReferences value={arrayInWrapper ? wrapper[arrayField] : route[arrayField]}
+              onChange={next => arrayInWrapper ? onChange({ ...wrapper, [arrayField]: next }) : save({ ...route, [arrayField]: next })} /> :
             <div data-config-condition="" className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
-              <NodeValueEditor value={condition.left ?? ""} disabled={disabled} label="待判断的数据" onChange={left => onChange({ ...route, condition: { ...condition, left } })}/>
+              <NodeValueEditor value={condition.left ?? ""} disabled={disabled} label="待判断的数据" onChange={left => save({ ...route, condition: { ...condition, left } })}/>
               <select
                 className={inputClass}
                 value={String(condition.operator ?? "equals")}
                 disabled={disabled}
                 onChange={event =>
-                  onChange({
+                  save({
                     ...route,
                     condition: { ...condition, operator: event.target.value },
                   })
@@ -1925,8 +1977,8 @@ function StructuredListRow({
                 <option value="greaterThan">大于</option>
                 <option value="lessThan">小于</option>
               </select>
-              <NodeValueEditor value={condition.right ?? ""} disabled={disabled} label="比较值" onChange={right => onChange({ ...route, condition: { ...condition, right } })}/>
-            </div>
+              <NodeValueEditor value={condition.right ?? ""} disabled={disabled} label="比较值" onChange={right => save({ ...route, condition: { ...condition, right } })}/>
+            </div>}
           </details>
           <ConfigDisclosure title="优先级、连线标识与流程身份">
             <label className={canvasFieldLabelClass}>
@@ -1940,7 +1992,7 @@ function StructuredListRow({
                 onChange={event => {
                   const priority =
                     event.target.value === "" ? "" : Number(event.target.value);
-                  onChange({
+                  save({
                     ...route,
                     priority,
                     routerRulePriority: priority,
@@ -1960,7 +2012,7 @@ function StructuredListRow({
                 value={String(route.handle ?? "")}
                 disabled={disabled}
                 onChange={event =>
-                  onChange({ ...route, handle: event.target.value })
+                  save({ ...route, handle: event.target.value })
                 }
               />
             </label>
@@ -1972,7 +2024,7 @@ function StructuredListRow({
                 value={roleKeys.join(", ")}
                 disabled={disabled}
                 onChange={event =>
-                  onChange({
+                  save({
                     ...route,
                     roleKeys: event.target.value
                       .split(",")
@@ -1985,15 +2037,14 @@ function StructuredListRow({
           </ConfigDisclosure>
           <button
             type="button"
-            className={"grid min-h-11 min-w-11 place-items-center " + mutedToneClass + " hover:text-red-600"}
+            className="rule-link rule-remove"
             disabled={disabled}
             onClick={onRemove}
-            aria-label="删除路由规则"
+            aria-label="删除此分支"
           >
-            <Trash2 size={14} />
+            <Trash2 size={14} /> 删除此分支
           </button>
         </div>
-      </ConfigDisclosure>
     );
   }
   if (fieldKey === "fields") {
@@ -2915,6 +2966,7 @@ export default function WorkflowCanvas({
     () => new Map(nodes.map(node => [node.id, node])),
     [nodes]
   );
+  const nodeNames = useMemo(() => Object.fromEntries(nodes.map(node => [node.id, String(node.data.label || node.id)])), [nodes]);
   const selectedRouteTargetLabels = useMemo(
     () =>
       edges
@@ -4790,6 +4842,9 @@ export default function WorkflowCanvas({
                       }
                     />
                   </label>
+                  <NodeConfigurationSummary kind={selected.data.kind} config={selectedConfig} participantMode={participantMode}
+                    names={nodeNames} operations={selected.data.kind === "state" ? Array.from(new Set(edges.filter(edge =>
+                      edge.source === selected.id && nodeMap.get(edge.target)?.data.kind === "operate").map(edge => edge.target)), id => nodeNames[id]) : []}/>
                   {edges.length >= 50 && <ConfigDisclosure key={selected.id} title="跳转到相邻节点">
                     {edges.filter(edge => edge.target === selected.id || edge.source === selected.id).map(edge => {
                       const incoming = edge.target === selected.id;
@@ -4913,12 +4968,6 @@ export default function WorkflowCanvas({
                         config={selectedConfig} workflowId={workflowId} disabled={inspectorDisabled} readOnly={readOnly}
                         onChange={config => updateSelected({ config })} />}
                       {participantMode && selected.data.kind === "state" && <p className="text-xs text-muted-foreground">参与人在此状态停留。连接操作节点即可授予持卡人对应操作，全部人员进入终态后实例完成。</p>}
-                      {participantMode && selected.data.kind === "router" && activeInspectorGroup.label === "分支规则" && <label className="grid gap-1 text-sm">人员未命中规则时
-                        <select className={canvasSelectClass} disabled={inspectorDisabled} value={String(selectedConfig.unmatched ?? "keep")}
-                          onChange={event => updateConfigField("unmatched", event.target.value)}>
-                          <option value="keep">保持原状态</option><option value="error">阻止本次操作</option>
-                        </select><span className="text-xs text-muted-foreground">按人匹配分支。展开一条路径，可设置哪些人进入对应的目标节点。</span>
-                      </label>}
 
                       {flowType === "data" && ["start", "end"].includes(selected.data.kind) && <p className="node-value-hint">{selected.data.kind === "start" ? "数据流程从已连接的数据源读取记录；在资源或查询节点中选择数据。此节点无需额外配置。" : "自动输出已连接上游的数据记录，无需填写结果模板。"}</p>}
                       {activeInspectorGroup.fields.map(field => {
@@ -5154,6 +5203,7 @@ export default function WorkflowCanvas({
                             routeTargetLabels={selectedRouteTargetLabels}
                             participantRouting={participantMode ? {
                               workflowId, readOnly,
+                              nodeNames,
                               states: nodes.filter(node => node.data.kind === "state").map(node => ({
                                 value: String(node.data.config.nodeDh || node.data.config.stateCode || node.id),
                                 label: String(node.data.config.jdmc || node.data.config.displayName || node.data.label),
@@ -5209,6 +5259,12 @@ export default function WorkflowCanvas({
                           />
                         );
                       })}
+                      {participantMode && selected.data.kind === "router" && activeInspectorGroup.label === "分支规则" && <label data-unmatched-rule="" className="grid gap-1 text-sm">人员未命中规则时
+                        <select className={canvasSelectClass} disabled={inspectorDisabled} value={String(selectedConfig.unmatched ?? "keep")}
+                          onChange={event => updateConfigField("unmatched", event.target.value)}>
+                          <option value="keep">保持原状态</option><option value="error">阻止本次操作</option>
+                        </select>
+                      </label>}
                       {selected.data.kind === "operate" &&
                         activeInspectorGroup.label === "处理人" && (
                           <OperateApprovalEditor

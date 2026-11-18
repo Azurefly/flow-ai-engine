@@ -21,6 +21,28 @@
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab:hover:not([aria-selected="true"]) { background:var(--muted); color:var(--foreground); }
 [data-node-config-panel] [data-inspector-section] { padding:18px 20px; }
 .node-config-section-note {margin-bottom:16px; font-size:12px; line-height:19px; color:var(--muted-foreground);}
+.config-facts, .rule-list, .rule-context { display:grid; min-width:0; gap:0; }
+.config-facts { gap:6px; padding:10px 12px; border-radius:8px; background:var(--muted); font-size:13px; }
+.config-facts > div { display:grid; grid-template-columns:5em minmax(0,1fr); gap:8px; }
+.config-facts dt, .rule-list-item small { color:var(--muted-foreground); }
+.config-facts dd, .rule-list-item span, .rule-context, .rule-heading { overflow-wrap:anywhere; }
+.rule-list { border-block:1px solid var(--border); }
+.rule-list:empty { display:none; }
+[data-config-fields]:has([data-route-detail]) [data-unmatched-rule] { display:none; }
+.rule-list-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; text-align:left; padding:9px 8px; font-size:14px; line-height:1.5; }
+.rule-list-item + .rule-list-item { border-top:1px solid var(--border); }
+.rule-list-item:is(:hover,:focus-visible) { background:var(--muted); }
+.rule-list-item strong, .rule-list-item small { display:block; }
+.rule-list-item small { font-size:13px; margin-top:3px; }
+.rule-link { display:inline-flex; align-items:center; justify-self:start; gap:5px; color:var(--primary); font-size:13px; }
+.rule-context { position:sticky; top:58px; z-index:2; background:var(--card); padding:0 0 10px; border-bottom:1px solid var(--border); gap:4px; }
+.rule-data-summary { overflow-wrap:anywhere; font-size:13px; }
+.rule-context > span { font-size:13px; color:var(--muted-foreground); }
+.rule-heading { font-size:14px; }
+.rule-controls { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; align-items:center; }
+.rule-controls > select { grid-column:1 / -1; }
+.rule-controls > label { white-space:nowrap; }
+[data-node-config-panel] :is(.rule-controls button,.rule-remove)[aria-label^="删除"] { width:auto; height:auto; justify-self:end; white-space:nowrap; align-self:center; }
 .node-value-editor, .node-value-body { display:grid; min-width:0; gap:8px; }
 .node-value-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted-foreground); font-size:12px; }
 .node-value-heading > span { flex:none; white-space:nowrap; }

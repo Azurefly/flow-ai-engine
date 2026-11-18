@@ -141,6 +141,15 @@ export function updateRouterConnections<T extends RouterEdge>(
   const connectedHandles = outgoing.map(edge => edge.sourceHandle || "default");
   if (new Set(connectedHandles).size !== connectedHandles.length)
     throw new Error("新路径句柄已有连线，请选择不同名称以保留两个分支。");
+  // A rule-only edit must not rewrite other rules or generate legacy mirrors.
+  if (oldDefault === nextDefault && before.lysz === requested.lysz && oldRoutes.length === routes.length &&
+      routes.every((route, i) => routeHandle(route) === routeHandle(oldRoutes[i]) &&
+        targetKeys.every(key => route[key] === oldRoutes[i][key])) &&
+      connectedHandles.every(handle => nextHandles.has(handle))) {
+    const targets = new Map(outgoing.map(edge => [edge.sourceHandle || "default", edge.target]));
+    if (routes.every((route, i) => normalizeReferenceRouterRule(route, i).targetNodeId === (targets.get(routeHandle(route)) || "")))
+      return { config: requested, edges };
+  }
   const lysz = Array.isArray(requested.lysz)
     ? requested.lysz.filter(isConfigRecord).flatMap((value, index) => {
         const nested = isConfigRecord(value.route);
