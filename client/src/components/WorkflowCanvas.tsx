@@ -1,6 +1,7 @@
 import { isParticipantStateDefinition, PARTICIPANT_STATE_MODEL } from "@shared/participant-state";
 import { createParticipantStateExample } from "@shared/participant-state-example";
 import { ParticipantOperationEditor } from "./ParticipantOperationEditor";
+import { ConfigDisclosure } from "./ConfigDisclosure";
 import { ParticipantRouteConditionEditor, type ParticipantRoutingEditorContext } from "./ParticipantRouteConditionEditor";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
@@ -1691,7 +1692,7 @@ function StructuredValueEditor({
               item={item}
               disabled={disabled}
               routeTargetLabels={routeTargetLabels}
-        participantRouting={participantRouting}
+              participantRouting={participantRouting}
               onChange={next =>
                 updateList(
                   list.map((current, itemIndex) =>
@@ -1871,34 +1872,8 @@ function StructuredListRow({
       ? route.roleKeys.map(String)
       : [];
     return (
-      <div className="grid min-w-0 gap-3 rounded-lg border border-aiflow-special-border bg-card p-3 shadow-sm">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold text-aiflow-special">
-            {String(route.label ?? "新路径")}
-          </span>
-          <button
-            type="button"
-            className={"grid min-h-11 min-w-11 place-items-center " + mutedToneClass + " hover:text-red-600"}
-            disabled={disabled}
-            onClick={onRemove}
-            aria-label="删除路由规则"
-          >
-            <Trash2 size={14} />
-          </button>
-        </div>
-        <div className="node-config-columns grid min-w-0 gap-2 sm:grid-cols-2">
-          <label className={canvasFieldLabelClass}>
-            路径句柄
-            <input
-              className={inputClass}
-              placeholder="例如 employee"
-              value={String(route.handle ?? "")}
-              disabled={disabled}
-              onChange={event =>
-                onChange({ ...route, handle: event.target.value })
-              }
-            />
-          </label>
+      <ConfigDisclosure title={`${String(route.label || route.handle || "新分支")} → ${String(targetLabel || "未连接目标")}`}>
+        <div className="grid min-w-0 gap-3 p-2">
           <label className={canvasFieldLabelClass}>
             路径名称
             <input
@@ -1911,86 +1886,109 @@ function StructuredListRow({
               }
             />
           </label>
+          <label className={canvasFieldLabelClass}>
+            目标节点
+            <span className="aiflow-type-control flex min-h-11 items-center rounded border border-border bg-muted px-2 text-foreground">
+              {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}
+            </span>
+          </label>
+          {participantRouting && <ParticipantRouteConditionEditor
+            value={route.participantCondition} context={participantRouting} disabled={disabled}
+            onChange={participantCondition => onChange({ ...route, participantCondition })}
+          />}
+          <details className="rounded border border-border bg-muted">
+            <summary className={"aiflow-type-control cursor-pointer px-2 py-3 font-medium " + mutedToneClass}>
+              附加数据条件
+            </summary>
+            <div data-config-condition="" className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
+              <NodeValueEditor value={condition.left ?? ""} disabled={disabled} label="待判断的数据" onChange={left => onChange({ ...route, condition: { ...condition, left } })}/>
+              <select
+                className={inputClass}
+                value={String(condition.operator ?? "equals")}
+                disabled={disabled}
+                onChange={event =>
+                  onChange({
+                    ...route,
+                    condition: { ...condition, operator: event.target.value },
+                  })
+                }
+              >
+                <option value="equals">等于</option>
+                <option value="notEquals">不等于</option>
+                <option value="contains">包含</option>
+                <option value="exists">存在</option>
+                <option value="greaterThan">大于</option>
+                <option value="lessThan">小于</option>
+              </select>
+              <NodeValueEditor value={condition.right ?? ""} disabled={disabled} label="比较值" onChange={right => onChange({ ...route, condition: { ...condition, right } })}/>
+            </div>
+          </details>
+          <ConfigDisclosure title="优先级、连线标识与流程身份">
+            <label className={canvasFieldLabelClass}>
+              优先级（-1 为默认规则）
+              <input
+                type="number"
+                step="any"
+                className={inputClass}
+                value={String(route.routerRulePriority ?? route.priority ?? 0)}
+                disabled={disabled}
+                onChange={event => {
+                  const priority =
+                    event.target.value === "" ? "" : Number(event.target.value);
+                  onChange({
+                    ...route,
+                    priority,
+                    routerRulePriority: priority,
+                    isDefault: priority === -1,
+                  });
+                }}
+              />
+              <span className="aiflow-type-meta">
+                {participantRouting ? "值越大越先匹配；同一人命中同优先级的多个分支时阻止操作。" : "值越大越先匹配；同值按创建顺序。留空按 0 处理。"}
+              </span>
+            </label>
+            <label className={canvasFieldLabelClass}>
+              连线标识
+              <input
+                className={inputClass}
+                placeholder="例如 employee"
+                value={String(route.handle ?? "")}
+                disabled={disabled}
+                onChange={event =>
+                  onChange({ ...route, handle: event.target.value })
+                }
+              />
+            </label>
+            <label className={canvasFieldLabelClass}>
+              流程身份（逗号分隔）
+              <input
+                className={inputClass}
+                placeholder="leave_employee, initiator"
+                value={roleKeys.join(", ")}
+                disabled={disabled}
+                onChange={event =>
+                  onChange({
+                    ...route,
+                    roleKeys: event.target.value
+                      .split(",")
+                      .map(value => value.trim())
+                      .filter(Boolean),
+                  })
+                }
+              />
+            </label>
+          </ConfigDisclosure>
+          <button
+            type="button"
+            className={"grid min-h-11 min-w-11 place-items-center " + mutedToneClass + " hover:text-red-600"}
+            disabled={disabled}
+            onClick={onRemove}
+            aria-label="删除路由规则"
+          >
+            <Trash2 size={14} />
+          </button>
         </div>
-        <label className={canvasFieldLabelClass}>
-          优先级（-1 为默认规则）
-          <input
-            type="number"
-            step="any"
-            className={inputClass}
-            value={String(route.routerRulePriority ?? route.priority ?? 0)}
-            disabled={disabled}
-            onChange={event => {
-              const priority =
-                event.target.value === "" ? "" : Number(event.target.value);
-              onChange({
-                ...route,
-                priority,
-                routerRulePriority: priority,
-                isDefault: priority === -1,
-              });
-            }}
-          />
-          <span className="aiflow-type-meta">
-            {participantRouting ? "值越大越先匹配；同一人命中同优先级的多个分支时阻止操作。" : "值越大越先匹配；同值按创建顺序。留空按 0 处理。"}
-          </span>
-        </label>
-        <label className={canvasFieldLabelClass}>
-          目标节点
-          <span className="aiflow-type-control flex min-h-11 items-center rounded border border-border bg-muted px-2 text-foreground">
-            {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}
-          </span>
-        </label>
-        {participantRouting && <ParticipantRouteConditionEditor
-          value={route.participantCondition} context={participantRouting} disabled={disabled}
-          onChange={participantCondition => onChange({ ...route, participantCondition })}
-        />}
-        <label className={canvasFieldLabelClass}>
-          流程身份（逗号分隔）
-          <input
-            className={inputClass}
-            placeholder="leave_employee, initiator"
-            value={roleKeys.join(", ")}
-            disabled={disabled}
-            onChange={event =>
-              onChange({
-                ...route,
-                roleKeys: event.target.value
-                  .split(",")
-                  .map(value => value.trim())
-                  .filter(Boolean),
-              })
-            }
-          />
-        </label>
-        <details className="rounded border border-border bg-muted">
-          <summary className={"aiflow-type-control cursor-pointer px-2 py-3 font-medium " + mutedToneClass}>
-            附加数据条件
-          </summary>
-          <div data-config-condition="" className="grid min-w-0 gap-2 border-t border-border p-2 sm:grid-cols-[minmax(0,1fr)_110px_minmax(0,1fr)]">
-            <NodeValueEditor value={condition.left ?? ""} disabled={disabled} label="待判断的数据" onChange={left => onChange({ ...route, condition: { ...condition, left } })}/>
-            <select
-              className={inputClass}
-              value={String(condition.operator ?? "equals")}
-              disabled={disabled}
-              onChange={event =>
-                onChange({
-                  ...route,
-                  condition: { ...condition, operator: event.target.value },
-                })
-              }
-            >
-              <option value="equals">等于</option>
-              <option value="notEquals">不等于</option>
-              <option value="contains">包含</option>
-              <option value="exists">存在</option>
-              <option value="greaterThan">大于</option>
-              <option value="lessThan">小于</option>
-            </select>
-            <NodeValueEditor value={condition.right ?? ""} disabled={disabled} label="比较值" onChange={right => onChange({ ...route, condition: { ...condition, right } })}/>
-          </div>
-        </details>
-      </div>
+      </ConfigDisclosure>
     );
   }
   if (fieldKey === "fields") {
@@ -2278,11 +2276,11 @@ export default function WorkflowCanvas({
     onSave: (name: string) => void | Promise<unknown>;
   } | null>(null);
   useEffect(() => setNameDialog(null), [workflowId, readOnly]);
-  const initial = definition ?? defaultDefinition();
-  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(
-    toFlowNodes(initial)
-  );
-  const [edges, setEdges, onEdgesChange] = useEdgesState(toFlowEdges(initial));
+  const initial = useMemo(() => definition ?? defaultDefinition(), [definition]);
+  const initialNodes = useMemo(() => toFlowNodes(initial), [initial]);
+  const initialEdges = useMemo(() => toFlowEdges(initial), [initial]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CanvasNode>(initialNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const groupNavigation = useInspectorGroupNavigation(selectedId);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -2369,12 +2367,14 @@ export default function WorkflowCanvas({
   const readingNodes = useMemo(() => readingActive ? readableCanvasLayout(nodes, edges) : nodes, [nodes, edges, readingActive]);
   const displayedNodesRef = useRef(readingNodes); displayedNodesRef.current = readingNodes;
   const readingActiveRef = useRef(readingActive); readingActiveRef.current = readingActive;
-  const fitCanvas = useCallback((nodeId?: string | null, edgeId?: string | null, duration = 180) => {
+  const fitCanvas = useCallback((nodeId?: string | null, edgeId?: string | null, duration = 180, includeNeighbors = false) => {
     if (!reactFlow || !flowViewportRef.current) return Promise.resolve(false);
     const allRects = canvasNodeRects(displayedNodesRef.current), currentEdges = latestEdgesRef.current;
     const ids = edgeId ? new Set(currentEdges.filter(e => e.id === edgeId).flatMap(e => [e.source, e.target])) : canvasContextIds(allRects, currentEdges, nodeId);
     const viewport = flowViewportRef.current;
-    return reactFlow.setViewport(getViewportForBounds(canvasViewBounds(allRects, currentEdges, ids), viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
+    const selectedRect = nodeId && !includeNeighbors && currentEdges.length >= 50 && allRects.find(rect => rect.id === nodeId);
+    const bounds = selectedRect ? canvasBounds([selectedRect]) : canvasViewBounds(allRects, currentEdges, ids);
+    return reactFlow.setViewport(getViewportForBounds(bounds, viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
   }, [reactFlow, prefersReducedMotion]);
 
   const definitionSignature = useMemo(
@@ -2613,6 +2613,8 @@ export default function WorkflowCanvas({
   const hasInspectorSelection = hasCanvasInspectorSelection(nodes, edges, selectedId, selectedEdgeId);
   const inspectorReveal = useContextReveal<HTMLElement>(selectedId || selectedEdgeId);
   const [highlightRelated, setHighlightRelated] = useState(false);
+  const [showAllLines, setShowAllLines] = useState(false);
+  const denseGraph = edges.length >= 50;
   const neighborhood = useMemo(() => highlightRelated ? traceWorkflowNeighborhood(nodes.map(node => node.id), edges, selectedId) : null, [highlightRelated, nodes, edges, selectedId]);
   const presentedNodes = useMemo(() => neighborhood ? readingNodes.map(node => ({ ...node, className: `${node.className ?? ""} ${neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"}` })) : readingNodes, [readingNodes, neighborhood]);
   const inspectorExpanded = hasInspectorSelection && inspectorMode !== "compact";
@@ -3014,7 +3016,12 @@ export default function WorkflowCanvas({
   );
   const canvasRects = useMemo(() => canvasNodeRects(readingNodes), [readingNodes]);
   const workspaceEdges = useMemo(() => displayedEdges.map((edge, canvasLane) => ({ ...edge, type: "workspace", data: { ...edge.data, canvasRects, canvasLane } })), [displayedEdges, canvasRects]);
-  const presentedEdges = useMemo(() => neighborhood ? workspaceEdges.map(edge => ({ ...edge, className: `${edge.className ?? ""} ${neighborhood.edges.has(edge.id) ? "aiflow-related-edge" : "aiflow-unrelated-edge"}` })) : workspaceEdges, [workspaceEdges, neighborhood]);
+  const presentedEdges = useMemo(() => {
+    if (neighborhood) return workspaceEdges.map(edge => ({ ...edge, className: `${edge.className ?? ""} ${neighborhood.edges.has(edge.id) ? "aiflow-related-edge" : "aiflow-unrelated-edge"}` }));
+    if (denseGraph && selectedId && !showAllLines) return workspaceEdges.map(edge =>
+      edge.source === selectedId || edge.target === selectedId ? edge : { ...edge, hidden: true });
+    return workspaceEdges;
+  }, [workspaceEdges, neighborhood, denseGraph, selectedId, showAllLines]);
 
   useEffect(() => {
     setInspectorTab(selectedFieldGroups[0]?.label ?? "");
@@ -3381,7 +3388,7 @@ export default function WorkflowCanvas({
             ? item.id === node.id
               ? { ...item, selected: !item.selected }
               : item
-            : { ...item, selected: item.id === node.id }
+            : Boolean(item.selected) === (item.id === node.id) ? item : { ...item, selected: item.id === node.id }
         )
       );
       setSelectedId(node.id);
@@ -4395,8 +4402,9 @@ export default function WorkflowCanvas({
           onDrop={handleCanvasDrop}
         >
           {!compactReadOnlyPreview && <div data-canvas-view-controls="" className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-md border border-border bg-card p-1 text-xs">
-            <button type="button" className="rounded px-2 py-1 hover:bg-muted" onClick={() => { void fitCanvas(); }}>总览</button>
-            <button type="button" className="rounded px-2 py-1 hover:bg-muted" disabled={!selectedId} onClick={() => { void fitCanvas(selectedId); }}>上下游</button>
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" onClick={() => { setShowAllLines(true); void fitCanvas(); }}>总览</button>
+            {denseGraph && selectedId && !neighborhood && <button type="button" className="rounded px-2 py-1 hover:bg-muted" aria-pressed={!showAllLines} onClick={() => setShowAllLines(value => !value)}>仅看相邻连线</button>}
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" disabled={!selectedId} onClick={() => { void fitCanvas(selectedId, null, 180, true); }}>上下游</button>
             <button type="button" className="rounded px-2 py-1 hover:bg-muted" title="切换显示布局，不修改已保存坐标" aria-pressed={readingActive} onClick={() => { setCanvasPresentation(readingActive ? "original" : "readable"); window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void fitCanvas(selectedId); })); }}>{readingActive ? "阅读布局" : "原始布局"}</button>
           </div>}
           {!readingActive && canvasHasCrowding(nodes) && <p data-canvas-layout-warning="" role="status" className="absolute bottom-3 left-16 z-10 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">原始节点重叠；切换阅读布局可查看连线，不修改原坐标。</p>}
@@ -4775,7 +4783,15 @@ export default function WorkflowCanvas({
                       }
                     />
                   </label>
-                  <p className="text-xs text-muted-foreground">修改立即应用到当前画布；请使用顶部“保存草稿”或“发布新版本”提交。</p>
+                  {denseGraph && <ConfigDisclosure key={selected.id} title="跳转到相邻节点">
+                    {edges.filter(edge => edge.target === selected.id || edge.source === selected.id).map(edge => {
+                      const incoming = edge.target === selected.id;
+                      const neighbor = incoming ? edge.source : edge.target;
+                      return <button type="button" key={edge.id} className="block w-full py-1 text-left text-sm text-aiflow-info" onClick={() => inspectCanvasNode(neighbor)}>
+                        {incoming ? "来自" : "前往"} · {String(nodeMap.get(neighbor)?.data.label ?? neighbor)}
+                      </button>;
+                    })}
+                  </ConfigDisclosure>}
                   {selectedServiceNode && projectId && <a className="block text-xs text-aiflow-info underline" href={formatConsoleRoute({section:"flows",view:"workspace",projectId})} target="_blank" rel="noopener noreferrer">打开项目中心 → 服务端点（新标签页）</a>}
                   {selected.data.kind === "llm" && <a className="block text-xs text-aiflow-info underline" href={formatConsoleRoute({section:"system",view:"config"})} target="_blank" rel="noopener noreferrer">打开系统配置 → 模型服务（新标签页）</a>}
                   <div
@@ -4850,6 +4866,7 @@ export default function WorkflowCanvas({
                     { key: "result", label: "本次办理表单", fields: [] },
                   ] : valueSources}>
                   <section
+                    key={selected.id}
                     role={selectedFieldGroups.length > 1 ? "tabpanel" : "region"}
                     data-inspector-section=""
                     ref={groupNavigation.panelRef}
@@ -4889,11 +4906,11 @@ export default function WorkflowCanvas({
                         config={selectedConfig} workflowId={workflowId} disabled={inspectorDisabled} readOnly={readOnly}
                         onChange={config => updateSelected({ config })} />}
                       {participantMode && selected.data.kind === "state" && <p className="text-xs text-muted-foreground">参与人在此状态停留。连接操作节点即可授予持卡人对应操作，全部人员进入终态后实例完成。</p>}
-                      {participantMode && selected.data.kind === "router" && <label className="grid gap-1 text-sm">人员未命中规则时
+                      {participantMode && selected.data.kind === "router" && activeInspectorGroup.label === "分支规则" && <label className="grid gap-1 text-sm">人员未命中规则时
                         <select className={canvasSelectClass} disabled={inspectorDisabled} value={String(selectedConfig.unmatched ?? "keep")}
                           onChange={event => updateConfigField("unmatched", event.target.value)}>
                           <option value="keep">保持原状态</option><option value="error">阻止本次操作</option>
-                        </select><span className="text-xs text-muted-foreground">actor、receiver、relation_sender、relation_receiver 表示本次操作关系。条件可引用被评估参与人的当前状态。</span>
+                        </select><span className="text-xs text-muted-foreground">按人匹配分支。展开一条路径，可设置哪些人进入对应的目标节点。</span>
                       </label>}
 
                       {flowType === "data" && ["start", "end"].includes(selected.data.kind) && <p className="node-value-hint">{selected.data.kind === "start" ? "数据流程从已连接的数据源读取记录；在资源或查询节点中选择数据。此节点无需额外配置。" : "自动输出已连接上游的数据记录，无需填写结果模板。"}</p>}

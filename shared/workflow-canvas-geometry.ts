@@ -98,7 +98,14 @@ export function canvasConnectionPoints(source: CanvasPoint, target: CanvasPoint,
   const mid = (sx + tx) / 2;
   let points = [source, { x: mid, y: source.y }, { x: mid, y: target.y }, target];
   if (target.x - source.x < 64 || obstacles.some(n => canvasPathCrosses(points, n))) {
-    const y = Math.min(source.y, target.y, ...rects.map(n => n.y)) - 48 - lane * 24;
+    // Route in the nearest clear row between the two columns. Absolute edge
+    // indices previously pushed late return paths thousands of pixels upwards.
+    const span = rects.filter(n => n.x - 12 <= Math.max(sx, tx) && n.x + n.width + 12 >= Math.min(sx, tx));
+    const gap = 24 + (lane % 8) * 6;
+    const middleY = (source.y + target.y) / 2;
+    const rows = [middleY, ...span.flatMap(n => [n.y - gap, n.y + n.height + gap])];
+    const y = rows.sort((u, v) => Math.abs(u - middleY) - Math.abs(v - middleY))
+      .find(row => span.every(n => row <= n.y - 12 || row >= n.y + n.height + 12))!;
     points = [source, { x: sx, y: source.y }, { x: sx, y }, { x: tx, y }, { x: tx, y: target.y }, target];
   }
   return points.filter((p, i) => !i || p.x !== points[i - 1].x || p.y !== points[i - 1].y);

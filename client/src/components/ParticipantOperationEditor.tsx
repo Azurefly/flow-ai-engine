@@ -5,6 +5,7 @@ import {
 } from "@shared/participant-state";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
 import { TaskFormSchemaEditor } from "./TaskFormSchemaEditor";
+import { ConfigDisclosure } from "./ConfigDisclosure";
 import { WorkflowOutcomeEditor } from "./WorkflowOutcomeEditor";
 
 const inputClass =
@@ -198,23 +199,27 @@ export function ParticipantOperationEditor({
           )}
         </fieldset>
       )}
-      <TaskFormSchemaEditor
-        value={config.formSchema ?? { fields: [] }}
-        disabled={disabled}
-        onChange={value => update("formSchema", value)}
-        advanced={null}
-      />
-      <WorkflowOutcomeEditor
-        targets={targets}
-        config={config}
-        value={config.outcomes}
-        mode="explicit"
-        disabled={disabled}
-        onChange={outcomes =>
-          onChange({ ...config, outcomeMode: "explicit", outcomes })
-        }
-        advanced={null}
-      />
+      <ConfigDisclosure title="办理时需要填写什么">
+        <TaskFormSchemaEditor
+          value={config.formSchema ?? { fields: [] }}
+          disabled={disabled}
+          onChange={value => update("formSchema", value)}
+          advanced={null}
+        />
+      </ConfigDisclosure>
+      <ConfigDisclosure title="办理结果与下一步">
+        <WorkflowOutcomeEditor
+          targets={targets}
+          config={config}
+          value={config.outcomes}
+          mode="explicit"
+          disabled={disabled}
+          onChange={outcomes =>
+            onChange({ ...config, outcomeMode: "explicit", outcomes })
+          }
+          advanced={null}
+        />
+      </ConfigDisclosure>
     </div>
   );
 }

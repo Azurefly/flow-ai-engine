@@ -16,7 +16,7 @@ export function CanvasConnectionEdge({ id, source, target, sourceX, sourceY, tar
   const anchor = canvasEdgeLabelAnchor(points, zoom), labelX = anchor.x;
   let labelY = anchor.y;
   const width = (String(label ?? "").length * 12 + 16) / zoom;
-  for (let i = 0; i < 16 && rects.some(n => labelX + width / 2 > n.x && labelX - width / 2 < n.x + n.width && labelY + 10 / zoom > n.y && labelY - 10 / zoom < n.y + n.height); i++) labelY -= 24 / zoom;
+  for (let i = 0; visibleLabel && i < 16 && rects.some(n => labelX + width / 2 > n.x && labelX - width / 2 < n.x + n.width && labelY + 10 / zoom > n.y && labelY - 10 / zoom < n.y + n.height); i++) labelY -= 24 / zoom;
   return <>
     <defs><marker id={marker} markerUnits="userSpaceOnUse" viewBox="0 0 12 12" refX="12" refY="6" markerWidth={9 / zoom} markerHeight={9 / zoom} orient="auto"><path d="M1 1 L11 6 L1 11 Z" fill={color} /></marker></defs>
     {label && <title>{String(label)}</title>}

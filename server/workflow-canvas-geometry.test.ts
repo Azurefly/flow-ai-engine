@@ -20,6 +20,12 @@ describe("画布阅读布局与连线可见性", () => {
     const back = canvasConnectionPoints({ x: 588, y: 84 }, { x: 36, y: 84 }, rects, "b", "a");
     expect(canvasEdgeLabelAnchor(back, 0.87).y).toBeLessThan(Math.min(...rects.map(r => r.y)));
   });
+  it("长列表末尾的返回线仍在附近绕行，不会把总览撑到节点区外数千像素", () => {
+    const rects = canvasNodeRects([node("a", 40, 40), node("b", 376, 40)]);
+    const path = canvasConnectionPoints({ x: 588, y: 84 }, { x: 36, y: 84 }, rects, "b", "a", 106);
+    expect(canvasBounds(rects, path).height).toBeLessThan(300);
+    for (const rect of rects) expect(crossesBody(path, rect)).toBe(false);
+  });
   it("键盘移动生成一次显式编辑，尺寸、选择、未移动及鼠标手势不重复记历史", () => {
     const nodes = [node("a", 40, 40), node("b", 376, 40)];
     const changes = [{ id: "a", type: "position", position: { x: 45, y: 40 }, dragging: false }, { id: "b", type: "position", position: { x: 381, y: 40 }, dragging: false }];

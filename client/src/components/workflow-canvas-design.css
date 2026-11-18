@@ -34,6 +34,7 @@
 [data-canvas-redesign] .flow-design-node [data-flow-node-glyph] {width: 30px; height: 30px; border-radius: 8px; box-shadow: none;}
 [data-canvas-redesign] .flow-design-node-title {font-size: max(14px, calc(12px / var(--canvas-zoom))) !important; line-height: 1.4 !important; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
 [data-canvas-redesign] .flow-design-node-type {font-size: 12px !important; line-height: 18px !important;}
+[data-canvas-redesign] .flow-design-node:not([data-compact]) .flow-design-node-title {display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal;}
 [data-canvas-redesign] .flow-design-node[data-compact] .flow-design-node-title {font-size: max(14px, calc(12px / var(--canvas-zoom))) !important; line-height: 1.4 !important;}
 [data-canvas-redesign] .flow-design-node[data-compact] :is(.flow-design-node-type, [data-flow-node-glyph], [data-canvas-config-state]) {display: none;}
 [data-canvas-redesign] [data-canvas-node-accent] {display: none;}

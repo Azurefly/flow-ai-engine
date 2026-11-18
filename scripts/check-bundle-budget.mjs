@@ -59,7 +59,8 @@ const maxChunkBytes = 450 * 1024;
 // Measured 1599.30 KiB raw / 491.76 KiB gzip; keep bounded headroom and existing chunk/HTML caps.
 // Participant-state editor, example and per-person history: measured 1610.71 / 495.44 KiB.
 // Composable personnel conditions: measured 1618.67 KiB raw / 497.71 KiB gzip.
-const maxTotalBytes = 1_620 * 1024;
+// Dense graph navigation and on-demand configuration: 1621.01 KiB raw / 498.21 KiB gzip.
+const maxTotalBytes = 1_622 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
 const maxTotalGzipBytes = 499 * 1024;
 const maxHtmlBytes = 20 * 1024;
