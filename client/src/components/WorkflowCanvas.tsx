@@ -2365,6 +2365,19 @@ export default function WorkflowCanvas({
   const readingDragRef = useRef<HistorySnapshot | null>(null);
   const readingActive = canvasPresentation === "readable" || (canvasPresentation === "auto" && canvasHasCrowding(nodes));
   const readingNodes = useMemo(() => readingActive ? readableCanvasLayout(nodes, edges) : nodes, [nodes, edges, readingActive]);
+  const [highlightRelated, setHighlightRelated] = useState(false);
+  const [focusAdjacent, setFocusAdjacent] = useState<boolean | null>(null);
+  const denseGraph = edges.length >= 50;
+  const adjacentId = (focusAdjacent ?? denseGraph) && !highlightRelated ? selectedId : null;
+  const adjacentView = useMemo(() => {
+    if (!adjacentId) return null;
+    const links = edges.filter(edge => edge.source === adjacentId || edge.target === adjacentId);
+    const ids = canvasContextIds(nodes, links, adjacentId);
+    const visible = readableCanvasLayout(nodes.filter(node => ids.has(node.id)), links);
+    return { id: adjacentId, nodes: visible, bounds: canvasViewBounds(canvasNodeRects(visible), links) };
+  }, [adjacentId, nodes, edges]);
+  const adjacentViewRef = useRef(adjacentView);
+  adjacentViewRef.current = adjacentView;
   const displayedNodesRef = useRef(readingNodes); displayedNodesRef.current = readingNodes;
   const readingActiveRef = useRef(readingActive); readingActiveRef.current = readingActive;
   const fitCanvas = useCallback((nodeId?: string | null, edgeId?: string | null, duration = 180, includeNeighbors = false) => {
@@ -2373,7 +2386,9 @@ export default function WorkflowCanvas({
     const ids = edgeId ? new Set(currentEdges.filter(e => e.id === edgeId).flatMap(e => [e.source, e.target])) : canvasContextIds(allRects, currentEdges, nodeId);
     const viewport = flowViewportRef.current;
     const selectedRect = nodeId && !includeNeighbors && currentEdges.length >= 50 && allRects.find(rect => rect.id === nodeId);
-    const bounds = selectedRect ? canvasBounds([selectedRect]) : canvasViewBounds(allRects, currentEdges, ids);
+    const local = adjacentViewRef.current;
+    const bounds = local && local.id === nodeId ? local.bounds :
+      selectedRect ? canvasBounds([selectedRect]) : canvasViewBounds(allRects, currentEdges, ids);
     return reactFlow.setViewport(getViewportForBounds(bounds, viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
   }, [reactFlow, prefersReducedMotion]);
 
@@ -2544,6 +2559,8 @@ export default function WorkflowCanvas({
 
   // Keyboard moves bypass pointer callbacks; promote the projection atomically and keep Undo.
   const onCanvasNodesChange = useCallback((changes: NodeChange<CanvasNode>[]) => {
+    // Local positions are for inspection only, including keyboard and touch moves.
+    if (adjacentViewRef.current) changes = changes.filter(change => change.type !== "position");
     if (canvasHasDiscreteMove(latestNodesRef.current, changes, Boolean(dragStartSnapshotRef.current))) {
       pushHistory();
       if (readingActiveRef.current) {
@@ -2612,11 +2629,15 @@ export default function WorkflowCanvas({
 
   const hasInspectorSelection = hasCanvasInspectorSelection(nodes, edges, selectedId, selectedEdgeId);
   const inspectorReveal = useContextReveal<HTMLElement>(selectedId || selectedEdgeId);
-  const [highlightRelated, setHighlightRelated] = useState(false);
-  const [showAllLines, setShowAllLines] = useState(false);
-  const denseGraph = edges.length >= 50;
   const neighborhood = useMemo(() => highlightRelated ? traceWorkflowNeighborhood(nodes.map(node => node.id), edges, selectedId) : null, [highlightRelated, nodes, edges, selectedId]);
-  const presentedNodes = useMemo(() => neighborhood ? readingNodes.map(node => ({ ...node, className: `${node.className ?? ""} ${neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"}` })) : readingNodes, [readingNodes, neighborhood]);
+  const visibleNodes = adjacentView?.nodes ?? readingNodes;
+  const presentedNodes = useMemo(() => neighborhood ? visibleNodes.map(node => ({ ...node, className: `${node.className ?? ""} ${neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"}` })) : visibleNodes, [visibleNodes, neighborhood]);
+  // Fit after React Flow has received the local projection and the inspector has resized.
+  useEffect(() => {
+    if (!adjacentId) return;
+    const frame = requestAnimationFrame(() => { void fitCanvas(adjacentId, null, 0); });
+    return () => cancelAnimationFrame(frame);
+  }, [adjacentId, fitCanvas]);
   const inspectorExpanded = hasInspectorSelection && inspectorMode !== "compact";
   useEffect(() => {
     if (!reactFlow) return;
@@ -3014,14 +3035,15 @@ export default function WorkflowCanvas({
       }),
     [edges, nodeMap, selectedEdgeId]
   );
-  const canvasRects = useMemo(() => canvasNodeRects(readingNodes), [readingNodes]);
-  const workspaceEdges = useMemo(() => displayedEdges.map((edge, canvasLane) => ({ ...edge, type: "workspace", data: { ...edge.data, canvasRects, canvasLane } })), [displayedEdges, canvasRects]);
+  const canvasRects = useMemo(() => canvasNodeRects(visibleNodes), [visibleNodes]);
+  const visibleEdges = useMemo(() => adjacentId
+    ? displayedEdges.filter(edge => edge.source === adjacentId || edge.target === adjacentId)
+    : displayedEdges, [adjacentId, displayedEdges]);
+  const workspaceEdges = useMemo(() => visibleEdges.map((edge, canvasLane) => ({ ...edge, type: "workspace", data: { ...edge.data, canvasRects, canvasLane } })), [visibleEdges, canvasRects]);
   const presentedEdges = useMemo(() => {
     if (neighborhood) return workspaceEdges.map(edge => ({ ...edge, className: `${edge.className ?? ""} ${neighborhood.edges.has(edge.id) ? "aiflow-related-edge" : "aiflow-unrelated-edge"}` }));
-    if (denseGraph && selectedId && !showAllLines) return workspaceEdges.map(edge =>
-      edge.source === selectedId || edge.target === selectedId ? edge : { ...edge, hidden: true });
     return workspaceEdges;
-  }, [workspaceEdges, neighborhood, denseGraph, selectedId, showAllLines]);
+  }, [workspaceEdges, neighborhood]);
 
   useEffect(() => {
     setInspectorTab(selectedFieldGroups[0]?.label ?? "");
@@ -4402,10 +4424,9 @@ export default function WorkflowCanvas({
           onDrop={handleCanvasDrop}
         >
           {!compactReadOnlyPreview && <div data-canvas-view-controls="" className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-md border border-border bg-card p-1 text-xs">
-            <button type="button" className="rounded px-2 py-1 hover:bg-muted" onClick={() => { setShowAllLines(true); void fitCanvas(); }}>总览</button>
-            {denseGraph && selectedId && !neighborhood && <button type="button" className="rounded px-2 py-1 hover:bg-muted" aria-pressed={!showAllLines} onClick={() => setShowAllLines(value => !value)}>仅看相邻连线</button>}
-            <button type="button" className="rounded px-2 py-1 hover:bg-muted" disabled={!selectedId} onClick={() => { void fitCanvas(selectedId, null, 180, true); }}>上下游</button>
-            <button type="button" className="rounded px-2 py-1 hover:bg-muted" title="切换显示布局，不修改已保存坐标" aria-pressed={readingActive} onClick={() => { setCanvasPresentation(readingActive ? "original" : "readable"); window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void fitCanvas(selectedId); })); }}>{readingActive ? "阅读布局" : "原始布局"}</button>
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" aria-pressed={!adjacentId} onClick={() => { setFocusAdjacent(false); void fitCanvas(); }}>总览</button>
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" disabled={!selectedId} aria-pressed={Boolean(adjacentId)} title="只显示选中节点和直接相连的上下游" onClick={() => { setFocusAdjacent(true); setHighlightRelated(false); void fitCanvas(selectedId, null, 180, true); }}>上下游</button>
+            <button type="button" className="rounded px-2 py-1 hover:bg-muted" title="切换显示布局，不修改已保存坐标" aria-pressed={readingActive} onClick={() => { setFocusAdjacent(false); setCanvasPresentation(readingActive ? "original" : "readable"); window.requestAnimationFrame(() => window.requestAnimationFrame(() => { void fitCanvas(); })); }}>{readingActive ? "阅读布局" : "原始布局"}</button>
           </div>}
           {!readingActive && canvasHasCrowding(nodes) && <p data-canvas-layout-warning="" role="status" className="absolute bottom-3 left-16 z-10 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">原始节点重叠；切换阅读布局可查看连线，不修改原坐标。</p>}
           <details className={"aiflow-type-control absolute left-3 top-3 z-10 rounded-lg border border-border bg-card/95 " + mutedToneClass + " shadow-sm"}>
@@ -4675,7 +4696,7 @@ export default function WorkflowCanvas({
               setContextMenu(null);
             }}
             onPaneContextMenu={onPaneContextMenu}
-            nodesDraggable={!readOnly}
+            nodesDraggable={!readOnly && !adjacentView}
             nodesConnectable={!readOnly}
             onNodeDragStart={readOnly ? undefined : onNodeDragStart}
             onNodeDragStop={readOnly ? undefined : onNodeDragStop}
@@ -4695,8 +4716,8 @@ export default function WorkflowCanvas({
             />
             <Controls
               className="flow-canvas-controls"
-              showInteractive={!readOnly}
-              onFitView={() => { void fitCanvas(); }}
+              showInteractive={!readOnly && !adjacentView}
+              onFitView={() => { void fitCanvas(adjacentId); }}
             />
           </ReactFlow>
           {neighborhood && <p data-workflow-neighborhood="" role="status" className={"aiflow-type-meta pointer-events-none absolute bottom-3 left-3 z-10 max-w-[calc(100%-5rem)] rounded-xl border border-border bg-card/95 px-3 py-2 " + mutedToneClass}>静态连接 · 上游 {neighborhood.upstream.size} 个 · 下游 {neighborhood.downstream.size} 个</p>}
