@@ -1013,6 +1013,25 @@ describe("P2 项目数据资源与数据流", () => {
           row => row.status === "success" && Number(row.attempt) === 1
         )
       ).toBe(true);
+      // Contending consumers must neither deadlock on the claim index nor execute
+      // one run twice; drain the queue concurrently rather than targeting IDs.
+      const burst = await Promise.all(Array.from({ length: 32 }, (_, index) =>
+        runDataflow(admin, { projectId: projectId!, workflowId: workflowId!, data: { index } })
+      ));
+      for (let wave = 0; wave < 32; wave += 1) {
+        await Promise.all(Array.from({ length: 8 }, () => runDataflowJobOnce()));
+        const [remaining] = await pool.query<mysql.RowDataPacket[]>(
+          "SELECT id FROM dataflow_run WHERE id IN (?) AND status<>'success'", [burst.map(run => run.runId)]
+        );
+        if (!remaining.length) break;
+      }
+      const [burstJobs] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT status,attempt FROM dataflow_run_job WHERE runId IN (?)", [burst.map(run => run.runId)]
+      );
+      expect(burstJobs).toHaveLength(32);
+      expect(burstJobs.every(job => job.status === "completed" && Number(job.attempt) === 1)).toBe(true);
+      const [sessionDefaults] = await pool.query<mysql.RowDataPacket[]>("SELECT @@session.transaction_isolation AS isolation");
+      expect(sessionDefaults[0].isolation).toBe("REPEATABLE-READ");
       const scheduleBucket = `trusted-task:${new Date().toISOString().slice(0, 16)}`;
       const scheduled = await runDataflow(admin, {
         projectId,

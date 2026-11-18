@@ -1875,6 +1875,10 @@ async function claimDataflowJob(
 ): Promise<ClaimedDataflowJob | null> {
   const connection = await db().getConnection();
   try {
+    // Queue claims need current rows, not a stable range snapshot. Keep record
+    // locks for lease ownership without gap locks on the moving status index.
+    // This applies to the next transaction only; pooled sessions keep their default.
+    await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const params: unknown[] = [];
     const runFilter = onlyRunId ? " AND j.runId=?" : "";

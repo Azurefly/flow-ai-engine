@@ -134,9 +134,10 @@ it("未取消仍完成所有节点、产物和运行，Job先于运行加锁", a
   );
   expect(calls("UPDATE dataflow_run SET status='success'")).toHaveLength(1);
   const sql = mocks.query.mock.calls.map(([s]) => String(s));
-  expect(sql[0]).not.toContain("JOIN dataflow_run");
-  expect(sql[0]).toContain("FOR UPDATE SKIP LOCKED");
-  expect(sql[1]).toContain("FROM dataflow_run WHERE id=? LIMIT 1 FOR UPDATE");
+  expect(sql[0]).toBe("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
+  expect(sql[1]).not.toContain("JOIN dataflow_run");
+  expect(sql[1]).toContain("FOR UPDATE SKIP LOCKED");
+  expect(sql[2]).toContain("FROM dataflow_run WHERE id=? LIMIT 1 FOR UPDATE");
 });
 it.each(["expired", "replaced"])(
   "%s租约仍是独立错误，旧Worker不覆盖状态",
