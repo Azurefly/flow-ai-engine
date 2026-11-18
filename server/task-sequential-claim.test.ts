@@ -24,26 +24,29 @@ const task = {
   signMode: "sequentialSignFor",
   approvalOrder: 2,
 };
+const priorSignerQuery = /SELECT id FROM workflow_task WHERE approvalGroupId=\? AND approvalOrder<\?/;
+function mockPendingSequentialTask() {
+  mocks.query.mockImplementation(async (sql: string) => {
+    if (sql.includes("WHERE t.id=?")) return [[task]];
+    if (priorSignerQuery.test(sql)) return [[{ id: "earlier-task" }]];
+    throw new Error("非预期的任务查询或写入");
+  });
+}
 it("顺序未到时返回可理解原因，且不领取或推进任务", async () => {
-  mocks.query
-    .mockResolvedValueOnce([[task]])
-    .mockResolvedValueOnce([[]])
-    .mockResolvedValueOnce([[{ id: "earlier-task" }]]);
+  mockPendingSequentialTask();
   await expect(
     claimWorkflowTask({ id: 12, role: "user" }, task.id)
   ).rejects.toThrow("顺序会签尚未轮到当前审批人");
-  expect(mocks.query).toHaveBeenCalledTimes(3);
-  expect(
-    mocks.query.mock.calls.every(call => !String(call[0]).includes("UPDATE"))
-  ).toBe(true);
-  expect(mocks.query.mock.calls[2][1]).toEqual(["group", 2]);
+  expect(mocks.query).toHaveBeenCalledWith(expect.stringMatching(priorSignerQuery), ["group", 2]);
+  expect(mocks.query).not.toHaveBeenCalledWith(expect.stringMatching(/^\s*UPDATE/i), expect.anything());
 });
 it("其他人员不能用顺序提示绕过任务领取权限", async () => {
-  mocks.query.mockResolvedValueOnce([[task]]).mockResolvedValueOnce([[]]);
+  mockPendingSequentialTask();
   await expect(
     claimWorkflowTask({ id: 99, role: "admin" }, task.id)
   ).rejects.toThrow("无权领取");
-  expect(mocks.query).toHaveBeenCalledTimes(2);
+  expect(mocks.query).not.toHaveBeenCalledWith(expect.stringMatching(priorSignerQuery), expect.anything());
+  expect(mocks.query).not.toHaveBeenCalledWith(expect.stringMatching(/^\s*UPDATE/i), expect.anything());
 });
 
 it("后续审批人等待期间不能办理，前序完成后恢复办理", () => {
