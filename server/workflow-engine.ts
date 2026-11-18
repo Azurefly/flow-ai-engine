@@ -5049,36 +5049,61 @@ export async function listRunAlerts(
 }
 
 export async function reconcileDueWorkflowTaskSchedules(limit = 100) {
-  await db().query(
-    `UPDATE workflow_task_schedule s
+  // Discover without locks, then use the same run -> task -> schedule lock order
+  // as human commands and cancellation. A joined UPDATE used the reverse order.
+  const [candidates] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT s.id,s.runId,s.taskId,w.name AS workflowName
+       FROM workflow_task_schedule s
        JOIN workflow_task t ON t.id=s.taskId
        JOIN workflow_run r ON r.id=s.runId
-        SET s.status='cancelled'
+       JOIN workflow w ON w.id=s.workflowId
       WHERE s.status='scheduled'
-        AND (t.status IN ('completed','cancelled') OR r.status NOT IN ('running','waiting'))`
+        AND (s.fireAt<=NOW() OR t.status NOT IN ('pending','claimed')
+             OR r.status NOT IN ('running','waiting'))
+      ORDER BY s.fireAt,s.createdAt,s.id LIMIT ?`,
+    [Math.max(1, Math.min(limit, 500))]
   );
   let fired = 0;
-  while (fired < Math.max(1, Math.min(limit, 500))) {
+  for (const candidate of candidates) {
     const connection = await db().getConnection();
     try {
       await connection.beginTransaction();
+      const [runs] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT status FROM workflow_run WHERE id=? FOR UPDATE SKIP LOCKED",
+        [candidate.runId]
+      );
+      if (!runs[0]) {
+        await connection.commit();
+        continue;
+      }
+      const [tasks] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT status,operationName,nodeName,dueAt FROM workflow_task WHERE id=? FOR UPDATE",
+        [candidate.taskId]
+      );
       const [rows] = await connection.query<mysql.RowDataPacket[]>(
-        `SELECT s.*,t.operationName,t.nodeName,t.dueAt,w.name AS workflowName
-           FROM workflow_task_schedule s
-           JOIN workflow_task t ON t.id=s.taskId
-           JOIN workflow w ON w.id=s.workflowId
-           JOIN workflow_run r ON r.id=s.runId
-          WHERE s.status='scheduled' AND s.fireAt<=NOW()
-            AND t.status IN ('pending','claimed')
-            AND r.status IN ('running','waiting')
-          ORDER BY s.fireAt,s.createdAt
-          LIMIT 1 FOR UPDATE SKIP LOCKED`
+        "SELECT *,fireAt<=NOW() AS isDue FROM workflow_task_schedule WHERE id=? AND status='scheduled' FOR UPDATE",
+        [candidate.id]
       );
       const schedule = rows[0];
-      if (!schedule) {
+      if (!schedule || !tasks[0]) {
         await connection.commit();
-        break;
+        continue;
       }
+      if (!['running', 'waiting'].includes(runs[0].status) || !['pending', 'claimed'].includes(tasks[0].status)) {
+        await connection.query("UPDATE workflow_task_schedule SET status='cancelled' WHERE id=? AND status='scheduled'", [schedule.id]);
+        await connection.commit();
+        continue;
+      }
+      if (!Number(schedule.isDue)) {
+        await connection.commit();
+        continue;
+      }
+      Object.assign(schedule, {
+        operationName: tasks[0].operationName,
+        nodeName: tasks[0].nodeName,
+        dueAt: tasks[0].dueAt,
+        workflowName: candidate.workflowName,
+      });
       const eventType = String(schedule.eventType);
       const label =
         eventType === "reminder"

@@ -16,5 +16,5 @@ it("领取之前也校验审批意见和实际结果分支", () => {
   expect(() => validateWorkflowTaskSubmission(task, { decision: "rejected", amount: 20 })).toThrow("处理意见");
   expect(() => validateWorkflowTaskSubmission({ ...task, outcomeHandlesJson: { mode: "explicit", handles: { approved: "yes" } } }, { decision: "approved", outcome: "missing", amount: 20 })).toThrow("运行分支");
   const source = readFileSync(new URL("./p1-service.ts", import.meta.url), "utf8").split("export async function executeWorkflowTask(")[1].split("export async function completeWorkflowTask(")[0];
-  expect(source.indexOf("validateWorkflowTaskSubmission(task, result)")).toBeLessThan(source.indexOf("await claimWorkflowTask(user, taskId)"));
+  expect(source.indexOf("validateWorkflowTaskSubmission(task, result)")).toBeLessThan(source.indexOf("await claimTaskSnapshot(user, taskId, task)"));
 });

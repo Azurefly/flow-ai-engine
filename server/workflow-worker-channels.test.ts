@@ -200,4 +200,6 @@ it("后台批次完成后继续领取积压任务，无需等待下一秒轮询"
     interval: 5,
   });
   expect(worker.getWorkflowWorkerStatus().channels.dataflow).toBe(false);
+  expect(mocks.schedules).toHaveBeenCalledOnce();
+  expect(mocks.sourceTest).toHaveBeenCalledOnce();
 });

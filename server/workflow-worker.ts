@@ -61,6 +61,7 @@ let dataflowProcessing = false;
 let sourceTestProcessing = false;
 let stopping = false;
 let lastWorkflowJobClaimed = false;
+let lastMaintenanceAt = 0;
 
 const state = {
   workerId,
@@ -571,7 +572,7 @@ export async function runWorkflowWorkerOnce() {
   return runWorkflowWorkerBatch(1);
 }
 
-async function runWorkflowWorkerBatch(concurrency: number) {
+async function runWorkflowWorkerBatch(concurrency: number, background = false) {
   if (processing) return false;
   processing = true;
   state.processing = true;
@@ -579,12 +580,19 @@ async function runWorkflowWorkerBatch(concurrency: number) {
   lastWorkflowJobClaimed = false;
   try {
     const outboxProcessed = await dispatchWorkflowOutboxOnce();
-    const waitsTriggered = await reconcileDueWorkflowWaits();
-    const taskSchedulesFired = await reconcileDueWorkflowTaskSchedules();
-    await reconcileWorkflowContinuations();
-    const exhaustedJobsReconciled = await reconcileExhaustedWorkflowJobs();
-    const terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
-    const dataflowSchedulesQueued = await queueDueNativeDataflowsOnce();
+    let waitsTriggered = 0, taskSchedulesFired = 0, exhaustedJobsReconciled = 0;
+    let terminalJobsReconciled = 0, dataflowSchedulesQueued = 0;
+    // Draining a queue immediately must not rescan every historical run and timer
+    // for each batch. Maintenance keeps its original polling cadence.
+    if (!background || Date.now() - lastMaintenanceAt >= pollIntervalMs) {
+      waitsTriggered = await reconcileDueWorkflowWaits();
+      taskSchedulesFired = await reconcileDueWorkflowTaskSchedules();
+      await reconcileWorkflowContinuations();
+      exhaustedJobsReconciled = await reconcileExhaustedWorkflowJobs();
+      terminalJobsReconciled = await reconcileTerminalWorkflowJobs();
+      dataflowSchedulesQueued = await queueDueNativeDataflowsOnce();
+      lastMaintenanceAt = Date.now();
+    }
     const jobs: ClaimedJob[] = [];
     // Claims lock both the job and run. Claim in order before executing the batch
     // so competing range scans cannot deadlock with each other's lease updates.
@@ -627,25 +635,29 @@ export async function drainWorkflowJobs(maxJobs = 100) {
   return processed;
 }
 
+function pollWorkerChannel(name: string, poll: () => Promise<boolean>) {
+  if (stopping) return;
+  void poll()
+    .then(processed => {
+      if (processed && state.started && !stopping) {
+        // Drain only the productive channel; other idle queues retain their poll cadence.
+        setImmediate(() => pollWorkerChannel(name, poll)).unref();
+      }
+    })
+    .catch(error => {
+      state.lastError = `${name}: ${error instanceof Error ? error.message : String(error)}`;
+    });
+}
+
 export function wakeWorkflowWorker() {
   if (stopping || process.env.WORKFLOW_WORKER_ENABLED === "false") return;
   queueMicrotask(() => {
     if (stopping) return;
     for (const [name, poll] of [
-      ["workflow", () => runWorkflowWorkerBatch(workerConcurrency)],
+      ["workflow", () => runWorkflowWorkerBatch(workerConcurrency, true)],
       ["dataflow", () => runDataflowWorkerBatch(workerConcurrency)],
       ["sourceTest", runSourceTestWorkerOnce],
-    ] as const) {
-      void poll()
-        .then(processed => {
-          if (processed && state.started && !stopping) {
-            setImmediate(wakeWorkflowWorker).unref();
-          }
-        })
-        .catch(error => {
-          state.lastError = `${name}: ${error instanceof Error ? error.message : String(error)}`;
-        });
-    }
+    ] as const) pollWorkerChannel(name, poll);
   });
 }
 

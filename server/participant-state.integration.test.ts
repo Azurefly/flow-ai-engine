@@ -17,7 +17,7 @@ import {
 } from "./workflow-revision-test-support";
 import { initializeParticipantStateRun } from "./participant-state-runtime";
 import { settleWorkflowCommand } from "./workflow-command-test-support";
-import { getWorkflowRun } from "./workflow-engine";
+import { getWorkflowRun, reconcileDueWorkflowTaskSchedules } from "./workflow-engine";
 import { lockActiveProject } from "./project-lifecycle-lock";
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip;
@@ -616,6 +616,37 @@ suite("参与人状态真实数据库与正常办理入口", () => {
         await connection.rollback();
         connection.release();
       }));
+    }
+  });
+
+  it("提醒与办理采用相同锁顺序，跳过忙实例且不重复发送或发送旧任务提醒", async () => {
+    const runId = await start();
+    const current = await task(runId, "submit");
+    const reminderId = randomUUID();
+    await pool.query("INSERT INTO workflow_task_schedule (id,taskId,runId,workflowId,recipientUserId,eventType,status,fireAt) VALUES (?,?,?,?,?,'reminder','scheduled',DATE_SUB(NOW(),INTERVAL 1 SECOND))", [reminderId,current.id,runId,workflowId,users[1].id]);
+    const command = await pool.getConnection();
+    try {
+      await command.beginTransaction();
+      await command.query("SELECT id FROM workflow_run WHERE id=? FOR UPDATE", [runId]);
+      expect(await reconcileDueWorkflowTaskSchedules()).toBe(0);
+      await command.commit();
+      const fired = await Promise.all([reconcileDueWorkflowTaskSchedules(), reconcileDueWorkflowTaskSchedules()]);
+      expect(fired.reduce((sum, value) => sum + value, 0)).toBe(1);
+      await execute(runId, "submit", users[1]);
+      const staleId = randomUUID();
+      await pool.query("INSERT INTO workflow_task_schedule (id,taskId,runId,workflowId,recipientUserId,eventType,status,fireAt) VALUES (?,?,?,?,?,'due','scheduled',DATE_ADD(NOW(),INTERVAL 1 DAY))", [staleId,current.id,runId,workflowId,users[1].id]);
+      await command.beginTransaction();
+      await command.query("SELECT id FROM workflow_run WHERE id=? FOR UPDATE", [runId]);
+      expect(await reconcileDueWorkflowTaskSchedules()).toBe(0);
+      await command.commit();
+      await reconcileDueWorkflowTaskSchedules();
+      const [schedules] = await pool.query<mysql.RowDataPacket[]>("SELECT status FROM workflow_task_schedule WHERE id=?", [staleId]);
+      expect(schedules[0].status).toBe("cancelled");
+      const [alerts] = await pool.query<mysql.RowDataPacket[]>("SELECT id FROM workflow_run_alert WHERE runId=?", [runId]);
+      expect(alerts).toHaveLength(1);
+    } finally {
+      await command.rollback();
+      command.release();
     }
   });
 

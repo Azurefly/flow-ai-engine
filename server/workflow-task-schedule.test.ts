@@ -63,8 +63,8 @@ describe("人工任务耐久提醒与升级", () => {
     );
     expect(engine).toContain("reconcileDueWorkflowTaskSchedules");
     expect(engine).toContain("FOR UPDATE SKIP LOCKED");
-    expect(engine).toContain("t.status IN ('pending','claimed')");
-    expect(engine).toContain("r.status IN ('running','waiting')");
+    expect(engine).toContain("t.status NOT IN ('pending','claimed')");
+    expect(engine).toContain("r.status NOT IN ('running','waiting')");
     expect(engine).toContain(
       "UPDATE workflow_task_schedule SET status='cancelled' WHERE taskId=?"
     );

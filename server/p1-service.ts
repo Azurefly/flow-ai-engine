@@ -505,7 +505,7 @@ export async function listWorkflowTasks(
   return accessible;
 }
 
-export async function getWorkflowTask(user: User, taskId: string) {
+export async function getWorkflowTask(user: User, taskId: string, options?: { forAction?: boolean }) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT t.*,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             responsible.name AS responsibleName,represented.name AS representedName,
@@ -527,7 +527,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
   const task = rows[0];
   if (!task || !(await canAccessTask(user, task))) return null;
   let approvalMembers: mysql.RowDataPacket[] = [];
-  if (task.approvalGroupId) {
+  if (task.approvalGroupId && !options?.forAction) {
     const [memberRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT member.id,member.assignedUserId,member.status,member.approvalOrder,
               assignee.name AS assignedName,assignee.username AS assignedUsername
@@ -538,7 +538,7 @@ export async function getWorkflowTask(user: User, taskId: string) {
     );
     approvalMembers = memberRows;
   }
-  const reassignment = (await hasWorkflowPermission(
+  const reassignment = (!options?.forAction && await hasWorkflowPermission(
     user,
     String(task.workflowId),
     "workflow:members:manage"
@@ -579,12 +579,19 @@ export async function inspectWorkflowTaskAction(user: User, taskId: string, work
 }
 
 export async function claimWorkflowTask(user: User, taskId: string) {
-  const task: any = await getWorkflowTask(user, taskId);
+  const task: any = await getWorkflowTask(user, taskId, { forAction: true });
   if (!task)
     throw new TRPCError({
       code: "NOT_FOUND",
       message: "人工任务不存在或无访问权限。",
     });
+  await claimTaskSnapshot(user, taskId, task);
+  return getWorkflowTask(user, taskId);
+}
+
+// The ownerVersion CAS rejects changes since this request read the task. The
+// explicit claim endpoint still returns a fresh full task for its caller.
+async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowDataPacket) {
   if (!(await canAccessTask(user, task, true)))
     throw new TRPCError({ code: "FORBIDDEN", message: "无权领取该人工任务。" });
   if (task.assignedUserId && Number(task.assignedUserId) !== user.id)
@@ -620,7 +627,7 @@ export async function claimWorkflowTask(user: User, taskId: string) {
     resourceId: taskId,
     details: { operation: "task_claimed" },
   });
-  return getWorkflowTask(user, taskId);
+
 }
 
 export async function executeWorkflowTask(
@@ -628,7 +635,7 @@ export async function executeWorkflowTask(
   taskId: string,
   result: JsonRecord
 ) {
-  const task: any = await getWorkflowTask(user, taskId);
+  const task: any = await getWorkflowTask(user, taskId, { forAction: true });
   if (!task)
     throw new TRPCError({
       code: "NOT_FOUND",
@@ -650,7 +657,7 @@ export async function executeWorkflowTask(
     throw new TRPCError({ code: "FORBIDDEN", message: "无权执行该人工任务。" });
   await assertCurrentTaskOperation(user, task);
   validateWorkflowTaskSubmission(task, result);
-  if (task.status === "pending") await claimWorkflowTask(user, taskId);
+  if (task.status === "pending") await claimTaskSnapshot(user, taskId, task);
   return completeWorkflowTask(user, taskId, result);
 }
 
@@ -659,7 +666,7 @@ export async function completeWorkflowTask(
   taskId: string,
   result: JsonRecord
 ) {
-  const task: any = await getWorkflowTask(user, taskId);
+  const task: any = await getWorkflowTask(user, taskId, { forAction: true });
   if (!task)
     throw new TRPCError({
       code: "NOT_FOUND",
