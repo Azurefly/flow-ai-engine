@@ -27,6 +27,13 @@ export type ParticipantStateRuntime = {
   version: 1;
   cards: Record<string, ParticipantCard>;
   relations: Record<string, ParticipantRelation>;
+  operationResults?: Record<
+    string,
+    {
+      relationId: string | null;
+      results: Record<string, Record<string, unknown>>;
+    }
+  >;
 };
 
 export type ParticipantTaskBinding = {

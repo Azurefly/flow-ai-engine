@@ -14,6 +14,7 @@ import {
 
 type JsonRecord = Record<string, unknown>;
 const db = () => getSharedPool();
+type OrganizationReader = Pick<mysql.Pool, "query">;
 
 const asRecord = (value: unknown): JsonRecord =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -390,16 +391,23 @@ export {
 } from "./organization-write-service";
 
 // Read-only assignee fallback validation; write paths validate locked accounts.
-async function assertActiveUser(userId: number, label: string) {
-  const [users] = await db().query<mysql.RowDataPacket[]>(
+async function assertActiveUser(
+  userId: number,
+  label: string,
+  connection: OrganizationReader = db()
+) {
+  const [users] = await connection.query<mysql.RowDataPacket[]>(
     "SELECT id FROM users WHERE id=? AND status='active' LIMIT 1",
     [userId]
   );
   if (!users[0]) throw new Error(label + "不存在或已停用。");
 }
 
-export async function resolveDirectManagerUserId(userId: number) {
-  const [memberships] = await db().query<mysql.RowDataPacket[]>(
+export async function resolveDirectManagerUserId(
+  userId: number,
+  connection: OrganizationReader = db()
+) {
+  const [memberships] = await connection.query<mysql.RowDataPacket[]>(
     "SELECT om.unitId,ou.managerUserId,ou.parentUnitId FROM organization_membership om JOIN organization_unit ou ON ou.id=om.unitId WHERE om.userId=? AND ou.status='active' ORDER BY om.isPrimary DESC,om.createdAt LIMIT 1",
     [userId]
   );
@@ -412,14 +420,14 @@ export async function resolveDirectManagerUserId(userId: number) {
       managerUserId > 0 &&
       managerUserId !== userId
     ) {
-      const [managers] = await db().query<mysql.RowDataPacket[]>(
+      const [managers] = await connection.query<mysql.RowDataPacket[]>(
         "SELECT id FROM users WHERE id=? AND status='active' LIMIT 1",
         [managerUserId]
       );
       if (managers[0]) return managerUserId;
     }
     if (!unit.parentUnitId) return null;
-    const [parents] = await db().query<mysql.RowDataPacket[]>(
+    const [parents] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id AS unitId,managerUserId,parentUnitId FROM organization_unit WHERE id=? AND status='active' LIMIT 1",
       [unit.parentUnitId]
     );
@@ -429,11 +437,18 @@ export async function resolveDirectManagerUserId(userId: number) {
 }
 
 /** Resolve the Nth active manager in the employee's organization chain. */
-export async function resolveNthManagerUserId(userId: number, level = 1) {
+export async function resolveNthManagerUserId(
+  userId: number,
+  level = 1,
+  connection: OrganizationReader = db()
+) {
   const depth = Math.min(Math.max(Math.trunc(Number(level) || 1), 1), 32);
   let currentUserId = userId;
   for (let index = 0; index < depth; index += 1) {
-    const managerUserId = await resolveDirectManagerUserId(currentUserId);
+    const managerUserId = await resolveDirectManagerUserId(
+      currentUserId,
+      connection
+    );
     if (!managerUserId) return null;
     currentUserId = managerUserId;
   }
@@ -442,10 +457,11 @@ export async function resolveNthManagerUserId(userId: number, level = 1) {
 
 export async function resolveRoleCandidateUserIds(
   roleCode: string,
-  workflowId: string
+  workflowId: string,
+  connection: OrganizationReader = db()
 ) {
   if (!roleCode.trim()) return [];
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
     `WITH RECURSIVE membership_units AS (
        SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
          FROM organization_membership om
@@ -479,7 +495,8 @@ export async function resolveRoleCandidateUserIds(
 
 export async function resolveDepartmentCandidateUserIds(
   unitIds: string[],
-  includeDescendants = true
+  includeDescendants = true,
+  connection: OrganizationReader = db()
 ) {
   const ids = Array.from(
     new Set(
@@ -491,7 +508,7 @@ export async function resolveDepartmentCandidateUserIds(
   );
   if (!ids.length) return [];
   const placeholders = ids.map(() => "?").join(",");
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
     includeDescendants
       ? `WITH RECURSIVE selected_units AS (
            SELECT id FROM organization_unit WHERE id IN (${placeholders}) AND status='active'
@@ -513,7 +530,10 @@ export async function resolveDepartmentCandidateUserIds(
     .filter(id => Number.isInteger(id) && id > 0);
 }
 
-export async function resolveDepartmentManagerUserIds(unitIds: string[]) {
+export async function resolveDepartmentManagerUserIds(
+  unitIds: string[],
+  connection: OrganizationReader = db()
+) {
   const ids = Array.from(
     new Set(
       unitIds
@@ -524,7 +544,7 @@ export async function resolveDepartmentManagerUserIds(unitIds: string[]) {
   );
   if (!ids.length) return [];
   const placeholders = ids.map(() => "?").join(",");
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
     `SELECT DISTINCT u.id FROM organization_unit ou
        JOIN users u ON u.id=ou.managerUserId AND u.status='active'
       WHERE ou.id IN (${placeholders}) AND ou.status='active' ORDER BY u.id`,
@@ -535,9 +555,12 @@ export async function resolveDepartmentManagerUserIds(unitIds: string[]) {
     .filter(id => Number.isInteger(id) && id > 0);
 }
 
-async function resolvePrimaryUnitIds(userId: number) {
+async function resolvePrimaryUnitIds(
+  userId: number,
+  connection: OrganizationReader = db()
+) {
   if (!Number.isInteger(userId) || userId <= 0) return [];
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
     "SELECT unitId FROM organization_membership WHERE userId=? ORDER BY isPrimary DESC,createdAt LIMIT 1",
     [userId]
   );
@@ -571,7 +594,8 @@ export const PARTICIPANT_RESOLVER_MODES = [
 
 export async function resolveWorkflowUserRoleKeys(
   userIds: number[],
-  workflowId: string
+  workflowId: string,
+  connection: OrganizationReader = db()
 ) {
   const uniqueUserIds = Array.from(
     new Set(userIds.filter(id => Number.isInteger(id) && id > 0))
@@ -581,7 +605,7 @@ export async function resolveWorkflowUserRoleKeys(
   );
   if (!uniqueUserIds.length) return result;
   const placeholders = uniqueUserIds.map(() => "?").join(",");
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
+  const [rows] = await connection.query<mysql.RowDataPacket[]>(
     `WITH RECURSIVE membership_units AS (
        SELECT om.userId,ou.id AS memberUnitId,ou.id AS unitId,ou.parentUnitId,0 AS depth
          FROM organization_membership om
@@ -624,7 +648,9 @@ export async function resolveOperateAssignees(input: {
   config: JsonRecord;
   context: JsonRecord;
   workflowId: string;
+  connection?: OrganizationReader;
 }) {
+  const connection = input.connection ?? db();
   const runtime = asRecord(input.context.runtime);
   const initiatorUserId = Number(runtime.triggeredByUserId);
   const senderUserId = Number(
@@ -652,16 +678,19 @@ export async function resolveOperateAssignees(input: {
     user: () => [Number(input.config.assigneeUserId)],
     initiator: () => [initiatorUserId],
     initiator_manager: async () => [
-      Number(await resolveDirectManagerUserId(initiatorUserId)),
+      Number(await resolveDirectManagerUserId(initiatorUserId, connection)),
     ],
     sender_manager: async () => [
-      Number(await resolveDirectManagerUserId(senderUserId)),
+      Number(await resolveDirectManagerUserId(senderUserId, connection)),
     ],
     initiator_manager_n: async () => [
       Number(
         await resolveNthManagerUserId(
           initiatorUserId,
-          Number(input.config.managerLevel ?? input.config.supervisorLevel ?? 2)
+          Number(
+            input.config.managerLevel ?? input.config.supervisorLevel ?? 2
+          ),
+          connection
         )
       ),
     ],
@@ -669,21 +698,26 @@ export async function resolveOperateAssignees(input: {
       Number(
         await resolveNthManagerUserId(
           senderUserId,
-          Number(input.config.managerLevel ?? input.config.supervisorLevel ?? 2)
+          Number(
+            input.config.managerLevel ?? input.config.supervisorLevel ?? 2
+          ),
+          connection
         )
       ),
     ],
     role: () =>
       resolveRoleCandidateUserIds(
         String(input.config.assigneeRoleCode || ""),
-        input.workflowId
+        input.workflowId,
+        connection
       ),
     department: () =>
       resolveDepartmentCandidateUserIds(
         Array.isArray(input.config.assigneeUnitIds)
           ? input.config.assigneeUnitIds.map(String)
           : [],
-        input.config.includeDescendants !== false
+        input.config.includeDescendants !== false,
+        connection
       ),
     department_manager: async () => {
       const configured = Array.isArray(input.config.assigneeUnitIds)
@@ -691,8 +725,8 @@ export async function resolveOperateAssignees(input: {
         : [];
       const unitIds = configured.length
         ? configured
-        : await resolvePrimaryUnitIds(initiatorUserId);
-      return resolveDepartmentManagerUserIds(unitIds);
+        : await resolvePrimaryUnitIds(initiatorUserId, connection);
+      return resolveDepartmentManagerUserIds(unitIds, connection);
     },
     form_user: () =>
       participantFormUserIds(
@@ -708,7 +742,8 @@ export async function resolveOperateAssignees(input: {
       Number(
         await resolveNthManagerUserId(
           subject === "sender" ? senderUserId : initiatorUserId,
-          Number(levelText)
+          Number(levelText),
+          connection
         )
       ),
     ];
@@ -719,7 +754,7 @@ export async function resolveOperateAssignees(input: {
   );
   const excluded: Array<{ userId: number; reason: string }> = [];
   if (candidates.length) {
-    const [active] = await db().query<mysql.RowDataPacket[]>(
+    const [active] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT id FROM users WHERE id IN (?) AND status='active'",
       [candidates]
     );
@@ -744,7 +779,7 @@ export async function resolveOperateAssignees(input: {
       candidates = [initiatorUserId];
       fallbackApplied = "initiator";
     } else if (fallback === "owner") {
-      const [ownerRows] = await db().query<mysql.RowDataPacket[]>(
+      const [ownerRows] = await connection.query<mysql.RowDataPacket[]>(
         "SELECT ownerUserId FROM workflow WHERE id=? LIMIT 1",
         [input.workflowId]
       );
@@ -756,7 +791,8 @@ export async function resolveOperateAssignees(input: {
     if (candidates.length === 0)
       throw new Error("操作节点未解析到有效处理人，且未配置可用兜底策略。");
   }
-  if (fallbackApplied) await assertActiveUser(candidates[0]!, "兜底处理人");
+  if (fallbackApplied)
+    await assertActiveUser(candidates[0]!, "兜底处理人", connection);
   return {
     mode,
     assignedUserId: candidates.length === 1 ? candidates[0] : null,
@@ -793,7 +829,9 @@ export async function resolveAutoRelatedParticipantUserIds(
     Number(runtime.lastActorUserId || runtime.triggeredByUserId),
   ].filter(id => Number.isInteger(id) && id > 0);
   const managers = await Promise.all(
-    Array.from(new Set(sources)).map(resolveDirectManagerUserId)
+    Array.from(new Set(sources)).map(userId =>
+      resolveDirectManagerUserId(userId)
+    )
   );
   return Array.from(
     new Set(

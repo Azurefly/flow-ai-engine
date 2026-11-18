@@ -1,6 +1,7 @@
 import { isParticipantStateDefinition, PARTICIPANT_STATE_MODEL } from "@shared/participant-state";
 import { createParticipantStateExample } from "@shared/participant-state-example";
 import { ParticipantOperationEditor } from "./ParticipantOperationEditor";
+import { ParticipantRouteConditionEditor, type ParticipantRoutingEditorContext } from "./ParticipantRouteConditionEditor";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
@@ -666,6 +667,7 @@ function ConfigFieldEditor({
   aggregateMetrics = false,
   nodeKind,
   routeTargetLabels,
+  participantRouting,
   outcomeMode,
   operateConfig,
   onChange,
@@ -682,6 +684,7 @@ function ConfigFieldEditor({
   aggregateMetrics?: boolean;
   nodeKind?: NodeKind;
   routeTargetLabels?: Record<string, string>;
+  participantRouting?: ParticipantRoutingEditorContext;
   outcomeMode?: string;
   operateConfig?: NodeConfig;
   onChange: (value: unknown) => void;
@@ -872,6 +875,7 @@ function ConfigFieldEditor({
         value={effectiveValue}
         disabled={disabled}
         routeTargetLabels={routeTargetLabels}
+        participantRouting={participantRouting}
         onChange={onChange}
       />
     );
@@ -1589,6 +1593,7 @@ function StructuredValueEditor({
   value,
   disabled,
   routeTargetLabels,
+  participantRouting,
   onChange,
 }: {
   field: FlowNodeDefinition["fields"][number];
@@ -1596,6 +1601,7 @@ function StructuredValueEditor({
   value: unknown;
   disabled: boolean;
   routeTargetLabels?: Record<string, string>;
+  participantRouting?: ParticipantRoutingEditorContext;
   onChange: (value: unknown) => void;
 }) {
   const allowReferences = usesNodeValueReferences(nodeKind, field.key) || field.kind === "template";
@@ -1685,6 +1691,7 @@ function StructuredValueEditor({
               item={item}
               disabled={disabled}
               routeTargetLabels={routeTargetLabels}
+        participantRouting={participantRouting}
               onChange={next =>
                 updateList(
                   list.map((current, itemIndex) =>
@@ -1739,6 +1746,7 @@ function StructuredListRow({
   item,
   disabled,
   routeTargetLabels,
+  participantRouting,
   onChange,
   onRemove,
 }: {
@@ -1746,6 +1754,7 @@ function StructuredListRow({
   item: unknown;
   disabled: boolean;
   routeTargetLabels?: Record<string, string>;
+  participantRouting?: ParticipantRoutingEditorContext;
   onChange: (value: unknown) => void;
   onRemove: () => void;
 }) {
@@ -1923,7 +1932,7 @@ function StructuredListRow({
             }}
           />
           <span className="aiflow-type-meta">
-            值越大越先匹配；同值按创建顺序。留空按 0 处理。
+            {participantRouting ? "值越大越先匹配；同一人命中同优先级的多个分支时阻止操作。" : "值越大越先匹配；同值按创建顺序。留空按 0 处理。"}
           </span>
         </label>
         <label className={canvasFieldLabelClass}>
@@ -1932,6 +1941,10 @@ function StructuredListRow({
             {String(targetLabel ?? "请从此路径句柄连线到目标状态节点")}
           </span>
         </label>
+        {participantRouting && <ParticipantRouteConditionEditor
+          value={route.participantCondition} context={participantRouting} disabled={disabled}
+          onChange={participantCondition => onChange({ ...route, participantCondition })}
+        />}
         <label className={canvasFieldLabelClass}>
           流程身份（逗号分隔）
           <input
@@ -4831,7 +4844,8 @@ export default function WorkflowCanvas({
                 </div>}
                 {activeInspectorGroup && (
                   <NodeValueSources.Provider value={participantMode ? [...valueSources,
-                    { key: "participant", label: "被评估参与人", fields: ["userId", "stateCode", "stateName", "isActor", "isReceiver", "isRelationSender", "isRelationReceiver"].map(value => ({ value, label: value })) },
+                    { key: "participant", label: "被评估参与人", fields: ["userId", "stateCode", "stateName", "results", "isInitiator", "isParticipant", "roleKeys", "departmentIds", "primaryDepartmentId", "isActor", "isReceiver", "isRelationSender", "isRelationReceiver"].map(value => ({ value, label: value })) },
+                    { key: "participants", label: "本轮各参与人的操作结果", fields: [], hint: "字段填写为 人员ID.results.操作节点ID.结果字段，例如 1783.results.finance_check.decision。仅包含当前提交轮次的结果。" },
                     { key: "action", label: "本次操作", fields: ["actorUserId", "receiverUserIds", "result", "relation"].map(value => ({ value, label: value })) },
                     { key: "result", label: "本次办理表单", fields: [] },
                   ] : valueSources}>
@@ -5114,6 +5128,13 @@ export default function WorkflowCanvas({
                                   : undefined
                             }
                             routeTargetLabels={selectedRouteTargetLabels}
+                            participantRouting={participantMode ? {
+                              workflowId, readOnly,
+                              states: nodes.filter(node => node.data.kind === "state").map(node => ({
+                                value: String(node.data.config.nodeDh || node.data.config.stateCode || node.id),
+                                label: String(node.data.config.jdmc || node.data.config.displayName || node.data.label),
+                              })),
+                            } : undefined}
                             operateConfig={selectedConfig}
                             outcomeMode={String(
                               selectedConfig.outcomeMode ?? "legacy_cancel"

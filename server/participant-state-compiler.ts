@@ -1,5 +1,6 @@
 import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
 import { normalizeReferenceRouterConfig } from "../shared/reference-router-config";
+import { participantRouteConditionSchema } from "./participant-route-condition-schema";
 import {
   participantOperation,
   PARTICIPANT_RELATION_OPTIONS,
@@ -207,6 +208,23 @@ export function validateParticipantStateGraph(
         );
       const handles = new Set<string>();
       for (const rule of router.rules) {
+        if (rule.participantCondition !== undefined) {
+          const condition = participantRouteConditionSchema.safeParse(
+            rule.participantCondition
+          );
+          if (!condition.success)
+            add(
+              "WF_PARTICIPANT_ROUTE_CONDITION",
+              `路由“${rule.name}”的组合条件不完整或无效，请检查人员选择、条件组和部门层级。`,
+              node.id
+            );
+          if (rule.isDefault)
+            add(
+              "WF_PARTICIPANT_DEFAULT_CONDITION",
+              `默认分支“${rule.name}”用于接收未命中人员，请将组合条件配置在普通分支。`,
+              node.id
+            );
+        }
         const targets = edges.filter(
           edge => (edge.sourceHandle || "default") === rule.handle
         );

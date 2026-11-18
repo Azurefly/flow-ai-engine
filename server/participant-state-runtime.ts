@@ -26,6 +26,10 @@ import {
   type ParticipantStateChange,
 } from "./participant-state-plan";
 import { resolveTemplates } from "./workflow-routing";
+import { normalizeReferenceRouterConfig } from "../shared/reference-router-config";
+import { participantConditionLeaves } from "../shared/participant-route-condition";
+import { participantRouteConditionSchema } from "./participant-route-condition-schema";
+import { resolveParticipantDepartments } from "./participant-route-condition";
 
 type JsonRecord = Record<string, any>;
 type CommandResult = {
@@ -103,6 +107,21 @@ async function recordNode(
   return id;
 }
 
+async function cancelTaskSchedules(
+  connection: PoolConnection,
+  taskIds: string[]
+) {
+  const [schedules] = await connection.query<RowDataPacket[]>(
+    "SELECT id FROM workflow_task_schedule WHERE taskId IN (?) AND status='scheduled'",
+    [taskIds]
+  );
+  if (schedules.length)
+    await connection.query(
+      "UPDATE workflow_task_schedule SET status='cancelled' WHERE id IN (?) AND status='scheduled'",
+      [schedules.map(schedule => schedule.id)]
+    );
+}
+
 async function replaceCardOperations(
   connection: PoolConnection,
   input: {
@@ -116,7 +135,7 @@ async function replaceCardOperations(
 ) {
   const { run, definition, context, state, card } = input;
   const [oldTasks] = await connection.query<RowDataPacket[]>(
-    "SELECT id,payloadJson FROM workflow_task WHERE runId=? AND assignedUserId=? AND roleKey='default' AND status IN ('pending','claimed') FOR UPDATE",
+    "SELECT id,payloadJson FROM workflow_task WHERE runId=? AND assignedUserId=? AND roleKey='default' AND status IN ('pending','claimed')",
     [run.id, card.userId]
   );
   for (const task of oldTasks) {
@@ -127,14 +146,15 @@ async function replaceCardOperations(
         [JSON.stringify({ reason: "个人状态或本轮提交关系已变化" }), nodeRunId]
       );
   }
-  await connection.query(
-    "UPDATE workflow_task_schedule SET status='cancelled' WHERE status='scheduled' AND taskId IN (SELECT id FROM workflow_task WHERE runId=? AND assignedUserId=? AND roleKey='default' AND status IN ('pending','claimed'))",
-    [run.id, card.userId]
-  );
-  await connection.query(
-    "UPDATE workflow_task SET status='cancelled',completedAt=NOW(),ownerVersion=ownerVersion+1 WHERE runId=? AND assignedUserId=? AND roleKey='default' AND status IN ('pending','claimed')",
-    [run.id, card.userId]
-  );
+  // The run row serializes state changes. Exact task IDs avoid locking adjacent runs' index gaps.
+  if (oldTasks.length) {
+    const taskIds = oldTasks.map(task => String(task.id));
+    await cancelTaskSchedules(connection, taskIds);
+    await connection.query(
+      "UPDATE workflow_task SET status='cancelled',completedAt=NOW(),ownerVersion=ownerVersion+1 WHERE id IN (?) AND status IN ('pending','claimed')",
+      [taskIds]
+    );
+  }
   const operations: JsonRecord[] = [];
   for (const node of cardOperations(definition, card, state)) {
     const taskId = randomUUID();
@@ -241,22 +261,22 @@ async function replaceCardOperations(
       outcomes,
     });
   }
-  await connection.query(
-    `INSERT INTO workflow_participant_state (id,runId,workflowId,userId,roleKey,stateCode,stateName,flowStatus,stateColor,sourceNodeId,availableOperationsJson)
-     VALUES (?,?,?,?,'default',?,?,?,?,?,?) ON DUPLICATE KEY UPDATE stateCode=VALUES(stateCode),stateName=VALUES(stateName),flowStatus=VALUES(flowStatus),stateColor=VALUES(stateColor),sourceNodeId=VALUES(sourceNodeId),availableOperationsJson=VALUES(availableOperationsJson),updatedAt=NOW()`,
-    [
-      randomUUID(),
-      run.id,
-      run.workflowId,
-      card.userId,
-      card.stateCode,
-      card.stateName,
-      card.stateName,
-      input.stateColor,
-      card.stateNodeId,
-      JSON.stringify(operations),
-    ]
+  const values = [card.stateCode, card.stateName, card.stateName, input.stateColor, card.stateNodeId, JSON.stringify(operations)];
+  const [existing] = await connection.query<RowDataPacket[]>(
+    "SELECT id FROM workflow_participant_state WHERE runId=? AND userId=? AND roleKey='default'",
+    [run.id, card.userId]
   );
+  if (existing.length) {
+    await connection.query(
+      "UPDATE workflow_participant_state SET stateCode=?,stateName=?,flowStatus=?,stateColor=?,sourceNodeId=?,availableOperationsJson=?,updatedAt=NOW() WHERE id=?",
+      [...values, existing[0].id]
+    );
+  } else {
+    await connection.query(
+      "INSERT INTO workflow_participant_state (id,runId,workflowId,userId,roleKey,stateCode,stateName,flowStatus,stateColor,sourceNodeId,availableOperationsJson) VALUES (?,?,?,?,'default',?,?,?,?,?,?)",
+      [randomUUID(), run.id, run.workflowId, card.userId, ...values]
+    );
+  }
   return operations;
 }
 
@@ -619,6 +639,7 @@ export async function completeParticipantStateTask(
       config: resolveTemplates(node.config, context) as JsonRecord,
       context,
       workflowId: String(run.workflowId),
+      connection,
     });
     receiverUserIds = assignment.candidateUserIds;
     if (!receiverUserIds.length) throw new Error("请选择有效接收人。");
@@ -677,11 +698,39 @@ export async function completeParticipantStateTask(
     operationNodeId: node.id,
     result: input.result,
   };
+  const resultRelationId = relation?.id ?? card.relationId;
+  state.operationResults ??= {};
+  const previousResults = state.operationResults[String(input.actorUserId)];
+  state.operationResults[String(input.actorUserId)] = {
+    relationId: resultRelationId,
+    results: {
+      ...(previousResults?.relationId === resultRelationId
+        ? previousResults.results
+        : {}),
+      [node.id]: input.result,
+    },
+  };
   const roles = await resolveWorkflowUserRoleKeys(
     userIds,
-    String(run.workflowId)
+    String(run.workflowId),
+    connection
   );
-  const changes = planParticipantStateChange({
+  const departmentConditions = definition.nodes
+    .filter(node => node.type === "router")
+    .flatMap(node => normalizeReferenceRouterConfig(node.config).rules)
+    .filter(rule => rule.participantCondition !== undefined)
+    .flatMap(rule =>
+      participantConditionLeaves(
+        participantRouteConditionSchema.parse(rule.participantCondition)
+      )
+    )
+    .filter(condition => condition.kind === "department");
+  const departments = await resolveParticipantDepartments(
+    connection,
+    userIds,
+    departmentConditions.flatMap(condition => condition.unitIds)
+  );
+  const plannedChanges = planParticipantStateChange({
     definition,
     entryNodeId: edge.targetNodeId,
     actorUserId: input.actorUserId,
@@ -691,8 +740,23 @@ export async function completeParticipantStateTask(
     relation,
     cards: state.cards,
     roles,
+    departments,
+    operationResults: state.operationResults,
     context,
   });
+  // Keep another person's current task and deadline when a shared vote leaves their state intact.
+  const changes = plannedChanges.filter(
+    change =>
+      change.userId === input.actorUserId ||
+      operation.relation !== "none" ||
+      change.before?.stateNodeId !== change.stateNodeId ||
+      change.before.stateCode !== change.stateCode ||
+      change.before.stateName !== change.stateName ||
+      String(
+        definition.nodes.find(node => node.id === change.stateNodeId)?.config
+          .stateColor ?? ""
+      ).includes("{{")
+  );
   // Every member of a new relationship must receive a card bound to that exact submission.
   if (
     operation.relation === "create" &&
@@ -705,10 +769,7 @@ export async function completeParticipantStateTask(
     "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
     [input.actorUserId, JSON.stringify(input.result), task.id]
   );
-  await connection.query(
-    "UPDATE workflow_task_schedule SET status='cancelled' WHERE taskId=? AND status='scheduled'",
-    [task.id]
-  );
+  await cancelTaskSchedules(connection, [String(task.id)]);
   const taskPayload = parse(task.payloadJson);
   await connection.query(
     "UPDATE workflow_node_run SET status='success',outputJson=?,finishedAt=NOW(),durationMs=GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000) WHERE id=? AND status='waiting'",

@@ -962,6 +962,8 @@ export function analyzeWorkflowDefinition(
             )
           );
         for (const rule of normalizeReferenceRouterConfig(node.config).rules) {
+          if (rule.participantCondition !== undefined)
+            diagnostics.push(diagnostic("WF_PARTICIPANT_MODE_REQUIRED", "人员组合条件需要启用参与人状态模式。", { kind: "node", nodeId: node.id, field: "config.routes" }));
           if (!rule.targetNodeId) continue;
           if (!nodesById.has(rule.targetNodeId)) {
             diagnostics.push(

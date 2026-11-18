@@ -3,6 +3,9 @@ import type { RowDataPacket } from "mysql2/promise";
 import { getSharedPool } from "./db";
 import { hasWorkflowPermission } from "./iam-service";
 import { normalizeReferenceOperateConfig } from "../shared/reference-operate-config";
+import { normalizeReferenceRouterConfig } from "../shared/reference-router-config";
+import { participantConditionLeaves } from "../shared/participant-route-condition";
+import { participantRouteConditionSchema } from "./participant-route-condition-schema";
 import type { SearchSelectOption } from "../shared/search-select";
 
 export async function searchWorkflowParticipants(
@@ -47,6 +50,26 @@ export async function searchWorkflowParticipants(
     const definition = typeof raw === "string" ? JSON.parse(raw) : raw;
     const allowed = new Set<string>();
     for (const node of definition?.nodes ?? []) {
+      if (node.type === "router") {
+        for (const rule of normalizeReferenceRouterConfig(node.config ?? {})
+          .rules) {
+          const condition = participantRouteConditionSchema.safeParse(
+            rule.participantCondition
+          );
+          if (!condition.success) continue;
+          for (const leaf of participantConditionLeaves(condition.data)) {
+            const values =
+              leaf.kind === "user" && input.kind === "user"
+                ? leaf.userIds
+                : leaf.kind === "department" && input.kind === "department"
+                  ? leaf.unitIds
+                  : leaf.kind === "role" && input.kind === "role"
+                    ? leaf.roleKeys
+                    : [];
+            values.forEach(value => allowed.add(String(value)));
+          }
+        }
+      }
       if (node.type !== "operate") continue;
       const config = node.config ?? {};
       const values =

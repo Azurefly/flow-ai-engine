@@ -14,6 +14,7 @@ export type NormalizedRouterRule = {
   handle: string;
   targetNodeId: string;
   roleKeys: string[];
+  participantCondition?: unknown;
   relation: "and" | "or";
   conditions: SafeRouterCondition[];
   isDefault: boolean;
@@ -113,6 +114,9 @@ export function normalizeReferenceRouterRule(raw: unknown, index: number): Norma
     handle,
     targetNodeId,
     roleKeys,
+    ...((route.participantCondition ?? wrapper.participantCondition) === undefined ? {} : {
+      participantCondition: route.participantCondition ?? wrapper.participantCondition,
+    }),
     relation: relationValue === "||" || relationValue === "or" || relationValue === "或" ? "or" : "and",
     conditions,
     isDefault: priority === -1 || route.isDefault === true || wrapper.isDefault === true,

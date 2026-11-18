@@ -89,3 +89,62 @@ it.each([
     searchWorkflowParticipants(user, { ...input, kind, selectedIds: [id] })
   ).resolves.toMatchObject({ items: [], hasMore: false });
 });
+
+it.each([
+  ["user", "91"],
+  ["role", "reviewer"],
+  ["department", "branch"],
+] as const)("只读解析嵌套组合条件中已配置的 %s", async (kind, id) => {
+  mocks.query.mockReset();
+  mocks.query
+    .mockResolvedValueOnce([
+      [
+        {
+          definitionJson: {
+            nodes: [
+              {
+                type: "router",
+                config: {
+                  routes: [
+                    {
+                      handle: "match",
+                      participantCondition: {
+                        kind: "group",
+                        match: "all",
+                        conditions: [
+                          { kind: "user", userIds: [91], negate: true },
+                          {
+                            kind: "group",
+                            match: "any",
+                            conditions: [
+                              {
+                                kind: "role",
+                                roleKeys: ["reviewer"],
+                                match: "any",
+                              },
+                              {
+                                kind: "department",
+                                unitIds: ["branch"],
+                                minDepth: 1,
+                                maxDepth: 3,
+                                membership: "primary",
+                              },
+                            ],
+                          },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    ])
+    .mockResolvedValueOnce([[]]);
+  await expect(
+    searchWorkflowParticipants(user, { ...input, kind, selectedIds: [id] })
+  ).resolves.toMatchObject({ items: [], hasMore: false });
+  expect(mocks.query).toHaveBeenCalledTimes(2);
+});

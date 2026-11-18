@@ -2,10 +2,16 @@ import { normalizeReferenceRouterConfig } from "../shared/reference-router-confi
 import type {
   ParticipantCard,
   ParticipantRelation,
+  ParticipantStateRuntime,
 } from "../shared/participant-state";
 import { resolveStateDisplayName } from "../shared/workflow-node-contract";
 import type { WorkflowDefinition, WorkflowNode } from "./workflow-compiler";
 import { resolveTemplates, routerRuleMatches } from "./workflow-routing";
+import { participantRouteConditionSchema } from "./participant-route-condition-schema";
+import {
+  matchesParticipantCondition,
+  type ParticipantDepartment,
+} from "./participant-route-condition";
 
 type JsonRecord = Record<string, unknown>;
 export type ParticipantStateChange = {
@@ -28,16 +34,71 @@ export function planParticipantStateChange(input: {
   relation?: ParticipantRelation;
   cards: Record<string, ParticipantCard>;
   roles: Map<number, string[]>;
+  departments?: Map<number, ParticipantDepartment[]>;
+  operationResults?: ParticipantStateRuntime["operationResults"];
   context: JsonRecord;
 }): ParticipantStateChange[] {
   const nodes = new Map(input.definition.nodes.map(node => [node.id, node]));
+  const routers = new Map(
+    input.definition.nodes
+      .filter(node => node.type === "router")
+      .map(node => [
+        node.id,
+        normalizeReferenceRouterConfig(node.config).rules.map(rule => ({
+          ...rule,
+          participantCondition:
+            rule.participantCondition === undefined
+              ? undefined
+              : participantRouteConditionSchema.parse(
+                  rule.participantCondition
+                ),
+        })),
+      ])
+  );
   const changes: ParticipantStateChange[] = [];
+  const participants = Object.fromEntries(
+    Array.from(
+      new Set([
+        ...Object.values(input.cards).map(card => card.userId),
+        ...input.userIds,
+      ])
+    ).map(userId => {
+      const card = input.cards[String(userId)];
+      const record = input.operationResults?.[String(userId)];
+      const relationId =
+        input.relation &&
+        [
+          input.relation.senderUserId,
+          ...input.relation.receiverUserIds,
+        ].includes(userId)
+          ? input.relation.id
+          : (card?.relationId ?? null);
+      return [
+        String(userId),
+        {
+          userId,
+          stateCode: card?.stateCode ?? null,
+          stateName: card?.stateName ?? null,
+          results: record?.relationId === relationId ? record.results : {},
+        },
+      ];
+    })
+  );
   for (const userId of Array.from(new Set(input.userIds)).sort(
     (a, b) => a - b
   )) {
     const before = input.cards[String(userId)] ?? null;
+    const assignedRoles = input.roles.get(userId) ?? [];
+    const departments = input.departments?.get(userId) ?? [];
     const participant = {
+      ...participants[String(userId)],
       userId,
+      isInitiator: userId === input.initiatorUserId,
+      isParticipant: true,
+      roleKeys: assignedRoles,
+      departmentIds: departments.map(department => department.unitId),
+      primaryDepartmentId:
+        departments.find(department => department.isPrimary)?.unitId ?? null,
       stateCode: before?.stateCode ?? null,
       stateName: before?.stateName ?? null,
       isActor: userId === input.actorUserId,
@@ -46,28 +107,39 @@ export function planParticipantStateChange(input: {
       isRelationReceiver:
         input.relation?.receiverUserIds.includes(userId) ?? false,
     };
-    const context = { ...input.context, participant };
-    const roles = [...(input.roles.get(userId) ?? ["default"])];
+    const context = { ...input.context, participants, participant };
+    const roles = [...assignedRoles, "default"];
     if (participant.isActor) roles.push("actor");
     if (participant.isReceiver) roles.push("receiver");
     if (participant.isRelationSender) roles.push("relation_sender");
     if (participant.isRelationReceiver) roles.push("relation_receiver");
-    if (userId === input.initiatorUserId) roles.push("initiator");
+    if (participant.isInitiator) roles.push("initiator");
     let node: WorkflowNode | undefined = nodes.get(input.entryNodeId);
     const path: string[] = [];
     while (node?.type === "router") {
       if (path.includes(node.id))
         throw new Error("人员路由存在循环，无法分配状态。");
       path.push(node.id);
-      const router = normalizeReferenceRouterConfig(node.config);
-      const matches = router.rules.filter(
-        rule => !rule.isDefault && routerRuleMatches(rule, context, roles)
+      const rules = routers.get(node.id)!;
+      const matches = rules.filter(
+        rule =>
+          !rule.isDefault &&
+          routerRuleMatches(rule, context, roles) &&
+          (!rule.participantCondition ||
+            matchesParticipantCondition(rule.participantCondition, {
+              userId,
+              roleKeys: assignedRoles,
+              stateCode: participant.stateCode,
+              departments,
+              context,
+              identities: participant,
+            }))
       );
       if (matches.length > 1 && matches[0].priority === matches[1].priority)
         throw new Error(
           `人员 ${userId} 在路由“${node.name}”命中相同优先级的多条规则，请明确优先级。`
         );
-      const selected = matches[0] ?? router.rules.find(rule => rule.isDefault);
+      const selected = matches[0] ?? rules.find(rule => rule.isDefault);
       if (!selected) {
         if (node.config.unmatched === "error" || !before)
           throw new Error(

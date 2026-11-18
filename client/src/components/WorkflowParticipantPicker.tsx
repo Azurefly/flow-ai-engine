@@ -12,6 +12,7 @@ export function WorkflowParticipantPicker({
   multiple = false,
   ordered = false,
   label: customLabel,
+  purpose = "assignee",
 }: {
   workflowId: string;
   kind: "user" | "department" | "role";
@@ -21,6 +22,7 @@ export function WorkflowParticipantPicker({
   multiple?: boolean;
   ordered?: boolean;
   label?: string;
+  purpose?: "assignee" | "condition";
   onChange: (value: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -148,6 +150,8 @@ export function WorkflowParticipantPicker({
       <p className="text-xs text-muted-foreground">
         {readOnly
           ? "仅查看已配置人员；修改请联系流程管理员。"
+          : purpose === "condition"
+            ? "选择用于路径匹配的项目；条件只筛选本次受影响的参与人。"
           : people
             ? "按姓名或账号搜索启用的人员。"
             : role
