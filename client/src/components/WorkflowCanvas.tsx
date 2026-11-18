@@ -1675,9 +1675,11 @@ function StructuredValueEditor({
   return (
     <fieldset data-route-rules={routeList ? "" : undefined} className="grid gap-2 rounded-md border border-border bg-muted p-2.5">
       <legend className={routeList ? "route-list-title aiflow-type-dialog-title" : "px-1 text-xs font-semibold text-foreground"}>
-        {field.required && <i className="mr-1 not-italic text-red-500">*</i>}
-        {field.label}
-        {routeList && <small>{list.length} 条分支</small>}
+        {routeList ? <span className="route-title-line">
+          <GitBranch className="route-title-icon" aria-hidden="true"/>
+          <span>{field.label}{field.required && <i className="route-required">*</i>}</span>
+          <small>{list.length} 条分支</small>
+        </span> : <>{field.required && <i className="mr-1 not-italic text-red-500">*</i>}{field.label}</>}
       </legend>
       {routeList ? (
         <RouteListEditor items={list} disabled={disabled} targets={routeTargetLabels}
@@ -1746,6 +1748,12 @@ function StructuredValueEditor({
   );
 }
 
+function RouteDestination({ name, isDefault }: { name: string; isDefault?: boolean }) {
+  return <small className="route-destination">
+    <span>{isDefault && "默认分支 · "}流向 {name}</span>
+  </small>;
+}
+
 function RouteListEditor({ items, disabled, targets, context, onChange }: {
   items: unknown[]; disabled: boolean; targets?: Record<string, string>;
   context?: ParticipantRoutingEditorContext; onChange: (items: unknown[]) => void;
@@ -1761,8 +1769,11 @@ function RouteListEditor({ items, disabled, targets, context, onChange }: {
     const { rule, index } = active;
     return <section className="grid min-w-0 gap-3" data-route-detail="" aria-label="分支详情">
       <header className="rule-context">
-        <button type="button" className="rule-link" onClick={() => select(null)}>‹ 全部分支（{items.length}）</button>
-        <h3 className="aiflow-type-dialog-title">{rule.name}</h3><span>流向　{target(rule)}</span>
+        <button type="button" className="rule-link" onClick={() => select(null)}>全部分支（{items.length}）</button>
+        <div className="route-detail-title">
+          <h3 className="aiflow-type-dialog-title">{rule.name}</h3>
+          <RouteDestination name={target(rule)} isDefault={rule.isDefault}/>
+        </div>
         {!targets?.[rule.handle] && !rule.targetNodeId && <span className="aiflow-type-control">请从此路径句柄连线到目标状态节点</span>}
       </header>
       <StructuredListRow key={index} fieldKey="routes" item={items[index]} disabled={disabled}
@@ -1779,8 +1790,7 @@ function RouteListEditor({ items, disabled, targets, context, onChange }: {
       {rows.sort((a, b) => Number(a.rule.isDefault) - Number(b.rule.isDefault) ||
         b.rule.priority - a.rule.priority || a.rule.createdAt - b.rule.createdAt).map(({ rule, index }) => (
         <button type="button" key={index} className="rule-list-item" onClick={() => select({ handle: rule.handle, index })}>
-          <span><strong>{rule.name}</strong><small>{rule.isDefault ? "默认分支 · " : ""}流向　{target(rule)}</small></span>
-          <span aria-hidden="true">›</span>
+          <span><strong>{rule.name}</strong><RouteDestination name={target(rule)} isDefault={rule.isDefault}/></span>
         </button>
       ))}
     </div>
@@ -4887,6 +4897,7 @@ export default function WorkflowCanvas({
                 {selectedFieldGroups.length > 1 && <div
                   role="tablist"
                   data-inspector-tabs=""
+                  data-route-tabs={selected.data.kind === "router" ? "" : undefined}
                   ref={groupNavigation.tabsRef}
                   aria-label={`${selectedDefinition.label}配置分类`}
                   className="sticky top-0 z-10 grid min-w-0 grid-cols-[repeat(auto-fit,minmax(100px,1fr))] gap-1 border-y border-border bg-muted px-3 py-2"

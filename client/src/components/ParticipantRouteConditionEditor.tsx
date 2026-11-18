@@ -98,7 +98,7 @@ export function ParticipantRouteConditionEditor({
           const description = vote ? `${vote.votes.length} 人中至少 ${vote.required} 人通过` : name(item);
           return <button type="button" className="rule-list-item"
             key={index} onClick={() => navigate([...address, index])}>
-            <span>{title ? <><strong>{title}</strong><small>{description}</small></> : description}</span><span aria-hidden="true">›</span>
+            <span>{title ? <><strong>{title}</strong><small>{description}</small></> : description}</span>
           </button>;
         })}
       </div>}

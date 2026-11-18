@@ -19,6 +19,7 @@
 [data-node-config-panel] [data-inspector-tabs] { display:flex!important; flex-wrap:nowrap; overflow-x:auto; scrollbar-width:thin; gap:4px; padding:6px 12px; background:var(--card); border-block:1px solid var(--border); }
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab { flex:1 0 auto; padding:11px 5px; min-height:42px!important; min-width:0; white-space:nowrap; font-size:13px!important; font-weight:500; line-height:20px!important; border:0; border-bottom:2px solid transparent; border-radius:6px; transition:color 150ms,background-color 150ms,border-color 150ms; }
 [data-node-config-panel] [data-inspector-tabs] > .node-config-tab:hover:not([aria-selected="true"]) { background:var(--muted); color:var(--foreground); }
+[data-node-config-panel] [data-inspector-tabs][data-route-tabs] > .node-config-tab[aria-selected="true"] { background:transparent; box-shadow:none; color:var(--selection-text); font-weight:600; }
 [data-node-config-panel] [data-inspector-section] { padding:18px 20px; }
 .node-config-section-note {margin-bottom:16px; font-size:12px; line-height:19px; color:var(--muted-foreground);}
 .config-facts, .rule-list, .rule-context { display:grid; min-width:0; gap:0; }
@@ -28,21 +29,32 @@
 .config-facts dd, .rule-list-item span, .rule-context, .rule-heading { overflow-wrap:anywhere; }
 .route-list-title, .rule-context h3 { color:var(--foreground); font-weight:650; }
 .route-list-title { width:100%; }
-.route-list-title i { font-size:var(--aiflow-type-meta); vertical-align:middle; }
-.route-list-title small { float:inline-end; padding-top:3px; color:var(--muted-foreground); font-size:var(--aiflow-type-meta); font-weight:400; }
+.route-title-line { display:flex; align-items:center; gap:9px; }
+.route-title-icon { flex:0 0 30px; width:30px; height:30px; padding:7px; border-radius:9px; background:var(--selection-surface); color:var(--selection-text); }
+.route-required { margin-inline-start:3px; vertical-align:super; font-size:.65em; font-style:normal; color:var(--destructive); }
+.route-list-title small { margin-inline-start:auto; flex:none; padding:2px 8px; border-radius:6px; background:var(--muted); color:var(--muted-foreground); font-weight:400; }
 /* In detail view the branch name becomes the visible title. Keep the fieldset named for screen readers. */
 [data-route-rules]:has([data-route-detail]) > .route-list-title { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-.rule-list { border-top:1px solid var(--border); }
+.rule-list { border:1px solid var(--border); border-radius:12px; background:var(--card); }
 .rule-list:empty { display:none; }
 [data-config-fields]:has([data-route-detail]) [data-unmatched-rule] { display:none; }
-.rule-list-item { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:10px 8px 10px 12px; border-bottom:1px solid var(--border); text-align:start; color:var(--foreground); font-size:var(--aiflow-type-control); font-weight:500; line-height:1.55; }
-.rule-list-item:is(:hover,:focus-visible) { background:var(--muted); }
+.rule-list-item { position:relative; display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; padding:11px 14px; min-height:44px; text-align:start; color:var(--foreground); font-size:var(--aiflow-type-control); font-weight:500; line-height:1.55; }
+.rule-list-item:first-child { border-start-start-radius:11px; border-start-end-radius:11px; }
+.rule-list-item:last-child { border-end-start-radius:11px; border-end-end-radius:11px; }
+.rule-list-item + .rule-list-item::before { content:""; position:absolute; inset:0 14px auto; border-top:1px solid var(--border); pointer-events:none; }
+.rule-list-item:is(:hover,:focus-visible) { z-index:1; background:var(--selection-surface); }
+.rule-list-item::after, .rule-context > .rule-link::before { content:""; width:7px; height:7px; border-top:1.5px solid; border-right:1.5px solid; transform:rotate(45deg); margin-inline:3px; color:var(--muted-foreground); }
+.rule-list-item:is(:hover,:focus-visible)::after { color:var(--selection-text); }
+.rule-context > .rule-link::before { transform:rotate(-135deg); color:inherit; }
 .rule-list-item strong, .rule-list-item small { display:block; }
 .rule-list-item strong { font-weight:inherit; }
-.rule-list-item small { margin-top:2px; font-size:var(--aiflow-type-meta); font-weight:400; line-height:1.5; }
-.rule-list-item > [aria-hidden] { color:var(--muted-foreground); }
+.rule-list-item small { margin-top:3px; font-size:var(--aiflow-type-meta); font-weight:400; line-height:1.5; }
+.rule-list-item .route-destination, .route-destination { display:grid; grid-template-columns:14px minmax(0,1fr); align-items:start; gap:6px; color:var(--muted-foreground); }
+.route-destination::before { content:""; width:9px; height:7px; margin:4px 0 0 2px; border-left:1.5px solid; border-bottom:1.5px solid; border-bottom-left-radius:3px; }
 .rule-link { display:inline-flex; align-items:center; justify-self:start; gap:5px; color:var(--primary); font-size:13px; }
-.rule-context { position:sticky; top:58px; z-index:2; background:var(--card); padding:0 0 10px; border-bottom:1px solid var(--border); gap:4px; }
+[data-route-rules] .rule-link:not(.rule-remove) { color:var(--selection-text); }
+.rule-context { position:sticky; top:58px; z-index:2; padding-bottom:6px; background:var(--card); gap:4px; }
+.route-detail-title { display:grid; min-width:0; gap:5px; padding:12px 14px; border-radius:10px; border-inline-start:3px solid var(--selection-indicator); background:var(--selection-surface); }
 .rule-data-summary { overflow-wrap:anywhere; font-size:13px; }
 .rule-context > span { font-size:var(--aiflow-type-meta); line-height:1.5; color:var(--muted-foreground); }
 .rule-heading { font-size:var(--aiflow-type-section); line-height:1.5; font-weight:600; }
