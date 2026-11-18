@@ -7,6 +7,7 @@ import {
 import { NodeValueEditor } from "./NodeValueEditor";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
 import { useState } from "react";
+import { useRuleNavigationFocus } from "@/hooks/useRuleNavigationFocus";
 import { availableCounts, conditionOperations, conditionText, isGroup, readApprovalCount, withApprovalCount } from "@shared/approval-condition-presentation";
 
 export type ParticipantRoutingEditorContext = {
@@ -41,6 +42,7 @@ export function ParticipantRouteConditionEditor({
 }) {
   const [path, setPath] = useState<number[]>([]);
   const [fields, setFields] = useState(false);
+  const focus = useRuleNavigationFocus();
   const navigate = (next: number[]) => { setPath(next); setFields(false); };
   const parents: Extract<ParticipantRouteCondition, { kind: "group" }>[] = [];
   let current = value;
@@ -50,6 +52,11 @@ export function ParticipantRouteConditionEditor({
     current = current.conditions[index];
   }
   const address = path.slice(0, parents.length);
+  function goBack() {
+    focus.pending.current = address[address.length - 1];
+    setPath(address.slice(0, -1));
+    setFields(Boolean(readApprovalCount(parents[parents.length - 1])));
+  }
   function change(next: ParticipantRouteCondition | undefined) {
     let result = next;
     for (let i = parents.length - 1; i >= 0; i--) {
@@ -77,7 +84,7 @@ export function ParticipantRouteConditionEditor({
     );
   return (
     <section aria-label="人员组合条件" className="grid min-w-0 gap-2">
-      {parents.length > 0 && <button type="button" className="rule-link" onClick={() => navigate(address.slice(0, -1))}>‹ 上一级条件</button>}
+      {parents.length > 0 && <button type="button" className="rule-link" ref={focus.buttonRef("back")} onClick={goBack}>‹ 上一级条件</button>}
       {parents.length > 0 && <small className="node-value-hint">{parents.map((parent, i) =>
         `${parent.negate ? "取反 · " : ""}${parent.match === "all" ? "全部" : "任一"}满足 / 第 ${address[i] + 1} 项`).join(" › ")}</small>}
       <strong className="rule-heading">{name(current)}</strong>
@@ -97,7 +104,10 @@ export function ParticipantRouteConditionEditor({
           const title = vote ? context.nodeNames[vote.node] || vote.node : isGroup(item) && conditionOperations(item, context.nodeNames);
           const description = vote ? `${vote.votes.length} 人中至少 ${vote.required} 人通过` : name(item);
           return <button type="button" className="rule-list-item"
-            key={index} onClick={() => navigate([...address, index])}>
+            key={index} ref={focus.buttonRef(index)} onClick={() => {
+              focus.pending.current = "back";
+              navigate([...address, index]);
+            }}>
             <span>{title ? <><strong>{title}</strong><small>{description}</small></> : description}</span>
           </button>;
         })}

@@ -41,6 +41,7 @@ export default function AgentSettings({
     retry: false,
   });
   const [selected, setSelected] = useState<string>();
+  const [draftId, setDraftId] = useState(newResourceRequestKey);
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function AgentSettings({
   const select = (value: string) => {
     if (busy || (dirty && !window.confirm("离开并丢弃未保存的 Agent 修改？")))
       return;
+    if (value === "") setDraftId(newResourceRequestKey());
     setDirty(false);
     setSelected(value);
   };
@@ -135,7 +137,8 @@ export default function AgentSettings({
             ))}
           </aside>
           <AgentEditor
-            key={active?.id ?? "new"}
+            key={active?.id ?? draftId}
+            agentId={active?.id ?? draftId}
             entry={active}
             userId={userId}
             onNavigate={onNavigate}
@@ -150,6 +153,7 @@ export default function AgentSettings({
 }
 
 function AgentEditor({
+  agentId,
   entry,
   userId,
   onNavigate,
@@ -157,6 +161,7 @@ function AgentEditor({
   onBusy,
   accept,
 }: {
+  agentId: string;
   entry?: Entry;
   userId: number;
   onNavigate: AssistantNavigation;
@@ -165,7 +170,6 @@ function AgentEditor({
   accept: (entry: Entry) => void;
 }) {
   const [form, setForm] = useState<Config>(entry?.draft ?? initialConfig);
-  const [newId] = useState(newResourceRequestKey);
   const utils = trpc.useUtils();
   const [base, setBase] = useState({
     config: entry?.draft ?? initialConfig,
@@ -218,7 +222,7 @@ function AgentEditor({
       const row =
         action === "save"
           ? await save.mutateAsync({
-              agentId: entry?.id ?? newId,
+              agentId,
               expectedVersion: base.version,
               config: form,
             })

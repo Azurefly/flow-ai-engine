@@ -3,6 +3,7 @@ import { createParticipantStateExample } from "@shared/participant-state-example
 import { ParticipantOperationEditor } from "./ParticipantOperationEditor";
 import { ConfigDisclosure } from "./ConfigDisclosure";
 import { ParticipantRouteConditionEditor, type ParticipantRoutingEditorContext } from "./ParticipantRouteConditionEditor";
+import { useRuleNavigationFocus } from "@/hooks/useRuleNavigationFocus";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
@@ -1759,6 +1760,15 @@ function RouteListEditor({ items, disabled, targets, context, onChange }: {
   context?: ParticipantRoutingEditorContext; onChange: (items: unknown[]) => void;
 }) {
   const [selection, select] = useState<{ handle: string; proposed?: string; index: number } | null>(null);
+  const focus = useRuleNavigationFocus();
+  function openBranch(handle: string, index: number) {
+    focus.pending.current = "back";
+    select({ handle, index });
+  }
+  function showList(target: number | "add") {
+    focus.pending.current = target;
+    select(null);
+  }
   const rows = items.map((item, index) => ({ rule: normalizeReferenceRouterRule(item, index), index }));
   const active = selection && (rows.find(row => row.index === selection.index &&
     (row.rule.handle === selection.handle || row.rule.handle === selection.proposed))
@@ -1769,7 +1779,7 @@ function RouteListEditor({ items, disabled, targets, context, onChange }: {
     const { rule, index } = active;
     return <section className="grid min-w-0 gap-3" data-route-detail="" aria-label="分支详情">
       <header className="rule-context">
-        <button type="button" className="rule-link" onClick={() => select(null)}>全部分支（{items.length}）</button>
+        <button type="button" className="rule-link" ref={focus.buttonRef("back")} onClick={() => showList(index)}>全部分支（{items.length}）</button>
         <div className="route-detail-title">
           <h3 className="aiflow-type-dialog-title">{rule.name}</h3>
           <RouteDestination name={target(rule)} isDefault={rule.isDefault}/>
@@ -1782,25 +1792,25 @@ function RouteListEditor({ items, disabled, targets, context, onChange }: {
           select({ handle: rule.handle, proposed: normalizeReferenceRouterRule(next, index).handle, index });
           onChange(items.map((original, i) => i === index ? next : original));
         }}
-        onRemove={() => { select(null); onChange(items.filter((_, i) => i !== index)); }} />
+        onRemove={() => { showList(items.length > 1 ? Math.min(index, items.length - 2) : "add"); onChange(items.filter((_, i) => i !== index)); }} />
     </section>;
   }
   return <div className="grid gap-2">
     <div className="rule-list" aria-label="全部分支">
       {rows.sort((a, b) => Number(a.rule.isDefault) - Number(b.rule.isDefault) ||
         b.rule.priority - a.rule.priority || a.rule.createdAt - b.rule.createdAt).map(({ rule, index }) => (
-        <button type="button" key={index} className="rule-list-item" onClick={() => select({ handle: rule.handle, index })}>
+        <button type="button" key={index} className="rule-list-item" ref={focus.buttonRef(index)} onClick={() => openBranch(rule.handle, index)}>
           <span><strong>{rule.name}</strong><RouteDestination name={target(rule)} isDefault={rule.isDefault}/></span>
         </button>
       ))}
     </div>
-    <Button type="button" size="sm" variant="outline" className="w-fit" disabled={disabled}
+    <Button type="button" size="sm" variant="outline" className="w-fit" disabled={disabled} ref={focus.buttonRef("add")}
       onClick={() => {
         const handles = new Set(rows.map(row => row.rule.handle));
         let id = items.length + 1;
         while (handles.has(`route-${id}`)) id++;
         const handle = `route-${id}`;
-        select({ handle, index: items.length });
+        openBranch(handle, items.length);
         onChange([...items, { handle, label: "新分支", condition: { left: "{{input.value}}", operator: "equals", right: "" } }]);
       }}><Plus size={14}/> 添加分支</Button>
   </div>;
