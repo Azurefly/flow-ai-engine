@@ -179,19 +179,23 @@ export const assistantRouter = router({
     .input(
       update.extend({
         text: z.string().trim().min(1).max(6000),
+        timeZone: z.string().max(100).refine(zone => {
+          try { new Intl.DateTimeFormat("en", { timeZone: zone }); return true; }
+          catch { return false; }
+        }, "时区无效").optional(),
         proposalId: id.optional(),
       })
     )
     .mutation(async ({ ctx, input }) => {
-      const { sessionId, revision, requestId, text, proposalId } = input;
+      const { sessionId, revision, requestId, text, proposalId, timeZone } = input;
       const session = await mutateAssistantSession(
         ctx.user,
         sessionId,
         revision,
         requestId,
-        { kind: "message", text, proposalId },
+        { kind: "message", text, proposalId, ...(timeZone ? { timeZone } : {}) },
         current =>
-          runAssistantTurn(ctx.user, current, text, undefined, proposalId, ctx)
+          runAssistantTurn(ctx.user, current, text, undefined, proposalId, ctx, timeZone)
       );
       return publicSession(session);
     }),

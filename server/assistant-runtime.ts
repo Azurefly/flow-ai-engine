@@ -163,7 +163,8 @@ export async function runAssistantTurn(
   text: string,
   dependencies = { modelForTurn, prepare: prepareAssistantTool },
   observedProposalId?: string,
-  request?: TrpcContext
+  request?: TrpcContext,
+  timeZone = "UTC"
 ) {
   const allowed = new Set<string>(session.config.tools);
   if (actor.role !== "admin") allowed.delete("updateWatermark");
@@ -208,7 +209,8 @@ export async function runAssistantTurn(
       content: [
         session.config.instructions,
         behavior,
-        JSON.stringify({ context, trial: session.trial }),
+        JSON.stringify({ context, trial: session.trial, now: new Date().toISOString(), timeZone }),
+        "涉及最近一周、昨天等相对时间时，根据当前时间和用户时区换算查询范围，并在答复中注明统计期间。",
       ].join("\n\n"),
     },
     ...session.messages.slice(-32).map(({ role, content, links }) => ({

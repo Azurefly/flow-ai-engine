@@ -72,6 +72,13 @@ function scripted(...answers: InvokeResult[]) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Agent conversation execution with scripted model responses", () => {
+  it("提供服务器时刻和用户时区供相对日期统计使用", async () => {
+    const deps = scripted(reply("查询时间范围"));
+    await runAssistantTurn(actor, session, "昨天的统计", deps, undefined, undefined, "Asia/Singapore");
+    const system = String(deps.model.mock.calls[0][0].messages[0].content);
+    expect(system).toContain('"timeZone":"Asia/Singapore"');
+    expect(system).toMatch(/"now":"\d{4}-\d{2}-\d{2}T[^"]+Z"/);
+  });
   it("feeds server-read results to the model and keeps real resource links in the transcript", async () => {
     const deps = scripted(
       reply("", { name: "searchWorkflows", args: { query: "请假" } }),

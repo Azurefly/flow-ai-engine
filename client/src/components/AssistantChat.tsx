@@ -25,6 +25,7 @@ type Attempt = {
   key: string;
   text: string;
   until: number;
+  timeZone?: string;
   start?: {
     agentId: string;
     context: AssistantContext;
@@ -241,6 +242,7 @@ export default function AssistantChat({
               revision,
               key: newResourceRequestKey(),
               text: message,
+              timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               until: Date.now() + 180_000,
             };
       remember(request);
@@ -271,6 +273,7 @@ export default function AssistantChat({
               ...payload,
               text: message,
               proposalId: target.pending?.id,
+              timeZone: request.timeZone,
             })
           : await decide.mutateAsync({
               ...payload,
