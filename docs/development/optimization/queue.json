@@ -11,11 +11,9 @@
       "priority": "P0",
       "ownerRole": "测试维护者、身份负责人",
       "dependsOn": [],
-      "status": "awaiting_identity_owner",
+      "status": "implemented_partial_acceptance",
       "type": "整改",
-      "externalDependencies": [
-        "身份负责人确认受影响凭据、轮换与会话处置"
-      ],
+      "externalDependencies": [],
       "sourceLocations": [
         {
           "path": "01-test/014-自动化脚本/e2e/run-ui-business-scenarios.js",
@@ -53,7 +51,8 @@
           "layer": "脚本 / 无网",
           "action": "用无网络测试适配器分别省略目标、身份和写入确认，执行四个已识别的入口",
           "expected": "各自返回明确的非零退出或配置错误，记录网络调用数 0，输出不含凭据",
-          "status": "planned"
+          "status": "verified",
+          "verification": "依次执行四个历史入口，每个分别省略目标、账号、口令、写入确认，另用不匹配来源。20 次均在加载浏览器、发送网络请求前终止，I/O 计数 0。"
         },
         {
           "id": "A02",
@@ -61,7 +60,8 @@
           "layer": "脚本 / 隔离 HTTP",
           "action": "给一个明确目标及对应测试身份，再把写入确认改成另一来源重复执行",
           "expected": "匹配时只操作本轮合成对象；不匹配时首次 I/O 前终止。核对每个改造入口",
-          "status": "planned"
+          "status": "partial",
+          "verification": "98 个历史入口逐一验证正确目标配置及错配在首次业务 I/O 前退出。12 个直连 SQL 入口和 1 个子进程另验错库零连接。4 个旧浏览器以合成身份登录并完成首个业务操作，2 个原验收脚本通过真实应用与 MySQL 跑完。其余历史脚本匹配来源后的全部业务副作用尚未逐个完整运行。"
         },
         {
           "id": "A03",
@@ -69,7 +69,8 @@
           "layer": "代码 / 身份运营",
           "action": "只输出路径和位置复核四处回退及目标清单，由身份所有者核对受影响账号、分发及会话",
           "expected": "已改文件无凭据回退；另有签收的轮换/会话处置结果或凭据未投用的核查依据",
-          "status": "planned"
+          "status": "verified",
+          "verification": "历史脚本移除凭据回退。管理员轮换、令牌版本递增与 58 个有效会话撤销已回读。"
         }
       ],
       "requirementIds": [
@@ -86,7 +87,7 @@
       "status": "implemented_verified_scope",
       "type": "整改",
       "externalDependencies": [
-        "支持的域名、证书、边缘配置与外部验收权限"
+        "已启用的 HTTPS 入口、有效证书与获准的测试账号供复验"
       ],
       "sourceLocations": [
         {
@@ -120,7 +121,8 @@
           "layer": "远程匿名",
           "action": "从外部访问被测原 HTTP 地址与登录路径，记录响应码和跳转链",
           "expected": "受支持入口终止于证书有效的 HTTPS；若旧入口按方案关闭则外部不可达。明文入口不出现可提交的登录表单",
-          "status": "planned"
+          "status": "verified",
+          "verification": "独立外部客户端验证 HTTP GET 308 到同路径 HTTPS，HTTP 明文提交返回 426，证书校验成功。"
         },
         {
           "id": "A05",
@@ -128,7 +130,8 @@
           "layer": "远程浏览器",
           "action": "通过正式支持的 HTTPS 入口用专用身份登录、刷新、退出再访问受保护页",
           "expected": "刷新后仍在当前身份，注销后被要求登录。Cookie 元数据符合 Secure、HttpOnly、预期 SameSite；不留 Cookie 值",
-          "status": "planned"
+          "status": "verified",
+          "verification": "外部 Edge 用普通验收账号登录、刷新、注销再访问；核对 Secure、HttpOnly、SameSite=Lax，并停用账号。"
         },
         {
           "id": "A06",
@@ -136,7 +139,8 @@
           "layer": "部署 / 发布演练",
           "action": "在预发布切换边缘配置，读取健康/就绪，使用既有受保护管理通道演练切回",
           "expected": "应用就绪，已有管理路径正常，回退后匿名及会话传输仍满足 A04/A05",
-          "status": "planned"
+          "status": "verified",
+          "verification": "远程回环 TLS 入口按基线、候选、基线切换。公网浏览器曾发现大资源中途截断。正式 Nginx 恢复 worker 的临时目录属主后，使用五个独立临时目录重演切回，并核对正式目录属主未受影响。HTTP 308/426、认证再注销均通过，切回后的最大 412260 字节资源摘要与镜像相同。"
         }
       ],
       "requirementIds": [
@@ -179,7 +183,8 @@
           "layer": "浏览器 / 回读",
           "action": "业务中心上传 quoted.csv，以唯一业务代号回读说明；再用英文 code、name、description 表头和新代号上传",
           "expected": "每份恰好一条；单行说明含逗号及一个字面双引号，BOM 与转义标记不入字段；英文、中文表头均识别",
-          "status": "planned"
+          "status": "verified",
+          "verification": "真实 Edge 上传含 BOM 的中文和英文表头样本，各建一条，含逗号和字面双引号的说明逐字回读一致。"
         },
         {
           "id": "A08",
@@ -187,7 +192,8 @@
           "layer": "浏览器 / 回读",
           "action": "上传 multiline.csv，说明栏在开闭引号之间含真实 CRLF；用新代号另跑 LF 版本",
           "expected": "每份恰建一个业务。整段说明保持两行，换行按约定原样保存，下一列和下一记录未移位",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 分别上传包含 CRLF 和 LF 的引号字段。服务端回读原始换行字节，后列未错位；双记录样本物理起始行为 2 和 4。"
         },
         {
           "id": "A09",
@@ -195,7 +201,8 @@
           "layer": "浏览器 / MySQL",
           "action": "上传 unclosed.csv，下载或查看错误信息，通过代号查询项目及创建审计",
           "expected": "明确标出源行和说明字段、未闭引号，项目和对应成功审计均新增 0",
-          "status": "planned"
+          "status": "verified",
+          "verification": "未闭引号指向第 2 行业务说明，Edge 下载错误明细。提交返回 409，按代号检查业务与创建审计均为零。"
         },
         {
           "id": "A10",
@@ -203,7 +210,8 @@
           "layer": "共享解析 / HTTP",
           "action": "生成 0、1、500、501 条以及规范化后代号重复的样本，尝试重复必要表头或空代码",
           "expected": "500 条可预检；501 被拒，诊断可定位；空文件/只有表头可区分；歧义表头、空代码、批内重复均在写前给出可读反馈",
-          "status": "planned"
+          "status": "verified",
+          "verification": "空文件、仅表头、1、500、501、歧义表头、空代号、规范化后重码通过解析与 HTTP 对照。501 条被拒并定位到物理第 502 行。"
         },
         {
           "id": "A11",
@@ -211,7 +219,8 @@
           "layer": "回归 / 权限",
           "action": "运行现有导入代号用例，使用受限身份、同所有者的归档占码和另一个所有者的私有项目",
           "expected": "归档占码继续拒绝，缺创建权限时不查询占码，不透出其他所有者对象，旧模板的正常导入可用",
-          "status": "planned"
+          "status": "verified",
+          "verification": "同所有者归档占码被拒；不同所有者私有业务未泄露。缺权限时 HTTP 403，定向回归验证占码查询未发生；浏览器下载的旧模板能导入。"
         }
       ],
       "requirementIds": [
@@ -263,7 +272,8 @@
           "layer": "浏览器 / MySQL",
           "action": "使用 batch-invalid.csv，A 合法、B 名称恰 300 字，预检并尝试执行",
           "expected": "显示 B 的逻辑行、name、上限 160 和中文原因。业务项目及创建审计新增 0",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 上传 A 合法、B 恰 300 字，界面定位第 3 行、名称及 160 字上限；项目和创建审计新增均为零。"
         },
         {
           "id": "A13",
@@ -271,7 +281,8 @@
           "layer": "浏览器 / MySQL",
           "action": "从 A12 改用 batch-corrected.csv，核对预览后提交；用同一请求重复确认",
           "expected": "A、B 各 1 个，同一批次各一份成功回执，两次提交返回同一批次结果。正式业务审计各 1 份",
-          "status": "planned"
+          "status": "verified",
+          "verification": "原批纠正后，真实服务与数据库回读 A、B 各一个项目、各一条创建审计；同修订重复提交得到相同回执。"
         },
         {
           "id": "A14",
@@ -279,7 +290,8 @@
           "layer": "并发 / 恢复",
           "action": "两行都通过预检；A 提交后使 B 的提交被可恢复条件中断。重开页面，按原批次纠正/恢复 B",
           "expected": "A 继续显示已建且未再次创建，B 从失败/待处理变为成功。每条成功记录有对象 ID 与相应审计",
-          "status": "planned"
+          "status": "verified",
+          "verification": "专属 MySQL 在 B 的写入阶段中断，独立应用进程用新会话读取 A 成功和 B 待处理，恢复同批后 A 的 ID 未变，A、B 各有一个对象和创建审计。"
         },
         {
           "id": "A15",
@@ -287,7 +299,8 @@
           "layer": "并发 / 权限",
           "action": "预检后由另一操作者先占 B 的代号；另一次在预检后撤销发起人创建权限",
           "expected": "首种给出该行的真实冲突，既有外部对象不被覆盖；撤权后待处理行无业务写入，结果仅对当前有权者可见",
-          "status": "planned"
+          "status": "verified",
+          "verification": "另一登录会话占用同所有者代号后原批返回逐行冲突并保留占码对象。另一个样本撤权后执行及回读均返回 403，待处理行零写入。"
         },
         {
           "id": "A16",
@@ -295,7 +308,8 @@
           "layer": "事务 / 回退",
           "action": "在合成库的一行创建阶段注入审计或回执写入失败，重启后查状态；再临时停用新执行入口",
           "expected": "失败行未出现孤立项目、默认关系或虚假成功；已成功批次仍能查看，手工单条创建仍正常",
-          "status": "planned"
+          "status": "verified",
+          "verification": "在合成库故意令 B 的行回执失败，项目、默认关系及审计共同回滚。关闭应用并以批量执行暂停配置重启，回执可查，提交 503，预览和单条创建仍成功。重开后按原批只续办 B。"
         }
       ],
       "requirementIds": [
@@ -361,7 +375,8 @@
           "layer": "HTTP / MySQL",
           "action": "无外部副作用的正式数据流，保留同一意图键；接单后丢弃成功响应，通过原键查询和重发",
           "expected": "只返回原 runId；本次运行 1、作业 1，终态可查，UI 可核对",
-          "status": "planned"
+          "status": "verified",
+          "verification": "隔离 HTTP 丢弃首次受理响应，查询及原键重提返回原 runId，真实 MySQL 核对一份回执、一个运行、一个作业及成功终态。"
         },
         {
           "id": "A18",
@@ -369,7 +384,8 @@
           "layer": "并发 / MySQL",
           "action": "用同一主体、键和输入并行提交两次。控制事务失败的子样本中重新使用原键",
           "expected": "并行只新增一个运行和一个作业；回滚样本不留半条回执，之后能正常受理并核对",
-          "status": "planned"
+          "status": "verified",
+          "verification": "同键并发得到相同运行。专库制造入队中断时运行和回执均为零；恢复后原键只产生一个运行、作业和回执。"
         },
         {
           "id": "A19",
@@ -377,7 +393,8 @@
           "layer": "HTTP / 版本",
           "action": "同键改输入，随后让流程定义推进再重放原输入与原版本；另做撤权后核对",
           "expected": "同键异意图冲突；同键同原意图得到原受理版本和运行；失权者拿不到该结果",
-          "status": "planned"
+          "status": "verified",
+          "verification": "同键改输入 HTTP 409。定义从 v2 变为 v5 后，按原意图回读 v2 的原成功运行；撤销授权后回执查询 403。"
         },
         {
           "id": "A20",
@@ -385,7 +402,8 @@
           "layer": "浏览器 / 兼容",
           "action": "依次从数据资源中心、项目工作区、编辑页发起，模拟响应未知，随后明确选择“再运行一次”",
           "expected": "三入口的未知重试沿用各自原键，主动再运行生成新键/新 ID。状态提示可区分等待回执与执行失败",
-          "status": "planned"
+          "status": "verified",
+          "verification": "独立 Edge 在资源中心、项目工作区和实际编辑弹窗分别丢弃已受理的响应。第二次点击均只查原回执，主动再运行生成新键及新 ID。6 个成功运行各有一个作业和回执。"
         },
         {
           "id": "A21",
@@ -393,7 +411,8 @@
           "layer": "调度 / 历史",
           "action": "同一流程兼用手动键、旧版无键请求和原生 cron；读取升级前历史",
           "expected": "手工键独立去重，旧客户端仍可执行，定时仍按原时间桶处理；旧运行可读且无补造回执",
-          "status": "planned"
+          "status": "verified",
+          "verification": "同一流程由带键、旧式无键和真实原生调度各自运行。三个扫描进程在同一 UTC 时间桶只产生一条定时运行。另用旧版本 8964f07 受理、执行历史，再用当前 HTTP 查询：原 ID、v5、成功、一个作业，无补造回执。两版使用升级后的兼容表结构。"
         }
       ],
       "requirementIds": [
@@ -444,7 +463,8 @@
           "layer": "MySQL / Worker",
           "action": "在专用库重复跑原签署文件至少三次，观察或签及会签实例、start/resume 作业",
           "expected": "每次原业务断言通过，目标作业在有界期内 completed，预期的作业数量、类型和出口次数精确匹配",
-          "status": "planned"
+          "status": "verified",
+          "verification": "单独启动三个新进程连续执行原签署文件，三轮所有业务、出口、作业断言通过。"
         },
         {
           "id": "A23",
@@ -452,7 +472,8 @@
           "layer": "时序 / Worker",
           "action": "构造实例已成功而恢复作业仍 leased 的短暂状态，在期限内提交正常完成",
           "expected": "等待命中本轮作业，真实提交后断言通过。记录两个状态采样，其他实例完成不能提前满足条件",
-          "status": "planned"
+          "status": "verified",
+          "verification": "目标运行已成功、resume 仍 leased 时，另一已完成实例未能满足等待。恢复本目标作业后 start/resume 均 completed，出口一次。"
         },
         {
           "id": "A24",
@@ -460,7 +481,8 @@
           "layer": "故障 / 回归",
           "action": "暂停测试 Worker 使目标作业超过测试期限，另跑已有 Worker 崩溃恢复用例",
           "expected": "第一个样本按期失败并标出目标状态，恢复用例仍通过，重复终点或作业可被检测",
-          "status": "planned"
+          "status": "verified",
+          "verification": "暂停隔离 Worker，原等待断言在 10020 ms 失败并附 runId 与 leased 状态；恢复用例通过。增加第二个合成 resume 时原断言同样失败。"
         }
       ],
       "requirementIds": [
@@ -519,7 +541,8 @@
           "layer": "HTTP / 路由",
           "action": "使用当前审核/发布修订构造旧标签、优先、广播和兜底，记录执行节点序列",
           "expected": "旧标签按原定义到达目标；优先 high；广播 high 与 low 各一次并汇合；兜底只执行 fallback",
-          "status": "planned"
+          "status": "verified",
+          "verification": "两个独立空库分别跑旧标签、优先、广播、兜底路由并回读实际分支。"
         },
         {
           "id": "A26",
@@ -527,7 +550,8 @@
           "layer": "HTTP / 发布",
           "action": "使用过期修订或漏配广播汇聚伙伴的合成流程去审核/发布，再补正重试",
           "expected": "得到相应冲突/校验，原发布版本完整；用新修订和成对引用后可发布，不能绕过准入",
-          "status": "planned"
+          "status": "verified",
+          "verification": "真实 HTTP 过期审核和发布均返回 409；缺广播汇聚配对时返回 400 并定位问题。原 v2 快照和执行摘要一致，补双向引用后 v3 发布成功。"
         },
         {
           "id": "A27",
@@ -535,7 +559,8 @@
           "layer": "HTTP / 质量",
           "action": "合法空值率 0.25、0.50 分别运行；非法 1.1、−0.1、最少行数 1.5、−1 分别独立创建",
           "expected": "合法样本分别运行失败且无 end / 成功；非法值各自在创建时拒绝，错误字段符合预期，未生成流程或草稿",
-          "status": "planned"
+          "status": "verified",
+          "verification": "两套独立 HTTP 环境分别检验合法运行结果、非法阈值在创建阶段被拒。"
         },
         {
           "id": "A28",
@@ -543,7 +568,8 @@
           "layer": "HTTP / 指标",
           "action": "各自创建空、单个成功、等待后终止的样本，记录 runDetail 与 runMetrics",
           "expected": "空时样本 0、平均 null；成功样本数 1、平均等于该运行 duration；终止样本总数 1、计时样本 0、平均 null",
-          "status": "planned"
+          "status": "verified",
+          "verification": "HTTP 回读空、单个成功和终止三个自建样本，验证计时字段和数量。"
         },
         {
           "id": "A29",
@@ -551,7 +577,8 @@
           "layer": "可重复执行",
           "action": "对两个新建的隔离环境分别运行 A25–A28 及原三组脚本，记录所有引用对象的创建来源",
           "expected": "两轮原三组退出码均 0，场景均执行到尾，仅本轮 ID 被访问；故意改错一个期望时对应套件会红",
-          "status": "planned"
+          "status": "verified",
+          "verification": "重新创建两套空 MySQL 并分别全量迁移。两轮三份原 HTTP 套件退出均为 0，独立验证 A25–A28，含过期修订、缺汇聚负例。两环境分别改错一个预期后对应测试退出 1，各个对象的创建来源可查。"
         }
       ],
       "requirementIds": [
@@ -566,10 +593,10 @@
       "priority": "P2",
       "ownerRole": "模型节点、运行详情",
       "dependsOn": [],
-      "status": "implemented_partial_acceptance",
+      "status": "implemented_verified_scope",
       "type": "整改",
       "externalDependencies": [
-        "获准的真实供应商测试连接"
+        "部署已配置的真实模型服务供复验；受控失败路径使用隔离测试对端"
       ],
       "sourceLocations": [
         {
@@ -601,7 +628,8 @@
           "layer": "受控供应商 / 运行",
           "action": "设置默认模型 A、节点覆盖 B，服务返回别名 C；分别跑有/无覆盖样本",
           "expected": "每次尝试能分别看到发出的 B 或 A 与返回的 C、配置标识；原有用量及计价依据保留",
-          "status": "planned"
+          "status": "verified",
+          "verification": "4 个受控运行实际产生 5 次模型 POST。默认 A、指定 B、返回 C、常规 429 后 200 两次请求标识及顺序均在 MySQL/API/Edge 对齐，20/5 tokens 的费用回读一致。"
         },
         {
           "id": "A31",
@@ -609,7 +637,8 @@
           "layer": "兼容 / 诊断",
           "action": "打开旧运行、供应商无 model 字段、失败重试的多尝试记录",
           "expected": "旧值不被伪造为请求值，缺失明确可辨，各次尝试可关联，日志和 API 无凭据",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 打开供应商省略模型和升级前记录，明确显示“供应商未返回”与“当时未记录”。缺字段时按 B 算 85 micros，旧计价 195 micros 保留。"
         },
         {
           "id": "A32",
@@ -617,7 +646,8 @@
           "layer": "真实供应商",
           "action": "在获准合成项目用已配置供应商运行固定短输出流程，回读节点和末端",
           "expected": "节点成功、输出匹配；可核对真实请求模型、返回模型及各自来源，清理测试对象",
-          "status": "planned"
+          "status": "verified",
+          "verification": "外部供应商真实三节点运行，短输出和末端一致，配置修订、HTTP 尝试与完成 ID 可读；测试项目已归档。"
         }
       ],
       "requirementIds": [
@@ -668,7 +698,8 @@
           "layer": "HTTP / MySQL",
           "action": "建 60 个同范围会话，含同更新时间记录；以小页遍历，记录 ID 集合、页大小和正文大小",
           "expected": "固定数据集遍历无重漏，稳定 tie-breaker，各页有上限；末页结束，60 个不在首个响应内",
-          "status": "planned"
+          "status": "verified",
+          "verification": "同一范围准备 1/30/60/120 条合成会话，含相同时间，用 7 条页遍历 60 和 120。逐 ID 对比零重漏，末页正确，120 条样本首个 HTTP 响应为 2655 字节。"
         },
         {
           "id": "A34",
@@ -676,7 +707,8 @@
           "layer": "权限 / 分页",
           "action": "候选中夹入大量失去可见性的会话，翻页时撤销项目权限；跨试聊/客户和另一项目换用原游标",
           "expected": "可访问结果能找到，无权限候选无泄漏；过滤后未满的一页不能错误终止。游标切换范围被拒或明确重置",
-          "status": "planned"
+          "status": "verified",
+          "verification": "候选 420 条，翻页途中撤去含 275 条会话的项目权限，空页仍可继续，最终找齐其余 145 条，跨项目和试聊游标均被拒。"
         },
         {
           "id": "A35",
@@ -684,7 +716,8 @@
           "layer": "详情 / 客户端",
           "action": "在长历史和存在待确认提案的会话中逐页向前读；并发更新一个会话后刷新列表",
           "expected": "消息按修订无重复/遗漏，旧提案可打开；刷新或快照边界按设计工作，详情页不默认读取全部历史",
-          "status": "planned"
+          "status": "verified",
+          "verification": "73 个修订、146 条消息逐页向前，与旧详情完全一致。390px Edge 打开旧提案并回到原项目，原修订的草稿及提案可继续。"
         },
         {
           "id": "A36",
@@ -692,7 +725,8 @@
           "layer": "兼容 / 测量",
           "action": "旧客户端读旧接口，新客户端查 1、30、60 及目标规模样本，留采样参数、扫描/返回行数",
           "expected": "老调用能读取，首屏数据受页长约束；有索引/扫描与响应字节证据。延迟仅对实测环境给出",
-          "status": "planned"
+          "status": "verified",
+          "verification": "HTTP 新旧接口实测 1/30/60/120 条。120 条时新首屏 7 条/2655 B，旧接口 120 条/41430 B。EXPLAIN ANALYZE 显示本样本读取并排序 120 行、SQL 返回 33 行；九次热测首屏 P95 47.26 ms。"
         }
       ],
       "requirementIds": [
@@ -733,7 +767,8 @@
           "layer": "键盘 / 浏览器",
           "action": "分普通和减少动效，用 Tab 与 Enter 打开新增业务，Esc 或“取消”关闭，再按 Tab",
           "expected": "打开后焦点在弹窗内，关闭后确为原触发按钮，下一次 Tab 到预定后继",
-          "status": "planned"
+          "status": "verified",
+          "verification": "普通和减少动效各用 Tab、Enter、Esc 或取消完成操作。焦点回原按钮，下一次 Tab 命中打开前记录的后继控件。"
         },
         {
           "id": "A38",
@@ -741,7 +776,8 @@
           "layer": "键盘 / 嵌套",
           "action": "填无效表单并提交，再触发未保存确认，依次取消二级、关闭一级",
           "expected": "错误字段可聚焦，二级关闭回父表单，最终回真实触发者；填写按现有合同保留",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 中无效表单指向业务代号，重开保留名称；二级确认返回父表单，放弃后焦点回新增流程。"
         },
         {
           "id": "A39",
@@ -749,7 +785,8 @@
           "layer": "浏览器 / 回归",
           "action": "成功提交及原触发者被移除各做一次，抽查公用弹窗的另两个调用方",
           "expected": "成功时有持久结果，焦点落在仍可用的触发者或定义的列表兜底，两个调用方没有关闭/草稿退化",
-          "status": "planned"
+          "status": "verified",
+          "verification": "正常提交回读项目和审计各一份；受控移除原触发按钮时焦点落在业务中心标题。另测新增流程与新建工作域。"
         }
       ],
       "requirementIds": [
@@ -791,7 +828,8 @@
           "layer": "浏览器 / 导航",
           "action": "上传失败行，进入编辑画布再返回业务中心并刷新，按键盘定位问题行",
           "expected": "画布没有跨页导入错误；回到业务可查看同批次、行列、中文原因、成功与待办计数，刷新后仍可核对",
-          "status": "planned"
+          "status": "verified",
+          "verification": "同一 SPA 内从失败批次去编辑画布再返回，画布无旧导入错误。刷新仍可读原批次、计数、行列和中文原因，Tab 可聚焦含该问题行的列表。"
         },
         {
           "id": "A41",
@@ -799,7 +837,8 @@
           "layer": "浏览器 / 权限",
           "action": "下载错误行、修正后仅重试该行，切换到无权查看本批次的账号",
           "expected": "成功条目不重复，失败行有新结果；下载及页面均按权限处理，切换后没有旧批次残留",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 下载仅含失败 B 的可编辑 CSV，回传后修订 1→2，B 仍显示原物理第 3 行，A 的 ID 和审计不变，最终各有一份审计。另一创建者回传 409、无权者 403，换账号后无原下载入口。"
         }
       ],
       "requirementIds": [
@@ -813,7 +852,7 @@
       "priority": "P2",
       "ownerRole": "业务前端",
       "dependsOn": [],
-      "status": "implemented_verified_scope",
+      "status": "implemented_partial_acceptance",
       "type": "体验",
       "externalDependencies": [
         "真机触摸验证"
@@ -840,7 +879,8 @@
           "layer": "视口 / 几何",
           "action": "在 360、390、768px 和桌面铺长中文名/长代号，直接进入一个工作区",
           "expected": "小屏首屏可辨名称状态、主动作无需横移，表头可读，展开显示次要字段。桌面列与操作齐全",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 实测 360/390/768/1440px 业务列表主操作可见，记录了右边缘位置。"
         },
         {
           "id": "A43",
@@ -848,7 +888,8 @@
           "layer": "键盘 / 真机",
           "action": "用键盘和真机触摸打开行菜单、展开、切换筛选并返回，检查目标对象",
           "expected": "可操作项有名称和足够可点区域，操作仍落于相同行，收回后焦点可继续，筛选不串行",
-          "status": "planned"
+          "status": "partial",
+          "verification": "390 CSS px 下用 Edge 触屏仿真与键盘进入、展开行操作并切换筛选，进入按钮 48×44、更多按钮 54×44。仍缺实体触屏操作。"
         }
       ],
       "requirementIds": [
@@ -861,7 +902,7 @@
       "priority": "P2",
       "ownerRole": "画布前端",
       "dependsOn": [],
-      "status": "implemented_partial_acceptance",
+      "status": "implemented_verified_scope",
       "type": "体验",
       "externalDependencies": [],
       "sourceLocations": [
@@ -893,7 +934,8 @@
           "layer": "画布 / 几何",
           "action": "面板关闭、展开、全屏往返，在 50%/100% 缩放定位左中右节点",
           "expected": "节点标题和连接点在实际可视区并能命中，面板和工具栏没有覆盖目标",
-          "status": "planned"
+          "status": "verified",
+          "verification": "1440px Edge 在 50% 与 100% 起始缩放、两种动效及普通/全屏往返中定位起点、路由与终点。24 组均真实命中节点四边与现有连接点，记录了面板初始关闭和展开状态。"
         },
         {
           "id": "A45",
@@ -901,7 +943,8 @@
           "layer": "浏览器 / 偏好",
           "action": "分普通与减少动效快速定位两个节点，中途手动拖动画布",
           "expected": "目标是最近选择；手势生效，未被旧动画抢回。减少偏好直接定位，焦点/选中信息可见",
-          "status": "planned"
+          "status": "verified",
+          "verification": "Edge 两次快速切换以最后节点为选择。两种动效下手势横向移动 75px、纵向 22px，500ms 后视口不回弹；定位操作没有推进定义版本。"
         },
         {
           "id": "A46",
@@ -909,7 +952,8 @@
           "layer": "浏览器 / 存储",
           "action": "实际命中节点标题并拖动，保存、刷新、再改名保存，回读版本与坐标",
           "expected": "定位不改变节点数据；显式拖动与改名分别只推进一次预期版本，重开坐标和名称一致",
-          "status": "planned"
+          "status": "verified",
+          "verification": "在专用草稿实际命中节点并拖动保存 v1→v2，刷新核对同一坐标；改名保存 v2→v3，重新打开仍是新名称。另验多次定位未改变数据版本，合成业务已归档。"
         }
       ],
       "requirementIds": [
@@ -923,7 +967,7 @@
       "priority": "P2",
       "ownerRole": "工作台前端",
       "dependsOn": [],
-      "status": "implemented_partial_acceptance",
+      "status": "implemented_verified_scope",
       "type": "体验",
       "externalDependencies": [],
       "sourceLocations": [
@@ -950,7 +994,8 @@
           "layer": "工作台 / 轮询",
           "action": "选中长列表中的任务并聚焦一项控件，连续经历三次无业务变化的轮询",
           "expected": "同一任务仍选中，焦点和滚动锚点保持，无全表进出场。标签可区分待办与已办",
-          "status": "planned"
+          "status": "verified",
+          "verification": "关闭任务抽屉回焦，连续三次自然轮询后任务行 DOM、焦点、滚动位置稳定。"
         },
         {
           "id": "A48",
@@ -958,7 +1003,8 @@
           "layer": "浏览器 / 办理",
           "action": "模拟慢返回后办理，再走一次业务拒绝样本，查工作台和任务详情",
           "expected": "提交期间状态可见，成功项在已办可查、退出待办，下一焦点有去向；拒绝保留输入并展示原因",
-          "status": "planned"
+          "status": "verified",
+          "verification": "真实 Edge 等待超过一秒的提交持续显示正在提交，成功后待办移除、已办可见，焦点在返回待办。办理中另一路暂停运行，原请求收到 409 和具体说明，保留经办意见；恢复后同一任务可继续办理。"
         }
       ],
       "requirementIds": [
@@ -1005,7 +1051,8 @@
           "layer": "助手 / 历史",
           "action": "两个项目、60 条历史，在 390px 用键盘筛选、往前翻页、打开旧提案并切项目",
           "expected": "找到正确会话，提案对象与项目明确，切项目不会提交原项目提案；当前候选、焦点可辨",
-          "status": "planned"
+          "status": "verified",
+          "verification": "390px Edge 键盘筛选并打开旧提案至第 4 修订。切至 B 即清除 A 的选择、待确认按钮和草稿，延迟回复不能回填。在 B 浏览 A 历史只读，返回 A 可继续原会话和草稿。"
         },
         {
           "id": "A50",
@@ -1013,7 +1060,8 @@
           "layer": "助手 / 真机",
           "action": "用户上滚阅读旧回复时来新消息；软键盘打开，分别取消、确认和进行试聊",
           "expected": "阅读位置保持，新消息可主动跳转；确认可操作并反馈结果，试聊有标识，减少动效无强制平滑滚动，读屏能定位状态",
-          "status": "planned"
+          "status": "partial",
+          "verification": "Edge 390px 和减少动效下，跨客户端新消息到达时 scrollTop 保持 60，主动跳转后距底部 0。真实键盘取消/客户确认/模拟试聊写入数 0/1/0；物理软键盘与语音读屏待设备验收。"
         }
       ],
       "requirementIds": [
@@ -1028,10 +1076,10 @@
       "priority": "本次发布",
       "ownerRole": "数据连接器、执行器",
       "dependsOn": [],
-      "status": "design_ready",
-      "type": "候选能力",
+      "status": "implemented_verified_scope",
+      "type": "新增模块",
       "externalDependencies": [
-        "API/文件合同、对象存储、外部写回测试租户；上线写出前验收 F05"
+        "已获准的独立远程测试对端，精确 origin 和单租户 SecretRef"
       ],
       "sourceLocations": [
         {
@@ -1068,7 +1116,8 @@
           "layer": "API 连接器 / 运行",
           "action": "合成三页端点在第二页超时，再从已提交检查点恢复，并测试限额",
           "expected": "已提交页不重复，行键/累计计数正确，页/行/字节超限有明确错误，血缘可回到资源版本",
-          "status": "planned"
+          "status": "verified",
+          "verification": "独立交换服务的三页读取与第二页临时失败均有可回读计数；专用 MySQL 核对检查点与限额。"
         },
         {
           "id": "A52",
@@ -1076,7 +1125,8 @@
           "layer": "文件 / 运行",
           "action": "上传 UTF-8 多行字段文件，发布后更换同名对象，分别运行旧/新版本；运行中撤权或取消",
           "expected": "两次均读取各自固定版本，中文字段一致；失权或取消后停止派新读取，暂存清理可查",
-          "status": "planned"
+          "status": "verified",
+          "verification": "两版同名 UTF-8 CSV 按其固定版本运行，浏览器读取多行字段；撤权和取消在独立 MySQL 覆盖。"
         },
         {
           "id": "A53",
@@ -1084,7 +1134,8 @@
           "layer": "输出 / 合同夹具",
           "action": "对支持回执的目标先 dry-run，再确认并模拟提交后响应丢失；按原操作键查询",
           "expected": "dry-run 写入 0；确认一次产生一次业务写入，未知结果查询原回执，再发不会重复",
-          "status": "planned"
+          "status": "verified",
+          "verification": "测试对端 dry-run 零写入，确认后主动断开响应，按回执查询和重放只有一份业务对象，双方回读内容一致。"
         },
         {
           "id": "A54",
@@ -1092,12 +1143,14 @@
           "layer": "外部联测 / 回退",
           "action": "用测试租户和专用对象完成读取、应用、回读，关闭该连接器再打开旧 audit_only 运行",
           "expected": "双方记录的对象、内容摘要和回执可对应；旧运行保持仅审计含义，能力状态在 UI、预检和 Worker 一致",
-          "status": "planned"
+          "status": "verified",
+          "verification": "获准的独立远程交换服务与部署应用完成 API/文件/输出全链路，停用端点拒绝新运行，旧 audit_only 测试保持通过。"
         }
       ],
       "requirementIds": [
         "R13"
-      ]
+      ],
+      "implementation": "G01-IMPLEMENTATION.md"
     },
     {
       "id": "G02",
@@ -1105,11 +1158,9 @@
       "priority": "本次发布",
       "ownerRole": "流程引擎、设计器",
       "dependsOn": [],
-      "status": "design_ready",
-      "type": "候选能力",
-      "externalDependencies": [
-        "产品确定父取消/子失败策略及首期深度"
-      ],
+      "status": "implemented_verified_scope",
+      "type": "新增模块",
+      "externalDependencies": [],
       "sourceLocations": [
         {
           "path": "server/subflow-diagnostics.ts",
@@ -1144,7 +1195,8 @@
           "layer": "MySQL / Worker",
           "action": "发布父流程和一个有人工等待的子版本，启动父、办理子，同时发布另一个子版本",
           "expected": "父固定旧子版本；子等待时父可恢复且不前进，子完成后父只续跑一次",
-          "status": "planned"
+          "status": "verified",
+          "verification": "父等待期间子流程发布新版本，再办理旧子待办；父继续时仍使用绑定版本，父子最终均成功。"
         },
         {
           "id": "A56",
@@ -1152,7 +1204,8 @@
           "layer": "故障 / Worker",
           "action": "在创建父子关系后重启，再重复发相同子完成事件",
           "expected": "父子链接 1、子实例 1、对应父恢复 1；事件重放可核对，任务和出口不重复",
-          "status": "planned"
+          "status": "verified",
+          "verification": "隔离 MySQL 在持久父子关系提交后中断并重启 Worker，重复投递子终态及过期尝试事件，最终只有一个子实例、一个父恢复作业和一个成功出口。"
         },
         {
           "id": "A57",
@@ -1160,7 +1213,8 @@
           "layer": "竞争 / 回归",
           "action": "父取消与子完成并发，另使子失败；再跑一个既有同步内联定义",
           "expected": "每种竞争只有一致的终态和原因，失败按配置处理，旧同步输出/快照兼容",
-          "status": "planned"
+          "status": "verified",
+          "verification": "MySQL 验证取消竞争、失败策略及旧同步路径，远程实例读取最终结果。"
         },
         {
           "id": "A58",
@@ -1168,12 +1222,14 @@
           "layer": "编译 / 权限",
           "action": "尝试循环引用或超约定深度；用只看父的一方和只看子的一方读取链接",
           "expected": "非法定义发布前有定位诊断；详情分别鉴权，链接不暴露另一端无权读取的信息",
-          "status": "planned"
+          "status": "verified",
+          "verification": "编译和运行专测覆盖自身/嵌套引用、固定版本及单端授权；Edge 实测双向导航。"
         }
       ],
       "requirementIds": [
         "R23"
-      ]
+      ],
+      "implementation": "G02-IMPLEMENTATION.md"
     },
     {
       "id": "G03",
@@ -1181,8 +1237,8 @@
       "priority": "本次发布",
       "ownerRole": "内部身份与组织管理",
       "dependsOn": [],
-      "status": "design_ready",
-      "type": "用户确认的能力",
+      "status": "implemented_verified_scope",
+      "type": "新增模块",
       "externalDependencies": [],
       "sourceLocations": [
         {
@@ -1218,7 +1274,8 @@
           "layer": "文件 / 差异",
           "action": "以内部目录版本 1 文件提供两个同名不同标识的对象、重复标识和循环部门，另省略已有对象",
           "expected": "按稳定标识匹配；预览业务写入 0，重复与循环标为冲突，省略对象保留",
-          "status": "planned"
+          "status": "verified",
+          "verification": "重复及循环、同名不同编码、零业务写和省略保留分别有 HTTP 与 MySQL 回读。"
         },
         {
           "id": "A60",
@@ -1226,7 +1283,8 @@
           "layer": "批次 / 权限",
           "action": "观察者预览、管理员确认，双发同一行并重开批次",
           "expected": "预览权不授予应用权限；每行只产生一个对象和一次写入审计，已提交回执可续读",
-          "status": "planned"
+          "status": "verified",
+          "verification": "专用库核对观察者、普通账号与管理员、重放一行唯一对象及唯一应用审计。"
         },
         {
           "id": "A61",
@@ -1234,7 +1292,8 @@
           "layer": "版本 / 回退",
           "action": "预览后另行修改资料，再提交旧预览并回退已被另改的行",
           "expected": "冲突保留人工修改；回退仅恢复仍匹配写后镜像的字段，已使用或有关联的新增对象保留处置回执",
-          "status": "planned"
+          "status": "verified",
+          "verification": "人工改名后的旧预览与回退不覆盖人工值，职责变更受版本保护，候选任务保护未登录账号。"
         },
         {
           "id": "A62",
@@ -1242,12 +1301,14 @@
           "layer": "远程内部目录 / HTTP",
           "action": "在已部署实例用专有账号、部门及成员关系执行新增、改名、重复请求、回读和回退",
           "expected": "真实目录按相同本地 ID 回读，变更与逐行审计可对应；测试账号与部门停用，成员关系回退",
-          "status": "planned"
+          "status": "verified",
+          "verification": "远程内部目录通过正式 API 执行预览/新增/改名/重放/冲突/回退，并读到原账号 ID 及停用状态。"
         }
       ],
       "requirementIds": [
         "R24"
-      ]
+      ],
+      "implementation": "G03-IMPLEMENTATION.md"
     },
     {
       "id": "G04",
@@ -1255,8 +1316,8 @@
       "priority": "本次发布",
       "ownerRole": "助手、后台作业",
       "dependsOn": [],
-      "status": "design_ready",
-      "type": "候选能力",
+      "status": "implemented_partial_acceptance",
+      "type": "新增模块",
       "externalDependencies": [
         "目标负载、供应商延迟样本和人工核对责任人"
       ],
@@ -1300,7 +1361,8 @@
           "layer": "慢模型 / MySQL",
           "action": "两个 Worker 处理不同会话，并对同一会话发送同键和同修订的竞争请求",
           "expected": "模型等待期间不长期占用会话写事务；同键不重复回合，另一意图过期时明确冲突，无双写",
-          "status": "planned"
+          "status": "verified",
+          "verification": "真实 MySQL 独立消费者、同键并发与双标签竞争均验证；六个受控并发会话完成。"
         },
         {
           "id": "A64",
@@ -1308,7 +1370,8 @@
           "layer": "故障 / 业务",
           "action": "在业务动作已提交、助手回执尚未更新时停止消费者，随后恢复并查询目标业务状态",
           "expected": "业务对象恰一份，结果可核对时恢复为 committed；无依据时保留待核对，不能再次盲发",
-          "status": "planned"
+          "status": "verified",
+          "verification": "业务提交与助手回执之间模拟中断后回读一份业务对象，无依据的结果保留人工核对。"
         },
         {
           "id": "A65",
@@ -1316,7 +1379,8 @@
           "layer": "权限 / 试聊",
           "action": "准备提案后撤销工具或项目权限再确认，另以试聊身份确认同样操作",
           "expected": "失权后拒绝，试聊只生成模拟结果。业务表无变化，回执可说明拒绝/试聊原因",
-          "status": "planned"
+          "status": "verified",
+          "verification": "在 MySQL 专项复核确认前撤权、试聊模拟及业务表结果。"
         },
         {
           "id": "A66",
@@ -1324,7 +1388,8 @@
           "layer": "升级 / 兼容",
           "action": "让旧会话、失效租约和新排队回合并存，按方案切换及切回消费者",
           "expected": "原 requestId 可查，过期租约可接管一次，停止新派发后在途逐一收尾；会话修订与结果相符",
-          "status": "planned"
+          "status": "verified",
+          "verification": "专库真实运行旧同步版本→新 Web/Worker→旧同步→新版本。在旧回执、自然过期租约和新排队请求并存时停止接单、排空并切回。旧版本重放三个原键无新模型调用，恢复后每个请求只有一条回执。"
         },
         {
           "id": "A67",
@@ -1332,13 +1397,23 @@
           "layer": "容量 / 运营",
           "action": "按服务负责人批准的并发、供应商延迟和目标样本运行受控压测，抽查结果未知的人工核对",
           "expected": "给出实测 P95/P99、错误率、池与租约占用、排队年龄及核对结果，对照已确认门槛签收",
-          "status": "planned"
+          "status": "partial",
+          "verification": "专库受控供应商延迟 220 ms，6 个会话、Worker 并发 2。100 ms 观察下 0 错误，端到端百分位和 Web/Worker 池、租约及最大排队年龄均已实测。未知业务回执按真实目录零写入核对。生产目标负载、容量及 SLA 仍需业务负责人签收。"
         }
       ],
       "requirementIds": [
         "R19"
-      ]
+      ],
+      "implementation": "G04-IMPLEMENTATION.md"
     }
   ],
-  "implementationRecord": "IMPLEMENTATION.md"
+  "implementationRecord": "IMPLEMENTATION.md",
+  "caseStatusMeaning": {
+    "verified": "此轮在所述环境实测通过",
+    "partial": "已有实测，仍有明确的未覆盖条件",
+    "open": "专项场景待执行"
+  },
+  "testedSourceCommit": "f9c0107ccc1b4ae608160d18116c28e726b0ef70",
+  "releaseEvidence": "release-evidence.json",
+  "currentApiInventory": "api-current.json"
 }

@@ -87,6 +87,10 @@ sudo nginx -t
 
 确认回环上游就绪后 reload Nginx。以独立客户端核对证书和跳转，使用测试身份登录、刷新和注销。证书续期时沿用现有 ACME 续期机制，并在更新后 reload Nginx。回退应用版本时保留 TLS 站点和回环上游，必要时恢复之前有效的站点配置并重新检查语法。
 
+**同机演练第二个 Nginx 实例时，给它独立的临时目录。** Linux 上 `nginx -p` 可以重定向相对路径，发行版在编译时设定的绝对临时目录仍可能被两个主进程共用。先确认服务的 worker 用户，给演练实例指定独立的 PID、日志、监听端口，以及 `client_body_temp_path`、`proxy_temp_path`、`fastcgi_temp_path`、`uwsgi_temp_path`、`scgi_temp_path`。每个目录由演练 worker 可访问。演练前后核对正式目录的属主与权限。
+
+发布验收应从公网读完上线镜像中的静态资源，比较完整字节数和 SHA-256，再用新浏览器会话登录与注销。本站曾在 `/readyz` 成功、JavaScript 请求返回 200 的情况下截断大响应。定位时分别读取容器文件、主机回环上游和公网文件，并检查 Nginx 错误日志中的代理临时目录。若正式目录属主与正式 worker 不符，核对正式配置，执行其 `nginx -t` 和标准服务 reload，再复验完整文件。[本轮发布回执](development/optimization/IMPLEMENTATION.md#远程发布回执)
+
 ## 验证
 
 ```bash

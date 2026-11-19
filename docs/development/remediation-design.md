@@ -1,6 +1,8 @@
 # 功能整改与缺失模块设计
 
-本设计基于 2026-11-19 的业务验收。F 编号对应已观察的问题或可追溯性缺口，G 编号对应候选能力。P0 优先处理凭据暴露，P1 先解决发布及数据正确性，P2 改进可维护性或使用体验。新增服务和表名均为设计建议，排期前由对应模块负责人确认。[评审基线](review-baseline.md)
+本设计记录 2026-11-19 审计时发现的问题、修改理由和当时提出的接口草案。F 编号对应缺陷，G01–G04 是此后选定并交付的四项新增能力。P0 处理凭据暴露，P1 处理发布及数据正确性，P2 改进可维护性或体验。[评审基线](review-baseline.md) · [整改和实测结果](optimization/IMPLEMENTATION.md)
+
+继续开发时，以模块交接中的正式接口、表名和恢复规则为准。对应文档分别为[版本化数据连接器](optimization/G01-IMPLEMENTATION.md)、[持久父子流程](optimization/G02-IMPLEMENTATION.md)、[内部目录批量导入](optimization/G03-IMPLEMENTATION.md)和[助手后台回合](optimization/G04-IMPLEMENTATION.md)。
 
 ## 首批整改保护部署与验收结果
 

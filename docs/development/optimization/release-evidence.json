@@ -1,0 +1,399 @@
+{
+  "schemaVersion": 1,
+  "environment": "远程 HTTPS 部署、独立数据交换对端和实际已配置的模型供应商",
+  "application": {
+    "commit": "f9c0107ccc1b4ae608160d18116c28e726b0ef70",
+    "buildId": "source-bbb6b497bbc262223d698db946944d3c37e9fb82ff500b350090ace9507a341e",
+    "imageId": "sha256:8eaacc037cb017ae48e57258cb3578bedc0f45145847562178e01a05daa324e2",
+    "sourceSha": "f79269cdf8ce1313d1812e41da3567b5b617e176b189bf69611d5edef14e217e",
+    "imageSha": "c0f95d2809f67e4beba4231f833d9de1e4a8628b1ebd33ac80896262e6d02ed5",
+    "buildTime": "2026-11-19T07:51:46Z"
+  },
+  "deployment": {
+    "finishedAt": "2026-11-19T07:57:19.083787+00:00",
+    "beforeImageId": "sha256:98b1955f602c075cf29e8d59250a10fcbbdc894b7a0e62a42bddb96fe18e0126",
+    "migration": "0049_governed_capabilities",
+    "migrationHash": "37f66fe482679a9e406c21da8449e364d65a10491d1eb0da8cfb8f383aab70a9",
+    "newTables": 6,
+    "backupBytes": 36233712,
+    "backupSha": "70698d56185827dc9026e2ba4c109f6caacbf1af0fb0779b58804279267efa69",
+    "activeLeasesBeforeSwitch": {
+      "workflow": 0,
+      "dataflow": 0,
+      "assistant": 0
+    },
+    "dbInstancePreserved": true,
+    "ready": true
+  },
+  "historicalAuditManifest": {
+    "auditCommit": "8964f07773c99ad3cbb4d627c1e21e23c7c50eff",
+    "summaryCompletedUtc": "2026-11-19T03:02:16.850150+00:00",
+    "originalHashCount": 130,
+    "originalBaselineManifestSha256": "e43d8eff39973a0eb8226cec09d007aa218ab5712ef0f26126a479cb3a3436d8"
+  },
+  "suites": {
+    "G01": {
+      "runner": "scripts/data-connector-acceptance.mjs",
+      "exit": 0,
+      "proof": {
+        "apiRun": "vfwffs3tEGg4iUFw",
+        "pages": [
+          1,
+          1,
+          1
+        ],
+        "dryRunWrites": 0,
+        "businessWrites": 1,
+        "remoteRowsMatched": true,
+        "payloadHash": "5909185c1536a51786de28790bf85c0ab2c0ec6c10297313802ffb9ea9f9ae51",
+        "fileDigests": [
+          "e2715bbe8cb920cd54d85841158c7b9359b38633ca7e6049b30a8e4c38c6e5d6",
+          "48d992c68fe22d017e18a5da1e1617f9d545f1490ceca36bba7377e3982eec34"
+        ],
+        "fixedFileVersions": true,
+        "deactivatedEndpointRejected": true,
+        "auditOnlyPreserved": true,
+        "archived": true
+      }
+    },
+    "G02": {
+      "runner": "scripts/durable-subflow-acceptance.mjs",
+      "exit": 0,
+      "proof": {
+        "parentRunId": "f6995b52-4b52-4c30-b5cc-0790b752d4f9",
+        "childRunId": "1e736d1c-2fb5-4d30-99b9-b91957f99146",
+        "fixedVersion": 2,
+        "newChildVersion": 5,
+        "parentStatus": "success",
+        "childStatus": "success",
+        "resultMatches": true,
+        "archived": true
+      }
+    },
+    "G03": {
+      "runner": "scripts/directory-import-acceptance.mjs",
+      "exit": 0,
+      "proof": {
+        "batchId": "31acf103-ee8a-4a5f-8ec4-0342e4de3c38",
+        "previewWrites": 0,
+        "replayUnique": true,
+        "staleWriteProtected": true,
+        "cleanup": "测试账号和部门已停用，成员关系已回退"
+      }
+    },
+    "G04": {
+      "runner": "scripts/assistant-job-acceptance.mjs",
+      "exit": 0,
+      "proof": {
+        "sessions": [
+          {
+            "jobId": "fc9b686f-43d1-4b13-bc78-c2fdcc528ac0",
+            "enqueueMs": 77,
+            "elapsedMs": 6621,
+            "attempts": 1,
+            "states": [
+              "running",
+              "completed"
+            ],
+            "revision": 1,
+            "providerReceipts": [
+              {
+                "model": "gemini-3.8-flash-n",
+                "completionId": "Dqz-apfHOfCE6tkPr7v9qAg"
+              }
+            ]
+          },
+          {
+            "jobId": "6c61a04f-43ea-4f5c-88b0-55fd9b5f81f8",
+            "enqueueMs": 77,
+            "elapsedMs": 8037,
+            "attempts": 1,
+            "states": [
+              "running",
+              "completed"
+            ],
+            "revision": 1,
+            "providerReceipts": [
+              {
+                "model": "gemini-3.8-flash-n",
+                "completionId": "EKz-ar-SNMSXodAPsKDR2AQ"
+              }
+            ]
+          }
+        ],
+        "p95Ms": 8037,
+        "p99Ms": 8037,
+        "failures": 0
+      }
+    }
+  },
+  "G01FirstUseRecovery": {
+    "testedCommit": "3d4d3673d87f2d05de5520afb9cb5277d7549293",
+    "apiRun": "zCBC5M5VLS6gs196",
+    "pages": [
+      1,
+      2,
+      1
+    ],
+    "dryRunWrites": 0,
+    "businessWrites": 1,
+    "payloadHash": "5909185c1536a51786de28790bf85c0ab2c0ec6c10297313802ffb9ea9f9ae51",
+    "remoteRowsMatched": true,
+    "archived": true
+  },
+  "sourceChecks": {
+    "unit": {
+      "files": 333,
+      "passed": 2641,
+      "total": 2641
+    },
+    "functional": {
+      "files": 8,
+      "passed": 71,
+      "total": 71
+    },
+    "scenario": {
+      "files": 2,
+      "passed": 13,
+      "total": 13
+    },
+    "mysql": {
+      "files": 38,
+      "passed": 82,
+      "total": 82
+    }
+  },
+  "publicLogin": {
+    "cookieFlags": [
+      {
+        "secure": true,
+        "httpOnly": true,
+        "sameSite": "Lax"
+      }
+    ],
+    "reload": true,
+    "logout": true,
+    "testAccountDisabled": true
+  },
+  "modelNode": {
+    "runId": "ec180015-9fc3-4339-a98c-3e78da0fc977",
+    "status": "success",
+    "requestedModel": "gemini-3.8-flash-high",
+    "reportedModel": "gemini-3.8-flash-n",
+    "configRevision": "fd5ca5f2ce61b8e77cc32bb5d0158f362c1beb03653fb4b83300d36de60d0138",
+    "providerCompletionId": true,
+    "nodeStatus": "success",
+    "terminalOutputMatches": true,
+    "sameActiveIds": true,
+    "loggedOut": true,
+    "attemptStatus": [
+      200
+    ]
+  },
+  "certificateRenewal": {
+    "timer": "enabled",
+    "active": "active",
+    "lastResult": "success",
+    "explicitNginxReload": true
+  },
+  "preproductionEdgeRollback": {
+    "scope": "dedicated loopback edge",
+    "versions": [
+      "baseline",
+      "candidate",
+      "baseline"
+    ],
+    "largeAsset": {
+      "path": "/assets/canvas-runtime-BV9aRkL_.js",
+      "bytes": 412260,
+      "sha": "afd4a13670cca9db653cd2424d3c3cc726502274f17c3f867b3b35abc941fbf0"
+    },
+    "ready": true,
+    "publicHttpLogin": 308,
+    "publicHttpPost": 426,
+    "certificateValidated": true,
+    "secureCookie": true,
+    "authenticatedThenLoggedOut": true,
+    "sessionRevoked": true,
+    "sharedTempOwnershipPreserved": true,
+    "isolatedTempPaths": 5
+  },
+  "publicAssets": {
+    "imageId": "sha256:8eaacc037cb017ae48e57258cb3578bedc0f45145847562178e01a05daa324e2",
+    "files": 35,
+    "bytes": 2046574,
+    "largestBytes": 412260,
+    "allDigestsMatched": true,
+    "manifestSha256": "3f83ef7f746c0e63538208988152603374408612f268793d8cfe0cf6b3e467fc",
+    "truncatedBeforeRepair": [
+      "/assets/canvas-runtime-BV9aRkL_.js",
+      "/assets/index-DE_0m46T.css",
+      "/assets/workspace-runtime-D43FHFLy.js"
+    ],
+    "anonymousBrowserStarts": [
+      {
+        "from": "http://124.223.198.84:1180",
+        "to": "https://124.223.198.84:1180/",
+        "loginFormVisible": true,
+        "failedRequests": 0,
+        "pageErrors": 0
+      },
+      {
+        "from": "https://124.223.198.84:1180/",
+        "to": "https://124.223.198.84:1180/",
+        "loginFormVisible": true,
+        "failedRequests": 0,
+        "pageErrors": 0
+      }
+    ]
+  },
+  "restoreDrill": {
+    "image": "sha256:bced325a4ab7aec848f4688371c7433351dcb5dba26fbcc29c67727d898ae5cb",
+    "backupSha": "70698d56185827dc9026e2ba4c109f6caacbf1af0fb0779b58804279267efa69",
+    "network": "none",
+    "cpuLimit": 0.65,
+    "memoryLimitMiB": 448,
+    "tables": 63,
+    "businessSamples": {
+      "G01": 1,
+      "G02": 1,
+      "G03": 1,
+      "G04": 2
+    },
+    "restoreSeconds": 33.0,
+    "temporaryContainerRemoved": true,
+    "onlineMysqlUnchanged": true,
+    "onlineAppReady": true
+  },
+  "localAcceptance": {
+    "failedRowImport": {
+      "cases": [
+        "A37",
+        "A38",
+        "A39",
+        "A07",
+        "A08",
+        "A09",
+        "A10",
+        "A11",
+        "A12",
+        "A13",
+        "A40",
+        "A41"
+      ],
+      "passed": 12,
+      "cleanup": {
+        "projectsArchived": 14,
+        "testAccountsDisabled": 2
+      }
+    },
+    "manualDataflowRecovery": {
+      "entryPoints": [
+        "业务资源中心",
+        "项目工作区",
+        "编辑器运行弹窗"
+      ],
+      "runs": 6,
+      "jobsPerRun": 1,
+      "receiptsPerRun": 1
+    },
+    "canvas": {
+      "motionPreferences": 2,
+      "initialZoom": [
+        0.5,
+        1
+      ],
+      "geometryChecks": 24,
+      "versions": [
+        1,
+        2,
+        3
+      ],
+      "syntheticProjectArchived": true
+    },
+    "assistantHistory": {
+      "sameScopeSessions": 120,
+      "pageSize": 7,
+      "firstPageBytes": 2655,
+      "legacyBytes": 41430,
+      "firstPageSqlRowsScanned": 120,
+      "firstPageSqlRowsReturned": 33,
+      "eligibleAfterRevocation": 145,
+      "deniedAfterRevocation": 275
+    },
+    "workbench": {
+      "cases": [
+        "A48",
+        "A43"
+      ],
+      "edge": "149.0.4022.80"
+    },
+    "historicalScriptTargets": {
+      "scopedEntrypoints": 98,
+      "matchedConfiguration": 98,
+      "mismatchedOriginRejected": 98,
+      "directSqlMismatchesWithoutIO": 13,
+      "browserLoginAndFirstBusinessAction": 4,
+      "otherPositiveConfigurationPaths": {
+        "acceptanceTarget": 49,
+        "acceptanceDatabaseTarget": 12,
+        "acceptanceSsh": 33
+      },
+      "fullPositiveScripts": [
+        "scripts/dataflow-run-graph-acceptance.mjs",
+        "scripts/node-template-acceptance.mjs"
+      ],
+      "fullBusinessScope": "其他历史入口按 A02 保留完整正例的待验条件。"
+    },
+    "participantStateFeedback": {
+      "beforeCommit": "bd246c95f6316f70ae7e0058b359943d599ddf93",
+      "failedBefore": [
+        {
+          "file": "participant-state.integration.test.ts",
+          "case": "事务中途失败时卡片和任务完成记录一起回滚"
+        },
+        {
+          "file": "participant-state.integration.test.ts",
+          "case": "组合部门深度、主部门和本轮个人结果，经发布与办理入口执行并原子回滚失败"
+        }
+      ],
+      "correctedCode": "CONFLICT",
+      "http": [
+        {
+          "case": "all-cards-no-actions",
+          "endpoint": "task.complete",
+          "status": 409,
+          "preclaimed": true,
+          "changedRecordGroups": []
+        },
+        {
+          "case": "published-unmatched-target",
+          "endpoint": "task.execute",
+          "status": 409,
+          "preclaimed": true,
+          "changedRecordGroups": []
+        },
+        {
+          "case": "published-unmatched-direct-from-pending",
+          "endpoint": "task.execute",
+          "status": 409,
+          "preclaimed": false,
+          "changedRecordGroups": [
+            "tasks",
+            "audit"
+          ]
+        }
+      ],
+      "cleanup": {
+        "archived": true,
+        "cancelledRuns": 3,
+        "disabled": 2,
+        "loggedOut": true
+      }
+    }
+  },
+  "scenarioStatusCounts": {
+    "verified": 63,
+    "partial": 4
+  }
+}
