@@ -1,6 +1,7 @@
+const { acceptanceTarget } = require("./acceptance-target.cjs");
 /**
  * 远程服务器全功能与按钮真实浏览器端到端（E2E）自动化验证脚本
- * Target: http://124.223.198.84:1180
+ * Target: FLOW_ACCEPTANCE_BASE_URL
  */
 const {
   chromium,
@@ -8,10 +9,10 @@ const {
 const fs = require("node:fs");
 const path = require("node:path");
 
-const BASE_URL = process.env.TEST_BASE_URL || "http://124.223.198.84:1180";
-const USERNAME = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME || "flow_admin";
+const BASE_URL = acceptanceTarget(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL || process.env.TEST_BASE_URL);
+const USERNAME = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME;
 const PASSWORD = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
-if (!PASSWORD)
+if (!USERNAME || !PASSWORD)
   throw new Error("FLOW_BOOTSTRAP_ADMIN_PASSWORD is required for this test");
 
 const screenshotDir = path.resolve(

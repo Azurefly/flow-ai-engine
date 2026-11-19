@@ -1,10 +1,11 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
 
 // Only the designated deployment is used. This script never creates or executes a workflow.
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const db = await mysql.createConnection(process.env.DATABASE_URL);
 let cookie = "";
 async function api(path, input, mutation = false) {

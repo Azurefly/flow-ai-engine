@@ -12,6 +12,7 @@ import { readDataflowFieldNames } from "../shared/dataflow-field-list";
 import { checkDataflowQuality } from "./dataflow-quality";
 import { executeBuiltinDataFunction } from "./dataflow-builtin-function";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { canonicalResourcePayload } from "../shared/resource-creation";
 import type { Request, Response } from "express";
 import mysql from "mysql2/promise";
 import { TRPCError } from "@trpc/server";
@@ -2077,12 +2078,25 @@ export async function runDataflowJobOnce(onlyRunId?: string) {
   return true;
 }
 
+type ManualRunScope = { projectId: string; workflowId: string; mode?: "formal" | "test"; idempotencyKey: string };
+function manualReceiptId(userId: number, scope: ManualRunScope) {
+  return createHash("sha256").update(JSON.stringify([userId,scope.projectId,scope.workflowId,scope.mode ?? "formal",scope.idempotencyKey])).digest("hex");
+}
+export async function dataflowRunReceipt(user: DataflowUser, input: ManualRunScope) {
+  await requireProjectAccess(user, input.projectId, input.mode === "test" ? "edit" : "run");
+  const [rows] = await db().query<mysql.RowDataPacket[]>(
+    "SELECT r.id,r.status FROM dataflow_manual_receipt m JOIN dataflow_run r ON r.id=m.runId WHERE m.id=? AND r.projectId=? AND r.workflowId=? AND r.triggeredByUserId=?",
+    [manualReceiptId(user.id,input),input.projectId,input.workflowId,user.id]
+  );
+  return rows[0] ? { runId: String(rows[0].id), status: String(rows[0].status) } : null;
+}
 export async function runDataflow(
   user: DataflowUser,
   input: {
     projectId: string;
     workflowId: string;
     data?: JsonRecord;
+    idempotencyKey?: string;
     triggerType?: "manual" | "schedule";
     mode?: "formal" | "test";
     scheduleBucket?: string;
@@ -2140,6 +2154,27 @@ export async function runDataflow(
     );
     const workflow = workflows[0];
     if (!workflow) throw new Error("数据流不存在、已归档或不属于当前项目。 ");
+    if (input.idempotencyKey && input.triggerType !== "schedule") {
+      const receiptId = manualReceiptId(user.id, { ...input, idempotencyKey: input.idempotencyKey });
+      const hash = createHash("sha256").update(canonicalResourcePayload({
+        data: input.data ?? {}, version: input.expectedDefinitionVersion ?? null, plan: input.expectedExecutionPlanHash ?? null,
+      })).digest("hex");
+      await connection.query(
+        "INSERT INTO dataflow_manual_receipt (id,payloadHash,runId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE id=dataflow_manual_receipt.id",
+        [receiptId,hash,runId]
+      );
+      const [receipts] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT payloadHash,runId FROM dataflow_manual_receipt WHERE id=? FOR UPDATE", [receiptId]
+      );
+      const receipt = receipts[0];
+      if (receipt.payloadHash !== hash) throw new TRPCError({ code: "CONFLICT", message: "同一操作的输入或所读版本已变化，请核对原运行。" });
+      if (receipt.runId !== runId) {
+        const [original] = await connection.query<mysql.RowDataPacket[]>("SELECT status FROM dataflow_run WHERE id=? FOR SHARE", [receipt.runId]);
+        if (!original[0]) throw new TRPCError({ code: "CONFLICT", message: "原运行记录已移除，请重新发起。" });
+        await connection.commit();
+        return { runId: String(receipt.runId), status: String(original[0].status), output: null };
+      }
+    }
     if (input.triggerType === "schedule" && workflow.status !== "published")
       throw new Error("定时调度的流程必须处于已发布状态。 ");
     if (input.mode !== "test" && workflow.status !== "published")

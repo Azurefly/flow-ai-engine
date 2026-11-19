@@ -329,19 +329,28 @@ const computeBackoffDelay = (
 const isRetryableStatus = (status: number): boolean =>
   status === 408 || status === 409 || status === 429 || status >= 500;
 
+export type LlmHttpAttempt = { attempt: number; httpStatus: number | null; providerRequestId: string | null };
+type AttemptObserver = (attempt: LlmHttpAttempt) => void;
 const fetchWithBackoff = async (
   url: string,
   init: FetchInit,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  observe?: AttemptObserver
 ): Promise<Response> => {
   let lastError: unknown;
 
   for (let attempt = 0; attempt <= RETRY_MAX_RETRIES; attempt++) {
+    let received = false;
     try {
       const response = await fetch(url, {
         ...init,
         ...(signal ? { signal } : {}),
       });
+      received = true;
+      if (observe) {
+        const id = response.headers.get("x-request-id") ?? response.headers.get("request-id") ?? "";
+        observe({ attempt: attempt + 1, httpStatus: response.status, providerRequestId: /^[a-zA-Z0-9._:/-]{1,160}$/.test(id) ? id : null });
+      }
       if (response.ok || !isRetryableStatus(response.status) || attempt === RETRY_MAX_RETRIES) {
         return response;
       }
@@ -357,6 +366,7 @@ const fetchWithBackoff = async (
       );
       await sleep(computeBackoffDelay(attempt, retryAfterMs), signal);
     } catch (error) {
+      if (!received) observe?.({ attempt: attempt + 1, httpStatus: null, providerRequestId: null });
       lastError = error;
       if (signal?.aborted) throw error;
       if (attempt === RETRY_MAX_RETRIES) throw error;
@@ -374,7 +384,8 @@ const fetchWithBackoff = async (
 
 export async function invokeLLM(
   params: InvokeParams,
-  savedConnection?: LlmConnection
+  savedConnection?: LlmConnection,
+  observe?: AttemptObserver
 ): Promise<InvokeResult> {
   const connection = savedConnection ?? (await resolveLlmConnection());
 
@@ -468,7 +479,7 @@ export async function invokeLLM(
         },
         body: JSON.stringify(payload),
       },
-      controller.signal
+      controller.signal, observe
     );
     if (!response.ok) {
       const errorText = await response.text();

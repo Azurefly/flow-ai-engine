@@ -1,8 +1,9 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 import superjson from "superjson";
 // Isolated directory boundary regression; creates test accounts and disables them in finally. No direct SQL or credential output.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {

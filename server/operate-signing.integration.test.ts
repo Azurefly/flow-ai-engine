@@ -23,6 +23,17 @@ let approvers: any[] = [];
 let projectId: string | undefined;
 const workflowIds: string[] = [];
 
+async function expectCompletedSigningJobs(database: mysql.Pool, runId: string) {
+  await expect.poll(async () => {
+    const [jobs] = await database.query<mysql.RowDataPacket[]>(
+      "SELECT jobType,status FROM workflow_run_job WHERE runId=?",
+      [runId]
+    );
+    return jobs.map(job => `${job.jobType}/${job.status}`).sort();
+  }, { timeout: 10_000, interval: 25, message: `签署实例 ${runId} 的恢复作业未按期完成` })
+    .toEqual(["resume/completed", "start/completed"]);
+}
+
 function callerFor(user: any) {
   return appRouter.createCaller({
     user,
@@ -344,17 +355,7 @@ describe("原版操作节点或签和会签运行语义", () => {
         "completed",
         "completed",
       ]);
-      const [orJobs] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT jobType,status FROM workflow_run_job WHERE runId=? ORDER BY createdAt,id",
-        [orStarted.runId]
-      );
-      expect(orJobs).toHaveLength(2);
-      expect(orJobs).toEqual(
-        expect.arrayContaining([
-          { jobType: "start", status: "completed" },
-          { jobType: "resume", status: "completed" },
-        ])
-      );
+      await expectCompletedSigningJobs(pool, orStarted.runId);
 
       const andWorkflowId = await createSigningWorkflow("andSignFor", 60);
       const andStarted: any = await settleWorkflowCommand(
@@ -428,17 +429,7 @@ describe("原版操作节点或签和会签运行语义", () => {
         [andStarted.runId]
       );
       expect(Number(nodeRuns[0].count)).toBe(1);
-      const [andJobs] = await pool.query<mysql.RowDataPacket[]>(
-        "SELECT jobType,status FROM workflow_run_job WHERE runId=? ORDER BY createdAt,id",
-        [andStarted.runId]
-      );
-      expect(andJobs).toHaveLength(2);
-      expect(andJobs).toEqual(
-        expect.arrayContaining([
-          { jobType: "start", status: "completed" },
-          { jobType: "resume", status: "completed" },
-        ])
-      );
+      await expectCompletedSigningJobs(pool, andStarted.runId);
     },
     120_000
   );

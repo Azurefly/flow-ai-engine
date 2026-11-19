@@ -1,8 +1,9 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import superjson from "superjson";
 // Exercise only the specified deployment and isolated fixtures created here.
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 let cookie = "";
 async function request(path, input, mutation = false) {
   const json = JSON.stringify(superjson.serialize(input ?? null));

@@ -44,6 +44,8 @@ export type AssistantMessage = {
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
+  turnRevision?: number;
+  turnIndex?: number;
   links?: Array<{ label: string; href: string }>;
 };
 export type AssistantChange = {
@@ -59,7 +61,7 @@ type StoredAgent = {
   draftVersion: number;
   publishedVersion: number;
 };
-type SessionSummary = {
+export type SessionSummary = {
   id: string;
   title: string;
   agentId: string;
@@ -74,6 +76,7 @@ type SessionSummary = {
 export type AssistantSession = SessionSummary & {
   config: AssistantConfig;
   messages: AssistantMessage[];
+  olderBefore?: number | null;
   task: Record<string, unknown> | null;
 };
 
@@ -359,7 +362,8 @@ async function readSession(
   user: AssistantUser,
   id: string,
   connection: PoolConnection,
-  lock = false
+  lock = false,
+  page?: { size: number; beforeRevision?: number }
 ): Promise<AssistantSession> {
   const [rows] = await connection.query<RowDataPacket[]>(
     "SELECT *,configJson->>'$.name' AS agentName FROM assistant_session WHERE id=? AND ownerUserId=?" +
@@ -383,15 +387,23 @@ async function readSession(
     lock
   );
   const pinned = assistantConfigSchema.parse(parseJson(session.configJson));
-  const [turns] = await connection.query<RowDataPacket[]>(
-    "SELECT messagesJson FROM assistant_turn WHERE sessionId=? ORDER BY revision",
-    [id]
-  );
+  const [turns] = page
+    ? await connection.query<RowDataPacket[]>(
+        "SELECT revision,messagesJson FROM assistant_turn WHERE sessionId=? AND revision<? ORDER BY revision DESC LIMIT ?",
+        [id, page.beforeRevision ?? Number(session.revision) + 1, page.size + 1]
+      )
+    : await connection.query<RowDataPacket[]>(
+        "SELECT revision,messagesJson FROM assistant_turn WHERE sessionId=? ORDER BY revision", [id]
+      );
+  const hasOlder = Boolean(page && turns.length > page.size);
+  if (hasOlder) turns.pop();
+  if (page) turns.reverse();
   return {
     ...sessionSummary(session),
+    ...(page ? { olderBefore: hasOlder ? Number(turns[0].revision) : null } : {}),
     task: parseJson(session.taskJson),
     messages: turns.flatMap(turn =>
-      parseJson<AssistantMessage[]>(turn.messagesJson)
+      parseJson<AssistantMessage[]>(turn.messagesJson).map((message, index) => ({ ...message, turnRevision: Number(turn.revision), turnIndex: index }))
     ),
     config: {
       ...pinned,
@@ -464,61 +476,90 @@ export async function createAssistantSession(
   }
 }
 
-export async function listAssistantSessions(
-  user: AssistantUser,
-  trial: boolean,
-  agentId?: string,
-  projectId?: string | null
-) {
-  if (trial && user.role !== "admin") throw denied();
-  const conditions = ["s.ownerUserId=?", "s.trial=?"];
-  const values: Array<string | number | boolean | null> = [user.id, trial];
-  if (agentId) {
-    conditions.push("s.agentId=?");
-    values.push(agentId);
-  }
-  if (projectId !== undefined) {
-    conditions.push("s.projectId <=> ?");
-    values.push(projectId);
-  }
-  const [rows] = await getSharedPool().query<RowDataPacket[]>(
-    "SELECT s.id,s.title,s.agentId,s.configJson->>'$.name' AS agentName,s.projectId,s.workflowId,s.trial,s.configVersion,s.revision,s.updatedAt,a.publishedJson FROM assistant_session s JOIN assistant_agent a ON a.id=s.agentId WHERE " +
-      conditions.join(" AND ") +
-      " ORDER BY s.updatedAt DESC,s.id",
-    values
-  );
-  const visibleProjects = new Map<string, boolean>();
-  const visibleWorkflows = new Map<string, boolean>();
-  const sessions: SessionSummary[] = [];
-  for (const row of rows) {
-    if (!trial && !inScope(parseJson(row.publishedJson), user, row.projectId))
-      continue;
-    if (row.projectId && !visibleProjects.has(row.projectId))
-      visibleProjects.set(
-        row.projectId,
-        await canViewProject(user, row.projectId)
-      );
-    if (row.projectId && !visibleProjects.get(row.projectId)) continue;
-    if (row.workflowId && !visibleWorkflows.has(row.workflowId)) {
-      const access = await getWorkflowAccess(user, row.workflowId);
-      visibleWorkflows.set(
-        row.workflowId,
-        access.permissions.has("workflow:view")
-      );
+type HistoryScope = {
+  preview: boolean;
+  agentId?: string;
+  projectId?: string | null;
+  configVersion?: number;
+  search?: string;
+};
+type HistoryCursor = { scope: string; time: number; id: string };
+const cursorSchema = z.object({ scope: z.string().length(64), time: z.number().int().nonnegative(), id: z.string().min(1).max(128) });
+
+export async function assistantSessionsPage(
+  user: AssistantUser, input: HistoryScope, size = 20, cursor?: string
+): Promise<{ items: SessionSummary[]; nextCursor: string | null }> {
+  if (input.preview && user.role !== "admin") throw denied();
+  const scope = operationHash(user.id, [input.preview, input.agentId, input.projectId === undefined ? "*" : input.projectId, input.configVersion, input.search ?? ""]);
+  let after: HistoryCursor | undefined;
+  if (cursor) {
+    try {
+      after = cursorSchema.parse(JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")));
+      if (after.scope !== scope) throw new Error();
+    } catch {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "筛选范围已变化或历史游标无效，请刷新第一页。" });
     }
-    if (!row.workflowId || visibleWorkflows.get(row.workflowId))
-      sessions.push(sessionSummary(row));
   }
-  return sessions;
+  const conditions = ["s.ownerUserId=?", "s.trial=?"];
+  const values: Array<string | number | boolean | null> = [user.id, input.preview];
+  for (const [column, value] of [
+    ["s.agentId=?", input.agentId], ["s.projectId <=> ?", input.projectId],
+    ["s.configVersion=?", input.configVersion], ["LOCATE(?,s.title)>0", input.search || undefined],
+  ] as const) {
+    if (value !== undefined) { conditions.push(column); values.push(value); }
+  }
+  const items: SessionSummary[] = [];
+  const projects = new Map<string, boolean>();
+  const workflows = new Map<string, boolean>();
+  const pageSize = Math.min(50, Math.max(1, size));
+  const scanSize = Math.max(32, pageSize);
+  for (let scan = 0; scan < 8; scan++) {
+    const next = after ? " AND (s.updatedAt<FROM_UNIXTIME(?) OR (s.updatedAt=FROM_UNIXTIME(?) AND s.id>?))" : "";
+    const [rows] = await getSharedPool().query<RowDataPacket[]>(
+      "SELECT s.id,s.title,s.agentId,s.configJson->>'$.name' AS agentName,s.projectId,s.workflowId,s.trial,s.configVersion,s.revision,s.updatedAt,UNIX_TIMESTAMP(s.updatedAt) AS sortTime,a.publishedJson FROM assistant_session s JOIN assistant_agent a ON a.id=s.agentId WHERE " +
+        conditions.join(" AND ") + next + " ORDER BY s.updatedAt DESC,s.id ASC LIMIT ?",
+      [...values, ...(after ? [after.time, after.time, after.id] : []), scanSize + 1]
+    );
+    for (let i = 0; i < Math.min(rows.length, scanSize); i++) {
+      const row = rows[i];
+      after = { scope, time: Number(row.sortTime), id: row.id };
+      if (!input.preview && !inScope(parseJson(row.publishedJson), user, row.projectId)) continue;
+      if (row.projectId) {
+        if (!projects.has(row.projectId)) projects.set(row.projectId, await canViewProject(user, row.projectId));
+        if (!projects.get(row.projectId)) continue;
+      }
+      if (row.workflowId) {
+        if (!workflows.has(row.workflowId)) workflows.set(row.workflowId, (await getWorkflowAccess(user, row.workflowId)).permissions.has("workflow:view"));
+        if (!workflows.get(row.workflowId)) continue;
+      }
+      items.push(sessionSummary(row));
+      if (items.length === pageSize)
+        return { items, nextCursor: i + 1 < rows.length ? Buffer.from(JSON.stringify(after)).toString("base64url") : null };
+    }
+    if (rows.length <= scanSize) return { items, nextCursor: null };
+  }
+  return { items, nextCursor: after ? Buffer.from(JSON.stringify(after)).toString("base64url") : null };
+}
+
+export async function listAssistantSessions(user: AssistantUser, trial: boolean, agentId?: string, projectId?: string | null) {
+  const items: SessionSummary[] = [];
+  let cursor: string | undefined;
+  do {
+    const result = await assistantSessionsPage(user, { preview: trial, agentId, projectId }, 50, cursor);
+    items.push(...result.items);
+    cursor = result.nextCursor ?? undefined;
+  } while (cursor);
+  return items;
 }
 
 export function getAssistantSession(
   user: AssistantUser,
   id: string,
-  requestId?: string
+  requestId?: string,
+  page?: { size: number; beforeRevision?: number }
 ): Promise<AssistantSession & { requestCommitted?: boolean }> {
   return transaction(async connection => {
-    const session = await readSession(user, id, connection);
+    const session = await readSession(user, id, connection, false, page);
     if (requestId === undefined) return session;
     const [rows] = await connection.query<RowDataPacket[]>(
       "SELECT 1 FROM assistant_turn WHERE sessionId=? AND requestId=? LIMIT 1",
@@ -544,7 +585,8 @@ export async function mutateAssistantSession(
   payload: unknown,
   apply: (
     session: AssistantSession
-  ) => AssistantChange | Promise<AssistantChange>
+  ) => AssistantChange | Promise<AssistantChange>,
+  pageSize?: number
 ): Promise<AssistantSession> {
   if (activeTurns >= maxConcurrentTurns)
     throw new TRPCError({
@@ -562,7 +604,7 @@ export async function mutateAssistantSession(
       );
       if (prior[0]) {
         if (prior[0].payloadHash !== hash) throw conflict();
-        return session;
+        return pageSize ? readSession(user, id, connection, false, { size: pageSize }) : session;
       }
       if (session.revision !== expectedRevision) throw conflict();
       const change = await apply(session);
@@ -591,6 +633,7 @@ export async function mutateAssistantSession(
         "UPDATE assistant_session SET title=?,revision=?,taskJson=?,updatedAt=CURRENT_TIMESTAMP WHERE id=? AND ownerUserId=?",
         [title, revision, taskJson, id, user.id]
       );
+      if (pageSize) return readSession(user, id, connection, false, { size: pageSize });
       return {
         ...session,
         revision,

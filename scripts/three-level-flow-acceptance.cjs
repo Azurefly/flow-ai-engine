@@ -1,3 +1,5 @@
+const { acceptanceTarget, acceptanceSsh } = require("./acceptance-target.cjs");
+const fixtureSsh = acceptanceSsh(process.env);
 const assert = require("node:assert/strict"),
   fs = require("node:fs"),
   path = require("node:path");
@@ -10,7 +12,7 @@ const {
 } = require("../01-test/014-自动化脚本/e2e/node_modules/@playwright/test");
 // Explicit finite expansion for three organization levels; this is not a general XML importer.
 // Input documents and generated evidence stay local; only the generic runner is versioned.
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const businessOutcomes = process.argv.includes("--business-outcomes");
 const files = process.argv
   .slice(2)
@@ -56,13 +58,13 @@ function serverInfo(login = false) {
     "ssh",
     [
       "-i",
-      "C:\\Users\\pan\\.ssh\\215.pem",
+      fixtureSsh.key,
       "-o",
       "BatchMode=yes",
       "-o",
       "ConnectTimeout=15",
-      "ubuntu@124.223.198.84",
-      "sudo -n docker exec -i flow-ai-engine-app-1 node --input-type=module -",
+      fixtureSsh.target,
+      "sudo -n docker exec -i " + fixtureSsh.app + " node --input-type=module -",
     ],
     { input: code, encoding: "utf8", windowsHide: true, timeout: 45000 }
   );

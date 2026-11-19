@@ -2,7 +2,8 @@ import superjson from "superjson";
 // Isolated public-service regression; no direct SQL, secrets, or existing account changes.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const base = "http://124.223.198.84:1180";
+import acceptance from "./acceptance-target.cjs";
+const { base } = acceptance.acceptanceLogin(process.env);
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {
@@ -11,6 +12,7 @@ class Session {
       `${base}/api/trpc/${path}${mutation ? "" : `?input=${encodeURIComponent(json)}`}`,
       {
         method: mutation ? "POST" : "GET",
+        redirect: "error", signal: AbortSignal.timeout(15000),
         headers: { "content-type": "application/json", cookie: this.cookie },
         ...(mutation ? { body: json } : {}),
       }
@@ -37,7 +39,7 @@ const admin = new Session();
 const username = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME;
 const password = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
 assert(username && password, "Missing existing login configuration");
-await admin.request("auth.login", { username, password }, true);
+const actor = await admin.request("auth.login", { username, password }, true);
 
 const tag = randomBytes(4).toString("hex");
 const project = await admin.request(
@@ -84,6 +86,7 @@ const empty = await metrics();
 assert.equal(empty.totalRuns, 0);
 assert.equal(empty.averageDurationMs, null);
 assert.equal(empty.durationSamples, 0);
+const clockStart = performance.now();
 const started = await admin.request(
   "workflow.run",
   {
@@ -105,9 +108,27 @@ try {
   assert.equal(measured.durationSamples, 1);
   assert.equal(measured.averageDurationMs, run.durationMs);
   assert(measured.averageDurationMs > 0);
-  const stopped = await admin.request("workflow.runMetrics", {
-    workflowId: "KPfT9I2iPL7UM8EE",
-  });
+  assert(measured.averageDurationMs <= performance.now() - clockStart + 2000, "Stored duration exceeded the observed operation by more than timestamp precision");
+  const stoppedFixture = await admin.request("project.createWorkflow", {
+    projectId: project.id, name: `指标终止_${tag}`, flowType: "control",
+    definition: {
+      schemaVersion: 1, viewport: { x: 0, y: 0, zoom: 1 }, settings: {},
+      nodes: [
+        { id: "start", type: "start", name: "开始", position: {x: 0, y: 0}, config: {} },
+        { id: "human", type: "operate", name: "待办", position: {x: 240, y: 0},
+          config: { nodeDh: "REV", czmc: "指标待办", assigneeMode: "user", assigneeUserId: actor.id, bdcz: { hqhqsz: "", hqtgbfb: 100 } } },
+        { id: "end", type: "end", name: "完成", position: {x: 480, y: 0}, config: {} },
+      ],
+      edges: [
+        { id: "a", sourceNodeId: "start", targetNodeId: "human", sourceHandle: "default" },
+        { id: "b", sourceNodeId: "human", targetNodeId: "end", sourceHandle: "approved" },
+      ],
+    },
+  }, true);
+  const pending = await admin.request("workflow.run", { workflowId: stoppedFixture.id, triggerType: "test", idempotencyKey: `stopped-${tag}` }, true);
+  await waitFor(() => admin.request("workflow.runDetail", {runId: pending.runId}), detail => detail.status === "waiting", "waiting sample");
+  await admin.request("workflow.terminateRun", {runId: pending.runId, reason:"指标验收样本"}, true);
+  const stopped = await admin.request("workflow.runMetrics", { workflowId: stoppedFixture.id });
   assert.equal(stopped.totalRuns, 1);
   assert.equal(stopped.durationSamples, 0);
   assert.equal(stopped.averageDurationMs, null);

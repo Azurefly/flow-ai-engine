@@ -1,0 +1,628 @@
+{
+  "schemaVersion": 1,
+  "auditedCommit": "8964f07773c99ad3cbb4d627c1e21e23c7c50eff",
+  "requirements": [
+    {
+      "id": "R01",
+      "requirement": "可登录、注销、禁用与撤权",
+      "baseline": "内部账号链路已验",
+      "sourceProcedures": [
+        "auth.login",
+        "auth.me",
+        "auth.logout"
+      ],
+      "relatedExecutedCases": [
+        "UI-02",
+        "DB-008-001",
+        "DB-003-001"
+      ],
+      "evidence": [
+        "E02",
+        "E03",
+        "E17"
+      ],
+      "tasks": [
+        "F01",
+        "F02"
+      ],
+      "boundary": "OAuth 租户与受保护外网入口另需签收。"
+    },
+    {
+      "id": "R02",
+      "requirement": "用户目录、角色及项目范围授权",
+      "baseline": "服务与 MySQL 已验",
+      "sourceProcedures": [
+        "iam.userDirectory",
+        "iam.roleMembersPage",
+        "iam.assignSystemRole",
+        "iam.revokeRoleAssignment"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-01",
+        "DB-006-001",
+        "DB-007-001",
+        "DB-031-001"
+      ],
+      "evidence": [
+        "E02",
+        "E05"
+      ],
+      "tasks": [],
+      "boundary": "每种到期/撤权组合还需按实际客户角色做 UI 样本。"
+    },
+    {
+      "id": "R03",
+      "requirement": "普通账号创建与模型建议",
+      "baseline": "隔离写入及远程预览已验",
+      "sourceProcedures": [
+        "iam.previewUserCreation",
+        "iam.previewUserBatch",
+        "iam.createUser",
+        "iam.createUsersBatch"
+      ],
+      "relatedExecutedCases": [
+        "UI-25",
+        "DB-005-001"
+      ],
+      "evidence": [
+        "E02",
+        "E12"
+      ],
+      "tasks": [],
+      "boundary": "远程样本止于显式确认前，真实批次规模须单独约定。"
+    },
+    {
+      "id": "R04",
+      "requirement": "组织、工作域与系统设置",
+      "baseline": "关键新增与回读已验",
+      "sourceProcedures": [
+        "config.organizationDirectory",
+        "config.createOrganizationUnit",
+        "config.workDomains",
+        "config.updateSetting"
+      ],
+      "relatedExecutedCases": [
+        "UI-29",
+        "UI-35",
+        "DB-012-001",
+        "DB-013-001"
+      ],
+      "evidence": [
+        "E02",
+        "E03",
+        "E05"
+      ],
+      "tasks": [],
+      "boundary": "五个设置页签逐项修改、刷新及失权恢复需要按变更补做浏览器回归。"
+    },
+    {
+      "id": "R05",
+      "requirement": "项目身份、成员、部门、端点",
+      "baseline": "项目创建、可见性及范围已验",
+      "sourceProcedures": [
+        "project.create",
+        "project.grantMember",
+        "project.grantUnit",
+        "project.serviceEndpoints"
+      ],
+      "relatedExecutedCases": [
+        "UI-03",
+        "DB-018-001",
+        "DB-019-001",
+        "DB-023-001"
+      ],
+      "evidence": [
+        "E02",
+        "E03",
+        "E05"
+      ],
+      "tasks": [],
+      "boundary": "真实外部服务可达性取决于该项目的端点配置。"
+    },
+    {
+      "id": "R06",
+      "requirement": "业务清单导入与纠错",
+      "baseline": "标准单行可用，三项浏览器失败",
+      "sourceProcedures": [
+        "project.existingCodes",
+        "project.activeDomains",
+        "project.create"
+      ],
+      "relatedExecutedCases": [
+        "UI-06",
+        "UI-07",
+        "UI-08",
+        "UI-09"
+      ],
+      "evidence": [
+        "E03",
+        "E04"
+      ],
+      "tasks": [
+        "F03",
+        "F04",
+        "U02"
+      ],
+      "boundary": "批次事务、竞争和续传按 A07–A16、A40–A41 验收。"
+    },
+    {
+      "id": "R07",
+      "requirement": "流程草稿、审核、发布、恢复",
+      "baseline": "浏览器持久化与真库治理已验",
+      "sourceProcedures": [
+        "project.createWorkflow",
+        "project.auditWorkflow",
+        "workflow.update",
+        "workflow.publish",
+        "workflow.rollbackVersion"
+      ],
+      "relatedExecutedCases": [
+        "UI-21",
+        "DB-024-001",
+        "DB-026-001",
+        "DB-027-001"
+      ],
+      "evidence": [
+        "E02",
+        "E03",
+        "E16"
+      ],
+      "tasks": [
+        "U04"
+      ],
+      "boundary": "复杂画布缩放、遮挡与拖动的组合需按 A44–A46 复验。"
+    },
+    {
+      "id": "R08",
+      "requirement": "流程仓库、导入导出和复用",
+      "baseline": "三类流程往返实跑",
+      "sourceProcedures": [
+        "project.warehouse",
+        "project.previewWorkflowImport",
+        "project.exportWorkflows",
+        "workflow.templates"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-10",
+        "UI-24",
+        "DB-022-001"
+      ],
+      "evidence": [
+        "E02",
+        "E05",
+        "E06"
+      ],
+      "tasks": [],
+      "boundary": "模板 CRUD 每条接口的单独浏览器验收未在本轮逐项登记。"
+    },
+    {
+      "id": "R09",
+      "requirement": "状态流及参与人生命周期",
+      "baseline": "正式实例及竞态已验",
+      "sourceProcedures": [
+        "workflow.run",
+        "workflow.runDetail",
+        "workflow.participantDirectory",
+        "task.execute"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-01",
+        "DB-017-001",
+        "DB-017-002",
+        "DB-017-003",
+        "DB-017-004",
+        "DB-017-005",
+        "DB-017-006",
+        "DB-017-007",
+        "DB-017-008",
+        "DB-030-001"
+      ],
+      "evidence": [
+        "E02",
+        "E05",
+        "E07"
+      ],
+      "tasks": [],
+      "boundary": "保留撤回、旧待办失效和所有者权限边界。"
+    },
+    {
+      "id": "R10",
+      "requirement": "路由、循环和并行汇聚",
+      "baseline": "常规循环通过，原路由夹具仍红",
+      "sourceProcedures": [
+        "workflow.compile",
+        "workflow.publish",
+        "workflow.run",
+        "task.signalMessage"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-03",
+        "HTTP-02",
+        "HTTP-04",
+        "HTTP-05"
+      ],
+      "evidence": [
+        "E06",
+        "E07",
+        "E08"
+      ],
+      "tasks": [
+        "F07"
+      ],
+      "boundary": "同镜像的原三组须独立变绿；早期补充路由覆盖不替代新版本验收。"
+    },
+    {
+      "id": "R11",
+      "requirement": "签署、移交、重复办理",
+      "baseline": "HTTP 主路径通过，作业终态门槛红",
+      "sourceProcedures": [
+        "task.complete",
+        "task.handover",
+        "task.delegate",
+        "task.reassign"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-06",
+        "HTTP-11",
+        "DB-011-001",
+        "DB-014-001"
+      ],
+      "evidence": [
+        "E02",
+        "E07"
+      ],
+      "tasks": [
+        "F06"
+      ],
+      "boundary": "对齐实例与作业终态，仍检查竞争和一次出口。"
+    },
+    {
+      "id": "R12",
+      "requirement": "运行监控、计时与告警",
+      "baseline": "计时样本已验；原指标脚本红",
+      "sourceProcedures": [
+        "workflow.runMetrics",
+        "workflow.runHistoryPage",
+        "workflow.alerts",
+        "system.notifyOwner"
+      ],
+      "relatedExecutedCases": [
+        "UI-22",
+        "HTTP-12",
+        "DB-028-001",
+        "DB-032-001",
+        "DB-032-002",
+        "DB-032-003",
+        "DB-032-004"
+      ],
+      "evidence": [
+        "E02",
+        "E10"
+      ],
+      "tasks": [
+        "F07"
+      ],
+      "boundary": "通知真实接收、恢复目标和生产负载待验。"
+    },
+    {
+      "id": "R13",
+      "requirement": "资源登记、探查与执行能力",
+      "baseline": "六页签与可执行 MySQL 已验",
+      "sourceProcedures": [
+        "data.resources",
+        "data.testSource",
+        "data.createAsset",
+        "data.runLineage"
+      ],
+      "relatedExecutedCases": [
+        "UI-14",
+        "UI-15",
+        "DB-015-001"
+      ],
+      "evidence": [
+        "E02",
+        "E03",
+        "E11"
+      ],
+      "tasks": [
+        "G01"
+      ],
+      "boundary": "登记及 probe 的成功不能推出 API/文件可读或可向第三方写入。"
+    },
+    {
+      "id": "R14",
+      "requirement": "数据关联、函数、筛重和质量",
+      "baseline": "真实运行，非法阈值的脚本预期过时",
+      "sourceProcedures": [
+        "data.run",
+        "data.runDetail",
+        "workflow.runReadiness"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-07",
+        "HTTP-09",
+        "HTTP-08"
+      ],
+      "evidence": [
+        "E08",
+        "E11"
+      ],
+      "tasks": [
+        "F07"
+      ],
+      "boundary": "分别重测每种非法输入，避免首个异常掩盖后续。"
+    },
+    {
+      "id": "R15",
+      "requirement": "人工数据运行及结果核对",
+      "baseline": "人工弃回执后两次运行均成功",
+      "sourceProcedures": [
+        "data.run",
+        "data.runs",
+        "data.runDetail",
+        "data.cancelRun"
+      ],
+      "relatedExecutedCases": [
+        "UI-19",
+        "DB-015-001"
+      ],
+      "evidence": [
+        "E09"
+      ],
+      "tasks": [
+        "F05"
+      ],
+      "boundary": "三处 UI 意图身份、同键并发、兼容旧运行。"
+    },
+    {
+      "id": "R16",
+      "requirement": "原生调度、暂停、删除及取消",
+      "baseline": "分钟触发与修订冲突已验",
+      "sourceProcedures": [
+        "data.saveScheduleDraft",
+        "data.activateSchedule",
+        "data.pauseSchedule",
+        "data.deleteSchedule"
+      ],
+      "relatedExecutedCases": [
+        "DB-016-001"
+      ],
+      "evidence": [
+        "E09"
+      ],
+      "tasks": [],
+      "boundary": "旧托管删除需要专用的外部旧任务。慢查询取消样本仅代表测试驱动。"
+    },
+    {
+      "id": "R17",
+      "requirement": "项目端点、系统模型与流程 LLM",
+      "baseline": "隔离 HTTP 与部署真实 LLM 可用",
+      "sourceProcedures": [
+        "project.serviceEndpoints",
+        "config.checkModelService",
+        "workflow.runtimeModels",
+        "workflow.run"
+      ],
+      "relatedExecutedCases": [
+        "DB-025-001",
+        "DB-023-001"
+      ],
+      "evidence": [
+        "E02",
+        "E12"
+      ],
+      "tasks": [
+        "F08"
+      ],
+      "boundary": "真实三节点流程和最终连通性取自两个阶段；历史缺请求模型记录。"
+    },
+    {
+      "id": "R18",
+      "requirement": "助手管理、发布与试聊",
+      "baseline": "隔离受控模型及真库通过",
+      "sourceProcedures": [
+        "assistant.adminAgents",
+        "assistant.saveDraft",
+        "assistant.publish",
+        "assistant.start"
+      ],
+      "relatedExecutedCases": [
+        "DB-001-001",
+        "DB-001-002",
+        "DB-001-003",
+        "DB-001-004",
+        "DB-001-005",
+        "DB-001-006",
+        "DB-001-007",
+        "DB-001-008",
+        "DB-001-009"
+      ],
+      "evidence": [
+        "E02",
+        "E14"
+      ],
+      "tasks": [
+        "U06"
+      ],
+      "boundary": "真实模型自由措辞的稳定性需独立标注集。"
+    },
+    {
+      "id": "R19",
+      "requirement": "客户助手提案、确认与重放",
+      "baseline": "部署真实供应商更改专用项目一次",
+      "sourceProcedures": [
+        "assistant.available",
+        "assistant.message",
+        "assistant.decide",
+        "assistant.get"
+      ],
+      "relatedExecutedCases": [
+        "DB-002-001",
+        "DB-001-001",
+        "DB-001-002",
+        "DB-001-003",
+        "DB-001-004",
+        "DB-001-005",
+        "DB-001-006",
+        "DB-001-007",
+        "DB-001-008",
+        "DB-001-009"
+      ],
+      "evidence": [
+        "E13",
+        "E14"
+      ],
+      "tasks": [
+        "G04",
+        "U06"
+      ],
+      "boundary": "远程样本限统计和创建目录。工具级遥测与长回合恢复需补。"
+    },
+    {
+      "id": "R20",
+      "requirement": "助手历史列表与消息恢复",
+      "baseline": "短链路可恢复，60 条全量返回",
+      "sourceProcedures": [
+        "assistant.sessions",
+        "assistant.get"
+      ],
+      "relatedExecutedCases": [
+        "DB-001-001",
+        "DB-001-002",
+        "DB-001-003",
+        "DB-001-004",
+        "DB-001-005",
+        "DB-001-006",
+        "DB-001-007",
+        "DB-001-008",
+        "DB-001-009"
+      ],
+      "evidence": [
+        "E14",
+        "E15"
+      ],
+      "tasks": [
+        "F09",
+        "U06"
+      ],
+      "boundary": "需按可见性分页、真机选取与跨项目确认验收。"
+    },
+    {
+      "id": "R21",
+      "requirement": "键盘弹窗与业务反馈",
+      "baseline": "Esc 后焦点落到 BODY，跨页残留提示",
+      "sourceProcedures": [
+        "project.create",
+        "project.existingCodes"
+      ],
+      "relatedExecutedCases": [
+        "UI-03",
+        "UI-09"
+      ],
+      "evidence": [
+        "E03",
+        "E04",
+        "E16"
+      ],
+      "tasks": [
+        "U01",
+        "U02"
+      ],
+      "boundary": "嵌套确认、提交成功、触发者消失分别验收。"
+    },
+    {
+      "id": "R22",
+      "requirement": "窄屏、视口定位和工作台连续操作",
+      "baseline": "移动主操作受限，减少动效已生效",
+      "sourceProcedures": [
+        "project.page",
+        "task.dashboard",
+        "task.page",
+        "workflow.get"
+      ],
+      "relatedExecutedCases": [
+        "UI-36",
+        "UI-23",
+        "UI-21"
+      ],
+      "evidence": [
+        "E03",
+        "E07",
+        "E16"
+      ],
+      "tasks": [
+        "U03",
+        "U04",
+        "U05"
+      ],
+      "boundary": "360/390/768、真机和后台轮询保持焦点与位置。"
+    },
+    {
+      "id": "R23",
+      "requirement": "独立等待的异步子流程",
+      "baseline": "当前同步可执行、嵌套创建被拒",
+      "sourceProcedures": [
+        "workflow.subflows",
+        "workflow.createSubflow",
+        "workflow.run"
+      ],
+      "relatedExecutedCases": [
+        "HTTP-03",
+        "DB-022-001"
+      ],
+      "evidence": [
+        "E02",
+        "E06",
+        "E11"
+      ],
+      "tasks": [
+        "G02"
+      ],
+      "boundary": "一层人工子实例、父子权限与崩溃后恢复按 A55–A58 验收。"
+    },
+    {
+      "id": "R24",
+      "requirement": "BDP 主数据同步",
+      "baseline": "按钮固定禁用、外部合同缺失",
+      "sourceProcedures": [
+        "project.list",
+        "project.create"
+      ],
+      "relatedExecutedCases": [
+        "UI-05"
+      ],
+      "evidence": [
+        "E03",
+        "E05"
+      ],
+      "tasks": [
+        "G03"
+      ],
+      "boundary": "这里列出本地业务复用入口；现存 API 没有本需求的专用 BDP 同步过程。"
+    },
+    {
+      "id": "R25",
+      "requirement": "部署就绪与运营证明",
+      "baseline": "匿名探针及资产读取通过",
+      "sourceProcedures": [
+        "system.health",
+        "config.readiness",
+        "config.runtimeInfo"
+      ],
+      "relatedExecutedCases": [
+        "UI-01",
+        "UI-34"
+      ],
+      "evidence": [
+        "E01",
+        "E17",
+        "E18"
+      ],
+      "tasks": [
+        "F01",
+        "F02"
+      ],
+      "boundary": "真实通知、OAuth、对象存储、恢复 RPO/RTO、负载与第三方签收另行取证。"
+    }
+  ]
+}

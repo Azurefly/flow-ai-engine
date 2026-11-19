@@ -78,7 +78,7 @@ it("reports the committed state of the requested operation under the signed-in a
     requestCommitted: false,
   } as Awaited<ReturnType<typeof getAssistantSession>>);
   const result = await caller.get({ sessionId, requestId });
-  expect(getAssistantSession).toHaveBeenCalledWith(user, sessionId, requestId);
+  expect(getAssistantSession).toHaveBeenCalledWith(user, sessionId, requestId, undefined);
   expect(result.requestCommitted).toBe(false);
   expect(await caller.get({ sessionId })).not.toHaveProperty(
     "requestCommitted"

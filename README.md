@@ -80,6 +80,12 @@ drizzle/    数据库结构与迁移
 scripts/    构建、部署与功能验收脚本
 ```
 
+## 开发与评审入口
+
+[开发索引](docs/development/INDEX.md)按业务操作列出页面、服务、数据库与用例。[协作约定](Agent.md)说明如何接手任务。[功能与需求评审](docs/development/review-baseline.md)记录 2026-11-19 的实测结论，并关联整改、助手与 UI 动效设计。
+
+接手优化时从[开发智能体任务入口](docs/development/optimization/START-HERE.md)领取具体编号，按[验收场景](docs/development/optimization/ACCEPTANCE.md)核对业务终态。仓库收录[完整审计报告](docs/development/optimization/REPORT.md)。
+
 ## 路由验收脚本
 
 `scripts/router-label-acceptance.mjs` 会创建业务项目、审核并发布四个流程、启动真实运行，验证旧路由名称及优先级、广播、默认分支。**它不是只读检查，应仅在专用验收环境运行。**

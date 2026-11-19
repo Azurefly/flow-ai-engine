@@ -84,10 +84,10 @@ export async function getLlmConfiguration() {
   };
 }
 
-export async function resolveLlmConnection(): Promise<LlmConnection> {
-  const { connection, status } = await getLlmConfiguration();
+export async function resolveLlmConnection(): Promise<LlmConnection & { configurationRevision: string }> {
+  const { connection, status, configToken } = await getLlmConfiguration();
   if (!status.configured) throw new Error(status.message);
-  return connection;
+  return { ...connection, configurationRevision: configToken };
 }
 
 export async function getLlmServiceStatus() {

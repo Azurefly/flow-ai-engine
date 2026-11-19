@@ -1,3 +1,4 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 /**
  * Three Comprehensive Workflow Canvases & Full-Node Real Instance Testing
  *
@@ -7,17 +8,17 @@
  *    - 控制流程 (Control Flow): start, milestone, transform, http, llm, condition (true/false), operate (human gate), wait, end.
  *    - 数据流程 (Data Flow): start, source (orders/users), join, quality_gate, filter, project, derive, deduplicate, aggregate, sort, sink, end.
  * 2. Each canvas tests ALL applicable node types in ONE unified, cohesive DAG!
- * 3. Real instance executions on the remote live environment (124.223.198.84:1180).
+ * 3. Real instance executions on the explicitly confirmed acceptance environment.
  * 4. CRITICAL: "测试数据不删除" - All projects, definitions, versions, instances, tasks, and data assets are preserved in MySQL.
  */
 import { randomBytes } from "node:crypto";
 
 const baseUrl = (
-  process.env.TEST_BASE_URL ?? "http://124.223.198.84:1180"
+  acceptanceTarget(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL || process.env.TEST_BASE_URL)
 ).replace(/\/$/, "");
-const adminUsername = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME ?? "flow_admin";
+const adminUsername = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME;
 const adminPassword = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
-if (!adminPassword)
+if (!adminUsername || !adminPassword)
   throw new Error("FLOW_BOOTSTRAP_ADMIN_PASSWORD is required for this test");
 
 class TrpcRequestError extends Error {

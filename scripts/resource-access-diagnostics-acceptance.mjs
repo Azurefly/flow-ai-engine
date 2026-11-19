@@ -1,10 +1,11 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Explicitly authorized isolated test: no global roles, no administrator test accounts.
 // The finally block revokes/archives only this run's uniquely named fixtures.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
-const base = "http://124.223.198.84:1180/",
+const base = acceptanceTarget(process.env) + "/",
   tag = randomBytes(6).toString("hex");
 const fixture = {
   tag,

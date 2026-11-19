@@ -1,0 +1,1453 @@
+{
+  "sourceCommit": "8964f07773c99ad3cbb4d627c1e21e23c7c50eff",
+  "kind": "tRPC registered procedures",
+  "count": 201,
+  "perNamespace": {
+    "system": {
+      "query": 1,
+      "mutation": 1
+    },
+    "assistant": {
+      "query": 4,
+      "mutation": 5
+    },
+    "auth": {
+      "query": 2,
+      "mutation": 2
+    },
+    "iam": {
+      "query": 13,
+      "mutation": 10
+    },
+    "project": {
+      "query": 21,
+      "mutation": 20
+    },
+    "data": {
+      "query": 9,
+      "mutation": 21
+    },
+    "task": {
+      "query": 8,
+      "mutation": 12
+    },
+    "config": {
+      "query": 10,
+      "mutation": 13
+    },
+    "workflow": {
+      "query": 22,
+      "mutation": 27
+    }
+  },
+  "scope": "从固定提交的 TypeScript 注册对象生成。method 与 accessDeclaration 是源码声明；领域层仍会复核授权。注册及测试文件存在均不能作为某个过程实测通过的依据。",
+  "routes": [
+    {
+      "procedure": "system.health",
+      "method": "query",
+      "accessDeclaration": "publicProcedure",
+      "path": "server/_core/systemRouter.ts",
+      "line": 6
+    },
+    {
+      "procedure": "system.notifyOwner",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/_core/systemRouter.ts",
+      "line": 16
+    },
+    {
+      "procedure": "assistant.available",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 58
+    },
+    {
+      "procedure": "assistant.adminAgents",
+      "method": "query",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 72
+    },
+    {
+      "procedure": "assistant.saveDraft",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 75
+    },
+    {
+      "procedure": "assistant.publish",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 93
+    },
+    {
+      "procedure": "assistant.start",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 106
+    },
+    {
+      "procedure": "assistant.sessions",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 132
+    },
+    {
+      "procedure": "assistant.get",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 163
+    },
+    {
+      "procedure": "assistant.message",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 178
+    },
+    {
+      "procedure": "assistant.decide",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/assistant-router.ts",
+      "line": 202
+    },
+    {
+      "procedure": "auth.bootstrapStatus",
+      "method": "query",
+      "accessDeclaration": "publicProcedure",
+      "path": "server/routers.ts",
+      "line": 263
+    },
+    {
+      "procedure": "auth.me",
+      "method": "query",
+      "accessDeclaration": "publicProcedure",
+      "path": "server/routers.ts",
+      "line": 272
+    },
+    {
+      "procedure": "auth.login",
+      "method": "mutation",
+      "accessDeclaration": "publicProcedure",
+      "path": "server/routers.ts",
+      "line": 276
+    },
+    {
+      "procedure": "auth.logout",
+      "method": "mutation",
+      "accessDeclaration": "publicProcedure",
+      "path": "server/routers.ts",
+      "line": 321
+    },
+    {
+      "procedure": "iam.users",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 334
+    },
+    {
+      "procedure": "iam.userDirectory",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 335
+    },
+    {
+      "procedure": "iam.roleAssignableUsers",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 347
+    },
+    {
+      "procedure": "iam.previewUserCreation",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 357
+    },
+    {
+      "procedure": "iam.previewUserBatch",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 369
+    },
+    {
+      "procedure": "iam.createUser",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 378
+    },
+    {
+      "procedure": "iam.createUsersBatch",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 392
+    },
+    {
+      "procedure": "iam.updateUserStatus",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 438
+    },
+    {
+      "procedure": "iam.permissionCatalog",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 452
+    },
+    {
+      "procedure": "iam.roles",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 453
+    },
+    {
+      "procedure": "iam.userAuthorizationDetails",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 460
+    },
+    {
+      "procedure": "iam.resourceAccess",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 463
+    },
+    {
+      "procedure": "iam.roleAuthorizationDetails",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 466
+    },
+    {
+      "procedure": "iam.roleAuthorizationOverview",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 469
+    },
+    {
+      "procedure": "iam.roleMembersPage",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 472
+    },
+    {
+      "procedure": "iam.assignSystemRole",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 475
+    },
+    {
+      "procedure": "iam.revokeRoleAssignment",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 501
+    },
+    {
+      "procedure": "iam.customRoleConfiguration",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 511
+    },
+    {
+      "procedure": "iam.createCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 514
+    },
+    {
+      "procedure": "iam.updateCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 540
+    },
+    {
+      "procedure": "iam.deleteCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 567
+    },
+    {
+      "procedure": "iam.authorizationAuditPage",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 573
+    },
+    {
+      "procedure": "iam.authorizationAudit",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 576
+    },
+    {
+      "procedure": "project.get",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 585
+    },
+    {
+      "procedure": "project.list",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 588
+    },
+    {
+      "procedure": "project.page",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 589
+    },
+    {
+      "procedure": "project.lifecyclePreview",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 590
+    },
+    {
+      "procedure": "project.changeStatus",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 592
+    },
+    {
+      "procedure": "project.existingCodes",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 594
+    },
+    {
+      "procedure": "project.access",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 596
+    },
+    {
+      "procedure": "project.serviceEndpoints",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 599
+    },
+    {
+      "procedure": "project.createServiceEndpoint",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 604
+    },
+    {
+      "procedure": "project.setServiceEndpointEnvironment",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 625
+    },
+    {
+      "procedure": "project.setServiceEndpointStatus",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 641
+    },
+    {
+      "procedure": "project.create",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 652
+    },
+    {
+      "procedure": "project.activeDomains",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 666
+    },
+    {
+      "procedure": "project.workflowStatistics",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 671
+    },
+    {
+      "procedure": "project.workflows",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 673
+    },
+    {
+      "procedure": "project.createWorkflow",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 678
+    },
+    {
+      "procedure": "project.updateWorkflowInfo",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 694
+    },
+    {
+      "procedure": "project.auditWorkflow",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 707
+    },
+    {
+      "procedure": "project.resetWorkflowAudit",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 718
+    },
+    {
+      "procedure": "project.workflowAudit",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 728
+    },
+    {
+      "procedure": "project.members",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 736
+    },
+    {
+      "procedure": "project.customRoles",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 739
+    },
+    {
+      "procedure": "project.customRoleAssignments",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 744
+    },
+    {
+      "procedure": "project.assignCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 753
+    },
+    {
+      "procedure": "project.revokeCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 764
+    },
+    {
+      "procedure": "project.grantMember",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 772
+    },
+    {
+      "procedure": "project.revokeMember",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 784
+    },
+    {
+      "procedure": "project.units",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 795
+    },
+    {
+      "procedure": "project.grantUnit",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 798
+    },
+    {
+      "procedure": "project.revokeUnit",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 811
+    },
+    {
+      "procedure": "project.activeUnits",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 821
+    },
+    {
+      "procedure": "project.searchActiveUnits",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 824
+    },
+    {
+      "procedure": "project.activeUsers",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 832
+    },
+    {
+      "procedure": "project.searchActiveUsers",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 835
+    },
+    {
+      "procedure": "project.warehouse",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 843
+    },
+    {
+      "procedure": "project.previewWorkflowImport",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 846
+    },
+    {
+      "procedure": "project.exportWorkflows",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 849
+    },
+    {
+      "procedure": "project.createFolder",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 857
+    },
+    {
+      "procedure": "project.updateFolder",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 869
+    },
+    {
+      "procedure": "project.deleteFolder",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 881
+    },
+    {
+      "procedure": "project.moveWorkflow",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 891
+    },
+    {
+      "procedure": "data.resourceOptions",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 904
+    },
+    {
+      "procedure": "data.resources",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 909
+    },
+    {
+      "procedure": "data.createSource",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 912
+    },
+    {
+      "procedure": "data.updateSource",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 926
+    },
+    {
+      "procedure": "data.deleteSource",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 940
+    },
+    {
+      "procedure": "data.createAsset",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 954
+    },
+    {
+      "procedure": "data.updateAsset",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 969
+    },
+    {
+      "procedure": "data.deleteAsset",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 983
+    },
+    {
+      "procedure": "data.createUdf",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 997
+    },
+    {
+      "procedure": "data.updateUdf",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1013
+    },
+    {
+      "procedure": "data.deleteUdf",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1028
+    },
+    {
+      "procedure": "data.createTag",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1038
+    },
+    {
+      "procedure": "data.deleteTag",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1053
+    },
+    {
+      "procedure": "data.createPlugin",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1063
+    },
+    {
+      "procedure": "data.updatePlugin",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1077
+    },
+    {
+      "procedure": "data.deletePlugin",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1090
+    },
+    {
+      "procedure": "data.flows",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1104
+    },
+    {
+      "procedure": "data.run",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1107
+    },
+    {
+      "procedure": "data.runs",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1119
+    },
+    {
+      "procedure": "data.runPage",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1129
+    },
+    {
+      "procedure": "data.runDetail",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1138
+    },
+    {
+      "procedure": "data.cancelRun",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1146
+    },
+    {
+      "procedure": "data.runLineage",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1149
+    },
+    {
+      "procedure": "data.testSource",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1157
+    },
+    {
+      "procedure": "data.sourceTests",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1165
+    },
+    {
+      "procedure": "data.schedules",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1174
+    },
+    {
+      "procedure": "data.saveScheduleDraft",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1179
+    },
+    {
+      "procedure": "data.activateSchedule",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1189
+    },
+    {
+      "procedure": "data.pauseSchedule",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1198
+    },
+    {
+      "procedure": "data.deleteSchedule",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1207
+    },
+    {
+      "procedure": "task.dashboard",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1218
+    },
+    {
+      "procedure": "task.list",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1221
+    },
+    {
+      "procedure": "task.page",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1235
+    },
+    {
+      "procedure": "task.instances",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1250
+    },
+    {
+      "procedure": "task.instancePage",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1258
+    },
+    {
+      "procedure": "task.calendar",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1271
+    },
+    {
+      "procedure": "task.get",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1285
+    },
+    {
+      "procedure": "task.signalMessage",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1292
+    },
+    {
+      "procedure": "task.assignees",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1320
+    },
+    {
+      "procedure": "task.claim",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1330
+    },
+    {
+      "procedure": "task.complete",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1333
+    },
+    {
+      "procedure": "task.execute",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1343
+    },
+    {
+      "procedure": "task.handover",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1353
+    },
+    {
+      "procedure": "task.delegate",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1361
+    },
+    {
+      "procedure": "task.reassign",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1369
+    },
+    {
+      "procedure": "task.addSigner",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1379
+    },
+    {
+      "procedure": "task.removeSigner",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1388
+    },
+    {
+      "procedure": "task.returnToPending",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1397
+    },
+    {
+      "procedure": "task.batchClaim",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1402
+    },
+    {
+      "procedure": "task.batchComplete",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1407
+    },
+    {
+      "procedure": "config.publicGeneral",
+      "method": "query",
+      "accessDeclaration": "publicProcedure",
+      "path": "server/routers.ts",
+      "line": 1423
+    },
+    {
+      "procedure": "config.runtimeInfo",
+      "method": "query",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1424
+    },
+    {
+      "procedure": "config.modelService",
+      "method": "query",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1425
+    },
+    {
+      "procedure": "config.checkModelService",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1426
+    },
+    {
+      "procedure": "config.readiness",
+      "method": "query",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1427
+    },
+    {
+      "procedure": "config.settings",
+      "method": "query",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1428
+    },
+    {
+      "procedure": "config.updateSetting",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1429
+    },
+    {
+      "procedure": "config.workDomains",
+      "method": "query",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1441
+    },
+    {
+      "procedure": "config.createWorkDomain",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1442
+    },
+    {
+      "procedure": "config.updateWorkDomain",
+      "method": "mutation",
+      "accessDeclaration": "adminProcedure",
+      "path": "server/routers.ts",
+      "line": 1453
+    },
+    {
+      "procedure": "config.organization",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1465
+    },
+    {
+      "procedure": "config.organizationDirectory",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1466
+    },
+    {
+      "procedure": "config.organizationMembersPage",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1469
+    },
+    {
+      "procedure": "config.organizationMemberConfiguration",
+      "method": "query",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1482
+    },
+    {
+      "procedure": "config.createOrganizationUnit",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1483
+    },
+    {
+      "procedure": "config.updateOrganizationUnit",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1502
+    },
+    {
+      "procedure": "config.assignOrganizationMember",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1523
+    },
+    {
+      "procedure": "config.removeOrganizationMember",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1537
+    },
+    {
+      "procedure": "config.setPrimaryOrganizationMembership",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1548
+    },
+    {
+      "procedure": "config.moveOrganizationMember",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1559
+    },
+    {
+      "procedure": "config.deleteOrganizationUnit",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1573
+    },
+    {
+      "procedure": "config.bindOrganizationRole",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1579
+    },
+    {
+      "procedure": "config.unbindOrganizationRole",
+      "method": "mutation",
+      "accessDeclaration": "iamManageProcedure",
+      "path": "server/routers.ts",
+      "line": 1594
+    },
+    {
+      "procedure": "workflow.operationAccess",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1607
+    },
+    {
+      "procedure": "workflow.search",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1617
+    },
+    {
+      "procedure": "workflow.list",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1620
+    },
+    {
+      "procedure": "workflow.page",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1621
+    },
+    {
+      "procedure": "workflow.archived",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1631
+    },
+    {
+      "procedure": "workflow.get",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1636
+    },
+    {
+      "procedure": "workflow.compile",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1643
+    },
+    {
+      "procedure": "workflow.runReadiness",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1659
+    },
+    {
+      "procedure": "workflow.previewParticipants",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1662
+    },
+    {
+      "procedure": "workflow.access",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1700
+    },
+    {
+      "procedure": "workflow.create",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1703
+    },
+    {
+      "procedure": "workflow.update",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1715
+    },
+    {
+      "procedure": "workflow.publish",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1729
+    },
+    {
+      "procedure": "workflow.unpublish",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1748
+    },
+    {
+      "procedure": "workflow.duplicate",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1758
+    },
+    {
+      "procedure": "workflow.delete",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1780
+    },
+    {
+      "procedure": "workflow.restore",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1787
+    },
+    {
+      "procedure": "workflow.versions",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1794
+    },
+    {
+      "procedure": "workflow.versionDiff",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1801
+    },
+    {
+      "procedure": "workflow.rollbackVersion",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1819
+    },
+    {
+      "procedure": "workflow.members",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1839
+    },
+    {
+      "procedure": "workflow.participantDirectory",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1852
+    },
+    {
+      "procedure": "workflow.memberCandidates",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1863
+    },
+    {
+      "procedure": "workflow.customRoles",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1886
+    },
+    {
+      "procedure": "workflow.customRoleAssignments",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1891
+    },
+    {
+      "procedure": "workflow.assignCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1900
+    },
+    {
+      "procedure": "workflow.revokeCustomRole",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1911
+    },
+    {
+      "procedure": "workflow.grantMember",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1919
+    },
+    {
+      "procedure": "workflow.revokeMember",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1932
+    },
+    {
+      "procedure": "workflow.runtimeModels",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1944
+    },
+    {
+      "procedure": "workflow.templates",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1945
+    },
+    {
+      "procedure": "workflow.createTemplate",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1948
+    },
+    {
+      "procedure": "workflow.updateTemplate",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1960
+    },
+    {
+      "procedure": "workflow.deleteTemplate",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1974
+    },
+    {
+      "procedure": "workflow.subflows",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1981
+    },
+    {
+      "procedure": "workflow.createSubflow",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1982
+    },
+    {
+      "procedure": "workflow.updateSubflow",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 1994
+    },
+    {
+      "procedure": "workflow.deleteSubflow",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2009
+    },
+    {
+      "procedure": "workflow.run",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2016
+    },
+    {
+      "procedure": "workflow.cancelRun",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2051
+    },
+    {
+      "procedure": "workflow.terminateRun",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2071
+    },
+    {
+      "procedure": "workflow.pauseRun",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2100
+    },
+    {
+      "procedure": "workflow.resumeRun",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2120
+    },
+    {
+      "procedure": "workflow.runs",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2140
+    },
+    {
+      "procedure": "workflow.runHistoryPage",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2177
+    },
+    {
+      "procedure": "workflow.runMetrics",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2216
+    },
+    {
+      "procedure": "workflow.alerts",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2252
+    },
+    {
+      "procedure": "workflow.markAlertRead",
+      "method": "mutation",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2277
+    },
+    {
+      "procedure": "workflow.runDetail",
+      "method": "query",
+      "accessDeclaration": "protectedProcedure",
+      "path": "server/routers.ts",
+      "line": 2282
+    }
+  ]
+}

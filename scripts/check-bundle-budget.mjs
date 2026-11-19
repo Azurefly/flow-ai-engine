@@ -63,9 +63,10 @@ const maxChunkBytes = 450 * 1024;
 // Branch lists, single-condition editing and node summaries add about 11 KiB raw / 5 KiB gzip.
 // Agent configuration, recoverable conversations and task links: 1652.74 KiB raw / 510.02 KiB gzip.
 // Assistant version comparison, settings navigation and lazy canvas preview: 1656.3 KiB raw / 511.21 KiB gzip on Linux.
-const maxTotalBytes = 1_657 * 1024;
+// CSV batch recovery, manual run receipts and paged assistant history: measured 1663.79 / 513.80 KiB with the node evidence view.
+const maxTotalBytes = 1_665 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 512 * 1024;
+const maxTotalGzipBytes = 515 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

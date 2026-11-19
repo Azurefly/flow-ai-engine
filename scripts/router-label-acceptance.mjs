@@ -21,6 +21,16 @@ async function waitFor(read, accept, label) {
   throw new Error(`Timed out: ${label}`);
 }
 const admin = new RouterAcceptanceSession(base);
+async function approveAndPublish(workflowId) {
+  const draft = await admin.request("workflow.get", { id: workflowId });
+  await admin.request("project.auditWorkflow", {
+    projectId: project.id, workflowId, auditStatus: "approved",
+    expectedDefinitionVersion: draft.definitionVersion, expectedAuditStatus: draft.auditStatus,
+  }, true);
+  const approved = await admin.request("workflow.get", { id: workflowId });
+  assert.equal(approved.auditStatus, "approved");
+  await admin.request("workflow.publish", { id: workflowId, expectedDefinitionVersion: approved.definitionVersion }, true);
+}
 const tag = randomBytes(4).toString("hex");
 console.log(
   JSON.stringify({
@@ -115,12 +125,7 @@ console.log(
     workflowId: workflow.id,
   })
 );
-await admin.request(
-  "project.auditWorkflow",
-  { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" },
-  true
-);
-await admin.request("workflow.publish", { id: workflow.id }, true);
+await approveAndPublish(workflow.id);
 const started = await admin.request(
   "workflow.run",
   { workflowId: workflow.id, input: {}, idempotencyKey: `route-${tag}` },
@@ -180,6 +185,7 @@ for (const scenario of [
             name: "路由",
             config: {
               broadcast: scenario.broadcast,
+              ...(scenario.broadcast ? { parallelJoinNodeId: "end" } : {}),
               defaultRoute: "fallback",
               routes: [
                 {
@@ -218,7 +224,7 @@ for (const scenario of [
             id: "end",
             type: "end",
             name: "完成",
-            config: { resultTemplate: "{{vars}}" },
+            config: { resultTemplate: "{{vars}}", ...(scenario.broadcast ? { parallelForNodeId: "router" } : {}) },
             position: { x: 750, y: 0 },
           },
           ...branches.map((id, i) => ({
@@ -261,12 +267,7 @@ for (const scenario of [
       workflowId: fixture.id,
     })
   );
-  await admin.request(
-    "project.auditWorkflow",
-    { projectId: project.id, workflowId: fixture.id, auditStatus: "approved" },
-    true
-  );
-  await admin.request("workflow.publish", { id: fixture.id }, true);
+  await approveAndPublish(fixture.id);
   const execution = await admin.request(
     "workflow.run",
     {

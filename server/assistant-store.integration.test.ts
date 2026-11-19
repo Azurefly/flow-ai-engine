@@ -6,6 +6,7 @@ import { getP1SystemSettings, updateP1SystemSetting } from "./p1-service";
 import {
   ASSISTANT_DEFAULT_ID,
   createAssistantSession,
+  assistantSessionsPage,
   getAssistantConfig,
   getAssistantSession,
   listAssistantSessions,
@@ -61,6 +62,29 @@ suite("全局助手 MySQL 持久化", () => {
     await closeSharedPool();
   });
 
+  it("相同更新时间按 ID 续读，范围变动拒绝游标，历史可按修订分段", async () => {
+    const a = await agent();
+    await publishAssistantConfig(admin, 1, a.agentId);
+    const scope = { preview: false, agentId: a.agentId, search: "分页" };
+    const sessions = await Promise.all([1,2,3,4].map(n => createAssistantSession(user, false, "分页" + n, null, a.agentId)));
+    const ids = sessions.map(item => item.id).sort();
+    await getSharedPool().query("UPDATE assistant_session SET updatedAt='2026-01-01 00:00:00' WHERE id IN (?)", [ids]);
+    const first = await assistantSessionsPage(user, scope, 2);
+    expect(first.items.map(s => s.id)).toEqual(ids.slice(0,2));
+    const second = await assistantSessionsPage(user, scope, 2, first.nextCursor!);
+    expect(second.items.map(s => s.id)).toEqual(ids.slice(2));
+    expect(second.nextCursor).toBeNull();
+    await expect(assistantSessionsPage(other, scope, 2, first.nextCursor!)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(assistantSessionsPage(user, { ...scope, search: "其他" }, 2, first.nextCursor!)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    for (let n=0; n<4; n++) await mutateAssistantSession(user, ids[0], n, randomUUID(), { n },
+      () => ({ messages: [{ role: "assistant", content: "内容" + n }] }));
+    const newest = await getAssistantSession(user, ids[0], undefined, { size: 2 });
+    expect(newest.messages.map(m=>m.turnRevision)).toEqual([3,4]);
+    const early = await getAssistantSession(user, ids[0], undefined, { size: 2, beforeRevision: newest.olderBefore! });
+    expect(early.messages.map(m=>m.turnRevision)).toEqual([1,2]);
+    expect(early.olderBefore).toBeNull();
+    expect(early.revision).toBe(4);
+  });
   it("授予已办工具后仅新对话取得该权限，撤回后已有对话也随之失效", async () => {
     const pendingOnly: AssistantConfig = { ...defaultConfig, tools: ["listMyTasks"] };
     const a = await agent(pendingOnly);

@@ -1,7 +1,8 @@
 // Public-service regression only; no database writes, token printing, or production task changes.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const base = "http://124.223.198.84:1180";
+import acceptance from "./acceptance-target.cjs";
+const { base } = acceptance.acceptanceLogin(process.env);
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {
@@ -22,6 +23,7 @@ if (["workflow.update", "workflow.publish", "workflow.unpublish"].includes(path)
       `${base}/api/trpc/${path}${mutation ? "" : `?input=${encodeURIComponent(json)}`}`,
       {
         method: mutation ? "POST" : "GET",
+        redirect: "error",
         headers: { "content-type": "application/json", cookie: this.cookie },
         ...(mutation ? { body: json } : {}),
       }
@@ -137,42 +139,21 @@ for (const { minRows, maxNullRate, expectedStatus, errorPattern } of [
       targetNodeId: id,
     })),
   };
-  const workflow = await admin.request(
-    "project.createWorkflow",
-    {
-      projectId: project.id,
-      name: `质量门_${maxNullRate}_${tag}`,
-      flowType: "data",
-      definition,
-    },
-    true
-  );
-  await admin.request(
-    "project.auditWorkflow",
-    { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" },
-    true
-  );
-  if (
-    maxNullRate < 0 ||
-    maxNullRate > 1 ||
-    minRows < 0 ||
-    !Number.isInteger(minRows)
-  ) {
-    await assert.rejects(
-      () => admin.request("workflow.publish", { id: workflow.id }, true),
-      minRows < 0 || !Number.isInteger(minRows) ? /最少行数/ : /空值率/
-    );
-    console.log(
-      JSON.stringify({
-        projectId: project.id,
-        workflowId: workflow.id,
-        minRows,
-        maxNullRate,
-        status: "publish-rejected",
-      })
-    );
+  const name = `质量门_${maxNullRate}_${minRows}_${tag}`;
+  const create = () => admin.request("project.createWorkflow", {
+    projectId: project.id, name, flowType: "data", definition,
+  }, true);
+  if (maxNullRate < 0 || maxNullRate > 1 || minRows < 0 || !Number.isInteger(minRows)) {
+    await assert.rejects(create, minRows < 0 || !Number.isInteger(minRows) ? /最少行数/ : /空值率/);
+    const listed = await admin.request("project.workflows", { projectId: project.id });
+    assert(!listed.some(item => item.name === name), "Rejected input must not leave a draft");
+    console.log(JSON.stringify({ minRows, maxNullRate, status: "creation-rejected" }));
     continue;
   }
+  const workflow = await create();
+  await admin.request("project.auditWorkflow", {
+    projectId: project.id, workflowId: workflow.id, auditStatus: "approved",
+  }, true);
   await admin.request("workflow.publish", { id: workflow.id }, true);
   const started = await admin.request(
     "data.run",

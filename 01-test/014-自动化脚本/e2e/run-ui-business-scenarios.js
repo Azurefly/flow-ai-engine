@@ -9,13 +9,14 @@
  * 场景三：每日财务交易数据 ETL 清洗汇算与数据治理（Data Flow 数据流）
  */
 
+const { acceptanceLogin } = require("../../../scripts/acceptance-target.cjs");
+const { base: BASE_URL, username: USERNAME, password: PASSWORD } =
+  acceptanceLogin(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL ?? process.env.TEST_BASE_URL);
 const { chromium } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BASE_URL = process.env.TEST_BASE_URL || 'http://124.223.198.84:1180';
-const USERNAME = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME || 'flow_admin';
-const PASSWORD = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD || 'b2b055bfb12ed3bed70e86589fdb15478eeb1d0db5c0ff87';
+
 
 const scenarioResults = [];
 

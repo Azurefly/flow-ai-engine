@@ -1,8 +1,9 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import superjson from "superjson";
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 function client() {
   let cookie = "";
   return async function request(path, input, mutation = false) {

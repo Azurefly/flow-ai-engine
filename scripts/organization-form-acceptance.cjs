@@ -1,3 +1,5 @@
+const { acceptanceTarget, acceptanceSsh } = require("./acceptance-target.cjs");
+const fixtureSsh = acceptanceSsh(process.env);
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { randomBytes } = require("node:crypto");
@@ -9,7 +11,7 @@ const {
 } = require("../01-test/014-自动化脚本/e2e/node_modules/@playwright/test");
 
 // All real HTTP and browser traffic is restricted to the designated remote app.
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const tag = "uiconfig_" + randomBytes(6).toString("hex");
 const credentials = suffix => ({
   username: tag + suffix,
@@ -32,13 +34,13 @@ function remote(intent, attempt = 0) {
       "ssh",
       [
         "-i",
-        "C:\\Users\\pan\\.ssh\\215.pem",
+        fixtureSsh.key,
         "-o",
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=10",
-        "ubuntu@124.223.198.84",
-        "sudo -n docker exec -i flow-ai-engine-app-1 node --input-type=module -",
+        fixtureSsh.target,
+        "sudo -n docker exec -i " + fixtureSsh.app + " node --input-type=module -",
       ],
       { windowsHide: true }
     );
@@ -149,19 +151,19 @@ function sqlProcess(action, extra = {}) {
     sqlHelper;
   const encoded = Buffer.from(code).toString("base64");
   const command =
-    "sudo -n docker exec -i flow-ai-engine-app-1 node --input-type=module -e \"await import('data:text/javascript;base64," +
+    "sudo -n docker exec -i " + fixtureSsh.app + " node --input-type=module -e \"await import('data:text/javascript;base64," +
     encoded +
     "').catch(error=>{console.error(error.code+': '+error.message);process.exitCode=1})\"";
   const child = spawn(
     "ssh",
     [
       "-i",
-      "C:\\Users\\pan\\.ssh\\215.pem",
+      fixtureSsh.key,
       "-o",
       "BatchMode=yes",
       "-o",
       "ConnectTimeout=10",
-      "ubuntu@124.223.198.84",
+      fixtureSsh.target,
       command,
     ],
     { windowsHide: true }
@@ -228,17 +230,17 @@ function rootFixtureStatement(statement) {
     );
   return new Promise((resolve, reject) => {
     // The existing container supplies its own admin credential; never read or print it.
-    const command = `sudo -n docker exec -i flow-ai-engine-mysql-1 sh -c 'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; exec mysql --user=root --batch --skip-column-names "$MYSQL_DATABASE"'`;
+    const command = `sudo -n docker exec -i ${fixtureSsh.mysql} sh -c 'export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; exec mysql --user=root --batch --skip-column-names "$MYSQL_DATABASE"'`;
     const child = spawn(
       "ssh",
       [
         "-i",
-        "C:\\Users\\pan\\.ssh\\215.pem",
+        fixtureSsh.key,
         "-o",
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=10",
-        "ubuntu@124.223.198.84",
+        fixtureSsh.target,
         command,
       ],
       { windowsHide: true }

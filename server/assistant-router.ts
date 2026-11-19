@@ -4,6 +4,8 @@ import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import { adminProcedure, protectedProcedure, router } from "./_core/trpc";
 import {
   assistantConfigSchema,
+  assistantSessionsPage,
+  type SessionSummary,
   createAssistantSession,
   getAssistantSession,
   listAssistantConfigs,
@@ -32,6 +34,7 @@ const update = z.object({
   sessionId: id,
   revision: z.number().int().nonnegative(),
   requestId: requestKey,
+  pageSize: z.number().int().min(1).max(50).optional(),
 });
 
 async function resolveContext(
@@ -52,6 +55,21 @@ async function resolveContext(
 
 function adminView<T extends { agentId: string }>(entry: T) {
   return { ...entry, id: entry.agentId };
+}
+
+function publicSummary(entry: SessionSummary) {
+  return {
+        id: entry.id,
+        agentId: entry.agentId,
+        agentName: entry.agentName,
+        title: entry.title,
+        preview: entry.trial,
+        revision: entry.revision,
+        configVersion: entry.configVersion,
+        projectId: entry.projectId,
+        context: { projectId: entry.projectId, workflowId: entry.workflowId },
+        updatedAt: entry.updatedAt,
+      };
 }
 
 export const assistantRouter = router({
@@ -147,26 +165,26 @@ export const assistantRouter = router({
           input?.agentId,
           input?.projectId
         )
-      ).map(entry => ({
-        id: entry.id,
-        agentId: entry.agentId,
-        agentName: entry.agentName,
-        title: entry.title,
-        preview: entry.trial,
-        revision: entry.revision,
-        configVersion: entry.configVersion,
-        projectId: entry.projectId,
-        context: { projectId: entry.projectId, workflowId: entry.workflowId },
-        updatedAt: entry.updatedAt,
-      }))
+      ).map(publicSummary)
     ),
+  sessionsPage: protectedProcedure
+    .input(z.object({
+      preview: z.boolean().default(false), agentId: id.optional(), projectId: id.nullish(),
+      configVersion: z.number().int().positive().optional(), search: z.string().trim().max(160).optional(),
+      limit: z.number().int().min(1).max(50).default(20), cursor: z.string().max(768).optional(),
+    }))
+    .query(async ({ ctx, input }) => {
+      const page = await assistantSessionsPage(ctx.user, input, input.limit, input.cursor);
+      return { items: page.items.map(publicSummary), nextCursor: page.nextCursor };
+    }),
   get: protectedProcedure
-    .input(z.object({ sessionId: id, requestId: requestKey.optional() }))
+    .input(z.object({ sessionId: id, requestId: requestKey.optional(), pageSize: z.number().int().min(1).max(50).optional(), beforeRevision: z.number().int().positive().optional() }))
     .query(async ({ ctx, input }) => {
       const session = await getAssistantSession(
         ctx.user,
         input.sessionId,
-        input.requestId
+        input.requestId,
+        input.pageSize ? { size: input.pageSize, beforeRevision: input.beforeRevision } : undefined
       );
       return {
         ...publicSession(session),
@@ -195,7 +213,8 @@ export const assistantRouter = router({
         requestId,
         { kind: "message", text, proposalId, ...(timeZone ? { timeZone } : {}) },
         current =>
-          runAssistantTurn(ctx.user, current, text, undefined, proposalId, ctx, timeZone)
+          runAssistantTurn(ctx.user, current, text, undefined, proposalId, ctx, timeZone),
+        input.pageSize
       );
       return publicSession(session);
     }),
@@ -210,7 +229,8 @@ export const assistantRouter = router({
         requestId,
         { kind: "decide", proposalId, approve },
         current =>
-          decideAssistantProposal(ctx.user, current, proposalId, approve, (actor, proposal, key) => commitAssistantTool(actor, proposal, key, ctx))
+          decideAssistantProposal(ctx.user, current, proposalId, approve, (actor, proposal, key) => commitAssistantTool(actor, proposal, key, ctx)),
+        input.pageSize
       );
       return publicSession(session);
     }),

@@ -100,6 +100,7 @@ export function publicSession(session: AssistantSession) {
     projectId,
     context: { projectId, workflowId },
     messages,
+    olderBefore: session.olderBefore,
     status: task.status,
     retryText: task.retryText ?? null,
     pending: task.pending ? {

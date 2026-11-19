@@ -297,20 +297,18 @@ export async function existingProjectCodes(user: ProjectUser, codes: string[]) {
   );
   return rows.map(row => String(row.code));
 }
-export async function createProject(
-  user: ProjectUser,
-  input: {
+export type ProjectCreationInput = {
     code: string;
     name: string;
     description?: string;
     domainId?: string | null;
     visibleUserIds?: number[];
     visibleUnitIds?: string[];
-  }
+  };
+
+export async function insertProjectInTransaction(
+  connection: mysql.PoolConnection, user: ProjectUser, input: ProjectCreationInput
 ) {
-  if (!(await hasSystemPermission(user, "workflow:create")))
-    throw new Error("当前账号没有创建项目的权限。");
-  await ensureProjectUnitTable();
   const projectId = id();
   const code = input.code.trim().toUpperCase();
   const name = input.name.trim();
@@ -320,65 +318,53 @@ export async function createProject(
     );
   if (!name) throw new Error("项目名称不能为空。");
   if (input.domainId) {
-    const [domains] = await db().query<mysql.RowDataPacket[]>(
-      "SELECT id FROM work_domain WHERE id=? AND status='active' LIMIT 1",
+    const [domains] = await connection.query<mysql.RowDataPacket[]>(
+      "SELECT id FROM work_domain WHERE id=? AND status='active' LIMIT 1 FOR SHARE",
       [input.domainId]
     );
     if (!domains[0]) throw new Error("所选工作域不存在或已停用。");
   }
-  const connection = await db().getConnection();
-  try {
-    await connection.beginTransaction();
-    await connection.query(
-      "INSERT INTO flow_project (id,ownerUserId,domainId,code,name,description,status) VALUES (?,?,?,?,?,?,'active')",
-      [
-        projectId,
-        user.id,
-        input.domainId ?? null,
-        code,
-        name,
-        input.description?.trim() || null,
-      ]
-    );
-    await connection.query(
-      "INSERT INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)",
-      [id(), projectId, user.id, user.id]
-    );
+  await connection.query(
+    "INSERT INTO flow_project (id,ownerUserId,domainId,code,name,description,status) VALUES (?,?,?,?,?,?,'active')",
+    [
+      projectId,
+      user.id,
+      input.domainId ?? null,
+      code,
+      name,
+      input.description || null,
+    ]
+  );
+  await connection.query(
+    "INSERT INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'owner',NOW(),?)",
+    [id(), projectId, user.id, user.id]
+  );
 
-    // 授权可见人（若创建人选定）
-    if (Array.isArray(input.visibleUserIds)) {
-      for (const visibleUid of input.visibleUserIds) {
-        const uid = Number(visibleUid);
-        if (Number.isInteger(uid) && uid > 0 && uid !== user.id) {
-          await connection.query(
-            "INSERT IGNORE INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'viewer',NOW(),?)",
-            [id(), projectId, uid, user.id]
-          );
-        }
+  // 授权可见人（若创建人选定）
+  if (Array.isArray(input.visibleUserIds)) {
+    for (const visibleUid of input.visibleUserIds) {
+      const uid = Number(visibleUid);
+      if (Number.isInteger(uid) && uid > 0 && uid !== user.id) {
+        await connection.query(
+          "INSERT IGNORE INTO flow_project_member (id,projectId,userId,role,effectiveFrom,grantedByUserId) VALUES (?,?,?,'viewer',NOW(),?)",
+          [id(), projectId, uid, user.id]
+        );
       }
     }
-
-    // 授权可见部门（若创建人选定）
-    if (Array.isArray(input.visibleUnitIds)) {
-      for (const unitId of input.visibleUnitIds) {
-        if (typeof unitId === "string" && unitId.trim()) {
-          await connection.query(
-            "INSERT IGNORE INTO flow_project_unit (id,projectId,unitId,role,createdAt) VALUES (?,?,?, 'viewer', NOW())",
-            [id(), projectId, unitId.trim()]
-          );
-        }
-      }
-    }
-
-    await connection.commit();
-  } catch (error) {
-    await connection.rollback();
-    if ((error as { code?: string; errno?: number }).code === "ER_DUP_ENTRY" || (error as { errno?: number }).errno === 1062)
-      throw new TRPCError({ code: "CONFLICT", message: "业务代号已存在，请更换代号；已归档业务也会保留原代号。" });
-    throw error;
-  } finally {
-    connection.release();
   }
+
+  // 授权可见部门（若创建人选定）
+  if (Array.isArray(input.visibleUnitIds)) {
+    for (const unitId of input.visibleUnitIds) {
+      if (typeof unitId === "string" && unitId.trim()) {
+        await connection.query(
+          "INSERT IGNORE INTO flow_project_unit (id,projectId,unitId,role,createdAt) VALUES (?,?,?, 'viewer', NOW())",
+          [id(), projectId, unitId.trim()]
+        );
+      }
+    }
+  }
+
   await recordAuthorizationAudit({
     actorUserId: user.id,
     action: "user_updated",
@@ -391,8 +377,28 @@ export async function createProject(
       visibleUsersCount: input.visibleUserIds?.length ?? 0,
       visibleUnitsCount: input.visibleUnitIds?.length ?? 0,
     },
-  });
+  }, connection);
   return projectId;
+}
+
+export async function createProject(user: ProjectUser, input: ProjectCreationInput) {
+  if (!(await hasSystemPermission(user, "workflow:create")))
+    throw new Error("当前账号没有创建项目的权限。");
+  await ensureProjectUnitTable();
+  const connection = await db().getConnection();
+  try {
+    await connection.beginTransaction();
+    const projectId = await insertProjectInTransaction(connection, user, { ...input, description: input.description?.trim() });
+    await connection.commit();
+    return projectId;
+  } catch (error) {
+    await connection.rollback();
+    if ((error as { code?: string }).code === "ER_DUP_ENTRY" || (error as { errno?: number }).errno === 1062)
+      throw new TRPCError({ code: "CONFLICT", message: "业务代号已存在，请更换代号；已归档业务也会保留原代号。" });
+    throw error;
+  } finally {
+    connection.release();
+  }
 }
 
 type ProjectWorkflowFilters = {

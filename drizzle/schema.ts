@@ -7,6 +7,7 @@ import {
   json,
   mysqlEnum,
   mysqlTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -1320,6 +1321,30 @@ export const resourceCreationRequests = mysqlTable(
 );
 
 /** Immutable, project-scoped dataflow run audit separate from general workflow runs. */
+export const projectImportBatches = mysqlTable("project_import_batch", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  ownerUserId: int("ownerUserId").notNull().references(() => users.id),
+  revision: int("revision").notNull(),
+  fileHash: varchar("fileHash", { length: 64 }).notNull(),
+  issues: json("issues").notNull(),
+  updatedAt: timestamp("updatedAt", { fsp: 3 }).defaultNow().notNull(),
+}, table => [index("project_import_owner_updated").on(table.ownerUserId, table.updatedAt)]);
+
+export const projectImportRows = mysqlTable("project_import_row", {
+  batchId: varchar("batchId", { length: 36 }).notNull().references(() => projectImportBatches.id, { onDelete: "cascade" }),
+  rowNumber: int("rowNumber").notNull(),
+  recordJson: json("recordJson").notNull(),
+  projectId: varchar("projectId", { length: 36 }),
+  error: varchar("error", { length: 320 }),
+}, table => [primaryKey({ columns: [table.batchId, table.rowNumber] })]);
+
+export const dataflowManualReceipts = mysqlTable("dataflow_manual_receipt", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+  runId: varchar("runId", { length: 36 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, table => [unique("dataflow_manual_receipt_run").on(table.runId)]);
+
 export const dataflowRuns = mysqlTable(
   "dataflow_run",
   {

@@ -37,6 +37,13 @@ type ViewerNode = Node<
   { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
   "runNode"
 >;
+function modelEvidence(value: unknown): Record<string, unknown> {
+  try {
+    const parsed: unknown = typeof value === "string" ? JSON.parse(value) : value;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch { return {}; }
+}
+
 // Tailwind keeps these complete tokens while equivalent status classes share one factory.
 // border-aiflow-success-border bg-aiflow-success-surface text-aiflow-success
 // border-aiflow-danger-border bg-aiflow-danger-surface text-aiflow-danger
@@ -141,6 +148,8 @@ export default function RunExecutionCanvas({
     graph.nodes.find(n => n.id === selected) ??
     graph.nodes.find(n => n.id === initialFocus.nodeId);
   const record = resolveRunGraphRecord(active, initialFocus, occurrence);
+  const modelTrace = active?.type === "llm" && record ?
+    modelEvidence(modelEvidence(record.errorJson).modelTrace ?? record.outputJson) : null;
   const pending =
     record && ["waiting", "running", "pending"].includes(record.status);
   const choose = (id: string) => {
@@ -438,6 +447,12 @@ export default function RunExecutionCanvas({
                     本次：{runNodeLabels[record.status] ?? record.status} · 耗时{" "}
                     {record.durationMs ?? "—"} ms
                   </p>
+                  {modelTrace && <dl className="grid grid-cols-[auto_1fr] gap-x-3 break-all text-sm" aria-label="模型调用记录">
+                    <dt>请求模型</dt><dd>{String(modelTrace.requestedModel ?? "当时未记录")}</dd>
+                    <dt>返回模型</dt><dd>{String(modelTrace.reportedModel ?? ("reportedModel" in modelTrace ? "供应商未返回" : "当时未记录"))}</dd>
+                    <dt>配置修订</dt><dd>{String(modelTrace.configurationRevision ?? "当时未记录")}</dd>
+                    <dt>响应标识</dt><dd>{String(modelTrace.providerCompletionId ?? "当时未记录")}</dd>
+                  </dl>}
                   {run.flowType === "data" && <p className="aiflow-type-body break-words text-muted-foreground">
                     {workflowNodeTypeLabel(active.type)} · {active.id} · 输出 {record.rowCount ?? "—"} 行 · {record.attempt ? `第 ${record.attempt} 次尝试` : "未记录尝试次数"}
                   </p>}

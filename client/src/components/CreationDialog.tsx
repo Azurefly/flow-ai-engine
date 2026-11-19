@@ -8,10 +8,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRef, type RefObject, type ReactNode } from "react";
 
 export function CreationDialog({
   open,
+  returnFocus,
   onOpenChange,
   title,
   description,
@@ -27,6 +28,7 @@ export function CreationDialog({
   cancelLabel = "取消",
 }: {
   open: boolean;
+  returnFocus?: RefObject<HTMLElement | null>;
   onOpenChange: (open: boolean) => void;
   title: string;
   description: string;
@@ -41,6 +43,7 @@ export function CreationDialog({
   destructive?: boolean;
   cancelLabel?: string;
 }) {
+  const opener = useRef<HTMLElement | null>(null);
   return (
     <Dialog
       open={open}
@@ -50,6 +53,18 @@ export function CreationDialog({
     >
       <DialogContent
         showCloseButton={false}
+        onOpenAutoFocus={() => {
+          opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        }}
+        onCloseAutoFocus={event => {
+          const target = [returnFocus?.current, opener.current].find(element => element?.isConnected && element !== document.body && !element.matches(":disabled"));
+          const fallback = document.querySelector<HTMLElement>("main h1, [data-aiflow-business-center] h1");
+          if (target || fallback) {
+            event.preventDefault();
+            if (!target && fallback) fallback.tabIndex = -1;
+            (target ?? fallback)?.focus({ preventScroll: true });
+          }
+        }}
         className={`flex w-[calc(100%-2rem)] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card p-4 shadow-2xl max-h-[calc(100vh-1rem)] supports-[height:100dvh]:max-h-[calc(100dvh-1rem)] sm:p-5 ${className}`}
       >
         <form

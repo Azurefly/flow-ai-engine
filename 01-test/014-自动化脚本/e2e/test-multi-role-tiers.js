@@ -8,13 +8,14 @@
  * 4. 全程使用真实 Chromium 浏览器驱动多用户界面交互操作，并生成真实高清截图证据链。
  */
 
+const { acceptanceLogin } = require("../../../scripts/acceptance-target.cjs");
+const { base: BASE_URL, username: ADMIN_USER, password: ADMIN_PWD } =
+  acceptanceLogin(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL ?? process.env.TEST_BASE_URL);
 const { chromium } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BASE_URL = process.env.TEST_BASE_URL || 'http://124.223.198.84:1180';
-const ADMIN_USER = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME || 'flow_admin';
-const ADMIN_PWD = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD || 'b2b055bfb12ed3bed70e86589fdb15478eeb1d0db5c0ff87';
+
 
 const USERS = {
   alice: { id: '228', username: 'applicant_alice', password: 'AlicePassword2026!', name: '采购申请人爱丽丝', role: '申请人/经办人 (Tier 1)' },

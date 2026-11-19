@@ -1,3 +1,4 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Run in the deployed app container against public 1180. The only SQL writes claim/release newly owned test jobs.
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -6,7 +7,7 @@ import { realpathSync } from "node:fs";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
 
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 const lab = process.env.FLOW_RECOVERY_LAB;
 assert(lab && /^\/tmp\/flow-loop-recovery-[a-f0-9]{12}$/.test(lab) && realpathSync(lab) === lab);
 const compiled = spawnSync("/app/node_modules/.bin/esbuild", [lab + "/scripts/loop-recovery-worker.ts", "--bundle", "--platform=node", "--format=esm", "--packages=external", "--tsconfig=" + lab + "/tsconfig.json", "--outfile=" + lab + "/worker.mjs"], { cwd: lab, encoding: "utf8" });

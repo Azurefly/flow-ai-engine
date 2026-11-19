@@ -5,8 +5,8 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0047_assistant_workspace_actions";
-export const DATABASE_MIGRATION_EPOCH = 1795052696342;
+export const DATABASE_MIGRATION_VERSION = "0048_audit_operations";
+export const DATABASE_MIGRATION_EPOCH = 1795063903129;
 export const DATABASE_REQUIRED_COLUMN_COUNT = 78;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
@@ -91,7 +91,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run','resource_creation_request','workflow_creation_request','assistant_agent','assistant_session','assistant_turn')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run','resource_creation_request','workflow_creation_request','assistant_agent','assistant_session','assistant_turn','project_import_batch','project_import_row','dataflow_manual_receipt')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -173,7 +173,7 @@ export async function checkReadiness() {
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 18 &&
+      Number(tableRows[0]?.count ?? 0) === 21 &&
       Number(columnRows[0]?.count ?? 0) === DATABASE_REQUIRED_COLUMN_COUNT &&
       Number(indexRows[0]?.count ?? 0) === 21 &&
       Number(projectUnitCollationRows[0]?.count ?? 0) === 3 &&

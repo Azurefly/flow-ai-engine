@@ -1,9 +1,10 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { ArrowUp, Plus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { parseConsoleRoute } from "@shared/console-route";
-import { newResourceRequestKey } from "@shared/resource-creation";
+import { newOperationUuid, newResourceRequestKey } from "@shared/resource-creation";
+import type { AssistantMessage } from "../../../server/assistant-store";
 import type {
   AssistantContext,
   AssistantNavigation,
@@ -33,22 +34,7 @@ type Attempt = {
   };
 };
 
-function sessionUuid() {
-  if (globalThis.crypto.randomUUID) return globalThis.crypto.randomUUID();
-  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6] & 15) | 64;
-  bytes[8] = (bytes[8] & 63) | 128;
-  const hex = Array.from(bytes, byte =>
-    byte.toString(16).padStart(2, "0")
-  ).join("");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    hex.slice(12, 16),
-    hex.slice(16, 20),
-    hex.slice(20),
-  ].join("-");
-}
+
 
 function readAttempt(key: string): Attempt | null {
   try {
@@ -107,12 +93,28 @@ export default function AssistantChat({
     enabled: !trial,
     retry: false,
   });
-  const history = trpc.assistant.sessions.useQuery(
-    { preview, agentId: trial?.id },
-    { retry: false }
+  const [historyAgent, setHistoryAgent] = useState("");
+  const [historyScope, setHistoryScope] = useState("all");
+  const [historySearch, setHistorySearch] = useState("");
+  const history = trpc.assistant.sessionsPage.useInfiniteQuery(
+    { preview, agentId: trial?.id ?? (historyAgent || undefined), configVersion: trial?.version,
+      projectId: trial || historyScope === "current" ? context.projectId ?? null : undefined,
+      search: historySearch.trim() || undefined, limit: 20 },
+    { retry: false, getNextPageParam: page => page.nextCursor ?? undefined }
   );
+  const pageSize = 12;
+  const [older, setOlder] = useState<{ id: string; messages: AssistantMessage[]; before: number | null } | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const currentSessionId = useRef(sessionId);
+  currentSessionId.current = sessionId;
+  const keepBottom = useRef(true);
+  const scrollAnchor = useRef<{ height: number; top: number } | null>(null);
+  const [unread, setUnread] = useState(false);
+  const composer = useRef<HTMLTextAreaElement>(null);
+  const proposalHeading = useRef<HTMLElement>(null);
+  const shouldFocus = useRef(false);
   const current = trpc.assistant.get.useQuery(
-    { sessionId },
+    { sessionId, pageSize },
     {
       enabled: Boolean(sessionId),
       retry: false,
@@ -125,7 +127,7 @@ export default function AssistantChat({
     attempt && sessionId === attempt.sessionId && !locked.current
   );
   const receipt = trpc.assistant.get.useQuery(
-    { sessionId, requestId: attempt?.key },
+    { sessionId, pageSize, requestId: attempt?.key },
     {
       enabled: recovering,
       retry: false,
@@ -145,13 +147,24 @@ export default function AssistantChat({
   const agents = trial ? [trial] : (list.data ?? []);
   const activeAgent =
     agents.find(item => item.id === selectedAgent) ?? agents[0];
-  const sessions = (history.data ?? []).filter(
-    item =>
-      !trial ||
-      (item.agentId === trial.id &&
-        item.configVersion === trial.version &&
-        item.projectId === (context.projectId ?? null))
-  );
+  const sessions = Array.from(new Map(history.data?.pages.flatMap(page => page.items.map(item => [item.id, item] as const))).values());
+  const before = older?.id === sessionId ? older.before : session?.olderBefore;
+  const messages = !session ? [] : Array.from(new Map([...(older?.id === sessionId ? older.messages : []), ...session.messages]
+    .map((message, index) => [message.turnRevision === undefined ? "legacy" + index : message.turnRevision + "/" + message.turnIndex, message] as const)).values());
+  async function loadOlder() {
+    if (!before || loadingOlder) return;
+    setLoadingOlder(true);
+    try {
+      const page = await utils.client.assistant.get.query({ sessionId, pageSize, beforeRevision: before });
+      if (currentSessionId.current !== sessionId) return;
+      const log = tail.current?.parentElement;
+      if (log) scrollAnchor.current = { height: log.scrollHeight, top: log.scrollTop };
+      keepBottom.current = false;
+      setOlder(prior => ({ id: sessionId, messages: [...page.messages, ...(prior?.id === sessionId ? prior.messages : [])], before: page.olderBefore ?? null }));
+    } catch (cause) {
+      if (currentSessionId.current === sessionId) setError(cause instanceof Error ? cause.message : "读取早期消息失败。");
+    } finally { setLoadingOlder(false); }
+  }
   const waiting =
     Boolean(recovering && session && attempt && session.revision > attempt.revision) ||
     start.isPending ||
@@ -180,7 +193,7 @@ export default function AssistantChat({
       result.revision <= attempt.revision
     )
       return;
-    utils.assistant.get.setData({ sessionId }, result);
+    utils.assistant.get.setData({ sessionId, pageSize }, result);
     remember(null);
     if (result.requestCommitted) {
       setText(existing => (existing === attempt.text ? "" : existing));
@@ -190,12 +203,25 @@ export default function AssistantChat({
     }
   }, [recovering, receipt.data, receipt.isError, attempt, sessionId, utils]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const log = tail.current?.parentElement;
-    if (log) log.scrollTop = log.scrollHeight;
-  }, [sessionId, session?.revision, sending, error]);
+    if (!log) return;
+    if (scrollAnchor.current) {
+      log.scrollTop = scrollAnchor.current.top + log.scrollHeight - scrollAnchor.current.height;
+      scrollAnchor.current = null;
+    } else if (keepBottom.current) log.scrollTop = log.scrollHeight;
+  }, [older, sessionId, session?.revision, sending]);
+  useEffect(() => {
+    if (!keepBottom.current && session?.revision) setUnread(true);
+  }, [session?.revision]);
+  useEffect(() => {
+    if (waiting || !shouldFocus.current) return;
+    shouldFocus.current = false;
+    (pending ? proposalHeading.current : composer.current)?.focus({ preventScroll: true });
+  }, [waiting, pending, sending, error]);
 
   function selectSession(id: string) {
+    setOlder(null); setUnread(false); keepBottom.current = true; scrollAnchor.current = null;
     setSessionId(id);
     setError("");
     setText("");
@@ -218,11 +244,12 @@ export default function AssistantChat({
       return;
     if (!session && (sessionId || (!activeAgent && !attempt?.start))) return;
     locked.current = true;
+    shouldFocus.current = true;
     setError("");
     let target = session;
     try {
       const id =
-        target?.id ?? (attempt?.start ? attempt.sessionId : sessionUuid());
+        target?.id ?? (attempt?.start ? attempt.sessionId : newOperationUuid());
       const revision = target?.revision ?? 0;
       const action = JSON.stringify([id, approve, pending?.id, message]);
       const creation = target
@@ -252,7 +279,7 @@ export default function AssistantChat({
           preview,
           sessionId: id,
         });
-        utils.assistant.get.setData({ sessionId: id }, target);
+        utils.assistant.get.setData({ sessionId: id, pageSize }, target);
         setSessionId(id);
         try {
           sessionStorage.setItem(storageKey, id);
@@ -264,7 +291,7 @@ export default function AssistantChat({
       const payload = {
         sessionId: target.id,
         revision: request.revision,
-        requestId: request.key,
+        requestId: request.key, pageSize,
       };
       if (approve === undefined) setSending(message);
       const next =
@@ -280,7 +307,7 @@ export default function AssistantChat({
               approve,
               proposalId: pending!.id,
             });
-      utils.assistant.get.setData({ sessionId: next.id }, next);
+      utils.assistant.get.setData({ sessionId: next.id, pageSize }, next);
       remember(null);
       setText("");
       if (!preview && target.pending && next.status === "completed") {
@@ -298,13 +325,25 @@ export default function AssistantChat({
     } finally {
       setSending("");
       locked.current = false;
-      void utils.assistant.sessions.invalidate();
+      void utils.assistant.sessionsPage.invalidate();
     }
   }
 
   return (
     <div className="assistant-chat">
       <div className="assistant-chat-toolbar">
+        <details>
+          <summary>筛选对话</summary>
+          <label>标题<input aria-label="历史对话标题" maxLength={160} value={historySearch} onChange={e => setHistorySearch(e.target.value)} /></label>
+          {!trial && <>
+            <label>助手<select aria-label="历史助手" value={historyAgent} onChange={e => setHistoryAgent(e.target.value)}>
+              <option value="">全部助手</option>{agents.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select></label>
+            <label>范围<select aria-label="历史项目范围" value={historyScope} onChange={e => setHistoryScope(e.target.value)}>
+              <option value="all">全部可见项目</option><option value="current">{context.projectId ? "本项目" : "工作台"}</option>
+            </select></label>
+          </>}
+        </details>
         <select
           aria-label="对话记录"
           value={sessionId}
@@ -323,6 +362,8 @@ export default function AssistantChat({
             </option>
           ))}
         </select>
+        {history.hasNextPage && <button type="button" className="assistant-link" disabled={history.isFetchingNextPage}
+          onClick={() => void history.fetchNextPage()}>更多对话</button>}
         <button
           type="button"
           className="assistant-link"
@@ -355,7 +396,9 @@ export default function AssistantChat({
         className="assistant-log"
         role="log"
         aria-label={trial ? "试聊记录" : "对话内容"}
-        aria-live="polite"
+        aria-live={unread ? "off" : "polite"}
+        onScroll={e => { const log = e.currentTarget; keepBottom.current = log.scrollHeight - log.scrollTop - log.clientHeight < 36;
+          if (keepBottom.current) setUnread(false); }}
       >
         {(!sessionId || session) && (
           <p className="assistant-session-title">
@@ -383,9 +426,11 @@ export default function AssistantChat({
             )}
           </div>
         )}
-        {(session?.messages ?? []).map((item, index) => (
+        {session && before && <button type="button" className="assistant-link" disabled={loadingOlder}
+          onClick={() => void loadOlder()}>读取更早的消息</button>}
+        {messages.map((item, index) => (
           <div
-            key={index}
+            key={item.turnRevision === undefined ? index : item.turnRevision + "/" + item.turnIndex}
             className="assistant-message"
             data-speaker={item.role}
           >
@@ -410,7 +455,8 @@ export default function AssistantChat({
           </div>
         )}
         {pending && (
-          <section className="assistant-proposal" aria-label="操作预览">
+          <section className="assistant-proposal" aria-label="操作预览" ref={proposalHeading} tabIndex={-1}>
+            <p>会话修订 {session?.revision} · {project.data?.name ?? (projectId || "工作台")}</p>
             <strong>{pending.title}</strong>
             <p>{pending.detail}</p>
             {pending.canvas && <Dialog key={pending.id}>
@@ -482,6 +528,10 @@ export default function AssistantChat({
         )}
         <div ref={tail} />
       </div>
+      {unread && <button type="button" className="assistant-link" onClick={() => {
+        const log = tail.current?.parentElement; if (log) log.scrollTop = log.scrollHeight;
+        keepBottom.current = true; setUnread(false);
+      }}>查看新消息</button>}
       <form
         className="assistant-composer"
         onSubmit={event => {
@@ -489,7 +539,7 @@ export default function AssistantChat({
           void respond();
         }}
       >
-        <textarea
+        <textarea ref={composer}
           aria-label={preview ? "试聊消息" : "发给助手的消息"}
           value={text}
           rows={2}

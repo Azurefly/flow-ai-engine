@@ -29,7 +29,7 @@ sudo env FLOW_COMPOSE_ENV_FILE=/opt/flow-ai-engine/source/.env \
 
 ## 目标
 
-- 应用通过宿主机端口 `1180` 提供服务。
+- Compose 将应用 HTTP 端口绑定到宿主回环地址。公网登录由 Nginx 终止 TLS。
 - MySQL 只连接独立内部 Docker 网络，不向宿主机暴露 3306。
 - 数据保存在 Compose 命名卷 `flow-ai-engine_flow_ai_mysql_data`。
 - 应用启动前运行版本化 Drizzle 迁移。
@@ -69,11 +69,27 @@ FLOW_COMPOSE_ENV_FILE=/opt/flow-ai-engine/source/.env bash scripts/deploy-app.sh
 
 `docker compose up -d` 不会删除命名卷。禁止使用 `docker compose down -v`，除非已经明确确认需要永久删除数据库。
 
+## 在同一公网端口提供 HTTPS
+
+主机已有为站点名或 IP 签发的有效证书时，可沿用当前公网端口。在远程 Linux 主机的 Compose 环境文件设置 `FLOW_HTTP_BIND_ADDRESS=127.0.0.1`、`FLOW_HTTP_PORT=1181`，为外部 Nginx 留出 1180。Docker 容器健康检查继续使用容器自身的 3000。保留既有数据库卷、应用镜像摘要、启动环境和加密密钥，先备份配置并在回环监听器测试。
+
+[站点模板](../scripts/nginx/flow-https.conf.template)会把原端口上的明文 GET/HEAD 升级为 HTTPS，以 426 拒绝明文写请求。将下例的站点名和证书目录替换为证书实际覆盖的名称与目录。在项目根目录的 Linux Bash 执行，显式变量清单保留模板中的 Nginx 变量。
+
+```bash
+export FLOW_PUBLIC_HOST=flow.example.org FLOW_TLS_PORT=1180 FLOW_HTTP_PORT=1181
+export FLOW_CERT_DIR=/etc/letsencrypt/live/flow.example.org
+envsubst '${FLOW_PUBLIC_HOST} ${FLOW_TLS_PORT} ${FLOW_HTTP_PORT} ${FLOW_CERT_DIR}'   < scripts/nginx/flow-https.conf.template > /tmp/flow-https.conf
+sudo install -m 0644 /tmp/flow-https.conf /etc/nginx/conf.d/flow-ai-engine-https.conf
+sudo nginx -t
+```
+
+确认回环上游就绪后 reload Nginx。以独立客户端核对证书和跳转，使用测试身份登录、刷新和注销。证书续期时沿用现有 ACME 续期机制，并在更新后 reload Nginx。回退应用版本时保留 TLS 站点和回环上游，必要时恢复之前有效的站点配置并重新检查语法。
+
 ## 验证
 
 ```bash
-curl --fail http://127.0.0.1:1180/
-curl --fail http://127.0.0.1:1180/healthz
+curl --fail "http://127.0.0.1:${FLOW_HTTP_PORT:-1180}/readyz"
+curl --fail "https://${FLOW_PUBLIC_HOST}:${FLOW_TLS_PORT:-1180}/healthz"
 docker compose ps
 docker compose logs --tail=100 app
 ```

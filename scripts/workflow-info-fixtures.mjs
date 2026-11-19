@@ -39,7 +39,7 @@ try {
     let cookie = "";
     async function api(method, input) {
       const response = await fetch(
-        "http://124.223.198.84:1180/api/trpc/" + method,
+        "http://127.0.0.1:3000/api/trpc/" + method,
         {
           method: "POST",
           headers: { "content-type": "application/json", cookie },

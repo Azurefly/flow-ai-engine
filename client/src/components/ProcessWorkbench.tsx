@@ -136,6 +136,19 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [localTaskId, setLocalTaskId] = useState<string | null>(null);
   const selectedTaskId = routeTaskId ?? localTaskId;
+  const taskOpener = useRef<HTMLElement | null>(null);
+  const panel = useRef<HTMLElement>(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !selectedTaskId) {
+      const target = taskOpener.current;
+      const fallback = panel.current?.querySelector<HTMLElement>("h1,button");
+      if (target?.isConnected && target.getClientRects().length) target.focus({ preventScroll: true });
+      else fallback?.focus({ preventScroll: true });
+      taskOpener.current = null;
+    }
+    wasOpen.current = Boolean(selectedTaskId);
+  }, [selectedTaskId]);
   const setSelectedTaskId = (id: string | null) => {
     setLocalTaskId(id);
     if (routeTaskId && id !== routeTaskId) onClearTaskRoute?.();
@@ -278,11 +291,13 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
   useEffect(() => {
     if (calendar.isFetching || !calendar.data) return;
     setCalendarEvents(current => {
-      const seen = new Set(current.map(event => event.id));
-      return [
-        ...current,
-        ...calendar.data.items.filter(event => !seen.has(event.id)),
-      ];
+      const incoming = new Map(calendar.data.items.map(event => [event.id, event]));
+      const retained = current.map(event => {
+        const updated = incoming.get(event.id);
+        incoming.delete(event.id);
+        return updated ?? event;
+      });
+      return [...retained, ...Array.from(incoming.values())];
     });
     setCalendarNextCursor(calendar.data.nextCursor);
   }, [calendar.data, calendar.isFetching]);
@@ -500,7 +515,10 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
     setListThrough("");
     invalidate();
   };
-  const openTask = (taskId: string) => setSelectedTaskId(taskId);
+  const openTask = (taskId: string) => {
+    taskOpener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedTaskId(taskId);
+  };
   const changeCalendarMonth = (nextMonth: Date) => {
     if (
       nextMonth.getFullYear() === month.getFullYear() &&
@@ -655,7 +673,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
         </aside>
         <section
           aria-label="流程工作台内容"
-          data-workbench-content=""
+          data-workbench-content="" ref={panel}
           className={`min-w-0 ${selectedRunId ? "lg:col-span-2" : ""}`}
         >
           {selectedRunId ? (
@@ -674,7 +692,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
               <header className="flex items-start justify-between gap-3 border-b border-border p-4 sm:items-center sm:p-5">
                 <div className="min-w-0">
                   <h1
-                    data-aiflow-page-title=""
+                    data-aiflow-page-title="" tabIndex={-1}
                     className="aiflow-type-page-title font-semibold text-foreground sm:mt-1"
                   >
                     {labels[view]}
@@ -1054,7 +1072,7 @@ function Board({
       <QueryErrorState title="看板加载失败" message={error} onRetry={onRetry} />
     );
   if (loading || !dashboard)
-    return <LoadingState label="正在加载当前授权范围内的看板统计与最近任务…" />;
+    return <LoadingState label="正在加载当前授权范围内的看板统计与本人相关任务…" />;
   const counts = dashboard?.counts ?? {};
   return (
     <div className="p-5">
@@ -1104,7 +1122,7 @@ function Board({
       <section className="mt-5 overflow-hidden rounded-lg border border-border">
         <div className="border-b border-border px-4 py-3">
           <h2 className="aiflow-type-section-title font-semibold text-foreground">
-            最近任务
+            与我相关的近期任务
           </h2>
           <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
             包含本人待办、已办和发起的近期任务；待办数只统计当前分配/候选给本人或由本人领取的任务。

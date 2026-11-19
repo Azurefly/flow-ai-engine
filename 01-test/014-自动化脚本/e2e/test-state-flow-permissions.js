@@ -9,13 +9,14 @@
  * 4. viewer_charlie: 无关第三方观察员（非当前人）
  */
 
+const { acceptanceLogin } = require("../../../scripts/acceptance-target.cjs");
+const { base: BASE_URL, username: ADMIN_USER, password: ADMIN_PWD } =
+  acceptanceLogin(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL ?? process.env.TEST_BASE_URL);
 const { chromium } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BASE_URL = process.env.TEST_BASE_URL || 'http://124.223.198.84:1180';
-const ADMIN_USER = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME || 'flow_admin';
-const ADMIN_PWD = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD || 'b2b055bfb12ed3bed70e86589fdb15478eeb1d0db5c0ff87';
+
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../018-测试报告/screenshots');
 if (!fs.existsSync(SCREENSHOT_DIR)) {

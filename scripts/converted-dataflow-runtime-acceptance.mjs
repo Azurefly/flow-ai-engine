@@ -1,3 +1,4 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Run the bundled script inside the app container. All HTTP stays on the approved 1180 service.
 // SQL is read-only. Writes are limited to one newly created, tagged project; no accounts or grants.
 import assert from "node:assert/strict";
@@ -8,7 +9,7 @@ import { inspectDataflowConfigConversion } from "../shared/dataflow-config-conve
 import { analyzeWorkflowDefinition } from "../server/workflow-compiler.ts";
 import { dataflowResourceDiagnostics } from "../server/dataflow-resource-readiness.ts";
 
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const observe = process.env.FLOW_CONVERTED_RUNTIME_OBSERVE === "1";
 const tag =
   process.env.FLOW_CONVERTED_RUNTIME_CLEANUP_TAG ??

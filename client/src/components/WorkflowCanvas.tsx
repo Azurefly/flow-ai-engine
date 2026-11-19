@@ -2463,6 +2463,14 @@ export default function WorkflowCanvas({
   const fitCanvas = useCallback((nodeId?: string | null, edgeId?: string | null, duration = 180) => {
     if (!reactFlow || !flowViewportRef.current) return Promise.resolve(false);
     const viewport = flowViewportRef.current;
+    const boundsOnPage = viewport.getBoundingClientRect();
+    const inspector = editorRegionRef.current?.querySelector("[data-workflow-inspector]")?.getBoundingClientRect();
+    const right = inspector && inspector.top < boundsOnPage.bottom && inspector.bottom > boundsOnPage.top &&
+      inspector.left > boundsOnPage.left && inspector.left < boundsOnPage.right ? inspector.left - boundsOnPage.left : viewport.clientWidth;
+    const controls = viewport.querySelector("[data-canvas-view-controls]")?.getBoundingClientRect();
+    const top = controls && nodeId ? Math.min(viewport.clientHeight / 3, Math.max(0, controls.bottom - boundsOnPage.top) + 8) : 0;
+    const availableWidth = Math.max(1, right - 16);
+    const availableHeight = Math.max(1, viewport.clientHeight - top - 16);
     const displayed = displayedNodesRef.current;
     if (globalLayoutRef.current) {
       const focusId = nodeId ?? (edgeId && latestEdgesRef.current.find(edge => edge.id === edgeId)?.source);
@@ -2471,8 +2479,8 @@ export default function WorkflowCanvas({
       if (anchor) {
         const { x, y, width, height } = canvasNodeRects([anchor])[0];
         const zoom = focusId ? Math.max(.85, reactFlow.getZoom()) : 1;
-        const left = focusId ? (viewport.clientWidth - width * zoom) / 2 : Math.min(48, viewport.clientWidth * .08);
-        return reactFlow.setViewport({ x: left - x * zoom, y: viewport.clientHeight / 2 - (y + height / 2) * zoom, zoom }, { duration: prefersReducedMotion ? 0 : duration });
+        const left = focusId ? 8 + (availableWidth - width * zoom) / 2 : Math.min(48, availableWidth * .08);
+        return reactFlow.setViewport({ x: left - x * zoom, y: top + 8 + availableHeight / 2 - (y + height / 2) * zoom, zoom }, { duration: prefersReducedMotion ? 0 : duration });
       }
     }
     const allRects = canvasNodeRects(displayed), currentEdges = latestEdgesRef.current;
@@ -2481,7 +2489,8 @@ export default function WorkflowCanvas({
     const local = adjacentViewRef.current;
     const bounds = local && local.id === nodeId ? local.bounds :
       selectedRect ? canvasBounds([selectedRect]) : canvasViewBounds(allRects, currentEdges, ids);
-    return reactFlow.setViewport(getViewportForBounds(bounds, viewport.clientWidth, viewport.clientHeight, 0.1, 1, 0.12), { duration: prefersReducedMotion ? 0 : duration });
+    const fitted = getViewportForBounds(bounds, availableWidth, availableHeight, 0.1, 1, 0.12);
+    return reactFlow.setViewport({ ...fitted, x: fitted.x + 8, y: fitted.y + top + 8 }, { duration: prefersReducedMotion ? 0 : duration });
   }, [reactFlow, prefersReducedMotion]);
 
   function showFullCanvas(scope: "global" | "overview", presentation: CanvasPresentation) {

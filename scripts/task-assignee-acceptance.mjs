@@ -1,8 +1,9 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Run inside the deployed app container. All product requests use the public 1180 service.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 let cookie = "";
 async function request(path, input, mutation = false) {
     // Fixture writes explicitly submit the revision just inspected; callers may supply an older revision to test conflicts.

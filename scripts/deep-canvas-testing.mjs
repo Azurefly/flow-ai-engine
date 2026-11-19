@@ -1,3 +1,4 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 /**
  * Deep Canvas & Node Functional Testing Suite
  *
@@ -12,11 +13,11 @@
 import { randomBytes } from "node:crypto";
 
 const baseUrl = (
-  process.env.TEST_BASE_URL ?? "http://124.223.198.84:1180"
+  acceptanceTarget(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL || process.env.TEST_BASE_URL)
 ).replace(/\/$/, "");
-const adminUsername = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME ?? "flow_admin";
+const adminUsername = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME;
 const adminPassword = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD;
-if (!adminPassword)
+if (!adminUsername || !adminPassword)
   throw new Error("FLOW_BOOTSTRAP_ADMIN_PASSWORD is required for this test");
 
 class TrpcRequestError extends Error {

@@ -1055,6 +1055,17 @@ async function resolveServiceTaskRuntimeConfig(
   return { ...runtimeConfig, url: resolvedUrl.toString(), headers };
 }
 
+type ModelTrace = {
+  requestedModel: string | null;
+  reportedModel: string | null;
+  configurationRevision: string;
+  providerCompletionId: string | null;
+  attempts: import("./_core/llm").LlmHttpAttempt[];
+};
+class WorkflowModelError extends Error {
+  constructor(message: string, readonly modelTrace: ModelTrace) { super(message); }
+}
+
 async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
   const configuredGovernance = asRecord(config.governance);
   const providerRef = String(
@@ -1153,95 +1164,109 @@ async function executeLlmNode(config: JsonRecord, context: JsonRecord) {
       `LLM 节点最坏费用 ${projectedCostMicros} micros 超过上限 ${maxCostMicros} micros。`
     );
   const startedAt = Date.now();
-  const response = await invokeLLM({
-    model,
-    maxTokens,
-    timeoutMs,
-    ...(effectiveOutputSchema
-      ? {
-          outputSchema: {
-            name: String(effectiveOutputSchema.name),
-            schema: effectiveOutputSchema.schema as Record<string, unknown>,
-            strict: effectiveOutputSchema.strict === true,
-          },
-        }
-      : {}),
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: prompt },
-    ],
-  }, connection);
-  const content = response.choices[0]?.message.content;
-  const contentText = Array.isArray(content)
-    ? content
-        .map(part => ("text" in part ? part.text : JSON.stringify(part)))
-        .join("\n")
-    : (content ?? "");
-  let structured: unknown;
-  if (effectiveOutputSchema) {
-    structured = parseStructuredLlmOutput(contentText);
-    assertJsonSchemaValue(
-      structured,
-      effectiveOutputSchema.schema as Record<string, unknown>
+  const trace: ModelTrace = { requestedModel: model ?? null, reportedModel: null,
+    configurationRevision: connection.configurationRevision, providerCompletionId: null, attempts: [] };
+  let received = false;
+  try {
+    const response = await invokeLLM({
+      model,
+      maxTokens,
+      timeoutMs,
+      ...(effectiveOutputSchema
+        ? {
+            outputSchema: {
+              name: String(effectiveOutputSchema.name),
+              schema: effectiveOutputSchema.schema as Record<string, unknown>,
+              strict: effectiveOutputSchema.strict === true,
+            },
+          }
+        : {}),
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+    }, connection, attempt => trace.attempts.push(attempt));
+    received = true;
+    trace.reportedModel = response.model || null;
+    trace.providerCompletionId = response.id || null;
+    const content = response.choices[0]?.message.content;
+    const contentText = Array.isArray(content)
+      ? content
+          .map(part => ("text" in part ? part.text : JSON.stringify(part)))
+          .join("\n")
+      : (content ?? "");
+    let structured: unknown;
+    if (effectiveOutputSchema) {
+      structured = parseStructuredLlmOutput(contentText);
+      assertJsonSchemaValue(
+        structured,
+        effectiveOutputSchema.schema as Record<string, unknown>
+      );
+    }
+    if (deterministicSchema && structured !== undefined)
+      assertJsonSchemaValue(structured, deterministicSchema);
+    const allowedValues = asRecord(deterministicValidation.allowedValues);
+    if (Object.keys(allowedValues).length) {
+      if (structured === undefined)
+        throw new Error("LLM 确定性允许值校验需要结构化输出。");
+      assertDeterministicLlmAllowedValues(
+        structured,
+        Object.fromEntries(
+          Object.entries(allowedValues).map(([path, values]) => [
+            path,
+            Array.isArray(values) ? values : [],
+          ])
+        )
+      );
+    }
+    const actualModel = response.model || model;
+    const actualPricing = actualModel ? pricingCatalog[actualModel] : undefined;
+    const actualCostMicros =
+      response.usage && actualPricing
+        ? calculateLlmCostMicros(response.usage, actualPricing)
+        : null;
+    if (hasCostLimit && (!response.usage || !actualPricing))
+      throw new Error("LLM Provider 未返回可计费 usage 或实际模型缺少可信定价。");
+    if (
+      hasCostLimit &&
+      actualCostMicros !== null &&
+      actualCostMicros > maxCostMicros
+    )
+      throw new Error(
+        `LLM 节点实际费用 ${actualCostMicros} micros 超过上限 ${maxCostMicros} micros。`
+      );
+    const redactedContent = redactLlmOutput(
+      contentText,
+      preparedContext.allowedSensitiveValues
     );
+    const redactedStructured =
+      structured === undefined
+        ? undefined
+        : redactLlmOutput(structured, preparedContext.allowedSensitiveValues);
+    return {
+      model: actualModel,
+      ...trace,
+      content: redactedContent,
+      ...(redactedStructured === undefined
+        ? {}
+        : { structured: redactedStructured }),
+      usage: response.usage ?? null,
+      costMicros: actualCostMicros,
+      maxCostMicros: hasCostLimit ? maxCostMicros : null,
+      dataClassification,
+      humanReviewRequired: governance.humanReviewRequired === true,
+      finishReason: response.choices[0]?.finish_reason ?? null,
+      durationMs: Date.now() - startedAt,
+      requestId:
+        String(asRecord(context.runtime).requestId ?? currentRequestId() ?? "") ||
+        null,
+    };
+  } catch (error) {
+    const last = trace.attempts.at(-1);
+    const message = received && error instanceof Error ? error.message :
+      "模型服务调用未完成" + (last?.httpStatus ? "（HTTP " + last.httpStatus + "）" : "") + "。";
+    throw new WorkflowModelError(message, trace);
   }
-  if (deterministicSchema && structured !== undefined)
-    assertJsonSchemaValue(structured, deterministicSchema);
-  const allowedValues = asRecord(deterministicValidation.allowedValues);
-  if (Object.keys(allowedValues).length) {
-    if (structured === undefined)
-      throw new Error("LLM 确定性允许值校验需要结构化输出。");
-    assertDeterministicLlmAllowedValues(
-      structured,
-      Object.fromEntries(
-        Object.entries(allowedValues).map(([path, values]) => [
-          path,
-          Array.isArray(values) ? values : [],
-        ])
-      )
-    );
-  }
-  const actualModel = response.model || model;
-  const actualPricing = actualModel ? pricingCatalog[actualModel] : undefined;
-  const actualCostMicros =
-    response.usage && actualPricing
-      ? calculateLlmCostMicros(response.usage, actualPricing)
-      : null;
-  if (hasCostLimit && (!response.usage || !actualPricing))
-    throw new Error("LLM Provider 未返回可计费 usage 或实际模型缺少可信定价。");
-  if (
-    hasCostLimit &&
-    actualCostMicros !== null &&
-    actualCostMicros > maxCostMicros
-  )
-    throw new Error(
-      `LLM 节点实际费用 ${actualCostMicros} micros 超过上限 ${maxCostMicros} micros。`
-    );
-  const redactedContent = redactLlmOutput(
-    contentText,
-    preparedContext.allowedSensitiveValues
-  );
-  const redactedStructured =
-    structured === undefined
-      ? undefined
-      : redactLlmOutput(structured, preparedContext.allowedSensitiveValues);
-  return {
-    model: actualModel,
-    content: redactedContent,
-    ...(redactedStructured === undefined
-      ? {}
-      : { structured: redactedStructured }),
-    usage: response.usage ?? null,
-    costMicros: actualCostMicros,
-    maxCostMicros: hasCostLimit ? maxCostMicros : null,
-    dataClassification,
-    humanReviewRequired: governance.humanReviewRequired === true,
-    finishReason: response.choices[0]?.finish_reason ?? null,
-    durationMs: Date.now() - startedAt,
-    requestId:
-      String(asRecord(context.runtime).requestId ?? currentRequestId() ?? "") ||
-      null,
-  };
 }
 
 
@@ -2076,9 +2101,6 @@ export async function executePreparedWorkflowRun(input: {
       : startNode
         ? [startNode.id]
         : [];
-  const runStartedAt = run.startedAt
-    ? new Date(run.startedAt).getTime()
-    : Date.now();
   const persistCheckpoint = async (checkpoint: WorkflowCheckpoint) => {
     const nextRuntime = asRecord(checkpoint.context.runtime);
     if (nextRuntime.parallelCheckpoint !== undefined)
@@ -2132,13 +2154,13 @@ export async function executePreparedWorkflowRun(input: {
   const params: unknown[] = [
     JSON.stringify(context),
     JSON.stringify(segment.output),
-    Date.now() - runStartedAt,
+
     input.runId,
   ];
   const leaseClause = input.leaseToken ? " AND executionLockToken=?" : "";
   if (input.leaseToken) params.push(input.leaseToken);
   const [finished] = await db().query<mysql.ResultSetHeader>(
-    `UPDATE workflow_run SET status='success',endReason='completed',contextJson=?,finalOutputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+    `UPDATE workflow_run SET status='success',endReason='completed',contextJson=?,finalOutputJson=?,errorJson=NULL,finishedAt=NOW(3),durationMs=COALESCE(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW(3)) DIV 1000),0),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
     params
   );
   if (!finished.affectedRows)
@@ -2182,7 +2204,7 @@ export async function markWorkflowRunFailed(
     }
     const params: unknown[] = [
       JSON.stringify(details),
-      run.startedAt ? Date.now() - new Date(run.startedAt).getTime() : 0,
+
       runId,
     ];
     const leaseClause =
@@ -2190,7 +2212,7 @@ export async function markWorkflowRunFailed(
       (exhaustedJobId ? " AND status IN ('queued','running','waiting')" : "");
     if (leaseToken) params.push(leaseToken);
     const [failed] = await connection.query<mysql.ResultSetHeader>(
-      `UPDATE workflow_run SET status='failed',endReason='failed',errorJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
+      `UPDATE workflow_run SET status='failed',endReason='failed',errorJson=?,finishedAt=NOW(3),durationMs=COALESCE(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW(3)) DIV 1000),0),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?${leaseClause}`,
       params
     );
     if (!failed.affectedRows) {
@@ -2578,7 +2600,7 @@ async function persistWorkflowWait(input: {
     await connection.query(
       `INSERT INTO workflow_wait_subscription
       (id,runId,workflowId,nodeId,nodeRunId,waitType,status,resumeAt,messageName,correlationKey,checkpointJson,requestId,executionKey)
-      VALUES (?,?,?,?,?,?,'active',?,?,?,?,?,?)`,
+      VALUES (?,?,?,?,?,?,'active',TIMESTAMPADD(SECOND,?,CURRENT_TIMESTAMP),?,?,?,?,?)`,
       [
         waitId,
         input.runId,
@@ -2586,9 +2608,7 @@ async function persistWorkflowWait(input: {
         input.node.id,
         input.nodeRunId,
         waitType,
-        waitType === "timer"
-          ? new Date(Date.now() + durationSeconds * 1000)
-          : null,
+        waitType === "timer" ? durationSeconds : null,
         messageName,
         correlationKey,
         JSON.stringify(checkpoint),
@@ -3819,6 +3839,7 @@ export async function executeRunSegment(input: {
     } catch (error) {
       const details = {
         message: error instanceof Error ? error.message : String(error),
+        ...(error instanceof WorkflowModelError ? { modelTrace: error.modelTrace } : {}),
       };
       await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details, db(), ["operate", "wait", "message_catch"].includes(node.type));
       throw error;
@@ -4265,10 +4286,10 @@ export async function resumeWorkflowTask(input: {
     if (!waitingNodeRun)
       throw new Error("人工任务对应的等待节点运行记录不存在。");
     const [finishedNode] = await connection.query<mysql.ResultSetHeader>(
-      "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=? AND status='waiting'",
+      "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(3),durationMs=COALESCE(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW(3)) DIV 1000),0) WHERE id=? AND status='waiting'",
       [
         JSON.stringify(taskOutput),
-        Date.now() - new Date(waitingNodeRun.startedAt ?? Date.now()).getTime(),
+
         waitingNodeRun.id,
       ]
     );
@@ -4280,11 +4301,11 @@ export async function resumeWorkflowTask(input: {
     );
     if (gate.rejected && outcomeRouting.mode === "legacy_cancel") {
       const [cancelledRun] = await connection.query<mysql.ResultSetHeader>(
-        "UPDATE workflow_run SET status='cancelled',endReason='legacy_rejected',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
+        "UPDATE workflow_run SET status='cancelled',endReason='legacy_rejected',contextJson=?,finalOutputJson=?,finishedAt=NOW(3),durationMs=COALESCE(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW(3)) DIV 1000),0),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status IN ('running','waiting')",
         [
           JSON.stringify(context),
           JSON.stringify(taskOutput),
-          Date.now() - new Date(task.startedAt ?? Date.now()).getTime(),
+
           task.runId,
         ]
       );
@@ -4741,10 +4762,10 @@ export async function reconcileWorkflowContinuations(limit = 20) {
         context
       );
       await connection.query(
-        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(),durationMs=? WHERE id=?",
+        "UPDATE workflow_node_run SET status='success',outputJson=?,errorJson=NULL,finishedAt=NOW(3),durationMs=COALESCE(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW(3)) DIV 1000),0) WHERE id=?",
         [
           JSON.stringify(taskOutput),
-          Date.now() - new Date(nodeRun.startedAt ?? Date.now()).getTime(),
+
           nodeRun.id,
         ]
       );
@@ -4765,11 +4786,11 @@ export async function reconcileWorkflowContinuations(limit = 20) {
       );
       if (rejected && outcomeRouting.mode === "legacy_cancel") {
         await connection.query(
-          "UPDATE workflow_run SET status='cancelled',endReason='legacy_rejected',contextJson=?,finalOutputJson=?,finishedAt=NOW(),durationMs=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+          "UPDATE workflow_run SET status='cancelled',endReason='legacy_rejected',contextJson=?,finalOutputJson=?,finishedAt=NOW(3),durationMs=COALESCE(GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW(3)) DIV 1000),0),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
           [
             JSON.stringify(context),
             JSON.stringify(taskOutput),
-            Date.now() - new Date(run.startedAt ?? Date.now()).getTime(),
+
             task.runId,
           ]
         );

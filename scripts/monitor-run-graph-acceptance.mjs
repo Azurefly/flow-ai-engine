@@ -1,3 +1,4 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Read-only acceptance: bundle this script, then set FLOW_MONITOR_GRAPH_RUN_IDS
 // to existing terminal workflow runs. Never creates fixtures or controls runs.
 import assert from "node:assert/strict";
@@ -7,7 +8,7 @@ import superjson from "superjson";
 import { projectRunGraph, resolveRunGraphRecord } from "../shared/run-execution-graph.ts";
 import { approvalGroupsForRecord } from "../shared/run-approval-progress.ts";
 
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const ids = [...new Set((process.env.FLOW_MONITOR_GRAPH_RUN_IDS || "").split(",").filter(Boolean))];
 assert(ids.length > 0 && ids.length <= 8, "Provide one to eight existing run IDs");
 assert(ids.every(id => /^[A-Za-z0-9_-]{8,64}$/.test(id)), "Invalid run ID");

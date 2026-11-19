@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import superjson from "superjson";
 
 // Loaded over SSH by browser-config-acceptance.cjs. Secrets remain in process memory.
-const base = "http://124.223.198.84:1180";
+const base = "http://127.0.0.1:3000";
 let cookie = "";
 async function request(path, input, mutation = false) {
   if (mutation && ["project.auditWorkflow", "project.resetWorkflowAudit"].includes(path) && input?.workflowId && input.expectedDefinitionVersion === undefined && input.expectedAuditStatus === undefined) {

@@ -17,8 +17,9 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
       );
 
       expect(source).toContain(
-        "const openTask = (taskId: string) => setSelectedTaskId(taskId);"
+        "setSelectedTaskId(taskId);"
       );
+      expect(source).toContain("taskOpener.current = document.activeElement");
       expect(source.match(/onTask=\{openTask\}/g)).toHaveLength(2);
       expect(source).not.toMatch(/onTask=\{id => \{\s*changeView\("todo"\);/);
 

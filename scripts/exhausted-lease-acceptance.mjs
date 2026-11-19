@@ -1,9 +1,10 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Public 1180 acceptance with fault injection restricted to this script's own run.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 let cookie = "";
 async function request(path, input, mutation = false) {
   const payload = JSON.stringify(superjson.serialize(input ?? null));

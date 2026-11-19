@@ -1,4 +1,7 @@
 import { getLlmServiceStatus } from "./llm-configuration";
+import { commitProjectImport, previewProjectImport, projectImportStatus, projectImportHistory } from "./project-import";
+import { projectImportByteLimit } from "../shared/project-import";
+import { dataflowRunReceipt } from "./p2-service";
 import { getRoleAuthorizationOverview, listRoleMembersPage, roleMemberPageInput } from "./role-member-directory";
 import { checkLlmService } from "./llm-service-check";
 import { cancelDataflowRun } from "./dataflow-run-control";
@@ -582,6 +585,16 @@ export const appRouter = router({
       .query(({ input }) => listAuthorizationAudit(input?.limit)),
   }),
   project: router({
+    previewImport: protectedProcedure
+      .input(z.object({ batchId: z.uuid(), expectedRevision: z.number().int().nonnegative(), csv: z.string().max(projectImportByteLimit) }))
+      .mutation(({ctx,input}) => previewProjectImport(ctx.user,input)),
+    commitImport: protectedProcedure
+      .input(z.object({ batchId: z.uuid(), expectedRevision: z.number().int().positive() }))
+      .mutation(({ctx,input}) => commitProjectImport(ctx.user,input)),
+    importHistory: protectedProcedure.query(({ ctx }) => projectImportHistory(ctx.user)),
+    importStatus: protectedProcedure
+      .input(z.object({ batchId: z.uuid().optional() }))
+      .query(({ctx,input}) => projectImportStatus(ctx.user,input.batchId)),
     get: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) => getProject(ctx.user, input.projectId)),
@@ -901,6 +914,9 @@ export const appRouter = router({
       })),
   }),
   data: router({
+    runReceipt: protectedProcedure
+      .input(z.object({ projectId: z.string().min(8).max(64), workflowId: z.string().min(8).max(64), mode: z.enum(["formal","test"]).optional(), idempotencyKey: z.string().regex(resourceRequestKeyPattern) }))
+      .query(({ctx,input}) => dataflowRunReceipt(ctx.user,input)),
     resourceOptions: protectedProcedure
       .input(z.object({ projectId: z.string().min(8).max(64) }))
       .query(({ ctx, input }) =>
@@ -1111,6 +1127,7 @@ export const appRouter = router({
           workflowId: z.string().min(8).max(64),
           mode: z.enum(["formal", "test"]).optional(),
           data: z.record(z.string(), z.unknown()).optional(),
+          idempotencyKey: z.string().regex(resourceRequestKeyPattern).optional(),
           expectedDefinitionVersion: z.number().int().positive().optional(),
           expectedExecutionPlanHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
         })

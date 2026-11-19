@@ -1,0 +1,1339 @@
+{
+  "schemaVersion": 1,
+  "auditedCommit": "8964f07773c99ad3cbb4d627c1e21e23c7c50eff",
+  "taskCount": 19,
+  "acceptanceCaseCount": 67,
+  "usage": "先读 IMPLEMENTATION.md 核对本轮已实测行为，再按未覆盖的验收编号领取工作。auditedCommit 与 historicalEvidence 对应原始基线。",
+  "tasks": [
+    {
+      "id": "F01",
+      "title": "清除历史测试的凭据回退与默认目标",
+      "priority": "P0",
+      "ownerRole": "测试维护者、身份负责人",
+      "dependsOn": [],
+      "status": "awaiting_identity_owner",
+      "type": "整改",
+      "externalDependencies": [
+        "身份负责人确认受影响凭据、轮换与会话处置"
+      ],
+      "sourceLocations": [
+        {
+          "path": "01-test/014-自动化脚本/e2e/run-ui-business-scenarios.js",
+          "line": 18
+        },
+        {
+          "path": "01-test/014-自动化脚本/e2e/test-complex-scenarios.js",
+          "line": 16
+        },
+        {
+          "path": "01-test/014-自动化脚本/e2e/test-multi-role-tiers.js",
+          "line": 17
+        },
+        {
+          "path": "01-test/014-自动化脚本/e2e/test-state-flow-permissions.js",
+          "line": 18
+        },
+        {
+          "path": "scripts/router-acceptance-safety.mjs"
+        }
+      ],
+      "historicalEvidence": [
+        "E17"
+      ],
+      "instructions": {
+        "基线与定位": "P0，测试维护者及身份负责人。E17。4 个字面量回退位于 `01-test/014-自动化脚本/e2e/run-ui-business-scenarios.js:18`、`01-test/014-自动化脚本/e2e/test-complex-scenarios.js:16`、`01-test/014-自动化脚本/e2e/test-multi-role-tiers.js:17`、`01-test/014-自动化脚本/e2e/test-state-flow-permissions.js:18`。`scripts/router-acceptance-safety.mjs` 已有显式目标和确认写入来源的实现。",
+        "实施": "删除缺省身份值，统一从环境传入专用账号。按是否写入和是否执行网络访问清点历史脚本，优先迁移可写入口。缺身份、缺目标、目标与声明不一致时在第一次 I/O 前退出。CI 可用拦截请求的无网夹具验这一行为。交由负责人员核对分发物、凭据使用范围、需要轮换的身份和会话。",
+        "兼容与回退": "保留显式配置下正常的测试流程及旧场景断言。迁移失败时隔离有问题的历史入口，维护者可继续使用通过验证的专用入口。交接只留路径、行号与处置状态。",
+        "完成": "A01–A03。代码修复与实际身份处置分别签收，历史风险有负责人、范围和完成时间。"
+      },
+      "acceptance": [
+        {
+          "id": "A01",
+          "task": "F01",
+          "layer": "脚本 / 无网",
+          "action": "用无网络测试适配器分别省略目标、身份和写入确认，执行四个已识别的入口",
+          "expected": "各自返回明确的非零退出或配置错误，记录网络调用数 0，输出不含凭据",
+          "status": "planned"
+        },
+        {
+          "id": "A02",
+          "task": "F01",
+          "layer": "脚本 / 隔离 HTTP",
+          "action": "给一个明确目标及对应测试身份，再把写入确认改成另一来源重复执行",
+          "expected": "匹配时只操作本轮合成对象；不匹配时首次 I/O 前终止。核对每个改造入口",
+          "status": "planned"
+        },
+        {
+          "id": "A03",
+          "task": "F01",
+          "layer": "代码 / 身份运营",
+          "action": "只输出路径和位置复核四处回退及目标清单，由身份所有者核对受影响账号、分发及会话",
+          "expected": "已改文件无凭据回退；另有签收的轮换/会话处置结果或凭据未投用的核查依据",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R01",
+        "R25"
+      ]
+    },
+    {
+      "id": "F02",
+      "title": "对外登录强制受保护的传输",
+      "priority": "P1",
+      "ownerRole": "部署及身份负责人",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [
+        "支持的域名、证书、边缘配置与外部验收权限"
+      ],
+      "sourceLocations": [
+        {
+          "path": "compose.yaml"
+        },
+        {
+          "path": "docs/deployment-linux-docker.md"
+        },
+        {
+          "path": "server/_core/cookies.ts",
+          "line": 11
+        },
+        {
+          "path": "server/_core/cookies.ts",
+          "line": 46
+        }
+      ],
+      "historicalEvidence": [
+        "E17"
+      ],
+      "instructions": {
+        "基线与定位": "P1，部署及认证负责人。E17。实际 HTTP 入口返回登录页面。读取 `compose.yaml`、`docs/deployment-linux-docker.md`、`server/_core/cookies.ts:11` 和 `server/_core/cookies.ts:46`，确认应用实际在何层获知 HTTPS。",
+        "实施": "登记受支持的对外域名及边缘终止点，配置证书、旧 HTTP 跳转或内网访问范围，受信代理生成转发协议。管理员在支持的 HTTPS 入口验证登录、刷新、注销与探针；凭据仅通过受保护通道使用。匿名检查原 HTTP 路径的响应链即可。",
+        "兼容与回退": "保留内部探针和既有可信管理路径。使用版本化边缘配置，证书/路由失败时退回最近可用的受保护入口，排查 Cookie 域、Secure、反代协议和回调配置。",
+        "完成": "A04–A06。需有实际证书/域名负责人以及外部浏览器的脱敏记录。"
+      },
+      "acceptance": [
+        {
+          "id": "A04",
+          "task": "F02",
+          "layer": "远程匿名",
+          "action": "从外部访问被测原 HTTP 地址与登录路径，记录响应码和跳转链",
+          "expected": "受支持入口终止于证书有效的 HTTPS；若旧入口按方案关闭则外部不可达。明文入口不出现可提交的登录表单",
+          "status": "planned"
+        },
+        {
+          "id": "A05",
+          "task": "F02",
+          "layer": "远程浏览器",
+          "action": "通过正式支持的 HTTPS 入口用专用身份登录、刷新、退出再访问受保护页",
+          "expected": "刷新后仍在当前身份，注销后被要求登录。Cookie 元数据符合 Secure、HttpOnly、预期 SameSite；不留 Cookie 值",
+          "status": "planned"
+        },
+        {
+          "id": "A06",
+          "task": "F02",
+          "layer": "部署 / 发布演练",
+          "action": "在预发布切换边缘配置，读取健康/就绪，使用既有受保护管理通道演练切回",
+          "expected": "应用就绪，已有管理路径正常，回退后匿名及会话传输仍满足 A04/A05",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R01",
+        "R25"
+      ]
+    },
+    {
+      "id": "F03",
+      "title": "按逻辑记录解析业务 CSV",
+      "priority": "P1",
+      "ownerRole": "业务前端、共享校验",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx",
+          "line": 272
+        },
+        {
+          "path": "server/project-import-preflight.test.ts"
+        }
+      ],
+      "historicalEvidence": [
+        "E03",
+        "E04"
+      ],
+      "instructions": {
+        "基线与定位": "P1，业务前端与共享校验维护者。E03、E04。`client/src/components/ProjectWorkspace.tsx:272` 的 `importBusinesses` 先拆物理行，`parseRow` 不检查未闭引号。`server/project-import-preflight.test.ts` 现有用例覆盖代号、归档占码、权限和竞态。",
+        "实施": "将完整输入交给一处可复用解析器，状态覆盖引号内外、转义双引号、CRLF/LF、尾部及空记录。保留逻辑记录号、物理开始行和字段。把语法诊断和字段业务诊断交给预检入口，以中文标明位置。先按现有 500 条上限作有界读取，用集合判同一个规范化代号。参考合成样本加共享测试，再从文件选择器真实上传。",
+        "兼容与回退": "保留中文及英文表头、UTF-8 BOM、既有单行模板和代号规范化。说明字段保留有效换行。语法不能解释的文件不得开始创建项目；手工单条创建可继续工作。",
+        "完成": "A07–A11。正确文件的回读值逐字符相同，错误文件的业务写入为零。"
+      },
+      "acceptance": [
+        {
+          "id": "A07",
+          "task": "F03",
+          "layer": "浏览器 / 回读",
+          "action": "业务中心上传 quoted.csv，以唯一业务代号回读说明；再用英文 code、name、description 表头和新代号上传",
+          "expected": "每份恰好一条；单行说明含逗号及一个字面双引号，BOM 与转义标记不入字段；英文、中文表头均识别",
+          "status": "planned"
+        },
+        {
+          "id": "A08",
+          "task": "F03",
+          "layer": "浏览器 / 回读",
+          "action": "上传 multiline.csv，说明栏在开闭引号之间含真实 CRLF；用新代号另跑 LF 版本",
+          "expected": "每份恰建一个业务。整段说明保持两行，换行按约定原样保存，下一列和下一记录未移位",
+          "status": "planned"
+        },
+        {
+          "id": "A09",
+          "task": "F03",
+          "layer": "浏览器 / MySQL",
+          "action": "上传 unclosed.csv，下载或查看错误信息，通过代号查询项目及创建审计",
+          "expected": "明确标出源行和说明字段、未闭引号，项目和对应成功审计均新增 0",
+          "status": "planned"
+        },
+        {
+          "id": "A10",
+          "task": "F03",
+          "layer": "共享解析 / HTTP",
+          "action": "生成 0、1、500、501 条以及规范化后代号重复的样本，尝试重复必要表头或空代码",
+          "expected": "500 条可预检；501 被拒，诊断可定位；空文件/只有表头可区分；歧义表头、空代码、批内重复均在写前给出可读反馈",
+          "status": "planned"
+        },
+        {
+          "id": "A11",
+          "task": "F03",
+          "layer": "回归 / 权限",
+          "action": "运行现有导入代号用例，使用受限身份、同所有者的归档占码和另一个所有者的私有项目",
+          "expected": "归档占码继续拒绝，缺创建权限时不查询占码，不透出其他所有者对象，旧模板的正常导入可用",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R06"
+      ]
+    },
+    {
+      "id": "F04",
+      "title": "批量导入可预检、可核对、可续传",
+      "priority": "P1",
+      "ownerRole": "项目服务、业务前端",
+      "dependsOn": [
+        "F03"
+      ],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx",
+          "line": 342
+        },
+        {
+          "path": "server/routers.ts",
+          "line": 652
+        },
+        {
+          "path": "server/project-service.ts",
+          "line": 289
+        },
+        {
+          "path": "server/project-service.ts",
+          "line": 300
+        }
+      ],
+      "historicalEvidence": [
+        "E04"
+      ],
+      "instructions": {
+        "基线与定位": "P1，项目服务及业务前端。依赖 F03 的行标识。E04。`client/src/components/ProjectWorkspace.tsx:342` 先查占码再逐条写；`server/routers.ts:652` 的单条模式限制代号 2–64、名称 1–160、说明至多 2,000；`server/project-service.ts:289`、`server/project-service.ts:300` 管理实际权限、占码和创建。",
+        "实施": "设计 `previewImport`、`commitImport`、`importStatus`。预检全批字段、工作域、归档占码和当前身份，返回每行诊断且业务写入为零。批次持久化项目范围、发起人、修订、摘要；行保存稳定行 ID、输入摘要、创建对象和结果。执行前及每行事务复核授权和唯一约束；项目、默认关系、审计与该行成功回执要么一起提交，要么一起回滚。单条和批量共用领域创建逻辑。只允许对失败或待处理行更新版本，成功行只读。显示可重试与必须人工处理的冲突。",
+        "兼容与回退": "单条 `project.create` 合同继续可用。先加可选的新表与查询，再启用新客户端。关闭批量执行后保留已接批次查询，归档项目的代号继续被占用。",
+        "完成": "A12–A16。核对业务表、批次行、项目关系与审计；修正 B 不再卡在本批已提交的 A。"
+      },
+      "acceptance": [
+        {
+          "id": "A12",
+          "task": "F04",
+          "layer": "浏览器 / MySQL",
+          "action": "使用 batch-invalid.csv，A 合法、B 名称恰 300 字，预检并尝试执行",
+          "expected": "显示 B 的逻辑行、name、上限 160 和中文原因。业务项目及创建审计新增 0",
+          "status": "planned"
+        },
+        {
+          "id": "A13",
+          "task": "F04",
+          "layer": "浏览器 / MySQL",
+          "action": "从 A12 改用 batch-corrected.csv，核对预览后提交；用同一请求重复确认",
+          "expected": "A、B 各 1 个，同一批次各一份成功回执，两次提交返回同一批次结果。正式业务审计各 1 份",
+          "status": "planned"
+        },
+        {
+          "id": "A14",
+          "task": "F04",
+          "layer": "并发 / 恢复",
+          "action": "两行都通过预检；A 提交后使 B 的提交被可恢复条件中断。重开页面，按原批次纠正/恢复 B",
+          "expected": "A 继续显示已建且未再次创建，B 从失败/待处理变为成功。每条成功记录有对象 ID 与相应审计",
+          "status": "planned"
+        },
+        {
+          "id": "A15",
+          "task": "F04",
+          "layer": "并发 / 权限",
+          "action": "预检后由另一操作者先占 B 的代号；另一次在预检后撤销发起人创建权限",
+          "expected": "首种给出该行的真实冲突，既有外部对象不被覆盖；撤权后待处理行无业务写入，结果仅对当前有权者可见",
+          "status": "planned"
+        },
+        {
+          "id": "A16",
+          "task": "F04",
+          "layer": "事务 / 回退",
+          "action": "在合成库的一行创建阶段注入审计或回执写入失败，重启后查状态；再临时停用新执行入口",
+          "expected": "失败行未出现孤立项目、默认关系或虚假成功；已成功批次仍能查看，手工单条创建仍正常",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R06"
+      ]
+    },
+    {
+      "id": "F05",
+      "title": "人工数据流运行支持请求核对",
+      "priority": "P1",
+      "ownerRole": "数据运行与三处发起入口",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "server/routers.ts",
+          "line": 1107
+        },
+        {
+          "path": "server/p2-service.ts",
+          "line": 2080
+        },
+        {
+          "path": "server/p2-service.ts",
+          "line": 2189
+        },
+        {
+          "path": "drizzle/schema.ts",
+          "line": 1324
+        },
+        {
+          "path": "client/src/components/DataResourceCenter.tsx",
+          "line": 322
+        },
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx",
+          "line": 1222
+        },
+        {
+          "path": "client/src/pages/Home.tsx",
+          "line": 1094
+        },
+        {
+          "path": "server/workflow-creation-request.ts",
+          "line": 72
+        }
+      ],
+      "historicalEvidence": [
+        "E09"
+      ],
+      "instructions": {
+        "基线与定位": "P1，数据运行维护者。E09。`server/routers.ts:1107`、`server/p2-service.ts:2080`、`server/p2-service.ts:2189`、`drizzle/schema.ts:1324`。三个用户入口为 `client/src/components/DataResourceCenter.tsx:322`、`client/src/components/ProjectWorkspace.tsx:1222`、`client/src/pages/Home.tsx:1094`。可参照 `server/workflow-creation-request.ts:72` 的既有请求重放规则。",
+        "实施": "为 `data.run` 增加可选操作键及预期定义版本，服务端按项目、流程、主体、模式、键唯一，并保存规范化输入摘要与首次接单版本。权限检查后优先查已接单回执；原定义后来变化时，按原意图和所报原版本核对。新请求在单事务内提交回执、一个运行与一个作业，冲突返回稳定错误。三处入口均在结果未知时持有原键，主动再运行才换键。提供只读核对动作。",
+        "兼容与回退": "旧客户端无键时保留原合同；调度时间桶维持现有语义。部署顺序为存储、兼容服务、新客户端。回退客户端后仍可查已经受理的键，失权后不返回运行元数据。",
+        "完成": "A17–A21。两次同意图的响应对应同一个 runId，数据库计数和审计可相互核对。"
+      },
+      "acceptance": [
+        {
+          "id": "A17",
+          "task": "F05",
+          "layer": "HTTP / MySQL",
+          "action": "无外部副作用的正式数据流，保留同一意图键；接单后丢弃成功响应，通过原键查询和重发",
+          "expected": "只返回原 runId；本次运行 1、作业 1，终态可查，UI 可核对",
+          "status": "planned"
+        },
+        {
+          "id": "A18",
+          "task": "F05",
+          "layer": "并发 / MySQL",
+          "action": "用同一主体、键和输入并行提交两次。控制事务失败的子样本中重新使用原键",
+          "expected": "并行只新增一个运行和一个作业；回滚样本不留半条回执，之后能正常受理并核对",
+          "status": "planned"
+        },
+        {
+          "id": "A19",
+          "task": "F05",
+          "layer": "HTTP / 版本",
+          "action": "同键改输入，随后让流程定义推进再重放原输入与原版本；另做撤权后核对",
+          "expected": "同键异意图冲突；同键同原意图得到原受理版本和运行；失权者拿不到该结果",
+          "status": "planned"
+        },
+        {
+          "id": "A20",
+          "task": "F05",
+          "layer": "浏览器 / 兼容",
+          "action": "依次从数据资源中心、项目工作区、编辑页发起，模拟响应未知，随后明确选择“再运行一次”",
+          "expected": "三入口的未知重试沿用各自原键，主动再运行生成新键/新 ID。状态提示可区分等待回执与执行失败",
+          "status": "planned"
+        },
+        {
+          "id": "A21",
+          "task": "F05",
+          "layer": "调度 / 历史",
+          "action": "同一流程兼用手动键、旧版无键请求和原生 cron；读取升级前历史",
+          "expected": "手工键独立去重，旧客户端仍可执行，定时仍按原时间桶处理；旧运行可读且无补造回执",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R15"
+      ]
+    },
+    {
+      "id": "F06",
+      "title": "等待签署恢复作业达到真实终态",
+      "priority": "P1",
+      "ownerRole": "Worker、测试维护者",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "server/operate-signing.integration.test.ts",
+          "line": 352
+        },
+        {
+          "path": "server/operate-signing.integration.test.ts",
+          "line": 435
+        },
+        {
+          "path": "server/workflow-command-test-support.ts",
+          "line": 18
+        },
+        {
+          "path": "server/workflow-worker.ts",
+          "line": 536
+        }
+      ],
+      "historicalEvidence": [
+        "E02",
+        "E07"
+      ],
+      "instructions": {
+        "基线与定位": "P1，Worker 与测试维护者。E02、E07。`server/operate-signing.integration.test.ts:352`、`server/operate-signing.integration.test.ts:435`、`server/workflow-command-test-support.ts:18`、`server/workflow-worker.ts:536`。完成实例和完成作业有独立提交点。",
+        "实施": "按本轮 runId/jobType 定位作业，使用现有测试等待/排空机制，在有界时限内查询达到 completed。检查 start、resume 数量、各自结果、终点次数、被拒的重复办理。超时时输出本轮最后的状态和时间。若超过时限或发现复制作业，再沿 Worker 完成路径调查。",
+        "兼容与回退": "测试等待应保持业务层现有异步契约。不修改生产租约时长去迎合测试。可单独退回测试改动；重复出口、作业丢失和长期未完成仍应报错。",
+        "完成": "A22–A24。真实库重复执行通过，故障样本仍在约定时限内明确失败。"
+      },
+      "acceptance": [
+        {
+          "id": "A22",
+          "task": "F06",
+          "layer": "MySQL / Worker",
+          "action": "在专用库重复跑原签署文件至少三次，观察或签及会签实例、start/resume 作业",
+          "expected": "每次原业务断言通过，目标作业在有界期内 completed，预期的作业数量、类型和出口次数精确匹配",
+          "status": "planned"
+        },
+        {
+          "id": "A23",
+          "task": "F06",
+          "layer": "时序 / Worker",
+          "action": "构造实例已成功而恢复作业仍 leased 的短暂状态，在期限内提交正常完成",
+          "expected": "等待命中本轮作业，真实提交后断言通过。记录两个状态采样，其他实例完成不能提前满足条件",
+          "status": "planned"
+        },
+        {
+          "id": "A24",
+          "task": "F06",
+          "layer": "故障 / 回归",
+          "action": "暂停测试 Worker 使目标作业超过测试期限，另跑已有 Worker 崩溃恢复用例",
+          "expected": "第一个样本按期失败并标出目标状态，恢复用例仍通过，重复终点或作业可被检测",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R11"
+      ]
+    },
+    {
+      "id": "F07",
+      "title": "让三组 HTTP 验收从空库可重复执行",
+      "priority": "P1",
+      "ownerRole": "HTTP 验收维护者",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "scripts/router-label-acceptance.mjs",
+          "line": 119
+        },
+        {
+          "path": "scripts/router-label-acceptance.mjs",
+          "line": 182
+        },
+        {
+          "path": "scripts/dataflow-quality-acceptance.mjs",
+          "line": 141
+        },
+        {
+          "path": "scripts/run-metrics-acceptance.mjs",
+          "line": 108
+        },
+        {
+          "path": "server/workflow-compiler.ts",
+          "line": 1032
+        },
+        {
+          "path": "server/workflow-compiler.ts",
+          "line": 1057
+        }
+      ],
+      "historicalEvidence": [
+        "E08",
+        "E10"
+      ],
+      "instructions": {
+        "基线与定位": "P1，验收维护者。E08、E10。`scripts/router-label-acceptance.mjs:119`、`scripts/router-label-acceptance.mjs:182`、`scripts/dataflow-quality-acceptance.mjs:141`、`scripts/run-metrics-acceptance.mjs:108`；`server/workflow-compiler.ts:1032` 和 `server/workflow-compiler.ts:1057` 校验广播双方的绑定。",
+        "实施": "路由按实际读取修订审核/发布，为广播提供相互引用的分发和汇聚节点，保持旧标签、优先、广播和兜底的分支计数。质量失败拆成独立测试，断言拒绝阶段、错误字段与无残留；成功和运行时拒绝分别验节点。指标脚本自建一个 waiting→terminated 及一个 success 实例，核对各自作用域、计时分母和平均值。每组显式目标，业务对象均由本轮创建，清理作用于本轮。",
+        "兼容与回退": "保留版本冲突、数值范围和权限准入。修复限于与现行合同不符的夹具；若自建样本仍错，单开产品缺陷并留存原失败。",
+        "完成": "A25–A29。两个新的隔离环境分别运行全部三组，逐场景有断言和退出码。"
+      },
+      "acceptance": [
+        {
+          "id": "A25",
+          "task": "F07",
+          "layer": "HTTP / 路由",
+          "action": "使用当前审核/发布修订构造旧标签、优先、广播和兜底，记录执行节点序列",
+          "expected": "旧标签按原定义到达目标；优先 high；广播 high 与 low 各一次并汇合；兜底只执行 fallback",
+          "status": "planned"
+        },
+        {
+          "id": "A26",
+          "task": "F07",
+          "layer": "HTTP / 发布",
+          "action": "使用过期修订或漏配广播汇聚伙伴的合成流程去审核/发布，再补正重试",
+          "expected": "得到相应冲突/校验，原发布版本完整；用新修订和成对引用后可发布，不能绕过准入",
+          "status": "planned"
+        },
+        {
+          "id": "A27",
+          "task": "F07",
+          "layer": "HTTP / 质量",
+          "action": "合法空值率 0.25、0.50 分别运行；非法 1.1、−0.1、最少行数 1.5、−1 分别独立创建",
+          "expected": "合法样本分别运行失败且无 end / 成功；非法值各自在创建时拒绝，错误字段符合预期，未生成流程或草稿",
+          "status": "planned"
+        },
+        {
+          "id": "A28",
+          "task": "F07",
+          "layer": "HTTP / 指标",
+          "action": "各自创建空、单个成功、等待后终止的样本，记录 runDetail 与 runMetrics",
+          "expected": "空时样本 0、平均 null；成功样本数 1、平均等于该运行 duration；终止样本总数 1、计时样本 0、平均 null",
+          "status": "planned"
+        },
+        {
+          "id": "A29",
+          "task": "F07",
+          "layer": "可重复执行",
+          "action": "对两个新建的隔离环境分别运行 A25–A28 及原三组脚本，记录所有引用对象的创建来源",
+          "expected": "两轮原三组退出码均 0，场景均执行到尾，仅本轮 ID 被访问；故意改错一个期望时对应套件会红",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R10",
+        "R12",
+        "R14"
+      ]
+    },
+    {
+      "id": "F08",
+      "title": "每次模型调用分别记录请求值和返回值",
+      "priority": "P2",
+      "ownerRole": "模型节点、运行详情",
+      "dependsOn": [],
+      "status": "implemented_partial_acceptance",
+      "type": "整改",
+      "externalDependencies": [
+        "获准的真实供应商测试连接"
+      ],
+      "sourceLocations": [
+        {
+          "path": "server/workflow-engine.ts",
+          "line": 1082
+        },
+        {
+          "path": "server/workflow-engine.ts",
+          "line": 1156
+        },
+        {
+          "path": "server/workflow-engine.ts",
+          "line": 1229
+        }
+      ],
+      "historicalEvidence": [
+        "E12"
+      ],
+      "instructions": {
+        "基线与定位": "P2，模型节点与运行详情维护者。E12。`server/workflow-engine.ts:1082` 选模型，`server/workflow-engine.ts:1156` 发起调用，`server/workflow-engine.ts:1229` 输出返回模型。检查相应节点日志与历史渲染。",
+        "实施": "每次尝试记录 requestedModel、reportedModel、可获得的配置修订和供应商请求关联标识。未返回时明确缺失；允许节点覆盖系统默认值。接口、详情、过滤与诊断应能对照同一次尝试。实际用量及计价沿用调用结果对应的既有规则。",
+        "兼容与回退": "新增字段可选，历史无信息显示“当时未记录”。回退读端仍可读旧 model 字段。诊断不落模型凭据、完整输入与供应商原始敏感报文。",
+        "完成": "A30–A32。受控别名样本可复现差别，并取得获准测试环境的一次真实流程回读。"
+      },
+      "acceptance": [
+        {
+          "id": "A30",
+          "task": "F08",
+          "layer": "受控供应商 / 运行",
+          "action": "设置默认模型 A、节点覆盖 B，服务返回别名 C；分别跑有/无覆盖样本",
+          "expected": "每次尝试能分别看到发出的 B 或 A 与返回的 C、配置标识；原有用量及计价依据保留",
+          "status": "planned"
+        },
+        {
+          "id": "A31",
+          "task": "F08",
+          "layer": "兼容 / 诊断",
+          "action": "打开旧运行、供应商无 model 字段、失败重试的多尝试记录",
+          "expected": "旧值不被伪造为请求值，缺失明确可辨，各次尝试可关联，日志和 API 无凭据",
+          "status": "planned"
+        },
+        {
+          "id": "A32",
+          "task": "F08",
+          "layer": "真实供应商",
+          "action": "在获准合成项目用已配置供应商运行固定短输出流程，回读节点和末端",
+          "expected": "节点成功、输出匹配；可核对真实请求模型、返回模型及各自来源，清理测试对象",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R17"
+      ]
+    },
+    {
+      "id": "F09",
+      "title": "分页读取助手会话及历史回合",
+      "priority": "P2",
+      "ownerRole": "助手服务",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "整改",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "server/assistant-store.ts",
+          "line": 467
+        },
+        {
+          "path": "server/assistant-store.ts",
+          "line": 358
+        },
+        {
+          "path": "server/assistant-router.ts",
+          "line": 132
+        },
+        {
+          "path": "server/assistant-runtime.ts",
+          "line": 216
+        }
+      ],
+      "historicalEvidence": [
+        "E14",
+        "E15"
+      ],
+      "instructions": {
+        "基线与定位": "P2，助手服务。E14、E15。`server/assistant-store.ts:467` 列表查询后还有范围可见性过滤；`server/assistant-store.ts:358` 详情读取所有回合；`server/assistant-router.ts:132` 为现有列表，`server/assistant-runtime.ts:216` 为模型上下文窗口。",
+        "实施": "新增兼容的列表页接口，范围包含用户、试聊/客户、项目、助手和检索条件。沿用稳定更新时间/ID 顺序，游标保存对应排序位置与筛选范围。权限可下推时下推；后置过滤则有界续扫到页满或遍历完成，并返回正确的扫描游标。规定列表有更新时的快照/刷新策略。详情支持按修订向前取消息，首次返回近期页和待确认状态，消息阅读与模型上下文策略独立。",
+        "兼容与回退": "保留旧列表/详情至调用方迁移，旧会话无新字段也能读取，游标不能扩大原有可见范围。记录扫描条数、返回条数与字节，再评估索引。",
+        "完成": "A33–A36。包含权限稀疏、同时间戳及翻页中更新样本；历史回读与确认修订保持一致。"
+      },
+      "acceptance": [
+        {
+          "id": "A33",
+          "task": "F09",
+          "layer": "HTTP / MySQL",
+          "action": "建 60 个同范围会话，含同更新时间记录；以小页遍历，记录 ID 集合、页大小和正文大小",
+          "expected": "固定数据集遍历无重漏，稳定 tie-breaker，各页有上限；末页结束，60 个不在首个响应内",
+          "status": "planned"
+        },
+        {
+          "id": "A34",
+          "task": "F09",
+          "layer": "权限 / 分页",
+          "action": "候选中夹入大量失去可见性的会话，翻页时撤销项目权限；跨试聊/客户和另一项目换用原游标",
+          "expected": "可访问结果能找到，无权限候选无泄漏；过滤后未满的一页不能错误终止。游标切换范围被拒或明确重置",
+          "status": "planned"
+        },
+        {
+          "id": "A35",
+          "task": "F09",
+          "layer": "详情 / 客户端",
+          "action": "在长历史和存在待确认提案的会话中逐页向前读；并发更新一个会话后刷新列表",
+          "expected": "消息按修订无重复/遗漏，旧提案可打开；刷新或快照边界按设计工作，详情页不默认读取全部历史",
+          "status": "planned"
+        },
+        {
+          "id": "A36",
+          "task": "F09",
+          "layer": "兼容 / 测量",
+          "action": "旧客户端读旧接口，新客户端查 1、30、60 及目标规模样本，留采样参数、扫描/返回行数",
+          "expected": "老调用能读取，首屏数据受页长约束；有索引/扫描与响应字节证据。延迟仅对实测环境给出",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R20"
+      ]
+    },
+    {
+      "id": "U01",
+      "title": "弹窗关闭后回到可继续操作的控件",
+      "priority": "P1",
+      "ownerRole": "交互前端",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "体验",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/CreationDialog.tsx",
+          "line": 51
+        },
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx"
+        }
+      ],
+      "historicalEvidence": [
+        "E16"
+      ],
+      "instructions": {
+        "基线与定位": "P1，交互前端。E16。`client/src/components/CreationDialog.tsx:51` 和 `client/src/components/ProjectWorkspace.tsx`。新增业务时两种动效偏好下都能进弹窗，Esc 退出后 activeElement 为 BODY。",
+        "实施": "受控弹窗保存真实 trigger 引用，利用 Radix 关闭回焦回调。嵌套确认先回原表单，成功时回到仍存在且可操作的触发者；触发者消失时回列表标题或下一可操作项。校验失败将焦点放到可修正字段。",
+        "兼容与回退": "保留提交中的关闭保护、未保存草稿和现有减少动效逻辑。首批改业务中心，检查公用组件另两个调用方，回退时仅撤回触发者接线。",
+        "完成": "A37–A39。提交 activeElement、下一次 Tab 的位置以及嵌套关闭顺序。"
+      },
+      "acceptance": [
+        {
+          "id": "A37",
+          "task": "U01",
+          "layer": "键盘 / 浏览器",
+          "action": "分普通和减少动效，用 Tab 与 Enter 打开新增业务，Esc 或“取消”关闭，再按 Tab",
+          "expected": "打开后焦点在弹窗内，关闭后确为原触发按钮，下一次 Tab 到预定后继",
+          "status": "planned"
+        },
+        {
+          "id": "A38",
+          "task": "U01",
+          "layer": "键盘 / 嵌套",
+          "action": "填无效表单并提交，再触发未保存确认，依次取消二级、关闭一级",
+          "expected": "错误字段可聚焦，二级关闭回父表单，最终回真实触发者；填写按现有合同保留",
+          "status": "planned"
+        },
+        {
+          "id": "A39",
+          "task": "U01",
+          "layer": "浏览器 / 回归",
+          "action": "成功提交及原触发者被移除各做一次，抽查公用弹窗的另两个调用方",
+          "expected": "成功时有持久结果，焦点落在仍可用的触发者或定义的列表兜底，两个调用方没有关闭/草稿退化",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R21"
+      ]
+    },
+    {
+      "id": "U02",
+      "title": "将导入反馈留在业务批次内",
+      "priority": "P1",
+      "ownerRole": "业务交互",
+      "dependsOn": [
+        "F04"
+      ],
+      "status": "implemented_verified_scope",
+      "type": "体验",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx",
+          "line": 272
+        }
+      ],
+      "historicalEvidence": [
+        "E03",
+        "E04",
+        "E16"
+      ],
+      "instructions": {
+        "基线与定位": "P1，业务交互。依赖 F04 的持久行结果。E03、E04、E16。`client/src/components/ProjectWorkspace.tsx:272` 使用全局提示，跨页截图仍显示早先的导入错误。",
+        "实施": "业务页保留最近批次和行级结果，中文显示已创建、待纠正、未处理及对应字段，提供错误行下载和仅重试符合条件的行。全局提示只传递必要的完成/失败信息，离开页面时释放属于导入的瞬时提示。",
+        "兼容与回退": "按当前用户和项目范围重新读取批次，无权限时移除原结果。用户关闭提示、切页或刷新后仍可按批次核对。旧版单文件入口通过服务查询继续识别已接批次。",
+        "完成": "A40–A41。错误行能由键盘定位，画布无残留提示，返回可见同一批次终态。"
+      },
+      "acceptance": [
+        {
+          "id": "A40",
+          "task": "U02",
+          "layer": "浏览器 / 导航",
+          "action": "上传失败行，进入编辑画布再返回业务中心并刷新，按键盘定位问题行",
+          "expected": "画布没有跨页导入错误；回到业务可查看同批次、行列、中文原因、成功与待办计数，刷新后仍可核对",
+          "status": "planned"
+        },
+        {
+          "id": "A41",
+          "task": "U02",
+          "layer": "浏览器 / 权限",
+          "action": "下载错误行、修正后仅重试该行，切换到无权查看本批次的账号",
+          "expected": "成功条目不重复，失败行有新结果；下载及页面均按权限处理，切换后没有旧批次残留",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R06",
+        "R21"
+      ]
+    },
+    {
+      "id": "U03",
+      "title": "窄屏业务列表首屏暴露主要动作",
+      "priority": "P2",
+      "ownerRole": "业务前端",
+      "dependsOn": [],
+      "status": "implemented_verified_scope",
+      "type": "体验",
+      "externalDependencies": [
+        "真机触摸验证"
+      ],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx"
+        }
+      ],
+      "historicalEvidence": [
+        "E03",
+        "E16"
+      ],
+      "instructions": {
+        "基线与定位": "P2，业务前端。E03、E16。`client/src/components/ProjectWorkspace.tsx` 的业务表在 390px 下整体宽度正常，流程数字段表头纵排、行末主动作在视口右侧。",
+        "实施": "小屏优先业务身份、状态和进入动作。工作域、流程数及次要动作放可展开详情。使用具备名称的触发按钮和稳定行键，展开状态随筛选和分页正确更新。",
+        "兼容与回退": "桌面保留多行比较、过滤及分页。优先以容器断点调整呈现，回退样式后同一套业务处理器仍可用。",
+        "完成": "A42–A43。提交 360/390/768 和桌面的几何及操作记录，包括长名称与触控。"
+      },
+      "acceptance": [
+        {
+          "id": "A42",
+          "task": "U03",
+          "layer": "视口 / 几何",
+          "action": "在 360、390、768px 和桌面铺长中文名/长代号，直接进入一个工作区",
+          "expected": "小屏首屏可辨名称状态、主动作无需横移，表头可读，展开显示次要字段。桌面列与操作齐全",
+          "status": "planned"
+        },
+        {
+          "id": "A43",
+          "task": "U03",
+          "layer": "键盘 / 真机",
+          "action": "用键盘和真机触摸打开行菜单、展开、切换筛选并返回，检查目标对象",
+          "expected": "可操作项有名称和足够可点区域，操作仍落于相同行，收回后焦点可继续，筛选不串行",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R22"
+      ]
+    },
+    {
+      "id": "U04",
+      "title": "画布定位使用面板之外的可见区",
+      "priority": "P2",
+      "ownerRole": "画布前端",
+      "dependsOn": [],
+      "status": "implemented_partial_acceptance",
+      "type": "体验",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/WorkflowCanvas.tsx"
+        },
+        {
+          "path": "client/src/hooks/useEditorViewport.ts",
+          "line": 10
+        },
+        {
+          "path": "client/src/hooks/useMotionPreference.ts",
+          "line": 8
+        }
+      ],
+      "historicalEvidence": [
+        "E16"
+      ],
+      "instructions": {
+        "基线与定位": "P2，画布前端。E16。`client/src/components/WorkflowCanvas.tsx`、`client/src/hooks/useEditorViewport.ts:10`、`client/src/hooks/useMotionPreference.ts:8`。最终样本普通/减少动效可定位到 end，右侧配置区边界接近节点。",
+        "实施": "计算面板、工具条、边距后的可用矩形；只在用户主动定位时移动视口。连续选择和手动拖动打断前次动画。用真实 DOM 包围盒验标题和连接点，不把画布 transform 当节点位置。",
+        "兼容与回退": "保留用户缩放、全屏进入/返回、已有保存与减少动效行为。回退定位算法时无需修改流程定义或保存坐标。",
+        "完成": "A44–A46。覆盖面板、缩放、快速切换与拖拽保存，以实际命中/重读验证结果。"
+      },
+      "acceptance": [
+        {
+          "id": "A44",
+          "task": "U04",
+          "layer": "画布 / 几何",
+          "action": "面板关闭、展开、全屏往返，在 50%/100% 缩放定位左中右节点",
+          "expected": "节点标题和连接点在实际可视区并能命中，面板和工具栏没有覆盖目标",
+          "status": "planned"
+        },
+        {
+          "id": "A45",
+          "task": "U04",
+          "layer": "浏览器 / 偏好",
+          "action": "分普通与减少动效快速定位两个节点，中途手动拖动画布",
+          "expected": "目标是最近选择；手势生效，未被旧动画抢回。减少偏好直接定位，焦点/选中信息可见",
+          "status": "planned"
+        },
+        {
+          "id": "A46",
+          "task": "U04",
+          "layer": "浏览器 / 存储",
+          "action": "实际命中节点标题并拖动，保存、刷新、再改名保存，回读版本与坐标",
+          "expected": "定位不改变节点数据；显式拖动与改名分别只推进一次预期版本，重开坐标和名称一致",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R07",
+        "R22"
+      ]
+    },
+    {
+      "id": "U05",
+      "title": "工作台轮询保持任务、焦点和位置稳定",
+      "priority": "P2",
+      "ownerRole": "工作台前端",
+      "dependsOn": [],
+      "status": "implemented_partial_acceptance",
+      "type": "体验",
+      "externalDependencies": [],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/ProcessWorkbench.tsx",
+          "line": 175
+        }
+      ],
+      "historicalEvidence": [
+        "E03",
+        "E07",
+        "E16"
+      ],
+      "instructions": {
+        "基线与定位": "P2，工作台前端。E03、E07、E16。`client/src/components/ProcessWorkbench.tsx:175` 及同组件多个 30 秒刷新。页面上相邻的最近任务区域需要更明确的行动含义。",
+        "实施": "按待我办理、我已办理等真实查询含义命名。轮询用任务 ID 复用行和选中项。用户正在办理时只改变对应行状态，成功时将焦点移到可继续的位置，失败保留输入。",
+        "兼容与回退": "保留既有数据刷新、权限过滤与深链接。动效限定在用户触发的一次更新；受控轮询保持键盘与读屏可操作。",
+        "完成": "A47–A48。留存连续三次普通刷新和一次有明确状态变化的真实办理记录。"
+      },
+      "acceptance": [
+        {
+          "id": "A47",
+          "task": "U05",
+          "layer": "工作台 / 轮询",
+          "action": "选中长列表中的任务并聚焦一项控件，连续经历三次无业务变化的轮询",
+          "expected": "同一任务仍选中，焦点和滚动锚点保持，无全表进出场。标签可区分待办与已办",
+          "status": "planned"
+        },
+        {
+          "id": "A48",
+          "task": "U05",
+          "layer": "浏览器 / 办理",
+          "action": "模拟慢返回后办理，再走一次业务拒绝样本，查工作台和任务详情",
+          "expected": "提交期间状态可见，成功项在已办可查、退出待办，下一焦点有去向；拒绝保留输入并展示原因",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R22"
+      ]
+    },
+    {
+      "id": "U06",
+      "title": "助手历史、提案与移动输入可定位",
+      "priority": "P2",
+      "ownerRole": "助手前端",
+      "dependsOn": [
+        "F09"
+      ],
+      "status": "implemented_partial_acceptance",
+      "type": "体验",
+      "externalDependencies": [
+        "真机软键盘与辅助技术"
+      ],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/AssistantChat.tsx"
+        },
+        {
+          "path": "client/src/components/AgentSettings.tsx"
+        }
+      ],
+      "historicalEvidence": [
+        "E13",
+        "E14",
+        "E15",
+        "E16"
+      ],
+      "instructions": {
+        "基线与定位": "P2，助手前端。依赖 F09 的分页合同。E13–E16。`client/src/components/AssistantChat.tsx`、`client/src/components/AgentSettings.tsx`。已有 390px 试聊和客户入口可用，历史是选择框。",
+        "实施": "显示项目/助手/模式筛选与分页，切换时清除过期的候选请求。把提案目标、范围、修订、确认与撤销结果放在同一上下文。用户向上阅读时显示新消息提示；提交与失败后的焦点定位到可继续操作的位置。",
+        "兼容与回退": "复用当前草稿、冲突恢复和 requestId，保留试聊标记。旧列表在兼容窗口仍可打开历史。减少动效偏好关闭非必要滚动。",
+        "完成": "A49–A50。真实浏览器覆盖 60 条历史及两个项目，另以真机和辅助技术签收。"
+      },
+      "acceptance": [
+        {
+          "id": "A49",
+          "task": "U06",
+          "layer": "助手 / 历史",
+          "action": "两个项目、60 条历史，在 390px 用键盘筛选、往前翻页、打开旧提案并切项目",
+          "expected": "找到正确会话，提案对象与项目明确，切项目不会提交原项目提案；当前候选、焦点可辨",
+          "status": "planned"
+        },
+        {
+          "id": "A50",
+          "task": "U06",
+          "layer": "助手 / 真机",
+          "action": "用户上滚阅读旧回复时来新消息；软键盘打开，分别取消、确认和进行试聊",
+          "expected": "阅读位置保持，新消息可主动跳转；确认可操作并反馈结果，试聊有标识，减少动效无强制平滑滚动，读屏能定位状态",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R18",
+        "R19",
+        "R20"
+      ]
+    },
+    {
+      "id": "G01",
+      "title": "实现版本化数据输入和受控外部输出",
+      "priority": "产品候选",
+      "ownerRole": "数据连接器、执行器",
+      "dependsOn": [],
+      "status": "design_ready",
+      "type": "候选能力",
+      "externalDependencies": [
+        "API/文件合同、对象存储、外部写回测试租户；上线写出前验收 F05"
+      ],
+      "sourceLocations": [
+        {
+          "path": "shared/data-source-capabilities.ts",
+          "line": 41
+        },
+        {
+          "path": "server/dataflow-resource-readiness.ts",
+          "line": 34
+        },
+        {
+          "path": "server/p2-service.ts",
+          "line": 1410
+        },
+        {
+          "path": "server/p2-service.ts",
+          "line": 1689
+        }
+      ],
+      "historicalEvidence": [
+        "E09",
+        "E11"
+      ],
+      "instructions": {
+        "基线与定位": "候选能力，连接器与数据执行器。E09、E11。`shared/data-source-capabilities.ts:41`、`server/dataflow-resource-readiness.ts:34`、`server/p2-service.ts:1410`、`server/p2-service.ts:1689`。已支持内联、可执行的 MySQL 只读查询及仅审计写出。",
+        "实施": "先选一个稳定分页的只读 API 和版本化 UTF-8 文件样本，定义 read/probe/write 能力，连接凭据引用、允许范围、大小/行数/页数/超时上限。发布冻结资源版本；每页原子保存产物片段与检查点，完成时公布清单。下一阶段为一个支持回执查询的目标增加 dry-run、写前确认、逐行执行键和结果未知核对。记录限额、取消、重试及清理后的边界。",
+        "兼容与回退": "按连接器与操作分别启用。关闭能力后保留旧运行和版本化产物的授权读取。外部写入上线采用 F05 的人工意图身份，同时要求目标端按操作回执去重。",
+        "完成": "A51–A54。先用合同夹具验证可恢复的读取，取得上游测试租户后用一个专用对象验证真实写回。"
+      },
+      "acceptance": [
+        {
+          "id": "A51",
+          "task": "G01",
+          "layer": "API 连接器 / 运行",
+          "action": "合成三页端点在第二页超时，再从已提交检查点恢复，并测试限额",
+          "expected": "已提交页不重复，行键/累计计数正确，页/行/字节超限有明确错误，血缘可回到资源版本",
+          "status": "planned"
+        },
+        {
+          "id": "A52",
+          "task": "G01",
+          "layer": "文件 / 运行",
+          "action": "上传 UTF-8 多行字段文件，发布后更换同名对象，分别运行旧/新版本；运行中撤权或取消",
+          "expected": "两次均读取各自固定版本，中文字段一致；失权或取消后停止派新读取，暂存清理可查",
+          "status": "planned"
+        },
+        {
+          "id": "A53",
+          "task": "G01",
+          "layer": "输出 / 合同夹具",
+          "action": "对支持回执的目标先 dry-run，再确认并模拟提交后响应丢失；按原操作键查询",
+          "expected": "dry-run 写入 0；确认一次产生一次业务写入，未知结果查询原回执，再发不会重复",
+          "status": "planned"
+        },
+        {
+          "id": "A54",
+          "task": "G01",
+          "layer": "外部联测 / 回退",
+          "action": "用测试租户和专用对象完成读取、应用、回读，关闭该连接器再打开旧 audit_only 运行",
+          "expected": "双方记录的对象、内容摘要和回执可对应；旧运行保持仅审计含义，能力状态在 UI、预检和 Worker 一致",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R13"
+      ]
+    },
+    {
+      "id": "G02",
+      "title": "用持久父子关系支持异步子流程",
+      "priority": "产品候选",
+      "ownerRole": "流程引擎、设计器",
+      "dependsOn": [],
+      "status": "design_ready",
+      "type": "候选能力",
+      "externalDependencies": [
+        "产品确定父取消/子失败策略及首期深度"
+      ],
+      "sourceLocations": [
+        {
+          "path": "server/subflow-diagnostics.ts",
+          "line": 7
+        },
+        {
+          "path": "server/workflow-compiler.ts"
+        },
+        {
+          "path": "server/workflow-worker.ts",
+          "line": 536
+        },
+        {
+          "path": "drizzle/schema.ts"
+        }
+      ],
+      "historicalEvidence": [
+        "E02",
+        "E06",
+        "E11"
+      ],
+      "instructions": {
+        "基线与定位": "候选能力，工作流引擎及设计器。E02、E06、E11。`server/subflow-diagnostics.ts:7`、`server/workflow-compiler.ts`、`server/workflow-worker.ts:536`、`drizzle/schema.ts`。已部署同步内联可运行，嵌套被拒。",
+        "实施": "首期仅一层可等待人工的子实例。编译检查可调用项目、固定发布版本/摘要、入出参映射及循环引用。父等待、父子关联、子实例和首作业同事务，关系按父实例、节点执行轮次及调用序号唯一。子终态事件恢复父节点一次。父取消按配置传给尚未结束的子实例；两端分别鉴权。详情记录等待原因、失败策略和所用子版本。",
+        "兼容与回退": "显式异步模式，旧同步快照和内联执行保持原合同。停开新调用后由兼容 Worker 收尾已有等待关系，先清点在途父子实例再退版本。",
+        "完成": "A55–A58。包含崩溃/竞争、独立权限、重复终态以及旧同步定义重放。"
+      },
+      "acceptance": [
+        {
+          "id": "A55",
+          "task": "G02",
+          "layer": "MySQL / Worker",
+          "action": "发布父流程和一个有人工等待的子版本，启动父、办理子，同时发布另一个子版本",
+          "expected": "父固定旧子版本；子等待时父可恢复且不前进，子完成后父只续跑一次",
+          "status": "planned"
+        },
+        {
+          "id": "A56",
+          "task": "G02",
+          "layer": "故障 / Worker",
+          "action": "在创建父子关系后重启，再重复发相同子完成事件",
+          "expected": "父子链接 1、子实例 1、对应父恢复 1；事件重放可核对，任务和出口不重复",
+          "status": "planned"
+        },
+        {
+          "id": "A57",
+          "task": "G02",
+          "layer": "竞争 / 回归",
+          "action": "父取消与子完成并发，另使子失败；再跑一个既有同步内联定义",
+          "expected": "每种竞争只有一致的终态和原因，失败按配置处理，旧同步输出/快照兼容",
+          "status": "planned"
+        },
+        {
+          "id": "A58",
+          "task": "G02",
+          "layer": "编译 / 权限",
+          "action": "尝试循环引用或超约定深度；用只看父的一方和只看子的一方读取链接",
+          "expected": "非法定义发布前有定位诊断；详情分别鉴权，链接不暴露另一端无权读取的信息",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R23"
+      ]
+    },
+    {
+      "id": "G03",
+      "title": "对 BDP 主数据先预览差异再应用",
+      "priority": "产品候选",
+      "ownerRole": "业务集成、BDP 所有者",
+      "dependsOn": [],
+      "status": "design_ready",
+      "type": "候选能力",
+      "externalDependencies": [
+        "上游稳定标识、字段所有权、删除合同和测试租户"
+      ],
+      "sourceLocations": [
+        {
+          "path": "client/src/components/ProjectWorkspace.tsx",
+          "line": 747
+        },
+        {
+          "path": "server/project-service.ts",
+          "line": 300
+        }
+      ],
+      "historicalEvidence": [
+        "E03",
+        "E05"
+      ],
+      "instructions": {
+        "基线与定位": "候选能力，业务集成与 BDP 所有者。E03、E05。`client/src/components/ProjectWorkspace.tsx:747` 对应禁用入口；`server/project-service.ts:300` 为本地创建逻辑。上游稳定标识和删除规则尚待确认。",
+        "实施": "先记录外部稳定 ID、字段所有权、版本、分页、凭据、失联及删除语义。导入生成差异快照，分类新增、更新、冲突和来源消失。保留外部→本地映射、双端修订、运行批次与逐行回执。应用者按授权和已读版本提交，来源消失交由人工确认归档。给回退保留可用前镜像及版本条件。",
+        "兼容与回退": "没有可用合同或租户时维持明确的能力说明，手工业务继续可用。已存在的本地业务只有经过明确匹配才建立受管映射。回退检查此后是否有人工修改。",
+        "完成": "A59–A62。接口所有者签字确认字段与冲突规则，用专用租户完成真实小批导入、重放、回读。"
+      },
+      "acceptance": [
+        {
+          "id": "A59",
+          "task": "G03",
+          "layer": "合同 / 差异",
+          "action": "取对接方已确认的数据字典，准备同名不同 ID、改名、重复页和来源消失样本",
+          "expected": "预览把持续身份、名称变化与冲突分开；预览期间本地业务写入 0，来源消失不会隐式删除",
+          "status": "planned"
+        },
+        {
+          "id": "A60",
+          "task": "G03",
+          "layer": "批次 / 权限",
+          "action": "使用观察者预览、应用者确认，双发同一批次，并在中间中断后继续",
+          "expected": "权限按合同，重复应用同一外部 ID 不重复建本地对象，逐行回执可续传",
+          "status": "planned"
+        },
+        {
+          "id": "A61",
+          "task": "G03",
+          "layer": "版本 / 回退",
+          "action": "预览后手工编辑一个映射字段，再应用；部分成功后对已被人另改的行请求回退",
+          "expected": "已修改行进入冲突，未覆盖人工内容；回退只影响仍匹配本批写入镜像的字段",
+          "status": "planned"
+        },
+        {
+          "id": "A62",
+          "task": "G03",
+          "layer": "真实 BDP",
+          "action": "使用对接方测试租户做一小批新增、改名、来源消失再回读",
+          "expected": "有签收的外部稳定 ID/版本、应用者和回执，可对应到一个本地 ID；归档走显式决定",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R24"
+      ]
+    },
+    {
+      "id": "G04",
+      "title": "助手长回合支持后台恢复和未知结果核对",
+      "priority": "产品候选",
+      "ownerRole": "助手、后台作业",
+      "dependsOn": [],
+      "status": "design_ready",
+      "type": "候选能力",
+      "externalDependencies": [
+        "目标负载、供应商延迟样本和人工核对责任人"
+      ],
+      "sourceLocations": [
+        {
+          "path": "server/assistant-store.ts",
+          "line": 539
+        },
+        {
+          "path": "server/assistant-runtime.ts",
+          "line": 216
+        },
+        {
+          "path": "server/assistant-workspace.ts",
+          "line": 581
+        },
+        {
+          "path": "server/assistant-workspace.ts",
+          "line": 617
+        },
+        {
+          "path": "drizzle/schema.ts",
+          "line": 1740
+        }
+      ],
+      "historicalEvidence": [
+        "E13",
+        "E14",
+        "E15"
+      ],
+      "instructions": {
+        "基线与定位": "候选能力，助手与 Worker 维护者。E13–E15。`server/assistant-store.ts:539`、`server/assistant-runtime.ts:216`、`server/assistant-workspace.ts:581`、`server/assistant-workspace.ts:617`、`drizzle/schema.ts:1740`。会话变更持行锁等待处理；已预约但未完成回填的工作台回执有结果未知的窗口。",
+        "实施": "接单短事务按会话/requestId 唯一登记输入摘要、修订和状态。数据库租约限制跨进程接管，模型调用在事务外执行，回写短事务再次比对修订与当前权限。与业务命令关联稳定键，持久区分预约、明确拒绝、已提交和未知。恢复优先核对目标端事实；需要人工判定的行保留重试与核对轨迹。显示队列年龄、耗时、重试与结果未知数量。",
+        "兼容与回退": "先做状态读取兼容及旧记录映射，再灰度新接单。回退时停止派新作业，由兼容消费者收尾已有租约。试聊保持模拟；确认才会改变业务。旧客户端沿原 requestId 可核对结果。",
+        "完成": "A63–A67。独立 Worker、慢模型、撤权、确认后进程终止均有可重建的业务和会话终态；真实容量门槛由服务所有者先给目标。"
+      },
+      "acceptance": [
+        {
+          "id": "A63",
+          "task": "G04",
+          "layer": "慢模型 / MySQL",
+          "action": "两个 Worker 处理不同会话，并对同一会话发送同键和同修订的竞争请求",
+          "expected": "模型等待期间不长期占用会话写事务；同键不重复回合，另一意图过期时明确冲突，无双写",
+          "status": "planned"
+        },
+        {
+          "id": "A64",
+          "task": "G04",
+          "layer": "故障 / 业务",
+          "action": "在业务动作已提交、助手回执尚未更新时停止消费者，随后恢复并查询目标业务状态",
+          "expected": "业务对象恰一份，结果可核对时恢复为 committed；无依据时保留待核对，不能再次盲发",
+          "status": "planned"
+        },
+        {
+          "id": "A65",
+          "task": "G04",
+          "layer": "权限 / 试聊",
+          "action": "准备提案后撤销工具或项目权限再确认，另以试聊身份确认同样操作",
+          "expected": "失权后拒绝，试聊只生成模拟结果。业务表无变化，回执可说明拒绝/试聊原因",
+          "status": "planned"
+        },
+        {
+          "id": "A66",
+          "task": "G04",
+          "layer": "升级 / 兼容",
+          "action": "让旧会话、失效租约和新排队回合并存，按方案切换及切回消费者",
+          "expected": "原 requestId 可查，过期租约可接管一次，停止新派发后在途逐一收尾；会话修订与结果相符",
+          "status": "planned"
+        },
+        {
+          "id": "A67",
+          "task": "G04",
+          "layer": "容量 / 运营",
+          "action": "按服务负责人批准的并发、供应商延迟和目标样本运行受控压测，抽查结果未知的人工核对",
+          "expected": "给出实测 P95/P99、错误率、池与租约占用、排队年龄及核对结果，对照已确认门槛签收",
+          "status": "planned"
+        }
+      ],
+      "requirementIds": [
+        "R19"
+      ]
+    }
+  ],
+  "implementationRecord": "IMPLEMENTATION.md"
+}

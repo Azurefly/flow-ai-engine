@@ -7,13 +7,14 @@
  * 3. 严格从真实 Web 界面上操作，而不是 API 调用：全流程由 Chromium 浏览器真实驱动点击、展开、表单交互与截图留痕。
  */
 
+const { acceptanceLogin } = require("../../../scripts/acceptance-target.cjs");
+const { base: BASE_URL, username: USERNAME, password: PASSWORD } =
+  acceptanceLogin(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL ?? process.env.TEST_BASE_URL);
 const { chromium } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const BASE_URL = process.env.TEST_BASE_URL || 'http://124.223.198.84:1180';
-const USERNAME = process.env.FLOW_BOOTSTRAP_ADMIN_USERNAME || 'flow_admin';
-const PASSWORD = process.env.FLOW_BOOTSTRAP_ADMIN_PASSWORD || 'b2b055bfb12ed3bed70e86589fdb15478eeb1d0db5c0ff87';
+
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../018-测试报告/screenshots');
 if (!fs.existsSync(SCREENSHOT_DIR)) {

@@ -1,10 +1,11 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Explicitly authorized: one isolated business/user/folder, at most seven flows, no global grants.
 // Writes are never retried automatically. finally revokes, disables and archives only this fixture.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
-const base = "http://124.223.198.84:1180/",
+const base = acceptanceTarget(process.env) + "/",
   tag = randomBytes(6).toString("hex"),
   code = `WARE_${tag}`.toUpperCase(),
   username = `warehouse_${tag}`;

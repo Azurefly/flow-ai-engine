@@ -1,7 +1,8 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import superjson from "superjson";
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {

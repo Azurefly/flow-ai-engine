@@ -1,10 +1,11 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Read-only acceptance against existing runs; never creates fixtures or executes flows.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
 
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const ids = (process.env.FLOW_DATA_GRAPH_RUN_IDS || "")
   .split(",")
   .filter(Boolean);

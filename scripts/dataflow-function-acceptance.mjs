@@ -1,7 +1,8 @@
+import { acceptanceTarget } from "./acceptance-target.cjs";
 // Public-service regression only; no database writes, token printing, or production task changes.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-const base = "http://124.223.198.84:1180";
+const base = acceptanceTarget(process.env);
 class Session {
   cookie = "";
   async request(path, input, mutation = false) {

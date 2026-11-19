@@ -1,3 +1,5 @@
+import { showDataflowRunResult, useManualDataflowRun } from "@/hooks/useManualDataflowRun";
+import { BusinessImport } from "./BusinessImport";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
@@ -209,9 +211,7 @@ export function BusinessCenter({
     visibleUserIds: [] as number[],
     visibleUnitIds: [] as string[],
   });
-  const [importing, setImporting] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  const csvImportInProgressRef = useRef(false);
   useEffect(() => {
     const timer = window.setTimeout(
       () => setDebouncedUnitDirectoryQuery(unitDirectoryQuery.trim()),
@@ -252,7 +252,6 @@ export function BusinessCenter({
   );
   const createProject = trpc.project.create.useMutation({
     onSuccess: () => {
-      if (csvImportInProgressRef.current) return;
       void utils.project.invalidate();
       setShowCreate(false);
       setForm({
@@ -266,128 +265,9 @@ export function BusinessCenter({
       toast.success("业务项目已创建，权限隔离已生效。");
     },
     onError: error => {
-      if (!csvImportInProgressRef.current) toast.error(error.message);
+      toast.error(error.message);
     },
   });
-  const importBusinesses = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (csvImportInProgressRef.current) return;
-    csvImportInProgressRef.current = true;
-    setImporting(true);
-    let importedCount = 0;
-    try {
-      const lines = (await file.text())
-        .replace(/^\uFEFF/, "")
-        .split(/\r?\n/)
-        .filter(line => line.trim());
-      if (!lines.length)
-        throw new Error("CSV 文件为空。请使用业务导入模板填写标题行后再导入。");
-      const parseRow = (line: string) => {
-        const cells: string[] = [];
-        let value = "";
-        let quoted = false;
-        for (let index = 0; index < line.length; index += 1) {
-          const character = line[index];
-          if (character === '"') {
-            if (quoted && line[index + 1] === '"') {
-              value += '"';
-              index += 1;
-            } else quoted = !quoted;
-          } else if (character === "," && !quoted) {
-            cells.push(value.trim());
-            value = "";
-          } else value += character;
-        }
-        cells.push(value.trim());
-        return cells;
-      };
-      const header = parseRow(lines[0]).map(value =>
-        value.trim().toLowerCase()
-      );
-      const column = (...names: string[]) =>
-        header.findIndex(value => names.includes(value));
-      const codeColumn = column("业务代号", "code");
-      const nameColumn = column("业务名称", "name");
-      const domainColumn = column("工作域代号", "domaincode");
-      const descriptionColumn = column("业务说明", "description");
-      if (codeColumn < 0 || nameColumn < 0)
-        throw new Error(
-          "CSV 标题必须包含“业务代号、业务名称”（或 code、name）。"
-        );
-      if (lines.length === 1) {
-        toast.info("模板中还没有业务记录；填写至少一条记录后再导入。");
-        return;
-      }
-      const imported = lines
-        .slice(1)
-        .map(parseRow)
-        .map(cells => ({
-          code: cells[codeColumn]?.toUpperCase() ?? "",
-          name: cells[nameColumn] ?? "",
-          domainCode: domainColumn >= 0 ? (cells[domainColumn] ?? "") : "",
-          description:
-            descriptionColumn >= 0 ? (cells[descriptionColumn] ?? "") : "",
-        }));
-      if (imported.some(item => !item.code || !item.name))
-        throw new Error("每条业务记录都需要业务代号和业务名称。");
-      const duplicate = imported.find(
-        (item, index) =>
-          imported.findIndex(other => other.code === item.code) !== index
-      );
-      if (duplicate)
-        throw new Error(`CSV 中存在重复业务代号：${duplicate.code}。`);
-      if (imported.length > 500) throw new Error("每次最多导入 500 个业务项目，请分批导入。");
-      const existingCodes = new Set(
-        await utils.project.existingCodes.fetch({ codes: imported.map(item => item.code) }, { staleTime: 0 })
-      );
-      const alreadyExists = imported.find(item => existingCodes.has(item.code));
-      if (alreadyExists)
-        throw new Error(
-          "业务代号已存在：" + alreadyExists.code + "。请先修正 CSV 再导入。"
-        );
-      const domainByCode = new Map(
-        (imported.some(item => item.domainCode) ? await utils.project.activeDomains.fetch(undefined, { staleTime: 0 }) : []).map(domain => [
-          String(domain.code).toUpperCase(),
-          domain.id,
-        ])
-      );
-      const invalidDomain = imported.find(
-        item =>
-          item.domainCode && !domainByCode.has(item.domainCode.toUpperCase())
-      );
-      if (invalidDomain)
-        throw new Error(
-          `工作域代号不存在：${invalidDomain.domainCode}。请留空或使用当前可选工作域。`
-        );
-      for (const item of imported) {
-        await createProject.mutateAsync({
-          code: item.code,
-          name: item.name,
-          description: item.description,
-          domainId: item.domainCode
-            ? (domainByCode.get(item.domainCode.toUpperCase()) ?? null)
-            : null,
-        });
-        importedCount += 1;
-      }
-      void utils.project.invalidate();
-      toast.success("已导入 " + importedCount + " 个业务项目。");
-    } catch (error) {
-      if (importedCount > 0) void utils.project.invalidate();
-      const message =
-        error instanceof Error ? error.message : "业务 CSV 导入失败。";
-      toast.error(
-        importedCount > 0
-          ? "导入已中断：已创建 " + importedCount + " 个业务项目；" + message
-          : message
-      );
-    } finally {
-      csvImportInProgressRef.current = false;
-      setImporting(false);
-      event.target.value = "";
-    }
-  };
   const downloadSampleCsv = () => {
     const csvTemplate = "业务代号,业务名称,工作域代号,业务说明\r\n";
     const blob = new Blob(["﻿" + csvTemplate], {
@@ -470,8 +350,8 @@ export function BusinessCenter({
           retry: () => void activeUsers.refetch(),
         }}
         creating={createProject.isPending}
-        importing={importing}
-        onRequestImport={() => importRef.current?.click()}
+        importPanel={canCreate && status === "active" ? <BusinessImport fileInput={importRef} /> : null}
+        onRequestImport={() => { if (importRef.current) { delete importRef.current.dataset.correction; importRef.current.click(); } }}
         onDownloadTemplate={downloadSampleCsv}
         onCreate={() =>
           createProject.mutate({
@@ -483,13 +363,7 @@ export function BusinessCenter({
         }
         onOpenProject={onOpenProject}
       />
-      <input
-        ref={importRef}
-        type="file"
-        accept=".csv,text/csv"
-        className="hidden"
-        onChange={event => void importBusinesses(event)}
-      />
+
       {archiveTarget && <Suspense fallback={<p role="status" className="aiflow-type-body p-4">正在加载业务归档管理…</p>}>
         <ProjectArchiveDialog key={archiveTarget.id} project={archiveTarget} onClose={() => setArchiveTarget(null)} />
       </Suspense>}
@@ -543,7 +417,7 @@ type BusinessCenterViewProps = {
   unitDirectory: DirectorySearchState;
   userDirectory: DirectorySearchState;
   creating: boolean;
-  importing: boolean;
+  importPanel: ReactNode;
   onRequestImport: () => void;
   onDownloadTemplate: () => void;
   onCreate: () => void;
@@ -553,6 +427,8 @@ type BusinessCenterViewProps = {
 function ProjectMoreDetails({ project }: { project: ProjectRecord }) {
   return (
     <dl className="aiflow-type-body grid gap-x-4 gap-y-2 sm:grid-cols-2">
+      <div className="sm:hidden"><dt>流程数</dt><dd>{project.workflowCount ?? 0}</dd></div>
+      <div className="sm:hidden"><dt>工作域</dt><dd>{project.domainName || "未归属"}</dd></div>
       <div>
         <dt className={surfaceClass1}>根部门</dt>
         <dd className={projectInfoValueClass}>
@@ -624,12 +500,13 @@ function BusinessCenterView({
   unitDirectory,
   userDirectory,
   creating,
-  importing,
+  importPanel,
   onRequestImport,
   onDownloadTemplate,
   onCreate,
   onOpenProject,
 }: BusinessCenterViewProps) {
+  const createTrigger = useRef<HTMLButtonElement>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [domainSelectorQuery, setDomainSelectorQuery] = useState("");
   useEffect(() => {
@@ -733,12 +610,12 @@ function BusinessCenterView({
                 </button>
                 <button
                   type="button"
-                  disabled={!canCreate || importing || status === "archived"}
-                  aria-label={importing ? "正在导入业务 CSV" : "导入业务 CSV"}
+                  disabled={!canCreate || status === "archived"}
+                  aria-label="导入业务 CSV"
                   onClick={onRequestImport}
                   className={surfaceClass3}
                 >
-                  {importing ? "正在导入…" : "导入业务 CSV"}
+                  导入业务 CSV
                 </button>
                 <div className="my-1 border-t border-border" />
                 <button
@@ -757,6 +634,7 @@ function BusinessCenterView({
                 type="button"
                 size="sm"
                 className="aiflow-type-control h-11 px-3 font-medium min-[1280px]:h-9"
+                ref={createTrigger}
                 onClick={() => setShowCreate(true)}
               >
                 <Plus size={14} className="mr-1" />
@@ -765,6 +643,7 @@ function BusinessCenterView({
             )}
           </div>
         </header>
+        {importPanel}
 
         <section className={surfaceClass4}>
           {/* 桌面列表将标题与范围选择并排，查询和反馈各占完整一行。 */}
@@ -878,7 +757,7 @@ function BusinessCenterView({
 
           <div data-business-table-desktop="">
             <div className="overflow-x-auto">
-              <table className="aiflow-type-body w-full min-w-[720px] table-fixed text-left">
+              <table data-business-projects="" className="aiflow-type-body w-full min-w-[720px] table-fixed text-left">
                 <thead className={"aiflow-type-control bg-muted font-medium " + mutedToneClass}>
                   <tr>
                     <th className="aiflow-type-control w-[36%] px-4 py-3">
@@ -980,6 +859,7 @@ function BusinessCenterView({
           {pagination}
         </section>
         <CreationDialog
+        returnFocus={createTrigger}
           open={showCreate}
           onOpenChange={setShowCreate}
           title="新增业务"
@@ -1219,12 +1099,10 @@ export function ProjectWorkspace({
       toast.success(`流程已发起：${result.runId.slice(0, 8)}`),
     onError: error => toast.error(error.message),
   });
-  const runDataflow = trpc.data.run.useMutation({
+  const runDataflow = useManualDataflowRun({
     onSuccess: result => {
       void utils.data.runs.invalidate({ projectId: project.id });
-      toast.success(
-        `${result.status === "success" ? "数据流运行完成" : "数据流已进入持久化执行队列"}：${result.runId.slice(0, 8)}`
-      );
+      showDataflowRunResult(result);
     },
     onError: error => toast.error(error.message),
   });

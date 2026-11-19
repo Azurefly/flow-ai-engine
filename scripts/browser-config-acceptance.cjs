@@ -1,3 +1,5 @@
+const { acceptanceTarget, acceptanceSsh } = require("./acceptance-target.cjs");
+const fixtureSsh = acceptanceSsh(process.env);
 const assert = require("node:assert/strict");
 const { spawn } = require("node:child_process");
 const { randomBytes } = require("node:crypto");
@@ -8,7 +10,7 @@ const {
   expect,
 } = require("../01-test/014-自动化脚本/e2e/node_modules/@playwright/test");
 const root = path.resolve(__dirname, "..");
-const base = "http://124.223.198.84:1180/";
+const base = acceptanceTarget(process.env) + "/";
 const verifyUpdated = process.env.FLOW_UI_EXPECT_UPDATED === "1";
 const verifySources = process.env.FLOW_UI_PERMISSION_SOURCES === "1";
 const verifyStatus = process.env.FLOW_UI_ACCOUNT_STATUS === "1";
@@ -44,13 +46,13 @@ function remoteOnce(intent) {
       "ssh",
       [
         "-i",
-        "C:\\Users\\pan\\.ssh\\215.pem",
+        fixtureSsh.key,
         "-o",
         "BatchMode=yes",
         "-o",
         "ConnectTimeout=10",
-        "ubuntu@124.223.198.84",
-        "sudo -n docker exec -i flow-ai-engine-app-1 node --input-type=module -",
+        fixtureSsh.target,
+        "sudo -n docker exec -i " + fixtureSsh.app + " node --input-type=module -",
       ],
       { windowsHide: true }
     );

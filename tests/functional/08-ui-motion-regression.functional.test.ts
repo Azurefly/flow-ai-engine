@@ -468,7 +468,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(canvasSource).not.toContain("fontSize: 12");
       expect(canvasSource).toContain("minZoom={0.1}");
       expect(canvasSource).toContain("lastInitialFitKeyRef");
-      expect(canvasSource).toContain("viewport.clientHeight, 0.1, 1, 0.12)");
+      expect(canvasSource).toContain("availableHeight, 0.1, 1, 0.12)");
       expect(readFileSync("client/src/components/workflow-canvas-design.css", "utf8")).toContain("calc(12px / var(--canvas-zoom))");
       expect(canvasSource).toContain("minZoom={0.1}");
       expect(canvasSource).toContain("maxZoom={1.25}");
@@ -1190,8 +1190,9 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(workspaceSrc).toContain('aria-label="业务流程列表"');
       expect(workspaceSrc).toContain("更多筛选");
       expect(workspaceSrc).toContain("显示第");
-      expect(workspaceSrc).toContain("模板中还没有业务记录");
-      expect(workspaceSrc).toContain("业务代号已存在：");
+      expect(readFileSync("shared/project-import.ts", "utf8")).toContain("模板中还没有业务记录");
+      expect(readFileSync("server/project-import.ts", "utf8")).toContain("业务代号已存在");
+      expect(readSrc("components/BusinessImport.tsx")).toContain("下载错误明细");
 
       // RunCenter
       expect(runCenterSrc).toContain(

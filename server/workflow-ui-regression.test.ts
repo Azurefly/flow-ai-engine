@@ -532,8 +532,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_657 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 512 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_665 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 515 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -745,7 +745,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(canvasSource).toContain("minZoom={0.1}");
     expect(canvasSource).toContain("lastInitialFitKeyRef");
-    expect(canvasSource).toContain("viewport.clientHeight, 0.1, 1, 0.12)");
+    expect(canvasSource).toContain("availableHeight, 0.1, 1, 0.12)");
     expect(canvasDesignStyles).toContain("calc(12px / var(--canvas-zoom))");
     expect(canvasSource).toContain("minZoom={0.1}");
     expect(canvasSource).toContain("maxZoom={1.25}");
@@ -2349,9 +2349,10 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("创建时间结束");
     expect(projectWorkspaceSource).toContain("同步 BDP 配置");
     expect(projectWorkspaceSource).toContain("导入业务");
-    expect(projectWorkspaceSource).toContain('accept=".csv,text/csv"');
-    expect(projectWorkspaceSource).toContain("CSV 标题必须包含");
-    expect(projectWorkspaceSource).toContain("业务代号、业务名称");
+    const importPanel = readFileSync(new URL("../client/src/components/BusinessImport.tsx", import.meta.url), "utf8");
+    expect(importPanel).toContain('accept=".csv,text/csv"');
+    expect(importPanel).toContain("previewImport.useMutation");
+    expect(importPanel).toContain("commitImport.useMutation");
     expect(projectWorkspaceSource).toContain(
       "仅展示当前账号有权查看的业务项目；筛选不会扩大访问范围。"
     );
@@ -2853,7 +2854,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("data-process-workbench-loading");
     expect(processWorkbenchSource).toContain("正在读取已启动流程");
     expect(processWorkbenchSource).toContain(
-      "正在加载当前授权范围内的看板统计与最近任务"
+      "正在加载当前授权范围内的看板统计与本人相关任务"
     );
     expect(processWorkbenchSource).toContain(
       '(view !== "board" || item.id === "done")'

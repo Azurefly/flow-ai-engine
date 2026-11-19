@@ -1,0 +1,26 @@
+# Render FLOW_PUBLIC_HOST, FLOW_TLS_PORT, FLOW_HTTP_PORT and FLOW_CERT_DIR before nginx -t.
+server {
+    listen ${FLOW_TLS_PORT} ssl;
+    server_name ${FLOW_PUBLIC_HOST};
+    ssl_certificate ${FLOW_CERT_DIR}/fullchain.pem;
+    ssl_certificate_key ${FLOW_CERT_DIR}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 2m;
+
+    error_page 497 = @flow_upgrade;
+    location @flow_upgrade {
+        if ($request_method !~ ^(GET|HEAD)$) { return 426; }
+        return 308 https://${FLOW_PUBLIC_HOST}:${FLOW_TLS_PORT}$request_uri;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:${FLOW_HTTP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Host ${FLOW_PUBLIC_HOST}:${FLOW_TLS_PORT};
+        proxy_set_header X-Forwarded-Host ${FLOW_PUBLIC_HOST}:${FLOW_TLS_PORT};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Connection "";
+        proxy_read_timeout 210s;
+    }
+}

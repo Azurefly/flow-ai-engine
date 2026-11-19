@@ -39,6 +39,7 @@ describe("P2 项目数据资源与数据流", () => {
       await pool.query("DELETE FROM dataflow_schedule WHERE projectId=?", [
         projectId,
       ]);
+      await pool.query("DELETE m FROM dataflow_manual_receipt m JOIN dataflow_run r ON r.id=m.runId WHERE r.projectId=?", [projectId]);
       await pool.query("DELETE FROM dataflow_run WHERE projectId=?", [
         projectId,
       ]);
@@ -976,6 +977,16 @@ describe("P2 项目数据资源与数据流", () => {
         status: "success",
         triggerType: "manual",
       });
+      const request = { projectId, workflowId, idempotencyKey: randomUUID(), data: { a: 1, b: 2 } };
+      const [first, second] = await Promise.all([owner.data.run(request), owner.data.run({ ...request, data: { b: 2, a: 1 } })]);
+      expect(second.runId).toBe(first.runId);
+      expect(await owner.data.runReceipt(request)).toMatchObject({ runId: first.runId, status: "queued" });
+      await expect(owner.data.run({ ...request, data: { a: 9 } })).rejects.toMatchObject({ code: "CONFLICT" });
+      const [admission] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT m.runId FROM dataflow_manual_receipt m JOIN dataflow_run_job j ON j.runId=m.runId WHERE m.runId=?", [first.runId]);
+      expect(admission).toHaveLength(1);
+      await runDataflowJobOnce(first.runId);
+      expect(await owner.data.run(request)).toMatchObject({ runId: first.runId, status: "success" });
       const faultBucket = `fault:${suffix}`;
       process.env.DATAFLOW_WORKER_FAULT_POINT = "after_nodes_before_complete";
       try {

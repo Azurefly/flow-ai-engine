@@ -1,3 +1,4 @@
+import { showDataflowRunResult, useManualDataflowRun } from "@/hooks/useManualDataflowRun";
 import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
@@ -319,14 +320,12 @@ export default function DataResourceCenter({
     },
     onError: reportResourceError,
   });
-  const run = trpc.data.run.useMutation({
+  const run = useManualDataflowRun({
     onSuccess: (result, variables) => {
       invalidate();
       setActiveFlowId(variables.workflowId);
       setDataflowSection("runs");
-      toast.success(
-        `${result.status === "success" ? "数据流运行完成" : "数据流已进入持久化执行队列"}：${result.runId.slice(0, 8)}`
-      );
+      showDataflowRunResult(result);
     },
     onError: error => {
       // Execution errors can arrive after a failed run has already been saved.

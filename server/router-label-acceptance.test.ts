@@ -175,6 +175,7 @@ describe("路由验收场景离线回归", () => {
         vi.stubEnv(key, value);
       const log = vi.spyOn(console, "log").mockImplementation(() => {});
       const fixtures: any[] = [];
+      let auditStatus = "pending";
       const branches = [["end"], ["high"], ["high", "low"], ["fallback"]];
       const fetch = vi.fn(async (url: string, options: RequestInit) => {
         const endpoint = new URL(url).pathname.split("/").at(-1);
@@ -186,13 +187,19 @@ describe("路由验收场景离线回归", () => {
         if (endpoint === "project.create")
           return response({ id: "fixture-project" });
         if (endpoint === "project.createWorkflow") {
+          auditStatus = "pending";
           fixtures.push(input);
           return response({ id: `workflow-${fixtures.length}` });
         }
-        if (
-          endpoint === "project.auditWorkflow" ||
-          endpoint === "workflow.publish"
-        )
+        if (endpoint === "workflow.get")
+          return response({ definitionVersion: 1, auditStatus });
+        if (endpoint === "project.auditWorkflow") {
+          expect(input.expectedDefinitionVersion).toBe(1);
+          expect(input.expectedAuditStatus).toBe(auditStatus);
+          auditStatus = "approved";
+          return response({ ok: true });
+        }
+        if (endpoint === "workflow.publish")
           return response({ ok: true });
         if (endpoint === "workflow.run")
           return response({ runId: `run-${fixtures.length}` });
