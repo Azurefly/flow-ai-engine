@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseProjectImport, projectImportByteLimit } from "./project-import";
+import { parseProjectImport, projectCorrectionCsv, projectImportByteLimit } from "./project-import";
 
 describe("业务 CSV 预检", () => {
   it.each(["\n", "\r\n"])(
@@ -57,5 +57,21 @@ describe("业务 CSV 预检", () => {
       parseProjectImport("中".repeat(Math.ceil(projectImportByteLimit / 3)))
         .issues[0].field
     ).toBe("文件");
+  });
+  it("待修正行导出保留业务字段、批次修订和稳定行标识，忽略成功行和正常待处理行", () => {
+    const base = { line: 4, code: "AA", name: "'原名", domainCode: "", description: '=示例,"甲"\r\n第二行' };
+    const csv = projectCorrectionCsv({
+      batchId: "sample-id", revision: 7, issues: [{ line: 4, field: "业务代号", message: "已占用" }],
+      rows: [
+        { rowNumber: 1, projectId: "done", error: null, record: { ...base, line: 2 } },
+        { rowNumber: 2, projectId: null, error: null, record: base },
+        { rowNumber: 3, projectId: null, error: null, record: { ...base, line: 6, code: "BB" } },
+      ],
+    });
+    expect(csv).toContain("'=示例");
+    expect(parseProjectImport(csv!)).toEqual({
+      records: [{ ...base, line: 2 }], issues: [], rowReferences: [{ key: "sample-id/2", revision: "7" }],
+    });
+    expect(parseProjectImport("批次行标识,code,name\nx,AA,甲").issues[0].field).toBe("批次修订");
   });
 });

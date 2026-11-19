@@ -790,6 +790,13 @@ function FlowConsole({
   const workflowAccessState = workflowViewState({ workflowId: effectiveWorkflowId, accessWorkflowId: accessInput.id,
     status: access.status, errorCode: access.error?.data?.code, exists: access.data?.exists, permissions: access.data?.permissions });
   const canViewWorkflow = workflowAccessState === "granted";
+  let assistantScopeNotice: string | undefined;
+  if (routeProjectUnresolved) {
+    assistantScopeNotice = routeProjectQuery.isError ? "当前项目不可用。" : "正在读取项目范围…";
+  } else if (routeWorkflowId && (!canViewWorkflow || selectedWorkflow?.id !== routeWorkflowId)) {
+    assistantScopeNotice = workflowAccessState === "checking" || (canViewWorkflow && selectedWorkflowQuery.isPending)
+      ? "正在读取流程范围…" : "当前流程不可用。";
+  }
   const mountedMonitorWorkflowId = useRef<string | null>(null);
   if (canViewWorkflow && section === "runs" && runView === "monitor") mountedMonitorWorkflowId.current = effectiveWorkflowId;
   const workflowContentState = canViewWorkflow && !selectedWorkflow && selectedWorkflowQuery.isError ? workflowReadFailureState(selectedWorkflowQuery.error.data?.code) : workflowAccessState;
@@ -1461,7 +1468,7 @@ function FlowConsole({
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
       {!agentSettingsActive && <AssistantLauncher key={user.id} isAdmin={user.role === "admin"}
-        userId={user.id} onNavigate={navigateRoute} context={{ projectId: routeProjectId ?? (routeWorkflowId && canViewWorkflow ? selectedWorkflow?.projectId : undefined) ?? undefined,
+        userId={user.id} onNavigate={navigateRoute} scopeNotice={assistantScopeNotice} context={{ projectId: routeProjectId ?? (routeWorkflowId && canViewWorkflow ? selectedWorkflow?.projectId : undefined) ?? undefined,
           workflowId: canViewWorkflow ? routeWorkflowId ?? undefined : undefined }} />}
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
         <WorkspaceCommandDialog target={commandTarget} canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />

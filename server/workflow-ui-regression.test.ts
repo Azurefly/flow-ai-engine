@@ -532,7 +532,7 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_691 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_693 * 1024");
     expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 524 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
@@ -4029,6 +4029,20 @@ it("数据流正式运行拒绝草稿，显式测试要求编辑权限", () => {
   expect(source("./routers.ts")).toContain(
     'mode: z.enum(["formal", "test"]).optional()'
   );
+});
+it("编辑器实际运行弹窗、资源中心及工作区共享手动数据流回执；弹窗保留预检和恢复提示", () => {
+  const modal = source("../client/src/components/WorkflowTestRunModal.tsx");
+  for (const entry of [
+    modal,
+    source("../client/src/components/DataResourceCenter.tsx"),
+    source("../client/src/components/ProjectWorkspace.tsx"),
+  ]) {
+    expect(entry).toContain("useManualDataflowRun(");
+    expect(entry).not.toContain("trpc.data.run.useMutation(");
+  }
+  expect(modal).toContain("runDataflowMutation.mutateAsync(");
+  expect(modal).toContain("data: runInput, ...checkpoint");
+  expect(modal).toContain('receiptPending ? "核对上次运行" : "再次创建实际运行"');
 });
 it("数据流程测试弹窗按项目权限禁用执行并显示原因", () => {
   const modal = source("../client/src/components/WorkflowTestRunModal.tsx");

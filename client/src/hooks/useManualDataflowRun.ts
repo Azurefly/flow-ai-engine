@@ -32,11 +32,12 @@ export function showDataflowRunResult(result: Result) {
   else toast.success(message);
 }
 const inMemory = new Map<string, string>();
+export const pendingDataflowReceiptMessage = "运行结果待核对。再次点击运行将核对上次请求。";
 
 export function useManualDataflowRun(callbacks: {
-  onSuccess: (result: Result, input: RunInput) => void;
-  onError: (error: Error) => void;
-}) {
+  onSuccess?: (result: Result, input: RunInput) => void;
+  onError?: (error: Error) => void;
+} = {}) {
   const utils = trpc.useUtils();
   return useMutation<Result, Error, RunInput>({
     ...callbacks,
@@ -115,7 +116,7 @@ export function useManualDataflowRun(callbacks: {
           clear();
           throw e;
         }
-        throw new Error("运行结果待核对。再次点击运行将核对上次请求。");
+        throw new Error(pendingDataflowReceiptMessage);
       }
     },
   });

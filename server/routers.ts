@@ -1,7 +1,7 @@
 import { readDurableRunLinks, redactHiddenChildReferences } from "./durable-subflow-runtime";
 import { getLlmServiceStatus } from "./llm-configuration";
 import { commitProjectImport, previewProjectImport, projectImportStatus, projectImportHistory } from "./project-import";
-import { projectImportByteLimit } from "../shared/project-import";
+import { projectCorrectionByteLimit } from "../shared/project-import";
 import { dataflowRunReceipt } from "./p2-service";
 import { connectorRouter } from "./data-connector-router";
 import { getRoleAuthorizationOverview, listRoleMembersPage, roleMemberPageInput } from "./role-member-directory";
@@ -596,7 +596,7 @@ export const appRouter = router({
   }),
   project: router({
     previewImport: protectedProcedure
-      .input(z.object({ batchId: z.uuid(), expectedRevision: z.number().int().nonnegative(), csv: z.string().max(projectImportByteLimit) }))
+      .input(z.object({ batchId: z.uuid(), expectedRevision: z.number().int().nonnegative(), csv: z.string().max(projectCorrectionByteLimit) }))
       .mutation(({ctx,input}) => previewProjectImport(ctx.user,input)),
     commitImport: protectedProcedure
       .input(z.object({ batchId: z.uuid(), expectedRevision: z.number().int().positive() }))

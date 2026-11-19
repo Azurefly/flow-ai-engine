@@ -1,6 +1,7 @@
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 import { DataflowCancelControl, DataflowCancellationInfo } from "./DataflowCancelControl";
+import { pendingDataflowReceiptMessage, showDataflowRunResult, useManualDataflowRun } from "@/hooks/useManualDataflowRun";
 import {
   dataflowTerminalResults,
   dataflowResultColumns,
@@ -119,6 +120,7 @@ export default function WorkflowTestRunModal({
   const [copied, setCopied] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const receiptPending = isDataflow && runError === pendingDataflowReceiptMessage;
   const [isRunning, setIsRunning] = useState(false);
   const readinessRequest = trpc.workflow.runReadiness.useMutation({ retry: false });
   const [acknowledgedActualRun, setAcknowledgedActualRun] = useState(false);
@@ -187,7 +189,7 @@ export default function WorkflowTestRunModal({
 
   // Mutations
   const runWorkflowMutation = trpc.workflow.run.useMutation();
-  const runDataflowMutation = trpc.data.run.useMutation();
+  const runDataflowMutation = useManualDataflowRun();
 
   // Queries for run details
   const workflowRunQuery = trpc.workflow.runDetail.useQuery(
@@ -374,6 +376,7 @@ export default function WorkflowTestRunModal({
               ...checkpoint,
             });
             setActiveRunId(res.runId);
+            if (res.recovered) showDataflowRunResult(res);
             void utils.data.runs.invalidate({ projectId: workflow.projectId });
             if ((res.status as string) === "failed") {
               setRunError("数据流执行未通过校验或内部算子失败");
@@ -406,7 +409,8 @@ export default function WorkflowTestRunModal({
       }
       const msg = err?.message || String(err) || "启动运行失败";
       setRunError(msg);
-      toast.error(msg);
+      if (msg === pendingDataflowReceiptMessage) toast.message(msg);
+      else toast.error(msg);
     } finally {
       setIsRunning(false);
     }
@@ -562,6 +566,11 @@ export default function WorkflowTestRunModal({
                       {isStateflow ? "状态流转抵达终态" : "执行顺利完成"}
                     </span>
                   </div>
+                ) : receiptPending ? (
+                  <div role="status" className="aiflow-type-body flex items-center gap-2 font-semibold text-aiflow-warning">
+                    <Clock size={16} />
+                    <span>上次运行结果待核对</span>
+                  </div>
                 ) : currentRun?.status === "failed" || runError ? (
                   <div className="aiflow-type-body flex items-center gap-2 font-semibold text-red-700">
                     <XCircle size={16} className="text-red-600" />
@@ -624,7 +633,7 @@ export default function WorkflowTestRunModal({
                   ) : (
                     <RefreshCw size={13} className="mr-1" />
                   )}
-                  再次创建实际运行
+                  {receiptPending ? "核对上次运行" : "再次创建实际运行"}
                 </Button>
               </div>
             </div>
@@ -918,7 +927,7 @@ export default function WorkflowTestRunModal({
               {activeTab === "result" && (
                 <div className={resultPanelClass}>
                   {/* Error view if failed */}
-                  {(runError || currentRun?.error) && (
+                  {!receiptPending && (runError || currentRun?.error) && (
                     <div className="aiflow-type-body mb-4 rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">
                       <div className="flex items-start gap-2.5">
                         <AlertTriangle

@@ -11,11 +11,13 @@ export function AssistantLauncher({
   isAdmin,
   userId,
   context,
+  scopeNotice,
   onNavigate,
 }: {
   isAdmin: boolean;
   userId: number;
   context: AssistantContext;
+  scopeNotice?: string;
   onNavigate: AssistantNavigation;
 }) {
   const [open, setOpen] = useState(false);
@@ -101,14 +103,14 @@ export function AssistantLauncher({
               </p>
             }
           >
-            <AssistantChat
+            {scopeNotice ? <p className="p-4" role="status">{scopeNotice}</p> : <AssistantChat
               userId={userId}
               context={context}
               onNavigate={route => {
                 close();
                 onNavigate(route);
               }}
-            />
+            />}
           </Suspense>
         </section>
       )}

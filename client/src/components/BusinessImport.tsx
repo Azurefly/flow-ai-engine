@@ -1,8 +1,17 @@
-import { useRef, useState, type RefObject } from "react";
+import { useMemo, useRef, useState, type RefObject } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { newOperationUuid } from "@shared/resource-creation";
-import { projectImportByteLimit } from "@shared/project-import";
+import { projectCorrectionByteLimit, projectCorrectionCsv, projectImportByteLimit } from "@shared/project-import";
+
+function downloadCsv(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 export function BusinessImport({
   fileInput,
@@ -25,6 +34,7 @@ export function BusinessImport({
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
   const batch = status.isError ? undefined : status.data;
+  const correctionCsv = useMemo(() => batch ? projectCorrectionCsv(batch) : null, [batch]);
   const problems = batch
     ? [
         ...batch.issues,
@@ -55,8 +65,8 @@ export function BusinessImport({
     }
   }
   async function readFile(file: File, edit: boolean) {
-    if (file.size > projectImportByteLimit)
-      throw new Error("业务 CSV 最大为 512 KiB。");
+    if (file.size > (edit ? projectCorrectionByteLimit : projectImportByteLimit))
+      throw new Error(edit ? "修正文件最大为 1 MiB。" : "业务 CSV 最大为 512 KiB。");
     const csv = await file.text();
     let intent = pendingPreview.current;
     if (
@@ -103,16 +113,7 @@ export function BusinessImport({
         [p.line, p.field, p.message].map(v => quote(String(v))).join(",")
       ),
     ];
-    const url = URL.createObjectURL(
-      new Blob(["\uFEFF", items.join("\r\n")], {
-        type: "text/csv;charset=utf-8",
-      })
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "业务导入错误.csv";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadCsv("业务导入错误.csv", "\uFEFF" + items.join("\r\n"));
   }
   return (
     <>
@@ -199,7 +200,13 @@ export function BusinessImport({
                       下载错误明细
                     </Button>
                   )}
+                  {correctionCsv && (
+                    <Button variant="outline" onClick={() => downloadCsv("待修正业务行.csv", correctionCsv)}>
+                      下载待修正行
+                    </Button>
+                  )}
                 </div>
+                {correctionCsv && <p className="mb-2 text-sm text-muted-foreground">保留批次行标识和修订，修改业务字段后，选择“上传本批纠正版”回传待修正行。</p>}
                 {!!problems.length && (
                   <ul className="max-h-36 overflow-auto" tabIndex={0}>
                     {problems.map((p, i) => (

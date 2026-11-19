@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import type { PoolConnection, RowDataPacket } from "mysql2/promise";
 import {
+  duplicateProjectCodeMessage,
   parseProjectImport,
   type ImportIssue,
   type ProjectImportRecord,
@@ -22,6 +23,8 @@ type ImportRow = {
 };
 type Database = PoolConnection | ReturnType<typeof getSharedPool>;
 const bad = (message: string) => new TRPCError({ code: "CONFLICT", message });
+const occupiedMessage = "业务代号已存在，含已归档业务。";
+const inactiveDomainMessage = "工作域不存在或已停用。";
 function json<T>(value: T | string): T {
   return typeof value === "string" ? (JSON.parse(value) as T) : value;
 }
@@ -103,19 +106,58 @@ export async function previewProjectImport(
   input: { batchId: string; expectedRevision: number; csv: string }
 ) {
   await permission(user);
-  const { records, issues } = parseProjectImport(input.csv);
+  const parsed = parseProjectImport(input.csv);
   const hash = createHash("sha256").update(input.csv).digest("hex");
   return commitWorkflowMutation(user, async (db, actor) => {
     await permission(actor, db);
     const previous = await getBatch(db, actor.id, input.batchId, true);
+    const references = parsed.rowReferences;
+    if (references && (!previous || !input.expectedRevision))
+      throw bad("请在原批次中上传修正文件。");
+    if (references?.some(ref => ref.revision !== String(input.expectedRevision)))
+      throw bad("文件修订与当前批次不一致，请重新下载待修正行。");
     if (previous?.fileHash === hash && !input.expectedRevision)
       return view(db, previous);
     if (Number(previous?.revision ?? 0) !== input.expectedRevision) {
-      if (previous?.fileHash === hash) return view(db, previous);
+      if (previous?.fileHash === hash && (!references || Number(previous.revision) === input.expectedRevision + 1))
+        return view(db, previous);
       throw bad("批次已更新，请重新读取后修改。");
     }
+    const priorRows = previous ? await rowsFor(db, previous.id) : [];
+    let { records, issues } = parsed;
+    const replacements = new Map<number, ProjectImportRecord>();
+    if (references) {
+      const byKey = new Map(priorRows.map(row => [input.batchId + "/" + row.rowNumber, row]));
+      for (const [index, ref] of Array.from(references.entries())) {
+        const row = byKey.get(ref.key);
+        if (!row) throw bad("修正文件中有不属于本批次的行标识。");
+        if (row.projectId) throw bad("第 " + row.record.line + " 行已经创建，不能修改。");
+        if (replacements.has(row.rowNumber)) throw bad("第 " + row.record.line + " 行的标识重复。");
+        replacements.set(row.rowNumber, { ...records[index], line: row.record.line });
+      }
+      if (issues.length) {
+        const issue = issues[0];
+        const index = records.findIndex(row => row.line === issue.line);
+        const sourceLine = index < 0 ? issue.line : byKey.get(references[index].key)?.record.line ?? issue.line;
+        throw new TRPCError({ code: "BAD_REQUEST", message: "第 " + sourceLine + " 行 · " + issue.field + " · " + issue.message });
+      }
+      const touched = new Set(Array.from(replacements.values(), row => row.line));
+      issues = json<ImportIssue[]>(previous!.issues).filter(issue => !touched.has(issue.line)
+        && issue.message !== duplicateProjectCodeMessage && issue.message !== occupiedMessage && issue.message !== inactiveDomainMessage);
+      records = priorRows.map(row => replacements.get(row.rowNumber) ?? row.record);
+      const codes = new Map<string, number>();
+      for (const row of records) {
+        const earlier = codes.get(row.code);
+        if (earlier !== undefined) {
+          if (touched.has(row.line) || touched.has(earlier))
+            throw bad("第 " + (touched.has(row.line) ? row.line : earlier) + " 行 · 业务代号 · " + duplicateProjectCodeMessage);
+          issues.push({ line: row.line, field: "业务代号", message: duplicateProjectCodeMessage });
+        }
+        codes.set(row.code, row.line);
+      }
+    }
     const completed = new Map(
-      (previous ? await rowsFor(db, previous.id) : [])
+      priorRows
         .filter(r => r.projectId)
         .map(r => [r.rowNumber, r])
     );
@@ -154,13 +196,13 @@ export async function previewProjectImport(
           issues.push({
             line: row.line,
             field: "业务代号",
-            message: "业务代号已存在，含已归档业务。",
+            message: occupiedMessage,
           });
         if (row.domainCode && !valid.has(row.domainCode))
           issues.push({
             line: row.line,
             field: "工作域代号",
-            message: "工作域不存在或已停用。",
+            message: inactiveDomainMessage,
           });
       });
     }
@@ -170,10 +212,14 @@ export async function previewProjectImport(
         "UPDATE project_import_batch SET revision=?,fileHash=?,issues=?,updatedAt=NOW(3) WHERE id=?",
         [revision, hash, JSON.stringify(issues), input.batchId]
       );
-      await db.query(
-        "DELETE FROM project_import_row WHERE batchId=? AND projectId IS NULL",
-        [input.batchId]
-      );
+      if (references) {
+        for (const [rowNumber, row] of Array.from(replacements))
+          await db.query("UPDATE project_import_row SET recordJson=?,error=NULL WHERE batchId=? AND rowNumber=? AND projectId IS NULL", [
+            JSON.stringify(row), input.batchId, rowNumber,
+          ]);
+      } else {
+        await db.query("DELETE FROM project_import_row WHERE batchId=? AND projectId IS NULL", [input.batchId]);
+      }
     } else {
       await db.query(
         "INSERT INTO project_import_batch (id,ownerUserId,revision,fileHash,issues) VALUES (?,?,?,?,?)",
@@ -183,7 +229,7 @@ export async function previewProjectImport(
     const pending = records.flatMap((row, i) =>
       completed.has(i + 1) ? [] : [[input.batchId, i + 1, JSON.stringify(row)]]
     );
-    if (pending.length)
+    if (!references && pending.length)
       await db.query(
         "INSERT INTO project_import_row (batchId,rowNumber,recordJson) VALUES ?",
         [pending]

@@ -9,6 +9,7 @@ import {
   projectImportStatus,
 } from "./project-import";
 import { createProject } from "./project-service";
+import { projectCorrectionCsv } from "../shared/project-import";
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip;
 suite("业务导入的记录、权限与事务", () => {
@@ -155,5 +156,41 @@ suite("业务导入的记录、权限与事务", () => {
       if (oldSetting === undefined) delete process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED;
       else process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED = oldSetting;
     }
+  });
+  it("按原批次稳定行号回传修正，拒绝跨用户、跨修订、重复标识和全批代码冲突", async () => {
+    const batchId = randomUUID();
+    const prefix = "FIX_" + batchId.slice(0, 8).toUpperCase();
+    const [a, b, c, fixed] = ["A", "B", "C", "FIXED"].map(s => prefix + "_" + s);
+    const preview = (csv: string, expectedRevision: number, actor = owner) =>
+      previewProjectImport(actor, { batchId, csv, expectedRevision });
+    const first = await preview('code,name,description\r\n' + a + ',甲,"一\r\n二"\r\n' + b + ',乙,待修正\r\n' + c + ',丙,待处理', 0);
+    await createProject(owner, { code: b, name: "并发占码" });
+    const partial = (await commitProjectImport(owner, { batchId, expectedRevision: first.revision }))!;
+    expect(partial.rows.map(r => [r.record.line, !!r.projectId, !!r.error])).toEqual([[2, true, false], [4, false, true], [5, false, false]]);
+    const patch = projectCorrectionCsv(partial)!;
+    const changed = patch.replace('"' + b + '"', '"' + fixed + '"');
+    await expect(preview(changed, first.revision, other)).rejects.toMatchObject({ code: "CONFLICT" });
+    await expect(preview(changed.replace(batchId + "/2", batchId + "/1"), 1)).rejects.toThrow("已经创建");
+    await expect(preview(changed.replace(batchId + "/2", batchId + "/99"), 1)).rejects.toThrow("不属于");
+    await expect(preview(changed + "\r\n" + changed.split("\r\n")[1], 1)).rejects.toThrow("标识重复");
+    await expect(preview(changed.replace(fixed, c.toLowerCase()), 1)).rejects.toThrow("第 4 行 · 业务代号");
+    await expect(preview(changed.replace('"' + fixed + '"', '""'), 1)).rejects.toThrow("第 4 行 · 业务代号");
+    expect(await projectImportStatus(owner, batchId)).toEqual(partial);
+    const [updated, replay] = await Promise.all([preview(changed, 1), preview(changed, 1)]);
+    expect(replay).toEqual(updated);
+    expect(updated.revision).toBe(2);
+    expect(updated.rows[0]).toEqual(partial.rows[0]);
+    expect(updated.rows[1]).toMatchObject({ rowNumber: 2, error: null, projectId: null, record: { code: fixed, line: 4 } });
+    expect(updated.rows[2]).toEqual(partial.rows[2]);
+    await expect(preview(changed, 2)).rejects.toThrow("修订");
+    const applied = (await commitProjectImport(owner, { batchId, expectedRevision: 2 }))!;
+    expect(applied.rows.every(r => r.projectId)).toBe(true);
+    expect(applied.rows[0].projectId).toBe(partial.rows[0].projectId);
+    expect(await commitProjectImport(owner, { batchId, expectedRevision: 2 })).toEqual(applied);
+    const [audits] = await pool().query<RowDataPacket[]>(
+      "SELECT resourceId FROM authorization_audit_log WHERE actorUserId=? AND resourceId IN (?)",
+      [owner.id, applied.rows.map(r => r.projectId)]
+    );
+    expect(audits.map(r => r.resourceId).sort()).toEqual(applied.rows.map(r => r.projectId).sort());
   });
 });
