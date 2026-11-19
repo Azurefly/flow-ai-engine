@@ -204,6 +204,11 @@ export async function commitProjectImport(
   for (let i = 0; i < 25; i++) {
     const advanced = await commitWorkflowMutation(user, async (db, actor) => {
       await permission(actor, db);
+      if (process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED?.trim().toLowerCase() === "false")
+        throw new TRPCError({
+          code: "SERVICE_UNAVAILABLE",
+          message: "业务批量导入已暂停执行。可继续查看批次，恢复后按原批次继续。",
+        });
       const batch = await getBatch(db, actor.id, input.batchId, true);
       if (!batch || Number(batch.revision) !== input.expectedRevision)
         throw bad("批次不存在或已变化，请重新读取。");

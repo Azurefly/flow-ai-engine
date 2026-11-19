@@ -8,7 +8,7 @@
  * 4. 全程使用真实 Chromium 浏览器驱动多用户界面交互操作，并生成真实高清截图证据链。
  */
 
-const { acceptanceLogin } = require("../../../scripts/acceptance-target.cjs");
+const { acceptanceLogin, loadRoleUsers } = require("../../../scripts/acceptance-target.cjs");
 const { base: BASE_URL, username: ADMIN_USER, password: ADMIN_PWD } =
   acceptanceLogin(process.env, process.env.FLOW_ACCEPTANCE_BASE_URL ?? process.env.TEST_BASE_URL);
 const { chromium } = require('@playwright/test');
@@ -17,14 +17,7 @@ const path = require('node:path');
 
 
 
-const USERS = {
-  alice: { id: '228', username: 'applicant_alice', password: 'AlicePassword2026!', name: '采购申请人爱丽丝', role: '申请人/经办人 (Tier 1)' },
-  bob: { id: '229', username: 'manager_bob', password: 'BobPassword2026!', name: '研发初审主管鲍勃', role: '初审主管 (Tier 2)' },
-  fiona: { id: '230', username: 'finance_fiona', password: 'FionaPassword2026!', name: '财务会签专员菲奥娜', role: '财务会签官 (Tier 3 并行)' },
-  leo: { id: '231', username: 'legal_leo', password: 'LeoPassword2026!', name: '法务会签官利奥', role: '法务会签官 (Tier 3 并行)' },
-  clark: { id: '232', username: 'cfo_clark', password: 'ClarkPassword2026!', name: '集团财务副总裁克拉克', role: 'CFO终审高管 (Tier 4 终审)' },
-  oscar: { id: '233', username: 'observer_oscar', password: 'OscarPassword2026!', name: '无权限观察员奥斯卡', role: '无关人员/观察员' },
-};
+const USERS = loadRoleUsers(process.env, BASE_URL);
 
 const SCREENSHOT_DIR = path.resolve(__dirname, '../../018-测试报告/screenshots');
 if (!fs.existsSync(SCREENSHOT_DIR)) {

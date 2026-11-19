@@ -118,4 +118,42 @@ suite("业务导入的记录、权限与事务", () => {
     expect((await projectImportHistory(owner))[0].batchId).toBe(batchId);
     expect(await projectImportHistory(other)).toEqual([]);
   });
+  it("暂停批量执行时可预检、读取原回执及单条创建，恢复后按原批次继续", async () => {
+    const oldSetting = process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED;
+    const code = "PAUSE_" + randomUUID().slice(0, 8).toUpperCase();
+    const preview = (suffix: string) => previewProjectImport(owner, {
+      batchId: randomUUID(),
+      expectedRevision: 0,
+      csv: `code,name\r\n${code}_${suffix},受控业务`,
+    });
+    try {
+      delete process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED;
+      const original = await preview("ORIGINAL");
+      const committed = await commitProjectImport(owner, {
+        batchId: original.batchId, expectedRevision: original.revision,
+      });
+      expect(committed?.rows[0].projectId).toBeTruthy();
+      process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED = "false";
+      const pending = await preview("PENDING");
+      const request = { batchId: pending.batchId, expectedRevision: pending.revision };
+      await expect(commitProjectImport(owner, request)).rejects.toMatchObject({
+        code: "SERVICE_UNAVAILABLE", message: expect.stringContaining("暂停"),
+      });
+      expect(await projectImportStatus(owner, original.batchId)).toEqual(committed);
+      expect((await projectImportHistory(owner)).map(batch => batch.batchId)).toContain(original.batchId);
+      expect((await projectImportStatus(owner, pending.batchId))?.rows[0].projectId).toBeNull();
+      const [uncreated] = await pool().query<RowDataPacket[]>(
+        "SELECT id FROM flow_project WHERE ownerUserId=? AND code=?", [owner.id, code + "_PENDING"],
+      );
+      expect(uncreated).toHaveLength(0);
+      expect(await createProject(owner, { code: code + "_MANUAL", name: "单条业务" })).toBeTruthy();
+      process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED = "true";
+      const resumed = await commitProjectImport(owner, request);
+      expect(resumed?.rows[0].projectId).toBeTruthy();
+      expect(await commitProjectImport(owner, request)).toEqual(resumed);
+    } finally {
+      if (oldSetting === undefined) delete process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED;
+      else process.env.FLOW_PROJECT_IMPORT_EXECUTION_ENABLED = oldSetting;
+    }
+  });
 });

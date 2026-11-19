@@ -77,4 +77,35 @@ function acceptanceSsh(env) {
   };
 }
 
-module.exports = { acceptanceTarget, acceptanceLogin, acceptanceSsh };
+function loadRoleUsers(env, origin) {
+  const filename = env.FLOW_ACCEPTANCE_ROLE_USERS_FILE;
+  if (!filename)
+    throw new Error("Set FLOW_ACCEPTANCE_ROLE_USERS_FILE to the private role fixture for this test origin");
+  let fixture;
+  try {
+    fixture = JSON.parse(require("node:fs").readFileSync(filename, "utf8").replace(/^\uFEFF/, ""));
+  } catch {
+    throw new Error("Cannot read the private role fixture as UTF-8 JSON");
+  }
+  if (fixture?.origin !== origin)
+    throw new Error("The private role fixture must match the confirmed acceptance origin");
+  const ids = new Set();
+  const names = new Set();
+  const users = {};
+  for (const role of ["alice", "bob", "fiona", "leo", "clark", "oscar"]) {
+    const account = fixture.users?.[role];
+    const id = String(account?.id ?? "");
+    const username = typeof account?.username === "string" ? account.username.trim() : "";
+    const password = account?.password;
+    if (!/^[1-9]\d*$/.test(id) || !username || typeof password !== "string" || !password)
+      throw new Error("Missing account ID, username or password for role " + role);
+    if (ids.has(id) || names.has(username.toLowerCase()))
+      throw new Error("Each test role must use a different account");
+    ids.add(id);
+    names.add(username.toLowerCase());
+    users[role] = { id, username, password };
+  }
+  return users;
+}
+
+module.exports = { acceptanceTarget, acceptanceLogin, acceptanceSsh, loadRoleUsers };
