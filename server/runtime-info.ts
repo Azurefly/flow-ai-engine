@@ -5,8 +5,8 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0046_assistant_completed_tasks";
-export const DATABASE_MIGRATION_EPOCH = 1795006800000;
+export const DATABASE_MIGRATION_VERSION = "0047_assistant_workspace_actions";
+export const DATABASE_MIGRATION_EPOCH = 1795052696342;
 export const DATABASE_REQUIRED_COLUMN_COUNT = 78;
 export const PUBLIC_APP_VERSION = "1.0.0";
 

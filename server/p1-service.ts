@@ -508,7 +508,7 @@ export async function listWorkflowTasks(
 
 export async function getWorkflowTask(user: User, taskId: string, options?: { forAction?: boolean }) {
   const [rows] = await db().query<mysql.RowDataPacket[]>(
-    `SELECT t.*,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
+    `SELECT t.*,w.projectId,w.name AS workflowName,w.flowType,w.ownerUserId,r.status AS runStatus,r.triggeredByUserId,initiator.name AS initiatedByName,assignee.name AS assignedName,claimant.name AS claimedByName,
             responsible.name AS responsibleName,represented.name AS representedName,
             g.totalApprovers,g.requiredApprovals,g.memberVersion,g.status AS groupStatus,
             ${earlierPendingSignerSql} AS hasEarlierPendingSigner,
@@ -548,6 +548,8 @@ export async function getWorkflowTask(user: User, taskId: string, options?: { fo
     : { eligible: false, reason: null };
   return {
     ...presentTask(task),
+    workflowId: String(task.workflowId),
+    projectId: task.projectId == null ? null : String(task.projectId),
     viewerUserId: user.id,
     ...taskActionState(user.id, task),
     canReassign: reassignment.eligible,

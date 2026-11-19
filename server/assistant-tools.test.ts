@@ -75,6 +75,24 @@ beforeEach(() => {
 });
 
 describe("对话业务工具", () => {
+  it("将并行审核和汇合编译为可执行的原生流程画布", async () => {
+    const graph = {
+      name: "财务和法务并审", flowType: "state",
+      nodes: [
+        { id:"start",type:"start",name:"开始" }, {id:"fork",type:"parallel",name:"启动并审",joinId:"join"},
+        ...["finance","legal"].map(id => ({id,type:"operate",name:id,assignee:"initiator"})),
+        {id:"join",type:"merge",forkId:"fork",name:"汇总结果"}, {id:"end",type:"end",name:"结束"},
+      ],
+      edges:[["start","fork"],["fork","finance"],["fork","legal"],["finance","join"],["legal","join"],["join","end"]].map(([from,to])=>({from,to})),
+    };
+    const preview = await prepareAssistantTool(user,"createWorkflowDraft",graph,context);
+    if (preview.kind !== "proposal" || preview.proposal.tool !== "createWorkflowDraft") throw new Error("缺少画布");
+    const definition = preview.proposal.payload.definition;
+    expect(definition.nodes.find(n=>n.id==="fork")?.config).toMatchObject({broadcast:true,parallelJoinNodeId:"join"});
+    expect(definition.edges.filter(e=>e.sourceNodeId==="fork").map(e=>e.sourceHandle)).toEqual(["finance","legal"]);
+    expect(definition.nodes.find(n=>n.id==="join")?.config.parallelForNodeId).toBe("fork");
+    await expect(prepareAssistantTool(user,"createWorkflowDraft",{...graph,edges:graph.edges.map(e=>e.from==="legal"?{...e,to:"end"}:e)},context)).rejects.toThrow();
+  });
   it("将审批角色、条件和两个真实去向显示在审批草稿中；可以预览后修订", async () => {
     const first = await prepareAssistantTool(
       user,

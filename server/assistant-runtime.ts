@@ -19,6 +19,8 @@ import {
   type AssistantToolProposal,
 } from "./assistant-tools";
 import type { ProjectUser } from "./project-service";
+import type { TrpcContext } from "./_core/context";
+import { WorkspaceOutcomeUnknown } from "./assistant-workspace";
 
 type Proposal = { id: string; proposal: AssistantToolProposal };
 type Status =
@@ -99,7 +101,12 @@ export function publicSession(session: AssistantSession) {
     messages,
     status: task.status,
     retryText: task.retryText ?? null,
-    pending: task.pending ? publicProposal(task.pending) : null,
+    pending: task.pending ? {
+      ...publicProposal(task.pending),
+      canvas: task.pending.proposal.tool === "createWorkflowDraft" && task.pending.proposal.payload.definition
+        ? { flowType: task.pending.proposal.payload.input.flowType, definition: task.pending.proposal.payload.definition }
+        : null,
+    } : null,
   };
 }
 
@@ -153,7 +160,8 @@ export async function runAssistantTurn(
   session: AssistantSession,
   text: string,
   dependencies = { modelForTurn, prepare: prepareAssistantTool },
-  observedProposalId?: string
+  observedProposalId?: string,
+  request?: TrpcContext
 ) {
   const allowed = new Set<string>(session.config.tools);
   if (actor.role !== "admin") allowed.delete("updateWatermark");
@@ -181,7 +189,7 @@ export async function runAssistantTurn(
         session,
         previous.id,
         approve,
-        commitAssistantTool,
+        request ? (actor, proposal, key) => commitAssistantTool(actor, proposal, key, request) : commitAssistantTool,
         text
       );
     }
@@ -337,7 +345,8 @@ export async function runAssistantTurn(
               actor,
               name,
               args,
-              context
+              context,
+              ...(request ? [request] : [])
             );
             if (prepared.kind === "proposal") {
               pending = { id: randomUUID(), proposal: prepared.proposal };
@@ -359,10 +368,13 @@ export async function runAssistantTurn(
         toolError = safeToolError(error);
         result = { error: toolError };
       }
+      const serialized = JSON.stringify(result);
       messages.push({
         role: "tool",
         tool_call_id: call.id,
-        content: JSON.stringify(result).slice(0, 32_000),
+        content: serialized.length <= 32_000 ? serialized : JSON.stringify({
+          message: "结果超出单次展示范围，请缩小查询条件、分页或只查统计。", truncated: true,
+        }),
       });
     }
     if (question) {
@@ -423,6 +435,10 @@ export async function decideAssistantProposal(
     try {
       receipt = await commit(actor, pending.proposal, pending.id);
     } catch (error) {
+      if (error instanceof WorkspaceOutcomeUnknown) {
+        events.push({ role: "assistant", content: "提交结果待核实，请在业务记录中检查本次操作。为避免重复办理，助手已停止重复提交。" });
+        return { messages: events, task: { status: "failed" } };
+      }
       const outdated =
         error instanceof TRPCError &&
         [

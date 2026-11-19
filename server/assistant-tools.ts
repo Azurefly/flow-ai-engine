@@ -4,6 +4,8 @@ import { z } from "zod";
 import { formatConsoleRoute } from "../shared/console-route";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import type { Tool } from "./_core/llm";
+import type { TrpcContext } from "./_core/context";
+import { commitWorkspace, prepareWorkspace, workspaceMutations, workspaceQueries, workspaceSchema, type WorkspaceInput, type WorkspaceScope } from "./assistant-workspace";
 import { getSharedPool } from "./db";
 import {
   getP1SystemSettings,
@@ -44,6 +46,8 @@ const assignees = {
 } as const;
 const graphNode = z.union([
   z.strictObject({ ...nodeBase, type: z.enum(["start", "end", "state"]) }),
+  z.strictObject({ ...nodeBase, type: z.literal("parallel"), joinId: nodeId.describe("并行发出至少两条普通连线，填对应 merge 节点 ID") }),
+  z.strictObject({ ...nodeBase, type: z.literal("merge"), forkId: nodeId.describe("所有并行分支到此汇合，填对应 parallel 节点 ID") }),
   z.strictObject({
     ...nodeBase,
     type: z.literal("operate"),
@@ -104,6 +108,8 @@ function tool(name: string, description: string, schema: z.ZodObject): Tool {
   return { type: "function", function: { name, description, parameters } };
 }
 export const assistantToolDefinitions: Tool[] = [
+  tool("workspaceRead", "查询业务项目、任务、仓库、数据资源和真实统计。先选 action，不确定参数时用 describe。保留统计下限和筛选条件，分页结果不可视为总数。", workspaceSchema(workspaceQueries)),
+  tool("workspaceWrite", "根据客户明确请求准备一项工作台业务变更，先用查询工具确定对象和版本，再生成确认单。", workspaceSchema(workspaceMutations)),
   tool(
     "listMyTasks",
     "查询登录客户本人的待办；会话有项目时仅查该项目。",
@@ -136,6 +142,7 @@ type WatermarkInput = z.infer<typeof watermarkInput>;
 type Preview = { title: string; summary: string; details: string[] };
 export type AssistantToolProposal = Preview &
   (
+    | { tool: "workspaceWrite"; payload: { input: WorkspaceInput; scope: WorkspaceScope } }
     | {
         tool: "createWorkflowDraft";
         payload: {
@@ -153,7 +160,7 @@ type ToolLink = { label: string; href: string };
 type PreparedTool =
   | { kind: "read"; message: string; result: unknown; links: ToolLink[] }
   | { kind: "proposal"; proposal: AssistantToolProposal };
-type Context = { projectId?: string | null };
+type Context = WorkspaceScope;
 function bad(message: string): never {
   throw new TRPCError({ code: "BAD_REQUEST", message });
 }
@@ -255,7 +262,22 @@ async function buildDraft(input: WorkflowInput) {
   for (const node of input.nodes) {
     const config: Record<string, unknown> = {};
     let description = node.name;
-    if (node.type === "operate") {
+    if (node.type === "parallel") {
+      const targets = input.edges.filter(edge => edge.from === node.id).map(edge => edge.to);
+      if (targets.length < 2 || new Set(targets).size !== targets.length) bad("并行路由至少需要两个不同分支。");
+      const join = input.nodes.find(candidate => candidate.id === node.joinId);
+      if (join?.type !== "merge" || join.forkId !== node.id) bad("并行路由与汇合节点需要相互绑定。");
+      Object.assign(config, { nodeDh: node.id, jdmc: node.name, broadcast: true, parallelJoinNodeId: join.id,
+        defaultRoute: targets[targets.length - 1], routes: targets.map((id, i) => ({
+          handle: id, name: input.nodes.find(n => n.id === id)?.name ?? id, targetNodeId: id, conditions: [], priority: targets.length - i,
+        })) });
+      description += " · 并行启动 " + targets.length + " 个分支";
+    } else if (node.type === "merge") {
+      const fork = input.nodes.find(candidate => candidate.id === node.forkId);
+      if (fork?.type !== "parallel" || fork.joinId !== node.id) bad("汇合节点需要引用对应的并行路由。");
+      Object.assign(config, { nodeDh: node.id, jdmc: node.name, stateType: "business", flowStatus: node.name, parallelForNodeId: fork.id });
+      description += " · 等待全部并行分支汇合";
+    } else if (node.type === "operate") {
       Object.assign(config, {
         nodeDh: node.id,
         czmc: node.name,
@@ -324,7 +346,7 @@ async function buildDraft(input: WorkflowInput) {
     nodes.push({
       id: node.id,
       name: node.name,
-      type: node.type,
+      type: node.type === "parallel" ? "router" : node.type === "merge" ? "state" : node.type,
       position: { x: 0, y: 0 },
       config,
     });
@@ -356,7 +378,7 @@ async function buildDraft(input: WorkflowInput) {
       id: "edge-" + (index + 1),
       sourceNodeId: from.id,
       targetNodeId: to.id,
-      ...(edge.branch ? { sourceHandle: edge.branch } : {}),
+      ...(from.config.broadcast ? { sourceHandle: edge.to } : edge.branch ? { sourceHandle: edge.branch } : {}),
     };
   });
   layout(nodes, edges);
@@ -394,8 +416,13 @@ export async function prepareAssistantTool(
   actor: ProjectUser,
   name: string,
   args: unknown,
-  context: Context
+  context: Context,
+  request?: TrpcContext
 ): Promise<PreparedTool> {
+  if (name === "workspaceRead" || name === "workspaceWrite") {
+    if (!request || request.user?.id !== actor.id) forbidden("当前账号无法执行该操作。");
+    return prepareWorkspace(request, context, name === "workspaceWrite", args);
+  }
   if (name === "listMyTasks" || name === "listMyCompletedTasks") {
     const input = parse(taskQuery, args);
     const completed = name === "listMyCompletedTasks";
@@ -501,8 +528,13 @@ export async function prepareAssistantTool(
 export async function commitAssistantTool(
   actor: ProjectUser,
   proposal: AssistantToolProposal,
-  requestKey: string
+  requestKey: string,
+  request?: TrpcContext
 ): Promise<{ message: string; workflowId?: string; projectId?: string }> {
+  if (proposal.tool === "workspaceWrite") {
+    if (!request || request.user?.id !== actor.id) forbidden("当前账号无法执行业务操作。");
+    return commitWorkspace(request, proposal.payload.scope, proposal.payload.input, requestKey);
+  }
   if (proposal.tool === "createWorkflowDraft") {
     if (!resourceRequestKeyPattern.test(requestKey)) bad("草稿确认标识无效。");
     const { input, projectId, definition } = proposal.payload;

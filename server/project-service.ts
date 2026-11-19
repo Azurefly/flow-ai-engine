@@ -395,21 +395,14 @@ export async function createProject(
   return projectId;
 }
 
-export async function listProjectWorkflows(
-  user: ProjectUser,
-  projectId: string,
-  filters?: {
+type ProjectWorkflowFilters = {
     flowType?: "state" | "control" | "data";
     auditStatus?: "init" | "approved" | "rejected";
     status?: "draft" | "published";
     keyword?: string;
-  }
-) {
-  const access = await requireProjectPermission(
-    user,
-    projectId,
-    "project:view"
-  );
+};
+
+function projectWorkflowFilter(projectId: string, filters?: ProjectWorkflowFilters) {
   const clauses = ["w.projectId=?", "w.archivedAt IS NULL"];
   const params: unknown[] = [projectId];
   if (filters?.flowType) {
@@ -431,6 +424,28 @@ export async function listProjectWorkflows(
     const keyword = `%${filters.keyword.trim().replace(/[!%_]/g, "!$&")}%`;
     params.push(keyword, keyword, keyword, keyword);
   }
+  return { clauses, params };
+}
+
+export async function getProjectWorkflowStatistics(user: ProjectUser, projectId: string, filters?: ProjectWorkflowFilters) {
+  await requireProjectPermission(user, projectId, "project:view");
+  const { clauses, params } = projectWorkflowFilter(projectId, filters);
+  const [groups] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT w.status,w.flowType,w.auditStatus,COUNT(DISTINCT w.id) AS workflows,COUNT(r.id) AS runs
+       FROM workflow w LEFT JOIN workflow_run r ON r.workflowId=w.id
+       WHERE ${clauses.join(" AND ")} GROUP BY w.status,w.flowType,w.auditStatus`, params);
+  const counts = (field: string) => {
+    const result: Record<string,number> = {};
+    for (const group of groups) result[group[field]] = (result[group[field]] ?? 0) + Number(group.workflows);
+    return result;
+  };
+  return {total: groups.reduce((sum,g)=>sum+Number(g.workflows),0), runs:groups.reduce((sum,g)=>sum+Number(g.runs),0),
+    byStatus:counts("status"), byAudit:counts("auditStatus"), byType:counts("flowType")};
+}
+
+export async function listProjectWorkflows(user: ProjectUser, projectId: string, filters?: ProjectWorkflowFilters) {
+  const access = await requireProjectPermission(user, projectId, "project:view");
+  const { clauses, params } = projectWorkflowFilter(projectId, filters);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
     `SELECT w.*,u.username AS creatorUsername,u.name AS creatorName,ds.name AS dataSourceName,p.status AS projectStatus,(SELECT COUNT(*) FROM workflow_run wr WHERE wr.workflowId=w.id) AS runCount
        FROM workflow w JOIN flow_project p ON p.id=w.projectId LEFT JOIN users u ON u.id=w.ownerUserId LEFT JOIN data_source ds ON ds.id=w.dataSourceId AND ds.projectId=w.projectId

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
 import { ArrowUp, Plus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { parseConsoleRoute } from "@shared/console-route";
@@ -8,6 +9,8 @@ import type {
   AssistantNavigation,
 } from "./AssistantLauncher";
 import "./assistant.css";
+
+const WorkflowPreview = lazy(() => import("./WorkflowCanvas"));
 
 type Props = {
   userId: number;
@@ -407,6 +410,18 @@ export default function AssistantChat({
           <section className="assistant-proposal" aria-label="操作预览">
             <strong>{pending.title}</strong>
             <p>{pending.detail}</p>
+            {pending.canvas && <Dialog key={pending.id}>
+              <DialogTrigger asChild><button type="button" className="assistant-link">预览流程画布</button></DialogTrigger>
+              <DialogContent className="w-[94vw] max-w-5xl sm:max-w-5xl">
+                <DialogHeader><DialogTitle>{pending.title}</DialogTitle></DialogHeader>
+                <div className="h-[65dvh] min-w-0 overflow-hidden">
+                  <Suspense fallback={<p role="status">正在加载流程画布…</p>}>
+                    <WorkflowPreview definition={pending.canvas.definition} flowType={pending.canvas.flowType}
+                      compactReadOnlyPreview readOnly showCanvasActions={false}/>
+                  </Suspense>
+                </div>
+              </DialogContent>
+            </Dialog>}
             {pending.details.length > 0 && (
               <ul>
                 {pending.details.map((line, index) => (

@@ -1737,6 +1737,13 @@ export const assistantAgents = mysqlTable("assistant_agent", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const assistantActionReceipts = mysqlTable("assistant_action_receipt", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  payloadHash: varchar("payloadHash", { length: 64 }).notNull(),
+  message: varchar("message", { length: 320 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const assistantSessions = mysqlTable("assistant_session", {
   id: varchar("id", { length: 36 }).primaryKey(),
   ownerUserId: int("ownerUserId").notNull().references(() => users.id, { onDelete: "cascade" }),

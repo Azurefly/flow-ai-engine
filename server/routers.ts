@@ -127,6 +127,7 @@ import {
   getProjectLifecycleRecord,
   listProjectWorkflowAudit,
   listProjectWorkflows,
+  getProjectWorkflowStatistics,
   listWarehouse,
   moveProjectWorkflow,
   resetProjectWorkflowAudit,
@@ -229,6 +230,14 @@ const approvalResultSchema = z
     comment: z.string().trim().max(2000).optional(),
   })
   .catchall(z.unknown());
+
+const projectWorkflowQuery = z.object({
+  projectId: z.string().min(8).max(64),
+  flowType: z.enum(["state", "control", "data"]).optional(),
+  auditStatus: z.enum(["init", "approved", "rejected"]).optional(),
+  status: z.enum(["draft", "published"]).optional(),
+  keyword: z.string().trim().max(160).optional(),
+});
 
 function assertWorkflowRunController(
   user: { id: number },
@@ -659,16 +668,10 @@ export const appRouter = router({
         throw new Error("当前账号无权读取可授权工作域。");
       return listActiveWorkDomains();
     }),
+    workflowStatistics: protectedProcedure.input(projectWorkflowQuery)
+      .query(({ctx,input}) => getProjectWorkflowStatistics(ctx.user,input.projectId,input)),
     workflows: protectedProcedure
-      .input(
-        z.object({
-          projectId: z.string().min(8).max(64),
-          flowType: z.enum(["state", "control", "data"]).optional(),
-          auditStatus: z.enum(["init", "approved", "rejected"]).optional(),
-          status: z.enum(["draft", "published"]).optional(),
-          keyword: z.string().trim().max(160).optional(),
-        })
-      )
+      .input(projectWorkflowQuery)
       .query(({ ctx, input }) =>
         listProjectWorkflows(ctx.user, input.projectId, input)
       ),

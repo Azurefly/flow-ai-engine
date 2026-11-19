@@ -20,6 +20,7 @@ import {
 } from "./assistant-runtime";
 import type { ProjectUser } from "./project-service";
 import { getWorkflow } from "./workflow-service";
+import { commitAssistantTool } from "./assistant-tools";
 
 const id = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 const requestKey = z.string().regex(resourceRequestKeyPattern);
@@ -190,7 +191,7 @@ export const assistantRouter = router({
         requestId,
         { kind: "message", text, proposalId },
         current =>
-          runAssistantTurn(ctx.user, current, text, undefined, proposalId)
+          runAssistantTurn(ctx.user, current, text, undefined, proposalId, ctx)
       );
       return publicSession(session);
     }),
@@ -205,7 +206,7 @@ export const assistantRouter = router({
         requestId,
         { kind: "decide", proposalId, approve },
         current =>
-          decideAssistantProposal(ctx.user, current, proposalId, approve)
+          decideAssistantProposal(ctx.user, current, proposalId, approve, (actor, proposal, key) => commitAssistantTool(actor, proposal, key, ctx))
       );
       return publicSession(session);
     }),

@@ -330,6 +330,13 @@
       "when": 1795006800000,
       "tag": "0046_assistant_completed_tasks",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1795052696342,
+      "tag": "0047_assistant_workspace_actions",
+      "breakpoints": true
     }
   ]
 }

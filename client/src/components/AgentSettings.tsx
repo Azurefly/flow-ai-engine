@@ -12,9 +12,15 @@ import "./assistant.css";
 
 type Config = inferRouterInputs<AppRouter>["assistant"]["saveDraft"]["config"];
 type Entry = inferRouterOutputs<AppRouter>["assistant"]["adminAgents"][number];
+function versions(entry: Entry) {
+  const published = entry.publishedVersion ? `已发布 v${entry.publishedVersion}` : "尚未发布";
+  return entry.draftVersion === entry.publishedVersion ? published : `待发布草稿 v${entry.draftVersion} · ${published}`;
+}
 const toolLabels = {
   listMyTasks: "查看我的待办",
   listMyCompletedTasks: "查看我的已办",
+  workspaceRead: "工作台查询与统计",
+  workspaceWrite: "办理工作台业务（逐项确认）",
   searchWorkflows: "查找流程",
   createWorkflowDraft: "创建流程草稿",
   updateWatermark: "修改系统水印",
@@ -47,7 +53,7 @@ export default function AgentSettings({
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     if (selected === undefined && entries.data?.length)
-      setSelected(entries.data[0].id);
+      setSelected((entries.data.find(entry => entry.draftVersion > entry.publishedVersion) ?? entries.data[0]).id);
   }, [selected, entries.data]);
   const editingNew = selected === "";
   const active = editingNew
@@ -130,9 +136,7 @@ export default function AgentSettings({
               >
                 {entry.draft.name}
                 <small>
-                  {entry.publishedVersion
-                    ? "已发布 · v" + entry.publishedVersion
-                    : "未发布"}
+                  {versions(entry)}
                 </small>
               </button>
             ))}
@@ -250,7 +254,18 @@ function AgentEditor({
           void submit("save");
         }}
       >
-        <h2>{entry ? "编辑配置" : "新建 Agent"}</h2>
+        <h2>{entry ? `编辑草稿 v${entry.draftVersion}` : "新建 Agent"}</h2>
+        {entry && <p className="assistant-note">{versions(entry)}{changed && " · 本页有未保存修改"}</p>}
+        {entry?.published && entry.draftVersion !== entry.publishedVersion && (
+          <details><summary>查看草稿与已发布版本的差异</summary>
+            <ul>{(Object.keys(initialConfig) as (keyof Config)[]).filter(key =>
+              JSON.stringify(entry.draft[key]) !== JSON.stringify(entry.published![key])
+            ).map(key => <li key={key}>{({
+              name: "名称", greeting: "开场白", instructions: "职责与指令", model: "模型", tools: "可用工具",
+              enabled: "启用状态", roles: "账号角色", projectIds: "适用项目",
+            })[key]}</li>)}</ul>
+          </details>
+        )}
         <fieldset disabled={lock}>
           <label>
             名称

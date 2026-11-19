@@ -35,10 +35,14 @@ const configCardClass = "min-w-0 rounded-lg border border-border bg-card p-4";
 const configValueClass = ("aiflow-type-body font-medium " + mutedToneClass);
 const configDescriptionClass = ("mt-2 text-sm leading-5 " + mutedToneClass);
 
-type Tab = "general" | "approval" | "llm" | "domain" | "runtime";
+type Tab = "general" | "approval" | "llm" | "domain" | "runtime" | "agents";
 
-export default function SystemConfigShell() {
-  const [tab, setTab] = useState<Tab>("general");
+export default function SystemConfigShell({ openAssistant }: { openAssistant: () => void }) {
+  const [tab, setSection] = useState<Exclude<Tab, "agents">>("general");
+  function setTab(next: Tab) {
+    if (next === "agents") openAssistant();
+    else setSection(next);
+  }
   const [collapsed, setCollapsed] = useState(false);
   const items = [
     { id: "general" as const, label: "通用设置", icon: SlidersHorizontal },
@@ -107,6 +111,7 @@ export default function SystemConfigShell() {
                   {item.label}
                 </option>
               ))}
+              <option value="agents">AI 助手配置</option>
             </select>
           </label>
           <nav
@@ -130,6 +135,10 @@ export default function SystemConfigShell() {
                 </span>
               </button>
             ))}
+            <button type="button" onClick={openAssistant} title="AI 助手配置"
+              className="flex min-h-10 items-center gap-2 rounded px-3 text-left text-sm hover:bg-muted">
+              <Workflow size={16} /><span className={collapsed ? "lg:hidden" : "truncate"}>AI 助手配置</span>
+            </button>
           </nav>
         </aside>
         <section className="overflow-hidden rounded-lg border border-border bg-card shadow-2xs">

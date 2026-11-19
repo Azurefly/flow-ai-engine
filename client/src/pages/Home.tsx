@@ -2166,7 +2166,7 @@ function FlowConsole({
           {section === "system" &&
             user.role === "admin" &&
             systemView === "config" && (
-              <SystemConfigShell />
+              <SystemConfigShell openAssistant={() => navigateRoute({ section: "system", view: "agents" })} />
             )}
           {agentSettingsActive && <AgentSettings userId={user.id} onNavigate={navigateRoute} />}
           {section === "system" && canManageIdentity && isIdentityWorkspaceView(systemView) && (
