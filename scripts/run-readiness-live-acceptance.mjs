@@ -1,4 +1,4 @@
-import { acceptanceTarget } from "./acceptance-target.cjs";
+import { acceptanceDatabaseTarget } from "./acceptance-target.cjs";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
@@ -7,7 +7,7 @@ import superjson from "superjson";
 // Opt-in acceptance on the designated deployment only. No accounts or grants.
 // At most one business, three flows, one inline source/asset and six runs.
 assert.equal(process.env.FLOW_READINESS_LIVE_ACCEPTANCE, "1");
-const base = acceptanceTarget(process.env) + "/";
+const base = acceptanceDatabaseTarget(process.env) + "/";
 const tag = randomBytes(6).toString("hex");
 const code = `RREADY_${tag}`.toUpperCase();
 const prefix = `运行门禁_${tag}_`;

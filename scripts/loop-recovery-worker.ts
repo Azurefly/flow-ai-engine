@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import acceptance from "./acceptance-target.cjs";
 import { processClaimedWorkflowJob } from "../server/workflow-worker";
 import { WorkflowExecutionInjectedCrash } from "../server/workflow-engine";
 import { getSharedPool } from "../server/db";
 import type mysql from "mysql2/promise";
 
+acceptance.acceptanceDatabaseTarget(process.env);
 const input = JSON.parse(process.env.FLOW_RECOVERY_JOB ?? "null");
 assert(input && /^recover_[a-f0-9]{12}$/.test(input.tag));
 assert(typeof input.workflowName === "string" && input.workflowName.endsWith("_" + input.tag));

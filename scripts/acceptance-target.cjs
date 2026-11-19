@@ -44,6 +44,37 @@ function acceptanceLogin(env, configured) {
   return { base, username, password };
 }
 
+/** Bind the HTTP service to the MySQL endpoint selected for this test, including forwarded ports. */
+function acceptanceDatabaseTarget(env) {
+  const origin = acceptanceTarget(env);
+  if (!env.FLOW_ACCEPTANCE_DATABASE_TARGET || !env.DATABASE_URL)
+    throw new Error("Set FLOW_ACCEPTANCE_DATABASE_TARGET and DATABASE_URL for this HTTP and MySQL acceptance run");
+  const invalid = "DATABASE_URL must match the confirmed HTTP origin, MySQL host, port and database in FLOW_ACCEPTANCE_DATABASE_TARGET";
+  try {
+    const expected = JSON.parse(env.FLOW_ACCEPTANCE_DATABASE_TARGET);
+    const actual = new URL(env.DATABASE_URL);
+    const hostname = value => value.toLowerCase().replace(/^\[([^\]]+)\]$/, "$1");
+    const database = decodeURIComponent(actual.pathname.slice(1));
+    if (!expected || Array.isArray(expected) ||
+        Object.keys(expected).some(key => !["origin", "host", "port", "database"].includes(key)) ||
+        expected.origin !== origin || typeof expected.host !== "string" || !expected.host ||
+        !Number.isInteger(expected.port) || expected.port < 1 || expected.port > 65535 ||
+        !database || /[\/\\\x00-\x1f]/.test(database) || expected.database !== database ||
+        actual.protocol !== "mysql:" || !actual.hostname || actual.hash ||
+        hostname(decodeURIComponent(actual.hostname)) !== hostname(expected.host) ||
+        Number(actual.port || 3306) !== expected.port)
+      throw new Error();
+    // mysql2 merges query options after parsing the authority and database path.
+    for (const key of actual.searchParams.keys())
+      if (["host", "port", "database", "socketpath", "stream", "uri", "__proto__", "prototype", "constructor"].includes(key.toLowerCase()))
+        throw new Error();
+  } catch {
+    // Parsing errors from URL/JSON can include the full input and its credentials.
+    throw new Error(invalid);
+  }
+  return origin;
+}
+
 // Browser fixtures also operate inside Docker. Bind both sides to the host
 // selected by the operator before any child process or fixture write starts.
 function acceptanceSsh(env) {
@@ -108,4 +139,4 @@ function loadRoleUsers(env, origin) {
   return users;
 }
 
-module.exports = { acceptanceTarget, acceptanceLogin, acceptanceSsh, loadRoleUsers };
+module.exports = { acceptanceTarget, acceptanceLogin, acceptanceDatabaseTarget, acceptanceSsh, loadRoleUsers };

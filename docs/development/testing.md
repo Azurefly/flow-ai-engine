@@ -49,6 +49,22 @@ pnpm exec vitest run --config vitest.unit.config.ts server/workflow-ui-regressio
 
 历史 HTTP 与浏览器验收统一从 `FLOW_ACCEPTANCE_BASE_URL` 读取环境。写入确认 `FLOW_ACCEPTANCE_CONFIRM_WRITES` 必须等于该地址的精确 origin。远程测试使用 HTTPS，本机回环或专用隧道可用 HTTP。需要账号的脚本读取本次测试环境的用户名、密码。部分旧浏览器套件还会进入 Docker 准备夹具，这些套件必须指定同主机的 `FLOW_ACCEPTANCE_SSH_TARGET`、`FLOW_ACCEPTANCE_SSH_KEY`、`FLOW_ACCEPTANCE_APP_CONTAINER`，操作数据库容器的套件另需 `FLOW_ACCEPTANCE_MYSQL_CONTAINER`。确认全部指向专用环境再执行。
 
+同时访问 HTTP 和 MySQL 的验收入口，在首次业务操作前还要核对 `FLOW_ACCEPTANCE_DATABASE_TARGET`。从测试环境交接记录独立取得 HTTP origin、MySQL 主机、端口及库名；用户名和密码只在私有 `DATABASE_URL` 中注入。数据库和应用可分别部署。若通过 SSH 转发访问数据库，登记本机转发主机和端口。PowerShell 示例假定已向当前会话注入测试库的 `DATABASE_URL`，应用监听 18482，专用 MySQL 隧道监听 43306，库名为 `flow_acceptance`。
+
+```powershell
+$env:FLOW_ACCEPTANCE_BASE_URL = 'http://127.0.0.1:18482'
+$env:FLOW_ACCEPTANCE_CONFIRM_WRITES = 'http://127.0.0.1:18482'
+$env:FLOW_ACCEPTANCE_DATABASE_TARGET = [ordered]@{
+    origin = 'http://127.0.0.1:18482'
+    host = '127.0.0.1'
+    port = 43306
+    database = 'flow_acceptance'
+} | ConvertTo-Json -Compress
+node -e 'require("./scripts/acceptance-target.cjs").acceptanceDatabaseTarget(process.env)'
+```
+
+请将示例改成所选环境的实际值。最后一条命令只核对配置，不发网络请求。SQL 验收使用 TCP 连接；DSN 的查询参数不得另选主机、端口、库名或套接字。已绑定应用容器内执行的辅助夹具沿用父入口确认的 SSH 目标和容器。纯 HTTP 验收与排序脚本的缺省本地预演继续使用原有配置，排序脚本显式执行时才校验 SQL 目标。
+
 业务导入可以用 PowerShell 执行 `node scripts/project-import-browser-acceptance.cjs`。它真实登录、上传含 CRLF 的中文 CSV、校验非法输入零写入、重开批次、核对焦点及四种视口。生成的数据以本轮随机代号标识。路由、质量与指标三组从迁移后的全新数据库启动应用再分别运行，核对输出中的实例与场景。指标同时比对客户端实测耗时，Windows 与 UTC MySQL 分离部署也适用。
 
 历史多角色浏览器套件 `test-multi-role-tiers.js` 使用目标隔离库内六个不同的专用身份。将 `FLOW_ACCEPTANCE_ROLE_USERS_FILE` 指向本机私有 UTF-8 JSON 文件。顶层 `origin` 填已确认的目标来源，`users` 下依次配置 `alice`、`bob`、`fiona`、`leo`、`clark`、`oscar`。每项填该环境实际的数字 `id`、`username`、`password`。文件仅授权测试执行者读取，保存在版本库外。四个历史浏览器入口的配置拦截回归见[入口用例](../../server/browser-acceptance-config.test.ts)。

@@ -1,4 +1,4 @@
-import { acceptanceTarget } from "./acceptance-target.cjs";
+import { acceptanceDatabaseTarget, acceptanceTarget } from "./acceptance-target.cjs";
 // Default is a local dry-run. Explicit execute mode touches only one new tagged test project.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -7,8 +7,8 @@ import superjson from "superjson";
 import { analyzeWorkflowDefinition } from "../server/workflow-compiler.ts";
 import { makeTypedSortFixture } from "./typed-sort-fixture.ts";
 
-const base = acceptanceTarget(process.env) + "/";
 const execute = process.env.FLOW_TYPED_SORT_EXECUTE === "1";
+const base = (execute ? acceptanceDatabaseTarget(process.env) : acceptanceTarget(process.env)) + "/";
 const recovery = process.env.FLOW_TYPED_SORT_CLEANUP_TAG;
 const tag = recovery ?? `TSORT_${randomBytes(6).toString("hex").toUpperCase()}`;
 assert(/^TSORT_[A-F0-9]{12}$/.test(tag));

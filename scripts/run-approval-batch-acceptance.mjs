@@ -1,10 +1,10 @@
-import { acceptanceTarget } from "./acceptance-target.cjs";
+import { acceptanceDatabaseTarget } from "./acceptance-target.cjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import mysql from "mysql2/promise";
 import superjson from "superjson";
 // Read-only acceptance against an existing repeated-node approval run, never creates fixtures.
-const base = acceptanceTarget(process.env) + "/";
+const base = acceptanceDatabaseTarget(process.env) + "/";
 const runId =
   process.env.FLOW_APPROVAL_BATCH_RUN_ID ||
   "f919b926-c37c-4892-9f2d-2102539d8dce";

@@ -1,4 +1,4 @@
-import { acceptanceTarget } from "./acceptance-target.cjs";
+import { acceptanceDatabaseTarget } from "./acceptance-target.cjs";
 // Read-only acceptance: bundle with esbuild (packages external) before running
 // inside the deployed app. Two normal admin logins append login_success only.
 import assert from "node:assert/strict";
@@ -7,7 +7,7 @@ import superjson from "superjson";
 import { normalizeRoleAuditEvent, authorizationAuditActions } from "../shared/role-audit-event.ts";
 import { auditActionSql } from "../server/authorization-audit-pagination.ts";
 
-const base = acceptanceTarget(process.env);
+const base = acceptanceDatabaseTarget(process.env);
 const db = await mysql.createConnection(process.env.DATABASE_URL);
 let cookie = "";
 const timings = [];
