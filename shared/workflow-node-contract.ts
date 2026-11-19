@@ -1,3 +1,4 @@
+import { childCallOptions, durableSubflowMode } from "./durable-subflow";
 import { assertSigningOutcomes, outcomeDecision, type SigningDecision } from "./operate-signing-outcomes";
 import { readDataflowFieldNames } from "./dataflow-field-list";
 import { readDeduplicateKeys } from "./dataflow-deduplicate-config";
@@ -371,7 +372,12 @@ const readLimitField: NodeField = {
   emptyHint: "留空读取最多 1000 行",
   help: "留空读取最多 1000 行；可填写 1 至 1000 的整数，达到上限后停止读取。",
 };
+const connectorVersionField: NodeField = {
+  key: "connectorVersionId", label: "固定资源版本", kind: "text",
+  help: "API、文件或外部写回从本业务数据资源选择具体版本。"
+};
 const sourceReadFields: NodeField[] = [
+  connectorVersionField,
   {
     key: "columns",
     label: "读取字段",
@@ -1322,7 +1328,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   subflow: {
     type: "subflow",
     label: "子流程",
-    description: "调用当前所有者的可复用私有流程",
+    description: "运行私有流程快照，或调用可独立等待的已发布流程",
     configEvidence: "reference-confirmed",
     flowTypes: ["state", "control", "data"],
     defaultConfig: {
@@ -1341,15 +1347,15 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "executionMode",
         label: "执行模式",
-        help: "当前仅支持同步等待发布时固定的子流程快照。",
+        help: "同步模式运行私有快照，持久模式调用指定的已发布流程并等待其终态。",
         kind: "select",
         required: true,
-        options: [{ value: "sync_snapshot", label: "同步等待·固定快照" }],
+        options: [{ value: "sync_snapshot", label: "同步等待·固定快照" }, { value: durableSubflowMode, label: "持久调用·支持人工与消息" }],
       },
       {
         key: "subflowId",
         label: "调用的子流程",
-        help: "选择已启用的私有子流程，主流程将等待它执行完成。",
+        help: "同步模式选择已启用的私有流程。持久模式选择有运行权限的已发布流程和版本。",
         kind: "text",
         required: true,
       },
@@ -1846,14 +1852,15 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "writeMode",
         label: "写入模式",
-        help: "当前仅允许 audit_only；真实 Sink Connector 待启用。",
+        help: "正式运行生成写回预览后，业务管理员可在实例详情确认。",
         kind: "select",
-        options: [{ value: "audit_only", label: "仅审计" }],
+        options: [{ value: "audit_only", label: "仅审计" }, { value: "receipt", label: "预览并确认外部写回" }],
       },
+      connectorVersionField,
       {
         key: "idempotencyKey",
         label: "幂等键模板",
-        help: "真实写入启用前必须提供稳定幂等键。",
+        help: "此模板保存在运行记录。外部提交使用实例、节点和资源版本生成的固定操作键。",
         kind: "template",
         required: true,
       },
@@ -2595,11 +2602,9 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
         firstNonBlank(config.subflowId),
         "子流程节点必须选择有效的当前子流程映射。"
       );
-      if (
-        config.executionMode !== undefined &&
-        config.executionMode !== "sync_snapshot"
-      )
-        throw new Error("子流程当前仅支持同步固定快照模式。");
+      if (config.executionMode === durableSubflowMode) childCallOptions(config);
+      else if (config.executionMode !== undefined && config.executionMode !== "sync_snapshot")
+        throw new Error("请选择有效的子流程执行模式。");
       break;
     case "source":
     case "table":
@@ -2688,8 +2693,8 @@ export function validateNodeConfig(type: FlowNodeType, config: NodeConfig) {
       assertString(config.outputField, "函数节点必须配置输出字段。");
       break;
     case "sink":
-      if (String(config.writeMode ?? "audit_only") !== "audit_only")
-        throw new Error("Sink 当前仅支持 audit_only 写入模式。");
+      if (!["audit_only","receipt"].includes(String(config.writeMode ?? "audit_only"))) throw new Error("Sink 写入模式无效。");
+      if (config.writeMode === "receipt" && !/^[a-f0-9]{64}$/.test(String(config.connectorVersionId ?? ""))) throw new Error("请选择受控写回的固定版本。");
       assertString(config.idempotencyKey, "Sink 必须配置幂等键模板。");
       assertString(config.outputName, "输出节点必须配置输出名称。");
       break;

@@ -1,5 +1,6 @@
 import { assertDataflowJobLease, DataflowCancelledError } from "./dataflow-job-lease";
 import { canCancelDataflowRun } from "./dataflow-run-control";
+import { prepareExternalWrite, readVersionedAsset, connectorVersionList, guardConnectorResult } from "./versioned-data-connectors";
 import { withDataflowConnectorDeadline } from "./dataflow-connector-deadline";
 import { dataflowSchemaFields } from "../shared/dataflow-input-fields";
 import { sortDataflowRows } from "./dataflow-sort-rows";
@@ -175,7 +176,8 @@ export async function listDataResourceOptions(
   projectId: string
 ) {
   await requireProjectAccess(user, projectId, "view");
-  const [assets, sources, udfs] = await Promise.all([
+  const [versions, assets, sources, udfs] = await Promise.all([
+    connectorVersionList(user, projectId),
     db().query<mysql.RowDataPacket[]>(
       "SELECT a.id,a.name,a.schemaJson,a.sourceId,a.status,s.id AS matchedSourceId,s.sourceType,s.status AS sourceStatus,s.connectionJson FROM data_asset a LEFT JOIN data_source s ON s.id=a.sourceId AND s.projectId=a.projectId WHERE a.projectId=? AND a.status='active' ORDER BY a.name,a.id",
       [projectId]
@@ -207,14 +209,14 @@ export async function listDataResourceOptions(
           : undefined
       );
       const option = options([row])[0];
+      const enabled = readiness.ready || versions.items.some(v=>v.assetId===row.id && v.kind!=="receipt_write" && v.enabled);
       return {
-        ...option,
-        label: option.label + (readiness.ready ? "" : " · 暂不可读取"),
+        ...option, label: option.label + (enabled ? "" : " · 暂不可读取"),
         fields: dataflowSchemaFields(parseJson(row.schemaJson, [])),
-        disabled: !readiness.ready,
-        ...(!readiness.ready ? { reason: readiness.message } : {}),
+        disabled: !enabled, ...(!enabled ? { reason: readiness.message } : {}),
       };
     }),
+    connectorVersions: versions.items,
     sources: options(sources[0]),
     udfs: udfs[0].map(row =>
       builtinDataFunctionChoice({
@@ -947,11 +949,14 @@ export async function deleteDataAsset(
 ) {
   await requireProjectAccess(user, projectId, "edit");
   const [result] = await db().query<mysql.ResultSetHeader>(
-    "DELETE FROM data_asset WHERE id=? AND projectId=?",
-    [assetId, projectId]
+    "DELETE FROM data_asset WHERE id=? AND projectId=? AND NOT EXISTS (SELECT 1 FROM data_connector_version WHERE assetId=? AND projectId=?)",
+    [assetId, projectId, assetId, projectId]
   );
-  if (!result.affectedRows)
+  if (!result.affectedRows) {
+    const [versions] = await db().query<mysql.RowDataPacket[]>("SELECT id FROM data_connector_version WHERE assetId=? AND projectId=? LIMIT 1", [assetId, projectId]);
+    if (versions.length) throw new TRPCError({ code: "CONFLICT", message: "数据资源含固定版本，请停用资源以保留历史实例与回执。" });
     throw new Error("数据资源不存在或不属于当前项目。 ");
+  }
   return true;
 }
 
@@ -1488,16 +1493,13 @@ async function runDataflowDefinition(
         output = { rows: rowsFromInput(inputs), stage: "start" };
       else if (["source", "data_source", "table"].includes(String(node.type))) {
         const assetId = String(config.assetId ?? "");
-        const asset = await readConnectorAsset(projectId, assetId, {
-          columns: readDataflowFieldNames(config.columns, "读取字段"),
-          limit: dataflowReadLimit(config.limit, 200),
-        });
-        output = {
-          assetId,
-          rows: asset.rows,
-          schema: asset.schema,
-          execution: "connector_read",
-        };
+        const columns = readDataflowFieldNames(config.columns, "读取字段");
+        const limit = dataflowReadLimit(config.limit, 200);
+        const versionId = String(config.connectorVersionId ?? "").trim();
+        const asset = versionId
+          ? await readVersionedAsset({ projectId, assetId, versionId, runId, nodeId, ownership, columns, limit })
+          : await readConnectorAsset(projectId, assetId, { columns, limit });
+        output = { ...asset, assetId, execution: "connector_read" };
       } else if (String(node.type) === "filter") {
         const rows = rowsFromInput(inputs);
         const field = String(config.filterField ?? "").trim();
@@ -1687,7 +1689,8 @@ async function runDataflowDefinition(
           operation: "quality_gate",
         };
       } else if (String(node.type) === "sink") {
-        if (String(config.writeMode ?? "audit_only") !== "audit_only")
+        const writeMode = String(config.writeMode ?? "audit_only");
+        if (!["audit_only", "receipt"].includes(writeMode))
           throw new Error("Sink 当前仅支持审计输出，拒绝未知写入模式。");
         const idempotencyKey = String(config.idempotencyKey ?? "").trim();
         if (!idempotencyKey) throw new Error("Sink 缺少幂等键模板。");
@@ -1695,7 +1698,7 @@ async function runDataflowDefinition(
           rows: rowsFromInput(inputs),
           stage: "sink",
           outputName: String(config.outputName ?? "result"),
-          writeMode: "audit_only",
+          writeMode,
           idempotencyKey,
         };
       } else if (["end", "output"].includes(String(node.type)))
@@ -1714,22 +1717,33 @@ async function runDataflowDefinition(
       const schemaHash = createHash("sha256")
         .update(JSON.stringify(schema))
         .digest("hex");
-      const serializedOutput = JSON.stringify(output);
+      // Freeze the reviewed write preview together with the node and its terminal artifact.
       const artifactId = id();
       const finishConnection = await db().getConnection();
       try {
         await finishConnection.beginTransaction();
-        await assertDataflowJobLease(finishConnection, ownership);
+        if (output.resourceVersion || (node.type === "sink" && output.writeMode === "receipt")) {
+          await guardConnectorResult(finishConnection, {
+            runId, ownership, projectId, versionId: String(config.connectorVersionId),
+            assetId: output.resourceVersion ? String(config.assetId) : undefined
+          });
+        } else {
+          await assertDataflowJobLease(finishConnection, ownership);
+        }
         const [nodeRows] = await finishConnection.query<mysql.RowDataPacket[]>(
           "SELECT id,attempt FROM dataflow_node_run WHERE runId=? AND nodeId=? AND status='running' AND jobLeaseToken=? LIMIT 1 FOR UPDATE",
           [runId, nodeId, ownership.leaseToken]
         );
         const nodeRun = nodeRows[0];
         if (!nodeRun) throw new Error("数据流节点 Attempt 已失去所有权。");
+        if (node.type === "sink" && output.writeMode === "receipt") {
+          output.writePreview = await prepareExternalWrite(finishConnection, projectId, runId, nodeId, String(config.connectorVersionId ?? ""), outputRows);
+        }
+        const serializedOutput = JSON.stringify(output);
         await finishConnection.query(
           `INSERT INTO dataflow_dataset_artifact
             (id,runId,nodeRunId,nodeId,schemaJson,schemaHash,storageRef,format,dataJson,partitionJson,rowCount,byteCount,watermarkJson,sampleJson)
-           VALUES (?,?,?,?,?,?,?,'inline_json',?,NULL,?,?,NULL,?)`,
+           VALUES (?,?,?,?,?,?,?,'inline_json',?,NULL,?,?,?,?)`,
           [
             artifactId,
             runId,
@@ -1741,6 +1755,7 @@ async function runDataflowDefinition(
             serializedOutput,
             outputRows.length,
             Buffer.byteLength(serializedOutput, "utf8"),
+            output.resourceVersion ? JSON.stringify(output.resourceVersion) : null,
             JSON.stringify(outputRows.slice(0, 20)),
           ]
         );
@@ -1791,6 +1806,7 @@ async function runDataflowDefinition(
             "UPDATE dataflow_run SET checkpointJson=? WHERE id=? AND status='running'",
             [JSON.stringify(checkpointJson), runId]
           );
+        if (output.resourceVersion) await finishConnection.query("UPDATE data_connector_page SET rowsJson=JSON_ARRAY() WHERE runId=? AND nodeId=?", [runId,nodeId]);
         if (!checkpointed.affectedRows)
           throw new Error("数据流运行状态已改变，Checkpoint 未提交。");
         await finishConnection.commit();
@@ -2058,6 +2074,7 @@ async function processDataflowJob(job: ClaimedDataflowJob) {
       );
       if (!updatedRun.affectedRows)
         throw new Error("数据流运行失败处理时状态已改变。");
+      if (!retry) await connection.query("UPDATE data_connector_page SET rowsJson=JSON_ARRAY() WHERE runId=?", [job.runId]);
       await connection.commit();
     } catch (failureError) {
       await connection.rollback();

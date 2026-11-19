@@ -20,7 +20,7 @@ import {
   type AssistantToolProposal,
 } from "./assistant-tools";
 import type { ProjectUser } from "./project-service";
-import type { TrpcContext } from "./_core/context";
+import type { AssistantWorkContext } from "./assistant-workspace";
 import { WorkspaceOutcomeUnknown } from "./assistant-workspace";
 
 type Proposal = { id: string; proposal: AssistantToolProposal };
@@ -37,6 +37,8 @@ type ProposalReference = {
 };
 type ConversationTask = {
   status: Status;
+  failureCode?: string;
+  modelReceipts?: { model: string | null; completionId: string | null }[];
   pending?: Proposal;
   reference?: ProposalReference;
   retryText?: string;
@@ -102,6 +104,7 @@ export function publicSession(session: AssistantSession) {
     messages,
     olderBefore: session.olderBefore,
     status: task.status,
+    modelReceipts: task.modelReceipts ?? [],
     retryText: task.retryText ?? null,
     pending: task.pending ? {
       ...publicProposal(task.pending),
@@ -112,7 +115,7 @@ export function publicSession(session: AssistantSession) {
   };
 }
 
-async function modelForTurn(configuredModel: string): Promise<Model> {
+export async function modelForTurn(configuredModel: string): Promise<Model> {
   const connection = await resolveLlmConnection();
   const model =
     configuredModel ||
@@ -164,8 +167,9 @@ export async function runAssistantTurn(
   text: string,
   dependencies = { modelForTurn, prepare: prepareAssistantTool },
   observedProposalId?: string,
-  request?: TrpcContext,
-  timeZone = "UTC"
+  request?: AssistantWorkContext,
+  timeZone = "UTC",
+  execution?: { signal?: AbortSignal; commit: typeof commitAssistantTool }
 ) {
   const allowed = new Set<string>(session.config.tools);
   if (actor.role !== "admin") allowed.delete("updateWatermark");
@@ -195,7 +199,7 @@ export async function runAssistantTurn(
         session,
         previous.id,
         approve,
-        request ? (actor, proposal, key) => commitAssistantTool(actor, proposal, key, request) : commitAssistantTool,
+        execution?.commit ?? (request ? (actor, proposal, key) => commitAssistantTool(actor, proposal, key, request) : commitAssistantTool),
         text
       );
     }
@@ -251,20 +255,20 @@ export async function runAssistantTurn(
       task,
     };
   }
-  function fail(reason: string) {
+  function fail(reason: string, failureCode = "model_response") {
     if (pending)
       return finish(
         `${pending.proposal.summary}\n已校验的提案已保留，可以核对后确认。`,
         { status: "waiting_confirmation", pending }
       );
-    return finish(reason, { status: "failed", retryText: text, reference });
+    return finish(reason, { status: "failed", retryText: text, reference, failureCode });
   }
   let model: Model;
   try {
     model = await dependencies.modelForTurn(session.config.model);
   } catch {
     return fail(
-      "无法连接 Agent 的模型，请管理员检查模型服务、凭据及默认模型后重试。"
+      "无法连接 Agent 的模型，请管理员检查模型服务、凭据及默认模型后重试。", "model_configuration"
     );
   }
   const deadline = Date.now() + 110_000;
@@ -280,9 +284,10 @@ export async function runAssistantTurn(
         ...(finalStep ? { toolChoice: "none" } : {}),
         maxTokens: 4096,
         timeoutMs: Math.min(45_000, remaining),
+        signal: execution?.signal,
       });
     } catch {
-      return fail("模型未能完成本轮回复，请检查模型服务或重试。");
+      return fail("模型未能完成本轮回复，请检查模型服务或重试。", "model_unavailable");
     }
     const choice = response?.choices?.[0];
     const reply = choice?.message;
@@ -391,7 +396,7 @@ export async function runAssistantTurn(
   }
   if (!answer) return fail("模型没有返回可显示的回复，请重试。");
   if (toolError && !pending && !question)
-    return fail(`工具未完成操作。${toolError}`);
+    return fail(`工具未完成操作。${toolError}`, "tool_rejected");
   const task: ConversationTask = pending
     ? { status: "waiting_confirmation", pending }
     : question
@@ -430,7 +435,7 @@ export async function decideAssistantProposal(
       role: "assistant",
       content: "当前账号或 Agent 已无权执行此操作，原提案已失效。",
     });
-    return { messages: events, task: { status: "failed" } };
+    return { messages: events, task: { status: "failed", failureCode: "permission_changed" } };
   }
   if (session.trial) {
     events.push({
@@ -444,7 +449,7 @@ export async function decideAssistantProposal(
     } catch (error) {
       if (error instanceof WorkspaceOutcomeUnknown) {
         events.push({ role: "assistant", content: "提交结果待核实，请在业务记录中检查本次操作。为避免重复办理，助手已停止重复提交。" });
-        return { messages: events, task: { status: "failed" } };
+        return { messages: events, task: { status: "failed", failureCode: "outcome_unknown" } };
       }
       const outdated =
         error instanceof TRPCError &&
@@ -470,6 +475,7 @@ export async function decideAssistantProposal(
           messages: events,
           task: {
             status: "failed",
+            failureCode: "domain_rejected",
             reference,
             retryText: "根据当前状态重新生成上一版提案的预览。",
           },
@@ -480,7 +486,7 @@ export async function decideAssistantProposal(
         content:
           "暂时无法取得提交回执，已保留本次提案。再次确认会沿用同一个提交标识。",
       });
-      return { messages: events, task: { status: "failed", pending } };
+      return { messages: events, task: { status: "failed", failureCode: "receipt_unavailable", pending } };
     }
     const links = receipt.workflowId
       ? [

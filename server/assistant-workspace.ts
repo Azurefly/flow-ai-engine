@@ -7,10 +7,12 @@ import { formatConsoleRoute } from "../shared/console-route";
 import type { TrpcContext } from "./_core/context";
 import { getSharedPool } from "./db";
 import { getWorkflowTask } from "./p1-service";
-import { getProjectAccess } from "./project-service";
+import { createFolder, getProjectAccess } from "./project-service";
 import { getWorkflow } from "./workflow-service";
 import { inspectWorkflowRunReadiness } from "./workflow-run-readiness";
 
+// This catalog only includes business procedures which can run with a reauthorized actor.
+export type AssistantWorkContext = Pick<TrpcContext, "user" | "requestId">;
 export type WorkspaceScope = {
   projectId?: string | null;
   workflowId?: string | null;
@@ -285,7 +287,7 @@ function projectResult(value: unknown, depth = 0): unknown {
   return out;
 }
 async function prepare(
-  ctx: TrpcContext,
+  ctx: AssistantWorkContext,
   scope: WorkspaceScope,
   write: boolean,
   raw: unknown
@@ -446,13 +448,16 @@ async function prepare(
       .parse(args.pageSize ?? 15);
   const input = schema ? args : undefined;
   if (schema) await schema.parseAsync(input);
-  const execute = (): Promise<unknown> =>
+  const execute = (actionKey?: string): Promise<unknown> =>
     callTRPCProcedure({
       router: app,
       ctx,
       path,
       type,
-      getRawInput: async () => input,
+      getRawInput: async () => actionKey && input ? {
+        ...input, ...(path === "workflow.run" ? { idempotencyKey: actionKey } :
+          path === "data.createTag" || path === "workflow.duplicate" ? { requestKey: actionKey } : {}),
+      } : input,
       signal: undefined,
     });
   return {
@@ -492,7 +497,7 @@ const fieldLabels: Record<string, string> = {
   cronExpression: "调度表达式",
 };
 export async function prepareWorkspace(
-  ctx: TrpcContext,
+  ctx: AssistantWorkContext,
   scope: WorkspaceScope,
   write: boolean,
   raw: unknown
@@ -579,7 +584,7 @@ export async function prepareWorkspace(
 // A receipt is reserved before dispatch. An interruption between the business commit
 // and acknowledgement leaves a detectable uncertain result and never redispatches it.
 export async function commitWorkspace(
-  ctx: TrpcContext,
+  ctx: AssistantWorkContext,
   scope: WorkspaceScope,
   input: WorkspaceInput,
   key: string
@@ -596,13 +601,65 @@ export async function commitWorkspace(
     );
     if (!rows[0]) return null;
     if (rows[0].payloadHash !== hash) return deny();
-    if (!rows[0].message) throw new WorkspaceOutcomeUnknown();
+    const op = (workspaceMutations as Catalog)[input.action];
+    if (!op || !availableInScope(input.action, op, ctx.user!.role, scope)) return deny();
+    const project = scope.projectId ?? input.arguments.projectId;
+    if (typeof project === "string" && !(await getProjectAccess(ctx.user!, project, { includeArchived: true })).permissions.has("project:view")) return deny();
+    const workflow = scope.workflowId ?? input.arguments.workflowId ?? (op.scope === "workflow" ? input.arguments.id : null);
+    if (typeof workflow === "string" && !(await getWorkflow(workflow, ctx.user!))) return deny();
+    if (op.scope === "task" && (typeof input.arguments.taskId !== "string" || !(await getWorkflowTask(ctx.user!, input.arguments.taskId)))) return deny();
+    if (rows[0].message === "!rejected") return bad("原业务请求已被拒绝，请重新预览。");
+    if (!rows[0].message) {
+      let message: string | undefined;
+      const args = input.arguments;
+      if (input.action === "workflow.run" && typeof args.workflowId === "string") {
+        const [runs] = await db.query<RowDataPacket[]>("SELECT runId FROM workflow_run_job WHERE idempotencyKey=?",
+          [`workflow:start:${args.workflowId}:${ctx.user!.id}:${key}`]);
+        if (runs[0]) message = "已提交运行。运行 ID：" + runs[0].runId + "，可在流程运行历史中查看进度。";
+      }
+      if (input.action === "data.createTag" && typeof args.projectId === "string") {
+        const [tags] = await db.query<RowDataPacket[]>(
+          "SELECT resourceId FROM resource_creation_request WHERE resourceKind='tag' AND actorUserId=? AND projectId=? AND requestKeyHash=?",
+          [ctx.user!.id, args.projectId, createHash("sha256").update(key).digest("hex")]);
+        if (tags[0]) message = "已执行：创建数据标签（" + tags[0].resourceId + "）。";
+      }
+      if (input.action === "workflow.duplicate" && typeof args.id === "string") {
+        const [copies] = await db.query<RowDataPacket[]>(
+          "SELECT workflowId FROM workflow_creation_request WHERE actorUserId=? AND requestKind='duplicate' AND requestKeyHash=?",
+          [ctx.user!.id, createHash("sha256").update(key).digest("hex")]);
+        if (copies[0]) message = "已执行：复制流程（" + copies[0].workflowId + "）。";
+      }
+      if (!message) throw new WorkspaceOutcomeUnknown();
+      await db.execute("UPDATE assistant_action_receipt SET message=? WHERE id=? AND payloadHash=? AND message IS NULL", [message, key, hash]);
+      return { message };
+    }
     return { message: String(rows[0].message) };
   }
   const existing = await findReceipt();
   if (existing) return existing;
   const res = await prepare(ctx, scope, true, input);
   if (!res.execute) return bad("无效的业务提案。");
+  if (input.action === "project.createFolder") {
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.execute("INSERT INTO assistant_action_receipt (id,payloadHash) VALUES (?,?)", [key,hash]);
+      const args = res.input!.arguments as Parameters<typeof createFolder>[1];
+      const folderId = await createFolder(ctx.user, args, connection);
+      const message = "已执行：" + res.label + "（" + folderId + "）。";
+      await connection.execute("UPDATE assistant_action_receipt SET message=? WHERE id=?", [message,key]);
+      await connection.commit();
+      return { message };
+    } catch (error) {
+      await connection.rollback();
+      if ((error as { code?: string }).code === "ER_DUP_ENTRY") {
+        const prior = await findReceipt();
+        if (prior) return prior;
+        return bad("同名目录已经存在。");
+      }
+      throw error;
+    } finally { connection.release(); }
+  }
   try {
     await db.execute(
       "INSERT INTO assistant_action_receipt (id,payloadHash) VALUES (?,?)",
@@ -616,7 +673,7 @@ export async function commitWorkspace(
   }
   let value: unknown;
   try {
-    value = await res.execute();
+    value = await res.execute(key);
   } catch (e) {
     if (
       e instanceof TRPCError &&
@@ -628,8 +685,10 @@ export async function commitWorkspace(
         "CONFLICT",
         "UNAUTHORIZED",
       ].includes(e.code)
-    )
+    ) {
+      await db.execute("UPDATE assistant_action_receipt SET message='!rejected' WHERE id=? AND payloadHash=? AND message IS NULL", [key,hash]);
       throw e;
+    }
     throw new WorkspaceOutcomeUnknown();
   }
   if (
@@ -638,8 +697,10 @@ export async function commitWorkspace(
       typeof value === "object" &&
       "success" in value &&
       value.success === false)
-  )
+  ) {
+    await db.execute("UPDATE assistant_action_receipt SET message='!rejected' WHERE id=? AND payloadHash=? AND message IS NULL", [key,hash]);
     return bad("业务操作未生效，请检查目标状态。");
+  }
   const id =
     value &&
     typeof value === "object" &&

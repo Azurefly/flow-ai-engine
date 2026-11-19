@@ -1,3 +1,4 @@
+import { assertDurableAdmission, bindDurableCalls } from "./durable-subflow-binding";
 import { inspectWorkflowServiceConfiguration } from "./workflow-service-readiness";
 import { isParticipantStateDefinition } from "../shared/participant-state";
 import { TRPCError } from "@trpc/server";
@@ -9,6 +10,7 @@ import {
   assertWorkflowExecutionPlan,
   compileWorkflowDefinition,
   hashWorkflowExecutionPlan,
+  WorkflowCompileError,
   type WorkflowCompileDiagnostic,
   type WorkflowDefinition,
   type WorkflowExecutionPlan,
@@ -304,6 +306,13 @@ export async function inspectWorkflowRunReadiness(
       );
       checks = participants.checks;
       issues.push(...participants.diagnostics);
+      try {
+        assertDurableAdmission(plan.definition);
+        await bindDurableCalls(plan.definition, input.workflowId, user.id);
+      } catch (error) {
+        if (!(error instanceof WorkflowCompileError)) throw error;
+        issues.push(...error.diagnostics);
+      }
       issues.push(...await inspectWorkflowServiceConfiguration(workflow.projectId, plan.definition));
     }
   }

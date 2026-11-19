@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { compactStyleConstants } from "./scripts/build-style-constants";
+import { createDebugLogReceiver } from "./scripts/dev/debug-log-receiver.mjs";
 import { minify } from "terser";
 import { gzipSync } from "node:zlib";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
@@ -16,12 +17,7 @@ import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
 
 const PROJECT_ROOT = import.meta.dirname;
 const LOG_DIR = path.join(PROJECT_ROOT, ".manus-logs");
-const DEBUG_COLLECTOR_SCRIPT_PATH = path.join(
-  PROJECT_ROOT,
-  "scripts",
-  "dev",
-  "debug-collector.js"
-);
+const DEBUG_SCRIPT_DIR = path.join(PROJECT_ROOT, "scripts", "dev");
 const MAX_LOG_SIZE_BYTES = 1 * 1024 * 1024; // 1MB per log file
 const TRIM_TARGET_BYTES = Math.floor(MAX_LOG_SIZE_BYTES * 0.6); // Trim to 60% to avoid constant re-trimming
 
@@ -79,7 +75,7 @@ function writeToLogFile(source: LogSource, entries: unknown[]) {
 
 /**
  * Vite plugin to collect browser debug logs
- * - POST /__manus__/logs: Browser sends logs, written directly to files
+ * - POST /__manus__/logs: Persist validated browser event metadata
  * - Files: browserConsole.log, networkRequests.log, sessionReplay.log
  * - Auto-trimmed when exceeding 1MB (keeps newest entries)
  */
@@ -97,8 +93,8 @@ function vitePluginManusDebugCollector(): Plugin {
           {
             tag: "script",
             attrs: {
+              type: "module",
               src: "/__manus__/debug-collector.js",
-              defer: true,
             },
             injectTo: "head",
           },
@@ -107,9 +103,8 @@ function vitePluginManusDebugCollector(): Plugin {
     },
 
     configureServer(server: ViteDevServer) {
-      server.middlewares.use(
-        "/__manus__/debug-collector.js",
-        (req, res, next) => {
+      for (const filename of ["debug-collector.js", "debug-log-metadata.mjs"]) {
+        server.middlewares.use(`/__manus__/${filename}`, (req, res, next) => {
           if (req.method !== "GET") {
             return next();
           }
@@ -117,58 +112,10 @@ function vitePluginManusDebugCollector(): Plugin {
           res.statusCode = 200;
           res.setHeader("Content-Type", "text/javascript; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");
-          res.end(fs.readFileSync(DEBUG_COLLECTOR_SCRIPT_PATH, "utf8"));
-        }
-      );
-
-      // POST /__manus__/logs: Browser sends logs (written directly to files)
-      server.middlewares.use("/__manus__/logs", (req, res, next) => {
-        if (req.method !== "POST") {
-          return next();
-        }
-
-        const handlePayload = (payload: any) => {
-          // Write logs directly to files
-          if (payload.consoleLogs?.length > 0) {
-            writeToLogFile("browserConsole", payload.consoleLogs);
-          }
-          if (payload.networkRequests?.length > 0) {
-            writeToLogFile("networkRequests", payload.networkRequests);
-          }
-          if (payload.sessionEvents?.length > 0) {
-            writeToLogFile("sessionReplay", payload.sessionEvents);
-          }
-
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ success: true }));
-        };
-
-        const reqBody = (req as { body?: unknown }).body;
-        if (reqBody && typeof reqBody === "object") {
-          try {
-            handlePayload(reqBody);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-          return;
-        }
-
-        let body = "";
-        req.on("data", chunk => {
-          body += chunk.toString();
+          res.end(fs.readFileSync(path.join(DEBUG_SCRIPT_DIR, filename), "utf8"));
         });
-
-        req.on("end", () => {
-          try {
-            const payload = JSON.parse(body);
-            handlePayload(payload);
-          } catch (e) {
-            res.writeHead(400, { "Content-Type": "application/json" });
-            res.end(JSON.stringify({ success: false, error: String(e) }));
-          }
-        });
-      });
+      }
+      server.middlewares.use("/__manus__/logs", createDebugLogReceiver(writeToLogFile));
     },
   };
 }

@@ -161,7 +161,7 @@ it("普通账号不生成内置管理员来源，来源元数据查询和鉴权�
     ).length
   ).toBe(1);
 });
-it("旧数据中的额外权限不扩大管理员既有七项权限集合", async () => {
+it("管理员包含内置目录预览权，旧数据中的额外权限不能扩大内置权限集合", async () => {
   mocks.role = "admin";
   mocks.sources.push({
     ...mocks.sources[0],
@@ -169,7 +169,8 @@ it("旧数据中的额外权限不扩大管理员既有七项权限集合", asyn
     name: "旧权限",
   });
   const details = await getUserAuthorizationDetails(12);
-  expect(details.effectivePermissions).toHaveLength(7);
+  expect(details.effectivePermissions).toHaveLength(8);
+  expect(details.effectivePermissions.some(p => p.code === "directory:preview")).toBe(true);
   expect(
     details.effectivePermissions.some(p => String(p.code) === "legacy:extra")
   ).toBe(false);

@@ -27,5 +27,5 @@
 | R21 键盘弹窗与业务反馈 | `project.create`、`project.existingCodes` | U01、U02 | 嵌套确认、提交成功、触发者消失分别验收。 |
 | R22 窄屏、视口定位和工作台连续操作 | `project.page`、`task.dashboard`、`task.page`、`workflow.get` | U03、U04、U05 | 360/390/768、真机和后台轮询保持焦点与位置。 |
 | R23 独立等待的异步子流程 | `workflow.subflows`、`workflow.createSubflow`、`workflow.run` | G02 | 一层人工子实例、父子权限与崩溃后恢复按 A55–A58 验收。 |
-| R24 BDP 主数据同步 | `project.list`、`project.create` | G03 | 这里列出本地业务复用入口；现存 API 没有本需求的专用 BDP 同步过程。 |
+| R24 内部账号、部门和成员关系批量导入 | `directoryImport.preview`、`directoryImport.applyRow`、`directoryImport.revert` | G03 | 业务与人员工作区可打开目录导入，逐行鉴权及回退。 |
 | R25 部署就绪与运营证明 | `system.health`、`config.readiness`、`config.runtimeInfo` | F01、F02 | 真实通知、OAuth、对象存储、恢复 RPO/RTO、负载与第三方签收另行取证。 |

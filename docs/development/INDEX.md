@@ -7,6 +7,7 @@
 | 当前任务 | 文档 |
 | --- | --- |
 | 新人或开发代理接手 | [仓库协作约定](../../Agent.md)、[当前系统设计](architecture.md)、[产品范围与本机启动](../../README.md) |
+| 修改本次新增的四个模块 | [版本化 API、文件与外部写回](optimization/G01-IMPLEMENTATION.md)、[持久父子流程](optimization/G02-IMPLEMENTATION.md)、[内部目录批量导入](optimization/G03-IMPLEMENTATION.md)、[助手后台回合](optimization/G04-IMPLEMENTATION.md) |
 | 领取优化任务或拆分开发工作 | [智能体交接入口](optimization/START-HERE.md)、[产品能力索引](optimization/CAPABILITIES.md)、[19 张任务卡](optimization/TASKS.md)、[67 条验收场景](optimization/ACCEPTANCE.md)、[结构化队列](optimization/queue.json) |
 | 排本轮整改优先级 | [实施与实测回执](optimization/IMPLEMENTATION.md)、[功能与需求评审摘要](review-baseline.md)、[功能补齐与整改设计](remediation-design.md) |
 | 调整页面、交互或动效 | [前端约束](frontend.md)、[开源动效研究与界面评审](ui-motion-review.md)、[查询交互回归表](../query-interaction-regression-checklist.md) |
@@ -18,6 +19,8 @@
 仓库收录[完整审计报告](optimization/REPORT.md)、[需求追踪矩阵](optimization/REQUIREMENTS.md)、[分层测试明细](optimization/COVERAGE.md)和[基线 API 清单](optimization/api-inventory.json)。逐用例原始记录与截图存放在审计工作区的 `.cache/functional-audit-20261119/handoff/`。
 
 ## 从页面定位到执行与验收
+
+[当前注册的 API](optimization/api-current.json)按模块列出 224 个过程和调用方式。接口变化后在仓库根目录运行 `node --import tsx scripts/index-project-api.mjs` 更新；加 `--check` 可检查生成物。在审计时点做对照可读取上面的基线清单。
 
 在 [Home](../../client/src/pages/Home.tsx) 找页面装配，在 [console-route](../../shared/console-route.ts) 找可直达的路由，在 [routers](../../server/routers.ts) 找同名 tRPC 过程。表定义及索引集中在 [schema](../../drizzle/schema.ts)。下表的最后一列是适合修改后先跑的一条用例。
 

@@ -922,7 +922,7 @@ export const workflowWaitSubscriptions = mysqlTable(
     nodeRunId: varchar("nodeRunId", { length: 36 })
       .notNull()
       .references(() => workflowNodeRuns.id),
-    waitType: mysqlEnum("waitType", ["timer", "message"]).notNull(),
+    waitType: mysqlEnum("waitType", ["timer", "message", "child"]).notNull(),
     status: mysqlEnum("status", ["active", "triggered", "cancelled"])
       .default("active")
       .notNull(),
@@ -1797,3 +1797,8 @@ export const assistantTurns = mysqlTable("assistant_turn", {
   unique("assistant_turn_request_unique").on(table.sessionId, table.requestId),
   unique("assistant_turn_revision_unique").on(table.sessionId, table.revision),
 ]);
+
+export * from "./assistant-job-schema";
+export * from "./data-connector-schema";
+export * from "./directory-import-schema";
+export * from "./workflow-run-link-schema";

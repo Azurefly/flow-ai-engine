@@ -5,9 +5,9 @@ import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 
-export const DATABASE_MIGRATION_VERSION = "0048_audit_operations";
-export const DATABASE_MIGRATION_EPOCH = 1795063903129;
-export const DATABASE_REQUIRED_COLUMN_COUNT = 78;
+export const DATABASE_MIGRATION_VERSION = "0049_governed_capabilities";
+export const DATABASE_MIGRATION_EPOCH = 1795067655618;
+export const DATABASE_REQUIRED_COLUMN_COUNT = 85;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
 export function getPublicReadiness(ready: boolean) {
@@ -53,7 +53,7 @@ export function getCapabilityStatus(llm?: { configured: boolean; message: string
       label: "数据流",
       status: "experimental",
       reason:
-        "耐久 Job、内联 Artifact 和 Checkpoint 已接入；尚无生产 Connector、外部存储和真实重启验收。",
+        "支持持久作业、检查点、MySQL、固定版本的分页 API 和 CSV。外部写回须经业务管理者确认并核对目标回执，各操作可按部署配置关闭。",
     },
   ] as const;
 }
@@ -91,7 +91,7 @@ export async function checkReadiness() {
       `SELECT COUNT(DISTINCT table_name) AS count
          FROM information_schema.tables
         WHERE table_schema=DATABASE()
-          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run','resource_creation_request','workflow_creation_request','assistant_agent','assistant_session','assistant_turn','project_import_batch','project_import_row','dataflow_manual_receipt')`
+          AND table_name IN ('workflow_run_job','workflow_task_group','workflow_outbox_event','workflow_state_transition','project_service_endpoint','workflow_wait_subscription','workflow_milestone','workflow_task_schedule','dataflow_run_job','dataflow_node_run','dataflow_dataset_artifact','dataflow_lineage_edge','data_source_test_run','resource_creation_request','workflow_creation_request','assistant_agent','assistant_session','assistant_turn','project_import_batch','project_import_row','dataflow_manual_receipt','assistant_turn_job','data_connector_page','data_connector_version','data_connector_write','directory_import_batch','workflow_run_link')`
     );
     const [columnRows] = await db().query<mysql.RowDataPacket[]>(
       `SELECT COUNT(*) AS count
@@ -116,6 +116,13 @@ export async function checkReadiness() {
           (table_name='workflow_state_transition' AND column_name IN ('nodeId','executionKey')) OR
           (table_name='workflow_wait_subscription' AND column_name='executionKey') OR
           (table_name IN ('workflow_task','workflow_task_group') AND column_name='executionKey') OR
+          (table_name='assistant_turn_job' AND column_name='leaseUntil') OR
+          (table_name='data_connector_page' AND column_name='pageNo') OR
+          (table_name='data_connector_version' AND column_name='contentHash') OR
+          (table_name='data_connector_write' AND column_name='operationKey') OR
+          (table_name='directory_import_batch' AND column_name='rowsJson') OR
+          (table_name='workflow_run_link' AND column_name='executionKey') OR
+          (table_name='workflow_wait_subscription' AND column_name='waitType' AND column_type='enum(''timer'',''message'',''child'')') OR
           (table_name='authorization_audit_log' AND column_name='requestId') OR
           (table_name='organization_unit_role' AND column_name IN ('includeDescendants','effectiveFrom','expiresAt'))
         )`
@@ -142,6 +149,9 @@ export async function checkReadiness() {
           OR (table_name='dataflow_lineage_edge' AND index_name='dataflow_lineage_edge_unique')
           OR (table_name='dataflow_schedule' AND index_name='dataflow_schedule_due_idx')
           OR (table_name='assistant_turn' AND index_name IN ('assistant_turn_revision_unique','assistant_turn_request_unique'))
+          OR (table_name='assistant_turn_job' AND index_name='assistant_job_request_unique')
+          OR (table_name='workflow_run_link' AND index_name IN ('workflow_link_visit_call','workflow_link_child'))
+          OR (table_name IN ('data_connector_page','data_connector_write') AND index_name='PRIMARY')
           OR (table_name='resource_creation_request' AND index_name='resource_creation_request_identity_unique')
           OR (table_name='workflow_creation_request' AND index_name='workflow_creation_request_identity_unique')
         )`
@@ -173,9 +183,9 @@ export async function checkReadiness() {
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
-      Number(tableRows[0]?.count ?? 0) === 21 &&
+      Number(tableRows[0]?.count ?? 0) === 27 &&
       Number(columnRows[0]?.count ?? 0) === DATABASE_REQUIRED_COLUMN_COUNT &&
-      Number(indexRows[0]?.count ?? 0) === 21 &&
+      Number(indexRows[0]?.count ?? 0) === 26 &&
       Number(projectUnitCollationRows[0]?.count ?? 0) === 3 &&
       Number(creationIndexRows[0]?.count ?? 0) === 4 &&
       Number(workflowCreationIndexRows[0]?.count ?? 0) === 2;

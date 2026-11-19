@@ -11,6 +11,10 @@ export function currentRequestId() {
   return requestContext.getStore()?.requestId;
 }
 
+export function withRequestId<T>(requestId: string, run: () => T): T {
+  return requestContext.run({ requestId }, run);
+}
+
 function configuredOrigins() {
   return new Set(
     [process.env.APP_ORIGIN, ...(process.env.TRUSTED_ORIGINS ?? "").split(",")]

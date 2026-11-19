@@ -10,9 +10,11 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { handleDataflowScheduleCallback } from "../p2-service";
 import { startWorkflowWorker, stopWorkflowWorker } from "../workflow-worker";
+import { startAssistantWorker, stopAssistantWorker } from "../assistant-job-worker";
 import { registerHealthRoutes } from "../health-routes";
 import { validateEnv } from "./env";
 import { closeSharedPool } from "../db";
+import { handleRequestBodyError } from "./request-body-error";
 import {
   enforceTrustedOrigin,
   requestCorrelation,
@@ -47,6 +49,7 @@ async function startServer() {
   app.use(enforceTrustedOrigin);
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ limit: "256kb", extended: true }));
+  app.use(handleRequestBodyError);
   registerHealthRoutes(app);
   registerStorageProxy(app);
   registerOAuthRoutes(app);
@@ -77,12 +80,13 @@ async function startServer() {
   server.listen({ port, host }, () => {
     console.log(`Server running on http://localhost:${port}/`);
     startWorkflowWorker();
+    startAssistantWorker();
   });
 
   const shutdown = () => {
     server.close(async () => {
       try {
-        await stopWorkflowWorker();
+        await Promise.all([stopWorkflowWorker(), stopAssistantWorker()]);
         await closeSharedPool();
       } catch (err) {
         console.error("[Shutdown] Error during graceful shutdown:", err);
@@ -93,4 +97,12 @@ async function startServer() {
   process.once("SIGINT", shutdown);
 }
 
-startServer().catch(console.error);
+if (process.argv.includes("--assistant-worker")) {
+  validateEnv();
+  startAssistantWorker(true);
+  const shutdown = () => void stopAssistantWorker().then(closeSharedPool);
+  process.once("SIGTERM", shutdown);
+  process.once("SIGINT", shutdown);
+} else {
+  startServer().catch(console.error);
+}

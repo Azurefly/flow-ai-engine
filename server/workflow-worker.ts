@@ -3,6 +3,7 @@ import mysql from "mysql2/promise";
 import { getSharedPool } from "./db";
 import {
   executePreparedWorkflowRun,
+  deliverDurableChildTerminal,
   markWorkflowRunFailed,
   reconcileDueWorkflowWaits,
   reconcileDueWorkflowTaskSchedules,
@@ -334,6 +335,8 @@ async function dispatchWorkflowOutboxOnce() {
         throw new Error("Outbox 通知事件缺少标题或内容。");
       if (!(await notifyOwner({ title, content })))
         throw new Error("通知服务未接受 Outbox 事件。");
+    } else if (event.eventType === "workflow.child.terminal") {
+      await deliverDurableChildTerminal(String(event.payload.waitId), String(event.payload.childRunId));
     } else if (event.eventType !== "workflow.state.changed") {
       throw new Error(`不支持的 Outbox 事件类型：${event.eventType}`);
     }
@@ -443,23 +446,26 @@ export async function reconcileExhaustedWorkflowJobs() {
   return recovered;
 }
 export async function reconcileTerminalWorkflowJobs() {
-  const [result] = await db().query<mysql.ResultSetHeader>(
-    `UPDATE workflow_run_job j
-       JOIN workflow_run r ON r.id=j.runId
-        SET j.status=CASE
-              WHEN r.status='success' THEN 'completed'
-              WHEN r.status='failed' THEN 'failed'
-              ELSE 'cancelled'
-            END,
-            j.resultJson=CASE WHEN r.status='success' THEN r.finalOutputJson ELSE j.resultJson END,
-            j.lastErrorJson=CASE WHEN r.status='failed' THEN r.errorJson ELSE j.lastErrorJson END,
-            j.leaseToken=NULL,
-            j.leaseExpiresAt=NULL,
-            j.finishedAt=COALESCE(j.finishedAt,NOW())
-      WHERE j.status IN ('queued','leased')
-        AND r.status IN ('success','failed','cancelled','terminated')`
+  // Terminal runs cannot be reopened. Read them without locks, then update each
+  // job by primary key so this sweep never holds a job lock while requesting its run.
+  const [terminalJobs] = await db().query<mysql.RowDataPacket[]>(
+    `SELECT j.id,r.status AS runStatus,CAST(r.finalOutputJson AS CHAR) AS finalOutput,CAST(r.errorJson AS CHAR) AS failure
+       FROM workflow_run_job j JOIN workflow_run r ON r.id=j.runId
+      WHERE j.status IN ('queued','leased') AND r.status IN ('success','failed','cancelled','terminated')
+      ORDER BY j.id LIMIT 100`
   );
-  return Number(result.affectedRows ?? 0);
+  let reconciled = 0;
+  for (const job of terminalJobs) {
+    const status = job.runStatus === "success" ? "completed" : job.runStatus === "failed" ? "failed" : "cancelled";
+    const [result] = await db().query<mysql.ResultSetHeader>(
+      `UPDATE workflow_run_job SET status=?,resultJson=IF(?='completed',?,resultJson),
+          lastErrorJson=IF(?='failed',?,lastErrorJson),leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=COALESCE(finishedAt,NOW())
+        WHERE id=? AND status IN ('queued','leased')`,
+      [status, status, job.finalOutput, status, job.failure, job.id]
+    );
+    reconciled += result.affectedRows;
+  }
+  return reconciled;
 }
 
 async function handleJobFailure(job: ClaimedJob, error: unknown) {
@@ -552,7 +558,7 @@ export async function processClaimedWorkflowJob(job: ClaimedJob) {
       onCheckpoint: checkpoint => saveCheckpoint(job, checkpoint),
     });
     injectWorkflowWorkerFault("after_execute_before_complete");
-    await completeJob(job, result);
+    if (result.status !== "waiting" || !result.committedChildWait) await completeJob(job, result);
     state.lastSuccessAt = new Date().toISOString();
     state.processedJobs += 1;
   } catch (error) {

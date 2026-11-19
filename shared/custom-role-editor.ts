@@ -20,4 +20,5 @@ export const CUSTOM_ROLE_PRESETS = [
   },
   { label: "办理与运行", permissions: ["workflow:view", "workflow:run"] },
   { label: "身份管理", permissions: ["iam:manage"] },
+  { label: "目录预览", permissions: ["directory:preview"] },
 ] as const;

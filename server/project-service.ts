@@ -900,22 +900,27 @@ export async function createFolder(
     name: string;
     parentId?: string | null;
     description?: string;
-  }
+  },
+  connection?: mysql.PoolConnection
 ) {
-  await requireProjectPermission(
-    user,
-    input.projectId,
-    "project:workflow:edit"
-  );
+  const store = connection ?? db();
+  if (connection) {
+    const [actors] = await connection.query<mysql.RowDataPacket[]>("SELECT role,status,tokenVersion FROM users WHERE id=? FOR SHARE", [user.id]);
+    const actor = actors[0];
+    if (!actor || actor.status !== "active" || (user.tokenVersion !== undefined && Number(actor.tokenVersion) !== user.tokenVersion))
+      throw new TRPCError({ code: "FORBIDDEN", message: "账号状态已变化。" });
+    const access = await getProjectAccess({ id: user.id, role: actor.role }, input.projectId, { connection, lock: "shared" });
+    if (!access.permissions.has("project:workflow:edit")) throw new TRPCError({ code: "FORBIDDEN", message: "当前账号无权创建目录。" });
+  } else await requireProjectPermission(user, input.projectId, "project:workflow:edit");
   if (input.parentId) {
-    const [parents] = await db().query<mysql.RowDataPacket[]>(
+    const [parents] = await store.query<mysql.RowDataPacket[]>(
       "SELECT id FROM workflow_folder WHERE id=? AND projectId=? LIMIT 1",
       [input.parentId, input.projectId]
     );
     if (!parents[0]) throw new Error("父目录不存在或不属于当前项目。");
   }
   const folderId = id();
-  await db().query(
+  await store.query(
     "INSERT INTO workflow_folder (id,projectId,parentId,name,description,createdByUserId) VALUES (?,?,?,?,?,?)",
     [
       folderId,

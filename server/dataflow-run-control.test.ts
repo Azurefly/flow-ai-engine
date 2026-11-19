@@ -70,11 +70,12 @@ it.each(["queued", "running"])(
     expect(await cancelDataflowRun(user, input, "local-session-token")).toEqual(
       { runId: input.runId, status: "cancelled", outcome: "cancelled" }
     );
-    expect(writes()).toHaveLength(4);
+    expect(writes()).toHaveLength(5);
+    expect(writes().find(([sql]) => sql.startsWith("UPDATE data_connector_page"))).toEqual(["UPDATE data_connector_page SET rowsJson=JSON_ARRAY() WHERE runId=?", [input.runId]]);
     expect(writes()[0][0]).toContain(
       "leaseToken=NULL,leaseExpiresAt=NULL,workerId=NULL"
     );
-    expect(writes()[2][0]).toContain("AND status='running'");
+    expect(writes().find(([sql]) => sql.startsWith("UPDATE dataflow_node_run"))?.[0]).toContain("AND status='running'");
     const metadata = JSON.parse(writes()[1][1][0]);
     expect(metadata).toMatchObject({
       actorUserId: 7,
@@ -253,7 +254,7 @@ it("设计者可取消自己以编辑权限测试的已发布计划，提示能�
   await expect(cancelDataflowRun(user, input, "session")).resolves.toMatchObject({
     status: "cancelled",
   });
-  expect(writes()).toHaveLength(4);
+  expect(writes()).toHaveLength(5);
 });
 it.each([
   ["project:workflow:run", "project:workflow:edit"],

@@ -1,0 +1,957 @@
+{
+  "schemaVersion": 1,
+  "count": 224,
+  "namespaces": {
+    "assistant": {
+      "source": "server/assistant-router.ts",
+      "procedures": [
+        {
+          "name": "assistant.adminAgents",
+          "method": "query"
+        },
+        {
+          "name": "assistant.available",
+          "method": "query"
+        },
+        {
+          "name": "assistant.cancelJob",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.decide",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.enqueue",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.get",
+          "method": "query"
+        },
+        {
+          "name": "assistant.job",
+          "method": "query"
+        },
+        {
+          "name": "assistant.message",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.operations",
+          "method": "query"
+        },
+        {
+          "name": "assistant.publish",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.reviewJob",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.saveDraft",
+          "method": "mutation"
+        },
+        {
+          "name": "assistant.sessions",
+          "method": "query"
+        },
+        {
+          "name": "assistant.sessionsPage",
+          "method": "query"
+        },
+        {
+          "name": "assistant.start",
+          "method": "mutation"
+        }
+      ]
+    },
+    "auth": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "auth.bootstrapStatus",
+          "method": "query"
+        },
+        {
+          "name": "auth.login",
+          "method": "mutation"
+        },
+        {
+          "name": "auth.logout",
+          "method": "mutation"
+        },
+        {
+          "name": "auth.me",
+          "method": "query"
+        }
+      ]
+    },
+    "config": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "config.assignOrganizationMember",
+          "method": "mutation"
+        },
+        {
+          "name": "config.bindOrganizationRole",
+          "method": "mutation"
+        },
+        {
+          "name": "config.checkModelService",
+          "method": "mutation"
+        },
+        {
+          "name": "config.createOrganizationUnit",
+          "method": "mutation"
+        },
+        {
+          "name": "config.createWorkDomain",
+          "method": "mutation"
+        },
+        {
+          "name": "config.deleteOrganizationUnit",
+          "method": "mutation"
+        },
+        {
+          "name": "config.modelService",
+          "method": "query"
+        },
+        {
+          "name": "config.moveOrganizationMember",
+          "method": "mutation"
+        },
+        {
+          "name": "config.organization",
+          "method": "query"
+        },
+        {
+          "name": "config.organizationDirectory",
+          "method": "query"
+        },
+        {
+          "name": "config.organizationMemberConfiguration",
+          "method": "query"
+        },
+        {
+          "name": "config.organizationMembersPage",
+          "method": "query"
+        },
+        {
+          "name": "config.publicGeneral",
+          "method": "query"
+        },
+        {
+          "name": "config.readiness",
+          "method": "query"
+        },
+        {
+          "name": "config.removeOrganizationMember",
+          "method": "mutation"
+        },
+        {
+          "name": "config.runtimeInfo",
+          "method": "query"
+        },
+        {
+          "name": "config.setPrimaryOrganizationMembership",
+          "method": "mutation"
+        },
+        {
+          "name": "config.settings",
+          "method": "query"
+        },
+        {
+          "name": "config.unbindOrganizationRole",
+          "method": "mutation"
+        },
+        {
+          "name": "config.updateOrganizationUnit",
+          "method": "mutation"
+        },
+        {
+          "name": "config.updateSetting",
+          "method": "mutation"
+        },
+        {
+          "name": "config.updateWorkDomain",
+          "method": "mutation"
+        },
+        {
+          "name": "config.workDomains",
+          "method": "query"
+        }
+      ]
+    },
+    "connector": {
+      "source": "server/data-connector-router.ts",
+      "procedures": [
+        {
+          "name": "connector.confirm",
+          "method": "mutation"
+        },
+        {
+          "name": "connector.register",
+          "method": "mutation"
+        },
+        {
+          "name": "connector.versions",
+          "method": "query"
+        },
+        {
+          "name": "connector.writes",
+          "method": "query"
+        }
+      ]
+    },
+    "data": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "data.activateSchedule",
+          "method": "mutation"
+        },
+        {
+          "name": "data.cancelRun",
+          "method": "mutation"
+        },
+        {
+          "name": "data.createAsset",
+          "method": "mutation"
+        },
+        {
+          "name": "data.createPlugin",
+          "method": "mutation"
+        },
+        {
+          "name": "data.createSource",
+          "method": "mutation"
+        },
+        {
+          "name": "data.createTag",
+          "method": "mutation"
+        },
+        {
+          "name": "data.createUdf",
+          "method": "mutation"
+        },
+        {
+          "name": "data.deleteAsset",
+          "method": "mutation"
+        },
+        {
+          "name": "data.deletePlugin",
+          "method": "mutation"
+        },
+        {
+          "name": "data.deleteSchedule",
+          "method": "mutation"
+        },
+        {
+          "name": "data.deleteSource",
+          "method": "mutation"
+        },
+        {
+          "name": "data.deleteTag",
+          "method": "mutation"
+        },
+        {
+          "name": "data.deleteUdf",
+          "method": "mutation"
+        },
+        {
+          "name": "data.flows",
+          "method": "query"
+        },
+        {
+          "name": "data.pauseSchedule",
+          "method": "mutation"
+        },
+        {
+          "name": "data.resourceOptions",
+          "method": "query"
+        },
+        {
+          "name": "data.resources",
+          "method": "query"
+        },
+        {
+          "name": "data.run",
+          "method": "mutation"
+        },
+        {
+          "name": "data.runDetail",
+          "method": "query"
+        },
+        {
+          "name": "data.runLineage",
+          "method": "query"
+        },
+        {
+          "name": "data.runPage",
+          "method": "query"
+        },
+        {
+          "name": "data.runReceipt",
+          "method": "query"
+        },
+        {
+          "name": "data.runs",
+          "method": "query"
+        },
+        {
+          "name": "data.saveScheduleDraft",
+          "method": "mutation"
+        },
+        {
+          "name": "data.schedules",
+          "method": "query"
+        },
+        {
+          "name": "data.sourceTests",
+          "method": "query"
+        },
+        {
+          "name": "data.testSource",
+          "method": "mutation"
+        },
+        {
+          "name": "data.updateAsset",
+          "method": "mutation"
+        },
+        {
+          "name": "data.updatePlugin",
+          "method": "mutation"
+        },
+        {
+          "name": "data.updateSource",
+          "method": "mutation"
+        },
+        {
+          "name": "data.updateUdf",
+          "method": "mutation"
+        }
+      ]
+    },
+    "directoryImport": {
+      "source": "server/directory-import-router.ts",
+      "procedures": [
+        {
+          "name": "directoryImport.access",
+          "method": "query"
+        },
+        {
+          "name": "directoryImport.applyRow",
+          "method": "mutation"
+        },
+        {
+          "name": "directoryImport.get",
+          "method": "query"
+        },
+        {
+          "name": "directoryImport.list",
+          "method": "query"
+        },
+        {
+          "name": "directoryImport.preview",
+          "method": "mutation"
+        },
+        {
+          "name": "directoryImport.revert",
+          "method": "mutation"
+        }
+      ]
+    },
+    "iam": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "iam.assignSystemRole",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.authorizationAudit",
+          "method": "query"
+        },
+        {
+          "name": "iam.authorizationAuditPage",
+          "method": "query"
+        },
+        {
+          "name": "iam.createCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.createUser",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.createUsersBatch",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.customRoleConfiguration",
+          "method": "query"
+        },
+        {
+          "name": "iam.deleteCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.permissionCatalog",
+          "method": "query"
+        },
+        {
+          "name": "iam.previewUserBatch",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.previewUserCreation",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.resourceAccess",
+          "method": "query"
+        },
+        {
+          "name": "iam.revokeRoleAssignment",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.roleAssignableUsers",
+          "method": "query"
+        },
+        {
+          "name": "iam.roleAuthorizationDetails",
+          "method": "query"
+        },
+        {
+          "name": "iam.roleAuthorizationOverview",
+          "method": "query"
+        },
+        {
+          "name": "iam.roleMembersPage",
+          "method": "query"
+        },
+        {
+          "name": "iam.roles",
+          "method": "query"
+        },
+        {
+          "name": "iam.updateCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.updateUserStatus",
+          "method": "mutation"
+        },
+        {
+          "name": "iam.userAuthorizationDetails",
+          "method": "query"
+        },
+        {
+          "name": "iam.userDirectory",
+          "method": "query"
+        },
+        {
+          "name": "iam.users",
+          "method": "query"
+        }
+      ]
+    },
+    "project": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "project.access",
+          "method": "query"
+        },
+        {
+          "name": "project.activeDomains",
+          "method": "query"
+        },
+        {
+          "name": "project.activeUnits",
+          "method": "query"
+        },
+        {
+          "name": "project.activeUsers",
+          "method": "query"
+        },
+        {
+          "name": "project.assignCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "project.auditWorkflow",
+          "method": "mutation"
+        },
+        {
+          "name": "project.changeStatus",
+          "method": "mutation"
+        },
+        {
+          "name": "project.commitImport",
+          "method": "mutation"
+        },
+        {
+          "name": "project.create",
+          "method": "mutation"
+        },
+        {
+          "name": "project.createFolder",
+          "method": "mutation"
+        },
+        {
+          "name": "project.createServiceEndpoint",
+          "method": "mutation"
+        },
+        {
+          "name": "project.createWorkflow",
+          "method": "mutation"
+        },
+        {
+          "name": "project.customRoleAssignments",
+          "method": "query"
+        },
+        {
+          "name": "project.customRoles",
+          "method": "query"
+        },
+        {
+          "name": "project.deleteFolder",
+          "method": "mutation"
+        },
+        {
+          "name": "project.existingCodes",
+          "method": "query"
+        },
+        {
+          "name": "project.exportWorkflows",
+          "method": "query"
+        },
+        {
+          "name": "project.get",
+          "method": "query"
+        },
+        {
+          "name": "project.grantMember",
+          "method": "mutation"
+        },
+        {
+          "name": "project.grantUnit",
+          "method": "mutation"
+        },
+        {
+          "name": "project.importHistory",
+          "method": "query"
+        },
+        {
+          "name": "project.importStatus",
+          "method": "query"
+        },
+        {
+          "name": "project.lifecyclePreview",
+          "method": "query"
+        },
+        {
+          "name": "project.list",
+          "method": "query"
+        },
+        {
+          "name": "project.members",
+          "method": "query"
+        },
+        {
+          "name": "project.moveWorkflow",
+          "method": "mutation"
+        },
+        {
+          "name": "project.page",
+          "method": "query"
+        },
+        {
+          "name": "project.previewImport",
+          "method": "mutation"
+        },
+        {
+          "name": "project.previewWorkflowImport",
+          "method": "mutation"
+        },
+        {
+          "name": "project.resetWorkflowAudit",
+          "method": "mutation"
+        },
+        {
+          "name": "project.revokeCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "project.revokeMember",
+          "method": "mutation"
+        },
+        {
+          "name": "project.revokeUnit",
+          "method": "mutation"
+        },
+        {
+          "name": "project.searchActiveUnits",
+          "method": "query"
+        },
+        {
+          "name": "project.searchActiveUsers",
+          "method": "query"
+        },
+        {
+          "name": "project.serviceEndpoints",
+          "method": "query"
+        },
+        {
+          "name": "project.setServiceEndpointEnvironment",
+          "method": "mutation"
+        },
+        {
+          "name": "project.setServiceEndpointStatus",
+          "method": "mutation"
+        },
+        {
+          "name": "project.units",
+          "method": "query"
+        },
+        {
+          "name": "project.updateFolder",
+          "method": "mutation"
+        },
+        {
+          "name": "project.updateWorkflowInfo",
+          "method": "mutation"
+        },
+        {
+          "name": "project.warehouse",
+          "method": "query"
+        },
+        {
+          "name": "project.workflowAudit",
+          "method": "query"
+        },
+        {
+          "name": "project.workflowStatistics",
+          "method": "query"
+        },
+        {
+          "name": "project.workflows",
+          "method": "query"
+        }
+      ]
+    },
+    "system": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "system.health",
+          "method": "query"
+        },
+        {
+          "name": "system.notifyOwner",
+          "method": "mutation"
+        }
+      ]
+    },
+    "task": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "task.addSigner",
+          "method": "mutation"
+        },
+        {
+          "name": "task.assignees",
+          "method": "query"
+        },
+        {
+          "name": "task.batchClaim",
+          "method": "mutation"
+        },
+        {
+          "name": "task.batchComplete",
+          "method": "mutation"
+        },
+        {
+          "name": "task.calendar",
+          "method": "query"
+        },
+        {
+          "name": "task.claim",
+          "method": "mutation"
+        },
+        {
+          "name": "task.complete",
+          "method": "mutation"
+        },
+        {
+          "name": "task.dashboard",
+          "method": "query"
+        },
+        {
+          "name": "task.delegate",
+          "method": "mutation"
+        },
+        {
+          "name": "task.execute",
+          "method": "mutation"
+        },
+        {
+          "name": "task.get",
+          "method": "query"
+        },
+        {
+          "name": "task.handover",
+          "method": "mutation"
+        },
+        {
+          "name": "task.instancePage",
+          "method": "query"
+        },
+        {
+          "name": "task.instances",
+          "method": "query"
+        },
+        {
+          "name": "task.list",
+          "method": "query"
+        },
+        {
+          "name": "task.page",
+          "method": "query"
+        },
+        {
+          "name": "task.reassign",
+          "method": "mutation"
+        },
+        {
+          "name": "task.removeSigner",
+          "method": "mutation"
+        },
+        {
+          "name": "task.returnToPending",
+          "method": "mutation"
+        },
+        {
+          "name": "task.signalMessage",
+          "method": "mutation"
+        }
+      ]
+    },
+    "workflow": {
+      "source": "server/routers.ts",
+      "procedures": [
+        {
+          "name": "workflow.access",
+          "method": "query"
+        },
+        {
+          "name": "workflow.alerts",
+          "method": "query"
+        },
+        {
+          "name": "workflow.archived",
+          "method": "query"
+        },
+        {
+          "name": "workflow.assignCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.callableTargets",
+          "method": "query"
+        },
+        {
+          "name": "workflow.cancelRun",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.compile",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.create",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.createSubflow",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.createTemplate",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.customRoleAssignments",
+          "method": "query"
+        },
+        {
+          "name": "workflow.customRoles",
+          "method": "query"
+        },
+        {
+          "name": "workflow.decideChildFailure",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.delete",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.deleteSubflow",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.deleteTemplate",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.duplicate",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.get",
+          "method": "query"
+        },
+        {
+          "name": "workflow.grantMember",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.list",
+          "method": "query"
+        },
+        {
+          "name": "workflow.markAlertRead",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.memberCandidates",
+          "method": "query"
+        },
+        {
+          "name": "workflow.members",
+          "method": "query"
+        },
+        {
+          "name": "workflow.operationAccess",
+          "method": "query"
+        },
+        {
+          "name": "workflow.page",
+          "method": "query"
+        },
+        {
+          "name": "workflow.participantDirectory",
+          "method": "query"
+        },
+        {
+          "name": "workflow.pauseRun",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.previewParticipants",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.publish",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.restore",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.resumeRun",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.revokeCustomRole",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.revokeMember",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.rollbackVersion",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.run",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.runDetail",
+          "method": "query"
+        },
+        {
+          "name": "workflow.runHistoryPage",
+          "method": "query"
+        },
+        {
+          "name": "workflow.runMetrics",
+          "method": "query"
+        },
+        {
+          "name": "workflow.runReadiness",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.runs",
+          "method": "query"
+        },
+        {
+          "name": "workflow.runtimeModels",
+          "method": "query"
+        },
+        {
+          "name": "workflow.search",
+          "method": "query"
+        },
+        {
+          "name": "workflow.subflows",
+          "method": "query"
+        },
+        {
+          "name": "workflow.templates",
+          "method": "query"
+        },
+        {
+          "name": "workflow.terminateRun",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.unpublish",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.update",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.updateSubflow",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.updateTemplate",
+          "method": "mutation"
+        },
+        {
+          "name": "workflow.versionDiff",
+          "method": "query"
+        },
+        {
+          "name": "workflow.versions",
+          "method": "query"
+        }
+      ]
+    }
+  }
+}

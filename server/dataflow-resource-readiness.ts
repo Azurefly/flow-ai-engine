@@ -1,4 +1,5 @@
 import type mysql from "mysql2/promise";
+import { loadConnectorVersion } from "./versioned-data-connectors";
 import { TRPCError } from "@trpc/server";
 import {
   dataAssetReadiness,
@@ -96,6 +97,26 @@ export async function dataflowResourceDiagnostics(
       add(node, "assetId", "数据资源不存在、已移出当前业务或尚未选择。");
       continue;
     }
+    const pinned = String(node.config.connectorVersionId ?? "").trim();
+    if (pinned) {
+      try {
+        await loadConnectorVersion(
+          reader,
+          projectId,
+          pinned,
+          String(asset.id),
+          ["api_read", "file_read"],
+          lock
+        );
+      } catch (error) {
+        add(
+          node,
+          "connectorVersionId",
+          error instanceof Error ? error.message : "固定资源版本不可用。"
+        );
+      }
+      continue;
+    }
     const readiness = dataAssetReadiness(
       { name: asset.name, sourceId: asset.sourceId, status: asset.status },
       asset.matchedSourceId
@@ -113,6 +134,26 @@ export async function dataflowResourceDiagnostics(
       node.config.columns.some(column => !isMysqlIdentifier(String(column)))
     )
       add(node, "columns", "MySQL读取列名必须是安全标识符，请重新选择字段。");
+  }
+  for (const node of definition.nodes.filter(
+    item => item.type === "sink" && item.config.writeMode === "receipt"
+  )) {
+    try {
+      await loadConnectorVersion(
+        reader,
+        projectId,
+        String(node.config.connectorVersionId ?? ""),
+        undefined,
+        ["receipt_write"],
+        lock
+      );
+    } catch (error) {
+      add(
+        node,
+        "connectorVersionId",
+        error instanceof Error ? error.message : "写回版本不可用。"
+      );
+    }
   }
   for (const node of sql) {
     const source = sourceRows.find(

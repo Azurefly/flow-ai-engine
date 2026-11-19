@@ -33,6 +33,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StructuredResourceForm } from "@/components/StructuredResourceForm";
+
 import { CreationDialog } from "@/components/CreationDialog";
 import { ResourceDetails } from "@/components/ResourceDetails";
 import { ResourceEditContext } from "@/contexts/ResourceEditContext";
@@ -85,6 +86,8 @@ import {
 import { toast } from "sonner";
 
 const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
+const ConnectorResourceVersions = lazy(() => import("./ConnectorResourceVersions"));
+const ConnectorWriteReceipts = lazy(() => import("./ConnectorWriteReceipts"));
 
 const metaClassName = ("aiflow-type-meta " + mutedToneClass);
 const mutedCellClassName = ("px-4 py-3 text-xs " + mutedToneClass);
@@ -730,6 +733,7 @@ export default function DataResourceCenter({
                 ))}
               </ResourceTable>
             )}
+          {tab === "assets" && resources.isSuccess && <Suspense fallback={null}><ConnectorResourceVersions key={projectId} projectId={projectId} assets={resources.data.assets as any[]} sources={resources.data.sources as any[]} canEdit={canEdit}/></Suspense>}
           {!selectedQueryLoading && !selectedQueryError && tab === "assets" && (
             <ResourceTable
               columns={[
@@ -1464,6 +1468,7 @@ function DataflowRunOutput({ run }: { run: any }) {
   return (
     <div dataflow-output-summary="" className="mt-3 space-y-3">
       <DataflowCancellationInfo cancellation={run.cancellation} />
+      {run.nodeRuns?.some((n: any) => n.output?.writePreview) && <Suspense fallback={null}><ConnectorWriteReceipts projectId={run.projectId} runId={run.id}/></Suspense>}
       {run.error && run.status !== "cancelled" && (
         <div
           role="alert"

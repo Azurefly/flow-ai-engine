@@ -222,8 +222,9 @@ describe("database migration integrity", () => {
       "0046_assistant_completed_tasks",
       "0047_assistant_workspace_actions",
       "0048_audit_operations",
+      "0049_governed_capabilities",
     ]);
-    expect(journal.entries.at(-1)?.idx).toBe(48);
+    expect(journal.entries.at(-1)?.idx).toBe(49);
   });
   it("等待分支迁移原子替换唯一约束并保留所有旧记录", () => {
     const migration = readFileSync(

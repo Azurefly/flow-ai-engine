@@ -35,6 +35,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
 COPY --from=build /app/scripts/remote-deployment-acceptance.mjs ./scripts/remote-deployment-acceptance.mjs
+COPY --from=build /app/scripts/acceptance-target.cjs /app/scripts/router-acceptance-safety.mjs /app/scripts/data-connector-acceptance.mjs /app/scripts/durable-subflow-acceptance.mjs /app/scripts/directory-import-acceptance.mjs /app/scripts/assistant-job-acceptance.mjs ./scripts/
 
 USER node
 EXPOSE 3000

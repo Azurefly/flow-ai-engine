@@ -4,6 +4,7 @@ import { ArrowUp, Plus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { parseConsoleRoute } from "@shared/console-route";
 import { newOperationUuid, newResourceRequestKey } from "@shared/resource-creation";
+import { assistantJobActive, assistantJobErrors, assistantJobLabels } from "@shared/assistant-job";
 import type { AssistantMessage } from "../../../server/assistant-store";
 import type {
   AssistantContext,
@@ -121,8 +122,16 @@ export default function AssistantChat({
     }
   );
   const start = trpc.assistant.start.useMutation();
-  const send = trpc.assistant.message.useMutation();
-  const decide = trpc.assistant.decide.useMutation();
+  const enqueue = trpc.assistant.enqueue.useMutation();
+  const cancelJob = trpc.assistant.cancelJob.useMutation();
+  const requestId = attempt?.sessionId === sessionId ? attempt.key : undefined;
+  const job = trpc.assistant.job.useQuery({ sessionId, requestId }, {
+    enabled: Boolean(sessionId && current.data && !current.isError), retry: false,
+    refetchInterval: query => assistantJobActive(query.state.data?.status) ? 1500 :
+      query.state.data?.status === "needs_review" ? 10_000 :
+      (!query.state.data && requestId && attempt && Date.now() < attempt.until ? 3500 : false),
+  });
+  const background = job.data;
   const recovering = Boolean(
     attempt && sessionId === attempt.sessionId && !locked.current
   );
@@ -168,8 +177,7 @@ export default function AssistantChat({
   const waiting =
     Boolean(recovering && session && attempt && session.revision > attempt.revision) ||
     start.isPending ||
-    send.isPending ||
-    decide.isPending ||
+    enqueue.isPending || assistantJobActive(background?.status) || background?.status === "needs_review" ||
     Boolean(sessionId && current.isLoading);
   const pending = session?.pending;
 
@@ -183,6 +191,22 @@ export default function AssistantChat({
       /* Reload recovery also works through the server history. */
     }
   }
+  const lastOutcome = useRef("");
+  useEffect(() => {
+    if (!background || background.sessionId !== sessionId || assistantJobActive(background.status)) return;
+    const identity = [background.id, background.status, background.reviewedAt].join("/");
+    if (lastOutcome.current === identity) return;
+    lastOutcome.current = identity;
+    void utils.assistant.get.invalidate({ sessionId });
+    void utils.assistant.sessionsPage.invalidate();
+    if (background.status === "completed" && background.actionKey && !preview) {
+      void Promise.allSettled([utils.project.invalidate(), utils.workflow.page.invalidate(), utils.config.publicGeneral.invalidate(), utils.config.settings.invalidate()]);
+    }
+    if (attempt?.key === background.requestId && ["cancelled", "failed"].includes(background.status)) {
+      remember(null);
+      setError(assistantJobErrors[background.failureCode ?? ""] ?? "");
+    }
+  }, [background, sessionId, attempt, utils, preview]);
   useEffect(() => {
     const result = receipt.data;
     if (
@@ -294,30 +318,11 @@ export default function AssistantChat({
         requestId: request.key, pageSize,
       };
       if (approve === undefined) setSending(message);
-      const next =
-        approve === undefined
-          ? await send.mutateAsync({
-              ...payload,
-              text: message,
-              proposalId: target.pending?.id,
-              timeZone: request.timeZone,
-            })
-          : await decide.mutateAsync({
-              ...payload,
-              approve,
-              proposalId: pending!.id,
-            });
-      utils.assistant.get.setData({ sessionId: next.id, pageSize }, next);
-      remember(null);
-      setText("");
-      if (!preview && target.pending && next.status === "completed") {
-        void Promise.allSettled([
-          utils.workflow.page.invalidate(),
-          utils.project.invalidate(),
-          utils.config.publicGeneral.invalidate(),
-          utils.config.settings.invalidate(),
-        ]);
-      }
+      const next = await enqueue.mutateAsync({ ...payload, payload: approve === undefined
+        ? { kind: "message", text: message, proposalId: target.pending?.id, timeZone: request.timeZone }
+        : { kind: "decide", approve, proposalId: pending!.id } });
+      utils.assistant.job.setData({ sessionId: target.id, requestId: request.key }, next);
+      utils.assistant.job.setData({ sessionId: target.id }, next);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "请求失败，请重试。");
       if (target)
@@ -347,7 +352,7 @@ export default function AssistantChat({
         <select
           aria-label="对话记录"
           value={sessionId}
-          disabled={waiting}
+          disabled={start.isPending || enqueue.isPending}
           onChange={e => selectSession(e.target.value)}
         >
           <option value="">新对话</option>
@@ -368,7 +373,7 @@ export default function AssistantChat({
           type="button"
           className="assistant-link"
           aria-label="新建对话"
-          disabled={waiting}
+          disabled={start.isPending || enqueue.isPending}
           onClick={() => selectSession("")}
         >
           <Plus size={16} /> 新对话
@@ -497,7 +502,17 @@ export default function AssistantChat({
             </div>
           </section>
         )}
-        {waiting && (
+        {background && (assistantJobActive(background.status) || background.status === "needs_review" || background.reviewedAt ||
+          (background.status === "failed" && background.baseRevision === session?.revision)) && (
+          <section className="assistant-note" aria-label="后台回合">
+            <p role="status">{assistantJobLabels[background.status]} {assistantJobErrors[background.failureCode ?? ""]}</p>
+            <small>请求号 {background.requestId}{background.evidence ? " · 核对记录 " + background.evidence : ""}</small>
+            {background.status === "queued" && <button type="button" className="assistant-link" disabled={cancelJob.isPending}
+              onClick={() => void cancelJob.mutateAsync({ sessionId, requestId: background.requestId })
+                .catch(cause => setError(cause.message)).finally(() => void utils.assistant.job.invalidate({ sessionId }))}>取消排队</button>}
+          </section>
+        )}
+        {waiting && !background && (
           <p role="status" className="assistant-note">
             正在处理…
           </p>
@@ -516,12 +531,13 @@ export default function AssistantChat({
             重试上一条消息
           </button>
         )}
-        {(error || current.isError || history.isError || (recovering && receipt.isError)) && (
+        {(error || current.isError || history.isError || job.isError || (recovering && receipt.isError)) && (
           <p className="assistant-error" role="alert">
-            {error || current.error?.message || history.error?.message || receipt.error?.message}
-            {(current.isError || history.isError || receipt.isError) && <button type="button" className="assistant-link" onClick={() => {
+            {error || current.error?.message || history.error?.message || job.error?.message || receipt.error?.message}
+            {(current.isError || history.isError || job.isError || receipt.isError) && <button type="button" className="assistant-link" onClick={() => {
               if (current.isError && sessionId) void current.refetch();
               if (history.isError) void history.refetch();
+              if (job.isError) void job.refetch();
               if (recovering && receipt.isError) void receipt.refetch();
             }}>重新读取</button>}
           </p>

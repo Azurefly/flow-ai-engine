@@ -4,7 +4,7 @@ import { z } from "zod";
 import { formatConsoleRoute } from "../shared/console-route";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import type { Tool } from "./_core/llm";
-import type { TrpcContext } from "./_core/context";
+import type { AssistantWorkContext } from "./assistant-workspace";
 import { commitWorkspace, prepareWorkspace, scopedWorkspaceSchema, workspaceMutations, workspaceQueries, workspaceSchema, type WorkspaceInput, type WorkspaceScope } from "./assistant-workspace";
 import { getSharedPool } from "./db";
 import {
@@ -422,7 +422,7 @@ export async function prepareAssistantTool(
   name: string,
   args: unknown,
   context: Context,
-  request?: TrpcContext
+  request?: AssistantWorkContext
 ): Promise<PreparedTool> {
   if (name === "workspaceRead" || name === "workspaceWrite") {
     if (!request || request.user?.id !== actor.id) forbidden("当前账号无法执行该操作。");
@@ -534,7 +534,7 @@ export async function commitAssistantTool(
   actor: ProjectUser,
   proposal: AssistantToolProposal,
   requestKey: string,
-  request?: TrpcContext
+  request?: AssistantWorkContext
 ): Promise<{ message: string; workflowId?: string; projectId?: string }> {
   if (proposal.tool === "workspaceWrite") {
     if (!request || request.user?.id !== actor.id) forbidden("当前账号无法执行业务操作。");

@@ -29,7 +29,7 @@ function db() {
 
 const tokenHash = (token: string) =>
   createHash("sha256").update(token).digest("hex");
-async function hashPassword(password: string) {
+export async function hashPassword(password: string) {
   const salt = randomBytes(16).toString("hex");
   const digest = (await scrypt(password, salt, 64)) as Buffer;
   return `${salt}:${digest.toString("hex")}`;
@@ -212,6 +212,11 @@ export type UserCreationAudit = {
   details?: Record<string, unknown>;
 };
 
+export function validateInternalPassword(password: string) {
+  if (password.length < 12) throw new Error("密码至少需要 12 位。");
+  if (!/[a-zA-Z]/.test(password) || !/[0-9\W_]/.test(password)) throw new Error("密码需包含字母以及数字或特殊符号。");
+}
+
 export async function createUser(
   values: {
     username: string;
@@ -222,10 +227,7 @@ export async function createUser(
   },
   audit?: UserCreationAudit
 ) {
-  if (values.password.length < 12) throw new Error("密码至少需要 12 位。");
-  if (!/[a-zA-Z]/.test(values.password) || !/[0-9\W_]/.test(values.password)) {
-    throw new Error("密码需包含字母以及数字或特殊符号。");
-  }
+  validateInternalPassword(values.password);
   const username = values.username.trim().toLowerCase();
   if (!/^[a-z][a-z0-9._-]{2,63}$/.test(username))
     throw new Error("用户名格式无效。");

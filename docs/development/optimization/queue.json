@@ -1025,7 +1025,7 @@
     {
       "id": "G01",
       "title": "实现版本化数据输入和受控外部输出",
-      "priority": "产品候选",
+      "priority": "本次发布",
       "ownerRole": "数据连接器、执行器",
       "dependsOn": [],
       "status": "design_ready",
@@ -1102,7 +1102,7 @@
     {
       "id": "G02",
       "title": "用持久父子关系支持异步子流程",
-      "priority": "产品候选",
+      "priority": "本次发布",
       "ownerRole": "流程引擎、设计器",
       "dependsOn": [],
       "status": "design_ready",
@@ -1177,23 +1177,28 @@
     },
     {
       "id": "G03",
-      "title": "对 BDP 主数据先预览差异再应用",
-      "priority": "产品候选",
-      "ownerRole": "业务集成、BDP 所有者",
+      "title": "内部账号、部门和成员关系批量导入",
+      "priority": "本次发布",
+      "ownerRole": "内部身份与组织管理",
       "dependsOn": [],
       "status": "design_ready",
-      "type": "候选能力",
-      "externalDependencies": [
-        "上游稳定标识、字段所有权、删除合同和测试租户"
-      ],
+      "type": "用户确认的能力",
+      "externalDependencies": [],
       "sourceLocations": [
         {
-          "path": "client/src/components/ProjectWorkspace.tsx",
-          "line": 747
+          "path": "shared/directory-import.ts"
         },
         {
-          "path": "server/project-service.ts",
-          "line": 300
+          "path": "server/directory-import.ts"
+        },
+        {
+          "path": "server/directory-import-router.ts"
+        },
+        {
+          "path": "client/src/components/DirectoryImportDialog.tsx"
+        },
+        {
+          "path": "scripts/directory-import-acceptance.mjs"
         }
       ],
       "historicalEvidence": [
@@ -1201,42 +1206,42 @@
         "E05"
       ],
       "instructions": {
-        "基线与定位": "候选能力，业务集成与 BDP 所有者。E03、E05。`client/src/components/ProjectWorkspace.tsx:747` 对应禁用入口；`server/project-service.ts:300` 为本地创建逻辑。上游稳定标识和删除规则尚待确认。",
-        "实施": "先记录外部稳定 ID、字段所有权、版本、分页、凭据、失联及删除语义。导入生成差异快照，分类新增、更新、冲突和来源消失。保留外部→本地映射、双端修订、运行批次与逐行回执。应用者按授权和已读版本提交，来源消失交由人工确认归档。给回退保留可用前镜像及版本条件。",
-        "兼容与回退": "没有可用合同或租户时维持明确的能力说明，手工业务继续可用。已存在的本地业务只有经过明确匹配才建立受管映射。回退检查此后是否有人工修改。",
-        "完成": "A59–A62。接口所有者签字确认字段与冲突规则，用专用租户完成真实小批导入、重放、回读。"
+        "基线与定位": "用户确认由系统内部管理账号与组织。本轮以用户名、部门编码及两者组合识别账号、部门与成员。入口位于业务中心导入菜单及人员与权限的组织架构页。",
+        "实施": "管理员与仅有目录预览权的观察者可上传版本 1 的 UTF-8 JSON 文件。预览保存逐行原镜像；应用按同一批次和行锁复核身份、依赖与版本，在同一事务写入对象、回执和授权审计。初始口令在应用新增账号时单独录入。",
+        "兼容与回退": "缺项保留。新增成员关系默认非主部门；移动既有部门继续使用原组织树流程。回退复核写后镜像，新增且仍未使用的账号及部门可停用，已被另改或使用的对象须由管理员核对。",
+        "完成": "A59–A62。在隔离 MySQL 验证观察者与应用者、并发、冲突、权限和口令；在远程部署通过系统 API 验证创建、改名、按批重放、逐行回读及回退。"
       },
       "acceptance": [
         {
           "id": "A59",
           "task": "G03",
-          "layer": "合同 / 差异",
-          "action": "取对接方已确认的数据字典，准备同名不同 ID、改名、重复页和来源消失样本",
-          "expected": "预览把持续身份、名称变化与冲突分开；预览期间本地业务写入 0，来源消失不会隐式删除",
+          "layer": "文件 / 差异",
+          "action": "以内部目录版本 1 文件提供两个同名不同标识的对象、重复标识和循环部门，另省略已有对象",
+          "expected": "按稳定标识匹配；预览业务写入 0，重复与循环标为冲突，省略对象保留",
           "status": "planned"
         },
         {
           "id": "A60",
           "task": "G03",
           "layer": "批次 / 权限",
-          "action": "使用观察者预览、应用者确认，双发同一批次，并在中间中断后继续",
-          "expected": "权限按合同，重复应用同一外部 ID 不重复建本地对象，逐行回执可续传",
+          "action": "观察者预览、管理员确认，双发同一行并重开批次",
+          "expected": "预览权不授予应用权限；每行只产生一个对象和一次写入审计，已提交回执可续读",
           "status": "planned"
         },
         {
           "id": "A61",
           "task": "G03",
           "layer": "版本 / 回退",
-          "action": "预览后手工编辑一个映射字段，再应用；部分成功后对已被人另改的行请求回退",
-          "expected": "已修改行进入冲突，未覆盖人工内容；回退只影响仍匹配本批写入镜像的字段",
+          "action": "预览后另行修改资料，再提交旧预览并回退已被另改的行",
+          "expected": "冲突保留人工修改；回退仅恢复仍匹配写后镜像的字段，已使用或有关联的新增对象保留处置回执",
           "status": "planned"
         },
         {
           "id": "A62",
           "task": "G03",
-          "layer": "真实 BDP",
-          "action": "使用对接方测试租户做一小批新增、改名、来源消失再回读",
-          "expected": "有签收的外部稳定 ID/版本、应用者和回执，可对应到一个本地 ID；归档走显式决定",
+          "layer": "远程内部目录 / HTTP",
+          "action": "在已部署实例用专有账号、部门及成员关系执行新增、改名、重复请求、回读和回退",
+          "expected": "真实目录按相同本地 ID 回读，变更与逐行审计可对应；测试账号与部门停用，成员关系回退",
           "status": "planned"
         }
       ],
@@ -1247,7 +1252,7 @@
     {
       "id": "G04",
       "title": "助手长回合支持后台恢复和未知结果核对",
-      "priority": "产品候选",
+      "priority": "本次发布",
       "ownerRole": "助手、后台作业",
       "dependsOn": [],
       "status": "design_ready",

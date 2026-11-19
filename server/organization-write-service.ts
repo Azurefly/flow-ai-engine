@@ -32,7 +32,7 @@ const optional = (value: string | null | undefined) =>
 /** One lock order for all organization writes, including creation/deletion.
  * Resolve authorization only after waiting, and keep the audit in this transaction.
  */
-async function changeOrganization<T>(
+export async function changeOrganization<T>(
   actor: Actor,
   accountIds: Array<number | null | undefined>,
   write: (context: Context) => Promise<T>

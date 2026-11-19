@@ -94,9 +94,22 @@ function parseJson<T>(value: unknown): T {
   return (typeof value === "string" ? JSON.parse(value) : value) as T;
 }
 
-async function transaction<T>(fn: (connection: PoolConnection) => Promise<T>) {
-  const connection = await getSharedPool().getConnection();
+let waitingForConnection = 0;
+let activeTransactions = 0;
+let peakTransactions = 0;
+export function assistantDatabaseUsage() {
+  return { waiting: waitingForConnection, active: activeTransactions, peak: peakTransactions };
+}
+
+async function transaction<T>(fn: (connection: PoolConnection) => Promise<T>, readCommitted = false) {
+  waitingForConnection++;
+  let connection: PoolConnection;
+  try { connection = await getSharedPool().getConnection(); }
+  finally { waitingForConnection--; }
+  activeTransactions++;
+  peakTransactions = Math.max(peakTransactions, activeTransactions);
   try {
+    if (readCommitted) await connection.query("SET TRANSACTION ISOLATION LEVEL READ COMMITTED");
     await connection.beginTransaction();
     const result = await fn(connection);
     await connection.commit();
@@ -105,6 +118,7 @@ async function transaction<T>(fn: (connection: PoolConnection) => Promise<T>) {
     await connection.rollback();
     throw error;
   } finally {
+    activeTransactions--;
     connection.release();
   }
 }
@@ -574,6 +588,26 @@ function operationHash(revision: number, payload: unknown) {
   return createHash("sha256").update(input).digest("hex");
 }
 
+export { transaction as assistantTransaction, readSession as readAssistantSessionInTransaction,
+  operationHash as assistantOperationHash, verifyAdmin as verifyAssistantAdmin };
+
+export async function appendAssistantChange(connection: PoolConnection, session: AssistantSession,
+  requestId: string, hash: string, change: AssistantChange): Promise<AssistantSession> {
+  const revision = session.revision + 1;
+  const now = new Date().toISOString();
+  const messages = (change.messages ?? []).map(message => ({ ...message, createdAt: message.createdAt ?? now }));
+  const task = change.task === undefined ? session.task : change.task;
+  const title = change.title?.trim().slice(0, 160) || session.title;
+  const taskJson = task ? JSON.stringify(task) : null;
+  await connection.query(
+    "INSERT INTO assistant_turn (id,sessionId,requestId,payloadHash,revision,messagesJson,taskJson) VALUES (?,?,?,?,?,?,?)",
+    [randomUUID(), session.id, requestId, hash, revision, JSON.stringify(messages), taskJson]
+  );
+  await connection.query("UPDATE assistant_session SET title=?,revision=?,taskJson=?,updatedAt=CURRENT_TIMESTAMP WHERE id=?",
+    [title, revision, taskJson, session.id]);
+  return { ...session, revision, title, task, messages: [...session.messages, ...messages], updatedAt: now };
+}
+
 // Leave pool capacity for the authorized domain services invoked by an active turn.
 let activeTurns = 0;
 const maxConcurrentTurns = 6;
@@ -608,40 +642,9 @@ export async function mutateAssistantSession(
       }
       if (session.revision !== expectedRevision) throw conflict();
       const change = await apply(session);
-      const revision = expectedRevision + 1;
-      const now = new Date().toISOString();
-      const messages = (change.messages ?? []).map(message => ({
-        ...message,
-        createdAt: message.createdAt ?? now,
-      }));
-      const task = change.task === undefined ? session.task : change.task;
-      const title = change.title?.trim().slice(0, 160) || session.title;
-      const taskJson = task ? JSON.stringify(task) : null;
-      await connection.query(
-        "INSERT INTO assistant_turn (id,sessionId,requestId,payloadHash,revision,messagesJson,taskJson) VALUES (?,?,?,?,?,?,?)",
-        [
-          randomUUID(),
-          id,
-          requestId,
-          hash,
-          revision,
-          JSON.stringify(messages),
-          taskJson,
-        ]
-      );
-      await connection.query(
-        "UPDATE assistant_session SET title=?,revision=?,taskJson=?,updatedAt=CURRENT_TIMESTAMP WHERE id=? AND ownerUserId=?",
-        [title, revision, taskJson, id, user.id]
-      );
+      const changed = await appendAssistantChange(connection, session, requestId, hash, change);
       if (pageSize) return readSession(user, id, connection, false, { size: pageSize });
-      return {
-        ...session,
-        revision,
-        title,
-        task,
-        messages: [...session.messages, ...messages],
-        updatedAt: now,
-      };
+      return changed;
     });
   } finally {
     activeTurns--;

@@ -1,3 +1,5 @@
+import { assertDurableAdmission, bindDurableCalls } from "./durable-subflow-binding";
+import { isDurableSubflow } from "../shared/durable-subflow";
 import { workflowInfoToken } from "./workflow-info-token";
 import { workflowParticipantReadiness } from "./workflow-participant-readiness";
 import { workflowCopyName } from "../shared/workflow-creation-form";
@@ -209,9 +211,12 @@ async function resolveSubflowReferences(
   ownerUserId: number,
   executable: boolean,
   flowType: "state" | "control" | "data",
+  parentWorkflowId: string,
+  actorId: number,
   connection?: mysql.PoolConnection
 ) {
-  const subflowNodes = definition.nodes.filter(node => node.type === "subflow");
+  definition = await bindDurableCalls(definition, parentWorkflowId, actorId, connection);
+  const subflowNodes = definition.nodes.filter(node => node.type === "subflow" && !isDurableSubflow(node));
   if (!subflowNodes.length) return definition;
   const [rows] = await (connection ?? db()).query<mysql.RowDataPacket[]>(
     "SELECT id,name,definitionJson,isEnabled,updatedAt FROM workflow_subflow WHERE ownerUserId=?" + (connection ? " FOR SHARE" : ""),
@@ -225,7 +230,7 @@ async function resolveSubflowReferences(
     byName.set(name, byName.has(name) ? null : row);
   }
   const nodes = definition.nodes.map(node => {
-    if (node.type !== "subflow") return node;
+    if (node.type !== "subflow" || isDurableSubflow(node)) return node;
     const legacy =
       node.config.zlcxz &&
       typeof node.config.zlcxz === "object" &&
@@ -296,11 +301,12 @@ async function resolveSubflowReferences(
 }
 
 export async function listWorkflows(user: WorkflowUser, options?: {
-  limit: number; offset: number; search?: string; projectId?: string; summaryOnly?: boolean;
+  limit: number; offset: number; search?: string; projectId?: string; summaryOnly?: boolean; callableOnly?: boolean;
 }) {
   const canViewAll =
     user.role === "admin" || (await hasSystemPermission(user, "workflow:view"));
-  const projection = options?.summaryOnly ? "w.id,w.name,w.flowType,w.status,w.updatedAt" : "w.*";
+  const summary = "w.id,w.name,w.flowType,w.status,w.updatedAt";
+  const projection = options?.callableOnly ? summary + ",w.definitionVersion" : options?.summaryOnly ? summary : "w.*";
   let query = canViewAll
       ? `SELECT DISTINCT ${projection} FROM workflow w WHERE w.archivedAt IS NULL`
       : `SELECT DISTINCT ${projection} FROM workflow w
@@ -321,6 +327,7 @@ export async function listWorkflows(user: WorkflowUser, options?: {
          )`;
   const params: unknown[] = canViewAll ? [] : [user.id, user.id, user.id, user.id, user.id, user.id];
   query += " AND (w.projectId IS NULL OR EXISTS (SELECT 1 FROM flow_project parent WHERE parent.id=w.projectId AND parent.status='active'))";
+  if (options?.callableOnly) query += " AND w.flowType IN ('state','control') AND w.status='published' AND w.publishedExecutionPlanHash IS NOT NULL AND (w.projectId IS NULL OR w.auditStatus='approved') AND NOT JSON_CONTAINS(w.publishedExecutionPlanJson,JSON_OBJECT('type','subflow'),'$.definition.nodes') AND EXISTS (SELECT 1 FROM workflow_version v WHERE v.workflowId=w.id AND v.version=w.definitionVersion AND v.executionPlanHash=w.publishedExecutionPlanHash)";
   if (options?.projectId) {
     query += " AND w.projectId=?";
     params.push(options.projectId);
@@ -343,6 +350,19 @@ export async function searchWorkflowDirectory(user: WorkflowUser, search: string
     const item = row as unknown as { id: string; name: string; flowType: "state" | "control" | "data"; status: string };
     return { id: item.id, name: item.name, flowType: item.flowType, status: item.status };
   });
+}
+
+export async function listDurableTargets(user: WorkflowUser, input: { search?: string; cursor?: number; parentId?: string }) {
+  const offset = input.cursor ?? 0;
+  const candidates = await listWorkflows(user, { search: input.search, limit: 21, offset, summaryOnly: true, callableOnly: true });
+  const items = [];
+  for (const candidate of candidates.slice(0,20)) {
+    if (candidate.id === input.parentId) continue;
+    const access = await getWorkflowAccess(user, candidate.id);
+    if (access.permissions.has("workflow:run") && access.permissions.has("workflow:view"))
+      items.push({ id: candidate.id, name: candidate.name, version: Number(candidate.definitionVersion) });
+  }
+  return { items, nextCursor: candidates.length > 20 ? offset + 20 : null };
 }
 
 export async function listWorkflowPage(user: WorkflowUser, input: {
@@ -513,7 +533,7 @@ export async function createWorkflow(
       );
     }
     let definition: Definition;
-    try { definition = await resolveSubflowReferences(draftDefinition,actor.id,false,flowType,connection); }
+    try { definition = await resolveSubflowReferences(draftDefinition,actor.id,false,flowType,workflowId,actor.id,connection); }
     catch(error) {
       if(error instanceof Error && error.message === "流程只能引用流程所有者创建的私有子流程。")
         throw new TRPCError({code:"BAD_REQUEST",message:"源流程引用了其他创建人的私有子流程，副本尚未创建。请先调整引用或联系创建人。",cause:error});
@@ -647,7 +667,7 @@ export async function updateWorkflow(
           draftDefinition,
           current.ownerUserId,
           executable,
-          current.flowType
+          current.flowType, workflowId, user.id
         );
   if (values.publish && current.projectId)
     assertProjectServiceTaskReferences(definition);
@@ -770,6 +790,8 @@ export async function updateWorkflow(
             ? "项目流程定义已变更，必须先保存草稿并重新审核后才能发布。"
             : "当前审批规则要求项目流程通过审核后才能发布。审核状态可能已变化，请重新读取后确认。",
         });
+      if (values.publish) assertDurableAdmission(persistedDefinition);
+      if (values.publish || values.definition !== undefined) await bindDurableCalls(persistedDefinition, workflowId, user.id, connection);
       if(values.publish && current.flowType === "data" && current.projectId)
         await assertDataflowResourcesReady(connection,current.projectId,persistedDefinition,true);
       await connection.query(
@@ -873,10 +895,11 @@ export async function compileWorkflowDraft(
       structural.definition,
       current.ownerUserId,
       true,
-      current.flowType
+      current.flowType, workflowId, user.id
     );
     if(current.flowType === "data" && current.projectId)
       await assertDataflowResourcesReady(db(),current.projectId,resolved);
+    assertDurableAdmission(resolved);
     const compiled = compileWorkflowDefinition(resolved, {
       flowType: current.flowType,
     });
@@ -1029,7 +1052,7 @@ export async function rollbackWorkflowVersion(
         target.definition,
         current.ownerUserId,
         true,
-        current.flowType,
+        current.flowType, workflowId, user.id,
       );
       const compiled = compileWorkflowDefinition(resolved, {
         flowType: current.flowType,
@@ -1067,6 +1090,8 @@ export async function rollbackWorkflowVersion(
         message:
           "当前审批规则要求变更后的流程重新审核。请先恢复为草稿并完成审核，再发布。",
       });
+    if (restoredStatus === "published") assertDurableAdmission(restoredDefinition);
+    if (restoredStatus === "published") await bindDurableCalls(restoredDefinition, workflowId, user.id, connection);
     if(restoredStatus === "published" && current.flowType === "data" && current.projectId)
       await assertDataflowResourcesReady(connection,current.projectId,restoredDefinition,true);
     const nextVersion = Number(locked.definitionVersion) + 1;

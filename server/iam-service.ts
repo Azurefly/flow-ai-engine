@@ -11,7 +11,7 @@ import { readRolePermissionCodes } from "../shared/role-permission-codes";
 
 export const WORKFLOW_PERMISSIONS = ["workflow:create", "workflow:view", "workflow:edit", "workflow:publish", "workflow:run", "workflow:members:manage"] as const;
 
-export const SYSTEM_PERMISSIONS = ["iam:manage"] as const;
+export const SYSTEM_PERMISSIONS = ["iam:manage", "directory:preview"] as const;
 export const ALL_PERMISSIONS = [...WORKFLOW_PERMISSIONS, ...SYSTEM_PERMISSIONS] as const;
 export type WorkflowPermission = (typeof WORKFLOW_PERMISSIONS)[number];
 export type PermissionCode = (typeof ALL_PERMISSIONS)[number];
@@ -96,6 +96,10 @@ const permissionCatalog: Record<PermissionCode, { name: string; description: str
   "iam:manage": {
     name: "管理身份与权限",
     description: "管理系统用户、角色和系统级授权。",
+  },
+  "directory:preview": {
+    name: "预览目录导入",
+    description: "核对上传的内部目录与现有账号、部门和成员关系，保存自己的预览批次。",
   },
 };
 

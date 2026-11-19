@@ -22,17 +22,17 @@ export const dataSourceTypes = [
   },
   {
     value: "api",
-    label: "API（仅连通测试）",
+    label: "API（版本化读取 / 受控写回）",
     description:
-      "可以登记并测试HTTP连通性；当前尚不支持在数据流程中读取API返回的数据。",
+      "可测试连通性。在数据资源登记受管端点及版本后，流程可分页读取或生成外部写回预览。",
     probeLabel: "测试连通性",
     canProbe: true,
   },
   {
     value: "file",
-    label: "文件（仅登记）",
+    label: "文件（版本化 CSV）",
     description:
-      "当前仅保存文件说明，未提供文件上传、服务端测试或流程读取能力。",
+      "在数据资源中上传 UTF-8 CSV。流程读取所选版本的原始对象。",
     probeLabel: "暂不支持测试",
     canProbe: false,
   },
@@ -69,9 +69,9 @@ export function dataSourceReadiness(source: SourceDescriptor): DataReadiness {
   if (source.sourceType === "inline")
     return { ready: true, mode: "inline", message: "可读取登记样本" };
   if (source.sourceType === "api")
-    return blocked("API仅支持连通测试，当前不能用于数据流程读取。");
+    return blocked("读取 API 需要先在数据资源登记接口合同，并在节点选择固定版本。");
   if (source.sourceType === "file")
-    return blocked("文件仅支持登记，当前不能用于数据流程读取。");
+    return blocked("读取文件需要先上传 UTF-8 CSV，并在节点选择固定版本。");
   if (source.sourceType !== "jdbc")
     return blocked("当前数据源类型尚不支持流程读取。");
   try {

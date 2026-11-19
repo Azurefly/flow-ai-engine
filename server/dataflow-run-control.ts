@@ -177,6 +177,7 @@ export async function cancelDataflowRun(
       "UPDATE dataflow_run SET status='cancelled',cancellationJson=?,finishedAt=NOW(),durationMs=IF(startedAt IS NULL,NULL,LEAST(2147483647,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000))) WHERE id=? AND projectId=?",
       [JSON.stringify(cancellation), input.runId, input.projectId]
     );
+    await connection.query("UPDATE data_connector_page SET rowsJson=JSON_ARRAY() WHERE runId=?", [input.runId]);
     await connection.query(
       "UPDATE dataflow_node_run SET status='cancelled',finishedAt=NOW(),durationMs=LEAST(2147483647,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000)) WHERE runId=? AND status='running'",
       [input.runId]

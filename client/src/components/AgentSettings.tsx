@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AssistantOperations from "./AssistantOperations";
 import { Plus } from "lucide-react";
 import type { inferRouterInputs, inferRouterOutputs } from "@trpc/server";
 import type { AppRouter } from "../../../server/routers";
@@ -104,6 +105,7 @@ export default function AgentSettings({
           返回系统配置
         </button>
       </header>
+      {entries.isSuccess && <AssistantOperations />}
       {entries.isLoading ? (
         <p role="status">正在读取 Agent 配置…</p>
       ) : entries.isError &&

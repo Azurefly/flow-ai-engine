@@ -344,6 +344,13 @@
       "when": 1795063903129,
       "tag": "0048_audit_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "5",
+      "when": 1795067655618,
+      "tag": "0049_governed_capabilities",
+      "breakpoints": true
     }
   ]
 }

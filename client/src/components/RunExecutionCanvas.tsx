@@ -1,3 +1,4 @@
+import { DurableRunLinks } from "./DurableRunLinks";
 const surfaceClass1 = "aiflow-type-body text-muted-foreground";
 import "./run-execution-canvas.css";
 import { CanvasConnectionEdge } from "./CanvasConnectionEdge";
@@ -237,6 +238,7 @@ export default function RunExecutionCanvas({
       data-run-canvas-design=""
       className="run-graph"
     >
+      {run.childLinks?.length > 0 && <DurableRunLinks links={run.childLinks} runId={String(run.id)} />}
       <header className="run-graph-header">
         <div>
           <h3>

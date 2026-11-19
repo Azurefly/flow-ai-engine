@@ -532,8 +532,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_665 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 515 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_691 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 524 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2347,7 +2347,7 @@ describe("流程设计器界面回归约束", () => {
     expect(styleSource).toContain("width: var(--aiflow-subnav-width)");
     expect(projectWorkspaceSource).toContain("创建时间开始");
     expect(projectWorkspaceSource).toContain("创建时间结束");
-    expect(projectWorkspaceSource).toContain("同步 BDP 配置");
+    expect(projectWorkspaceSource).toContain("内部目录批量导入");
     expect(projectWorkspaceSource).toContain("导入业务");
     const importPanel = readFileSync(new URL("../client/src/components/BusinessImport.tsx", import.meta.url), "utf8");
     expect(importPanel).toContain('accept=".csv,text/csv"');

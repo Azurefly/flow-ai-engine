@@ -1,7 +1,9 @@
+import { readDurableRunLinks, redactHiddenChildReferences } from "./durable-subflow-runtime";
 import { getLlmServiceStatus } from "./llm-configuration";
 import { commitProjectImport, previewProjectImport, projectImportStatus, projectImportHistory } from "./project-import";
 import { projectImportByteLimit } from "../shared/project-import";
 import { dataflowRunReceipt } from "./p2-service";
+import { connectorRouter } from "./data-connector-router";
 import { getRoleAuthorizationOverview, listRoleMembersPage, roleMemberPageInput } from "./role-member-directory";
 import { checkLlmService } from "./llm-service-check";
 import { cancelDataflowRun } from "./dataflow-run-control";
@@ -77,6 +79,7 @@ import {
   pauseWorkflowRun,
   resumeWorkflowRun,
   signalWorkflowMessage,
+  resolveDurableChildFailure,
 } from "./workflow-engine";
 import { submitWorkflowRun, wakeWorkflowWorker } from "./workflow-worker";
 import { checkReadiness, getRuntimeInfo } from "./runtime-info";
@@ -101,6 +104,7 @@ import {
   listWorkflows,
   listWorkflowPage,
   searchWorkflowDirectory,
+  listDurableTargets,
   restoreWorkflow,
   rollbackWorkflowVersion,
   updateNodeTemplate,
@@ -259,7 +263,11 @@ function assertWorkflowRunController(
   }
 }
 
+import { directoryImportRouter } from "./directory-import-router";
+
 export const appRouter = router({
+  directoryImport: directoryImportRouter,
+  connector: connectorRouter,
   system: systemRouter,
   assistant: assistantRouter,
   auth: router({
@@ -531,6 +539,7 @@ export const appRouter = router({
                 "workflow:run",
                 "workflow:members:manage",
                 "iam:manage",
+                "directory:preview",
               ])
             )
             .min(1),
@@ -557,6 +566,7 @@ export const appRouter = router({
                 "workflow:run",
                 "workflow:members:manage",
                 "iam:manage",
+                "directory:preview",
               ])
             )
             .min(1)
@@ -1635,6 +1645,11 @@ export const appRouter = router({
       .input(z.object({ search: z.string().trim().min(1).max(100) }))
       .query(({ ctx, input }) => searchWorkflowDirectory(ctx.user, input.search)),
     list: protectedProcedure.query(({ ctx }) => listWorkflows(ctx.user)),
+    callableTargets: protectedProcedure.input(z.object({ search: z.string().trim().max(100).optional(), cursor: z.number().int().nonnegative().optional(), parentId: z.string().max(64).optional() }))
+      .query(({ ctx, input }) => listDurableTargets(ctx.user, input)),
+    decideChildFailure: protectedProcedure.input(z.object({ linkId: z.string().uuid(), decision: z.enum(["retry","accept_failure","fail_parent"]) }))
+      .mutation(async ({ ctx, input }) => { const result = await resolveDurableChildFailure(ctx.user, input.linkId, input.decision); wakeWorkflowWorker(); return result; }),
+
     page: protectedProcedure
       .input(
         z.object({
@@ -2306,7 +2321,8 @@ export const appRouter = router({
             code: "NOT_FOUND",
             message: "运行记录不存在或无访问权限。",
           });
-        return Object.assign(run, { controlCapabilities: workflowRunControlCapabilities(ctx.user.id, run, access.permissions.has("workflow:run")) });
+        const childLinks = await readDurableRunLinks(input.runId, ctx.user);
+        return Object.assign(await redactHiddenChildReferences(run, ctx.user), { childLinks, controlCapabilities: workflowRunControlCapabilities(ctx.user.id, run, access.permissions.has("workflow:run")) });
       }),
   }),
 });

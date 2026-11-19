@@ -1,3 +1,6 @@
+import { assertDurableAdmission } from "./durable-subflow-binding";
+import { isDurableSubflow } from "../shared/durable-subflow";
+import { childWaitsToSettle, settleChild, startDurableChild, stopDurableChildren, type ChildDecision } from "./durable-subflow-runtime";
 import { getPath, interpolate, resolveTemplates, compareCondition, selectRouterRoutes } from "./workflow-routing";
 import { isParticipantStateDefinition } from "../shared/participant-state";
 import { initializeParticipantStateRun, completeParticipantStateTask } from "./participant-state-runtime";
@@ -472,7 +475,7 @@ export type WorkflowCheckpoint = {
 
 export type WorkflowExecutionResult =
   | { runId: string; status: "success"; output: unknown }
-  | { runId: string; status: "waiting"; taskId: string };
+  | { runId: string; status: "waiting"; taskId: string; committedChildWait?: boolean };
 
 function db() {
   return getSharedPool();
@@ -569,6 +572,7 @@ export async function assertSafeHttpUrl(rawUrl: string) {
 }
 
 function requestPinnedHttp(input: {
+  signal?: AbortSignal;
   url: URL;
   address: string;
   family: number;
@@ -592,6 +596,7 @@ function requestPinnedHttp(input: {
         path: `${input.url.pathname}${input.url.search}`,
         method: input.method,
         headers: withHttpClientIdentity(input.headers),
+        signal: input.signal,
         servername: input.url.hostname,
         lookup: ((
           _hostname: string,
@@ -662,6 +667,14 @@ function requestPinnedHttp(input: {
     if (input.body !== undefined) request.write(input.body);
     request.end();
   });
+}
+
+/** Project connectors share the workflow transport and all target/redirect/size checks. */
+export async function requestDataExchange(rawUrl: string, method: "GET" | "POST", headers: Record<string,string>, timeoutMs: number, body?: string) {
+  const signal = AbortSignal.timeout(timeoutMs);
+  const target = await resolveSafeHttpTarget(rawUrl);
+  signal.throwIfAborted();
+  return requestPinnedHttp({ ...target, method, headers, timeoutMs, body, signal });
 }
 
 /** Performs a bounded, DNS-pinned probe for data-source verification. */
@@ -1857,6 +1870,53 @@ async function createFailureAlerts(
   );
 }
 
+function initialWorkflowCheckpoint(runId: string, executableDefinition: Definition, workflowInput: JsonRecord, actorId: number, requestId: string | null): WorkflowCheckpoint {
+  const startNode = executableDefinition.nodes.find(
+    node => node.type === "start"
+  );
+  if (!startNode) throw new Error("流程缺少开始节点。");
+  const context: JsonRecord = {
+    input: workflowInput,
+    vars: {},
+    nodes: {},
+    runtime: {
+      executionRunId: runId,
+      httpIdempotencyVersion: 3,
+      durableWaitVersion: 1,
+      durableTaskVersion: 1,
+      atomicHumanTaskVersion: 1,
+      deferredRootWaitVersion: 1,
+      triggeredByUserId: actorId,
+      lastActorUserId: actorId,
+      participantUserIds: [actorId],
+      requestId: requestId,
+      roleKeysByUser: {
+        [String(actorId)]: ["default", "initiator", "sender"],
+      },
+      executionQueue: [startNode.id],
+      executionCurrentNodeId: null,
+    },
+  };
+  setRuntimeNodeParticipants(context, startNode.id, [actorId]);
+  if (executableDefinition.edges.some(edge => edge.loop) || executableDefinition.nodes.some(node => {
+    const childEdges = asRecord(node.config.resolvedSubflowDefinition).edges;
+    return Array.isArray(childEdges) && childEdges.some(edge => Boolean(asRecord(edge).loop));
+  })) {
+    Object.assign(asRecord(context.runtime), {
+      loopExecutionVersion: 1, executionStepCount: 0,
+      executionLoopCursor: emptyWorkflowLoopCursor(),
+      durableWaitVersion: 2, durableTaskVersion: 2, httpIdempotencyVersion: 4,
+      parallelCheckpoint: initialWorkflowLoopQueue(startNode.id),
+    });
+  }
+  return {
+    queue: [startNode.id],
+    context,
+    finalOutput: null,
+    currentNodeId: null,
+  };
+}
+
 export async function submitWorkflowRun(input: {
   workflowId: string;
   triggeredBy: WorkflowUser;
@@ -1922,58 +1982,17 @@ export async function submitWorkflowRun(input: {
     };
   }
 
+  assertDurableAdmission(executableDefinition);
   const runId = randomUUID();
   const jobId = randomUUID();
-  const startNode = executableDefinition.nodes.find(
-    node => node.type === "start"
-  );
-  if (!startNode) throw new Error("流程缺少开始节点。");
-  const context: JsonRecord = {
-    input: input.workflowInput ?? {},
-    vars: {},
-    nodes: {},
-    runtime: {
-      executionRunId: runId,
-      httpIdempotencyVersion: 3,
-      durableWaitVersion: 1,
-      durableTaskVersion: 1,
-      atomicHumanTaskVersion: 1,
-      deferredRootWaitVersion: 1,
-      triggeredByUserId: input.triggeredBy.id,
-      lastActorUserId: input.triggeredBy.id,
-      participantUserIds: [input.triggeredBy.id],
-      requestId: input.requestId ?? currentRequestId() ?? null,
-      roleKeysByUser: {
-        [String(input.triggeredBy.id)]: ["default", "initiator", "sender"],
-      },
-      executionQueue: [startNode.id],
-      executionCurrentNodeId: null,
-    },
-  };
-  setRuntimeNodeParticipants(context, startNode.id, [input.triggeredBy.id]);
-  if (executableDefinition.edges.some(edge => edge.loop) || executableDefinition.nodes.some(node => {
-    const childEdges = asRecord(node.config.resolvedSubflowDefinition).edges;
-    return Array.isArray(childEdges) && childEdges.some(edge => Boolean(asRecord(edge).loop));
-  })) {
-    Object.assign(asRecord(context.runtime), {
-      loopExecutionVersion: 1, executionStepCount: 0,
-      executionLoopCursor: emptyWorkflowLoopCursor(),
-      durableWaitVersion: 2, durableTaskVersion: 2, httpIdempotencyVersion: 4,
-      parallelCheckpoint: initialWorkflowLoopQueue(startNode.id),
-    });
-  }
   const authorizationSnapshot = {
     userId: input.triggeredBy.id,
     userRole: input.triggeredBy.role,
     permission: "workflow:run",
     authorizedAt: new Date().toISOString(),
   };
-  const checkpoint: WorkflowCheckpoint = {
-    queue: [startNode.id],
-    context,
-    finalOutput: null,
-    currentNodeId: null,
-  };
+  const checkpoint = initialWorkflowCheckpoint(runId, executableDefinition, input.workflowInput ?? {}, input.triggeredBy.id, input.requestId ?? currentRequestId() ?? null);
+  const context = checkpoint.context;
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
@@ -2138,6 +2157,7 @@ export async function executePreparedWorkflowRun(input: {
     leaseToken: input.leaseToken,
   });
   if (segment.status === "waiting") {
+    if (segment.committedChildWait) return { runId: input.runId, ...segment };
     const waitingParams: unknown[] = [input.runId];
     const waitingLeaseClause = input.leaseToken
       ? " AND executionLockToken=?"
@@ -2258,6 +2278,38 @@ export async function markWorkflowRunFailed(
   }
 }
 
+async function stopLockedWorkflow(
+  connection: mysql.PoolConnection,
+  runId: string,
+  targetStatus: "terminated" | "cancelled" | "failed",
+  endReason: string,
+  details: JsonRecord | null
+) {
+  await connection.query(
+    "UPDATE workflow_run SET status=?,endReason=?,errorJson=?,finishedAt=NOW(),durationMs=IF(startedAt IS NULL,NULL,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000)),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
+    [
+      targetStatus, endReason, details ? JSON.stringify(details) : null, runId,
+    ]
+  );
+  await connection.query(
+    "UPDATE workflow_run_job SET status='cancelled',leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE runId=? AND status IN ('queued','leased')",
+    [runId]
+  );
+  await connection.query(
+    "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
+    [runId]
+  );
+  await connection.query(
+    "UPDATE workflow_task_schedule SET status='cancelled' WHERE runId=? AND status='scheduled'",
+    [runId]
+  );
+  await connection.query(
+    "UPDATE workflow_wait_subscription SET status='cancelled',triggeredAt=NOW() WHERE runId=? AND status='active'",
+    [runId]
+  );
+  await connection.query("UPDATE workflow_task_group SET status='cancelled',completedAt=NOW() WHERE runId=? AND status='waiting'", [runId]);
+}
+
 export type WorkflowRunControlAction = "cancel" | "terminate";
 
 /** Idempotently stops queued/running/waiting work and prevents a leased worker from committing it. */
@@ -2287,36 +2339,8 @@ export async function controlWorkflowRun(input: {
       await connection.commit();
       return { runId: input.runId, status: currentStatus, changed: false };
     }
-    await connection.query(
-      "UPDATE workflow_run SET status=?,endReason=?,errorJson=?,finishedAt=NOW(),durationMs=IF(startedAt IS NULL,NULL,GREATEST(0,TIMESTAMPDIFF(MICROSECOND,startedAt,NOW()) DIV 1000)),executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=?",
-      [
-        targetStatus,
-        targetStatus,
-        input.reason
-          ? JSON.stringify({
-              message: input.reason,
-              controlledBy: input.action,
-            })
-          : null,
-        input.runId,
-      ]
-    );
-    await connection.query(
-      "UPDATE workflow_run_job SET status='cancelled',leaseToken=NULL,leaseExpiresAt=NULL,finishedAt=NOW() WHERE runId=? AND status IN ('queued','leased')",
-      [input.runId]
-    );
-    await connection.query(
-      "UPDATE workflow_task SET status='cancelled',completedAt=NOW() WHERE runId=? AND status IN ('pending','claimed')",
-      [input.runId]
-    );
-    await connection.query(
-      "UPDATE workflow_task_schedule SET status='cancelled' WHERE runId=? AND status='scheduled'",
-      [input.runId]
-    );
-    await connection.query(
-      "UPDATE workflow_wait_subscription SET status='cancelled',triggeredAt=NOW() WHERE runId=? AND status='active'",
-      [input.runId]
-    );
+    await stopLockedWorkflow(connection, input.runId, targetStatus, targetStatus, input.reason ? { message: input.reason, controlledBy: input.action } : null);
+    await stopDurableChildren(connection, input.runId, stopLockedWorkflow);
     await connection.commit();
     return { runId: input.runId, status: targetStatus, changed: true };
   } catch (error) {
@@ -2554,7 +2578,7 @@ type PersistedWorkflow = mysql.RowDataPacket & {
 };
 type RunSegmentResult =
   | { status: "success"; output: unknown }
-  | { status: "waiting"; taskId: string };
+  | { status: "waiting"; taskId: string; committedChildWait?: boolean };
 
 async function assertArtifactLease(connection: mysql.PoolConnection, runId: string, leaseToken?: string) {
   if (!leaseToken) return;
@@ -2571,9 +2595,10 @@ async function persistWorkflowWait(input: {
   queue: string[];
   finalOutput: unknown;
   leaseToken?: string;
+  commitChildRoot?: boolean;
 }) {
   const config = asRecord(resolveTemplates(input.node.config, input.context));
-  const waitType = input.node.type === "wait" ? "timer" : "message";
+  const waitType = isDurableSubflow(input.node) ? "child" : input.node.type === "wait" ? "timer" : "message";
   const durationSeconds = Math.max(
     1,
     Math.trunc(Number(config.durationSeconds ?? 60))
@@ -2593,6 +2618,8 @@ async function persistWorkflowWait(input: {
     currentNodeId: null,
   };
   const waitId = randomUUID();
+  const executionKey = workflowWaitExecutionKey(asRecord(input.context.runtime),
+    (asRecord(input.context.runtime).parallelActiveTokens as BranchToken[] | undefined) ?? []);
   const connection = await db().getConnection();
   try {
     await connection.beginTransaction();
@@ -2615,12 +2642,7 @@ async function persistWorkflowWait(input: {
         String(
           asRecord(input.context.runtime).requestId ?? currentRequestId() ?? ""
         ) || null,
-        workflowWaitExecutionKey(
-          asRecord(input.context.runtime),
-          (asRecord(input.context.runtime).parallelActiveTokens as
-            | BranchToken[]
-            | undefined) ?? []
-        ),
+        executionKey,
       ]
     );
     const [waitingNode] = await connection.query<mysql.ResultSetHeader>(
@@ -2629,6 +2651,27 @@ async function persistWorkflowWait(input: {
     );
     if (!waitingNode.affectedRows)
       throw new Error("等待节点状态已变化，订阅未保存。");
+    if (waitType === "child") {
+      const runtime = asRecord(input.context.runtime);
+      await startDurableChild(connection, { parentWorkflowId: input.workflowId, parentRunId: input.runId, node: input.node,
+        actorId: Number(runtime.triggeredByUserId), waitId, executionKey, ordinal: 1, mappedInput: config.input ?? {},
+        requestId: String(runtime.requestId ?? "") || null }, initialWorkflowCheckpoint);
+      if (input.commitChildRoot) {
+        runtime.executionQueue = input.queue;
+        runtime.executionCurrentNodeId = null;
+        runtime.executionFinalOutput = input.finalOutput;
+        const [parked] = await connection.query<mysql.ResultSetHeader>(
+          "UPDATE workflow_run SET status='waiting',contextJson=?,executionLockToken=NULL,executionLockExpiresAt=NULL WHERE id=? AND status='running'",
+          [JSON.stringify(input.context), input.runId]);
+        if (!parked.affectedRows) throw new Error("父流程已离开运行状态，子调用未创建。");
+        if (input.leaseToken) {
+          const [job] = await connection.query<mysql.ResultSetHeader>(
+            "UPDATE workflow_run_job SET status='completed',checkpointJson=?,resultJson=?,finishedAt=NOW(),leaseToken=NULL,leaseExpiresAt=NULL WHERE runId=? AND status='leased' AND leaseToken=?",
+            [JSON.stringify(checkpoint), JSON.stringify({ runId:input.runId, status:"waiting", taskId:waitId }), input.runId, input.leaseToken]);
+          if (job.affectedRows !== 1) throw new Error("父作业租约已失效，子调用未创建。");
+        }
+      }
+    }
     await connection.commit();
   } catch (error) {
     await connection.rollback();
@@ -3140,7 +3183,7 @@ export async function executeRunSegment(input: {
         node.id
       );
     }
-    if (["wait", "message_catch"].includes(node.type)) {
+    if (["wait", "message_catch"].includes(node.type) || isDurableSubflow(node)) {
       const [existingWaits] = await db().query<mysql.RowDataPacket[]>(
         "SELECT id,nodeRunId FROM workflow_wait_subscription WHERE runId=? AND nodeId=? AND executionKey=? AND status='active' LIMIT 1",
         [input.runId, node.id, workflowWaitExecutionKey(asRecord(input.context.runtime), activeTokens)]
@@ -3209,7 +3252,7 @@ export async function executeRunSegment(input: {
     );
     const startedAt = Date.now();
     try {
-      if (node.type === "wait" || node.type === "message_catch") {
+      if (node.type === "wait" || node.type === "message_catch" || isDurableSubflow(node)) {
         const deferredRootWait = !parallel && asRecord(input.context.runtime).deferredRootWaitVersion === 1;
         const nextNodeIds = input.definition.edges
           .filter(edge => edge.sourceNodeId === node.id)
@@ -3245,7 +3288,9 @@ export async function executeRunSegment(input: {
           queue: [...input.queue],
           finalOutput,
           leaseToken: input.leaseToken,
+          commitChildRoot: isDurableSubflow(node) && !parallel,
         });
+        if (isDurableSubflow(node) && !parallel) return { status: "waiting", taskId: persisted.waitId, committedChildWait: true };
         if (parallel) {
           await persistCheckpoint({
             queue: [...input.queue],
@@ -3841,7 +3886,7 @@ export async function executeRunSegment(input: {
         message: error instanceof Error ? error.message : String(error),
         ...(error instanceof WorkflowModelError ? { modelTrace: error.modelTrace } : {}),
       };
-      await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details, db(), ["operate", "wait", "message_catch"].includes(node.type));
+      await finishNodeRun(nodeRunId, "failed", startedAt, undefined, details, db(), ["operate", "wait", "message_catch"].includes(node.type) || isDurableSubflow(node));
       throw error;
     }
   }
@@ -4410,7 +4455,9 @@ export async function resumeWorkflowTask(input: {
 async function triggerWorkflowWaitSubscription(
   waitId: string,
   payload: JsonRecord,
-  resumeAcceptedMessage = false
+  resumeAcceptedMessage = false,
+  command?: { decision: ChildDecision; linkId: string; actor: WorkflowUser & { tokenVersion?: number } },
+  expectedChildRunId?: string
 ) {
   const connection = await db().getConnection();
   try {
@@ -4426,6 +4473,15 @@ async function triggerWorkflowWaitSubscription(
     if (!wait || wait.status !== "active") {
       await connection.rollback();
       return false;
+    }
+    let childOutput: JsonRecord | undefined;
+    if (wait.waitType === "child") {
+      const settled = await settleChild(connection, wait, initialWorkflowCheckpoint, stopLockedWorkflow, command, expectedChildRunId);
+      if (!settled.output) { await connection.commit(); return settled.changed; }
+      childOutput = settled.output;
+      payload = childOutput;
+    } else if (command) {
+      await connection.rollback(); return false;
     }
     const checkpoint = readJson(wait.checkpointJson) as WorkflowCheckpoint;
     const continuation = asRecord(
@@ -4491,7 +4547,7 @@ async function triggerWorkflowWaitSubscription(
       checkpoint.queue = resumeWorkflowQueue(checkpoint.queue, rootContinuation.nextNodeIds.map(String));
       delete asRecord(context.runtime).rootWaitContinuation;
     }
-    const output = {
+    const output = childOutput ?? {
       waitId,
       waitType: String(wait.waitType),
       messageName: wait.messageName ?? null,
@@ -4555,6 +4611,16 @@ async function triggerWorkflowWaitSubscription(
   }
 }
 
+export function deliverDurableChildTerminal(waitId: string, childRunId: string) {
+  return triggerWorkflowWaitSubscription(waitId, {}, false, undefined, childRunId);
+}
+
+export async function resolveDurableChildFailure(actor: WorkflowUser & { tokenVersion?: number }, linkId: string, decision: ChildDecision) {
+  const [rows] = await db().query<mysql.RowDataPacket[]>("SELECT waitId FROM workflow_run_link WHERE id=? AND state='manual'", [linkId]);
+  if (!rows[0]) return { changed: false };
+  return { changed: await triggerWorkflowWaitSubscription(rows[0].waitId, {}, false, { actor, linkId, decision }) };
+}
+
 export async function reconcileDueWorkflowWaits(limit = 50) {
   const safeLimit = Math.min(Math.max(Math.trunc(limit), 1), 200);
   const [rows] = await db().query<mysql.RowDataPacket[]>(
@@ -4576,6 +4642,22 @@ export async function reconcileDueWorkflowWaits(limit = 50) {
       )
     )
       triggered += 1;
+  const childWaits = await childWaitsToSettle(safeLimit);
+  for (const childWait of childWaits) {
+    if (childWait.parentStatus === "waiting") {
+      if (await deliverDurableChildTerminal(childWait.waitId, childWait.childRunId)) triggered++;
+      continue;
+    }
+    const connection = await db().getConnection();
+    try {
+      await connection.beginTransaction();
+      const [parents] = await connection.query<mysql.RowDataPacket[]>("SELECT status FROM workflow_run WHERE id=? FOR UPDATE", [childWait.parentRunId]);
+      if (parents[0] && ["success","failed","cancelled","terminated"].includes(parents[0].status))
+        await stopDurableChildren(connection, childWait.parentRunId, stopLockedWorkflow);
+      await connection.commit();
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
+  }
   return triggered;
 }
 

@@ -582,11 +582,13 @@
     },
     {
       "id": "R24",
-      "requirement": "BDP 主数据同步",
-      "baseline": "按钮固定禁用、外部合同缺失",
+      "requirement": "内部账号、部门和成员关系批量导入",
+      "baseline": "原审计发现禁用的 BDP 按钮。用户明确没有 BDP，内部目录是本次交付范围。",
       "sourceProcedures": [
-        "project.list",
-        "project.create"
+        "directoryImport.preview",
+        "directoryImport.get",
+        "directoryImport.applyRow",
+        "directoryImport.revert"
       ],
       "relatedExecutedCases": [
         "UI-05"
@@ -598,7 +600,7 @@
       "tasks": [
         "G03"
       ],
-      "boundary": "这里列出本地业务复用入口；现存 API 没有本需求的专用 BDP 同步过程。"
+      "boundary": "自然键是用户名与部门编码；缺行保留，移动现有部门或维护主部门走组织管理。"
     },
     {
       "id": "R25",

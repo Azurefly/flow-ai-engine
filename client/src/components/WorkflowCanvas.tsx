@@ -1,3 +1,4 @@
+import { DurableSubflowPicker } from "./DurableSubflowPicker";
 import { isParticipantStateDefinition, PARTICIPANT_STATE_MODEL } from "@shared/participant-state";
 import { createParticipantStateExample } from "@shared/participant-state-example";
 import { ParticipantOperationEditor } from "./ParticipantOperationEditor";
@@ -2849,14 +2850,14 @@ export default function WorkflowCanvas({
       setSelectedId(next.id);
       setInspectorMode("normal");
       canvasRegionRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
       void fitCanvas(next.id);
     };
     window.addEventListener("flow:inspect-node", inspect);
     return () => window.removeEventListener("flow:inspect-node", inspect);
-  }, [reactFlow, fitCanvas]);
+  }, [reactFlow, fitCanvas, prefersReducedMotion]);
 
   useEffect(() => {
     const focus = (event: Event) => {
@@ -2877,7 +2878,7 @@ export default function WorkflowCanvas({
       setSelectedEdgeId(null);
       setInspectorMode("normal");
       canvasRegionRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
       void fitCanvas(node.id);
@@ -2885,7 +2886,7 @@ export default function WorkflowCanvas({
     };
     window.addEventListener("flow:focus-node", focus);
     return () => window.removeEventListener("flow:focus-node", focus);
-  }, [inspectCanvasEdge, reactFlow, fitCanvas]);
+  }, [inspectCanvasEdge, reactFlow, fitCanvas, prefersReducedMotion]);
 
   const selected = useMemo(
     () => nodes.find(node => node.id === selectedId),
@@ -2922,7 +2923,7 @@ export default function WorkflowCanvas({
     { projectId: projectId ?? "" },
     {
       enabled: Boolean(
-        projectId && (selectedResourceKey || selected?.data.kind === "filter")
+        projectId && (selectedResourceKey || selected?.data.kind === "filter" || selected?.data.kind === "sink")
       ),
       staleTime: 30_000,
     }
@@ -3780,6 +3781,11 @@ export default function WorkflowCanvas({
   const updateConfigFields = (updates: NodeConfig) =>
     updateSelected({ config: { ...selectedConfig, ...updates } });
   const updateConfigField = (key: string, value: unknown) => {
+    if (selected?.data.kind === "subflow" && key === "executionMode" && value !== selectedConfig.executionMode) {
+      updateConfigFields({ executionMode: value, subflowId: "", childVersion: undefined, childPlanHash: undefined,
+        resolvedSubflowId: undefined, resolvedSubflowName: undefined, resolvedSubflowUpdatedAt: undefined, resolvedSubflowDefinition: undefined, zlcxz: {} });
+      return;
+    }
     if (key === "gbms" && selected?.data.kind === "router") {
       updateSelected({
         config: setRouterBroadcast(selectedConfig, Boolean(value)),
@@ -3885,7 +3891,7 @@ export default function WorkflowCanvas({
   useEffect(() => {
     const focusCanvas = () =>
       canvasRegionRef.current?.scrollIntoView({
-        behavior: "smooth",
+        behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
     const clearHighlight = () => {
@@ -5003,6 +5009,8 @@ export default function WorkflowCanvas({
 
                       {flowType === "data" && ["start", "end"].includes(selected.data.kind) && <p className="node-value-hint">{selected.data.kind === "start" ? "数据流程从已连接的数据源读取记录；在资源或查询节点中选择数据。此节点无需额外配置。" : "自动输出已连接上游的数据记录，无需填写结果模板。"}</p>}
                       {activeInspectorGroup.fields.map(field => {
+                        if (selected.data.kind === "subflow" && selectedConfig.executionMode === "durable_child" && field.key === "subflowId")
+                          return <DurableSubflowPicker key={selected.id} workflowId={workflowId ?? undefined} config={selectedConfig} disabled={inspectorDisabled} onChange={updateConfigFields} />;
                         const fieldValue =
                           selected.data.kind === "router" &&
                           field.key === "gbms"
@@ -5056,7 +5064,10 @@ export default function WorkflowCanvas({
                           );
                         }
                         const runtimeOptions =
-                          selected.data.kind === "llm" && field.key === "model"
+                          field.key === "connectorVersionId" && projectId
+                            ? (resourceOptions.data?.connectorVersions ?? []).filter(v => selected.data.kind === "sink" ? v.kind === "receipt_write" : v.assetId === selectedConfig.assetId && v.kind !== "receipt_write")
+                              .map(v=>({value:v.id,label:v.assetName+" · "+v.label+" · "+v.id.slice(0,8),disabled:!v.enabled}))
+                          : selected.data.kind === "llm" && field.key === "model"
                             ? (runtimeModels.data ?? []).map(model => ({ value: model.id, label: model.id }))
                             : field.key === "parallelJoinNodeId"
                             ? nodes
@@ -5142,7 +5153,7 @@ export default function WorkflowCanvas({
                                         ? "按名称选择已通过连接验证的 MySQL 数据源；请先在业务项目的数据源页面登记并测试连接。"
                                         : selectedResourceKey === "udfId"
                                           ? "选择已审核且绑定内置处理实现的函数；标记“尚不可执行”的函数不能选用。"
-                                          : "选择可读取的登记样本或已验证MySQL表；仅登记的API、文件等资源不可用于当前流程读取。",
+                                          : "选择项目资源。API 与文件还需选择已登记的固定版本。",
                                   }
                                 : field.key === "endpointRef" && projectId
                                   ? {

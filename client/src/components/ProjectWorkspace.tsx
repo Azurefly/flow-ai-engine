@@ -94,6 +94,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 const DataResourceCenter = lazy(() => import("./DataResourceCenter"));
+const DirectoryImportDialog = lazy(() => import("./DirectoryImportDialog"));
 const ProjectArchiveDialog = lazy(() => import("./ProjectArchiveDialog"));
 const WorkflowReviewDialog = lazy(() => import("./WorkflowReviewDialog"));
 const projectInfoValueClass = "aiflow-type-body mt-0.5 break-words text-foreground";
@@ -506,6 +507,8 @@ function BusinessCenterView({
   onCreate,
   onOpenProject,
 }: BusinessCenterViewProps) {
+  const directoryAccess = trpc.directoryImport.access.useQuery();
+  const [directoryOpenedBy, setDirectoryOpenedBy] = useState<HTMLButtonElement | null>(null);
   const createTrigger = useRef<HTMLButtonElement>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [domainSelectorQuery, setDomainSelectorQuery] = useState("");
@@ -617,16 +620,8 @@ function BusinessCenterView({
                 >
                   导入业务 CSV
                 </button>
-                <div className="my-1 border-t border-border" />
-                <button
-                  type="button"
-                  disabled
-                  aria-label="同步 BDP 配置，未配置连接，暂不可用"
-                  title="当前未配置受管 BDP 连接，无法同步外部业务配置。"
-                  className={"aiflow-type-control min-h-11 rounded px-2.5 py-2 text-left " + mutedToneClass + " disabled:cursor-not-allowed min-[1280px]:min-h-0"}
-                >
-                  同步 BDP 配置 · 未配置连接
-                </button>
+                {directoryAccess.data?.preview && <button type="button" className={surfaceClass3}
+                  onClick={event => setDirectoryOpenedBy(event.currentTarget)}>内部目录批量导入</button>}
               </div>
             </details>
             {canCreate && status === "active" && (
@@ -644,6 +639,9 @@ function BusinessCenterView({
           </div>
         </header>
         {importPanel}
+        {directoryOpenedBy && directoryAccess.data?.preview && <Suspense fallback={<p role="status">正在加载内部目录导入…</p>}>
+          <DirectoryImportDialog opener={directoryOpenedBy} canApply={directoryAccess.data.apply} onClose={() => setDirectoryOpenedBy(null)} />
+        </Suspense>}
 
         <section className={surfaceClass4}>
           {/* 桌面列表将标题与范围选择并排，查询和反馈各占完整一行。 */}

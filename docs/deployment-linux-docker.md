@@ -1,5 +1,7 @@
 # Linux Docker 部署
 
+升级到 `0049_governed_capabilities` 时，核对候选镜像内的迁移字节和现有数据库备份。此版为父子流程、助手回合、外部连接器和内部目录增加持久回执。需要回退时先停止新增接单，保留能够处理在途回执的消费者，核对待确认写回和子实例，随后切换兼容镜像。具体配置、外部联测命令和逐项收尾条件见[数据连接器](development/optimization/G01-IMPLEMENTATION.md)、[父子流程](development/optimization/G02-IMPLEMENTATION.md)、[内部目录](development/optimization/G03-IMPLEMENTATION.md)及[助手作业](development/optimization/G04-IMPLEMENTATION.md)。
+
 ## 低内存服务器构建
 
 应用部署脚本要求本机编译前至少有 2 GiB 可用内存。内存不足时，在独立构建机生成镜像，通过 `docker image save` 导出，再把镜像包和同一提交的源码归档上传到部署服务器。

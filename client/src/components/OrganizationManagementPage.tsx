@@ -76,6 +76,7 @@ const OrganizationMutationDialog = lazy(
 );
 
 const SystemRoleAssignmentDialog = lazy(() => import("./SystemRoleAssignmentDialog"));
+const DirectoryImportDialog = lazy(() => import("./DirectoryImportDialog"));
 
 type Unit = Record<string, any> & {
   id: string;
@@ -98,6 +99,7 @@ export default function OrganizationManagementPage({
   embedded?: boolean;
 }) {
   const utils = trpc.useUtils();
+  const [directoryOpener, setDirectoryOpener] = useState<HTMLButtonElement | null>(null);
   const organization = trpc.config.organizationDirectory.useQuery(
     undefined,
     authorizationQueryPolicy(true)
@@ -530,6 +532,10 @@ export default function OrganizationManagementPage({
               管理部门、负责人、成员岗位与权限来源，支持流程按直属上级或角色分配任务。
             </p>
           </div>
+          <Button type="button" variant="outline" onClick={event => setDirectoryOpener(event.currentTarget)}>内部目录批量导入</Button>
+          {directoryOpener && <Suspense fallback={<p role="status">正在加载目录导入…</p>}>
+            <DirectoryImportDialog opener={directoryOpener} canApply onClose={() => setDirectoryOpener(null)} />
+          </Suspense>}
           <details
             ref={unitActionsRef}
             className="relative self-start sm:self-auto"
