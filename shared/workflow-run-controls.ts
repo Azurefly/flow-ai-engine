@@ -1,4 +1,5 @@
 export type WorkflowRunControlAction = "pause" | "resume" | "cancel" | "terminate";
+export const pausedTaskMessage = "流程已暂停，恢复运行后可重新提交办理结果。";
 export type WorkflowRunControlCapabilities = {
   canPause: boolean;
   canResume: boolean;

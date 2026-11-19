@@ -1,5 +1,6 @@
 import { encryptLlmApiKey, type LlmCredentialChange } from "./llm-secret-storage";
 import { taskSummarySelect } from "./task-list-projection";
+import { pausedTaskMessage } from "../shared/workflow-run-controls";
 import { participantTaskBinding } from "../shared/participant-state";
 import { replayParticipantTask } from "./participant-state-runtime";
 import { eligibleDirectoryPage } from "./eligible-directory-page";
@@ -206,12 +207,14 @@ async function assertCurrentTaskOperation(
     [user.id]
   );
   if (String(actorRows[0]?.status ?? "") !== "active") {
-    throw new Error("当前账号已停用，不能执行人工操作。 ");
+    throw new TRPCError({ code: "FORBIDDEN", message: "当前账号已停用，不能执行人工操作。" });
   }
+  if (task.runStatus === "blocked" && ["pending", "claimed"].includes(String(task.status)))
+    throw new TRPCError({ code: "CONFLICT", message: pausedTaskMessage });
   if (!isTaskRunActionable(task))
-    throw new Error("流程实例当前不在可操作状态。 ");
+    throw new TRPCError({ code: "CONFLICT", message: "流程实例当前不在可操作状态。" });
   if (!["pending", "claimed"].includes(String(task.status)))
-    throw new Error("当前人工操作已结束或被取消。 ");
+    throw new TRPCError({ code: "CONFLICT", message: "当前人工操作已结束或被取消。" });
   const [states] = await db().query<mysql.RowDataPacket[]>(
     `SELECT stateCode,sourceNodeId,availableOperationsJson
        FROM workflow_participant_state
@@ -228,11 +231,12 @@ async function assertCurrentTaskOperation(
       operations: Array.isArray(operations) ? operations : [],
     })
   ) {
-    throw new Error(
-      state
-        ? "当前操作已不属于该用户的可执行操作集合，请刷新任务状态。 "
-        : "当前用户不在该流程实例的当前状态，不能执行此操作。 "
-    );
+    throw new TRPCError({
+      code: state ? "CONFLICT" : "FORBIDDEN",
+      message: state
+        ? "当前操作已不属于该用户的可执行操作集合，请刷新任务状态。"
+        : "当前用户不在该流程实例的当前状态，不能执行此操作。",
+    });
   }
 }
 
@@ -247,7 +251,7 @@ export function taskActionState(userId: number, task: mysql.RowDataPacket) {
     return {
       canAct: false,
       blockedReason: paused
-        ? "流程已暂停，恢复后才能办理。"
+        ? pausedTaskMessage
         : reason ? `${reason}，当前任务不可办理。` : "流程当前不可办理，请刷新状态。",
       actionLabel: paused ? "流程已暂停" : reason || "当前不可办理",
     };

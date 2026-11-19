@@ -27,6 +27,7 @@ import {
 import { forkParallelState, type BranchToken } from "./workflow-parallel-state";
 import { prepareParallelJoin } from "./workflow-parallel-join";
 import { workflowTaskRoleKey } from "./workflow-task-role";
+import { pausedTaskMessage } from "../shared/workflow-run-controls";
 import {
   activateParallelScope,
   saveParallelScope,
@@ -1667,11 +1668,11 @@ export function normalizeApprovalResult(result: JsonRecord) {
     decision !== "rejected" &&
     decision !== "abstained"
   )
-    throw new Error("审批结果必须明确选择同意或拒绝；也可选择弃权。");
+    throw new TRPCError({ code: "BAD_REQUEST", message: "审批结果必须明确选择同意或拒绝；也可选择弃权。" });
   const comment =
     typeof result.comment === "string" ? result.comment.trim() : "";
   if (decision === "rejected" && !comment)
-    throw new Error("拒绝审批时必须填写处理意见。");
+    throw new TRPCError({ code: "BAD_REQUEST", message: "拒绝审批时必须填写处理意见。" });
   return {
     ...result,
     decision: decision as ApprovalDecision,
@@ -3944,7 +3945,7 @@ async function completeTaskAndEvaluateApprovalGroup(
         input.completedBy.id,
       ]
     );
-    if (!claim.affectedRows) throw new Error("人工任务已被其他操作处理。 ");
+    if (!claim.affectedRows) throw new TRPCError({ code: "CONFLICT", message: "人工任务已被其他操作处理。" });
     await connection.query(
       "UPDATE workflow_task_schedule SET status='cancelled' WHERE taskId=? AND status='scheduled'",
       [input.taskId]
@@ -3978,7 +3979,7 @@ async function completeTaskAndEvaluateApprovalGroup(
   );
   const group = groups[0];
   if (!group || group.status !== "waiting")
-    throw new Error("或签/会签任务组已结束。 ");
+    throw new TRPCError({ code: "CONFLICT", message: "或签/会签任务组已结束。" });
   const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>(
     "SELECT * FROM workflow_task WHERE id=? FOR UPDATE",
     [input.taskId]
@@ -3989,7 +3990,7 @@ async function completeTaskAndEvaluateApprovalGroup(
     lockedTask.status !== "claimed" ||
     Number(lockedTask.claimedByUserId) !== input.completedBy.id
   ) {
-    throw new Error("人工任务已被其他操作处理。 ");
+    throw new TRPCError({ code: "CONFLICT", message: "人工任务已被其他操作处理。" });
   }
   await connection.query(
     "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
@@ -4177,7 +4178,7 @@ export async function resumeWorkflowTask(input: {
       [input.taskId]
     );
     const task = rows[0] as PersistedWorkflow & mysql.RowDataPacket;
-    if (!task) throw new Error("人工任务不存在。 ");
+    if (!task) throw new TRPCError({ code: "NOT_FOUND", message: "人工任务不存在或无访问权限。" });
     const [lockedRuns] = await connection.query<mysql.RowDataPacket[]>(
       "SELECT status,contextJson,definitionSnapshotJson,startedAt FROM workflow_run WHERE id=? FOR UPDATE",
       [task.runId]
@@ -4188,7 +4189,17 @@ export async function resumeWorkflowTask(input: {
       task.definitionSnapshotJson = lockedRuns[0].definitionSnapshotJson;
       task.startedAt = lockedRuns[0].startedAt;
     }
-    if (isParticipantStateDefinition(readJson(task.definitionSnapshotJson))) {
+    const participantState = isParticipantStateDefinition(readJson(task.definitionSnapshotJson));
+    if (task.runStatus === "blocked") {
+      // A pause or reassignment can commit after the outer task eligibility check.
+      const [holders] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT t.assignedUserId FROM workflow_task t JOIN users u ON u.id=t.claimedByUserId AND u.status='active' WHERE t.id=? AND t.status='claimed' AND t.claimedByUserId=? FOR UPDATE",
+        [input.taskId, input.completedBy.id]
+      );
+      if (holders[0] && (!participantState || Number(holders[0].assignedUserId) === input.completedBy.id))
+        throw new TRPCError({ code: "CONFLICT", message: pausedTaskMessage });
+    }
+    if (participantState) {
       const result = await completeParticipantStateTask(connection, {
         taskId: input.taskId, actorUserId: input.completedBy.id, runId: String(task.runId),
         result: validateWorkflowTaskSubmission(task, normalizedResult),
@@ -4196,11 +4207,10 @@ export async function resumeWorkflowTask(input: {
       await connection.commit();
       return result;
     }
-    if (
-      task.status !== "claimed" ||
-      Number(task.claimedByUserId) !== input.completedBy.id
-    )
-      throw new Error("仅领取该任务的处理人可以完成操作。 ");
+    if (task.status !== "claimed")
+      throw new TRPCError({ code: "CONFLICT", message: "人工任务已变化，请刷新任务状态。" });
+    if (Number(task.claimedByUserId) !== input.completedBy.id)
+      throw new TRPCError({ code: "FORBIDDEN", message: "无权完成该人工任务。" });
     const taskPayload = asRecord(readJson(task.payloadJson));
     const parallelTask = Array.isArray(taskPayload.parallelTokens);
     if (
@@ -4208,7 +4218,7 @@ export async function resumeWorkflowTask(input: {
         parallelTask ? ["running", "waiting", "queued"] : ["running", "waiting"]
       ).includes(String(task.runStatus))
     )
-      throw new Error("所属流程实例不处于等待人工操作状态。 ");
+      throw new TRPCError({ code: "CONFLICT", message: "所属流程实例不处于等待人工操作状态。" });
     Object.assign(normalizedResult, validateWorkflowTaskSubmission(task, normalizedResult));
     const gate = await completeTaskAndEvaluateApprovalGroup(connection, task, {
       ...input,
@@ -4339,7 +4349,7 @@ export async function resumeWorkflowTask(input: {
       ]
     );
     if (!finishedNode.affectedRows)
-      throw new Error("人工任务节点已被其他请求推进。");
+      throw new TRPCError({ code: "CONFLICT", message: "人工任务节点已被其他请求推进。" });
     const outcomeRouting = resolveOperateOutcomeRouting(
       task.outcomeHandlesJson,
       taskOutput.outcome
@@ -4355,7 +4365,7 @@ export async function resumeWorkflowTask(input: {
         ]
       );
       if (!cancelledRun.affectedRows)
-        throw new Error("流程状态已变化，无法重复终止。");
+        throw new TRPCError({ code: "CONFLICT", message: "流程状态已变化，无法重复终止。" });
       await connection.commit();
       return {
         runId: String(task.runId),

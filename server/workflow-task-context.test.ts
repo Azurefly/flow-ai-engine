@@ -16,6 +16,16 @@ import {
   reconcileWorkflowContinuations,
 } from "./workflow-engine";
 beforeEach(() => vi.resetAllMocks());
+it("员工完成任务前刚好暂停时按已锁运行和当前领取人返回冲突", async () => {
+  mocks.query.mockResolvedValueOnce([[{ runId: "r", status: "claimed", claimedByUserId: 7, runStatus: "waiting" }]])
+    .mockResolvedValueOnce([[{ status: "blocked", contextJson: "{}", definitionSnapshotJson: '{"nodes":[],"edges":[]}' }]])
+    .mockResolvedValueOnce([[{ assignedUserId: 7 }]]);
+  await expect(resumeWorkflowTask({ taskId: "t", completedBy: { id: 7, role: "user" }, result: { decision: "approved" } }))
+    .rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("已暂停") });
+  expect(mocks.query.mock.calls[2][1]).toEqual(["t", 7]);
+  expect(mocks.rollback).toHaveBeenCalledOnce();
+  expect(mocks.commit).not.toHaveBeenCalled();
+});
 it("后台恢复不会抢占仍在运行的并行执行器", async () => {
   mocks.query.mockImplementation(async (sql: string) => {
     if (sql.includes("FROM workflow_task t"))

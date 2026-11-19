@@ -642,7 +642,7 @@ export async function completeParticipantStateTask(
       connection,
     });
     receiverUserIds = assignment.candidateUserIds;
-    if (!receiverUserIds.length) throw new Error("请选择有效接收人。");
+    if (!receiverUserIds.length) throw new TRPCError({ code: "BAD_REQUEST", message: "请选择有效接收人。" });
     const [activeReceivers] = await connection.query<RowDataPacket[]>(
       "SELECT id,status FROM users WHERE id IN (?) ORDER BY id FOR SHARE",
       [receiverUserIds]

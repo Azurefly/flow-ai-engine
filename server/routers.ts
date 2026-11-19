@@ -2,6 +2,7 @@ import { readDurableRunLinks, redactHiddenChildReferences } from "./durable-subf
 import { getLlmServiceStatus } from "./llm-configuration";
 import { commitProjectImport, previewProjectImport, projectImportStatus, projectImportHistory } from "./project-import";
 import { projectCorrectionByteLimit } from "../shared/project-import";
+import { throwTaskSubmissionError } from "./task-submission-error";
 import { dataflowRunReceipt } from "./p2-service";
 import { connectorRouter } from "./data-connector-router";
 import { getRoleAuthorizationOverview, listRoleMembersPage, roleMemberPageInput } from "./role-member-directory";
@@ -1365,7 +1366,7 @@ export const appRouter = router({
         })
       )
       .mutation(({ ctx, input }) =>
-        completeWorkflowTask(ctx.user, input.taskId, input.result)
+        completeWorkflowTask(ctx.user, input.taskId, input.result).catch(throwTaskSubmissionError)
       ),
     execute: protectedProcedure
       .input(
@@ -1375,7 +1376,7 @@ export const appRouter = router({
         })
       )
       .mutation(({ ctx, input }) =>
-        executeWorkflowTask(ctx.user, input.taskId, input.result)
+        executeWorkflowTask(ctx.user, input.taskId, input.result).catch(throwTaskSubmissionError)
       ),
     handover: protectedProcedure
       .input(

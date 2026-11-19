@@ -74,6 +74,12 @@ const labels: Record<View, string> = {
   all: "全部流程",
 };
 
+function submissionErrorText(error: { message: string; data?: { code?: string } | null }) {
+  if (["BAD_REQUEST", "CONFLICT", "FORBIDDEN", "NOT_FOUND", "UNAUTHORIZED"].includes(error.data?.code ?? ""))
+    return error.message;
+  return "暂时无法提交办理结果。填写内容已保留，请稍后重试。";
+}
+
 function formatStatusLabel(status: string) {
   return WORKBENCH_STATUS_LABELS[status] ?? status;
 }
@@ -378,12 +384,13 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
   };
   const complete = trpc.task.complete.useMutation({
     onSuccess: taskFinished,
-    onError: error => toast.error(error.message),
   });
   const execute = trpc.task.execute.useMutation({
     onSuccess: taskFinished,
-    onError: error => toast.error(error.message),
   });
+  const taskSubmission = [execute, complete]
+    .filter(mutation => mutation.variables?.taskId === selectedTaskId)
+    .sort((a, b) => b.submittedAt - a.submittedAt)[0];
   const handover = trpc.task.handover.useMutation({
     onSuccess: () => {
       setSelectedTaskId(null);
@@ -907,6 +914,8 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
           }
           assigneesError={assignees.isError}
           onRetryAssignees={() => void assignees.refetch()}
+          submitting={taskSubmission?.isPending === true}
+          submissionError={taskSubmission?.error ? submissionErrorText(taskSubmission.error) : null}
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
           onOpenRun={(runId: string) => {
@@ -2557,6 +2566,8 @@ function TaskDrawer({
   assigneesLoading,
   assigneesError,
   onRetryAssignees,
+  submitting,
+  submissionError,
   busy,
   onClose,
   onOpenRun,
@@ -3279,6 +3290,7 @@ function TaskDrawer({
         )}
         {canManage && (
           <footer data-task-actions="" className="task-actions">
+            {submissionError && <p role="alert" className="mb-2 text-sm text-aiflow-danger">{submissionError}</p>}
             {(invalidKeys.length > 0 ||
               additionalError ||
               (commentRequired && !comment.trim())) && (
@@ -3308,6 +3320,7 @@ function TaskDrawer({
               )}
               <Button
                 className="task-submit min-h-11 flex-1"
+                aria-busy={submitting}
                 variant={decision === "rejected" ? "destructive" : "default"}
                 disabled={
                   busy ||
@@ -3318,7 +3331,7 @@ function TaskDrawer({
                 onClick={submitResult}
               >
                 {busy && <Loader2 className="animate-spin" size={15} />}
-                {`提交${selectedOutcome?.label ?? task.operationName ?? "操作结果"}`}
+                {submitting ? "正在提交…" : `提交${selectedOutcome?.label ?? task.operationName ?? "操作结果"}`}
               </Button>
             </div>
           </footer>

@@ -125,7 +125,7 @@ it("暂停实例有明确原因，恢复后原任务恢复办理", () => {
   ).toMatchObject({
     canAct: false,
     actionLabel: "流程已暂停",
-    blockedReason: "流程已暂停，恢复后才能办理。",
+    blockedReason: "流程已暂停，恢复运行后可重新提交办理结果。",
   });
   expect(
     taskActionState(12, {
