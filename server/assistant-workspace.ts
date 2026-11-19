@@ -647,7 +647,10 @@ export async function commitWorkspace(
     typeof value.id === "string"
       ? value.id
       : null;
-  const message = "已执行：" + res.label + (id ? "（" + id + "）" : "") + "。";
+  const runId = value && typeof value === "object" && "runId" in value && typeof value.runId === "string" ? value.runId : undefined;
+  const message = input.action === "workflow.run" && runId
+    ? "已提交运行。运行 ID：" + runId + "，可在流程运行历史中查看进度。"
+    : "已执行：" + res.label + (id ? "（" + id + "）" : "") + "。";
   await db.execute(
     "UPDATE assistant_action_receipt SET message=? WHERE id=? AND payloadHash=?",
     [message, key, hash]
