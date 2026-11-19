@@ -291,7 +291,7 @@ suite("参与人状态真实数据库与正常办理入口", () => {
           receiverUserId: users[2].id,
         },
       })
-    ).rejects.toThrow("无可执行操作");
+    ).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("无可执行操作") });
     expect(await cards(runId)).toEqual({ [users[1].id]: "待提交" });
     expect((await task(runId, "submit")).status).toBe("claimed");
     const detail: any = await getWorkflowRun(runId);
@@ -447,7 +447,7 @@ suite("参与人状态真实数据库与正常办理入口", () => {
     const runId = await start();
     await expect(
       execute(runId, "submit", users[1], { receiverUserId: users[2].id })
-    ).rejects.toThrow("未匹配");
+    ).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("未匹配") });
     expect(await cards(runId)).toEqual({ [users[1].id]: "待提交" });
     const failed: any = await getWorkflowRun(runId);
     expect(

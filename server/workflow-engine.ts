@@ -4387,9 +4387,10 @@ export async function resumeWorkflowTask(input: {
           (edge.sourceHandle?.trim() || "default") === outcomeRouting.handle
       );
       if (outcomeEdges.length !== 1)
-        throw new Error(
-          `人工操作结果分支 ${outcomeRouting.handle} 必须且仅能命中一个后继节点。`
-        );
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `人工操作结果分支 ${outcomeRouting.handle} 必须且仅能命中一个后继节点。`,
+        });
       continuationNodeIds = [outcomeEdges[0]!.targetNodeId];
     }
     if (asRecord(context.runtime).parallelCheckpoint !== undefined) {
@@ -4435,7 +4436,7 @@ export async function resumeWorkflowTask(input: {
       [JSON.stringify(context), task.runId]
     );
     if (!queuedRun.affectedRows)
-      throw new Error("流程状态已变化，无法重复提交续跑命令。");
+      throw new TRPCError({ code: "CONFLICT", message: "流程状态已变化，无法重复提交续跑命令。" });
     await connection.query(
       "INSERT INTO workflow_run_job (id,runId,jobType,status,idempotencyKey,checkpointJson,maxAttempts,requestId) VALUES (?,?,'resume','queued',?,?,?,?)",
       [

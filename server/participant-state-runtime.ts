@@ -22,6 +22,7 @@ import {
   type WorkflowNode,
 } from "./workflow-compiler";
 import {
+  participantStateConflict as conflict,
   planParticipantStateChange,
   type ParticipantStateChange,
 } from "./participant-state-plan";
@@ -41,9 +42,6 @@ type CommandResult = {
 };
 const parse = (value: any): any =>
   typeof value === "string" ? JSON.parse(value) : value;
-function conflict(message: string): never {
-  throw new TRPCError({ code: "CONFLICT", message });
-}
 
 function runtimeState(context: JsonRecord): ParticipantStateRuntime {
   const state = context.runtime?.participantState;
@@ -355,7 +353,7 @@ async function persistParticipantCommand(
     [run.id]
   );
   if (!allTerminal && !pending[0])
-    throw new Error(
+    conflict(
       "变更后所有参与人均无可执行操作且未全部结束，请调整目标状态或关系配置。"
     );
   const response: CommandResult = {
@@ -619,7 +617,7 @@ export async function completeParticipantStateTask(
         edge.sourceNodeId === node.id &&
         (edge.sourceHandle || "default") === outcome.sourceHandle
     );
-  if (!edge) throw new Error("业务结果缺少有效路由。");
+  if (!edge) conflict("业务结果缺少有效路由。");
   const operation = participantOperation(node.config);
   const previousRelation = card.relationId
     ? state.relations[card.relationId]
@@ -764,7 +762,7 @@ export async function completeParticipantStateTask(
       id => !changes.some(change => change.userId === id)
     )
   )
-    throw new Error("新提交的发送人和接收人必须匹配明确的目标状态。");
+    conflict("新提交的发送人和接收人必须匹配明确的目标状态。");
   await connection.query(
     "UPDATE workflow_task SET status='completed',completedByUserId=?,resultJson=?,completedAt=NOW() WHERE id=?",
     [input.actorUserId, JSON.stringify(input.result), task.id]

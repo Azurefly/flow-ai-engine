@@ -1,3 +1,4 @@
+import { TRPCError } from "@trpc/server";
 import { normalizeReferenceRouterConfig } from "../shared/reference-router-config";
 import type {
   ParticipantCard,
@@ -14,6 +15,11 @@ import {
 } from "./participant-route-condition";
 
 type JsonRecord = Record<string, unknown>;
+
+export function participantStateConflict(message: string): never {
+  throw new TRPCError({ code: "CONFLICT", message });
+}
+
 export type ParticipantStateChange = {
   userId: number;
   before: ParticipantCard | null;
@@ -118,7 +124,7 @@ export function planParticipantStateChange(input: {
     const path: string[] = [];
     while (node?.type === "router") {
       if (path.includes(node.id))
-        throw new Error("人员路由存在循环，无法分配状态。");
+        participantStateConflict("人员路由存在循环，无法分配状态。");
       path.push(node.id);
       const rules = routers.get(node.id)!;
       const matches = rules.filter(
@@ -136,13 +142,13 @@ export function planParticipantStateChange(input: {
             }))
       );
       if (matches.length > 1 && matches[0].priority === matches[1].priority)
-        throw new Error(
+        participantStateConflict(
           `人员 ${userId} 在路由“${node.name}”命中相同优先级的多条规则，请明确优先级。`
         );
       const selected = matches[0] ?? rules.find(rule => rule.isDefault);
       if (!selected) {
         if (node.config.unmatched === "error" || !before)
-          throw new Error(
+          participantStateConflict(
             `人员 ${userId} 在路由“${node.name}”未匹配目标状态。`
           );
         node = undefined;
@@ -153,15 +159,15 @@ export function planParticipantStateChange(input: {
           edge.sourceNodeId === node!.id &&
           (edge.sourceHandle || "default") === selected.handle
       );
-      if (!edge) throw new Error(`路由“${node.name}”的目标连线不存在。`);
+      if (!edge) participantStateConflict(`路由“${node.name}”的目标连线不存在。`);
       node = nodes.get(edge.targetNodeId);
     }
     if (!node) {
       if (before) continue;
-      throw new Error(`人员 ${userId} 缺少初始状态。`);
+      participantStateConflict(`人员 ${userId} 缺少初始状态。`);
     }
     if (node.type !== "state")
-      throw new Error("操作后的路由必须到达个人状态。");
+      participantStateConflict("操作后的路由必须到达个人状态。");
     path.push(node.id);
     const config = resolveTemplates(node.config, context) as JsonRecord;
     changes.push({
