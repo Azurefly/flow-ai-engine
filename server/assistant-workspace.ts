@@ -207,6 +207,15 @@ export const workspaceMutations = {
   ),
 } as const;
 type Catalog = Record<string, ReturnType<typeof action>>;
+function availableInScope(name: string, op: Catalog[string], role: string, scope: WorkspaceScope) {
+  if (name.startsWith("config.") && role !== "admin") return false;
+  if (op.scope === "global") return !scope.projectId && !scope.workflowId;
+  return op.scope !== "project" || !scope.workflowId || op.fields.includes("workflowId");
+}
+export function scopedWorkspaceSchema(write: boolean, role: string, scope: WorkspaceScope) {
+  const entries = Object.entries(write ? workspaceMutations : workspaceQueries);
+  return workspaceSchema(Object.fromEntries(entries.filter(([name,op]) => availableInScope(name, op, role, scope))));
+}
 export function workspaceSchema(catalog: Catalog) {
   return z.strictObject({
     action: z.enum(Object.keys(catalog) as [string, ...string[]]).describe(
@@ -285,8 +294,7 @@ async function prepare(
   const catalog: Catalog = write ? workspaceMutations : workspaceQueries;
   const parsed = workspaceSchema(catalog).parse(raw);
   const op = catalog[parsed.action];
-  if (parsed.action.startsWith("config.") && ctx.user.role !== "admin")
-    return deny();
+  if (!availableInScope(parsed.action, op, ctx.user.role, scope)) return deny();
   const path = parsed.action;
   const app = await router();
   const procedure = app._def.procedures[path];
@@ -344,14 +352,6 @@ async function prepare(
         comment: z.string().trim().max(2000).optional(),
       })
       .parse(args.result);
-  if (op.scope === "global" && (scope.projectId || scope.workflowId))
-    return deny();
-  if (
-    op.scope === "project" &&
-    scope.workflowId &&
-    !op.fields.includes("workflowId")
-  )
-    return deny();
   if (op.fields.includes("projectId") && scope.projectId) {
     if (args.projectId !== undefined && args.projectId !== scope.projectId)
       return deny();

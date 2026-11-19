@@ -5,7 +5,7 @@ import { formatConsoleRoute } from "../shared/console-route";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import type { Tool } from "./_core/llm";
 import type { TrpcContext } from "./_core/context";
-import { commitWorkspace, prepareWorkspace, workspaceMutations, workspaceQueries, workspaceSchema, type WorkspaceInput, type WorkspaceScope } from "./assistant-workspace";
+import { commitWorkspace, prepareWorkspace, scopedWorkspaceSchema, workspaceMutations, workspaceQueries, workspaceSchema, type WorkspaceInput, type WorkspaceScope } from "./assistant-workspace";
 import { getSharedPool } from "./db";
 import {
   getP1SystemSettings,
@@ -44,7 +44,7 @@ const assignees = {
   department_manager: "发起人所在部门的负责人",
   role: "权限角色",
 } as const;
-const graphNode = z.union([
+const graphNode = z.discriminatedUnion("type", [
   z.strictObject({ ...nodeBase, type: z.enum(["start", "end", "state"]) }),
   z.strictObject({ ...nodeBase, type: z.literal("parallel"), joinId: nodeId.describe("并行发出至少两条普通连线，填对应 merge 节点 ID") }),
   z.strictObject({ ...nodeBase, type: z.literal("merge"), forkId: nodeId.describe("所有并行分支到此汇合，填对应 parallel 节点 ID") }),
@@ -107,6 +107,11 @@ function tool(name: string, description: string, schema: z.ZodObject): Tool {
   const { $schema, ...parameters } = z.toJSONSchema(schema);
   return { type: "function", function: { name, description, parameters } };
 }
+export function scopeAssistantTool(definition: Tool, role: string, scope: WorkspaceScope): Tool {
+  const { name, description } = definition.function;
+  if (name !== "workspaceRead" && name !== "workspaceWrite") return definition;
+  return tool(name, description ?? "", scopedWorkspaceSchema(name === "workspaceWrite", role, scope));
+}
 export const assistantToolDefinitions: Tool[] = [
   tool("workspaceRead", "查询业务项目、任务、仓库、数据资源和真实统计。先选 action，不确定参数时用 describe。保留统计下限和筛选条件，分页结果不可视为总数。", workspaceSchema(workspaceQueries)),
   tool("workspaceWrite", "根据客户明确请求准备一项工作台业务变更，先用查询工具确定对象和版本，再生成确认单。", workspaceSchema(workspaceMutations)),
@@ -127,7 +132,7 @@ export const assistantToolDefinitions: Tool[] = [
   ),
   tool(
     "createWorkflowDraft",
-    "生成并校验项目内状态或控制流程草稿预览，等待客户确认。当前项目优先；无当前项目时提供业务项目完整名称或真实 ID。按业务顺序给出节点和连线。开始和结束各一个；condition 的 true、false 分支各一条；operate 的处理人必须来自客户要求，按角色时 role 填真实角色名或代号。默认拒绝会取消流程，另有拒绝去向时同时连 approved、rejected 两条边。调整审批人或门槛时重发完整新图。信息不足先追问。",
+    "创建或修订可视化草稿。开始和结束各一个。串行审批用 operate；条件判断用 condition 并连接 true、false。并行审批用一对 parallel 和 merge：parallel.joinId 指向 merge，merge.forkId 指回 parallel，各审批分支从 parallel 发出并回到 merge，使用不带 branch 的普通边。operate.assignee 根据客户要求填写，角色用真实代号。另有拒绝去向时同时连 approved、rejected，否则拒绝会取消流程。调整时重发完整图。当前项目内可省略 projectId；无当前项目时提供项目全名或真实 ID。",
     workflowInput
   ),
   tool(

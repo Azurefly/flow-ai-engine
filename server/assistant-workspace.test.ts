@@ -2,12 +2,22 @@ import { describe, expect, it } from "vitest";
 import type { TrpcContext } from "./_core/context";
 import {
   prepareWorkspace,
+  scopedWorkspaceSchema,
   workspaceMutations,
   workspaceQueries,
 } from "./assistant-workspace";
 
 const ctx = (role: string) => ({ user: { id: 7, role } }) as TrpcContext;
 describe("工作台操作与业务接口契约", () => {
+  it("项目内只向模型列出能在本项目使用的操作", () => {
+    const scope = { projectId:"project-01" };
+    const queries = scopedWorkspaceSchema(false,"user",scope).shape.action.options;
+    expect(queries).toContain("project.workflowStatistics");
+    expect(queries).not.toContain("workflow.templates");
+    const writes = scopedWorkspaceSchema(true,"user",scope).shape.action.options;
+    expect(writes).toContain("project.createFolder");
+    expect(writes).not.toContain("config.createWorkDomain");
+  });
   it("每个操作均能返回真实参数，操作种类与路由一致", async () => {
     for (const [write, catalog] of [
       [false, workspaceQueries],
