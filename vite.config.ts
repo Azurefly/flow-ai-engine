@@ -3,9 +3,9 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import fs from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { defineConfig, type Plugin, type ViteDevServer } from "vite";
 import { compactStyleConstants } from "./scripts/build-style-constants";
-import { createDebugLogReceiver } from "./scripts/dev/debug-log-receiver.mjs";
 import { minify } from "terser";
 import { gzipSync } from "node:zlib";
 import { vitePluginManusRuntime } from "vite-plugin-manus-runtime";
@@ -102,7 +102,9 @@ function vitePluginManusDebugCollector(): Plugin {
       };
     },
 
-    configureServer(server: ViteDevServer) {
+    async configureServer(server: ViteDevServer) {
+      const receiverUrl = pathToFileURL(path.join(DEBUG_SCRIPT_DIR, "debug-log-receiver.mjs"));
+      const { createDebugLogReceiver } = await import(receiverUrl.href) as typeof import("./scripts/dev/debug-log-receiver.mjs");
       for (const filename of ["debug-collector.js", "debug-log-metadata.mjs"]) {
         server.middlewares.use(`/__manus__/${filename}`, (req, res, next) => {
           if (req.method !== "GET") {
