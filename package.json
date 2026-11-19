@@ -18,6 +18,8 @@
     "test:integration:authorization": "vitest run --config vitest.mysql.config.ts auth-bootstrap-session internal-auth iam-account-center iam-catalog iam-custom-role workflow-permissions workflow-owner-protection",
     "test:integration:worker": "vitest run --config vitest.mysql.config.ts workflow-worker",
     "test:integration:provider": "vitest run --config vitest.provider.config.ts",
+    "demo:build": "vite build --config vite.demo.config.ts",
+    "demo:preview": "vite preview --config vite.demo.config.ts",
     "demo:leave:seed": "tsx scripts/seed-leave-approval-demo.mts",
     "db:push": "drizzle-kit generate && drizzle-kit migrate"
   },
