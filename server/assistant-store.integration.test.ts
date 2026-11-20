@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeSharedPool, getSharedPool } from "./db";
+import { assistantHistoryQuery, type HistoryScope } from "./assistant-history-query";
 import { getP1SystemSettings, updateP1SystemSetting } from "./p1-service";
 import {
   ASSISTANT_DEFAULT_ID,
@@ -84,6 +85,77 @@ suite("全局助手 MySQL 持久化", () => {
     expect(early.messages.map(m=>m.turnRevision)).toEqual([1,2]);
     expect(early.olderBefore).toBeNull();
     expect(early.revision).toBe(4);
+  });
+
+  it("四种历史查询直接定位同秒的深游标，各读取八个候选且没有排序", async () => {
+    const owner = await actor("user");
+    const project = randomUUID();
+    const ids = Array.from({ length: 120 }, () => randomUUID()).sort();
+    const a = await agent();
+    await publishAssistantConfig(admin, 1, a.agentId);
+    const connection = await getSharedPool().getConnection();
+    try {
+      const time = 1704110400;
+      const rows = ids.map(id => [id, owner.id, a.agentId, false, "历史", project, 1, JSON.stringify(defaultConfig), new Date(time * 1000)]);
+      await connection.query("INSERT INTO assistant_session(id,ownerUserId,agentId,trial,title,projectId,configVersion,configJson,updatedAt) VALUES ?", [rows]);
+      const [times] = await connection.query<RowDataPacket[]>("SELECT UNIX_TIMESTAMP(updatedAt) AS time FROM assistant_session WHERE id=?", [ids[0]]);
+      const after = { time: Number(times[0].time), id: ids[111] };
+      const shapes: Array<[HistoryScope, string]> = [
+        [{ preview: false }, "assistant_history_owner_idx"],
+        [{ preview: false, projectId: project }, "assistant_history_project_idx"],
+        [{ preview: false, agentId: a.agentId }, "assistant_history_agent_idx"],
+        [{ preview: false, projectId: project, agentId: a.agentId }, "assistant_history_project_agent_idx"],
+      ];
+      async function steps() {
+        const [status] = await connection.query<RowDataPacket[]>(
+          "SHOW SESSION STATUS WHERE Variable_name IN ('Handler_read_next','Handler_read_prev')"
+        );
+        return status.reduce((sum, row) => sum + Number(row.Value), 0);
+      }
+      for (const [scope, index] of shapes) {
+        const { sql, values } = assistantHistoryQuery(owner.id, scope, 8, after);
+        const [plan] = await connection.query<RowDataPacket[]>("EXPLAIN ANALYZE " + sql, values);
+        expect(plan[0].EXPLAIN).toContain(index);
+        expect(plan[0].EXPLAIN).not.toMatch(/\bSort:/i);
+        const before = await steps();
+        const [page] = await connection.query<RowDataPacket[]>(sql, values);
+        expect(page.map(row => row.id)).toEqual(ids.slice(112));
+        expect((await steps()) - before).toBeLessThanOrEqual(8);
+      }
+    } finally {
+      connection.release();
+    }
+  });
+
+  it("权限稀疏的空页继续前进，纯工作区、草稿和另一个客户账号均隔离", async () => {
+    const reader = await actor("user");
+    const a = await agent();
+    await publishAssistantConfig(admin, 1, a.agentId);
+    const scope = { preview: false, agentId: a.agentId };
+    const revoked = randomUUID();
+    const ids = Array.from({ length: 272 }, () => randomUUID()).sort();
+    const rows = ids.map((id, i) => [
+      id, reader.id, a.agentId, false, i > 265 ? "匹配的旧记录" : "历史", i > 265 ? null : revoked,
+      i > 265 ? 2 : 1, JSON.stringify(defaultConfig), "2026-01-01 00:00:00",
+    ]);
+    await getSharedPool().query("INSERT INTO assistant_session(id,ownerUserId,agentId,trial,title,projectId,configVersion,configJson,updatedAt) VALUES ?", [rows]);
+    await createAssistantSession(other, false, "其他账号", null, a.agentId);
+    await createAssistantSession(admin, true, "管理员试聊", null, a.agentId);
+    const empty = await assistantSessionsPage(reader, scope, 3);
+    expect(empty.items).toEqual([]);
+    expect(empty.nextCursor).toBeTruthy();
+    const next = await assistantSessionsPage(reader, scope, 3, empty.nextCursor!);
+    expect(next.items.map(row => row.id)).toEqual(ids.slice(266, 269));
+    const tail = await assistantSessionsPage(reader, scope, 3, next.nextCursor!);
+    expect(tail.items.map(row => row.id)).toEqual(ids.slice(269));
+    expect(tail.nextCursor).toBeNull();
+    for (const filter of [{ projectId: null }, { search: "匹配" }, { configVersion: 2 }]) {
+      const page = await assistantSessionsPage(reader, { ...scope, ...filter }, 7);
+      expect(page.items.map(row => row.id)).toEqual(ids.slice(266));
+      expect(page.nextCursor).toBeNull();
+      await expect(assistantSessionsPage(reader, { ...scope, ...filter }, 3, empty.nextCursor!)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    }
+    expect((await listAssistantSessions(reader, false, a.agentId)).map(row => row.id)).toEqual(ids.slice(266));
   });
   it("授予已办工具后仅新对话取得该权限，撤回后已有对话也随之失效", async () => {
     const pendingOnly: AssistantConfig = { ...defaultConfig, tools: ["listMyTasks"] };

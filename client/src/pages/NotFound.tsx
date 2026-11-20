@@ -1,15 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Home } from "lucide-react";
-import { useLocation } from "wouter";
 
 export default function NotFound() {
-  const [, setLocation] = useLocation();
-
-  const handleGoHome = () => {
-    setLocation("/");
-  };
-
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
       <Card className="w-full max-w-lg mx-4 shadow-sm border-border bg-card">
@@ -38,12 +31,11 @@ export default function NotFound() {
             id="not-found-button-group"
             className="flex flex-col sm:flex-row gap-3 justify-center"
           >
-            <Button
-              onClick={handleGoHome}
-              className="px-6"
-            >
-              <Home className="w-4 h-4 mr-2" />
-              返回工作空间
+            <Button asChild className="px-6">
+              <a href="/">
+                <Home className="w-4 h-4 mr-2" />
+                返回工作空间
+              </a>
             </Button>
           </div>
         </CardContent>

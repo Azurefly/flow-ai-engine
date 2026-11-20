@@ -9,6 +9,7 @@ import {
 import { getSharedPool } from "./db";
 import { getWorkflowAccess, recordAuthorizationAudit } from "./iam-service";
 import { getProjectAccess, type ProjectUser } from "./project-service";
+import { assistantHistoryQuery, type HistoryScope } from "./assistant-history-query";
 
 export const ASSISTANT_DEFAULT_ID = "flow-assistant";
 export const assistantConfigSchema = z
@@ -490,13 +491,6 @@ export async function createAssistantSession(
   }
 }
 
-type HistoryScope = {
-  preview: boolean;
-  agentId?: string;
-  projectId?: string | null;
-  configVersion?: number;
-  search?: string;
-};
 type HistoryCursor = { scope: string; time: number; id: string };
 const cursorSchema = z.object({ scope: z.string().length(64), time: z.number().int().nonnegative(), id: z.string().min(1).max(128) });
 
@@ -514,26 +508,16 @@ export async function assistantSessionsPage(
       throw new TRPCError({ code: "BAD_REQUEST", message: "筛选范围已变化或历史游标无效，请刷新第一页。" });
     }
   }
-  const conditions = ["s.ownerUserId=?", "s.trial=?"];
-  const values: Array<string | number | boolean | null> = [user.id, input.preview];
-  for (const [column, value] of [
-    ["s.agentId=?", input.agentId], ["s.projectId <=> ?", input.projectId],
-    ["s.configVersion=?", input.configVersion], ["LOCATE(?,s.title)>0", input.search || undefined],
-  ] as const) {
-    if (value !== undefined) { conditions.push(column); values.push(value); }
-  }
   const items: SessionSummary[] = [];
   const projects = new Map<string, boolean>();
   const workflows = new Map<string, boolean>();
   const pageSize = Math.min(50, Math.max(1, size));
-  const scanSize = Math.max(32, pageSize);
-  for (let scan = 0; scan < 8; scan++) {
-    const next = after ? " AND (s.updatedAt<FROM_UNIXTIME(?) OR (s.updatedAt=FROM_UNIXTIME(?) AND s.id>?))" : "";
-    const [rows] = await getSharedPool().query<RowDataPacket[]>(
-      "SELECT s.id,s.title,s.agentId,s.configJson->>'$.name' AS agentName,s.projectId,s.workflowId,s.trial,s.configVersion,s.revision,s.updatedAt,UNIX_TIMESTAMP(s.updatedAt) AS sortTime,a.publishedJson FROM assistant_session s JOIN assistant_agent a ON a.id=s.agentId WHERE " +
-        conditions.join(" AND ") + next + " ORDER BY s.updatedAt DESC,s.id ASC LIMIT ?",
-      [...values, ...(after ? [after.time, after.time, after.id] : []), scanSize + 1]
-    );
+  const sparseBatch = Math.max(32, pageSize);
+  let remaining = sparseBatch * 8;
+  let scanSize = pageSize;
+  while (remaining > 0) {
+    const { sql, values } = assistantHistoryQuery(user.id, input, scanSize + 1, after);
+    const [rows] = await getSharedPool().query<RowDataPacket[]>(sql, values);
     for (let i = 0; i < Math.min(rows.length, scanSize); i++) {
       const row = rows[i];
       after = { scope, time: Number(row.sortTime), id: row.id };
@@ -551,6 +535,8 @@ export async function assistantSessionsPage(
         return { items, nextCursor: i + 1 < rows.length ? Buffer.from(JSON.stringify(after)).toString("base64url") : null };
     }
     if (rows.length <= scanSize) return { items, nextCursor: null };
+    remaining -= scanSize;
+    scanSize = Math.min(sparseBatch, remaining);
   }
   return { items, nextCursor: after ? Buffer.from(JSON.stringify(after)).toString("base64url") : null };
 }

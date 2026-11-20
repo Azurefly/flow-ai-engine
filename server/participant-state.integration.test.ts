@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import mysql from "mysql2/promise";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createParticipantStateExample } from "../shared/participant-state-example";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
@@ -19,6 +19,7 @@ import { initializeParticipantStateRun } from "./participant-state-runtime";
 import { settleWorkflowCommand } from "./workflow-command-test-support";
 import { getWorkflowRun, reconcileDueWorkflowTaskSchedules } from "./workflow-engine";
 import { lockActiveProject } from "./project-lifecycle-lock";
+import * as iam from "./iam-service";
 
 const suite = process.env.DATABASE_URL ? describe : describe.skip;
 suite("参与人状态真实数据库与正常办理入口", () => {
@@ -66,6 +67,37 @@ suite("参与人状态真实数据库与正常办理入口", () => {
     return Object.fromEntries(
       detail.participantCards.map((card: any) => [card.userId, card.stateName])
     );
+  }
+  async function taskAudits(taskId: string) {
+    const [rows] = await pool.query<mysql.RowDataPacket[]>(
+      "SELECT id,actorUserId,detailsJson FROM authorization_audit_log WHERE resourceType='workflow_task' AND resourceId=? ORDER BY id",
+      [taskId]
+    );
+    return rows.map(row => ({ id: row.id, actor: row.actorUserId, operation: parse(row.detailsJson).operation }));
+  }
+  async function submissionState(runId: string, taskId: string) {
+    // The initial run becomes visible before its Worker releases the dispatch lease.
+    await vi.waitFor(async () => {
+      const [pending] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT id FROM workflow_run_job WHERE runId=? AND status IN ('queued','leased')",
+        [runId]
+      );
+      expect(pending).toHaveLength(0);
+    }, { timeout: 5000 });
+    const queries = [
+      "SELECT * FROM workflow_run WHERE id=?",
+      "SELECT * FROM workflow_task WHERE runId=? ORDER BY id",
+      "SELECT * FROM workflow_participant_state WHERE runId=? ORDER BY id",
+      "SELECT * FROM workflow_state_transition WHERE runId=? ORDER BY sequenceNo,id",
+      "SELECT * FROM workflow_node_run WHERE runId=? ORDER BY id",
+      "SELECT * FROM workflow_run_job WHERE runId=? ORDER BY id",
+      "SELECT * FROM workflow_task_schedule WHERE runId=? ORDER BY id",
+      "SELECT * FROM workflow_outbox_event WHERE aggregateId=? ORDER BY id",
+    ];
+    return {
+      rows: await Promise.all(queries.map(async sql => (await pool.query(sql, [runId]))[0])),
+      audits: await taskAudits(taskId),
+    };
   }
   beforeAll(async () => {
     pool = mysql.createPool(process.env.DATABASE_URL!);
@@ -264,10 +296,11 @@ suite("参与人状态真实数据库与正常办理入口", () => {
     );
   }, 30000);
 
-  it("事务中途失败时卡片和任务完成记录一起回滚", async () => {
+  it.each(["pending", "claimed"] as const)("从 %s 办理遇到后置路由冲突时回滚本次全部写入，可修正重试并重放", async initialStatus => {
     const runId = await start();
     const current = await task(runId, "submit");
-    await caller(users[1]).task.claim({ taskId: current.id });
+    const actor = caller(users[1]);
+    if (initialStatus === "claimed") await actor.task.claim({ taskId: current.id });
     const [rows] = await pool.query<mysql.RowDataPacket[]>(
       "SELECT definitionSnapshotJson FROM workflow_run WHERE id=?",
       [runId]
@@ -282,25 +315,51 @@ suite("参与人状态真实数据库与正常办理入口", () => {
       "UPDATE workflow_run SET definitionSnapshotJson=? WHERE id=?",
       [JSON.stringify(broken), runId]
     );
-    await expect(
-      caller(users[1]).task.complete({
-        taskId: current.id,
-        result: {
-          decision: "approved",
-          outcome: "submit",
-          receiverUserId: users[2].id,
-        },
-      })
-    ).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("无可执行操作") });
+    const input = { taskId: current.id, result: { decision: "approved" as const, outcome: "submit", receiverUserId: users[2].id } };
+    const submit = () => initialStatus === "pending" ? actor.task.execute(input) : actor.task.complete(input);
+    const before = await submissionState(runId, current.id);
+    expect(before.audits.map(audit => audit.operation)).toEqual(initialStatus === "claimed" ? ["task_claimed"] : []);
+    await expect(submit()).rejects.toMatchObject({ code: "CONFLICT", message: expect.stringContaining("无可执行操作") });
+    expect(await submissionState(runId, current.id)).toEqual(before);
     expect(await cards(runId)).toEqual({ [users[1].id]: "待提交" });
-    expect((await task(runId, "submit")).status).toBe("claimed");
+    expect((await task(runId, "submit")).status).toBe(initialStatus);
     const detail: any = await getWorkflowRun(runId);
     expect(detail.stateTransitions).toHaveLength(1);
     await pool.query(
       "UPDATE workflow_run SET definitionSnapshotJson=? WHERE id=?",
       [JSON.stringify(original), runId]
     );
-    await execute(runId, "submit", users[1], { receiverUserId: users[2].id });
+    const receipt = await submit();
+    expect(receipt).toMatchObject({ runId, status: "waiting" });
+    const committed = await submissionState(runId, current.id);
+    expect(committed.audits.map(audit => audit.operation).sort()).toEqual(["task_approved", "task_claimed"]);
+    expect(committed.audits.every(audit => Number(audit.actor) === users[1].id)).toBe(true);
+    expect(committed.audits).toEqual(expect.arrayContaining(before.audits));
+    await expect(actor.task.execute(input)).resolves.toEqual({ ...receipt, deduplicated: true });
+    await expect(actor.task.execute({ ...input, result: { ...input.result, receiverUserId: users[3].id } })).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await submissionState(runId, current.id)).toEqual(committed);
+  }, 30000);
+
+  it("办理审计写入失败时，隐式领取和已经执行的业务写入同时回滚", async () => {
+    const runId = await start();
+    const current = await task(runId, "submit");
+    const before = await submissionState(runId, current.id);
+    const writeAudit = iam.recordAuthorizationAudit;
+    const operations: string[] = [];
+    const audit = vi.spyOn(iam, "recordAuthorizationAudit").mockImplementation(async (entry, connection) => {
+      if (entry.resourceId === current.id) {
+        operations.push(String(entry.details?.operation));
+        if (entry.details?.operation === "task_approved") throw new Error("synthetic decision audit failure");
+      }
+      return writeAudit(entry, connection);
+    });
+    try {
+      await expect(execute(runId, "submit", users[1], { receiverUserId: users[2].id })).rejects.toMatchObject({ code: "INTERNAL_SERVER_ERROR" });
+    } finally {
+      audit.mockRestore();
+    }
+    expect(operations).toEqual(["task_claimed", "task_approved"]);
+    expect(await submissionState(runId, current.id)).toEqual(before);
   }, 30000);
 
   it("启动重试不重复创建，草稿修改不改变运行快照，停用接收人被拒绝", async () => {

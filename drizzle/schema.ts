@@ -13,6 +13,7 @@ import {
   unique,
   varchar,
 } from "drizzle-orm/mysql-core";
+import { sql } from "drizzle-orm";
 
 /** Internal identities. The physical table is retained from the recovery database. */
 export const users = mysqlTable("users", {
@@ -1782,7 +1783,15 @@ export const assistantSessions = mysqlTable("assistant_session", {
   revision: int("revision").default(0).notNull(),
   taskJson: json("taskJson"),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, table => [index("assistant_session_owner_idx").on(table.ownerUserId, table.trial, table.updatedAt)]);
+}, table => {
+  const newest = sql`${sql.identifier(table.updatedAt.name)} DESC`;
+  return [
+    index("assistant_history_owner_idx").on(table.ownerUserId, table.trial, newest, table.id),
+    index("assistant_history_project_idx").on(table.ownerUserId, table.trial, table.projectId, newest, table.id),
+    index("assistant_history_agent_idx").on(table.ownerUserId, table.trial, table.agentId, newest, table.id),
+    index("assistant_history_project_agent_idx").on(table.ownerUserId, table.trial, table.projectId, table.agentId, newest, table.id),
+  ];
+});
 
 export const assistantTurns = mysqlTable("assistant_turn", {
   id: varchar("id", { length: 36 }).primaryKey(),

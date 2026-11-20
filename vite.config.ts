@@ -186,25 +186,26 @@ export default defineConfig(({ command }) => {
           experimentalMinChunkSize: 64 * 1024,
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
-            // Cache shared form and request runtimes together; application pages remain lazy.
-            if (
-              /\/(?:@radix-ui\/[^/]+|@trpc\/[^/]+|@tanstack\/[^/]+|react-remove-scroll[^/]*|react-style-singleton|aria-hidden|tailwind-merge|class-variance-authority|clsx|sonner|cmdk|superjson)\//.test(
-                id.replace(/\\/g, "/")
-              )
-            )
-              return "workspace-runtime";
-            // These UI libraries initialize together; keep their dependency closure outside application chunks.
-            if (
-              id.includes("commonjsHelpers") ||
-              /\/(react|react-dom|scheduler|lucide-react|@xyflow\/[^/]+|@floating-ui\/[^/]+|zustand|use-sync-external-store|classcat|d3-[^/]+|internmap)\//.test(
-                id.replace(/\\/g, "/")
-              )
-            )
+            const modulePath = id.replace(/\\/g, "/");
+            // Both canvases share this edge renderer. Keep it with React Flow
+            // so the chunk merger cannot pull the graph into the root page.
+            if (modulePath.endsWith("/components/CanvasConnectionEdge.tsx"))
               return "canvas-runtime";
-            if (id.replace(/\\/g, "/").includes("/node_modules/")) return "workspace-runtime";
+            if (id.includes("commonjsHelpers")) return "react-runtime";
+            const moduleRoot = "/node_modules/";
+            const dependencyStart = modulePath.lastIndexOf(moduleRoot);
+            if (dependencyStart >= 0) {
+              const dependency = modulePath.slice(dependencyStart + moduleRoot.length);
+              // Only pages with a workflow canvas need the graph and zoom runtime.
+              if (/^(?:@xyflow\/[^/]+|zustand|classcat|d3-[^/]+|internmap)\//.test(dependency))
+                return "canvas-runtime";
+              if (/^(?:react|react-dom|scheduler|lucide-react|@floating-ui\/[^/]+|use-sync-external-store)\//.test(dependency))
+                return "react-runtime";
+              return "workspace-runtime";
+            }
             if (
               /\/components\/(CustomRoleDialog|SystemRoleAssignmentDialog|WorkflowRoleBindingsDialog|ProjectArchiveDialog|WorkflowReviewDialog)\.tsx$/.test(
-                id.replace(/\\/g, "/")
+                modulePath
               )
             )
               return "management-dialogs";

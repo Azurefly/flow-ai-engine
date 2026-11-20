@@ -1,0 +1,62 @@
+name: 主应用回归
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, 'codex/**']
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    name: Application regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: flow_ci
+          MYSQL_USER: flow_ci
+          MYSQL_PASSWORD: runner-fixture-only
+          MYSQL_RANDOM_ROOT_PASSWORD: 'yes'
+        ports:
+          - 3306/tcp
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval=5s --health-timeout=5s --health-retries=36
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: node --import tsx scripts/index-project-api.mjs --check
+      - run: pnpm test:unit
+      - run: pnpm test:functional
+      - run: pnpm test:scenario
+      - name: 在独立 MySQL 上应用迁移并重跑
+        env:
+          DATABASE_URL: mysql://flow_ci:runner-fixture-only@127.0.0.1:${{ job.services.mysql.ports[3306] }}/flow_ci
+        run: |
+          pnpm exec drizzle-kit migrate
+          pnpm exec drizzle-kit migrate
+      - name: MySQL 集成回归
+        env:
+          DATABASE_URL: mysql://flow_ci:runner-fixture-only@127.0.0.1:${{ job.services.mysql.ports[3306] }}/flow_ci
+          DATA_CONNECTOR_ALLOWED_HOSTS: 127.0.0.1,localhost
+          DATA_CONNECTOR_ALLOWED_PORTS: ${{ job.services.mysql.ports[3306] }}
+        run: |
+          export JWT_SECRET="$(openssl rand -hex 32)"
+          export FLOW_LLM_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+          pnpm test:integration:mysql
+      - run: pnpm build

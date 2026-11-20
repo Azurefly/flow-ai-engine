@@ -4,9 +4,10 @@ import { ENV } from "./_core/env";
 import { getWorkflowWorkerStatus } from "./workflow-worker";
 import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
+import { assistantHistoryIndexes } from "./assistant-history-query";
 
-export const DATABASE_MIGRATION_VERSION = "0049_governed_capabilities";
-export const DATABASE_MIGRATION_EPOCH = 1795067655618;
+export const DATABASE_MIGRATION_VERSION = "0050_assistant_history_indexes";
+export const DATABASE_MIGRATION_EPOCH = 1795163352662;
 export const DATABASE_REQUIRED_COLUMN_COUNT = 85;
 export const PUBLIC_APP_VERSION = "1.0.0";
 
@@ -180,6 +181,16 @@ export async function checkReadiness() {
          AND ((seq_in_index=1 AND column_name='actorUserId')
            OR (seq_in_index=2 AND column_name='requestKeyHash'))`
     );
+    const [historyIndexes] = await db().query<mysql.RowDataPacket[]>(
+      `SELECT index_name AS name,
+              GROUP_CONCAT(CONCAT(column_name,':',collation) ORDER BY seq_in_index) AS parts
+         FROM information_schema.statistics
+        WHERE table_schema=DATABASE() AND table_name='assistant_session'
+          AND index_name IN (?) AND is_visible='YES' AND index_type='BTREE'
+        GROUP BY index_name`,
+      [Object.keys(assistantHistoryIndexes)]
+    );
+    const orderedIndexes = new Map(historyIndexes.map(row => [row.name, row.parts]));
     const latestMigrationAt = Number(migrationRows[0]?.latestMigrationAt ?? 0);
     const complete =
       latestMigrationAt >= DATABASE_MIGRATION_EPOCH &&
@@ -188,7 +199,8 @@ export async function checkReadiness() {
       Number(indexRows[0]?.count ?? 0) === 26 &&
       Number(projectUnitCollationRows[0]?.count ?? 0) === 3 &&
       Number(creationIndexRows[0]?.count ?? 0) === 4 &&
-      Number(workflowCreationIndexRows[0]?.count ?? 0) === 2;
+      Number(workflowCreationIndexRows[0]?.count ?? 0) === 2 &&
+      Object.entries(assistantHistoryIndexes).every(([name, parts]) => orderedIndexes.get(name) === parts);
     checks.migrations = complete
       ? { ok: true, message: DATABASE_MIGRATION_VERSION }
       : {

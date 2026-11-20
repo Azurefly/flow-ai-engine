@@ -200,26 +200,30 @@ async function taskReassignmentState(
 
 async function assertCurrentTaskOperation(
   user: User,
-  task: mysql.RowDataPacket
+  task: mysql.RowDataPacket,
+  connection?: mysql.PoolConnection
 ) {
-  const [actorRows] = await db().query<mysql.RowDataPacket[]>(
-    "SELECT status FROM users WHERE id=? LIMIT 1",
+  const executor = connection ?? db();
+  const [actorRows] = await executor.query<mysql.RowDataPacket[]>(
+    connection ? "SELECT status,tokenVersion FROM users WHERE id=? LIMIT 1 FOR SHARE" : "SELECT status FROM users WHERE id=? LIMIT 1",
     [user.id]
   );
   if (String(actorRows[0]?.status ?? "") !== "active") {
     throw new TRPCError({ code: "FORBIDDEN", message: "当前账号已停用，不能执行人工操作。" });
   }
+  if (connection && user.tokenVersion != null && Number(actorRows[0].tokenVersion) !== user.tokenVersion)
+    throw new TRPCError({ code: "UNAUTHORIZED", message: "登录状态已变化，请重新登录。" });
   if (task.runStatus === "blocked" && ["pending", "claimed"].includes(String(task.status)))
     throw new TRPCError({ code: "CONFLICT", message: pausedTaskMessage });
   if (!isTaskRunActionable(task))
     throw new TRPCError({ code: "CONFLICT", message: "流程实例当前不在可操作状态。" });
   if (!["pending", "claimed"].includes(String(task.status)))
     throw new TRPCError({ code: "CONFLICT", message: "当前人工操作已结束或被取消。" });
-  const [states] = await db().query<mysql.RowDataPacket[]>(
+  const [states] = await executor.query<mysql.RowDataPacket[]>(
     `SELECT stateCode,sourceNodeId,availableOperationsJson
        FROM workflow_participant_state
       WHERE runId=? AND userId=? AND roleKey=?
-      ORDER BY updatedAt DESC,id DESC LIMIT 1`,
+      ORDER BY updatedAt DESC,id DESC LIMIT 1${connection ? " FOR SHARE" : ""}`,
     [task.runId, user.id, String(task.roleKey || "default")]
   );
   const state = states[0];
@@ -598,7 +602,8 @@ export async function claimWorkflowTask(user: User, taskId: string) {
 
 // The ownerVersion CAS rejects changes since this request read the task. The
 // explicit claim endpoint still returns a fresh full task for its caller.
-async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowDataPacket) {
+async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowDataPacket, connection?: mysql.PoolConnection) {
+  const executor = connection ?? db();
   if (!(await canAccessTask(user, task, true)))
     throw new TRPCError({ code: "FORBIDDEN", message: "无权领取该人工任务。" });
   if (task.assignedUserId && Number(task.assignedUserId) !== user.id)
@@ -607,8 +612,8 @@ async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowData
       message: "该人工任务已指定其他处理人。",
     });
   if (task.approvalGroupId && task.signMode === "sequentialSignFor") {
-    const [prior] = await db().query<mysql.RowDataPacket[]>(
-      "SELECT id FROM workflow_task WHERE approvalGroupId=? AND approvalOrder<? AND status IN ('pending','claimed') LIMIT 1",
+    const [prior] = await executor.query<mysql.RowDataPacket[]>(
+      `SELECT id FROM workflow_task WHERE approvalGroupId=? AND approvalOrder<? AND status IN ('pending','claimed') LIMIT 1${connection ? " FOR SHARE" : ""}`,
       [task.approvalGroupId, Number(task.approvalOrder ?? 0)]
     );
     if (prior[0])
@@ -617,8 +622,8 @@ async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowData
         message: "顺序会签尚未轮到当前审批人。",
       });
   }
-  await assertCurrentTaskOperation(user, task);
-  const [result] = await db().query<mysql.ResultSetHeader>(
+  await assertCurrentTaskOperation(user, task, connection);
+  const [result] = await executor.query<mysql.ResultSetHeader>(
     "UPDATE workflow_task SET status='claimed',claimedByUserId=?,claimedAt=NOW(),ownerVersion=ownerVersion+1 WHERE id=? AND status='pending' AND ownerVersion=?",
     [user.id, taskId, Number(task.ownerVersion ?? 0)]
   );
@@ -633,8 +638,7 @@ async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowData
     resourceType: "workflow_task",
     resourceId: taskId,
     details: { operation: "task_claimed" },
-  });
-
+  }, connection);
 }
 
 export async function executeWorkflowTask(
@@ -664,8 +668,7 @@ export async function executeWorkflowTask(
     throw new TRPCError({ code: "FORBIDDEN", message: "无权执行该人工任务。" });
   await assertCurrentTaskOperation(user, task);
   validateWorkflowTaskSubmission(task, result);
-  if (task.status === "pending") await claimTaskSnapshot(user, taskId, task);
-  return completeWorkflowTask(user, taskId, result);
+  return submitWorkflowTask(user, task, result);
 }
 
 export async function completeWorkflowTask(
@@ -691,34 +694,51 @@ export async function completeWorkflowTask(
       message: "仅当前领取人可完成已领取的人工任务。",
     });
   await assertCurrentTaskOperation(user, task);
-  const resumed = await resumeWorkflowTask({
-    taskId,
-    completedBy: user,
-    result,
-  });
-  if (resumed.status === "queued") wakeWorkflowWorker();
+  return submitWorkflowTask(user, task, result);
+}
+
+async function submitWorkflowTask(user: User, snapshot: mysql.RowDataPacket, result: JsonRecord) {
+  const taskId = String(snapshot.id);
   const auditOperation =
     result.decision === "rejected"
       ? "task_rejected"
       : result.decision === "abstained"
         ? "task_abstained"
         : "task_approved";
-  await recordAuthorizationAudit({
-    actorUserId: user.id,
-    action: "user_updated",
-    resourceType: "workflow_task",
-    resourceId: taskId,
-    details: {
-      operation: auditOperation,
-      decision: result.decision,
-      runId: resumed.runId,
-      status: resumed.status,
-      responsibleUserId: task.responsibleUserId ?? user.id,
-      representedUserId: task.representedUserId ?? null,
-      delegationId: task.delegationId ?? null,
+  const resumed = await resumeWorkflowTask({ taskId, completedBy: user, result }, {
+    async prepare(connection, task) {
+      if (task.status !== snapshot.status || Number(task.ownerVersion) !== Number(snapshot.ownerVersion))
+        throw new TRPCError({ code: "CONFLICT", message: "人工任务已变化，请刷新任务状态。" });
+      if (task.status === "pending") {
+        await claimTaskSnapshot(user, taskId, task, connection);
+        task.status = "claimed";
+        task.claimedByUserId = user.id;
+      } else {
+        if (!isCurrentTaskOwner(user.id, task))
+          throw new TRPCError({ code: "FORBIDDEN", message: "无权完成该人工任务。" });
+        await assertCurrentTaskOperation(user, task, connection);
+      }
+    },
+    async audit(connection, task, outcome) {
+      await recordAuthorizationAudit({
+        actorUserId: user.id,
+        action: "user_updated",
+        resourceType: "workflow_task",
+        resourceId: taskId,
+        details: {
+          operation: auditOperation,
+          decision: result.decision,
+          runId: outcome.runId,
+          status: outcome.status,
+          responsibleUserId: task.responsibleUserId ?? user.id,
+          representedUserId: task.representedUserId ?? null,
+          delegationId: task.delegationId ?? null,
+        },
+      }, connection);
     },
   });
-  return { ...resumed, canViewRun: task.canViewRun === true };
+  if (resumed.status === "queued") wakeWorkflowWorker();
+  return { ...resumed, canViewRun: snapshot.canViewRun === true };
 }
 
 async function getEligibleAssignee(task: mysql.RowDataPacket, userId: number) {

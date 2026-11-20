@@ -793,7 +793,8 @@ export async function completeParticipantStateTask(
 export async function replayParticipantTask(
   task: JsonRecord,
   userId: number,
-  result: JsonRecord
+  result: JsonRecord,
+  connection?: PoolConnection
 ) {
   if (
     !participantTaskBinding(task.payloadJson ?? task.payload) ||
@@ -810,8 +811,8 @@ export async function replayParticipantTask(
     stableWorkflowJson(result)
   )
     conflict("该操作已成功提交，重试内容与原提交不一致。");
-  const [rows] = await getSharedPool().query<RowDataPacket[]>(
-    "SELECT resultJson FROM workflow_state_transition WHERE runId=? AND taskId=? AND actorUserId=? LIMIT 1",
+  const [rows] = await (connection ?? getSharedPool()).query<RowDataPacket[]>(
+    `SELECT resultJson FROM workflow_state_transition WHERE runId=? AND taskId=? AND actorUserId=? LIMIT 1${connection ? " FOR SHARE" : ""}`,
     [task.runId, task.id, userId]
   );
   const response = parse(rows[0]?.resultJson)?.response as

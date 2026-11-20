@@ -3,7 +3,7 @@ import { isDurableSubflow } from "../shared/durable-subflow";
 import { childWaitsToSettle, settleChild, startDurableChild, stopDurableChildren, type ChildDecision } from "./durable-subflow-runtime";
 import { getPath, interpolate, resolveTemplates, compareCondition, selectRouterRoutes } from "./workflow-routing";
 import { isParticipantStateDefinition } from "../shared/participant-state";
-import { initializeParticipantStateRun, completeParticipantStateTask } from "./participant-state-runtime";
+import { initializeParticipantStateRun, completeParticipantStateTask, replayParticipantTask } from "./participant-state-runtime";
 export { interpolate, resolveTemplates, selectRouterRoutes, selectRouterRoute } from "./workflow-routing";
 import { getLlmConfiguration, resolveLlmConnection } from "./llm-configuration";
 import { TRPCError } from "@trpc/server";
@@ -4167,6 +4167,9 @@ export async function resumeWorkflowTask(input: {
   taskId: string;
   completedBy: WorkflowUser;
   result: JsonRecord;
+}, submission?: {
+  prepare(connection: mysql.PoolConnection, task: mysql.RowDataPacket): Promise<void>;
+  audit(connection: mysql.PoolConnection, task: mysql.RowDataPacket, outcome: { runId: string; status: string }): Promise<void>;
 }) {
   const normalizedResult = normalizeApprovalResult(input.result);
   const connection = await db().getConnection();
@@ -4190,6 +4193,27 @@ export async function resumeWorkflowTask(input: {
       task.startedAt = lockedRuns[0].startedAt;
     }
     const participantState = isParticipantStateDefinition(readJson(task.definitionSnapshotJson));
+    if (submission) {
+      // Refresh under the run lock: the initial join can predate another holder's commit.
+      const [lockedTasks] = await connection.query<mysql.RowDataPacket[]>(
+        "SELECT * FROM workflow_task WHERE id=? AND runId=? FOR UPDATE", [input.taskId, task.runId]
+      );
+      if (!lockedTasks[0]) throw new TRPCError({ code: "NOT_FOUND", message: "人工任务不存在或无访问权限。" });
+      Object.assign(task, lockedTasks[0]);
+      if (participantState && task.status === "completed") {
+        const replay = await replayParticipantTask(task, input.completedBy.id, validateWorkflowTaskSubmission(task, normalizedResult), connection);
+        if (replay) {
+          await connection.commit();
+          return replay;
+        }
+      }
+      await submission.prepare(connection, task);
+    }
+    const finish = async <T extends { runId: string; status: string }>(outcome: T) => {
+      await submission?.audit(connection, task, outcome);
+      await connection.commit();
+      return outcome;
+    };
     if (task.runStatus === "blocked") {
       // A pause or reassignment can commit after the outer task eligibility check.
       const [holders] = await connection.query<mysql.RowDataPacket[]>(
@@ -4204,8 +4228,7 @@ export async function resumeWorkflowTask(input: {
         taskId: input.taskId, actorUserId: input.completedBy.id, runId: String(task.runId),
         result: validateWorkflowTaskSubmission(task, normalizedResult),
       });
-      await connection.commit();
-      return result;
+      return await finish(result);
     }
     if (task.status !== "claimed")
       throw new TRPCError({ code: "CONFLICT", message: "人工任务已变化，请刷新任务状态。" });
@@ -4237,8 +4260,7 @@ export async function resumeWorkflowTask(input: {
       ]
     );
     if (!gate.continueFlow && !gate.rejected) {
-      await connection.commit();
-      return {
+      return await finish({
         runId: String(task.runId),
         status: "waiting" as const,
         taskId: gate.pendingTaskId ?? input.taskId,
@@ -4250,17 +4272,16 @@ export async function resumeWorkflowTask(input: {
           required: gate.requiredApprovals,
           total: gate.totalApprovers,
         },
-      };
+      });
     }
     if (parallelTask && task.runStatus !== "waiting") {
       // The completed decision is durable. The continuation reconciler joins it
       // after the current worker has checkpointed and released the run lease.
-      await connection.commit();
-      return {
+      return await finish({
         runId: String(task.runId),
         status: "queued" as const,
         continuationPending: true,
-      };
+      });
     }
     const context = asRecord(readJson(task.contextJson));
     const runtime = asRecord(context.runtime);
@@ -4366,12 +4387,11 @@ export async function resumeWorkflowTask(input: {
       );
       if (!cancelledRun.affectedRows)
         throw new TRPCError({ code: "CONFLICT", message: "流程状态已变化，无法重复终止。" });
-      await connection.commit();
-      return {
+      return await finish({
         runId: String(task.runId),
         status: "cancelled" as const,
         output: taskOutput,
-      };
+      });
     }
     restoreHumanCreationRuntime(context, taskPayload);
     completeCurrentHumanCheckpoint(asRecord(context.runtime), String(task.nodeId), task.executionKey);
@@ -4448,13 +4468,12 @@ export async function resumeWorkflowTask(input: {
         String(task.requestId ?? currentRequestId() ?? "") || null,
       ]
     );
-    await connection.commit();
-    return {
+    return await finish({
       runId: String(task.runId),
       jobId,
       status: "queued" as const,
       approvalProgress: taskOutput.approvalProgress,
-    };
+    });
   } catch (error) {
     await connection.rollback();
     throw error;
