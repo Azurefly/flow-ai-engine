@@ -1,18 +1,21 @@
 import { eq } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
-import mysql from "mysql2/promise";
+import { drizzle, type MySql2Database } from "drizzle-orm/mysql2";
+import { createPool } from "mysql2";
+import type mysql from "mysql2/promise";
 import { InsertUser, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _pool: mysql.Pool | null = null;
+let _db: MySql2Database | null = null;
 
 export function getSharedPool(): mysql.Pool {
   if (!process.env.DATABASE_URL) {
     throw new Error("数据库连接未配置。");
   }
   if (!_pool) {
-    _pool = mysql.createPool({
+    const pool = createPool({
       uri: process.env.DATABASE_URL,
+      timezone: "Z",
       waitForConnections: true,
       connectionLimit: 20,
       maxIdle: 10,
@@ -21,24 +24,32 @@ export function getSharedPool(): mysql.Pool {
       enableKeepAlive: true,
       keepAliveInitialDelay: 10000,
     });
+    // The connection event runs before the pool hands the connection to a query.
+    // Queue initialization first so TIMESTAMP values and bound Dates use UTC.
+    pool.on("connection", connection => {
+      connection.query("SET SESSION time_zone = '+00:00'", error => {
+        if (!error) return;
+        console.error("[Database] Could not initialize the UTC session", error.code);
+        connection.destroy();
+      });
+    });
+    _pool = pool.promise();
   }
   return _pool;
 }
 
 export async function closeSharedPool(): Promise<void> {
-  if (_pool) {
-    await _pool.end();
-    _pool = null;
-  }
+  const pool = _pool;
+  _pool = null;
+  _db = null;
+  await pool?.end();
 }
-
-let _db: ReturnType<typeof drizzle> | null = null;
 
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      _db = drizzle(getSharedPool());
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;

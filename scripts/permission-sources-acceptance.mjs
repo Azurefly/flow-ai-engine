@@ -127,7 +127,10 @@ try {
   );
   await snapshot("ordinary_without_grants", []);
   const builtIn = await details(people[1].id);
-  assert.equal(builtIn.effectivePermissions.length, 7);
+  const builtInCodes = ["iam:manage", "workflow:create", "workflow:edit",
+    "workflow:members:manage", "workflow:publish", "workflow:run", "workflow:view"];
+  if (!legacy) builtInCodes.push("directory:preview");
+  assert.deepEqual(builtIn.effectivePermissions.map(p => p.code).sort(), builtInCodes.sort());
   if (!legacy) {
     assert(builtIn.authorizationSummary.includes("撤销角色不会移除"));
     for (const p of builtIn.effectivePermissions)
@@ -139,7 +142,7 @@ try {
   console.log(
     JSON.stringify({
       scenario: "admin_builtin_without_role_bindings",
-      permissions: 7,
+      permissions: builtInCodes.length,
     })
   );
   await admin.request(

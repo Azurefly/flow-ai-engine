@@ -15,6 +15,8 @@ GitHub 的 [主应用回归](../../.github/workflows/ci.yml)在提交到 `codex/
 | 真实浏览器 | 可定位并完成操作、键盘、焦点、减少动效、错误恢复、刷新后回读 | [浏览器用例目录](../../01-test/014-自动化脚本/e2e/README.md) |
 | 部署及第三方 | 线上实际镜像、外部服务的回执、取消、送达与授权范围 | [部署说明](../deployment-linux-docker.md)、[供应商专用配置](../../vitest.provider.config.ts) |
 
+产品发布验收面向电脑网页端。运行 [产品验收脚本](../../scripts/product-release-acceptance.mts) 前向当前会话注入下文说明的目标和账号变量，再在仓库根目录执行 `node --import tsx scripts/product-release-acceptance.mts`。脚本通过 HTTP 创建专属合成部门、账号和项目，正式发起三类流程并读取已持久化记录。结束后归档项目、停用夹具并注销。桌面浏览器验证另记录视口、用户动作、实际运行编号和截图。[验收断言和外部依赖](optimization/PRODUCT-RELEASE.md)
+
 PowerShell 在仓库根目录按变更范围执行以下命令。`test` 使用独立的默认配置，专项门槛分别运行。真实数据库从专用测试环境注入 `DATABASE_URL`，用前确认目标库名及迁移版本。MySQL 套件会修改全局配置和测试夹具，使用隔离库。供应商用例另需经授权、已配置的专用连接。
 
 ```powershell

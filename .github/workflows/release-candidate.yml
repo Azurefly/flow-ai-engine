@@ -1,0 +1,27 @@
+name: 构建发布候选镜像
+
+on:
+  push:
+    branches: ['codex/release/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: 构建并校验 Linux amd64 发布包
+        run: bash scripts/build-release-candidate.sh "$RUNNER_TEMP/flow-release"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: flow-ai-engine-${{ github.sha }}
+          path: ${{ runner.temp }}/flow-release/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

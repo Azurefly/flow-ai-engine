@@ -23,9 +23,9 @@
 | R17 项目端点、系统模型与流程 LLM | `project.serviceEndpoints`、`config.checkModelService`、`workflow.runtimeModels`、`workflow.run` | F08 | 真实三节点流程和最终连通性取自两个阶段；历史缺请求模型记录。 |
 | R18 助手管理、发布与试聊 | `assistant.adminAgents`、`assistant.saveDraft`、`assistant.publish`、`assistant.start` | U06 | 真实模型自由措辞的稳定性需独立标注集。 |
 | R19 客户助手提案、确认与重放 | `assistant.available`、`assistant.message`、`assistant.decide`、`assistant.get` | G04、U06 | 远程样本限统计和创建目录。工具级遥测与长回合恢复需补。 |
-| R20 助手历史列表与消息恢复 | `assistant.sessions`、`assistant.get` | F09、U06 | 需按可见性分页、真机选取与跨项目确认验收。 |
+| R20 助手历史列表与消息恢复 | `assistant.sessions`、`assistant.get` | F09、U06 | 核对可见性分页、桌面键盘选取与跨项目确认。 |
 | R21 键盘弹窗与业务反馈 | `project.create`、`project.existingCodes` | U01、U02 | 嵌套确认、提交成功、触发者消失分别验收。 |
-| R22 窄屏、视口定位和工作台连续操作 | `project.page`、`task.dashboard`、`task.page`、`workflow.get` | U03、U04、U05 | 360/390/768、真机和后台轮询保持焦点与位置。 |
+| R22 桌面视口定位和工作台连续操作 | `project.page`、`task.dashboard`、`task.page`、`workflow.get` | U03、U04、U05 | 桌面窗口内核对焦点、定位、浏览器返回和后台轮询。 |
 | R23 独立等待的异步子流程 | `workflow.subflows`、`workflow.createSubflow`、`workflow.run` | G02 | 一层人工子实例、父子权限与崩溃后恢复按 A55–A58 验收。 |
 | R24 内部账号、部门和成员关系批量导入 | `directoryImport.preview`、`directoryImport.applyRow`、`directoryImport.revert` | G03 | 业务与人员工作区可打开目录导入，逐行鉴权及回退。 |
 | R25 部署就绪与运营证明 | `system.health`、`config.readiness`、`config.runtimeInfo` | F01、F02 | 真实通知、OAuth、对象存储、恢复 RPO/RTO、负载与第三方签收另行取证。 |

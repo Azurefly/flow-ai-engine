@@ -20,8 +20,9 @@ class Session {
     if (cookie) this.cookie = cookie.split(";", 1)[0];
     const payload = await response.json();
     if (!response.ok || payload.error)
-      throw new Error(
-        `${path}: ${payload.error?.json?.message ?? response.status}`
+      throw Object.assign(
+        new Error(`${path}: ${payload.error?.json?.message ?? response.status}`),
+        { status: response.status }
       );
     return superjson.deserialize(payload.result.data);
   }
@@ -129,7 +130,7 @@ try {
   assert.equal((await member()).authorizationStatus, "disabled");
   await assert.rejects(
     () => user.request("workflow.get", { id: workflow.id }),
-    /Please login/
+    { status: 401 }
   );
   await admin.request(
     "workflow.revokeMember",
