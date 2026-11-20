@@ -46,4 +46,4 @@ GitHub 对 `main` 要求 `Application regression` 成功并禁止强推和删除
 3. 切换后核对健康探针、就绪、静态资源和实际构建身份，再跑一条带回读的业务链。公共 `/version` 显示产品版本。部署身份另取镜像或服务端诊断。
 4. 失败时记录阶段、运行中的镜像和迁移状态。可直接回滚且获授权时切回已验证镜像，重新核对就绪与业务样本。需要恢复数据库时按约定的恢复点、备份和授权范围处理。提交、推送、构建、上线、验收分别记录结果。
 
-在 `codex/release/**` 候选分支推送后，[发布包构建](../../.github/workflows/release-candidate.yml)生成 Linux amd64 镜像、源码、`SHA256SUMS` 和 `release-manifest.json`。远程验收使用该候选制品。待 `main` 指向同一提交并完成回归，再将同一制品和验收摘要上传至 GitHub Release。
+在 `codex/release/**` 候选分支推送后，[发布包构建](../../.github/workflows/release-candidate.yml)生成 Linux amd64 镜像、源码、`SHA256SUMS` 和 `release-manifest.json`。清单的 `imageId` 为制品中受校验的镜像配置摘要，`builderImageId` 为 Docker 构建机报告的标识。若构建机与部署机使用不同的镜像存储，实现可能分别显示索引摘要和配置摘要。远程验收使用该候选制品。待 `main` 指向同一提交并完成回归，再将同一制品和验收摘要上传至 GitHub Release。

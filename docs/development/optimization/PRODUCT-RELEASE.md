@@ -10,6 +10,7 @@
 | 两个历史验收脚本预期过时 | 内部目录增加 `directory:preview` 后，当前版本的系统内置授权共有八个。旧版本的对照仍按七个校验。另一个脚本原来匹配英文登录文案，改为验证 HTTP 401。 | 用独立 HTTP 与 MySQL 复验当前版本的授权代码、委派管理员、权限撤销及会话失效。[权限来源](../../../scripts/permission-sources-acceptance.mjs) · [流程成员状态](../../../scripts/workflow-member-status-acceptance.mjs) |
 | 旧验收要求从浏览器取得一个既有运行，独立环境没有该夹具 | 产品验收每次自行创建模拟业务、发布所需流程并读取本次运行和结果。Edge 运行表单提交本次消息实例，再按浏览器回执核对其输入及终态。 | 输入 `00123` 保持文本，`10` 保持数值，`{"enabled":true}` 保持对象。按原业务键发送消息后，结束节点执行一次。多结果集在桌面可分别选择，金额名称去除首尾空格并保留对应行。[产品验收脚本](../../../scripts/product-release-acceptance.mts) |
 | 发布链缺少可重复取得的构建制品，README 的状态描述落后 | 候选分支以已提交的源码构建 Linux amd64 镜像，追加源码归档、SHA-256 和包含构建身份的清单。说明补充三类实跑截图、概念和内置节点，保留在线演示。 | 用候选制品做远程签收，再以同一制品交付 GitHub Release。清单、检查结果和发布地址可从发布页核对。[构建工作流](../../../.github/workflows/release-candidate.yml) · [发布页](https://github.com/Azurefly/flow-ai-engine/releases/tag/v1.0.0) |
+| 镜像导入后部署预检报告标识不一致 | 构建机返回 OCI 索引摘要，目标 Docker 返回镜像配置摘要。候选包现在从归档读取唯一的 Linux amd64 配置，校验平台、版本、修订标签和内容摘要。 | 实际归档中的配置摘要与服务器导入后读取的标识一致。清单保留构建机读数，部署使用校验后的配置摘要。[发行约定](../contributing.md#发版与恢复) · [Docker 镜像存储说明](https://docs.docker.com/engine/storage/containerd/) |
 
 ## 需求追踪与实测结果
 
