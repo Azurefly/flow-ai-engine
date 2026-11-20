@@ -77,9 +77,10 @@ it("所有筛选与下一页游标在数据库执行，关键词通配符按字�
   const [sql, params] = mocks.query.mock.calls[0];
   expect(sql).toContain("r.projectId=? AND r.workflowId=? AND r.status=?");
   expect(sql).toContain("r.createdAt<? OR (r.createdAt=? AND r.id<?)");
+  expect(sql).toContain("r.createdAt>=COALESCE(FROM_UNIXTIME(?),?)");
   expect(params).toContain("%a!_!%!!%");
   expect(params).toContain("%李!%%");
-  expect(params).toContain(date);
+  expect(params.slice(5, 7)).toEqual([date.getTime() / 1000, "9999-12-31"]);
 });
 it("没有项目查看权限时拒绝且不读取历史数据", async () => {
   mocks.access.mockResolvedValue({ exists: true, permissions: new Set() });
