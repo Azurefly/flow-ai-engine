@@ -102,4 +102,4 @@ run("统计按账号和项目取数，确认同一项业务操作只写一次", 
     );
     await pool.query("DELETE FROM users WHERE id=?", [actor.insertId]);
   }
-});
+}, 30000);

@@ -1,5 +1,5 @@
 import { acceptanceTarget } from "./acceptance-target.cjs";
-// Public-service regression only; no database writes, token printing, or production task changes.
+// Exercise function publication and execution through HTTP with synthetic project data.
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 const base = acceptanceTarget(process.env);
@@ -214,6 +214,19 @@ for (const metadataOnly of [false, true]) {
     { projectId: project.id, workflowId: workflow.id, auditStatus: "approved" },
     true
   );
+  if (metadataOnly) {
+    await assert.rejects(
+      admin.request("workflow.publish", { id: workflow.id }, true),
+      /尚未绑定当前可执行的内置处理实现/
+    );
+    const history = await admin.request("data.runPage", {
+      projectId: project.id,
+      workflowId: workflow.id,
+    });
+    assert.equal(history.items.length, 0);
+    console.log(JSON.stringify({ projectId: project.id, workflowId: workflow.id, metadataOnly, publicationRejected: true, runsCreated: 0 }));
+    continue;
+  }
   await admin.request("workflow.publish", { id: workflow.id }, true);
   const started = await admin.request(
     "data.run",
@@ -229,27 +242,25 @@ for (const metadataOnly of [false, true]) {
     r => ["success", "failed"].includes(r.status),
     "function run finished"
   );
-  assert.equal(run.status, metadataOnly ? "failed" : "success");
-  if (metadataOnly) assert.match(JSON.stringify(run), /尚无可执行实现/);
-  else
-    assert.deepEqual(run.output.terminals[0].rows, [
-      {
-        ...rows[0],
-        copied: rows[0].text,
-        trimmed: "Alice",
-        lowered: "alice",
-        uppered: "ALICE",
-        masked: "138****5678",
-      },
-      {
-        ...rows[1],
-        copied: null,
-        trimmed: null,
-        lowered: null,
-        uppered: null,
-        masked: null,
-      },
-    ]);
+  assert.equal(run.status, "success");
+  assert.deepEqual(run.output.terminals[0].rows, [
+    {
+      ...rows[0],
+      copied: rows[0].text,
+      trimmed: "Alice",
+      lowered: "alice",
+      uppered: "ALICE",
+      masked: "138****5678",
+    },
+    {
+      ...rows[1],
+      copied: null,
+      trimmed: null,
+      lowered: null,
+      uppered: null,
+      masked: null,
+    },
+  ]);
   console.log(
     JSON.stringify({
       projectId: project.id,

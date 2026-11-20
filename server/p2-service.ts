@@ -2437,13 +2437,15 @@ export async function pageDataflowRuns(
     );
     params.push(like(input.trigger));
   }
-  if (input.createdFrom) {
-    clauses.push("r.createdAt>=?");
-    params.push(input.createdFrom);
-  }
-  if (input.createdBefore) {
-    clauses.push("r.createdAt<?");
-    params.push(input.createdBefore);
+  for (const [operator, date] of [
+    [">=", input.createdFrom],
+    ["<", input.createdBefore],
+  ] as const) {
+    if (!date) continue;
+    const epochSeconds = date.getTime() / 1000;
+    // Convert the bound in MySQL's session time zone, with the indexed column unchanged.
+    clauses.push(`r.createdAt${operator}COALESCE(FROM_UNIXTIME(?),?)`);
+    params.push(epochSeconds, epochSeconds < 0 ? "1000-01-01" : "9999-12-31");
   }
   if (after) {
     clauses.push("(r.createdAt<? OR (r.createdAt=? AND r.id<?))");

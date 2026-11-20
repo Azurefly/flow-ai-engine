@@ -130,7 +130,11 @@ try {
         true
       );
       const codes = compiled.diagnostics.map(item => item.code);
-      assert.equal(compiled.ok, mode === "normal");
+      assert.equal(
+        compiled.ok,
+        mode === "normal" || (mode === "bounded" && !legacy),
+        `${flowType}/${mode}: ${codes.join(", ")}`
+      );
       if (mode === "partial") {
         assert.equal(codes.includes("WF_LOOP_NOT_BOUNDED"), !legacy);
         if (!legacy)
@@ -141,7 +145,7 @@ try {
             { kind: "edge", edgeId: "b-c", field: "loop" }
           );
       } else assert(!codes.includes("WF_LOOP_NOT_BOUNDED"));
-      if (["partial", "bounded"].includes(mode))
+      if (legacy && ["partial", "bounded"].includes(mode))
         assert(codes.includes("WF_RUNTIME_LOOP_UNSUPPORTED"));
       if (mode === "undeclared") assert(codes.includes("WF_LOOP_NOT_DECLARED"));
       console.log(
@@ -213,6 +217,19 @@ try {
     await request("workflow.delete", { id }, true).catch(error =>
       failures.push(error.message)
     );
+  try {
+    const current = await request("project.lifecyclePreview", { projectId: project.id });
+    assert.equal(current.code, `LOOPCHECK_${tag}`.toUpperCase());
+    await request("project.changeStatus", {
+      projectId: project.id,
+      status: "archived",
+      expectedVersion: current.lifecycleVersion,
+      expectedWorkflowCount: current.workflowCount,
+    }, true);
+    await request("auth.logout", null, true);
+  } catch (error) {
+    failures.push(error.message);
+  }
   assert.deepEqual(failures, [], "隔离验收流程清理失败");
   console.log(JSON.stringify({ ownWorkflowsArchived: workflows.length }));
 }

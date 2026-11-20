@@ -353,6 +353,31 @@ describe("P2 项目数据资源与数据流", () => {
       expect((run.output.terminals[0] as any).rows).toEqual([
         { orderId: "A-01", amount: 12 },
       ]);
+      const [[created]] = await pool.query<mysql.RowDataPacket[]>(
+        "SELECT UNIX_TIMESTAMP(createdAt) AS epoch, TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW()) AS offsetSeconds FROM dataflow_run WHERE id=?",
+        [run.runId]
+      );
+      const createdAt = new Date(Number(created.epoch) * 1000);
+      const previousTimeZone = process.env.TZ;
+      process.env.TZ = Number(created.offsetSeconds) === 28_800 ? "UTC" : "Etc/GMT-8";
+      try {
+        const inRange = await owner.data.runPage({
+          projectId,
+          workflowId,
+          createdFrom: createdAt,
+          createdBefore: new Date(createdAt.getTime() + 1000),
+        });
+        expect(inRange.items.map(row => row.id)).toEqual([run.runId]);
+        const exclusiveEnd = await owner.data.runPage({
+          projectId,
+          workflowId,
+          createdBefore: createdAt,
+        });
+        expect(exclusiveEnd.items).toHaveLength(0);
+      } finally {
+        if (previousTimeZone === undefined) delete process.env.TZ;
+        else process.env.TZ = previousTimeZone;
+      }
       const limitedLineage = await owner.data.runLineage({
         projectId,
         runId: run.runId,

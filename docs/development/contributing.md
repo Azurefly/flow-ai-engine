@@ -39,7 +39,7 @@ git status --short --branch
 
 ## 发版与恢复
 
-向 `main` 交付前，先在候选提交上取得 GitHub 的 `Application regression` 成功结果，并核对检查对应的提交 SHA。需要修复失败时将改动提交到候选分支，使用新提交重新验收。[主应用检查定义](../../.github/workflows/ci.yml)
+GitHub 对 `main` 要求 `Application regression` 成功并禁止强推和删除。向 `main` 交付前，先在候选提交上取得成功结果，并核对检查对应的提交 SHA。需要修复失败时将改动提交到候选分支，使用新提交重新验收。[主应用检查定义](../../.github/workflows/ci.yml)
 
 1. 记录待发布的 Git 提交、源码指纹、迁移版本、构建预算及测试结果。并行开发时核对工作树、远程分支和当前运行镜像的身份。
 2. 按[部署说明](../deployment-linux-docker.md)核对备份、镜像摘要、配置来源和数据库兼容性。验收账号、目标业务及外部调用费用需与本次环境匹配。
