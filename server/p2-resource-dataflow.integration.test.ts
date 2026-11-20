@@ -11,6 +11,7 @@ const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
 const adminName = `p2_admin_${suffix}`;
 const viewerName = `p2_viewer_${suffix}`;
+const jdbcFixtureTable = `p2_jdbc_${suffix}`;
 const mysqlSecretEnv = "FLOW_SECRET_TEST_DATAFLOW_MYSQL";
 const originalAllowedHosts = process.env.DATA_CONNECTOR_ALLOWED_HOSTS;
 let pool: mysql.Pool | undefined;
@@ -35,6 +36,7 @@ describe("P2 项目数据资源与数据流", () => {
       delete process.env.DATA_CONNECTOR_ALLOWED_HOSTS;
     else process.env.DATA_CONNECTOR_ALLOWED_HOSTS = originalAllowedHosts;
     if (!pool) return;
+    await pool.query("DROP TABLE IF EXISTS ??", [jdbcFixtureTable]);
     if (projectId) {
       await pool.query("DELETE FROM dataflow_schedule WHERE projectId=?", [
         projectId,
@@ -664,11 +666,16 @@ describe("P2 项目数据资源与数据流", () => {
           echo: adminName,
         },
       ]);
+      await pool.query("CREATE TABLE ?? (username VARCHAR(64), ignoredLabel VARCHAR(64))", [jdbcFixtureTable]);
+      await pool.query("INSERT INTO ?? (username,ignoredLabel) VALUES ?", [
+        jdbcFixtureTable,
+        [[adminName, "first"], [adminName, "second"]],
+      ]);
       const jdbcAssetId = (
         await owner.data.createAsset({
           projectId,
           sourceId: mysqlSourceId,
-          name: "users",
+          name: jdbcFixtureTable,
           assetType: "table",
           schema: [{ name: "username", type: "string" }],
           sample: [],
@@ -713,7 +720,7 @@ describe("P2 项目数据资源与数据流", () => {
       });
       expect(jdbcRead.status).toBe("success");
       expect((jdbcRead.output.terminals[0] as any).rows).toEqual([
-        { account: expect.any(String) },
+        { account: adminName },
       ]);
       const jdbcLineage = await owner.data.runLineage({
         projectId,
@@ -721,7 +728,7 @@ describe("P2 项目数据资源与数据流", () => {
       });
       expect(
         jdbcLineage.artifacts.find(item => item.nodeId === "source")?.sample
-      ).toEqual([{ username: expect.any(String) }]);
+      ).toEqual([{ username: adminName }]);
       const digits = Array.from(
         { length: 10 },
         (_, n) => `SELECT ${n} AS n`
