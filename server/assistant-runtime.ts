@@ -162,7 +162,8 @@ const behavior = [
 const draftBehavior = [
   "客户要求新建流程时，项目及必要业务步骤已明确就直接调用 createWorkflowDraft。该调用只准备可确认的画布，创建全新流程无需先查询已有流程、流程数量或模板。",
   "会话已绑定项目时省略项目字段。状态流程包含业务状态时，从开始进入唯一初始 state，经办理后进入代表业务结果的最终 state，再连 end。例如开始 → 待审批 state → 审批 operate → 已审批 state → 结束。控制流程的并行审批用 parallel → 两个 operate 分支 → merge，前后各接开始和结束。",
-  "数据流程选择 data，用 source 绑定本项目已有资产。客户未给出可确定的源数据时先询问，禁止编造资产名或 ID。用户只要空白起止模板时可直接生成两个节点。",
+  "数据流程选择 data。用 start 开始，再用 source 绑定本项目已有资产，至少有一个 end 或 output 终点。客户未给出可确定的源数据时先询问，禁止编造资产名或 ID。用户只要空白起止模板时可直接生成两个节点。",
+  '数据节点额外字段直接写在各节点对象内。例：{"id":"orders","type":"source","name":"读订单","asset":"订单样本"}，{"id":"paid","type":"filter","name":"筛选","field":"status","operator":"equals","value":"paid"}，{"id":"totals","type":"aggregate","name":"汇总","groupBy":["region"],"metrics":[{"name":"total","operation":"sum","field":"amount"}]}。连线用 {"from":"orders","to":"paid"}。',
 ].join("\n");
 
 export async function runAssistantTurn(

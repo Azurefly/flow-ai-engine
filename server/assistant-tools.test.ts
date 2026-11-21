@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TRPCError } from "@trpc/server";
-import { commitAssistantTool, prepareAssistantTool } from "./assistant-tools";
+import { assistantToolDefinitions, commitAssistantTool, prepareAssistantTool } from "./assistant-tools";
 import { compareCondition } from "./workflow-routing";
 
 const services = vi.hoisted(() => ({
@@ -81,6 +81,20 @@ beforeEach(() => {
 });
 
 describe("对话业务工具", () => {
+  it("向模型公开数据节点的扁平字段定义", () => {
+    const draft = assistantToolDefinitions.find(tool => tool.function.name === "createWorkflowDraft");
+    expect(draft?.function.parameters).toMatchObject({
+      properties: { nodes: { items: {
+        type: "object",
+        required: ["id", "name", "type"],
+        properties: {
+          asset: expect.objectContaining({ type: "string" }),
+          field: expect.objectContaining({ type: "string" }),
+          metrics: expect.objectContaining({ type: "array" }),
+        },
+      } } },
+    });
+  });
   it.each(["state", "control"])("为 %s 流程选择兼容的并行汇合节点", async flowType => {
     const graph = {
       name: "财务和法务并审", flowType,
