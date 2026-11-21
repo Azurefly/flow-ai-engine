@@ -2,11 +2,16 @@ export type IdentityTab = "users" | "roles" | "audit";
 
 export type ConsoleSection = "flows" | "runs" | "warehouse" | "system";
 
+export type WorkbenchRunTarget = { runId: string; entryTaskId?: string };
+
 export type ConsoleRoute =
   | { section: "flows"; view: "center" }
   | { section: "flows"; view: "workspace"; projectId: string }
   | { section: "flows"; view: "detail" | "editor"; workflowId: string }
-  | { section: "runs"; view: "workbench"; taskId?: string }
+  | ({ section: "runs"; view: "workbench" } & (
+      | { taskId?: string; instance?: never }
+      | { instance: WorkbenchRunTarget; taskId?: never }
+    ))
   | { section: "runs"; view: "monitor"; workflowId: string; runId?: string }
   | { section: "warehouse" }
   | { section: "system"; view: "config" | "organization" | "agents" }
@@ -48,6 +53,16 @@ export function parseConsoleRoute(hash: string): ConsoleRoute {
       return { section: "flows", view, workflowId };
   }
   if (parts[0] === "runs") {
+    if (parts[1] === "workbench" && parts[2] === "instance") {
+      const runId = decodeRouteId(parts[3]);
+      if (runId && parts.length === 4)
+        return { section: "runs", view: "workbench", instance: { runId } };
+      if (runId && parts.length === 6 && parts[4] === "task") {
+        const entryTaskId = decodeRouteId(parts[5]);
+        if (entryTaskId)
+          return { section: "runs", view: "workbench", instance: { runId, entryTaskId } };
+      }
+    }
     if (parts.length === 4 && parts[1] === "workbench" && parts[2] === "task") {
       const taskId = decodeRouteId(parts[3]);
       if (taskId) return { section: "runs", view: "workbench", taskId };
@@ -95,8 +110,15 @@ export function formatConsoleRoute(route: ConsoleRoute): string {
     return `#/flows/workflow/${encodeURIComponent(route.workflowId)}/${route.view}`;
   }
   if (route.section === "runs") {
-    if (route.view === "workbench") return route.taskId
-      ? `#/runs/workbench/task/${encodeURIComponent(route.taskId)}` : "#/runs/workbench";
+    if (route.view === "workbench") {
+      if (route.instance) {
+        const { runId, entryTaskId } = route.instance;
+        const base = `#/runs/workbench/instance/${encodeURIComponent(runId)}`;
+        return entryTaskId ? `${base}/task/${encodeURIComponent(entryTaskId)}` : base;
+      }
+      return route.taskId
+        ? `#/runs/workbench/task/${encodeURIComponent(route.taskId)}` : "#/runs/workbench";
+    }
     const base = `#/runs/monitor/${encodeURIComponent(route.workflowId)}`;
     return route.runId ? `${base}/${encodeURIComponent(route.runId)}` : base;
   }

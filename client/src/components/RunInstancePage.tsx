@@ -4,10 +4,10 @@ import { FlowTypeBadge } from "./FlowTypeBadge";
 import { Button } from "./ui/button";
 import "./run-instance-page.css";
 
-export function useRunMonitorReturn(runId: string | null, workflowId: string | null, viewAllowed: boolean) {
+export function useRunInstanceReturn(runId: string | null, scopeId: string | null, viewAllowed: boolean) {
   const list = useRef<HTMLElement>(null);
   const previousRun = useRef(runId);
-  const source = useRef<{ workflowId: string | null; buttonId: string; top: number } | null>(null);
+  const source = useRef<{ scopeId: string | null; buttonId: string; top: number } | null>(null);
 
   useEffect(() => {
     if (!viewAllowed) return;
@@ -16,7 +16,7 @@ export function useRunMonitorReturn(runId: string | null, workflowId: string | n
     if (runId || !previous) return;
     const frame = window.requestAnimationFrame(() => {
       const position = source.current;
-      const button = position?.workflowId === workflowId ? document.getElementById(position.buttonId) : null;
+      const button = position?.scopeId === scopeId ? document.getElementById(position.buttonId) : null;
       if (button && position) {
         window.scrollTo({ top: position.top, behavior: "auto" });
         button.focus({ preventScroll: true });
@@ -26,12 +26,12 @@ export function useRunMonitorReturn(runId: string | null, workflowId: string | n
       }
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [runId, viewAllowed, workflowId]);
+  }, [runId, viewAllowed, scopeId]);
 
   return {
     list,
     rememberOpener(button: HTMLElement) {
-      source.current = { workflowId, buttonId: button.id, top: window.scrollY };
+      source.current = { scopeId, buttonId: button.id, top: window.scrollY };
     },
   };
 }
@@ -41,6 +41,7 @@ export function RunInstancePage({
   workflowName,
   flowType,
   onBack,
+  backLabel = "返回运行监控",
   actions,
   summary,
   children,
@@ -49,6 +50,7 @@ export function RunInstancePage({
   workflowName?: string | null;
   flowType?: string | null;
   onBack: () => void;
+  backLabel?: string;
   actions?: ReactNode;
   summary?: ReactNode;
   children: ReactNode;
@@ -65,10 +67,10 @@ export function RunInstancePage({
         <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             <Button type="button" variant="outline" size="sm" onClick={onBack}>
-              <ArrowLeft size={16} aria-hidden="true" /> 返回运行监控
+              <ArrowLeft size={16} aria-hidden="true" /> {backLabel}
             </Button>
             <div className="min-w-0">
-              <h1 ref={heading} id="run-instance-title" tabIndex={-1} className="aiflow-type-page-title w-fit font-semibold">实例画布</h1>
+              <h1 ref={heading} id="run-instance-title" data-aiflow-page-title="" tabIndex={-1} className="aiflow-type-page-title w-fit font-semibold">实例画布</h1>
               <div className="aiflow-type-meta flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground">
                 {workflowName && <span className="break-words">{workflowName}</span>}
                 {flowType && <FlowTypeBadge type={flowType} />}

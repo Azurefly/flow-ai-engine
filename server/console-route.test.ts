@@ -13,6 +13,12 @@ describe("console hash routes", () => {
     { section: "flows", view: "editor", workflowId: "workflow_1234" },
     { section: "runs", view: "workbench" },
     { section: "runs", view: "workbench", taskId: "task_123456" },
+    { section: "runs", view: "workbench", instance: { runId: "run_12345678" } },
+    {
+      section: "runs",
+      view: "workbench",
+      instance: { runId: "run_12345678", entryTaskId: "task_123456" },
+    },
     { section: "runs", view: "monitor", workflowId: "workflow_1234" },
     {
       section: "runs",
@@ -56,6 +62,9 @@ describe("console hash routes", () => {
     "#/flows/workflow/bad%2Fid/editor",
     "#/runs/monitor/workflow_1234/bad%2Frun",
     "#/runs/workbench/task/short",
+    "#/runs/workbench/instance/short",
+    "#/runs/workbench/instance/run_12345678/task/bad%2Ftask",
+    "#/runs/workbench/instance/run_12345678/task",
     "#/system/identity/extra",
     "#/system/identity/roles/delete",
     "#/system/identity/%2Faudit",

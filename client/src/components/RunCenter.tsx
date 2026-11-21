@@ -30,7 +30,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
-import { RunInstancePage, useRunMonitorReturn } from "./RunInstancePage";
+import { RunInstancePage, useRunInstanceReturn } from "./RunInstancePage";
 import { workflowRunControlAllowed, type WorkflowRunControlCapabilities } from "@shared/workflow-run-controls";
 
 const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
@@ -124,7 +124,7 @@ export default function RunCenter({
     filterKey: string;
     cursors: Array<string | undefined>;
   }>({ filterKey: "", cursors: [undefined] });
-  const monitorReturn = useRunMonitorReturn(selectedRunId, workflowId, viewAllowed);
+  const monitorReturn = useRunInstanceReturn(selectedRunId, workflowId, viewAllowed);
   const runUnavailable = selectedRunErrorCode === "NOT_FOUND" || selectedRunErrorCode === "FORBIDDEN";
   const runDetail = !runUnavailable && selectedRun?.id === selectedRunId && selectedRun?.workflowId === workflowId
     ? selectedRun : null;

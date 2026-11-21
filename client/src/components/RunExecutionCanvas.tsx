@@ -122,7 +122,9 @@ export default function RunExecutionCanvas({
     () => resolveRunGraphFocus(run, graph.nodes, entryTaskId),
     [run, graph, entryTaskId]
   );
-  const [selected, setSelected] = useState("");
+  const [selected, setSelected] = useState(() =>
+    workspace && entryTaskId && initialFocus.recordId ? initialFocus.nodeId ?? "" : ""
+  );
   const [occurrence, setOccurrence] = useState("");
   const chosenRecords = useRef(new Map<string, string>());
   const [layout, setLayout] = useState(true);

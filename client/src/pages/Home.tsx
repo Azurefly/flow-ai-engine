@@ -7,7 +7,7 @@ import { authorizationAuditActions, authorizationAuditCategories, auditDateBound
 import { IdentityDepartmentDirectory, type IdentityUnit } from "@/components/IdentityDepartmentDirectory";
 import type { OrganizationTarget } from "@shared/organization-form";
 import { IdentityWorkspace } from "@/components/IdentityWorkspace";
-import type { IdentityTab } from "@shared/console-route";
+import type { IdentityTab, WorkbenchRunTarget } from "@shared/console-route";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { AssistantLauncher } from "@/components/AssistantLauncher";
 import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
@@ -643,17 +643,33 @@ function FlowConsole({
   const navigateRoute = useCallback(
     (
       route: ConsoleRoute,
-      options?: { replace?: boolean; editorReturn?: FlowEditorReturn }
+      options?: { replace?: boolean; editorReturn?: FlowEditorReturn; returnToWorkbench?: true }
     ) => {
       if (!consoleAlive.current) return false;
       return consoleHistory.current?.navigate(
         formatConsoleRoute(route),
-        { aiflowEditorReturn: options?.editorReturn ?? null },
+        {
+          aiflowEditorReturn: options?.editorReturn ?? null,
+          ...(options?.returnToWorkbench && { aiflowReturnToWorkbench: true }),
+        },
         options?.replace
       ) ?? false;
     },
     []
   );
+  const clearWorkbenchSelection = useCallback(() => {
+    navigateRoute({ section: "runs", view: "workbench" }, { replace: true });
+  }, [navigateRoute]);
+  const openWorkbenchRun = useCallback((instance: WorkbenchRunTarget) => {
+    navigateRoute(
+      { section: "runs", view: "workbench", instance },
+      { returnToWorkbench: true }
+    );
+  }, [navigateRoute]);
+  const closeWorkbenchRun = useCallback(() => {
+    if (window.history.state?.aiflowReturnToWorkbench === true) window.history.back();
+    else clearWorkbenchSelection();
+  }, [clearWorkbenchSelection]);
   const navigateSection = useCallback(
     (next: ConsoleSection | "identity") => {
       if (next === "identity") {
@@ -804,6 +820,8 @@ function FlowConsole({
     ? (decodeJson(selectedWorkflow.definition) as Definition) : null;
   // UX 修复：监控按当前路由选取实例，避免切换流程时短暂查询旧实例；保留原有视图状态。
   const monitorRunId = resolveMonitorRunId(requestedRoute.route, selectedRunId);
+  const workbenchRoute = requestedRoute.route.section === "runs" && requestedRoute.route.view === "workbench"
+    ? requestedRoute.route : null;
   const detailInput = useMemo(
     () => ({ runId: monitorRunId ?? "00000000-0000-0000-0000-000000000000" }),
     [monitorRunId]
@@ -2103,9 +2121,14 @@ function FlowConsole({
           {section === "runs" && !routeRestoring && (
             <div>
               {runView === "workbench" ? (
-                <ProcessWorkbench navigationControls={runNavigation}
-                  routeTaskId={requestedRoute.route.section === "runs" && requestedRoute.route.view === "workbench" ? requestedRoute.route.taskId : undefined}
-                  onClearTaskRoute={() => navigateRoute({ section: "runs", view: "workbench" }, { replace: true })} />
+                <ProcessWorkbench
+                  navigationControls={runNavigation}
+                  routeTaskId={workbenchRoute?.taskId}
+                  routeRun={workbenchRoute?.instance}
+                  onClearTaskRoute={clearWorkbenchSelection}
+                  onOpenRun={openWorkbenchRun}
+                  onBackFromRun={closeWorkbenchRun}
+                />
               ) : (
                 <div
                   data-runs-monitor-workspace

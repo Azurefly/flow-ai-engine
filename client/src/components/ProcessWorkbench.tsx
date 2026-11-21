@@ -26,7 +26,9 @@ import { AlertDialog, AlertDialogContent, AlertDialogTitle, AlertDialogDescripti
 import { visibleTaskFormErrors } from "@shared/task-form-feedback";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 import { Input } from "@/components/ui/input";
-import { ProcessWorkbenchRunTab } from "@/components/ProcessWorkbenchRunTab";
+import { ProcessWorkbenchRunPage } from "./ProcessWorkbenchRunPage";
+import { useRunInstanceReturn } from "./RunInstancePage";
+import type { WorkbenchRunTarget } from "@shared/console-route";
 import { FlowTypeBadge } from "./FlowTypeBadge";
 import { trpc } from "@/lib/trpc";
 import {
@@ -134,16 +136,22 @@ const filterLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " 
 const summaryRowClass = "flex min-w-0 justify-between gap-2";
 const detailTextClass = ("aiflow-type-body mt-1 break-words " + mutedToneClass);
 
-export default function ProcessWorkbench({ navigationControls, routeTaskId, onClearTaskRoute }: {
-  navigationControls?: ReactNode; routeTaskId?: string; onClearTaskRoute?: () => void;
+export default function ProcessWorkbench({ navigationControls, routeTaskId, routeRun, onClearTaskRoute, onOpenRun, onBackFromRun }: {
+  navigationControls?: ReactNode;
+  routeTaskId?: string;
+  routeRun?: WorkbenchRunTarget;
+  onClearTaskRoute: () => void;
+  onOpenRun: (target: WorkbenchRunTarget) => void;
+  onBackFromRun: () => void;
 }) {
   const utils = trpc.useUtils();
   const [view, setView] = useState<View>("board");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [localTaskId, setLocalTaskId] = useState<string | null>(null);
-  const selectedTaskId = routeTaskId ?? localTaskId;
+  const selectedTaskId = routeRun ? null : routeTaskId ?? localTaskId;
   const taskOpener = useRef<HTMLElement | null>(null);
-  const panel = useRef<HTMLElement>(null);
+  const runReturn = useRunInstanceReturn(routeRun?.runId ?? null, view, true);
+  const panel = runReturn.list;
   const wasOpen = useRef(false);
   useEffect(() => {
     if (wasOpen.current && !selectedTaskId) {
@@ -157,10 +165,21 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
   }, [selectedTaskId]);
   const setSelectedTaskId = (id: string | null) => {
     setLocalTaskId(id);
-    if (routeTaskId && id !== routeTaskId) onClearTaskRoute?.();
+    if (routeTaskId && id !== routeTaskId) onClearTaskRoute();
   };
-  const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
-  const [runEntryTask, setRunEntryTask] = useState<{ runId: string; taskId: string } | null>(null);
+  const [runAfterTaskClose, setRunAfterTaskClose] = useState<WorkbenchRunTarget | null>(null);
+  useEffect(() => {
+    if (!selectedTaskId && runAfterTaskClose) {
+      setRunAfterTaskClose(null);
+      onOpenRun(runAfterTaskClose);
+    }
+  }, [onOpenRun, runAfterTaskClose, selectedTaskId]);
+
+  const openTaskRun = (runId: string, entryTaskId: string) => {
+    // The drawer confirms draft loss before opening a saved run. Wait for its navigation guard to unmount.
+    setRunAfterTaskClose({ runId, entryTaskId });
+    setSelectedTaskId(null);
+  };
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
   const [pageSize, setPageSize] = useState(10);
   const [pageCursorStack, setPageCursorStack] = useState<
@@ -191,6 +210,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
     return () => window.clearTimeout(timeout);
   }, [listSearch]);
   const dashboard = trpc.task.dashboard.useQuery(undefined, {
+    enabled: !routeRun,
     refetchInterval: 30_000,
   });
   const currentPageCursor = pageCursorStack[pageCursorStack.length - 1];
@@ -228,7 +248,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
     ]
   );
   const tasks = trpc.task.page.useQuery(taskInput, {
-    enabled: ["todo", "done"].includes(view),
+    enabled: !routeRun && ["todo", "done"].includes(view),
     refetchInterval: 30_000,
   });
   const instanceInput = useMemo(
@@ -261,7 +281,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
     [month.getFullYear(), month.getMonth(), calendarCursorStack]
   );
   const instances = trpc.task.instancePage.useQuery(instanceInput, {
-    enabled: ["initiated", "all"].includes(view),
+    enabled: !routeRun && ["initiated", "all"].includes(view),
     refetchInterval: 30_000,
   });
   const taskPage = tasks.data;
@@ -291,7 +311,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
   const pagingLoading =
     tasks.isFetching || instances.isFetching || searchPending;
   const calendar = trpc.task.calendar.useQuery(calendarInput, {
-    enabled: view === "calendar",
+    enabled: !routeRun && view === "calendar",
     refetchInterval: 30_000,
   });
   useEffect(() => {
@@ -377,10 +397,10 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
             : "处理结果已记录，流程已完成。"
       );
     if (result.runId && result.canViewRun === true) {
-      setRunEntryTask({ runId: result.runId, taskId: submitted.taskId });
-      setSelectedRunId(result.runId);
+      openTaskRun(result.runId, submitted.taskId);
+    } else {
+      setSelectedTaskId(null);
     }
-    setSelectedTaskId(null);
   };
   const complete = trpc.task.complete.useMutation({
     onSuccess: taskFinished,
@@ -461,8 +481,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
           ["success", "cancelled"].includes(String(item.status))
       );
       if (completed?.runId) {
-        setRunEntryTask({ runId: completed.runId, taskId: completed.taskId });
-        setSelectedRunId(completed.runId);
+        onOpenRun({ runId: completed.runId, entryTaskId: completed.taskId });
       }
       const message = `批量处理已逐项执行：${success} 项成功${failed ? `，${failed} 项未处理` : ""}。`;
       if (!success) toast.error(message);
@@ -503,15 +522,8 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
       count: dashboard.data?.counts.all,
     },
   ];
-  const closeRunTab = () => {
-    setRunEntryTask(null);
-    setSelectedRunId(null);
-    invalidate();
-  };
   const changeView = (next: View) => {
-    setRunEntryTask(null);
     setView(next);
-    setSelectedRunId(null);
     setSelectedTaskId(null);
     setSelectedTaskIds([]);
     setPageCursorStack([undefined]);
@@ -561,6 +573,17 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
     });
   };
 
+  if (routeRun) {
+    return (
+      <ProcessWorkbenchRunPage
+        key={`${routeRun.runId}:${routeRun.entryTaskId ?? ""}`}
+        runId={routeRun.runId}
+        entryTaskId={routeRun.entryTaskId}
+        onBack={onBackFromRun}
+      />
+    );
+  }
+
   return (
     <div data-aiflow-workbench-page="" className="aiflow-page-frame bg-background">
       <div
@@ -570,7 +593,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
       >
         <aside
           data-workbench-navigation=""
-          className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card p-2 shadow-sm ${selectedRunId ? "hidden" : ""}`}
+          className="min-w-0 overflow-hidden rounded-lg border border-border bg-card p-2 shadow-sm"
         >
           <div
             data-workbench-nav-header=""
@@ -680,223 +703,216 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
         </aside>
         <section
           aria-label="流程工作台内容"
-          data-workbench-content="" ref={panel}
-          className={`min-w-0 ${selectedRunId ? "lg:col-span-2" : ""}`}
+          data-workbench-content="" ref={panel} tabIndex={-1}
+          className="min-w-0"
         >
-          {selectedRunId ? (
-            <ProcessWorkbenchRunTab
-              runId={selectedRunId}
-              entryTaskId={runEntryTask?.runId === selectedRunId ? runEntryTask.taskId : undefined}
-              baseTabLabel={labels[view]}
-              onClose={closeRunTab}
-              onReturn={closeRunTab}
-            />
-          ) : (
-            <section
-              data-workbench-panel=""
-              className="rounded-lg border border-border bg-card shadow-sm"
-            >
-              <header className="flex items-start justify-between gap-3 border-b border-border p-4 sm:items-center sm:p-5">
-                <div className="min-w-0">
-                  <h1
-                    data-aiflow-page-title="" tabIndex={-1}
-                    className="aiflow-type-page-title font-semibold text-foreground sm:mt-1"
-                  >
-                    {labels[view]}
-                  </h1>
-                  <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
-                    当前视图仅展示具备运行权限的流程实例与人工任务。
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  aria-label="刷新当前视图"
-                  title="刷新当前视图"
-                  className="aiflow-type-control min-h-11 min-w-11 shrink-0 px-2 sm:min-w-0 sm:px-3 lg:min-h-9"
-                  onClick={() => {
-                    if (view === "calendar") {
-                      setCalendarCursorStack([undefined]);
-                      setCalendarEvents([]);
-                      setCalendarNextCursor(null);
-                    }
-                    invalidate();
-                  }}
+          <section
+            data-workbench-panel=""
+            className="rounded-lg border border-border bg-card shadow-sm"
+          >
+            <header className="flex items-start justify-between gap-3 border-b border-border p-4 sm:items-center sm:p-5">
+              <div className="min-w-0">
+                <h1
+                  data-aiflow-page-title="" tabIndex={-1}
+                  className="aiflow-type-page-title font-semibold text-foreground sm:mt-1"
                 >
-                  <RefreshCw size={14} />
-                  <span className="sr-only sm:not-sr-only">刷新</span>
-                </Button>
-              </header>
-              {view === "board" && (
-                <Board
-                  dashboard={dashboard.data}
-                  loading={dashboard.isLoading}
-                  error={dashboard.error?.message}
-                  onView={changeView}
-                  onRetry={() => void dashboard.refetch()}
+                  {labels[view]}
+                </h1>
+                <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
+                  当前视图仅展示具备运行权限的流程实例与人工任务。
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label="刷新当前视图"
+                title="刷新当前视图"
+                className="aiflow-type-control min-h-11 min-w-11 shrink-0 px-2 sm:min-w-0 sm:px-3 lg:min-h-9"
+                onClick={() => {
+                  if (view === "calendar") {
+                    setCalendarCursorStack([undefined]);
+                    setCalendarEvents([]);
+                    setCalendarNextCursor(null);
+                  }
+                  invalidate();
+                }}
+              >
+                <RefreshCw size={14} />
+                <span className="sr-only sm:not-sr-only">刷新</span>
+              </Button>
+            </header>
+            {view === "board" && (
+              <Board
+                dashboard={dashboard.data}
+                loading={dashboard.isLoading}
+                error={dashboard.error?.message}
+                onView={changeView}
+                onRetry={() => void dashboard.refetch()}
+                onTask={openTask}
+              />
+            )}
+            {view === "calendar" &&
+              (calendar.isError && !calendarEvents.length ? (
+                <QueryErrorState
+                  title="日历加载失败"
+                  message={calendar.error.message}
+                  onRetry={() => void calendar.refetch()}
+                />
+              ) : calendar.isLoading && !calendarEvents.length ? (
+                <LoadingState label="正在读取当前月份的流程任务…" />
+              ) : (
+                <Calendar
+                  month={month}
+                  setMonth={changeCalendarMonth}
+                  events={calendarEvents}
+                  hasMore={Boolean(calendarNextCursor)}
+                  loadingMore={calendar.isFetching}
+                  loadMoreError={
+                    calendar.isError ? calendar.error.message : undefined
+                  }
+                  onLoadMore={loadMoreCalendarEvents}
                   onTask={openTask}
                 />
-              )}
-              {view === "calendar" &&
-                (calendar.isError && !calendarEvents.length ? (
-                  <QueryErrorState
-                    title="日历加载失败"
-                    message={calendar.error.message}
-                    onRetry={() => void calendar.refetch()}
-                  />
-                ) : calendar.isLoading && !calendarEvents.length ? (
-                  <LoadingState label="正在读取当前月份的流程任务…" />
-                ) : (
-                  <Calendar
-                    month={month}
-                    setMonth={changeCalendarMonth}
-                    events={calendarEvents}
-                    hasMore={Boolean(calendarNextCursor)}
-                    loadingMore={calendar.isFetching}
-                    loadMoreError={
-                      calendar.isError ? calendar.error.message : undefined
-                    }
-                    onLoadMore={loadMoreCalendarEvents}
-                    onTask={openTask}
-                  />
-                ))}
-              {view === "todo" && selectedTaskIds.length > 0 && (
-                <TaskBatchBar
-                  count={selectedTaskIds.length}
-                  busy={busy}
-                  onClaim={() =>
-                    batchClaim.mutate({ taskIds: selectedTaskIds })
-                  }
-                  onComplete={runBatchComplete}
-                  decision={batchDecision}
-                  comment={batchComment}
-                  onDecision={setBatchDecision}
-                  onComment={setBatchComment}
-                />
-              )}
-              {["todo", "done", "initiated", "all"].includes(view) && (
-                <WorkbenchListFilters
-                  matchingCount={filteredListRows.length}
-                  pageNumber={pageCursorStack.length}
-                  pageSize={pageSize}
-                  hasPreviousPage={pageCursorStack.length > 1}
-                  hasNextPage={activeHasNextPage}
-                  searchPending={searchPending}
-                  pagingLoading={pagingLoading}
-                  search={listSearch}
-                  status={listStatus}
-                  from={listFrom}
-                  through={listThrough}
-                  statusLabel={
-                    ["todo", "done"].includes(view)
-                      ? "任务状态"
-                      : "流程状态 / 业务阶段"
-                  }
-                  statusOptions={listStatusOptions}
-                  onSearch={value => {
-                    setListSearch(value);
+              ))}
+            {view === "todo" && selectedTaskIds.length > 0 && (
+              <TaskBatchBar
+                count={selectedTaskIds.length}
+                busy={busy}
+                onClaim={() =>
+                  batchClaim.mutate({ taskIds: selectedTaskIds })
+                }
+                onComplete={runBatchComplete}
+                decision={batchDecision}
+                comment={batchComment}
+                onDecision={setBatchDecision}
+                onComment={setBatchComment}
+              />
+            )}
+            {["todo", "done", "initiated", "all"].includes(view) && (
+              <WorkbenchListFilters
+                matchingCount={filteredListRows.length}
+                pageNumber={pageCursorStack.length}
+                pageSize={pageSize}
+                hasPreviousPage={pageCursorStack.length > 1}
+                hasNextPage={activeHasNextPage}
+                searchPending={searchPending}
+                pagingLoading={pagingLoading}
+                search={listSearch}
+                status={listStatus}
+                from={listFrom}
+                through={listThrough}
+                statusLabel={
+                  ["todo", "done"].includes(view)
+                    ? "任务状态"
+                    : "流程状态 / 业务阶段"
+                }
+                statusOptions={listStatusOptions}
+                onSearch={value => {
+                  setListSearch(value);
+                  setSelectedTaskIds([]);
+                }}
+                onStatus={value => {
+                  setListStatus(value);
+                  setPageCursorStack([undefined]);
+                  setSelectedTaskIds([]);
+                }}
+                onFrom={value => {
+                  setListFrom(value);
+                  setPageCursorStack([undefined]);
+                  setSelectedTaskIds([]);
+                }}
+                onThrough={value => {
+                  setListThrough(value);
+                  setPageCursorStack([undefined]);
+                  setSelectedTaskIds([]);
+                }}
+                onReset={() => {
+                  setListSearch("");
+                  setDebouncedListSearch("");
+                  setListStatus("all");
+                  setListFrom("");
+                  setListThrough("");
+                  setPageCursorStack([undefined]);
+                  setSelectedTaskIds([]);
+                }}
+                onPageSize={value => {
+                  setPageSize(value);
+                  setPageCursorStack([undefined]);
+                  setSelectedTaskIds([]);
+                }}
+                onPreviousPage={() => {
+                  setSelectedTaskIds([]);
+                  setPageCursorStack(current => current.slice(0, -1));
+                }}
+                onNextPage={() => {
+                  const nextCursor = ["todo", "done"].includes(view)
+                    ? taskPage?.nextCursor
+                    : instancePage?.nextCursor;
+                  if (nextCursor) {
                     setSelectedTaskIds([]);
-                  }}
-                  onStatus={value => {
-                    setListStatus(value);
-                    setPageCursorStack([undefined]);
-                    setSelectedTaskIds([]);
-                  }}
-                  onFrom={value => {
-                    setListFrom(value);
-                    setPageCursorStack([undefined]);
-                    setSelectedTaskIds([]);
-                  }}
-                  onThrough={value => {
-                    setListThrough(value);
-                    setPageCursorStack([undefined]);
-                    setSelectedTaskIds([]);
-                  }}
-                  onReset={() => {
-                    setListSearch("");
-                    setDebouncedListSearch("");
-                    setListStatus("all");
-                    setListFrom("");
-                    setListThrough("");
-                    setPageCursorStack([undefined]);
-                    setSelectedTaskIds([]);
-                  }}
-                  onPageSize={value => {
-                    setPageSize(value);
-                    setPageCursorStack([undefined]);
-                    setSelectedTaskIds([]);
-                  }}
-                  onPreviousPage={() => {
-                    setSelectedTaskIds([]);
-                    setPageCursorStack(current => current.slice(0, -1));
-                  }}
-                  onNextPage={() => {
-                    const nextCursor = ["todo", "done"].includes(view)
-                      ? taskPage?.nextCursor
-                      : instancePage?.nextCursor;
-                    if (nextCursor) {
-                      setSelectedTaskIds([]);
-                      setPageCursorStack(current => [...current, nextCursor]);
-                    }
-                  }}
-                />
-              )}
-              {["todo", "done"].includes(view) && (
-                <TaskList
-                  key={`${view}:${listSearch}:${listStatus}:${listFrom}:${listThrough}:${pageSize}:${pageCursorStack.at(-1) ?? "first"}`}
-                  tasks={filteredListRows}
-                  loading={
-                    tasks.isLoading ||
-                    (pagingLoading && filteredListRows.length === 0)
+                    setPageCursorStack(current => [...current, nextCursor]);
                   }
-                  error={tasks.isError ? tasks.error.message : undefined}
-                  onRetry={() => void tasks.refetch()}
-                  onTask={setSelectedTaskId}
-                  onExecute={setSelectedTaskId}
-                  busy={busy}
-                  selectedTaskIds={selectedTaskIds}
-                  onToggle={taskId =>
-                    setSelectedTaskIds(current =>
-                      current.includes(taskId)
-                        ? current.filter(id => id !== taskId)
-                        : [...current, taskId]
-                    )
-                  }
-                  selectable={view === "todo"}
-                  emptyMessage={
-                    activeHasNextPage
-                      ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
-                      : hasListFilters
-                        ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
-                        : "当前范围内暂无可见人工任务。"
-                  }
-                />
-              )}
-              {["initiated", "all"].includes(view) && (
-                <InstanceList
-                  key={`${view}:${listSearch}:${listStatus}:${listFrom}:${listThrough}:${pageSize}:${pageCursorStack.at(-1) ?? "first"}`}
-                  instances={filteredListRows}
-                  loading={
-                    instances.isLoading ||
-                    (pagingLoading && filteredListRows.length === 0)
-                  }
-                  error={
-                    instances.isError ? instances.error.message : undefined
-                  }
-                  onRetry={() => void instances.refetch()}
-                  onOpenRun={(id: string) => { setRunEntryTask(null); setSelectedRunId(id); }}
-                  emptyMessage={
-                    activeHasNextPage
-                      ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
-                      : hasListFilters
-                        ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
-                        : "当前范围内暂无可见流程实例。"
-                  }
-                />
-              )}
-            </section>
-          )}
+                }}
+              />
+            )}
+            {["todo", "done"].includes(view) && (
+              <TaskList
+                key={`${view}:${listSearch}:${listStatus}:${listFrom}:${listThrough}:${pageSize}:${pageCursorStack.at(-1) ?? "first"}`}
+                tasks={filteredListRows}
+                loading={
+                  tasks.isLoading ||
+                  (pagingLoading && filteredListRows.length === 0)
+                }
+                error={tasks.isError ? tasks.error.message : undefined}
+                onRetry={() => void tasks.refetch()}
+                onTask={setSelectedTaskId}
+                onExecute={setSelectedTaskId}
+                busy={busy}
+                selectedTaskIds={selectedTaskIds}
+                onToggle={taskId =>
+                  setSelectedTaskIds(current =>
+                    current.includes(taskId)
+                      ? current.filter(id => id !== taskId)
+                      : [...current, taskId]
+                  )
+                }
+                selectable={view === "todo"}
+                emptyMessage={
+                  activeHasNextPage
+                    ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
+                    : hasListFilters
+                      ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
+                      : "当前范围内暂无可见人工任务。"
+                }
+              />
+            )}
+            {["initiated", "all"].includes(view) && (
+              <InstanceList
+                key={`${view}:${listSearch}:${listStatus}:${listFrom}:${listThrough}:${pageSize}:${pageCursorStack.at(-1) ?? "first"}`}
+                instances={filteredListRows}
+                loading={
+                  instances.isLoading ||
+                  (pagingLoading && filteredListRows.length === 0)
+                }
+                error={
+                  instances.isError ? instances.error.message : undefined
+                }
+                onRetry={() => void instances.refetch()}
+                onOpenRun={(runId, button) => {
+                  runReturn.rememberOpener(button);
+                  onOpenRun({ runId });
+                }}
+                emptyMessage={
+                  activeHasNextPage
+                    ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
+                    : hasListFilters
+                      ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
+                      : "当前范围内暂无可见流程实例。"
+                }
+              />
+            )}
+          </section>
         </section>
       </div>
       {selectedTaskId && (
@@ -918,11 +934,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, onCl
           submissionError={taskSubmission?.error ? submissionErrorText(taskSubmission.error) : null}
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
-          onOpenRun={(runId: string) => {
-            setRunEntryTask({ runId, taskId: selectedTaskId });
-            setSelectedTaskId(null);
-            setSelectedRunId(runId);
-          }}
+          onOpenRun={(runId: string) => openTaskRun(runId, selectedTaskId)}
           onClaim={() => claim.mutate({ taskId: selectedTaskId })}
           onExecute={(result: {
             decision: "approved" | "rejected" | "abstained";
@@ -1700,7 +1712,7 @@ function InstanceList({
   loading: boolean;
   error?: string;
   onRetry: () => void;
-  onOpenRun: (id: string) => void;
+  onOpenRun: (id: string, button: HTMLButtonElement) => void;
   emptyMessage: string;
 }) {
   const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
@@ -1774,7 +1786,8 @@ function InstanceList({
                   variant="outline"
                   size="sm"
                   className="aiflow-type-control mt-3 min-h-11 w-full text-aiflow-info"
-                  onClick={() => onOpenRun(run.id)}
+                  id={`workbench-run-card-${run.id}`}
+                  onClick={event => onOpenRun(run.id, event.currentTarget)}
                 >
                   实例详情
                 </Button>
@@ -1851,7 +1864,8 @@ function InstanceList({
                         : "打开实例详情"
                     }
                     className="min-h-11 px-1 text-xs text-aiflow-info"
-                    onClick={() => onOpenRun(run.id)}
+                    id={`workbench-run-row-${run.id}`}
+                    onClick={event => onOpenRun(run.id, event.currentTarget)}
                   >
                     实例详情
                   </Button>

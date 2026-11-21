@@ -26,7 +26,8 @@ describe("已启动流程类型展示", () => {
     expect(workbench.match(/<FlowTypeBadge type=\{run.flowType\}/g)?.length).toBe(2);
     expect(workbench.match(/<FlowTypeBadge type=\{event.flowType\}/g)?.length).toBe(3);
     expect(source("./p1-service.ts")).toContain("flowType: task.flowType,");
-    expect(source("../client/src/components/ProcessWorkbenchRunTab.tsx")).toContain("<FlowTypeBadge type={run.flowType}");
+    expect(source("../client/src/components/ProcessWorkbenchRunPage.tsx")).toContain('flowType={typeof run?.flowType === "string" ? run.flowType : undefined}');
+    expect(source("../client/src/components/RunInstancePage.tsx")).toContain("<FlowTypeBadge type={flowType}");
     expect(source("../client/src/components/RunCenter.tsx")).toContain("<FlowTypeBadge type={flowType}");
     expect(source("../client/src/components/DataResourceCenter.tsx")).toContain('<FlowTypeBadge type="data"');
   });

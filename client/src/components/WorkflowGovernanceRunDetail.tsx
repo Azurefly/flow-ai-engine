@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from "react";
 import "./workflow-governance.css";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
+import type { RunRecord } from "@shared/run-execution-graph";
 import { RunPayloadDetails } from "./RunPayloadDetails";
 const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
 
@@ -130,13 +131,83 @@ function FactSection({ run }: { run: any }) {
     </section>
   );
 }
-export function RunDetailContent({
-  run,
-  entryTaskId,
-}: {
-  run: any;
-  entryTaskId?: string;
-}) {
+export function RunDetailSummary({ run }: { run: RunRecord }) {
+  return (
+    <section aria-label="实例状态摘要" className="grid grid-cols-2 gap-x-5 gap-y-2 lg:grid-cols-4">
+      <Summary
+        label="实例状态"
+        value={statusLabel(run.status)}
+        secondary={
+          run.participantStatusName
+            ? `我的办理：${run.participantStatusName}`
+            : undefined
+        }
+      />
+      <Summary
+        label="发起人"
+        value={
+          run.triggeredByName ||
+          run.username ||
+          `用户 ${run.triggeredByUserId ?? "—"}`
+        }
+      />
+      <Summary
+        label="开始时间"
+        value={formatTime(run.startedAt ?? run.createdAt)}
+      />
+      {run.flowType === "state" && (
+        <Summary
+          label="当前业务状态"
+          value={
+            run.flowType === "state"
+              ? run.currentStateName || run.currentStateCode || "尚未进入状态"
+              : "不适用"
+          }
+          secondary={
+            run.flowType === "state" && run.currentStateName
+              ? run.currentStateCode
+              : undefined
+          }
+        />
+      )}
+    </section>
+  );
+}
+
+export function RunDetailFacts({ run }: { run: RunRecord }) {
+  return (
+    <div className="space-y-4">
+      <details className="aiflow-type-meta text-muted-foreground">
+        <summary className="cursor-pointer">实例版本与时间信息</summary>
+        <p className="mt-2">
+          结束时间：{formatTime(run.finishedAt)}
+          {run.flowType === "state"
+            ? ` · 状态版本：${run.stateVersion ?? 0}`
+            : ""}
+        </p>
+      </details>
+      {run.participantCards?.length > 0 && (
+        <section>
+          <h3 className="aiflow-type-section-title font-semibold">参与人状态</h3>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2" data-participant-state-cards="">
+            {run.participantCards.map((card: any) => (
+              <article key={card.userId} className="min-w-0 rounded-lg border border-border p-3">
+                <p className="break-words font-medium">{card.userName || `用户 ${card.userId}`}</p>
+                <p className="mt-1 break-words aiflow-type-body">{card.stateName}</p>
+                <p className="mt-1 break-words aiflow-type-meta text-muted-foreground">
+                  {(parse(card.availableOperationsJson) ?? []).map((operation: any) => operation.name).join("、") || "暂无可用操作"}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      <FactSection run={run} />
+    </div>
+  );
+}
+
+function RunDetailContent({ run }: { run: RunRecord | null }) {
   const [selection, setSelection] = useState<{
     runId: string;
     nodeId: string;
@@ -155,53 +226,7 @@ export function RunDetailContent({
   );
   return (
     <div className="space-y-4 p-5">
-      <section className="grid grid-cols-2 gap-x-5 gap-y-2 rounded-lg border border-border px-4 py-3 lg:grid-cols-4">
-        <Summary
-          label="实例状态"
-          value={statusLabel(run.status)}
-          secondary={
-            run.participantStatusName
-              ? `我的办理：${run.participantStatusName}`
-              : undefined
-          }
-        />
-        <Summary
-          label="发起人"
-          value={
-            run.triggeredByName ||
-            run.username ||
-            `用户 ${run.triggeredByUserId ?? "—"}`
-          }
-        />
-        <Summary
-          label="开始时间"
-          value={formatTime(run.startedAt ?? run.createdAt)}
-        />
-        {run.flowType === "state" && (
-          <Summary
-            label="当前业务状态"
-            value={
-              run.flowType === "state"
-                ? run.currentStateName || run.currentStateCode || "尚未进入状态"
-                : "不适用"
-            }
-            secondary={
-              run.flowType === "state" && run.currentStateName
-                ? run.currentStateCode
-                : undefined
-            }
-          />
-        )}
-      </section>
-      <details className="aiflow-type-meta text-muted-foreground">
-        <summary className="cursor-pointer">实例版本与时间信息</summary>
-        <p className="mt-2">
-          结束时间：{formatTime(run.finishedAt)}
-          {run.flowType === "state"
-            ? ` · 状态版本：${run.stateVersion ?? 0}`
-            : ""}
-        </p>
-      </details>
+      <div className="rounded-lg border border-border px-4 py-3"><RunDetailSummary run={run} /></div>
       <Suspense
         fallback={
           <p
@@ -215,30 +240,13 @@ export function RunDetailContent({
         <RunExecutionCanvas
           key={run.id}
           run={run}
-          entryTaskId={entryTaskId}
           focusRequest={
             selection && selection.runId === run.id ? selection : undefined
           }
         />
       </Suspense>
       <RunPayloadDetails title="实例错误" value={run.errorJson} kind="error" />
-      {run.participantCards?.length > 0 && (
-        <section>
-          <h3 className="aiflow-type-section-title font-semibold">参与人状态</h3>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2" data-participant-state-cards="">
-            {run.participantCards.map((card: any) => (
-              <article key={card.userId} className="min-w-0 rounded-lg border border-border p-3">
-                <p className="break-words font-medium">{card.userName || `用户 ${card.userId}`}</p>
-                <p className="mt-1 break-words aiflow-type-body">{card.stateName}</p>
-                <p className="mt-1 break-words aiflow-type-meta text-muted-foreground">
-                  {(parse(card.availableOperationsJson) ?? []).map((operation: any) => operation.name).join("、") || "暂无可用操作"}
-                </p>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-      <FactSection run={run} />
+      <RunDetailFacts run={run} />
       <section>
         <h3 className="aiflow-type-section-title font-semibold text-foreground">
           操作记录 · {actions.length}

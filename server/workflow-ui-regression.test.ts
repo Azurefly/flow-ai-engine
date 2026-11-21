@@ -217,9 +217,10 @@ const processWorkbenchSource = source(
   "../client/src/components/ProcessWorkbench.tsx"
 );
 const p1ServiceSource = source("./p1-service.ts");
-const processWorkbenchRunTabSource = source(
-  "../client/src/components/ProcessWorkbenchRunTab.tsx"
+const processWorkbenchRunPageSource = source(
+  "../client/src/components/ProcessWorkbenchRunPage.tsx"
 );
+const runInstancePageSource = source("../client/src/components/RunInstancePage.tsx");
 const instanceDetailSource = source(
   "../client/src/components/WorkflowGovernanceRunDetail.tsx"
 );
@@ -361,16 +362,17 @@ describe("共享对话框关闭控件", () => {
 });
 
 describe("工作台只读任务运行详情入口", () => {
-  it("只在服务端确认 workflow:view 后显示链接并切换到已有详情面板", () => {
+  it("只在服务端确认 workflow:view 后显示链接，并以任务标识打开独立实例页", () => {
     expect(p1ServiceSource).toMatch(
       /canViewRun:\s*await hasWorkflowPermission\(\s*user,\s*String\(task\.workflowId\),\s*"workflow:view"\s*\)/
     );
     expect(processWorkbenchSource).toContain("task.canViewRun === true");
     expect(processWorkbenchSource).toContain("查看运行详情");
-    expect(processWorkbenchSource).toMatch(
-      /onOpenRun=\{\(runId: string\) => \{\s*setRunEntryTask\(\{ runId, taskId: selectedTaskId \}\);\s*setSelectedTaskId\(null\);\s*setSelectedRunId\(runId\);\s*\}\}/
-    );
-    expect(processWorkbenchSource).toContain("<ProcessWorkbenchRunTab");
+    expect(processWorkbenchSource).toContain("requestExit(()=>onOpenRun(String(task.runId)))");
+    expect(processWorkbenchSource).toContain("onOpenRun={(runId: string) => openTaskRun(runId, selectedTaskId)}");
+    expect(processWorkbenchSource).toContain("openTaskRun(result.runId, submitted.taskId)");
+    expect(processWorkbenchSource).toContain("onOpenRun({ runId: completed.runId, entryTaskId: completed.taskId })");
+    expect(processWorkbenchRunPageSource).toContain("<RunExecutionCanvas run={run} entryTaskId={entryTaskId} workspace />");
   });
 });
 
@@ -2225,13 +2227,9 @@ describe("流程设计器界面回归约束", () => {
       "LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId"
     );
     expect(instanceDetailSource).toContain("run.triggeredByName ||");
-    expect(processWorkbenchRunTabSource).toContain('data-aiflow-page-title=""');
-    expect(processWorkbenchRunTabSource).toContain(
-      'className="aiflow-type-page-title mt-1 font-semibold text-foreground"'
-    );
-    expect(processWorkbenchRunTabSource).toContain(
-      'aria-label="实例详情路径"'
-    );
+    expect(runInstancePageSource).toContain('data-aiflow-page-title=""');
+    expect(runInstancePageSource).toContain('className="aiflow-type-page-title w-fit font-semibold"');
+    expect(processWorkbenchRunPageSource).toContain("<RunDetailSummary run={run} />");
   });
 
   it("工作台统计首次加载时不把未知计数显示为零", () => {
@@ -2860,28 +2858,15 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(processWorkbenchSource).toContain('label: "全部可见"');
     expect(processWorkbenchSource).toContain('label: "我发起"');
-    expect(processWorkbenchSource).toContain("ProcessWorkbenchRunTab");
-    expect(processWorkbenchSource).toContain("setRunEntryTask(null); setSelectedRunId(id)");
-    expect(processWorkbenchSource).toContain("baseTabLabel={labels[view]}");
+    expect(processWorkbenchSource).toMatch(/if \(routeRun\) \{\s*return \(\s*<ProcessWorkbenchRunPage/);
+    expect(processWorkbenchSource).toContain("runReturn.rememberOpener(button)");
+    expect(homeSource).toContain("routeRun={workbenchRoute?.instance}");
     expect(processWorkbenchSource).toMatch(
-      /const closeRunTab = \(\) => \{\s*setRunEntryTask\(null\);\s*setSelectedRunId\(null\);\s*invalidate\(\);\s*\}/
-    );
-    expect(processWorkbenchSource).toMatch(
-      /setSelectedRunId\(null\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);\s*invalidate\(\);/
+      /setView\(next\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);\s*invalidate\(\);/
     );
     expect(styleSource).toContain("--aiflow-section-gap: 1rem;");
-    expect(processWorkbenchRunTabSource).toContain('aria-label="实例详情路径"');
-    expect(processWorkbenchRunTabSource).toContain("返回工作台");
-    expect(processWorkbenchRunTabSource).toContain(
-      "trpc.workflow.runDetail.useQuery"
-    );
-    expect(processWorkbenchRunTabSource).toContain("baseTabLabel");
-    expect(processWorkbenchRunTabSource).toContain(
-      "返回{baseTabLabel}"
-    );
-    expect(processWorkbenchRunTabSource).toContain(
-      "data-process-workbench-tabs"
-    );
+    expect(processWorkbenchRunPageSource).toContain('backLabel="返回流程工作台"');
+    expect(processWorkbenchRunPageSource).toContain("trpc.workflow.runDetail.useQuery");
   });
 
   it("我发起列表使用统一的正文、元数据和操作字号", () => {
@@ -3310,9 +3295,7 @@ describe("流程设计器界面回归约束", () => {
     expect(organizationManagementSource).toContain(
       "grid min-w-0 grid-cols-3 gap-1"
     );
-    expect(processWorkbenchRunTabSource).toContain(
-      "flex items-center gap-2 border-b border-border"
-    );
+    expect(runInstancePageSource).toContain("flex min-w-0 flex-wrap items-center justify-between gap-3");
     expect(processDetailPageSource).toContain(
       "grid h-auto w-full min-w-0 grid-cols-3"
     );

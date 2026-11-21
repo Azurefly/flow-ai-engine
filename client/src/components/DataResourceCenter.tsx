@@ -15,7 +15,7 @@ const surfaceClass7 = "aiflow-type-control inline-flex min-h-11 items-center fon
 const surfaceClass8 = ("aiflow-type-control grid gap-1 font-medium " + mutedToneClass);
 import { dataflowGraphRun } from "@shared/dataflow-run-view";
 import { DataflowResultTable } from "./DataflowResultTable";
-import { RunInstancePage, useRunMonitorReturn } from "./RunInstancePage";
+import { RunInstancePage, useRunInstanceReturn } from "./RunInstancePage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import "./dataflow-run-inspection.css";
 import { canProbeDataSource, dataSourceCapability, dataSourceReadiness } from "@shared/data-source-capabilities";
@@ -2483,7 +2483,7 @@ export function DataflowRunMonitor({
   blockedContent?: React.ReactNode;
 }) {
   const utils = trpc.useUtils();
-  const monitorReturn = useRunMonitorReturn(selectedRunId, workflowId, viewAllowed);
+  const monitorReturn = useRunInstanceReturn(selectedRunId, workflowId, viewAllowed);
   const detail = trpc.data.runDetail.useQuery(
     { projectId: projectId ?? "00000000", runId: selectedRunId ?? "00000000" },
     {
