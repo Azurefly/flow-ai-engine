@@ -67,6 +67,15 @@ function decodeJson(value: unknown) {
   }
 }
 
+function revealRunPanel(panel: HTMLElement | null) {
+  if (!panel) return;
+  panel.focus({ preventScroll: true });
+  panel.scrollIntoView({
+    block: "start",
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+  });
+}
+
 export default function RunCenter({
   workflowId,
   workflowName,
@@ -75,6 +84,7 @@ export default function RunCenter({
   selectedRun,
   selectedRunLoading,
   selectedRunError,
+  selectedRunErrorCode,
   onSelect,
   onClearSelection,
   onRetrySelection,
@@ -89,6 +99,7 @@ export default function RunCenter({
   selectedRun: any;
   selectedRunLoading: boolean;
   selectedRunError: boolean;
+  selectedRunErrorCode?: string;
   onSelect: (id: string) => void;
   onClearSelection: () => void;
   onRetrySelection: () => void;
@@ -137,9 +148,10 @@ export default function RunCenter({
   }>({ filterKey: "", cursors: [undefined] });
   const runListRef = useRef<HTMLElement | null>(null);
   const runDetailRef = useRef<HTMLElement | null>(null);
-  const previousSelectedRunId = useRef<string | null>(selectedRunId);
-  const runDetail =
-    selectedRunId && selectedRun?.id !== selectedRunId ? null : selectedRun;
+  const previousSelectedRunId = useRef<string | null>(null);
+  const runUnavailable = selectedRunErrorCode === "NOT_FOUND" || selectedRunErrorCode === "FORBIDDEN";
+  const runDetail = !runUnavailable && selectedRun?.id === selectedRunId && selectedRun?.workflowId === workflowId
+    ? selectedRun : null;
   const controlCapabilities = runDetail?.controlCapabilities as WorkflowRunControlCapabilities | undefined;
   const dialogAllowed = Boolean(controlDialog && controlDialog.runId === runDetail?.id && workflowRunControlAllowed(controlCapabilities, controlDialog.action));
   const nodeEntries = useMemo(
@@ -150,30 +162,19 @@ export default function RunCenter({
     const snapshot = decodeJson(runDetail?.definitionSnapshotJson);
     return Array.isArray(snapshot?.nodes) ? snapshot.nodes : [];
   }, [runDetail?.definitionSnapshotJson]);
-  const hasSelectedRun = Boolean(selectedRunId || runDetail);
+  const hasSelectedRun = Boolean(selectedRunId);
   useEffect(() => {
-    const activeRunId = selectedRunId ?? selectedRun?.id ?? null;
-    let frame: number | undefined;
-    if (activeRunId && window.matchMedia("(max-width: 1535px)").matches) {
-      frame = window.requestAnimationFrame(() =>
-        runDetailRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        })
-      );
-    } else if (!activeRunId && previousSelectedRunId.current) {
-      frame = window.requestAnimationFrame(() =>
-        runListRef.current?.scrollIntoView({
-          behavior: "smooth",
-          block: "start",
-        })
-      );
-    }
-    previousSelectedRunId.current = activeRunId;
-    return () => {
-      if (frame !== undefined) window.cancelAnimationFrame(frame);
-    };
-  }, [selectedRunId, selectedRun?.id]);
+    if (!viewAllowed || selectedRunId === previousSelectedRunId.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      previousSelectedRunId.current = selectedRunId;
+      revealRunPanel(selectedRunId ? runDetailRef.current : runListRef.current);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedRunId, viewAllowed]);
+  function selectRun(runId: string) {
+    if (runId === selectedRunId) revealRunPanel(runDetailRef.current);
+    else onSelect(runId);
+  }
   useEffect(() => {
     const timeout = window.setTimeout(
       () => setTriggeredByQuery(triggeredByInput.trim()),
@@ -632,7 +633,7 @@ export default function RunCenter({
                       size="sm"
                       variant="outline"
                       className={compactButtonClass}
-                      onClick={() => onSelect(String(alert.runId))}
+                      onClick={() => selectRun(String(alert.runId))}
                     >
                       查看运行
                     </Button>
@@ -661,7 +662,9 @@ export default function RunCenter({
         <section
           ref={runListRef}
           data-run-history-panel
-          className={`min-w-0 overflow-hidden rounded-lg border border-border bg-card ${hasSelectedRun ? "hidden 2xl:block" : ""}`}
+          tabIndex={-1}
+          aria-label="运行记录"
+          className={`min-w-0 scroll-mt-[calc(var(--workspace-header-height,64px)+16px)] overflow-hidden rounded-lg border border-border bg-card ${hasSelectedRun ? "hidden 2xl:block" : ""}`}
         >
           <div className="aiflow-type-section-title flex items-center justify-between border-b border-border px-4 py-3 font-semibold">
             <span>运行记录</span>
@@ -676,7 +679,7 @@ export default function RunCenter({
             {workflowRuns.map((run: any) => (
               <button
                 key={run.id}
-                onClick={() => onSelect(run.id)}
+                onClick={() => selectRun(run.id)}
                 className={`w-full border-b border-border p-4 text-left hover:bg-muted ${selectedRun?.id === run.id || selectedRunId === run.id ? "bg-aiflow-info-surface" : ""}`}
               >
                 <div className="flex justify-between gap-2">
@@ -754,7 +757,9 @@ export default function RunCenter({
           <section
             ref={runDetailRef}
             data-run-detail-panel
-            className="min-w-0 scroll-mt-4 rounded-lg border border-border bg-card p-4 sm:p-5"
+            tabIndex={-1}
+            aria-label="运行详情"
+            className="min-w-0 scroll-mt-[calc(var(--workspace-header-height,64px)+16px)] rounded-lg border border-border bg-card p-4 sm:p-5"
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -858,19 +863,19 @@ export default function RunCenter({
                 ))}
               </dl>
             )}
-            {selectedRunLoading && !selectedRun ? (
+            {selectedRunLoading && !runDetail ? (
               <div
                 role="status"
                 className={"aiflow-type-body mt-5 grid min-h-32 place-items-center " + mutedToneClass}
               >
                 正在读取运行节点详情…
               </div>
-            ) : selectedRunError && !selectedRun ? (
+            ) : selectedRunError && !runDetail ? (
               <div
                 role="alert"
                 className="aiflow-type-body mt-5 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-aiflow-danger"
               >
-                <p>运行详情暂时无法读取。请重试，或返回运行记录列表。</p>
+                <p>{runUnavailable ? "运行记录不存在或无访问权限。" : "运行详情暂时无法读取。请重试，或返回运行记录列表。"}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"

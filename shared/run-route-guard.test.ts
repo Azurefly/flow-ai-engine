@@ -49,7 +49,7 @@ it("尚未加载当前实例时保持直达链接", () => {
     })
   ).toBe(false);
 });
-it("当前实例匹配流程时保持路由，不匹配或明确不存在时返回列表", () => {
+it("仅在读到属于其他流程的实例时返回列表", () => {
   expect(
     shouldResetRunRoute({
       ...target,
@@ -62,23 +62,12 @@ it("当前实例匹配流程时保持路由，不匹配或明确不存在时返�
       detail: { id: "new-run", workflowId: "wrong-flow" },
     })
   ).toBe(true);
-  expect(
-    shouldResetRunRoute({
-      ...target,
-      queryFailed: true,
-      queryErrorCode: "NOT_FOUND",
-    })
-  ).toBe(true);
 });
-it("失权、登录过期和读取失败保留当前实例链接及操作草稿", () => {
-  for (const queryErrorCode of [
-    "FORBIDDEN",
-    "UNAUTHORIZED",
-    "INTERNAL_SERVER_ERROR",
-    undefined,
-  ]) {
-    expect(
-      shouldResetRunRoute({ ...target, queryFailed: true, queryErrorCode })
-    ).toBe(false);
-  }
+it("实例详情读取失败时保留当前链接，使错误与重试入口可见", () => {
+  expect(shouldResetRunRoute({ ...target, queryFailed: true })).toBe(false);
+  expect(shouldResetRunRoute({
+    ...target,
+    queryFailed: true,
+    detail: { id: target.requestedRunId, workflowId: "old-flow" },
+  })).toBe(false);
 });

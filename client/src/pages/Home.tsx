@@ -811,7 +811,7 @@ function FlowConsole({
   const runDetail = trpc.workflow.runDetail.useQuery(detailInput, {
     enabled: Boolean(
       requestedRoute.route.section === "runs" && requestedRoute.route.view === "monitor" &&
-      canViewWorkflow && selectedRunId && selectedWorkflow && selectedWorkflow.flowType !== "data" && monitorRunId
+      canViewWorkflow && selectedWorkflow && selectedWorkflow.flowType !== "data" && monitorRunId
     ),
     retry: false,
     refetchInterval: query =>
@@ -977,7 +977,6 @@ function FlowConsole({
         queriedRunId: detailInput.runId,
         workflowId: route.workflowId,
         queryFailed: runDetail.isError,
-        queryErrorCode: runDetail.error?.data?.code,
         detail,
       })
     )
@@ -992,7 +991,6 @@ function FlowConsole({
     detailInput.runId,
     runDetail.data,
     runDetail.isError,
-    runDetail.error?.data?.code,
   ]);
 
   const routeRestoring = Boolean(
@@ -2133,6 +2131,7 @@ function FlowConsole({
                           selectedRun={runDetail.data ?? null}
                           selectedRunLoading={runDetail.isLoading}
                           selectedRunError={runDetail.isError}
+                          selectedRunErrorCode={runDetail.error?.data?.code}
                           onSelect={(runId) =>
                             selectedId &&
                             navigateRoute({
