@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { closeSharedPool, getSharedPool } from "./db";
@@ -61,6 +62,48 @@ suite("全局助手 MySQL 持久化", () => {
     if (agents.length)
       await pool.query("DELETE FROM assistant_agent WHERE id IN (?)", [agents]);
     await closeSharedPool();
+  });
+
+  it("原装助手升级创建能力一次，保留管理员保存的配置", async () => {
+    const prior: AssistantConfig = {
+      name: "流程助手",
+      greeting: "你好。你可以让我查看自己的待办、已办，或查找流程。",
+      instructions: "请用中文回答，依据工具返回的系统数据说明结果。",
+      model: "",
+      tools: ["listMyTasks", "searchWorkflows", "listMyCompletedTasks"],
+      enabled: true,
+      roles: ["user", "admin"],
+      projectIds: [],
+    };
+    const migration = readFileSync(new URL("../drizzle/0051_assistant_workflow_creation_default.sql", import.meta.url), "utf8");
+    const connection = await getSharedPool().getConnection();
+    try {
+      await connection.beginTransaction();
+      const restore = (config: AssistantConfig, updater: number | null) => connection.query(
+        "UPDATE assistant_agent SET draftJson=?,publishedJson=?,draftVersion=2,publishedVersion=2,updatedByUserId=? WHERE id=?",
+        [JSON.stringify(config), JSON.stringify(config), updater, ASSISTANT_DEFAULT_ID],
+      );
+      await restore(prior, null);
+      const [applied] = await connection.query<ResultSetHeader>(migration);
+      expect(applied.affectedRows).toBe(1);
+      const [[row]] = await connection.query<RowDataPacket[]>(
+        "SELECT draftJson,publishedJson,draftVersion,publishedVersion FROM assistant_agent WHERE id=?", [ASSISTANT_DEFAULT_ID],
+      );
+      expect(row.draftVersion).toBe(3);
+      expect(row.publishedVersion).toBe(3);
+      const decode = (value: unknown) => typeof value === "string" ? JSON.parse(value) : value;
+      expect(decode(row.draftJson)).toEqual(decode(row.publishedJson));
+      expect(decode(row.publishedJson)).toMatchObject({ tools: [...prior.tools, "createWorkflowDraft"] });
+      const [replayed] = await connection.query<ResultSetHeader>(migration);
+      expect(replayed.affectedRows).toBe(0);
+      await restore(prior, admin.id);
+      expect((await connection.query<ResultSetHeader>(migration))[0].affectedRows).toBe(0);
+      await restore({ ...prior, greeting: "管理员自定义问候" }, null);
+      expect((await connection.query<ResultSetHeader>(migration))[0].affectedRows).toBe(0);
+    } finally {
+      await connection.rollback();
+      connection.release();
+    }
   });
 
   it("相同更新时间按 ID 续读，范围变动拒绝游标，历史可按修订分段", async () => {
@@ -172,8 +215,8 @@ suite("全局助手 MySQL 持久化", () => {
     expect((await getAssistantSession(user, current.id)).config.tools).toEqual(["listMyTasks"]);
   });
 
-  it("内置已发布助手仅启用只读工具，新草稿先由管理员试聊", async () => {
-    expect(defaultConfig.tools).toEqual(["listMyTasks", "searchWorkflows", "listMyCompletedTasks"]);
+  it("系统内置助手可以准备流程草稿，自定义助手发布前仅供管理员试聊", async () => {
+    expect(defaultConfig.tools).toEqual(["listMyTasks", "searchWorkflows", "listMyCompletedTasks", "createWorkflowDraft"]);
     const a = await agent();
     expect(a.published).toBeNull();
     await expect(

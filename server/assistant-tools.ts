@@ -158,7 +158,7 @@ export const assistantToolDefinitions: Tool[] = [
   ),
   tool(
     "createWorkflowDraft",
-    "准备当前项目的状态、控制或数据流程草稿，确认后才创建。节点 ID 用英文字母开头，显示名称可用中文。状态、控制流程开始和结束各一个，审批用 operate，条件连 true 和 false，并行用 parallel 和 merge，分别填 joinId 和 forkId。显式拒绝路线用 approved、rejected，否则拒绝会取消流程。数据流程用 source（asset 填真实资产全名或 ID）、filter、map、aggregate、output 或 end，连线不填 branch。调整时重发完整图。会话已绑定项目时省略项目字段。",
+    "准备当前项目的状态、控制或数据流程草稿，确认后才创建。节点 ID 用英文字母开头，显示名称可用中文。状态流程用初始 state 和连接到 end 的结果 state，审批用 operate。条件连 true 和 false，并行用 parallel 和 merge，分别填 joinId 和 forkId。显式拒绝路线用 approved、rejected，否则拒绝会取消流程。数据流程用 source（asset 填真实资产全名或 ID）、filter、map、aggregate、output 或 end，连线不填 branch。调整时重发完整图。会话已绑定项目时省略项目字段。",
     workflowInput
   ),
   tool(
