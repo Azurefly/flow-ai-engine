@@ -173,7 +173,8 @@ function cleanSource(row: mysql.RowDataPacket) {
 
 export async function listDataResourceOptions(
   user: DataflowUser,
-  projectId: string
+  projectId: string,
+  { includeAssetMetadata = false } = {}
 ) {
   await requireProjectAccess(user, projectId, "view");
   const [versions, assets, sources, udfs] = await Promise.all([
@@ -212,6 +213,7 @@ export async function listDataResourceOptions(
       const enabled = readiness.ready || versions.items.some(v=>v.assetId===row.id && v.kind!=="receipt_write" && v.enabled);
       return {
         ...option, label: option.label + (enabled ? "" : " · 暂不可读取"),
+        ...(includeAssetMetadata ? { name: String(row.name), nativeReadable: readiness.ready } : {}),
         fields: dataflowSchemaFields(parseJson(row.schemaJson, [])),
         disabled: !enabled, ...(!enabled ? { reason: readiness.message } : {}),
       };

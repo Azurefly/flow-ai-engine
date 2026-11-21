@@ -8,6 +8,8 @@ const services = vi.hoisted(() => ({
   getProject: vi.fn(),
   listProjectPage: vi.fn(),
   createProjectWorkflow: vi.fn(),
+  listDataResourceOptions: vi.fn(),
+  dataflowResourceDiagnostics: vi.fn(),
   listWorkflowTasks: vi.fn(),
   updateP1SystemSetting: vi.fn(),
   getP1SystemSettings: vi.fn(),
@@ -15,6 +17,8 @@ const services = vi.hoisted(() => ({
   query: vi.fn(),
 }));
 vi.mock("./project-service", () => services);
+vi.mock("./p2-service", () => services);
+vi.mock("./dataflow-resource-readiness", () => services);
 vi.mock("./p1-service", () => services);
 vi.mock("./workflow-service", () => services);
 vi.mock("./db", () => ({ getSharedPool: () => ({ query: services.query }) }));
@@ -72,12 +76,14 @@ beforeEach(() => {
     code: "PURCHASE",
   });
   services.query.mockResolvedValue([[{ code: "finance", name: "财务" }]]);
+  services.listDataResourceOptions.mockResolvedValue({ assets: [], connectorVersions: [] });
+  services.dataflowResourceDiagnostics.mockResolvedValue([]);
 });
 
 describe("对话业务工具", () => {
-  it("将并行审核和汇合编译为可执行的原生流程画布", async () => {
+  it.each(["state", "control"])("为 %s 流程选择兼容的并行汇合节点", async flowType => {
     const graph = {
-      name: "财务和法务并审", flowType: "state",
+      name: "财务和法务并审", flowType,
       nodes: [
         { id:"start",type:"start",name:"开始" }, {id:"fork",type:"parallel",name:"启动并审",joinId:"join"},
         ...["finance","legal"].map(id => ({id,type:"operate",name:id,assignee:"initiator"})),
@@ -90,8 +96,49 @@ describe("对话业务工具", () => {
     const definition = preview.proposal.payload.definition;
     expect(definition.nodes.find(n=>n.id==="fork")?.config).toMatchObject({broadcast:true,parallelJoinNodeId:"join"});
     expect(definition.edges.filter(e=>e.sourceNodeId==="fork").map(e=>e.sourceHandle)).toEqual(["finance","legal"]);
-    expect(definition.nodes.find(n=>n.id==="join")?.config.parallelForNodeId).toBe("fork");
+    expect(definition.nodes.find(n=>n.id==="join")).toMatchObject({
+      type: flowType === "state" ? "state" : "transform",
+      config: { parallelForNodeId: "fork" },
+    });
     await expect(prepareAssistantTool(user,"createWorkflowDraft",{...graph,edges:graph.edges.map(e=>e.from==="legal"?{...e,to:"end"}:e)},context)).rejects.toThrow();
+  });
+  it("将数据流程绑定到同一业务的真实资产，确认前只准备画布", async () => {
+    const graph = {
+      name: "订单地区汇总", flowType: "data",
+      nodes: [
+        { id: "start", type: "start", name: "开始" },
+        { id: "orders", type: "source", name: "读订单", asset: "订单样本" },
+        { id: "paid", type: "filter", name: "已付款", field: "status", value: "paid" },
+        { id: "totals", type: "aggregate", name: "地区汇总", groupBy: ["region"], metrics: [{ name: "total", operation: "sum", field: "amount" }] },
+        { id: "end", type: "end", name: "查看汇总" },
+      ],
+      edges: [["start", "orders"], ["orders", "paid"], ["paid", "totals"], ["totals", "end"]].map(([from, to]) => ({ from, to })),
+    };
+    services.listDataResourceOptions.mockResolvedValue({
+      assets: [{ name: "订单样本", value: "ordersAsset1", disabled: false, nativeReadable: true }], connectorVersions: [],
+    });
+    const prepared = await prepareAssistantTool(user, "createWorkflowDraft", graph, context);
+    if (prepared.kind !== "proposal" || prepared.proposal.tool !== "createWorkflowDraft") throw new Error("缺少数据草稿");
+    const draft = prepared.proposal.payload.definition;
+    expect(draft.nodes.find(n => n.type === "source")?.config).toMatchObject({ assetId: "ordersAsset1" });
+    expect(draft.nodes.find(n => n.type === "filter")?.config).toMatchObject({ filterField: "status", filterValue: "paid" });
+    expect(prepared.proposal.summary).toContain("数据流程");
+    expect(services.dataflowResourceDiagnostics).toHaveBeenCalledWith(expect.anything(), projectId, draft);
+    expect(services.createProjectWorkflow).not.toHaveBeenCalled();
+
+    services.listDataResourceOptions.mockResolvedValueOnce({ assets: [], connectorVersions: [] });
+    await expect(prepareAssistantTool(user, "createWorkflowDraft", graph, context)).rejects.toThrow("订单样本");
+    services.listDataResourceOptions.mockResolvedValueOnce({ assets: [
+      { name: "订单样本", value: "ordersAsset1", disabled: false }, { name: "订单样本", value: "ordersAsset2", disabled: false },
+    ], connectorVersions: [] });
+    await expect(prepareAssistantTool(user, "createWorkflowDraft", graph, context)).rejects.toThrow("同名");
+    services.listDataResourceOptions.mockResolvedValueOnce({
+      assets: [{ name: "订单样本", value: "ordersAsset1", disabled: false, nativeReadable: false }],
+      connectorVersions: [{ id: "ordersVersion1", assetId: "ordersAsset1", kind: "file_read", enabled: true, label: "月度订单" }],
+    });
+    const pinned = await prepareAssistantTool(user, "createWorkflowDraft", graph, context);
+    if (pinned.kind !== "proposal" || pinned.proposal.tool !== "createWorkflowDraft") throw new Error("缺少文件资源草稿");
+    expect(pinned.proposal.payload.definition.nodes.find(n => n.type === "source")?.config.connectorVersionId).toBe("ordersVersion1");
   });
   it("将审批角色、条件和两个真实去向显示在审批草稿中；可以预览后修订", async () => {
     const first = await prepareAssistantTool(

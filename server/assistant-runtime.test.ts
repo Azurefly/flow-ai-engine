@@ -277,13 +277,15 @@ describe("Agent conversation execution with scripted model responses", () => {
     );
     expect(malformed.task.status).toBe("failed");
   });
-  it("retains a checked proposal after a model summary or transient commit failure", async () => {
+  it("renders a checked draft immediately and retains it on transient commit failure", async () => {
     const deps = scripted(
       reply("", { name: "createWorkflowDraft", args: {} }),
       {} as InvokeResult
     );
     deps.prepare.mockResolvedValue({ kind: "proposal", proposal });
     const prepared = await runAssistantTurn(actor, session, "创建流程", deps);
+    expect(deps.model).toHaveBeenCalledTimes(1);
+    expect(prepared.messages.at(-1)?.content).toContain("检查画布并确认创建草稿");
     const active = { ...session, ...prepared };
     const id = prepared.task.pending!.id;
     expect(publicSession(active).pending?.id).toBe(id);
@@ -316,6 +318,16 @@ describe("Agent conversation execution with scripted model responses", () => {
       status: "failed",
       pending: null,
     });
+  });
+  it("accepts a valid draft on the last bounded model round", async () => {
+    const call = reply("", { name: "createWorkflowDraft", args: {} });
+    const deps = scripted(call, call, call, call, call);
+    deps.prepare.mockResolvedValue({ kind: "proposal", proposal });
+    for (let attempt = 0; attempt < 4; attempt++)
+      deps.prepare.mockRejectedValueOnce(new TRPCError({ code: "BAD_REQUEST", message: "请修正流程节点。" }));
+    const result = await runAssistantTurn(actor, session, "创建流程", deps);
+    expect(result.task.status).toBe("waiting_confirmation");
+    expect(deps.model).toHaveBeenCalledTimes(5);
   });
   it("replaces the old confirmation after a conversational revision", async () => {
     const prior = {

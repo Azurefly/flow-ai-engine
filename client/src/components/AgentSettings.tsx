@@ -29,9 +29,9 @@ const toolLabels = {
 const initialConfig: Config = {
   name: "流程助手",
   greeting: "你希望我帮你处理什么？",
-  instructions: "帮助客户查询待办和流程。缺少必要信息时向客户询问。",
+  instructions: "帮助客户查询待办和流程，按客户的业务需求准备可确认的流程草稿。缺少必要信息时向客户询问。",
   model: "",
-  tools: ["listMyTasks", "listMyCompletedTasks", "searchWorkflows"],
+  tools: ["listMyTasks", "listMyCompletedTasks", "searchWorkflows", "createWorkflowDraft"],
   enabled: true,
   roles: ["user", "admin"],
   projectIds: [],

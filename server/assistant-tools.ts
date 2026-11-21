@@ -2,16 +2,19 @@ import { TRPCError } from "@trpc/server";
 import type { RowDataPacket } from "mysql2/promise";
 import { z } from "zod";
 import { formatConsoleRoute } from "../shared/console-route";
+import { getFlowProfile } from "../shared/flow-profile-contract";
 import { resourceRequestKeyPattern } from "../shared/resource-creation";
 import type { Tool } from "./_core/llm";
 import type { AssistantWorkContext } from "./assistant-workspace";
 import { commitWorkspace, prepareWorkspace, scopedWorkspaceSchema, workspaceMutations, workspaceQueries, workspaceSchema, type WorkspaceInput, type WorkspaceScope } from "./assistant-workspace";
+import { dataflowResourceDiagnostics } from "./dataflow-resource-readiness";
 import { getSharedPool } from "./db";
 import {
   getP1SystemSettings,
   listWorkflowTasks,
   updateP1SystemSetting,
 } from "./p1-service";
+import { listDataResourceOptions } from "./p2-service";
 import {
   createProjectWorkflow,
   getProject,
@@ -44,6 +47,9 @@ const assignees = {
   department_manager: "发起人所在部门的负责人",
   role: "权限角色",
 } as const;
+const operator = z.enum(["equals", "notEquals", "greaterThan", "lessThan", "contains"]);
+const dataField = text(160);
+const scalar = z.union([z.number(), text(120), z.boolean()]);
 const graphNode = z.discriminatedUnion("type", [
   z.strictObject({ ...nodeBase, type: z.enum(["start", "end", "state"]) }),
   z.strictObject({ ...nodeBase, type: z.literal("parallel"), joinId: nodeId.describe("并行发出至少两条普通连线，填对应 merge 节点 ID") }),
@@ -67,15 +73,35 @@ const graphNode = z.discriminatedUnion("type", [
       .string()
       .regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/)
       .describe("运行输入字段名，如 amount"),
-    operator: z.enum([
-      "equals",
-      "notEquals",
-      "greaterThan",
-      "lessThan",
-      "contains",
-    ]),
-    value: z.union([z.number(), text(120), z.boolean()]),
+    operator,
+    value: scalar,
   }),
+  z.strictObject({
+    ...nodeBase,
+    type: z.literal("source"),
+    asset: text(160).describe("当前业务已有数据资产的全名或真实 ID"),
+    versionId: projectId.optional().describe("已确认的固定资源版本 ID；可省略"),
+    limit: z.number().int().min(1).max(100_000).optional(),
+  }),
+  z.strictObject({
+    ...nodeBase,
+    type: z.literal("filter"),
+    field: dataField,
+    operator: operator.optional(),
+    value: scalar,
+  }),
+  z.strictObject({ ...nodeBase, type: z.literal("map"), columns: z.array(dataField).min(1).max(32) }),
+  z.strictObject({
+    ...nodeBase,
+    type: z.literal("aggregate"),
+    groupBy: z.array(dataField).max(16),
+    metrics: z.array(z.strictObject({
+      name: dataField,
+      operation: z.enum(["count", "sum", "min", "max", "avg"]),
+      field: dataField.optional().describe("除 count 之外须指定输入列"),
+    })).min(1).max(16),
+  }),
+  z.strictObject({ ...nodeBase, type: z.literal("output"), outputName: dataField }),
 ]);
 const edge = z.strictObject({
   from: nodeId,
@@ -94,9 +120,9 @@ const workflowInput = z.strictObject({
   projectName: text(160).optional(),
   name: text(160),
   description: text(1200).optional(),
-  flowType: z.enum(["control", "state"]),
-  nodes: z.array(graphNode).min(3).max(32),
-  edges: z.array(edge).min(2).max(60),
+  flowType: z.enum(["control", "state", "data"]),
+  nodes: z.array(graphNode).min(2).max(32),
+  edges: z.array(edge).min(1).max(60),
 });
 const watermarkInput = z.strictObject({
   enabled: z.boolean().optional(),
@@ -132,7 +158,7 @@ export const assistantToolDefinitions: Tool[] = [
   ),
   tool(
     "createWorkflowDraft",
-    "创建或修订可视化草稿。开始和结束各一个。串行审批用 operate；条件判断用 condition 并连接 true、false。并行审批用一对 parallel 和 merge：parallel.joinId 指向 merge，merge.forkId 指回 parallel，各审批分支从 parallel 发出并回到 merge，使用不带 branch 的普通边。operate.assignee 根据客户要求填写，角色用真实代号。另有拒绝去向时同时连 approved、rejected，否则拒绝会取消流程。调整时重发完整图。当前项目内可省略 projectId；无当前项目时提供项目全名或真实 ID。",
+    "准备当前项目的状态、控制或数据流程草稿，确认后才创建。节点 ID 用英文字母开头，显示名称可用中文。状态、控制流程开始和结束各一个，审批用 operate，条件连 true 和 false，并行用 parallel 和 merge，分别填 joinId 和 forkId。显式拒绝路线用 approved、rejected，否则拒绝会取消流程。数据流程用 source（asset 填真实资产全名或 ID）、filter、map、aggregate、output 或 end，连线不填 branch。调整时重发完整图。会话已绑定项目时省略项目字段。",
     workflowInput
   ),
   tool(
@@ -260,10 +286,13 @@ function layout(nodes: WorkflowNode[], edges: WorkflowDefinition["edges"]) {
   }
 }
 
-async function buildDraft(input: WorkflowInput) {
+async function buildDraft(actor: ProjectUser, targetId: string, input: WorkflowInput) {
   const nodes: WorkflowNode[] = [];
   const details: string[] = [];
   const roles = new Map<string, Awaited<ReturnType<typeof findRole>>>();
+  const resources = input.flowType === "data" && input.nodes.some(node => node.type === "source")
+    ? await listDataResourceOptions(actor, targetId, { includeAssetMetadata: true })
+    : null;
   for (const node of input.nodes) {
     const config: Record<string, unknown> = {};
     let description = node.name;
@@ -280,7 +309,8 @@ async function buildDraft(input: WorkflowInput) {
     } else if (node.type === "merge") {
       const fork = input.nodes.find(candidate => candidate.id === node.forkId);
       if (fork?.type !== "parallel" || fork.joinId !== node.id) bad("汇合节点需要引用对应的并行路由。");
-      Object.assign(config, { nodeDh: node.id, jdmc: node.name, stateType: "business", flowStatus: node.name, parallelForNodeId: fork.id });
+      Object.assign(config, { nodeDh: node.id, jdmc: node.name, parallelForNodeId: fork.id });
+      if (input.flowType === "state") Object.assign(config, { stateType: "business", flowStatus: node.name });
       description += " · 等待全部并行分支汇合";
     } else if (node.type === "operate") {
       Object.assign(config, {
@@ -326,20 +356,19 @@ async function buildDraft(input: WorkflowInput) {
       description +=
         ` · 办理人：${assignee}` +
         (node.instruction ? ` · ${node.instruction}` : "");
-    } else if (node.type === "condition") {
+    } else if (node.type === "condition" || node.type === "filter") {
+      const operation = node.operator ?? "equals";
       if (
-        ["greaterThan", "lessThan"].includes(node.operator) &&
+        ["greaterThan", "lessThan"].includes(operation) &&
         typeof node.value !== "number"
       )
         bad(`“${node.name}”的数值条件必须提供数字。`);
-      if (node.operator === "contains" && typeof node.value !== "string")
+      if (operation === "contains" && typeof node.value !== "string")
         bad(`“${node.name}”的包含条件必须提供文字。`);
-      Object.assign(config, {
-        left: "{{input." + node.field + "}}",
-        operator: node.operator,
-        right: node.value,
-      });
-      description += ` · 输入 ${node.field} ${operators[node.operator]} ${node.value}`;
+      Object.assign(config, node.type === "condition"
+        ? { left: "{{input." + node.field + "}}", operator: operation, right: node.value }
+        : { filterField: node.field, operator: operation, filterValue: node.value });
+      description += ` · 输入 ${node.field} ${operators[operation]} ${node.value}`;
     } else if (node.type === "state") {
       Object.assign(config, {
         nodeDh: node.id,
@@ -347,11 +376,43 @@ async function buildDraft(input: WorkflowInput) {
         flowStatus: node.name,
         stateType: "business",
       });
+    } else if (node.type === "source") {
+      if (!resources) bad("资源节点只能用于数据流程。");
+      const named = resources.assets.filter(asset => asset.name === node.asset);
+      const asset = resources.assets.find(asset => asset.value === node.asset) ?? (named.length === 1 ? named[0] : undefined);
+      if (!asset) {
+        if (named.length > 1) bad(`当前项目有多个同名数据资产“${node.asset}”，请提供准确的资产 ID。`);
+        bad(`当前项目找不到数据资产“${node.asset}”，请提供已有资产的全名或 ID。`);
+      }
+      const assetName = asset.name ?? node.asset;
+      if (asset.disabled) bad(`项目数据资产“${assetName}”暂不可读取。`);
+      const versions = resources.connectorVersions.filter(version =>
+        version.assetId === asset.value && version.kind !== "receipt_write" && version.enabled
+      );
+      const pinned = node.versionId
+        ? versions.find(version => version.id === node.versionId)
+        : !asset.nativeReadable && versions.length === 1 ? versions[0] : undefined;
+      if (node.versionId && !pinned) bad(`数据资产“${assetName}”没有该可读版本。`);
+      if (!asset.nativeReadable && versions.length > 1 && !pinned)
+        bad(`数据资产“${assetName}”有多个可读版本，请指定版本 ${versions.slice(0, 5).map(version => `${version.label}（${version.id}）`).join("、")}。`);
+      Object.assign(config, { assetId: asset.value, limit: node.limit ?? 200, ...(pinned ? { connectorVersionId: pinned.id } : {}) });
+      description += ` · 数据资产 ${assetName}` + (pinned ? ` · 版本 ${pinned.label}` : "");
+    } else if (node.type === "map") {
+      config.columns = node.columns;
+      description += ` · 保留 ${node.columns.join("、")}`;
+    } else if (node.type === "aggregate") {
+      Object.assign(config, { groupBy: node.groupBy, metrics: node.metrics });
+      description += ` · 指标 ${node.metrics.map(metric => metric.name).join("、")}`;
+    } else if (node.type === "output") {
+      config.outputName = node.outputName;
+      description += ` · 结果集 ${node.outputName}`;
     }
     nodes.push({
       id: node.id,
       name: node.name,
-      type: node.type === "parallel" ? "router" : node.type === "merge" ? "state" : node.type,
+      type: node.type === "parallel" ? "router" : node.type === "merge"
+        ? input.flowType === "state" ? "state" : "transform"
+        : node.type,
       position: { x: 0, y: 0 },
       config,
     });
@@ -405,6 +466,10 @@ async function buildDraft(input: WorkflowInput) {
         .map(item => item.message)
         .join("；")
     );
+  if (resources) {
+    const diagnostics = await dataflowResourceDiagnostics(getSharedPool(), targetId, definition);
+    if (diagnostics.length) bad(diagnostics.slice(0, 6).map(item => item.message).join("；"));
+  }
   if (roles.size)
     details.push("审批角色按运行时有效授权分配；无人获授权时该节点将报错。");
   return { definition, details };
@@ -487,13 +552,13 @@ export async function prepareAssistantTool(
   if (name === "createWorkflowDraft") {
     const input = parse(workflowInput, args);
     const project = await targetProject(actor, input, context);
-    const draft = await buildDraft(input);
+    const draft = await buildDraft(actor, project.id, input);
     return {
       kind: "proposal",
       proposal: {
         tool: name,
         title: `创建“${input.name}”草稿`,
-        summary: `${project.name} · ${input.flowType === "state" ? "状态流程" : "控制流程"} · ${draft.definition.nodes.length} 个节点，${draft.definition.edges.length} 条连线`,
+        summary: `${project.name} · ${getFlowProfile(input.flowType).label} · ${draft.definition.nodes.length} 个节点，${draft.definition.edges.length} 条连线`,
         details: [
           ...(input.description ? [input.description] : []),
           ...draft.details,
