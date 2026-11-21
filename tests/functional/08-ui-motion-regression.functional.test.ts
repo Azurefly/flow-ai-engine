@@ -48,8 +48,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "client/src/components/ProcessWorkbench.tsx",
         "utf8"
       );
-      const processWorkbenchRunTabSource = readFileSync(
-        "client/src/components/ProcessWorkbenchRunTab.tsx",
+      const processWorkbenchRunPageSource = readFileSync(
+        "client/src/components/ProcessWorkbenchRunPage.tsx",
         "utf8"
       );
       const homeSource = readFileSync("client/src/pages/Home.tsx", "utf8");
@@ -287,8 +287,8 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         "唯一主部门用于直属上级解析。"
       );
       expectSemanticBodyForCopy(
-        processWorkbenchRunTabSource,
-        "当前账户无权查看该实例，或该实例已不存在。"
+        processWorkbenchRunPageSource,
+        "运行记录不存在或无访问权限。"
       );
       expectSemanticBodyForCopy(
         processWorkbenchSource,
