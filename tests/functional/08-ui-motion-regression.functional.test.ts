@@ -924,7 +924,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
   });
 
   describe("TC-REG-006: 运行监控中心 (RunCenter) 告警与未选中状态自适应", () => {
-    it("零告警轻量展示，常规视口单列，超宽屏选中后分栏", () => {
+    it("运行监控展示概览，实例页在电脑端展示画布与可独立滚动的右侧记录", () => {
       const start = performance.now();
       const runCenterSource = readFileSync(
         new URL("../../client/src/components/RunCenter.tsx", import.meta.url),
@@ -948,14 +948,16 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(statusMap["blocked"]).toBe("已阻塞");
 
       // Check the shipped layout rather than a duplicated test-only formula.
-      expect(runCenterSource).toContain(
-        "2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]"
-      );
-      expect(runCenterSource).toContain('"hidden 2xl:block"');
+      expect(runCenterSource).toContain("当前筛选范围内无告警记录");
+      expect(runCenterSource).toContain("<RunInstancePage");
+      expect(runCenterSource).toContain("run={runDetail} workspace");
+      const canvasStyles = readFileSync("client/src/components/run-execution-canvas.css", "utf8");
+      expect(canvasStyles).toContain("grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 420px)");
+      expect(canvasStyles).toMatch(/\[data-run-records-scroll\] \{[^}]*overflow-y: auto;/);
 
       TestResultCollector.record({
         testId: "TC-REG-RUN-007",
-        name: "运行监控状态全量中文映射与空选中全宽自适应",
+        name: "运行监控与独立实例画布布局",
         category: "contract",
         module: "运行监控中心",
         target: "RunCenter.LayoutAndStatus",

@@ -394,17 +394,16 @@ describe("流程设计器界面回归约束", () => {
     expect(graph).toContain("if (!ready || !measured) return");
     expect(graph).not.toContain("const timer = setTimeout");
     expect(graph).not.toContain("fitViewOptions={{");
-    expect(graph.indexOf("fit(id);", graph.indexOf("const choose ="))).toBeLessThan(graph.indexOf("if (id === active?.id) return;"));
+    expect(graph).toMatch(/const choose = \(id: string, recordId\?: string\) => \{\s*fit\(id\);/);
   });
   it("监控记录和实例图按执行批次展示审批组，并使用冻结表单名称", () => {
     const graph = source("../client/src/components/RunExecutionCanvas.tsx");
     expect(graph).toContain("approvalGroupsForRecord(run.approvalGroups ?? [], record)");
     expect(graph).toContain("!approvalGroups.length && activities.map");
-    const monitor = source("../client/src/components/RunCenter.tsx");
-    expect(monitor).toContain("approvalGroupsForRecord(runDetail?.approvalGroups ?? [], node)");
-    expect(monitor).toContain("decodeJson(runDetail?.definitionSnapshotJson)");
-    expect(monitor).toContain("nodeConfig={snapshotNodes.find");
-    expect(monitor).not.toContain("group.nodeId === node.nodeId");
+    expect(graph).toContain("projectRunGraph(run)");
+    expect(graph).toContain("nodeConfig={active.config}");
+    expect(graph).toContain("choose(node.nodeId, node.id)");
+    expect(runCenterSource).toContain("run={runDetail} workspace");
   });
   it("运行弹窗关闭按钮独占布局空间，不与标题或操作区绝对定位重叠", () => {
     const header = runModalSource.split("<DialogHeader ")[1]?.split("</DialogHeader>")[0];
@@ -1948,9 +1947,9 @@ describe("流程设计器界面回归约束", () => {
       "flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:flex-row"
     );
     expect(runCenterSource).toContain("lg:flex-none");
-    expect(runCenterSource).toContain(
-      "2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]"
-    );
+    expect(runCenterSource).toContain("if (selectedRunId)");
+    expect(runCenterSource.indexOf("<RunInstancePage")).toBeLessThan(runCenterSource.indexOf("data-runtime-monitor"));
+    expect(homeSource).toContain("{!monitorRunId && <aside");
     expect(runCenterSource).not.toContain("max-h-[650px] overflow-y-auto");
     expect(source("../client/src/components/run-payload-details.css")).toMatch(
       /\[data-payload-field\] pre \{[^}]*white-space: pre-wrap;[^}]*overflow-wrap: anywhere;/
@@ -3555,7 +3554,7 @@ it("数据流程监控使用独立运行接口并保留深链接和真实错误"
   );
   expect(dataResourceSource).toContain("export function DataflowRunMonitor");
   expect(dataResourceSource).toContain('aria-label="数据流程运行监控"');
-  expect(dataResourceSource).toContain('aria-label="数据流程运行详情"');
+  expect(dataResourceSource).toContain("<RunInstancePage");
   expect(dataResourceSource).toContain(
     "detail.data?.workflowId === workflowId"
   );
@@ -3571,7 +3570,8 @@ it("数据实例共用只读图并保留失败定位与结果表格，详情不�
   expect(canvas).toContain('title="错误原因"');
   expect(canvas).toContain("record.errorJson");
   expect(canvas).toContain("快照依赖");
-  expect(dataResourceSource).toContain("返回运行记录");
+  expect(dataResourceSource).toContain("run={matchingDetail} workspace");
+  expect(source("../client/src/components/RunInstancePage.tsx")).toContain("返回运行监控");
 });
 
 it("组织成员统一表格区分停用账号并统一主部门名称", () => {
@@ -3707,11 +3707,11 @@ it("运行控制使用站内确认，必填原因和失败输入可保留", () =
 });
 
 it("节点明细展示中文类型并保留节点标识，内部渲染类型不变", () => {
-  const monitor = source("../client/src/components/RunCenter.tsx");
-  expect(monitor).toContain("workflowNodeTypeLabel(node.nodeType)");
-  expect(monitor).toContain("node.nodeName || node.nodeId");
-  expect(monitor).toContain("nodeType={node.nodeType}");
-  expect(source("../client/src/components/RunExecutionCanvas.tsx")).toContain("workflowNodeTypeLabel(active.type)");
+  const graph = source("../client/src/components/RunExecutionCanvas.tsx");
+  expect(graph).toContain("workflowNodeTypeLabel(node.nodeType ?? graphNodesById.get(node.nodeId)?.type)");
+  expect(graph).toContain("data-node-id={node.nodeId}");
+  expect(graph).toContain("nodeType={active.type}");
+  expect(graph).toContain("workflowNodeTypeLabel(active.type)");
 });
 
 it("节点与模板命名使用站内弹窗，等待服务端结果并保留失败输入", () => {
@@ -3767,16 +3767,15 @@ it("子流程保存传递来源类型，更新保留已保存类型，旧记录�
 });
 
 it("节点执行记录显示中文状态、序号和重复次数，保留逐次详情", () => {
-  expect(runCenterSource).toContain(
-    "nodeExecutionEntries<any>(runDetail?.nodeRuns ?? [])"
-  );
-  expect(runCenterSource).toContain("{orderLabel}");
-  expect(runCenterSource).toContain("{statusLabel}");
-  expect(runCenterSource).toContain("totalOccurrences > 1");
-  expect(runCenterSource).toContain("第 {occurrence} 次执行记录");
-  expect(runCenterSource).toContain("key={node.id}");
-  expect(runCenterSource).toContain('title="错误" value={node.errorJson}');
-  expect(runCenterSource).toContain("暂无节点执行记录。");
+  const graph = source("../client/src/components/RunExecutionCanvas.tsx");
+  expect(graph).toContain("nodeExecutionEntries<RunRecord>(run.nodeRuns)");
+  expect(graph).toContain("{orderLabel}");
+  expect(graph).toContain("{statusLabel}");
+  expect(graph).toContain("totalOccurrences > 1");
+  expect(graph).toContain("第 ${occurrence} 次");
+  expect(graph).toContain("data-run-record-id={node.id}");
+  expect(graph).toContain('aria-label={workspace ? "节点执行记录" : "节点执行详情"}');
+  expect(graph).toContain("暂无节点执行记录。");
 });
 
 it("运行错误使用显式类型展示原因和折叠堆栈，不再标为业务输入", () => {
@@ -3785,7 +3784,7 @@ it("运行错误使用显式类型展示原因和折叠堆栈，不再标为业�
   expect(runPayloadDetailsSource).toContain("错误详情");
   expect(runPayloadDetailsSource).toContain("调用堆栈（诊断信息）");
   expect(runPayloadDetailsSource).not.toContain('title.includes("输出")');
-  expect(runCenterSource).toContain('value={node.errorJson} kind="error"');
+  expect(source("../client/src/components/RunExecutionCanvas.tsx")).toMatch(/value=\{record.errorJson\}\s+kind="error"/);
   expect(
     source("../client/src/components/WorkflowGovernanceRunDetail.tsx")
   ).toContain('value={node.errorJson} kind="error"');

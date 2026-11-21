@@ -1,8 +1,6 @@
 import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
-import { nodeExecutionEntries } from "@shared/node-execution-entries";
-import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import {
   Dialog,
   DialogContent,
@@ -14,14 +12,11 @@ import {
 import { toast } from "sonner";
 import { formatRunDuration } from "@shared/run-duration";
 import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
-import { RunApprovalProgress } from "./RunApprovalProgress";
-import { approvalGroupsForRecord } from "@shared/run-approval-progress";
 import { formatRunStatus, runStatusSummary } from "@shared/run-status-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
 import {
-  ArrowLeft,
   AlertTriangle,
   BarChart3,
   CheckCircle2,
@@ -34,8 +29,8 @@ import {
   RotateCcw,
   XCircle,
 } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { RunPayloadDetails } from "./RunPayloadDetails";
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
+import { RunInstancePage, useRunMonitorReturn } from "./RunInstancePage";
 import { workflowRunControlAllowed, type WorkflowRunControlCapabilities } from "@shared/workflow-run-controls";
 
 const RunExecutionCanvas = lazy(() => import("./RunExecutionCanvas"));
@@ -65,15 +60,6 @@ function decodeJson(value: unknown) {
   } catch {
     return value;
   }
-}
-
-function revealRunPanel(panel: HTMLElement | null) {
-  if (!panel) return;
-  panel.focus({ preventScroll: true });
-  panel.scrollIntoView({
-    block: "start",
-    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-  });
 }
 
 export default function RunCenter({
@@ -113,18 +99,10 @@ export default function RunCenter({
   } | null>(null);
   const [controlReason, setControlReason] = useState("");
   const [controlError, setControlError] = useState("");
-  // UX 优化：日志与画布通过实例及执行记录 ID 关联，不猜测同名节点的批次。
-  const [graphSelection, setGraphSelection] = useState<{
-    runId: string;
-    nodeId: string;
-    recordId: string;
-    version: number;
-  } | null>(null);
   useEffect(() => {
     setControlDialog(null);
     setControlReason("");
     setControlError("");
-    setGraphSelection(null);
   }, [workflowId, selectedRunId]);
   const [status, setStatus] = useState<
     | ""
@@ -146,34 +124,16 @@ export default function RunCenter({
     filterKey: string;
     cursors: Array<string | undefined>;
   }>({ filterKey: "", cursors: [undefined] });
-  const runListRef = useRef<HTMLElement | null>(null);
-  const runDetailRef = useRef<HTMLElement | null>(null);
-  const previousSelectedRunId = useRef<string | null>(null);
+  const monitorReturn = useRunMonitorReturn(selectedRunId, workflowId, viewAllowed);
   const runUnavailable = selectedRunErrorCode === "NOT_FOUND" || selectedRunErrorCode === "FORBIDDEN";
   const runDetail = !runUnavailable && selectedRun?.id === selectedRunId && selectedRun?.workflowId === workflowId
     ? selectedRun : null;
   const controlCapabilities = runDetail?.controlCapabilities as WorkflowRunControlCapabilities | undefined;
   const dialogAllowed = Boolean(controlDialog && controlDialog.runId === runDetail?.id && workflowRunControlAllowed(controlCapabilities, controlDialog.action));
-  const nodeEntries = useMemo(
-    () => nodeExecutionEntries<any>(runDetail?.nodeRuns ?? []),
-    [runDetail?.nodeRuns]
-  );
-  const snapshotNodes = useMemo(() => {
-    const snapshot = decodeJson(runDetail?.definitionSnapshotJson);
-    return Array.isArray(snapshot?.nodes) ? snapshot.nodes : [];
-  }, [runDetail?.definitionSnapshotJson]);
-  const hasSelectedRun = Boolean(selectedRunId);
-  useEffect(() => {
-    if (!viewAllowed || selectedRunId === previousSelectedRunId.current) return;
-    const frame = window.requestAnimationFrame(() => {
-      previousSelectedRunId.current = selectedRunId;
-      revealRunPanel(selectedRunId ? runDetailRef.current : runListRef.current);
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [selectedRunId, viewAllowed]);
-  function selectRun(runId: string) {
-    if (runId === selectedRunId) revealRunPanel(runDetailRef.current);
-    else onSelect(runId);
+  const listEnabled = Boolean(viewAllowed && workflowId && !selectedRunId);
+  function selectRun(runId: string, button: HTMLElement) {
+    monitorReturn.rememberOpener(button);
+    onSelect(runId);
   }
   useEffect(() => {
     const timeout = window.setTimeout(
@@ -218,12 +178,11 @@ export default function RunCenter({
       : [undefined];
   const historyCursor = historyCursorStack.at(-1);
   const metrics = trpc.workflow.runMetrics.useQuery(filter, {
-    enabled: Boolean(viewAllowed && workflowId),
+    enabled: listEnabled,
     refetchInterval: query =>
       runMonitorRefreshInterval({
         enabled: autoRefreshEnabled,
         ...query.state.data,
-        selectedStatus: runDetail?.status,
         queryFailed: Boolean(query.state.error),
       }),
     refetchIntervalInBackground: false,
@@ -231,18 +190,17 @@ export default function RunCenter({
   const refreshInterval = runMonitorRefreshInterval({
     enabled: autoRefreshEnabled,
     ...metrics.data,
-    selectedStatus: runDetail?.status,
   });
   const runs = trpc.workflow.runHistoryPage.useQuery(
     { ...filter, cursor: historyCursor, pageSize: 10 },
     {
-      enabled: Boolean(viewAllowed && workflowId),
+      enabled: listEnabled,
       refetchInterval: query => (query.state.error ? false : refreshInterval),
       refetchIntervalInBackground: false,
     }
   );
   const alerts = trpc.workflow.alerts.useQuery(filter, {
-    enabled: Boolean(viewAllowed && workflowId),
+    enabled: listEnabled,
     refetchInterval: query => (query.state.error ? false : refreshInterval),
     refetchIntervalInBackground: false,
   });
@@ -337,6 +295,209 @@ export default function RunCenter({
         </div>
       </div>
     );
+
+  if (selectedRunId) {
+    return (
+      <>
+        <RunInstancePage
+          runId={selectedRunId}
+          workflowName={workflowName}
+          flowType={flowType}
+          onBack={onClearSelection}
+          actions={runDetail && (
+            <>
+              {(workflowRunControlAllowed(controlCapabilities, "pause") || workflowRunControlAllowed(controlCapabilities, "resume")) && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`${compactButtonClass} text-aiflow-info`}
+                    disabled={controlPending}
+                    onClick={() => {
+                      if (runDetail.status === "blocked") {
+                        if (workflowRunControlAllowed(controlCapabilities, "resume")) resumeRun.mutate({ runId: runDetail.id });
+                      } else {
+                        setControlError("");
+                        setControlDialog({
+                          action: "pause",
+                          runId: runDetail.id,
+                        });
+                      }
+                    }}
+                  >
+                    {runDetail.status === "blocked" ? "恢复运行" : "暂停运行"}
+                  </Button>
+                )}
+              {workflowRunControlAllowed(controlCapabilities, "cancel") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`${compactButtonClass} text-aiflow-warning`}
+                    disabled={controlPending}
+                    onClick={() => {
+                      setControlError("");
+                      setControlDialog({
+                        action: "cancel",
+                        runId: runDetail.id,
+                      });
+                    }}
+                  >
+                    取消运行
+                  </Button>
+                )}
+              {workflowRunControlAllowed(controlCapabilities, "terminate") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className={`${compactButtonClass} text-red-700`}
+                    disabled={controlPending}
+                    onClick={() => {
+                      setControlError("");
+                      setControlReason("");
+                      setControlDialog({
+                        action: "terminate",
+                        runId: runDetail.id,
+                      });
+                    }}
+                  >
+                    终止运行
+                  </Button>
+                )}
+            </>
+          )}
+          summary={runDetail && (
+            <>
+              <dl aria-label="运行状态摘要" className="grid grid-cols-2 gap-x-4 gap-y-2 border-t pt-2 lg:grid-cols-4">
+                {[...runStatusSummary(runDetail), { label: "耗时", value: formatRunDuration(runDetail.durationMs) }].map(item => (
+                  <div key={item.label} className="min-w-0">
+                    <dt className={mutedMetaClass}>{item.label}</dt>
+                    <dd className="aiflow-type-control break-words font-medium">{item.value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {controlCapabilities?.disabledReason && (
+                <p role="status" data-run-controls-readonly="" className={"aiflow-type-meta " + mutedToneClass}>
+                  {controlCapabilities.disabledReason}
+                </p>
+              )}
+            </>
+          )}
+        >
+          {selectedRunLoading && !runDetail ? (
+            <p role="status" className={"p-4 " + mutedToneClass}>正在读取运行节点详情…</p>
+          ) : runDetail ? (
+            <Suspense fallback={<p role="status" className="p-4">正在准备实例流程图…</p>}>
+              <RunExecutionCanvas key={runDetail.id} run={runDetail} workspace />
+            </Suspense>
+          ) : (
+            <div role="alert" className="aiflow-type-body rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-aiflow-danger">
+              <p>{runUnavailable || !selectedRunError ? "运行记录不存在或无访问权限。" : "运行详情暂时无法读取。请重试，或返回运行监控。"}</p>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={onRetrySelection}>
+                <RotateCcw size={14} aria-hidden="true" /> 重试
+              </Button>
+            </div>
+          )}
+        </RunInstancePage>
+        <Dialog
+          open={Boolean(controlDialog)}
+          onOpenChange={open => {
+            if (!open && !controlPending) setControlDialog(null);
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {controlDialog?.action === "pause"
+                  ? "确认暂停运行"
+                  : controlDialog?.action === "terminate"
+                    ? "确认终止运行"
+                    : "确认取消运行"}
+              </DialogTitle>
+              <DialogDescription>
+                {controlDialog?.action === "pause"
+                  ? "将在安全节点边界暂停，恢复后继续推进实例。"
+                  : "停止后不再继续推进该实例；已执行动作不会撤销，历史记录会保留。"}
+              </DialogDescription>
+            </DialogHeader>
+            <p className={"break-all text-sm " + mutedToneClass}>
+              运行编号：{controlDialog?.runId}
+            </p>
+            {controlDialog?.action === "terminate" && (
+              <label className="grid gap-2 text-sm">
+                终止原因（必填）
+                <textarea
+                  aria-label="终止原因"
+                  rows={3}
+                  maxLength={500}
+                  className="rounded-md border border-border bg-background p-3"
+                  value={controlReason}
+                  disabled={controlPending}
+                  onChange={event => setControlReason(event.target.value)}
+                />
+              </label>
+            )}
+            {controlError && (
+              <p role="alert" className={errorTextClass}>
+                {controlError}
+              </p>
+            )}
+            {!dialogAllowed && controlDialog && <p role="alert" className={errorTextClass}>当前权限或运行状态已变化，此操作不可提交。请返回并刷新运行记录。</p>}
+            <DialogFooter>
+              <Button
+                variant="outline"
+                disabled={controlPending}
+                onClick={() => setControlDialog(null)}
+              >
+                返回
+              </Button>
+              <Button
+                disabled={
+                  controlPending ||
+                  !dialogAllowed ||
+                  !controlDialog ||
+                  controlDialog.runId !== selectedRunId ||
+                  (controlDialog.action === "terminate" && !controlReason.trim())
+                }
+                onClick={async () => {
+                  if (!controlDialog || controlDialog.runId !== selectedRunId || !dialogAllowed)
+                    return;
+                  setControlError("");
+                  try {
+                    const input = { runId: controlDialog.runId };
+                    if (controlDialog.action === "pause")
+                      await pauseRun.mutateAsync(input);
+                    else if (controlDialog.action === "terminate")
+                      await terminateRun.mutateAsync({
+                        ...input,
+                        reason: controlReason.trim(),
+                      });
+                    else await cancelRun.mutateAsync(input);
+                    setControlDialog(null);
+                  } catch (error) {
+                    setControlError(
+                      error instanceof Error
+                        ? error.message
+                        : "操作失败，请重试。"
+                    );
+                  }
+                }}
+              >
+                {controlPending
+                  ? "正在提交…"
+                  : controlDialog?.action === "pause"
+                    ? "确认暂停"
+                    : controlDialog?.action === "terminate"
+                      ? "确认终止"
+                      : "确认取消"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  }
 
   return (
     <div data-runtime-monitor className="min-w-0 space-y-5 p-4 lg:p-6">
@@ -633,7 +794,8 @@ export default function RunCenter({
                       size="sm"
                       variant="outline"
                       className={compactButtonClass}
-                      onClick={() => selectRun(String(alert.runId))}
+                      id={`run-alert-${alert.id}`}
+                      onClick={event => selectRun(String(alert.runId), event.currentTarget)}
                     >
                       查看运行
                     </Button>
@@ -656,470 +818,103 @@ export default function RunCenter({
           </div>
         </section>
       )}
-      <div
-        className={`grid min-w-0 gap-4 ${hasSelectedRun ? "grid-cols-1 2xl:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]" : "grid-cols-1"}`}
+      <section
+        ref={monitorReturn.list}
+        data-run-history-panel
+        tabIndex={-1}
+        aria-label="运行记录"
+        className="min-w-0 scroll-mt-[calc(var(--workspace-header-height,64px)+16px)] overflow-hidden rounded-lg border border-border bg-card"
       >
-        <section
-          ref={runListRef}
-          data-run-history-panel
-          tabIndex={-1}
-          aria-label="运行记录"
-          className={`min-w-0 scroll-mt-[calc(var(--workspace-header-height,64px)+16px)] overflow-hidden rounded-lg border border-border bg-card ${hasSelectedRun ? "hidden 2xl:block" : ""}`}
-        >
-          <div className="aiflow-type-section-title flex items-center justify-between border-b border-border px-4 py-3 font-semibold">
-            <span>运行记录</span>
-            {runs.isFetching && (
-              <Loader2
-                className={"animate-spin " + mutedToneClass}
-                size={14}
-              />
-            )}
-          </div>
-          <div>
-            {workflowRuns.map((run: any) => (
-              <button
-                key={run.id}
-                onClick={() => selectRun(run.id)}
-                className={`w-full border-b border-border p-4 text-left hover:bg-muted ${selectedRun?.id === run.id || selectedRunId === run.id ? "bg-aiflow-info-surface" : ""}`}
-              >
-                <div className="flex justify-between gap-2">
-                  <code className={"aiflow-type-code font-mono " + mutedToneClass}>
-                    {run.id.slice(0, 8)}
-                  </code>
-                  <span
-                    className={`aiflow-type-meta rounded px-1.5 py-0.5 font-medium border ${run.status === "success" ? "bg-aiflow-success-surface text-aiflow-success border-aiflow-success-border" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-aiflow-warning-surface text-aiflow-warning border-aiflow-warning-border"}`}
-                  >
-                    {formatRunStatus(run.status)}
-                  </span>
-                </div>
-                <div className={"mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 " + mutedToneClass}>
-                  <span className={timeClass}>
-                    {formatTime(run.createdAt)}
-                  </span>
-                  <span className={timeClass}>
-                    {formatRunDuration(run.durationMs)}
-                  </span>
-                  <span className="aiflow-type-body min-w-0 break-words">
-                    {run.triggeredByName ||
-                      run.username ||
-                      `用户 ${run.triggeredByUserId ?? "—"}`}
-                  </span>
-                </div>
-              </button>
-            ))}
-            {!runs.isFetching && !workflowRuns.length && (
-              <p className={"aiflow-type-body p-6 text-center " + mutedToneClass}>
-                当前筛选条件下尚无运行记录。
-              </p>
-            )}
-          </div>
-          <div className={"aiflow-type-control flex flex-col gap-2 border-t border-border px-4 py-3 " + mutedToneClass + " sm:flex-row sm:items-center sm:justify-between"}>
-            <span aria-live="polite">
-              第 {historyCursorStack.length} 页 · 本页 {workflowRuns.length} 条
-            </span>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={paginationButtonClass}
-                disabled={historyCursorStack.length <= 1 || runs.isFetching}
-                onClick={() =>
-                  setHistoryNavigation({
-                    filterKey: historyFilterKey,
-                    cursors: historyCursorStack.slice(0, -1),
-                  })
-                }
-              >
-                较新记录
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className={paginationButtonClass}
-                disabled={!runs.data?.nextCursor || runs.isFetching}
-                onClick={() => {
-                  const nextCursor = runs.data?.nextCursor;
-                  if (nextCursor)
-                    setHistoryNavigation({
-                      filterKey: historyFilterKey,
-                      cursors: [...historyCursorStack, nextCursor],
-                    });
-                }}
-              >
-                更早记录
-              </Button>
-            </div>
-          </div>
-        </section>
-        {hasSelectedRun && (
-          <section
-            ref={runDetailRef}
-            data-run-detail-panel
-            tabIndex={-1}
-            aria-label="运行详情"
-            className="min-w-0 scroll-mt-[calc(var(--workspace-header-height,64px)+16px)] rounded-lg border border-border bg-card p-4 sm:p-5"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className={"aiflow-type-meta font-bold tracking-[.18em] " + mutedToneClass}>
-                  RUN {(selectedRunId ?? runDetail?.id ?? "").slice(0, 8)}
-                </p>
-                <h3 className="aiflow-type-section-title mt-1 font-semibold">
-                  运行详情
-                </h3>
-              </div>
-              <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
-                <span className={mutedMetaClass}>
-                  {formatRunDuration(runDetail?.durationMs)}
-                </span>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="aiflow-type-control min-h-11 lg:min-h-9"
-                  onClick={onClearSelection}
-                >
-                  <ArrowLeft size={14} aria-hidden="true" />
-                  返回运行记录
-                </Button>
-                {runDetail && (workflowRunControlAllowed(controlCapabilities, "pause") || workflowRunControlAllowed(controlCapabilities, "resume")) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={`${compactButtonClass} text-aiflow-info`}
-                      disabled={controlPending}
-                      onClick={() => {
-                        if (runDetail.status === "blocked") {
-                          if (workflowRunControlAllowed(controlCapabilities, "resume")) resumeRun.mutate({ runId: runDetail.id });
-                        } else {
-                          setControlError("");
-                          setControlDialog({
-                            action: "pause",
-                            runId: runDetail.id,
-                          });
-                        }
-                      }}
-                    >
-                      {runDetail.status === "blocked" ? "恢复运行" : "暂停运行"}
-                    </Button>
-                  )}
-                {runDetail && workflowRunControlAllowed(controlCapabilities, "cancel") && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={`${compactButtonClass} text-aiflow-warning`}
-                      disabled={controlPending}
-                      onClick={() => {
-                        setControlError("");
-                        setControlDialog({
-                          action: "cancel",
-                          runId: runDetail.id,
-                        });
-                      }}
-                    >
-                      取消运行
-                    </Button>
-                  )}
-                {runDetail && workflowRunControlAllowed(controlCapabilities, "terminate") && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className={`${compactButtonClass} text-red-700`}
-                      disabled={controlPending}
-                      onClick={() => {
-                        setControlError("");
-                        setControlReason("");
-                        setControlDialog({
-                          action: "terminate",
-                          runId: runDetail.id,
-                        });
-                      }}
-                    >
-                      终止运行
-                    </Button>
-                  )}
-              </div>
-            </div>
-            {controlCapabilities?.disabledReason && <p role="status" data-run-controls-readonly="" className={"mt-3 rounded-md border border-border bg-muted p-3 text-sm " + mutedToneClass}>{controlCapabilities.disabledReason}</p>}
-            {runDetail && (
-              <dl
-                aria-label="运行状态摘要"
-                className="mt-4 grid gap-3 rounded-lg bg-muted p-3 sm:grid-cols-3"
-              >
-                {runStatusSummary(runDetail).map(item => (
-                  <div key={item.label} className="min-w-0">
-                    <dt className={mutedMetaClass}>
-                      {item.label}
-                    </dt>
-                    <dd className="aiflow-type-body mt-1 break-words font-medium text-foreground">
-                      {item.value}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-            {selectedRunLoading && !runDetail ? (
-              <div
-                role="status"
-                className={"aiflow-type-body mt-5 grid min-h-32 place-items-center " + mutedToneClass}
-              >
-                正在读取运行节点详情…
-              </div>
-            ) : selectedRunError && !runDetail ? (
-              <div
-                role="alert"
-                className="aiflow-type-body mt-5 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-aiflow-danger"
-              >
-                <p>{runUnavailable ? "运行记录不存在或无访问权限。" : "运行详情暂时无法读取。请重试，或返回运行记录列表。"}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="min-h-11 lg:min-h-9"
-                    onClick={onRetrySelection}
-                  >
-                    <RotateCcw size={14} aria-hidden="true" /> 重试
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="min-h-11 lg:min-h-9"
-                    onClick={onClearSelection}
-                  >
-                    返回运行记录
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 grid gap-3">
-                {/* UX 优化：复用授权运行快照的只读画布，原执行日志和控制入口完整保留。 */}
-                {runDetail && (
-                  <>
-                    <Suspense fallback={<p role="status">正在准备实例流程图…</p>}>
-                      <RunExecutionCanvas
-                        key={runDetail.id}
-                        run={runDetail}
-                        focusRequest={graphSelection && graphSelection.runId === runDetail.id ? graphSelection : undefined}
-                      />
-                    </Suspense>
-                    <RunPayloadDetails title="实例错误" value={runDetail.errorJson} kind="error" />
-                  </>
-                )}
-                <div>
-                  <h3 className="aiflow-type-control font-semibold">
-                    节点执行记录 · {nodeEntries.length} 条
-                  </h3>
-                  <p className={supportingMetaClass}>
-                    同一节点的多次执行分别记录，展开可查看每次输入、输出和错误。
-                  </p>
-                </div>
-                {!nodeEntries.length && (
-                  <p className={"aiflow-type-body " + mutedToneClass}>
-                    暂无节点执行记录。
-                  </p>
-                )}
-                {nodeEntries.map(
-                  ({
-                    node,
-                    statusLabel,
-                    orderLabel,
-                    occurrence,
-                    totalOccurrences,
-                  }) => (
-                    <details
-                      key={node.id}
-                      data-run-execution-record=""
-                      className="group min-w-0 rounded border border-border bg-muted p-3"
-                    >
-                      <summary className="aiflow-type-body flex min-w-0 cursor-pointer list-none items-center justify-between gap-3">
-                        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                          <span className={"aiflow-type-meta shrink-0 tabular-nums " + mutedToneClass}>
-                            {orderLabel}
-                          </span>
-                          <span className="min-w-0 break-words">
-                            {node.nodeName || node.nodeId}
-                          </span>
-                          <span className={"aiflow-type-meta rounded bg-card px-2 py-0.5 " + mutedToneClass}>
-                            {workflowNodeTypeLabel(node.nodeType)}
-                          </span>
-                          <span
-                            className={`aiflow-type-meta rounded px-2 py-0.5 font-medium ${node.status === "failed" ? "bg-destructive/10 text-destructive" : node.status === "success" ? "bg-aiflow-success-surface text-aiflow-success" : "bg-card text-muted-foreground"}`}
-                          >
-                            {statusLabel}
-                          </span>
-                          {totalOccurrences > 1 && (
-                            <span className={mutedMetaClass}>
-                              第 {occurrence} 次执行记录
-                            </span>
-                          )}
-                          {node.nodeName && node.nodeName !== node.nodeId && (
-                            <code className={"aiflow-type-code min-w-0 max-w-full break-words " + mutedToneClass + " [overflow-wrap:anywhere]"}>
-                              {node.nodeId}
-                            </code>
-                          )}
-                        </span>
-                        <span className={"aiflow-type-meta shrink-0 " + mutedToneClass}>
-                          {formatRunDuration(node.durationMs)}
-                        </span>
-                        <ChevronDown
-                          aria-hidden="true"
-                          size={14}
-                          className={"shrink-0 " + mutedToneClass + " transition-transform group-open:rotate-180"}
-                        />
-                      </summary>
-                      <div data-run-record-body="" className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
-                        {runDetail && node.nodeId && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="w-fit"
-                            data-run-record-id={node.id}
-                            onClick={() => setGraphSelection(previous => ({
-                              runId: runDetail.id,
-                              nodeId: String(node.nodeId),
-                              recordId: String(node.id),
-                              version: (previous?.version ?? 0) + 1,
-                            }))}
-                          >
-                            在图中查看本次执行
-                          </Button>
-                        )}
-                        {approvalGroupsForRecord(runDetail?.approvalGroups ?? [], node)
-                          .map(group => (
-                            <RunApprovalProgress
-                              key={group.groupId}
-                              group={group}
-                            />
-                          ))}
-                        <RunPayloadDetails
-                          title="输入"
-                          value={node.inputJson}
-                          kind="input"
-                        />
-                        <RunPayloadDetails
-                          title="输出"
-                          value={node.outputJson}
-                          kind="output"
-                          nodeType={node.nodeType}
-                          nodeConfig={snapshotNodes.find((item: { id: string }) => item.id === node.nodeId)?.config}
-                        />
-                        <RunPayloadDetails
-                          title="错误"
-                          value={node.errorJson}
-                          kind="error"
-                        />
-                      </div>
-                    </details>
-                  )
-                )}
-              </div>
-            )}
-          </section>
-        )}
-      </div>
-      <Dialog
-        open={Boolean(controlDialog)}
-        onOpenChange={open => {
-          if (!open && !controlPending) setControlDialog(null);
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>
-              {controlDialog?.action === "pause"
-                ? "确认暂停运行"
-                : controlDialog?.action === "terminate"
-                  ? "确认终止运行"
-                  : "确认取消运行"}
-            </DialogTitle>
-            <DialogDescription>
-              {controlDialog?.action === "pause"
-                ? "将在安全节点边界暂停，恢复后继续推进实例。"
-                : "停止后不再继续推进该实例；已执行动作不会撤销，历史记录会保留。"}
-            </DialogDescription>
-          </DialogHeader>
-          <p className={"break-all text-sm " + mutedToneClass}>
-            运行编号：{controlDialog?.runId}
-          </p>
-          {controlDialog?.action === "terminate" && (
-            <label className="grid gap-2 text-sm">
-              终止原因（必填）
-              <textarea
-                aria-label="终止原因"
-                rows={3}
-                maxLength={500}
-                className="rounded-md border border-border bg-background p-3"
-                value={controlReason}
-                disabled={controlPending}
-                onChange={event => setControlReason(event.target.value)}
-              />
-            </label>
+        <div className="aiflow-type-section-title flex items-center justify-between border-b border-border px-4 py-3 font-semibold">
+          <span>运行记录</span>
+          {runs.isFetching && (
+            <Loader2
+              className={"animate-spin " + mutedToneClass}
+              size={14}
+            />
           )}
-          {controlError && (
-            <p role="alert" className={errorTextClass}>
-              {controlError}
+        </div>
+        <div>
+          {workflowRuns.map((run: any) => (
+            <button
+              key={run.id}
+              id={`run-history-${run.id}`}
+              type="button"
+              onClick={event => selectRun(run.id, event.currentTarget)}
+              className="w-full border-b border-border p-4 text-left hover:bg-muted"
+            >
+              <div className="flex justify-between gap-2">
+                <code className={"aiflow-type-code font-mono " + mutedToneClass}>
+                  {run.id.slice(0, 8)}
+                </code>
+                <span
+                  className={`aiflow-type-meta rounded px-1.5 py-0.5 font-medium border ${run.status === "success" ? "bg-aiflow-success-surface text-aiflow-success border-aiflow-success-border" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-aiflow-warning-surface text-aiflow-warning border-aiflow-warning-border"}`}
+                >
+                  {formatRunStatus(run.status)}
+                </span>
+              </div>
+              <div className={"mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 " + mutedToneClass}>
+                <span className={timeClass}>
+                  {formatTime(run.createdAt)}
+                </span>
+                <span className={timeClass}>
+                  {formatRunDuration(run.durationMs)}
+                </span>
+                <span className="aiflow-type-body min-w-0 break-words">
+                  {run.triggeredByName ||
+                    run.username ||
+                    `用户 ${run.triggeredByUserId ?? "—"}`}
+                </span>
+              </div>
+            </button>
+          ))}
+          {!runs.isFetching && !workflowRuns.length && (
+            <p className={"aiflow-type-body p-6 text-center " + mutedToneClass}>
+              当前筛选条件下尚无运行记录。
             </p>
           )}
-          {!dialogAllowed && controlDialog && <p role="alert" className={errorTextClass}>当前权限或运行状态已变化，此操作不可提交。请返回并刷新运行记录。</p>}
-          <DialogFooter>
+        </div>
+        <div className={"aiflow-type-control flex flex-col gap-2 border-t border-border px-4 py-3 " + mutedToneClass + " sm:flex-row sm:items-center sm:justify-between"}>
+          <span aria-live="polite">
+            第 {historyCursorStack.length} 页 · 本页 {workflowRuns.length} 条
+          </span>
+          <div className="flex gap-2">
             <Button
+              type="button"
               variant="outline"
-              disabled={controlPending}
-              onClick={() => setControlDialog(null)}
+              size="sm"
+              className={paginationButtonClass}
+              disabled={historyCursorStack.length <= 1 || runs.isFetching}
+              onClick={() =>
+                setHistoryNavigation({
+                  filterKey: historyFilterKey,
+                  cursors: historyCursorStack.slice(0, -1),
+                })
+              }
             >
-              返回
+              较新记录
             </Button>
             <Button
-              disabled={
-                controlPending ||
-                !dialogAllowed ||
-                !controlDialog ||
-                controlDialog.runId !== selectedRunId ||
-                (controlDialog.action === "terminate" && !controlReason.trim())
-              }
-              onClick={async () => {
-                if (!controlDialog || controlDialog.runId !== selectedRunId || !dialogAllowed)
-                  return;
-                setControlError("");
-                try {
-                  const input = { runId: controlDialog.runId };
-                  if (controlDialog.action === "pause")
-                    await pauseRun.mutateAsync(input);
-                  else if (controlDialog.action === "terminate")
-                    await terminateRun.mutateAsync({
-                      ...input,
-                      reason: controlReason.trim(),
-                    });
-                  else await cancelRun.mutateAsync(input);
-                  setControlDialog(null);
-                } catch (error) {
-                  setControlError(
-                    error instanceof Error
-                      ? error.message
-                      : "操作失败，请重试。"
-                  );
-                }
+              type="button"
+              variant="outline"
+              size="sm"
+              className={paginationButtonClass}
+              disabled={!runs.data?.nextCursor || runs.isFetching}
+              onClick={() => {
+                const nextCursor = runs.data?.nextCursor;
+                if (nextCursor)
+                  setHistoryNavigation({
+                    filterKey: historyFilterKey,
+                    cursors: [...historyCursorStack, nextCursor],
+                  });
               }}
             >
-              {controlPending
-                ? "正在提交…"
-                : controlDialog?.action === "pause"
-                  ? "确认暂停"
-                  : controlDialog?.action === "terminate"
-                    ? "确认终止"
-                    : "确认取消"}
+              更早记录
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </div>
+        </div>
+      </section>
+
     </div>
   );
 }

@@ -2109,12 +2109,12 @@ function FlowConsole({
               ) : (
                 <div
                   data-runs-monitor-workspace
-                  className="aiflow-page-frame bg-background"
+                  className={monitorRunId ? "bg-background" : "aiflow-page-frame bg-background"}
                 >
-                  <div className="aiflow-page-content aiflow-split-layout grid items-start gap-4">
-                    <aside className="self-start rounded-lg border border-border bg-card p-2 lg:sticky lg:top-[calc(var(--workspace-header-height,64px)+16px)]">
+                  <div className={monitorRunId ? "min-w-0" : "aiflow-page-content aiflow-split-layout grid items-start gap-4"}>
+                    {!monitorRunId && <aside className="self-start rounded-lg border border-border bg-card p-2 lg:sticky lg:top-[calc(var(--workspace-header-height,64px)+16px)]">
                       {runNavigation}
-                    </aside>
+                    </aside>}
                     <section data-runs-monitor-content className="min-w-0">
                       {workflowContentState !== "granted" &&
                       mountedMonitorWorkflowId.current !== effectiveWorkflowId ? (
@@ -2133,21 +2133,21 @@ function FlowConsole({
                           selectedRunError={runDetail.isError}
                           selectedRunErrorCode={runDetail.error?.data?.code}
                           onSelect={(runId) =>
-                            selectedId &&
+                            effectiveWorkflowId &&
                             navigateRoute({
                               section: "runs",
                               view: "monitor",
-                              workflowId: selectedId,
+                              workflowId: effectiveWorkflowId,
                               runId,
                             })
                           }
                           onClearSelection={() =>
-                            selectedId &&
+                            effectiveWorkflowId &&
                             navigateRoute({
                               section: "runs",
                               view: "monitor",
-                              workflowId: selectedId,
-                            })
+                              workflowId: effectiveWorkflowId,
+                            }, { replace: true })
                           }
                           onRetrySelection={() => void runDetail.refetch()}
                         />

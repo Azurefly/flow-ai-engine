@@ -80,6 +80,73 @@
 [data-run-canvas-design] [data-run-canvas-actions] button { border:0; box-shadow:none; background:transparent; }
 [data-run-canvas-design] [data-run-canvas-actions] button:hover { background:var(--muted); }
 [data-run-canvas-design] [data-run-node-details] :is(h3,h4,p,label) { overflow-wrap:anywhere; }
+
+[data-run-canvas-workspace] {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+}
+[data-run-canvas-workspace] [data-run-canvas-body] {
+  min-height: 360px;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 420px);
+}
+[data-run-canvas-workspace] [data-run-node-details] {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+}
+[data-run-records-header] {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  padding: 12px 16px;
+}
+[data-run-records-scroll] {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 10px 12px 64px;
+}
+[data-run-records-list] {
+  display: grid;
+  gap: 6px;
+}
+[data-run-execution-record], .run-record-disclosure {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.run-record-disclosure { margin-bottom: 8px; padding: 8px 10px; }
+[data-run-execution-record] > button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 3px 8px;
+  border-radius: 7px;
+  padding: 8px 10px;
+  text-align: left;
+}
+[data-run-execution-record] > button:hover { background: var(--muted); }
+[data-run-execution-record] > button[aria-current="true"] {
+  background: var(--selection-surface);
+  box-shadow: inset 3px 0 0 var(--selection-indicator);
+}
+[data-run-record-body] { min-width: 0; border-top: 1px solid var(--border); padding: 0 10px 12px; }
+
+@media (max-width: 1023px) {
+  [data-run-canvas-workspace] [data-run-canvas-body] { grid-template-columns: minmax(0, 1fr); }
+  [data-run-records-scroll] { max-height: 460px; }
+}
 @media (max-width:1100px) {
   [data-run-canvas-design] > header { grid-template-columns:minmax(0,1fr); }
   [data-run-canvas-design] [data-run-canvas-actions] { width:fit-content; }

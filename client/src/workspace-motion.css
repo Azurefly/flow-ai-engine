@@ -86,7 +86,7 @@
     animation: aiflow-layer-in var(--duration-drawer) var(--ease-out-expo);
   }
 
-  [data-run-execution-record][open] > [data-run-record-body] {
+  [data-run-execution-record] > [data-run-record-body] {
     animation: aiflow-surface-in var(--duration-micro) ease-out;
   }
 

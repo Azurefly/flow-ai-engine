@@ -15,6 +15,7 @@ const surfaceClass7 = "aiflow-type-control inline-flex min-h-11 items-center fon
 const surfaceClass8 = ("aiflow-type-control grid gap-1 font-medium " + mutedToneClass);
 import { dataflowGraphRun } from "@shared/dataflow-run-view";
 import { DataflowResultTable } from "./DataflowResultTable";
+import { RunInstancePage, useRunMonitorReturn } from "./RunInstancePage";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import "./dataflow-run-inspection.css";
 import { canProbeDataSource, dataSourceCapability, dataSourceReadiness } from "@shared/data-source-capabilities";
@@ -1102,11 +1103,13 @@ function DataflowOperationList({
   projectName,
   workflowId,
   onOpenRun,
+  active = true,
 }: {
   projectId: string;
   projectName: string;
   workflowId?: string;
-  onOpenRun?: (id: string) => void;
+  onOpenRun?: (id: string, button: HTMLButtonElement) => void;
+  active?: boolean;
 }) {
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const blank = { search: "", trigger: "", status: "", from: "", through: "" };
@@ -1138,6 +1141,7 @@ function DataflowOperationList({
         : undefined,
     },
     {
+      enabled: active,
       retry: false,
       refetchInterval: query =>
         query.state.data?.items.some(r =>
@@ -1157,7 +1161,7 @@ function DataflowOperationList({
       runId: expandedRunId ?? "",
     },
     {
-      enabled: Boolean(expandedRun),
+      enabled: active && Boolean(expandedRun),
       refetchInterval: query =>
         runDetailRefreshInterval(
           query.state.data?.status,
@@ -1325,10 +1329,11 @@ function DataflowOperationList({
                     type="button"
                     variant="outline"
                     size="sm"
+                    id={onOpenRun ? `data-run-history-${run.id}` : undefined}
                     aria-label={`查看实例详情：${run.workflowName}（${run.id}）`}
                     aria-expanded={onOpenRun ? undefined : expandedRunId === run.id}
-                    onClick={() =>
-                      onOpenRun ? onOpenRun(run.id) : setExpandedRunId(current =>
+                    onClick={event =>
+                      onOpenRun ? onOpenRun(run.id, event.currentTarget) : setExpandedRunId(current =>
                         current === run.id ? null : run.id
                       )
                     }
@@ -1434,7 +1439,7 @@ function parseDataflowResult(value: unknown): unknown {
 }
 
 
-function DataflowRunOutput({ run }: { run: any }) {
+function DataflowRunOutput({ run, workspace = false }: { run: any; workspace?: boolean }) {
   const [selectedTerminal, setSelectedTerminal] = useState(0);
   const [showRaw, setShowRaw] = useState(false);
   const rawResult = (run.error ? { output: run.output, error: run.error } : run.output) ??
@@ -1466,7 +1471,7 @@ function DataflowRunOutput({ run }: { run: any }) {
   }, [rawResult, showRaw]);
 
   return (
-    <div dataflow-output-summary="" className="mt-3 space-y-3">
+    <div dataflow-output-summary="" className={workspace ? "flex min-h-0 flex-1 flex-col gap-3" : "mt-3 space-y-3"}>
       <DataflowCancellationInfo cancellation={run.cancellation} />
       {run.nodeRuns?.some((n: any) => n.output?.writePreview) && <Suspense fallback={null}><ConnectorWriteReceipts projectId={run.projectId} runId={run.id}/></Suspense>}
       {run.error && run.status !== "cancelled" && (
@@ -1478,14 +1483,14 @@ function DataflowRunOutput({ run }: { run: any }) {
         </div>
       )}
       {/* UX：阅读视图保留挂载，切换不丢节点、批次、分页与原始数据状态。 */}
-      <Tabs defaultValue="graph" data-run-inspection="">
+      <Tabs defaultValue="graph" data-run-inspection="" className={workspace ? "min-h-0 flex-1" : undefined}>
         <TabsList aria-label="实例详情阅读视图">
           <TabsTrigger value="graph">流程画布</TabsTrigger>
           <TabsTrigger value="results">最终结果</TabsTrigger>
         </TabsList>
         <TabsContent value="graph" forceMount>
           <Suspense fallback={<p role="status">正在加载实例流程图…</p>}>
-            <RunExecutionCanvas key={run.id} run={graphRun} renderDataOutput={record => (
+            <RunExecutionCanvas key={run.id} run={graphRun} workspace={workspace} renderDataOutput={record => (
               Array.isArray(record.outputJson?.rows)
                 ? <DataflowResultTable key={record.id} rows={record.outputJson.rows} title="节点输出预览" />
                 : null
@@ -2478,6 +2483,7 @@ export function DataflowRunMonitor({
   blockedContent?: React.ReactNode;
 }) {
   const utils = trpc.useUtils();
+  const monitorReturn = useRunMonitorReturn(selectedRunId, workflowId, viewAllowed);
   const detail = trpc.data.runDetail.useQuery(
     { projectId: projectId ?? "00000000", runId: selectedRunId ?? "00000000" },
     {
@@ -2492,11 +2498,11 @@ export function DataflowRunMonitor({
     }
   );
   const matchingDetail =
-    detail.data?.workflowId === workflowId ? detail.data : null;
+    !detail.isError && detail.data?.workflowId === workflowId && detail.data?.id === selectedRunId ? detail.data : null;
   if (!viewAllowed) return blockedContent ?? null;
   return (
-    <section data-runtime-monitor className="space-y-4 p-4 sm:p-5" aria-label="数据流程运行监控">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div data-runtime-monitor className={selectedRunId ? undefined : "space-y-4 p-4 sm:p-5"}>
+      {!selectedRunId && <header aria-label="数据流程运行监控" className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="aiflow-type-page-title font-semibold">
             数据流程运行监控
@@ -2508,51 +2514,52 @@ export function DataflowRunMonitor({
         </div>
         <Button
           variant="outline"
-          disabled={!projectId || detail.isFetching}
-          onClick={() => {
-            void utils.data.runPage.invalidate({ projectId: projectId ?? "00000000", workflowId: workflowId ?? "00000000" });
-            if (selectedRunId) void detail.refetch();
-          }}
+          disabled={!projectId}
+          onClick={() => void utils.data.runPage.invalidate({ projectId: projectId ?? "00000000", workflowId: workflowId ?? "00000000" })}
         >
           刷新运行记录
         </Button>
-      </div>
-      {projectId && workflowId && <div hidden={Boolean(selectedRunId)}><DataflowOperationList key={workflowId} projectId={projectId} workflowId={workflowId} projectName={workflowName || "当前流程"} onOpenRun={onSelect}/></div>}
-      {selectedRunId && (
-        <section
-          className={resourcePanelClassName}
-          data-dataflow-run-detail=""
-          aria-label="数据流程运行详情"
-        >
-          <div className={surfaceClass4}>
-            <h2 className="aiflow-type-section-title font-semibold" title={selectedRunId}>
-              实例详情 · {selectedRunId.slice(0, 8)}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              {matchingDetail && <DataflowCancelControl key={matchingDetail.id} run={matchingDetail} />}
-            <Button variant="ghost" onClick={onClearSelection}>
-              返回运行记录
-            </Button>
-            </div>
-          </div>
-          {detail.isError ? (
-            <p role="alert" className="mt-3 text-destructive">
-              读取运行详情失败：{detail.error.message}
-            </p>
-          ) : detail.isLoading ? (
-            <p role="status">正在读取运行详情…</p>
-          ) : matchingDetail ? (
-            <>
-              <p data-run-summary="" className={"aiflow-type-body my-3 " + mutedToneClass}>
-                <State value={matchingDetail.status} /> · {matchingDetail.triggerName || "系统用户"} · {formatDataflowTime(matchingDetail.startedAt)} · 耗时 {matchingDetail.durationMs ?? "—"} ms
-              </p>
-              <DataflowRunOutput key={selectedRunId} run={matchingDetail} />
-            </>
-          ) : (
-            <p role="alert">运行记录不属于当前流程或已无法访问。</p>
-          )}
+      </header>}
+      {projectId && workflowId && (
+        <section ref={monitorReturn.list} hidden={Boolean(selectedRunId)} tabIndex={-1} aria-label="运行记录">
+          <DataflowOperationList
+            key={workflowId}
+            projectId={projectId}
+            workflowId={workflowId}
+            projectName={workflowName || "当前流程"}
+            active={!selectedRunId}
+            onOpenRun={(id, button) => {
+              monitorReturn.rememberOpener(button);
+              onSelect(id);
+            }}
+          />
         </section>
       )}
-    </section>
+      {selectedRunId && (
+        <RunInstancePage
+          runId={selectedRunId}
+          workflowName={workflowName}
+          flowType="data"
+          onBack={onClearSelection}
+          actions={matchingDetail && <DataflowCancelControl key={matchingDetail.id} run={matchingDetail} />}
+          summary={matchingDetail && (
+            <p data-run-summary="" className={"aiflow-type-body border-t pt-2 " + mutedToneClass}>
+              <State value={matchingDetail.status} /> · {matchingDetail.triggerName || "系统用户"} · {formatDataflowTime(matchingDetail.startedAt)} · 耗时 {matchingDetail.durationMs ?? "—"} ms
+            </p>
+          )}
+        >
+          {detail.isLoading ? (
+            <p role="status" className="p-4">正在读取运行详情…</p>
+          ) : matchingDetail ? (
+            <DataflowRunOutput key={selectedRunId} run={matchingDetail} workspace />
+          ) : (
+            <div role="alert" className="aiflow-type-body rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-4 text-aiflow-danger">
+              <p>{detail.isError ? detail.error.message : "运行记录不属于当前流程或已无法访问。"}</p>
+              <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void detail.refetch()}>重试</Button>
+            </div>
+          )}
+        </RunInstancePage>
+      )}
+    </div>
   );
 }
