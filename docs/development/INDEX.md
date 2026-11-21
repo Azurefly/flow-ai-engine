@@ -7,7 +7,7 @@
 | 当前任务 | 文档 |
 | --- | --- |
 | 新人或开发代理接手 | [仓库协作约定](../../Agent.md)、[当前系统设计](architecture.md)、[产品范围与本机启动](../../README.md) |
-| 理解或演示三类流程 | [流转语义、内置节点与运行截图](../workflow-guide.md) |
+| 理解或演示三类流程 | [设备报警处置主演示](../../README.md#设备报警处置主演示)、[流转语义、内置节点与运行截图](../workflow-guide.md) |
 | 修改本次新增的四个模块 | [版本化 API、文件与外部写回](optimization/G01-IMPLEMENTATION.md)、[持久父子流程](optimization/G02-IMPLEMENTATION.md)、[内部目录批量导入](optimization/G03-IMPLEMENTATION.md)、[助手后台回合](optimization/G04-IMPLEMENTATION.md) |
 | 领取优化任务或拆分开发工作 | [智能体交接入口](optimization/START-HERE.md)、[产品能力索引](optimization/CAPABILITIES.md)、[19 张任务卡](optimization/TASKS.md)、[67 条验收场景](optimization/ACCEPTANCE.md)、[结构化队列](optimization/queue.json) |
 | 核对本轮发布和剩余验收 | [产品发布验收](optimization/PRODUCT-RELEASE.md)、[实施与实测回执](optimization/IMPLEMENTATION.md)、[脱敏发布证据](optimization/release-evidence.json)、[逐项验收状态](optimization/queue.json) |
