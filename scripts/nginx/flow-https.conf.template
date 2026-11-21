@@ -16,6 +16,7 @@ server {
     location / {
         proxy_pass http://127.0.0.1:${FLOW_HTTP_PORT};
         proxy_http_version 1.1;
+        proxy_max_temp_file_size 0;
         proxy_set_header Host ${FLOW_PUBLIC_HOST}:${FLOW_TLS_PORT};
         proxy_set_header X-Forwarded-Host ${FLOW_PUBLIC_HOST}:${FLOW_TLS_PORT};
         proxy_set_header X-Forwarded-Proto https;

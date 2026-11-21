@@ -91,6 +91,8 @@ sudo nginx -t
 
 发布验收应从公网读完上线镜像中的静态资源，比较完整字节数和 SHA-256，再用新浏览器会话登录与注销。本站曾在 `/readyz` 成功、JavaScript 请求返回 200 的情况下截断大响应。定位时分别读取容器文件、主机回环上游和公网文件，并检查 Nginx 错误日志中的代理临时目录。若正式目录属主与正式 worker 不符，核对正式配置，执行其 `nginx -t` 和标准服务 reload，再复验完整文件。[本轮发布回执](development/optimization/IMPLEMENTATION.md#远程发布回执)
 
+站点模板在应用的 `location /` 中设置 `proxy_max_temp_file_size 0`，使反向代理使用有界内存缓冲传送响应。工作台列表和实例详情的响应可能超过该缓冲区。迁移已有站点时，把同一条指令补到应用代理位置，保留该站点已有的代理路由，再检查配置并 reload。验收时在桌面浏览器反复前进、后退，确认实例详情和节点记录完整加载，同时检查 `workflow.runDetail` 和 `task.instancePage` 对应的日志有没有临时文件写入失败。[Nginx 指令说明](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_max_temp_file_size)
+
 ## 验证
 
 ```bash
