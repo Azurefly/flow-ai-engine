@@ -53,15 +53,19 @@ it("桌面审计记录的六个单元格固定在同一行，避免状态列让�
     /@media \(min-width: 1024px\)\s*\{\s*\[data-iam-audit-row\] > div:first-child > \*\s*\{\s*grid-row: 1;/
   );
 });
-it("dialog motion never interpolates responsive width or viewport height", () => {
+it("普通与确认弹窗只对透明度和变换使用动效", () => {
+  const motion = read("client/src/workspace-motion.css");
   for (const name of ["dialog", "alert-dialog"]) {
-    const source = readFileSync(
-      new URL(`../client/src/components/ui/${name}.tsx`, import.meta.url),
-      "utf8"
-    );
-    expect(source).toContain("transition-opacity duration-200");
-    expect(source).not.toContain("transition-all");
+    expect(motion).toContain(`[data-slot="${name}-content"]`);
+    expect(read(`client/src/components/ui/${name}.tsx`)).not.toContain("transition-all");
   }
+  for (const direction of ["in", "out"]) {
+    const frame = motion.match(new RegExp(`@keyframes aiflow-layer-${direction} \\{\\s*(?:from|to) \\{([^}]+)\\}`));
+    expect(frame).not.toBeNull();
+    const properties = Array.from(frame![1].matchAll(/([a-z-]+)\s*:/g), match => match[1]);
+    expect(properties).toEqual(["opacity", "transform"]);
+  }
+  expect(motion).toContain("@media (prefers-reduced-motion: no-preference)");
 });
 
 it("流程管理标题不继承旧装饰卡片，工作区使用统一冷色表面", () => {
