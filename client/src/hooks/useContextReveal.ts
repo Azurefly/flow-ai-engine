@@ -13,10 +13,10 @@ export function useContextReveal<T extends HTMLElement>(
     const animation = ref.current.animate(
       translate
         ? [
-            { opacity: 0.55, transform: "translateY(6px)" },
+            { opacity: 0.76, transform: "translateY(4px)" },
             { opacity: 1, transform: "translateY(0)" },
           ]
-        : [{ opacity: 0.55 }, { opacity: 1 }],
+        : [{ opacity: 0.82 }, { opacity: 1 }],
       { duration: 180, easing: "cubic-bezier(.2,.8,.2,1)" }
     );
     return () => animation.cancel();

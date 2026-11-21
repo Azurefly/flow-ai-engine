@@ -935,6 +935,7 @@ export default function RunCenter({
                   }) => (
                     <details
                       key={node.id}
+                      data-run-execution-record=""
                       className="group min-w-0 rounded border border-border bg-muted p-3"
                     >
                       <summary className="aiflow-type-body flex min-w-0 cursor-pointer list-none items-center justify-between gap-3">
@@ -973,7 +974,7 @@ export default function RunCenter({
                           className={"shrink-0 " + mutedToneClass + " transition-transform group-open:rotate-180"}
                         />
                       </summary>
-                      <div className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
+                      <div data-run-record-body="" className="aiflow-type-body mt-3 grid gap-3 border-t border-border pt-3">
                         {runDetail && node.nodeId && (
                           <Button
                             type="button"

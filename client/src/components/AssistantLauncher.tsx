@@ -36,6 +36,7 @@ export function AssistantLauncher({
       <button
         ref={trigger}
         type="button"
+        data-motion-lift=""
         aria-label="打开流程助手"
         aria-expanded={open}
         aria-controls={visited ? "flow-assistant-panel" : undefined}

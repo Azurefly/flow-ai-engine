@@ -10,6 +10,7 @@ import "./index.css";
 import "./components/management-pages.css";
 import "./desktop-workspace.css";
 import "./selection-states.css";
+import "./workspace-motion.css";
 
 const queryClient = new QueryClient();
 

@@ -1374,13 +1374,13 @@ function FlowConsole({
     }
   };
 
-  const nav = [
+  const nav = useMemo(() => [
     { id: "flows" as const, label: "流程设计", icon: FolderKanban },
     { id: "runs" as const, label: "已启动流程", icon: Activity },
     { id: "warehouse" as const, label: "流程仓库", icon: FolderKanban },
     ...(canManageIdentity ? [{ id: "identity" as const, label: "用户与权限", icon: UsersRound }] : []),
     ...(user.role === "admin" ? [{ id: "system" as const, label: "系统配置", icon: SlidersHorizontal }] : []),
-  ];
+  ], [canManageIdentity, user.role]);
   const activeSection = section === "system" && isIdentityWorkspaceView(systemView) ? "identity" : section;
   const agentSettingsActive = section === "system" && systemView === "agents" && user.role === "admin";
   const workspaceLabel = agentSettingsActive ? "Agent 配置" : businessFocused ? "业务工作区" : editorActive ? "流程设计器" : detailActive ? "流程详情" : nav.find(item => item.id === activeSection)?.label || "工作区";

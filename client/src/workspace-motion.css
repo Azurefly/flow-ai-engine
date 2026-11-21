@@ -1,0 +1,114 @@
+[data-aiflow-primary-nav] {
+  position: relative;
+}
+
+[data-workspace-nav-indicator] {
+  position: absolute;
+  z-index: 2;
+  inset-block-end: 2px;
+  left: 0;
+  width: 24px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--selection-indicator);
+  pointer-events: none;
+}
+
+:root [data-aiflow-primary-nav][data-nav-indicator-ready] > [data-selection="tab"]::after {
+  content: none;
+}
+
+@media (forced-colors: active) {
+  [data-workspace-nav-indicator] { background: Highlight; forced-color-adjust: none; }
+}
+
+@keyframes aiflow-layer-in {
+  from {
+    opacity: 0;
+    transform: translate3d(var(--layer-x, 0), var(--layer-y, 0), 0) scale(var(--layer-scale, 1));
+  }
+}
+
+@keyframes aiflow-layer-out {
+  to {
+    opacity: 0;
+    transform: translate3d(var(--layer-x, 0), var(--layer-y, 0), 0) scale(var(--layer-scale, 1));
+  }
+}
+
+@keyframes aiflow-scrim-out {
+  to { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-workspace-nav-indicator] {
+    transition: transform var(--duration-drawer) cubic-bezier(.45, 0, .3, 1);
+  }
+
+  :is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"])[data-state="open"] {
+    animation: aiflow-surface-in var(--duration-surface) ease-out;
+  }
+
+  :is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"])[data-state="closed"] {
+    animation: aiflow-scrim-out var(--duration-micro) ease-in;
+  }
+
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
+    --layer-scale: .97;
+    --layer-duration: var(--duration-surface);
+  }
+
+  [data-task-drawer] {
+    --layer-x: 20px;
+    --layer-scale: 1;
+    --layer-duration: var(--duration-drawer);
+  }
+
+  [data-slot="popover-content"] {
+    --layer-duration: var(--duration-micro);
+  }
+
+  [data-slot="popover-content"][data-side="top"] { --layer-y: 6px; }
+  [data-slot="popover-content"][data-side="bottom"] { --layer-y: -6px; }
+  [data-slot="popover-content"][data-side="left"] { --layer-x: 6px; }
+  [data-slot="popover-content"][data-side="right"] { --layer-x: -6px; }
+
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"])[data-state="open"] {
+    animation: aiflow-layer-in var(--layer-duration) var(--ease-out-expo);
+  }
+
+  :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"])[data-state="closed"] {
+    animation: aiflow-layer-out var(--duration-micro) ease-in;
+  }
+
+  #flow-assistant-panel:not([hidden]) {
+    --layer-x: 12px;
+    animation: aiflow-layer-in var(--duration-drawer) var(--ease-out-expo);
+  }
+
+  [data-run-execution-record][open] > [data-run-record-body] {
+    animation: aiflow-surface-in var(--duration-micro) ease-out;
+  }
+
+  [data-sonner-toaster] [data-sonner-toast][data-x-position="right"][data-mounted="false"] {
+    --y: translateX(16px);
+  }
+
+  [data-sonner-toaster] [data-sonner-toast]:not([data-swiping="true"], [data-removed="true"]) {
+    transition-duration: var(--duration-surface), var(--duration-surface), var(--duration-drawer), var(--duration-micro);
+    transition-timing-function: var(--ease-out-expo);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  [data-motion-lift] {
+    transition: translate var(--duration-micro) var(--ease-out-expo),
+      background-color var(--duration-micro), color var(--duration-micro),
+      border-color var(--duration-micro), box-shadow var(--duration-micro);
+  }
+
+  [data-motion-lift]:hover:not(:active, :disabled, [aria-disabled="true"]) {
+    translate: 0 -2px;
+    box-shadow: var(--aiflow-surface-shadow-raised);
+  }
+}

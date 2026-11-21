@@ -46,6 +46,31 @@ export function WorkspaceHeader({
 }) {
   const name = user.name || user.username || "内部用户";
   const role = user.role === "admin" ? "系统管理员" : "成员";
+  const navRef = React.useRef<HTMLElement>(null);
+  const indicatorRef = React.useRef<HTMLSpanElement>(null);
+  React.useLayoutEffect(() => {
+    const strip = navRef.current;
+    const indicator = indicatorRef.current;
+    if (!strip || !indicator || typeof ResizeObserver === "undefined") return;
+
+    const selected = strip.querySelector<HTMLAnchorElement>('a[aria-current="page"]');
+    const alignIndicator = () => {
+      const width = selected?.offsetWidth ?? 0;
+      indicator.hidden = !width;
+      strip.toggleAttribute("data-nav-indicator-ready", Boolean(width));
+      if (selected && width) {
+        const center = selected.offsetLeft + width / 2;
+        indicator.style.transform = `translateX(${center - indicator.offsetWidth / 2}px)`;
+      }
+    };
+
+    alignIndicator();
+    const observer = new ResizeObserver(alignIndicator);
+    observer.observe(strip);
+    strip.querySelectorAll("a").forEach(link => observer.observe(link));
+    return () => observer.disconnect();
+  }, [activeSection, nav]);
+
   return (
     <header
       data-workspace-header
@@ -79,6 +104,7 @@ export function WorkspaceHeader({
           </span>
         </div>
         <nav
+          ref={navRef}
           data-aiflow-primary-nav
           aria-label="工作空间主导航"
           className="hidden min-w-0 items-stretch md:flex"
@@ -105,6 +131,7 @@ export function WorkspaceHeader({
               <span data-workspace-nav-label>{item.label}</span>
             </a>
           ))}
+          <span ref={indicatorRef} data-workspace-nav-indicator aria-hidden="true" hidden />
         </nav>
         <div
           data-aiflow-user-actions

@@ -628,6 +628,7 @@ function BusinessCenterView({
               <Button
                 type="button"
                 size="sm"
+                data-motion-lift=""
                 className="aiflow-type-control h-11 px-3 font-medium min-[1280px]:h-9"
                 ref={createTrigger}
                 onClick={() => setShowCreate(true)}
@@ -2196,6 +2197,7 @@ function ProcessCenter({
             <Button
               type="button"
               size="sm"
+              data-motion-lift=""
               className="aiflow-type-control h-11 gap-1 px-3 font-medium sm:h-9"
               onClick={onOpenCreate}
             >
