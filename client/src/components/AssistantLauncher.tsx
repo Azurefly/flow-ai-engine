@@ -57,10 +57,13 @@ export function AssistantLauncher({
           className="fixed right-2 bottom-2 z-40 flex h-[min(39rem,calc(100dvh-1rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-2xl sm:right-4 sm:bottom-4"
           style={{ display: open ? undefined : "none" }}
           onKeyDown={event => {
-            if (event.key === "Escape") {
-              event.stopPropagation();
-              close();
-            }
+            if (
+              event.key !== "Escape" ||
+              event.defaultPrevented ||
+              !event.currentTarget.contains(event.target as Node)
+            ) return;
+            event.stopPropagation();
+            close();
           }}
         >
           <header className="flex items-center gap-2 border-b px-4 py-2">
