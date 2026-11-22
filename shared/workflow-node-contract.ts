@@ -1009,7 +1009,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
       {
         key: "defaultRoute",
-        label: "默认分支",
+        label: "默认出口代号",
         help: "未命中规则时使用的连线句柄；应与画布连线的源句柄一致。",
         kind: "text",
         required: true,

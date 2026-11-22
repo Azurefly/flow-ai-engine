@@ -346,7 +346,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expectSemanticBodyForCopy(runCenterSource, "请查看运行节点日志。");
       expectSemanticRoleForCopy(
         canvasSource,
-        "请从此路径句柄连线到目标状态节点",
+        "{destination}</span>",
         "aiflow-type-control"
       );
       expectSemanticBodyForCopy(

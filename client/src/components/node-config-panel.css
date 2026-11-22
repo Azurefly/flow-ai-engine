@@ -49,18 +49,33 @@
 .rule-list-item strong, .rule-list-item small { display:block; }
 .rule-list-item strong { font-weight:inherit; }
 .rule-list-item small { margin-top:3px; font-size:var(--aiflow-type-meta); font-weight:400; line-height:1.5; }
+.route-row-header { display:flex; justify-content:space-between; gap:8px; align-items:baseline; }
+.route-row-header small { flex:none; white-space:nowrap; }
 .rule-list-item .route-destination, .route-destination { display:grid; grid-template-columns:14px minmax(0,1fr); align-items:start; gap:6px; color:var(--muted-foreground); }
 .route-destination::before { content:""; width:9px; height:7px; margin:4px 0 0 2px; border-left:1.5px solid; border-bottom:1.5px solid; border-bottom-left-radius:3px; }
 .rule-link { display:inline-flex; align-items:center; justify-self:start; gap:5px; color:var(--primary); font-size:13px; }
 [data-route-rules] .rule-link:not(.rule-remove) { color:var(--selection-text); }
 .rule-context { position:sticky; top:58px; z-index:2; padding-bottom:6px; background:var(--card); gap:4px; }
-.route-detail-title { display:grid; min-width:0; gap:5px; padding:12px 14px; border-radius:10px; background:var(--selection-surface); }
-.rule-data-summary { overflow-wrap:anywhere; font-size:13px; }
-.rule-context > span { font-size:var(--aiflow-type-meta); line-height:1.5; color:var(--muted-foreground); }
+.route-branch-settings, .route-conditions { display:grid; gap:10px; min-width:0; padding:12px; border:1px solid var(--border); border-radius:10px; }
+.route-branch-settings { grid-template-columns:minmax(0,1fr) minmax(72px,86px); align-items:start; }
+.route-wide { grid-column:1 / -1; }
+[data-node-config-panel] .route-name { width:100%; min-height:58px; padding:6px 9px; border:1px solid var(--border); background:var(--card); color:var(--foreground); }
+.route-condition-heading { display:flex; justify-content:space-between; align-items:start; gap:10px; font-size:var(--aiflow-type-control); }
+.route-condition-heading .rule-link { flex:none; }
+.route-connection { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:8px; padding:6px 8px; min-height:36px; text-align:start; overflow-wrap:anywhere; border:1px solid var(--border); border-radius:6px; }
+.route-connection small { color:var(--muted-foreground); }
+.route-connection:is(:hover,[aria-pressed="true"]) { color:var(--selection-text); background:var(--selection-surface); }
+[data-route-detail]:has([data-route-condition-edit]) [data-route-branch-settings],
+[data-route-rule-conditions]:has(> [data-route-condition-edit]) > :not([data-route-condition-edit]),
+[data-config-fields]:has([data-route-condition-edit]) > :not([data-route-rules]),
+[data-route-rules]:has([data-route-condition-edit]) > [data-config-help],
+[data-node-config-panel]:has([data-route-detail]) [data-inspector-context],
+[data-node-config-panel]:has([data-route-condition-edit]) :is([data-inspector-tabs],[data-config-template-actions],[data-workflow-inspector-footer]) { display:none; }
 .rule-heading { font-size:var(--aiflow-type-section); line-height:1.5; font-weight:600; }
 .rule-controls { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; align-items:center; }
 .rule-controls > select { grid-column:1 / -1; }
 .rule-controls > label { white-space:nowrap; }
+.rule-controls > button { grid-column:2; }
 [data-node-config-panel] :is(.rule-controls button,.rule-remove)[aria-label^="删除"] { width:auto; height:auto; justify-self:end; white-space:nowrap; align-self:center; }
 .node-value-editor, .node-value-body { display:grid; min-width:0; gap:8px; }
 .node-value-heading { display:flex; align-items:center; justify-content:space-between; gap:8px; color:var(--muted-foreground); font-size:12px; }

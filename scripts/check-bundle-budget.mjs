@@ -67,9 +67,10 @@ const maxChunkBytes = 450 * 1024;
 // Versioned connectors, durable subflows, directory import and assistant operations: 1688.58 / 522.52 KiB on Windows.
 // Scoped proposal recovery, editable failed rows and editor run receipts: 1692.52 KiB raw / 523.83 KiB gzip.
 // In-task progress, recoverable rejection and preserved input: 1692.84 KiB raw / 524.02 KiB gzip.
-const maxTotalBytes = 1_694 * 1024;
+// Route sorting, locating connected nodes and scoped condition editing: about 1696 / 526.4 KiB.
+const maxTotalBytes = 1_697 * 1024;
 // Task drawer draft protection adds about 0.82 KiB gzip.
-const maxTotalGzipBytes = 525 * 1024;
+const maxTotalGzipBytes = 527 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;

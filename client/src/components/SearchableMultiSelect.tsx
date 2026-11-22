@@ -39,6 +39,7 @@ type SearchableMultiSelectProps = {
   maxSelected?: number;
   maxResults?: number;
   hasMore?: boolean;
+  showSelectionCount?: boolean;
 };
 
 export function SearchableMultiSelect({
@@ -60,6 +61,7 @@ export function SearchableMultiSelect({
   maxSelected = Number.POSITIVE_INFINITY,
   maxResults = 50,
   hasMore = false,
+  showSelectionCount = false,
 }: SearchableMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const optionCache = useRef(new Map<string, SearchSelectOption>());
@@ -79,6 +81,8 @@ export function SearchableMultiSelect({
   const selectedLabel =
     selectedOptions.length === 0
       ? placeholder
+      : showSelectionCount
+        ? `已选 ${selectedOptions.length} 项`
       : maxSelected === 1
         ? selectedOptions[0]?.label
         : selectedOptions.length === 1

@@ -124,13 +124,17 @@ export function normalizeReferenceRouterRule(raw: unknown, index: number): Norma
   };
 }
 
+export function compareRouterRulePriority(left: NormalizedRouterRule, right: NormalizedRouterRule) {
+  return right.priority - left.priority || left.createdAt - right.createdAt;
+}
+
 export function normalizeReferenceRouterConfig(config: RouterJsonRecord) {
   const originalRules = asArray(config.lysz);
   const modernRules = asArray(config.routes);
   const source = modernRules.length ? modernRules : originalRules;
   const rules = source
     .map(normalizeReferenceRouterRule)
-    .sort((left, right) => right.priority - left.priority || left.createdAt - right.createdAt);
+    .sort(compareRouterRulePriority);
   return {
     broadcast: config.gbms === true || config.gbms === "true" || config.broadcast === true || config.broadcast === "true",
     defaultRoute: firstText(config.defaultRoute, "default"),

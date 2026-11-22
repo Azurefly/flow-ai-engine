@@ -11,6 +11,15 @@ const group = (match: "any" | "all", ...conditions: Condition[]): Condition =>
 const pair = (a: number, b: number) => group("all", vote(a), vote(b));
 
 describe("approval count editing", () => {
+  it("identifies each voter and describes a negated role match in plain language", () => {
+    const nodes = { finance: "财务审核" };
+    const names = { user: { "1": "审批员甲", "2": "审批员乙" }, role: { system_admin: "系统管理员" } };
+    expect(conditionText(vote(1), nodes, names)).toBe("财务审核 · 审批员甲通过");
+    expect(conditionText(vote(2), nodes, names)).toBe("财务审核 · 审批员乙通过");
+    expect(conditionText({ kind: "role", roleKeys: ["system_admin"], match: "any", negate: true }, nodes, names))
+      .toBe("没有以下任何角色 系统管理员");
+  });
+
   it("recognizes the complete two-of-three expression, independent of order", () => {
     const rule = group("any", pair(2, 1), pair(3, 2), pair(1, 3));
     expect(readApprovalCount(rule)).toMatchObject({ required: 2, node: "finance" });

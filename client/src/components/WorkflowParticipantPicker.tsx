@@ -2,6 +2,11 @@ import React, { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { SearchableMultiSelect } from "./SearchableMultiSelect";
 
+export function participantDirectoryLabel(label: string, id: string) {
+  const suffix = `（${id}）`;
+  return label.endsWith(suffix) ? label.slice(0, -suffix.length).trim() : label;
+}
+
 export function WorkflowParticipantPicker({
   workflowId,
   kind,
@@ -50,7 +55,9 @@ export function WorkflowParticipantPicker({
       [
         ...(directory.data?.selected ?? []),
         ...(directory.data?.items ?? []),
-      ].map(option => [option.value, option])
+      ].map(option => [option.value, purpose === "condition"
+        ? { ...option, label: participantDirectoryLabel(option.label, option.value) }
+        : option])
     ).values()
   );
   const missing = directory.isSuccess
@@ -89,6 +96,7 @@ export function WorkflowParticipantPicker({
         requireSearch
         maxSelected={multiple ? 100 : people || role ? 1 : 100}
         hasMore={directory.data?.hasMore}
+        showSelectionCount={purpose === "condition"}
       />
       {ordered && value.length > 0 && (
         <ol aria-label="审批顺序" className="space-y-2">
@@ -147,17 +155,15 @@ export function WorkflowParticipantPicker({
             .join("、")}
         </p>
       )}
-      <p className="text-xs text-muted-foreground">
+      {(readOnly || purpose !== "condition") && <p className="text-xs text-muted-foreground">
         {readOnly
           ? "仅查看已配置人员；修改请联系流程管理员。"
-          : purpose === "condition"
-            ? "选择用于路径匹配的项目；条件只筛选本次受影响的参与人。"
           : people
             ? "按姓名或账号搜索启用的人员。"
             : role
               ? "选择角色后，由该角色在本流程中有办理资格的人员处理。"
               : "按名称选择启用的部门；部门负责人模式留空时使用发起人的主部门。"}
-      </p>
+      </p>}
     </div>
   );
 }

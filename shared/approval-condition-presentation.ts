@@ -86,24 +86,34 @@ export function withApprovalCount(rule: ApprovalCount, required: number): Condit
   return { kind: "group", match: "any", conditions: terms };
 }
 
-export function conditionText(value: unknown, names: Record<string, string>): string {
+type OperandNames = Partial<Record<"user" | "role" | "department" | "state", Record<string, string>>>;
+
+export function conditionText(value: unknown, names: Record<string, string>, operands: OperandNames = {}): string {
   const rule = readApprovalCount(value);
-  if (rule) return `${names[rule.node] || rule.node} · ${rule.votes.length} 人中至少 ${rule.required} 人通过`;
+  const person = (id: string) => operands.user?.[id] || `人员 ${id}`;
+  if (rule) return `${names[rule.node] || rule.node} · ${rule.votes.length === 1
+    ? `${person(rule.ids[0])}通过`
+    : `${rule.votes.length} 人中至少 ${rule.required} 人通过`}`;
   const c = value as Condition | undefined;
   if (!c) return "未设置条件";
-  const list = (items: unknown) => Array.isArray(items) && items.length ? items.join("、") : "未选择";
+  const list = (items: unknown, kind: keyof OperandNames) =>
+    Array.isArray(items) && items.length
+      ? items.map(item => operands[kind]?.[String(item)] ?? item).join("、")
+      : "未选择";
   const format = (v: unknown) => typeof v === "object" ? JSON.stringify(v) : String(v ?? "");
   let text: string;
   switch (c.kind) {
     case "group": text = `${c.match === "all" ? "全部" : "任一"}满足 · ${Array.isArray(c.conditions) ? c.conditions.length : 0} 项条件`; break;
     case "identity": text = PARTICIPANT_IDENTITIES.find(i => i.value === c.identity)?.label || "流程身份"; break;
-    case "user": text = "指定人员 " + list(c.userIds); break;
-    case "role": text = (c.match === "all" ? "同时具有角色 " : "具有任一角色 ") + list(c.roleKeys); break;
-    case "state": text = "个人状态 " + list(c.stateCodes); break;
-    case "department": text = `${c.membership === "primary" ? "主部门" : "所属部门"} ${list(c.unitIds)} · 层级 ${c.minDepth}–${c.maxDepth ?? "不限"}`; break;
+    case "user": text = "指定人员 " + list(c.userIds, "user"); break;
+    case "role": return (c.match === "all"
+      ? c.negate ? "缺少以下至少一个角色 " : "具备以下全部角色 "
+      : c.negate ? "没有以下任何角色 " : "具备以下任一角色 ") + list(c.roleKeys, "role");
+    case "state": text = "个人状态 " + list(c.stateCodes, "state"); break;
+    case "department": text = `${c.membership === "primary" ? "主部门" : "所属部门"} ${list(c.unitIds, "department")} · 层级 ${c.minDepth}–${c.maxDepth ?? "不限"}`; break;
     case "data": {
       const path = typeof c.left === "string" && decisionPath.exec(c.left);
-      const source = path ? `${names[path[2]] || path[2]} · 人员 ${path[1]} 的意见` : format(c.left);
+      const source = path ? `${names[path[2]] || path[2]} · ${person(path[1])}的意见` : format(c.left);
       const op = PARTICIPANT_DATA_OPERATORS.find(o => o.value === c.operator)?.label ?? c.operator;
       const decisions: Record<string, string> = { approved: "通过", rejected: "拒绝", abstained: "弃权" };
       const right = path && typeof c.right === "string" && Object.hasOwn(decisions, c.right) ? decisions[c.right] : format(c.right);
@@ -113,17 +123,4 @@ export function conditionText(value: unknown, names: Record<string, string>): st
     default: text = "未识别的条件";
   }
   return c.negate ? `取反（${text}）` : text;
-}
-
-// Group titles identify the operation even when the expression cannot be simplified.
-export function conditionOperations(value: unknown, names: Record<string, string>) {
-  const operations = new Set<string>();
-  function visit(item: unknown) {
-    if (isGroup(item)) return item.conditions.forEach(visit);
-    const leaf = item as Leaf | null;
-    const path = leaf?.kind === "data" && typeof leaf.left === "string" && decisionPath.exec(leaf.left);
-    if (path) operations.add(names[path[2]] || path[2]);
-  }
-  visit(value);
-  return Array.from(operations).join("、");
 }
