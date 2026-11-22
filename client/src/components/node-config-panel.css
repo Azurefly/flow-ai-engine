@@ -70,7 +70,8 @@
 [data-config-fields]:has([data-route-condition-edit]) > :not([data-route-rules]),
 [data-route-rules]:has([data-route-condition-edit]) > [data-config-help],
 [data-node-config-panel]:has([data-route-detail]) [data-inspector-context],
-[data-node-config-panel]:has([data-route-condition-edit]) :is([data-inspector-tabs],[data-config-template-actions],[data-workflow-inspector-footer]) { display:none; }
+[data-node-config-panel]:has([data-route-condition-edit]) :is([data-config-template-actions],[data-workflow-inspector-footer]) { display:none; }
+[data-node-config-panel]:has([data-route-condition-edit]) [data-inspector-tabs] { display:none!important; }
 .rule-heading { font-size:var(--aiflow-type-section); line-height:1.5; font-weight:600; }
 .rule-controls { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; align-items:center; }
 .rule-controls > select { grid-column:1 / -1; }
