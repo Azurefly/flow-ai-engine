@@ -386,7 +386,7 @@ describe("流程设计器界面回归约束", () => {
     expect(graph).toContain("fitViewOptions={overviewFit}");
     expect(graph).toContain("fit(focusRequest.nodeId)");
     expect(graph).toContain("overview.current ? undefined : focusId.current");
-    expect(graph).toContain("[layout, ready, measured, expanded]");
+    expect(graph).toContain("[layout, ready, measured, expanded, routeOnly]");
     expect(graph).toContain("const initialized = useNodesInitialized()");
     expect(graph).toContain("<ViewportMeasurement onReady={setMeasured} />");
     expect(graph).toContain("onlyRenderVisibleElements={measured}");
@@ -4279,8 +4279,9 @@ it("阅读投影隔离于持久化，拖动和整理仍可连同显示模式一�
   expect(canvasDesignStyles).toContain("overflow: visible;");
   const edge = source("../client/src/components/CanvasConnectionEdge.tsx");
   expect(edge).toContain("interactionWidth={24 / zoom}");
-  expect(edge).toContain('markerWidth={9 / zoom}');
-  expect(edge).toContain("strokeWidth: (emphasized ? 3 : 2) / zoom");
+  expect(edge).toContain("const arrowSize = (traced ? 14 : 9) / zoom");
+  expect(edge).toContain("markerWidth={arrowSize}");
+  expect(edge).toContain("strokeWidth: (traced ? 5 : emphasized ? 3 : 2) / zoom");
 });
 
 

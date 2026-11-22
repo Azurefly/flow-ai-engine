@@ -47,6 +47,15 @@
 [data-run-canvas-design] .run-graph-node.is-selected,
 [data-run-canvas-design] .run-graph-node:focus-visible {outline: 2px solid var(--aiflow-canvas-selected); outline-offset: 1px;}
 [data-run-canvas-design] .run-graph-node-title {display: block; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: max(14px, calc(12px / var(--canvas-zoom))) !important; line-height: 1.4 !important;}
+[data-run-route-view] .run-graph-node:not([data-compact]) {padding-block: 8px;}
+[data-run-route-view] .run-graph-node:not([data-compact]) .run-graph-node-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.18 !important;
+}
 [data-run-canvas-design] .run-graph-node-status {display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 2px 6px; border: 1px solid; border-radius: 4px; font-size: 12px; line-height: 18px;}
 [data-run-canvas-design] .run-graph-node-status::before {content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor;}
 [data-run-canvas-design] .run-graph-node-count {display: block; margin-top: 4px; font-size: 12px !important; line-height: 18px !important; color: var(--muted-foreground);}
@@ -72,13 +81,25 @@
 [data-run-canvas-design] .react-flow__edge:hover .react-flow__edge-textwrapper,
 [data-run-canvas-design] .react-flow__edge:focus .react-flow__edge-textwrapper,
 [data-run-canvas-design] .react-flow__edge.selected .react-flow__edge-textwrapper { opacity:1; }
+[data-run-has-trace] .react-flow__edge:not(.run-edge-traversed,:hover,:focus-within,.selected) { opacity: .24; }
+.run-edge-flow {
+  stroke: var(--card);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-dasharray: 7 19;
+  animation: run-edge-travel 850ms linear infinite;
+}
+@keyframes run-edge-travel { to { stroke-dashoffset: -26; } }
+[data-run-motion-paused] .run-edge-flow { display: none; animation: none; }
 @media (prefers-reduced-motion:reduce) {
   [data-run-canvas-design] .react-flow__edge-textwrapper { transition:none; }
+  .run-edge-flow, [data-run-canvas-actions] [data-run-motion-toggle] { display: none; animation: none; }
 }
 
 [data-run-canvas-design] [data-run-canvas-actions] { align-items:center; gap:4px; padding:3px; border:1px solid var(--border); border-radius:8px; background:var(--card); }
 [data-run-canvas-design] [data-run-canvas-actions] button { border:0; box-shadow:none; background:transparent; }
 [data-run-canvas-design] [data-run-canvas-actions] button:hover { background:var(--muted); }
+[data-run-canvas-design] [data-run-canvas-actions] button[aria-pressed="true"] { background:var(--selection-surface); color:var(--selection-text); box-shadow:inset 0 0 0 1px var(--selection-stroke); }
 [data-run-canvas-design] [data-run-node-details] :is(h3,h4,p,label) { overflow-wrap:anywhere; }
 
 [data-run-canvas-workspace] {

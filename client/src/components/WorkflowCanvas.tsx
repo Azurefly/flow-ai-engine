@@ -1783,7 +1783,7 @@ function RouteConnections({ handle, destination, navigation }: {
         aria-pressed={navigation?.activeEdgeId === target.id}
         aria-label={`在画布定位：${target.name}`}
         onClick={() => navigation?.locate(target.id)}>
-        <GitBranch size={15} aria-hidden="true"/><span>{target.name}</span><small>定位</small>
+        <GitBranch size={15} aria-hidden="true"/><span>{target.name}</span><small>{navigation?.activeEdgeId === target.id ? "已定位" : "定位"}</small>
       </button>
     )) : <span className="aiflow-type-control text-muted-foreground">{destination}</span>}
   </section>;
@@ -2538,6 +2538,7 @@ export default function WorkflowCanvas({
   }
 
   function showFullCanvas(scope: "global" | "overview", presentation: CanvasPresentation) {
+    setRouteEdgeId(null);
     setCanvasScope(scope);
     setCanvasPresentation(presentation);
     setHighlightRelated(false);
@@ -2781,6 +2782,7 @@ export default function WorkflowCanvas({
   const presentedNodes = useMemo(() => neighborhood || routeEdge ? visibleNodes.map(node => ({
     ...node,
     className: [node.className, neighborhood && (neighborhood.nodes.has(node.id) ? "aiflow-related-node" : "aiflow-unrelated-node"),
+      node.id === routeEdge?.source && "aiflow-route-source",
       node.id === routeEdge?.target && "aiflow-route-target"].filter(Boolean).join(" "),
   })) : visibleNodes, [visibleNodes, neighborhood, routeEdge]);
   // Fit after React Flow has received the local projection and the inspector has resized.
@@ -4521,6 +4523,7 @@ export default function WorkflowCanvas({
         <div
           ref={flowViewportRef}
           data-flow-canvas-viewport=""
+          data-route-located={routeEdge ? "" : undefined}
           className={`relative ${fullscreen ? "h-[480px] shrink-0 sm:h-[600px] lg:min-h-0 lg:h-auto lg:flex-1" : compactReadOnlyPreview ? "h-[340px] sm:h-[420px] lg:h-[520px]" : "h-[480px] sm:h-[600px] lg:h-[calc(100vh-220px)] lg:min-h-[620px]"}`}
           onDragOver={event => event.preventDefault()}
           onDrop={handleCanvasDrop}
@@ -4531,6 +4534,10 @@ export default function WorkflowCanvas({
             <button type="button" disabled={!selectedId} aria-pressed={Boolean(adjacentId)} title="只显示选中节点和直接相连的上下游" onClick={() => { setCanvasScope("adjacent"); setHighlightRelated(false); if (adjacentId) void fitCanvas(adjacentId); }}>上下游</button>
             <button type="button" aria-pressed={!readingActive && !adjacentId} onClick={() => showFullCanvas("overview", "original")}>原始布局</button>
           </div>}
+          {routeEdge && <button type="button" data-exit-route="" onClick={event => {
+            event.currentTarget.closest("[data-canvas-redesign]")?.querySelector<HTMLButtonElement>('.route-connection[aria-pressed="true"]')?.focus();
+            locateRouteConnection(null);
+          }}>退出分支定位</button>}
           {!readingActive && !adjacentId && canvasHasCrowding(nodes) && <p data-canvas-layout-warning="" role="status" className="absolute bottom-3 left-16 z-10 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">原始节点重叠，可切换到全局布局。</p>}
           <details className={"aiflow-type-control absolute left-3 top-3 z-10 rounded-lg border border-border bg-card/95 " + mutedToneClass + " shadow-sm"}>
             <summary className="inline-flex min-h-11 cursor-pointer items-center px-3 py-2 font-semibold text-foreground">

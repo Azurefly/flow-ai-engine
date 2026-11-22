@@ -129,6 +129,11 @@ export default function RunExecutionCanvas({
   const chosenRecords = useRef(new Map<string, string>());
   const [layout, setLayout] = useState(true);
   const [expanded, setExpanded] = useState(false);
+  const hasTrace = graph.edges.some(edge => edge.traversed);
+  const [routeView, setRouteView] = useState(workspace && hasTrace && !entryTaskId && !focusRequest);
+  const [motionPaused, setMotionPaused] = useState(false);
+  const routeOnly = layout && routeView && hasTrace;
+  const visibleEdges = routeOnly ? graph.edges.filter(edge => edge.traversed) : graph.edges;
   const api = useRef<ReactFlowInstance<ViewerNode, Edge> | null>(null);
   const [ready, setReady] = useState(false);
   const [measured, setMeasured] = useState(false);
@@ -147,6 +152,15 @@ export default function RunExecutionCanvas({
     const rects = canvasNodeRects(viewNodes.current);
     const next = getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18);
     void api.current.setViewport(next, { duration: 0 });
+  };
+  const showRunView = (route: boolean) => {
+    if (routeOnly === route) return fit();
+    overview.current = true;
+    setRouteView(route);
+    if (route) {
+      setLayout(true);
+      if (!active?.records.length) setSelected("");
+    }
   };
   const current = graph.nodes.filter(n =>
     ["running", "waiting", "failed"].includes(n.status)
@@ -182,7 +196,7 @@ export default function RunExecutionCanvas({
     if (row.top < bounds.top) scroller.scrollTop += row.top - bounds.top - 8;
     else if (row.bottom > bounds.bottom) scroller.scrollTop += row.bottom - bounds.bottom + 8;
   }, [workspace, activeRecordId]);
-  const rawNodes: ViewerNode[] = graph.nodes.map(n => ({
+  const rawNodes: ViewerNode[] = (routeOnly ? graph.nodes.filter(node => node.records.length) : graph.nodes).map(n => ({
     id: n.id,
     type: "runNode",
     position: layout ? n.layout : n.position,
@@ -193,17 +207,19 @@ export default function RunExecutionCanvas({
     handles: runGraphHandles(sizes.get(n.id) ?? { width: 208, height: 104 }),
   }));
   // UX: measured reading geometry is shared with the designer; original snapshot stays intact.
-  const nodes = layout ? readableCanvasLayout(rawNodes, graph.edges.map(e => ({ source: String(e.source), target: String(e.target), data: { loop: e.returning } }))) : rawNodes;
+  const nodes = layout ? readableCanvasLayout(rawNodes, visibleEdges.map(e => ({ source: String(e.source), target: String(e.target), data: { loop: e.returning } }))) : rawNodes;
   const rects = canvasNodeRects(nodes);
   viewNodes.current = nodes;
-  const edges: Edge[] = graph.edges.map((e, canvasLane) => ({
+  const edges: Edge[] = visibleEdges.map((e, canvasLane) => ({
     id: e.id,
     source: e.source,
     target: e.target,
     type: "runEdge",
-    data: { canvasRects: rects, canvasLane, loop: e.returning, canvasEmphasis: Boolean(e.confirmed), canvasStroke: e.confirmed ? "var(--aiflow-canvas-selected)" : undefined },
+    className: e.traversed ? "run-edge-traversed" : undefined,
+    zIndex: e.traversed ? 1 : 0,
+    data: { canvasRects: rects, canvasLane, loop: e.returning, canvasEmphasis: e.traversed, canvasFlow: e.traversed, canvasStroke: e.traversed ? "var(--aiflow-canvas-selected)" : undefined },
     label: e.label
-      ? `${e.returning ? "返回 · " : ""}${e.label}${e.confirmed ? ` · 已确认${e.confirmed}次` : ""}`
+      ? `${e.returning ? "返回 · " : ""}${e.label}${e.confirmed ? ` · 已选${e.confirmed}次` : ""}`
       : undefined,
 
   }));
@@ -228,7 +244,7 @@ export default function RunExecutionCanvas({
     if (!region) return;
     // UX：隐藏/恢复不改实际阅读尺寸时，保留用户缩放与平移。
     const resize = () => {
-      const key = [region.clientWidth, region.clientHeight, layout, expanded].join(":");
+      const key = [region.clientWidth, region.clientHeight, layout, expanded, routeOnly].join(":");
       if (!region.clientWidth || !region.clientHeight || fittedBox.current === key) return;
       fittedBox.current = key;
       fit(overview.current ? undefined : focusId.current);
@@ -238,7 +254,7 @@ export default function RunExecutionCanvas({
     const observer = new ResizeObserver(resize);
     observer.observe(region);
     return () => observer.disconnect();
-  }, [layout, ready, measured, expanded]);
+  }, [layout, ready, measured, expanded, routeOnly]);
   const root = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (focusRequest) {
@@ -392,6 +408,9 @@ export default function RunExecutionCanvas({
       data-run-execution-graph
       data-run-canvas-design=""
       data-run-canvas-workspace={workspace ? "" : undefined}
+      data-run-has-trace={hasTrace ? "" : undefined}
+      data-run-route-view={routeOnly ? "" : undefined}
+      data-run-motion-paused={motionPaused ? "" : undefined}
       className="run-graph"
     >
       {!workspace && run.childLinks?.length > 0 && <DurableRunLinks links={run.childLinks} runId={String(run.id)} />}
@@ -401,16 +420,18 @@ export default function RunExecutionCanvas({
             实例流程图
           </h3>
           <p>
-            {graph.hasSnapshot ? "基于本次运行快照" : "仅有节点执行记录"} · {graph.nodes.length} 个节点 ·{" "}
+            {graph.hasSnapshot ? "基于本次运行快照" : "仅有节点执行记录"} · {routeOnly && "已到达 "}{nodes.length} 个节点 ·{" "}
             {current.filter(n => n.activeCount).length} 处进行中
           </p>
         </div>
         <div data-run-canvas-actions="" className="flex flex-wrap gap-2">
+          {hasTrace && <Button variant="outline" size="sm" aria-pressed={routeOnly} onClick={() => showRunView(true)}>执行路线</Button>}
           <Button
             variant="outline"
             size="sm"
+            aria-pressed={hasTrace ? !routeOnly : undefined}
             disabled={!ready || !measured}
-            onClick={() => fit()}
+            onClick={() => showRunView(false)}
           >
             查看全图
           </Button>
@@ -426,10 +447,13 @@ export default function RunExecutionCanvas({
             variant="outline"
             size="sm"
             disabled={!graph.hasOriginalLayout}
-            onClick={() => setLayout(x => !x)}
+            onClick={() => { setRouteView(false); setLayout(x => !x); }}
           >
             {layout ? "原始布局" : "自动排布"}
           </Button>
+          {hasTrace && <Button variant="outline" size="sm" data-run-motion-toggle="" onClick={() => setMotionPaused(paused => !paused)}>
+            {motionPaused ? "播放动效" : "暂停动效"}
+          </Button>}
           {!workspace && <Button
             variant="outline"
             size="sm"
@@ -449,8 +473,7 @@ export default function RunExecutionCanvas({
               {label}
             </span>
           ))}
-          <span>{run.flowType === "data" ? "灰线：快照依赖；节点颜色：执行状态。" : "灰线：定义；蓝线：已确认。"}</span>
-          <span>节点视图包含上下游，全图浏览完整依赖。</span>
+          <span>{run.flowType === "data" ? "灰线表示快照依赖，节点颜色表示执行状态。" : "蓝色粗线表示有记录证实的流转，箭头指向下一个节点。"}</span>
         </div>
         </details>
       </header>
@@ -520,7 +543,7 @@ export default function RunExecutionCanvas({
             >
               <ViewportMeasurement onReady={setMeasured} />
               <Background color="var(--aiflow-canvas-dot)" gap={24} size={1} />
-              <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => { void api.current?.fitView(overviewFit).then(() => fit()); }} />
+              <Controls showInteractive={false} fitViewOptions={overviewFit} onFitView={() => showRunView(false)} />
               <MiniMap
                 style={{ width: 160, height: 80 }}
                 className="hidden lg:block"

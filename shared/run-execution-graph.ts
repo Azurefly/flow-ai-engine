@@ -171,10 +171,14 @@ export function projectRunGraph(run: RunRecord) {
   const nodeMap = new Map(nodes.map(n => [n.id, n]));
   const edgeIds = new Set<string>();
   const edges: RunRecord[] = [];
-  for (const [index, edge] of (Array.isArray(definition?.edges)
-    ? definition.edges
-    : []
-  ).entries()) {
+  const rawEdges: RunRecord[] = Array.isArray(definition?.edges) ? definition.edges : [];
+  const outlets = new Map<string, number>();
+  for (const edge of rawEdges) {
+    const source = String(edge?.sourceNodeId ?? edge?.source ?? "");
+    outlets.set(source, (outlets.get(source) ?? 0) + 1);
+  }
+  for (let index = 0; index < rawEdges.length; index++) {
+    const edge = rawEdges[index];
     const source = String(edge?.sourceNodeId ?? edge?.source ?? ""),
       target = String(edge?.targetNodeId ?? edge?.target ?? "");
     const id = String(edge?.id ?? "edge-" + index);
@@ -188,7 +192,7 @@ export function projectRunGraph(run: RunRecord) {
           (o: RunRecord) => String(o.sourceHandle ?? o.code) === handle
         )
       : undefined;
-    const confirmations = node.records.filter((record: RunRecord) => {
+    const selectedRecords = node.records.filter((record: RunRecord) => {
       if (record.status !== "success") return false;
       const output = parseRunValue(record.outputJson);
       if (!output || typeof output !== "object") return false;
@@ -218,14 +222,28 @@ export function projectRunGraph(run: RunRecord) {
             (!b.targetNodeId || String(b.targetNodeId) === target)
         );
       return false;
-    }).length;
+    });
+    // A sequential step needs more than adjacent timestamps. The later visit
+    // must record the predecessor's output and the snapshot must have one exit.
+    const direct = handle === "default" && outlets.get(source) === 1 &&
+      !["condition", "router", "end"].includes(node.type) &&
+      !(node.type === "operate" && node.config?.outcomeMode === "explicit");
+    const dispatch = (direct ? node.records : selectedRecords).find(record =>
+      record.status === "success" && Number.isSafeInteger(record.sequenceNo)
+    );
+    const traversed = run.flowType !== "data" && Boolean(dispatch &&
+      nodeMap.get(target)!.records.some(record =>
+        Number.isSafeInteger(record.sequenceNo) && record.sequenceNo > dispatch.sequenceNo &&
+        (!direct || Object.hasOwn(parseRunValue(record.inputJson)?.context?.nodes ?? {}, source))
+      ));
     edges.push({
       ...edge,
       id,
       source,
       target,
       label: configured?.label ?? (handle === "default" ? "" : handle),
-      confirmed: confirmations,
+      confirmed: selectedRecords.length,
+      traversed,
       returning: false,
     });
   }

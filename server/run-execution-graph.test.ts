@@ -309,6 +309,33 @@ describe("实例执行画布投影", () => {
       ["chosen", 1],
     ]);
   });
+  it("执行路线需要有后继记录，普通连线还要有单一出口和上游输出", () => {
+    const visits = [
+      { nodeId: "start", status: "success", sequenceNo: 1 },
+      {
+        nodeId: "review", status: "success", sequenceNo: 2,
+        inputJson: { context: { nodes: { start: { submitted: true } } } },
+        outputJson: { outcome: "confirmed" },
+      },
+      { nodeId: "done", status: "failed", sequenceNo: 3 },
+      { nodeId: "done", status: "failed", sequenceNo: 4 },
+    ];
+    const traced = (extra: Record<string, unknown>) =>
+      projectRunGraph(run({ nodeRuns: visits, ...extra })).edges
+        .filter(edge => edge.traversed).map(edge => edge.id);
+    expect(traced({})).toEqual(["first", "pass"]);
+    expect(traced({ flowType: "data" })).toEqual([]);
+    expect(traced({ nodeRuns: visits.slice(0, 2) })).toEqual(["first"]);
+    expect(traced({
+      nodeRuns: [visits[0], { ...visits[1], inputJson: {} }, ...visits.slice(2)],
+    })).toEqual(["pass"]);
+    expect(traced({
+      definitionSnapshotJson: {
+        ...definition,
+        edges: [...definition.edges, { id: "alternate", source: "start", target: "done", sourceHandle: "alternate" }],
+      },
+    })).toEqual(["pass"]);
+  });
   it("循环保留连线且自动布局有限、无重叠、不改快照", () => {
     const before = JSON.stringify(definition);
     const graph = projectRunGraph(run());
