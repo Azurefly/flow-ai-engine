@@ -171,6 +171,13 @@ export function canvasEdgeLabelAnchor(points: CanvasPoint[], zoom: number, width
       }
     }
   }
+  // Important short outcomes can clear a compact node row with a leader.
+  if (outcome) for (const { a, b } of segments) {
+    if (a.y !== b.y) continue;
+    const x = (a.x + b.x) / 2;
+    attach(x, a.y, 0, 2 * verticalOffset);
+    attach(x, a.y, 0, -2 * verticalOffset);
+  }
   return candidates.find(({ x, y }) => rects.every(n =>
     x + halfWidth + 3 / zoom < n.x || x - halfWidth - 3 / zoom > n.x + n.width ||
     y + 12 / zoom < n.y || y - 12 / zoom > n.y + n.height

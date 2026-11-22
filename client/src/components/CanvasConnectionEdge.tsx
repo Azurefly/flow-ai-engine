@@ -31,7 +31,7 @@ export function CanvasConnectionEdge({ id, source, target, sourceX, sourceY, tar
       style={{ ...style, stroke: color, strokeWidth: (located ? 4 : focused ? 3.3 : traced ? 2.6 : 1.7) / zoom, strokeDasharray: "none", strokeLinecap: "round", strokeLinejoin: "round" }} />
     {data?.canvasFlow ? <path key={String(data.canvasFlow)} className="run-edge-flow" d={path} pathLength={100} fill="none" aria-hidden="true" /> : null}
     {anchor && (
-      <g className="aiflow-edge-caption" data-caption-muted={(data?.quietLabels || zoom < .36) && !focused ? "" : undefined}
+      <g className="aiflow-edge-caption" data-caption-muted={(data?.quietLabels || zoom < (outcome ? .28 : .36)) && !focused ? "" : undefined}
         transform={`translate(${anchor.x} ${anchor.y}) scale(${1 / zoom})`}>
         <path d={`M0 0 L${(anchor.line.x - anchor.x) * zoom} ${(anchor.line.y - anchor.y) * zoom}`} stroke={color} strokeOpacity={.58} />
         <EdgeText x={0} y={0} label={compact}
