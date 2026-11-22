@@ -688,7 +688,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   operate: {
     type: "operate",
     label: "操作节点",
-    description: "创建可领取、可审计的人工操作",
+    description: "让指定人员办理、填写表单或作出审批决定",
     configEvidence: "reference-confirmed",
     flowTypes: ["state", "control"],
     defaultConfig: {
@@ -819,8 +819,8 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       },
       {
         key: "assigneeMode",
-        label: "处理人方式",
-        help: "选择处理人来源，运行时解析实际办理人员。",
+        label: "谁来办理",
+        help: "例如选“指定用户”安排给固定人员，或选“发起人直属上级”随发起人变化。",
         kind: "select",
         required: true,
         options: [
@@ -1196,7 +1196,7 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
   condition: {
     type: "condition",
     label: "条件",
-    description: "选择 true 或 false 分支",
+    description: "比较业务数据，按条件是否成立选择下一步",
     flowTypes: ["state", "control", "data"],
     defaultConfig: {
       left: "{{input.value}}",
@@ -1209,14 +1209,14 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "left",
         label: "待判断的数据",
-        help: templateHelp,
+        help: "从“引用流程数据”选取要检查的值，例如申请金额。",
         kind: "template",
         required: true,
       },
       {
         key: "operator",
         label: "比较方式",
-        help: "使用严格比较、包含、存在或数值比较。",
+        help: "例如选“大于”和数字 100，金额超过 100 时走成立分支。",
         kind: "select",
         required: true,
         options: conditionOperators,
@@ -1224,20 +1224,20 @@ export const FLOW_NODE_DEFINITIONS: Record<FlowNodeType, FlowNodeDefinition> = {
       {
         key: "right",
         label: "比较值",
-        help: "填写比较目标，选择正确的文字、数字或是／否类型，也可引用流程数据。",
+        help: "可填文字、数字或是／否，也可引用数据。选“存在”时此项可留空。",
         kind: "json",
       },
       {
         key: "trueHandle",
-        label: "成立分支句柄",
-        help: "匹配时选择的源句柄。",
+        label: "成立分支代号",
+        help: "通常保留默认值。修改后已有连线会同步。",
         kind: "text",
         required: true,
       },
       {
         key: "falseHandle",
-        label: "不成立分支句柄",
-        help: "不匹配时选择的源句柄。",
+        label: "不成立分支代号",
+        help: "通常保留默认值。修改后已有连线会同步。",
         kind: "text",
         required: true,
       },

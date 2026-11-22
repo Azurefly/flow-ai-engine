@@ -122,6 +122,7 @@ export function getWorkflowWorkerStatus() {
       dataflow: dataflowProcessing,
       sourceTest: sourceTestProcessing,
     },
+    concurrency: { workflow: workerConcurrency, dataflow: workerConcurrency, sourceTest: 1 },
   };
 }
 

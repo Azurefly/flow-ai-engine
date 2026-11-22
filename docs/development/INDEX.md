@@ -13,6 +13,7 @@
 | 领取优化任务或拆分开发工作 | [智能体交接入口](optimization/START-HERE.md)、[产品能力索引](optimization/CAPABILITIES.md)、[19 张任务卡](optimization/TASKS.md)、[67 条验收场景](optimization/ACCEPTANCE.md)、[结构化队列](optimization/queue.json) |
 | 核对本轮发布和剩余验收 | [产品发布验收](optimization/PRODUCT-RELEASE.md)、[实施与实测回执](optimization/IMPLEMENTATION.md)、[脱敏发布证据](optimization/release-evidence.json)、[逐项验收状态](optimization/queue.json) |
 | 了解原始问题和方案取舍 | [功能与需求评审摘要](review-baseline.md)、[功能补齐与整改设计](remediation-design.md) |
+| 从电脑端用户角度核对易用性和容量 | [流程绘制、办理、权限和并发评估](user-workflow-assessment-2026-11-22.md) |
 | 调整页面、交互或动效 | [前端约束](frontend.md)、[开源动效研究与界面评审](ui-motion-review.md)、[查询交互回归表](../query-interaction-regression-checklist.md) |
 | 新增接口、节点、作业、表 | [后端约束](backend.md)、[数据库与迁移](database.md)、[节点契约](../aiflow-reference-node-contract.md) |
 | 理解人员状态与审批 | [参与人状态路由](../participant-state-routing-design.md)、[并发验收](../participant-state-concurrency-acceptance.md) |

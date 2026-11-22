@@ -238,8 +238,10 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
         "utf8"
       ));
 
-      expect(source).toContain("const [pageSize, setPageSize] = useState(10);");
-      expect(source.match(/limit: pageSize/g)).toHaveLength(2);
+      expect(source).toContain("const [pageSize, setPageSize] = useState(initial?.pageSize ?? 10);");
+      expect(source).toContain("limit: pageSize");
+      expect(source).toContain("trpc.task.page.useQuery({ ...listInput,");
+      expect(source).toContain("trpc.task.instancePage.useQuery({ ...listInput,");
       expect(source).toContain('aria-label="每页条数"');
       expect(source).toContain("<option value={10}>10 条</option>");
       expect(source).toContain("<option value={20}>20 条</option>");

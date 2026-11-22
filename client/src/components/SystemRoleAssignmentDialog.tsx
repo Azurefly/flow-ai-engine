@@ -99,6 +99,10 @@ export default function SystemRoleAssignmentDialog({
     (role: any) =>
       role.scopeType === "system" && role.roleCode === form.roleCode
   );
+  const inheritedFrom = details.data?.inheritedRoles
+    .filter(role => role.scope === "system" && role.roleCode === form.roleCode)
+    .map(role => role.unitName)
+    .join("、");
   const valid =
     allowed &&
     currentRole &&
@@ -186,7 +190,7 @@ export default function SystemRoleAssignmentDialog({
           if (!open) close();
         }}
         title={target.mode === "role" ? "为角色绑定用户" : "为用户绑定角色"}
-        description="授予直接系统角色，与组织继承权限叠加；相同有效绑定不可重复提交。"
+        description="为账号单独授予系统角色。已有的部门授权继续生效。"
         submitLabel="确认绑定"
         pending={busy}
         submitDisabled={!valid || Boolean(expiry.error)}
@@ -230,6 +234,7 @@ export default function SystemRoleAssignmentDialog({
                 <label className="auth-label">
                   系统角色
                   <select
+                    aria-label="系统角色"
                     className="auth-select"
                     value={form.roleCode}
                     onChange={event => {
@@ -283,6 +288,7 @@ export default function SystemRoleAssignmentDialog({
                 <label className="auth-label">
                   选择内部用户
                   <select
+                    aria-label="选择内部用户"
                     className="auth-select"
                     value={form.userId}
                     disabled={candidates.isPending || candidates.isError}
@@ -380,9 +386,12 @@ export default function SystemRoleAssignmentDialog({
             )}
             {assigned && (
               <p role="status" className="auth-body">
-                此账号已有效绑定该角色，请先核对列表；填写仍保留。
+                此账号已直接获得该角色。
               </p>
             )}
+            {inheritedFrom && <p role="status" className="auth-body">
+              已从部门 {inheritedFrom} 继承该角色。
+            </p>}
             {form.userId &&
               details.isSuccess &&
               details.data.user.status !== "active" && (

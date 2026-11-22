@@ -9,7 +9,7 @@ const source = (file: string) =>
 describe("small default list pages", () => {
   it("starts the workbench at ten while preserving larger page choices", () => {
     const workbench = source("ProcessWorkbench");
-    expect(workbench).toContain("const [pageSize, setPageSize] = useState(10)");
+    expect(workbench).toContain("const [pageSize, setPageSize] = useState(initial?.pageSize ?? 10)");
     for (const size of [10, 20, 50, 100])
       expect(workbench).toContain(
         `<option value={${size}}>${size} 条</option>`

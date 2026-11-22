@@ -67,6 +67,15 @@ import { toast } from "sonner";
 import "./task-drawer.css";
 
 type View = "board" | "calendar" | "todo" | "done" | "initiated" | "all";
+export type WorkbenchListSnapshot = {
+  accountId: number;
+  view: View;
+  pageSize: number;
+  search: string;
+  status: string;
+  from: string;
+  through: string;
+};
 const labels: Record<View, string> = {
   board: "我的看板",
   calendar: "日历",
@@ -136,16 +145,19 @@ const filterLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " 
 const summaryRowClass = "flex min-w-0 justify-between gap-2";
 const detailTextClass = ("aiflow-type-body mt-1 break-words " + mutedToneClass);
 
-export default function ProcessWorkbench({ navigationControls, routeTaskId, routeRun, onClearTaskRoute, onOpenRun, onBackFromRun }: {
+export default function ProcessWorkbench({ accountId, navigationControls, routeTaskId, routeRun, onClearTaskRoute, onOpenRun, onBackFromRun }: {
+  accountId: number;
   navigationControls?: ReactNode;
   routeTaskId?: string;
   routeRun?: WorkbenchRunTarget;
   onClearTaskRoute: () => void;
-  onOpenRun: (target: WorkbenchRunTarget) => void;
+  onOpenRun: (target: WorkbenchRunTarget, snapshot?: WorkbenchListSnapshot) => void;
   onBackFromRun: () => void;
 }) {
   const utils = trpc.useUtils();
-  const [view, setView] = useState<View>("board");
+  const savedList = window.history.state?.aiflowWorkbenchList as WorkbenchListSnapshot | undefined;
+  const initial = savedList?.accountId === accountId ? savedList : undefined;
+  const [view, setView] = useState<View>(initial?.view ?? "board");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [localTaskId, setLocalTaskId] = useState<string | null>(null);
   const selectedTaskId = routeRun ? null : routeTaskId ?? localTaskId;
@@ -181,7 +193,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
     setSelectedTaskId(null);
   };
   const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize, setPageSize] = useState(initial?.pageSize ?? 10);
   const [pageCursorStack, setPageCursorStack] = useState<
     Array<string | undefined>
   >([undefined]);
@@ -189,11 +201,11 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
     "approved" | "rejected" | "abstained"
   >("approved");
   const [batchComment, setBatchComment] = useState("");
-  const [listSearch, setListSearch] = useState("");
-  const [debouncedListSearch, setDebouncedListSearch] = useState("");
-  const [listStatus, setListStatus] = useState("all");
-  const [listFrom, setListFrom] = useState("");
-  const [listThrough, setListThrough] = useState("");
+  const [listSearch, setListSearch] = useState(initial?.search ?? "");
+  const [debouncedListSearch, setDebouncedListSearch] = useState(listSearch);
+  const [listStatus, setListStatus] = useState(initial?.status ?? "all");
+  const [listFrom, setListFrom] = useState(initial?.from ?? "");
+  const [listThrough, setListThrough] = useState(initial?.through ?? "");
   const [month, setMonth] = useState(() => new Date());
   const [calendarCursorStack, setCalendarCursorStack] = useState<
     Array<string | undefined>
@@ -227,50 +239,20 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
     }),
     [listFrom, listThrough]
   );
-  const taskInput = useMemo(
-    () => ({
-      view: view === "board" || view === "calendar" ? ("todo" as const) : view,
-      limit: pageSize,
-      cursor: currentPageCursor,
-      ...(debouncedListSearch.trim()
-        ? { search: debouncedListSearch.trim() }
-        : {}),
-      ...(listStatus !== "all" ? { status: listStatus } : {}),
-      ...dateFilterInput,
-    }),
-    [
-      view,
-      currentPageCursor,
-      pageSize,
-      debouncedListSearch,
-      listStatus,
-      dateFilterInput,
-    ]
-  );
-  const tasks = trpc.task.page.useQuery(taskInput, {
+  const listInput = {
+    limit: pageSize,
+    cursor: currentPageCursor,
+    ...(debouncedListSearch.trim() ? { search: debouncedListSearch.trim() } : {}),
+    ...(listStatus !== "all" ? { status: listStatus } : {}),
+    ...dateFilterInput,
+  };
+  const tasks = trpc.task.page.useQuery({
+    ...listInput,
+    view: view === "board" || view === "calendar" ? "todo" : view,
+  }, {
     enabled: !routeRun && ["todo", "done"].includes(view),
     refetchInterval: 30_000,
   });
-  const instanceInput = useMemo(
-    () => ({
-      view: view === "initiated" ? ("initiated" as const) : ("all" as const),
-      limit: pageSize,
-      cursor: currentPageCursor,
-      ...(debouncedListSearch.trim()
-        ? { search: debouncedListSearch.trim() }
-        : {}),
-      ...(listStatus !== "all" ? { status: listStatus } : {}),
-      ...dateFilterInput,
-    }),
-    [
-      view,
-      currentPageCursor,
-      pageSize,
-      debouncedListSearch,
-      listStatus,
-      dateFilterInput,
-    ]
-  );
   const calendarInput = useMemo(
     () => ({
       start: new Date(month.getFullYear(), month.getMonth(), 1),
@@ -280,7 +262,10 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
     }),
     [month.getFullYear(), month.getMonth(), calendarCursorStack]
   );
-  const instances = trpc.task.instancePage.useQuery(instanceInput, {
+  const instances = trpc.task.instancePage.useQuery({
+    ...listInput,
+    view: view === "initiated" ? "initiated" : "all",
+  }, {
     enabled: !routeRun && ["initiated", "all"].includes(view),
     refetchInterval: 30_000,
   });
@@ -307,6 +292,9 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
   const activeHasNextPage = ["todo", "done"].includes(view)
     ? Boolean(taskPage?.hasMore)
     : Boolean(instancePage?.hasMore);
+  const emptyListHint = activeHasNextPage
+    ? "本页暂无可见记录，可以继续下一页。"
+    : hasListFilters ? "没有匹配记录，请调整筛选。" : "";
   const searchPending = listSearch !== debouncedListSearch;
   const pagingLoading =
     tasks.isFetching || instances.isFetching || searchPending;
@@ -522,9 +510,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
       count: dashboard.data?.counts.all,
     },
   ];
-  const changeView = (next: View) => {
-    setView(next);
-    setSelectedTaskId(null);
+  const resetListFilters = () => {
     setSelectedTaskIds([]);
     setPageCursorStack([undefined]);
     setListSearch("");
@@ -532,6 +518,11 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
     setListStatus("all");
     setListFrom("");
     setListThrough("");
+  };
+  const changeView = (next: View) => {
+    setView(next);
+    setSelectedTaskId(null);
+    resetListFilters();
     invalidate();
   };
   const openTask = (taskId: string) => {
@@ -696,7 +687,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
                 />
               </summary>
               <p className={"aiflow-type-body pb-3 " + mutedToneClass}>
-                人工操作由服务端暂停和续跑；移交、退回与批量处理逐项执行，任务仅在当前流程授权范围内可见。
+                任务按当前权限显示。批量处理会逐条返回结果。
               </p>
             </details>
           )}
@@ -718,9 +709,6 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
                 >
                   {labels[view]}
                 </h1>
-                <p className={"aiflow-type-body mt-1 " + mutedToneClass}>
-                  当前视图仅展示具备运行权限的流程实例与人工任务。
-                </p>
               </div>
               <Button
                 type="button"
@@ -791,6 +779,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
             )}
             {["todo", "done", "initiated", "all"].includes(view) && (
               <WorkbenchListFilters
+                forInstances={view === "initiated" || view === "all"}
                 matchingCount={filteredListRows.length}
                 pageNumber={pageCursorStack.length}
                 pageSize={pageSize}
@@ -827,15 +816,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
                   setPageCursorStack([undefined]);
                   setSelectedTaskIds([]);
                 }}
-                onReset={() => {
-                  setListSearch("");
-                  setDebouncedListSearch("");
-                  setListStatus("all");
-                  setListFrom("");
-                  setListThrough("");
-                  setPageCursorStack([undefined]);
-                  setSelectedTaskIds([]);
-                }}
+                onReset={resetListFilters}
                 onPageSize={value => {
                   setPageSize(value);
                   setPageCursorStack([undefined]);
@@ -878,13 +859,7 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
                   )
                 }
                 selectable={view === "todo"}
-                emptyMessage={
-                  activeHasNextPage
-                    ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
-                    : hasListFilters
-                      ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
-                      : "当前范围内暂无可见人工任务。"
-                }
+                emptyMessage={emptyListHint || "暂无可见任务。"}
               />
             )}
             {["initiated", "all"].includes(view) && (
@@ -901,15 +876,12 @@ export default function ProcessWorkbench({ navigationControls, routeTaskId, rout
                 onRetry={() => void instances.refetch()}
                 onOpenRun={(runId, button) => {
                   runReturn.rememberOpener(button);
-                  onOpenRun({ runId });
+                  onOpenRun({ runId }, {
+                    accountId, view, pageSize, search: listSearch,
+                    status: listStatus, from: listFrom, through: listThrough,
+                  });
                 }}
-                emptyMessage={
-                  activeHasNextPage
-                    ? "当前扫描区间暂无匹配记录，可继续扫描后续授权数据。"
-                    : hasListFilters
-                      ? "当前页没有符合筛选条件的记录，请继续扫描或调整筛选。"
-                      : "当前范围内暂无可见流程实例。"
-                }
+                emptyMessage={emptyListHint || "暂无可见实例。"}
               />
             )}
           </section>
@@ -1221,6 +1193,7 @@ function Stat({ icon: Icon, label, value, tone }: any) {
 }
 
 function WorkbenchListFilters({
+  forInstances,
   matchingCount,
   pageNumber,
   pageSize,
@@ -1243,6 +1216,7 @@ function WorkbenchListFilters({
   onPreviousPage,
   onNextPage,
 }: {
+  forInstances: boolean;
   matchingCount: number;
   pageNumber: number;
   pageSize: number;
@@ -1271,6 +1245,7 @@ function WorkbenchListFilters({
   );
   const advancedFilterCount =
     Number(status !== "all") + Number(Boolean(from)) + Number(Boolean(through));
+  const keywordHint = forInstances ? "流程、实例编号或发起人账号" : "流程、任务节点或发起人";
   return (
     <div
       data-aiflow-workbench-list-filters=""
@@ -1283,8 +1258,8 @@ function WorkbenchListFilters({
           <Input
             value={search}
             onChange={event => onSearch(event.target.value)}
-            placeholder="流程、任务节点或发起人"
-            aria-label="搜索流程、任务节点或发起人"
+            placeholder={keywordHint}
+            aria-label={`搜索${keywordHint}`}
             className="h-11 lg:h-9"
           />
         </label>
@@ -1716,6 +1691,19 @@ function InstanceList({
   emptyMessage: string;
 }) {
   const [mobileVisibleCount, setMobileVisibleCount] = useState(10);
+  const detailsAction = (run: (typeof instances)[number], card = false) =>
+    run.canViewRun ? (
+      <Button
+        type="button"
+        variant={card ? "outline" : "ghost"}
+        size="sm"
+        className={card ? "aiflow-type-control mt-3 min-h-11 w-full text-aiflow-info" : "min-h-11 px-1 text-xs text-aiflow-info"}
+        id={`workbench-run-${card ? "card" : "row"}-${run.id}`}
+        onClick={event => onOpenRun(run.id, event.currentTarget)}
+      >
+        实例详情
+      </Button>
+    ) : <span className="block whitespace-normal text-xs text-muted-foreground">仅可查看本人办理记录</span>;
 
   return (
     <>
@@ -1781,16 +1769,7 @@ function InstanceList({
                     </dd>
                   </div>
                 </dl>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="aiflow-type-control mt-3 min-h-11 w-full text-aiflow-info"
-                  id={`workbench-run-card-${run.id}`}
-                  onClick={event => onOpenRun(run.id, event.currentTarget)}
-                >
-                  实例详情
-                </Button>
+                {detailsAction(run, true)}
               </article>
             ))}
             {instances.length > mobileVisibleCount && (
@@ -1837,7 +1816,7 @@ function InstanceList({
                     {run.workflowName.replaceAll("_", "_\u200b")}
                   </p>
                   <FlowTypeBadge type={run.flowType} />
-                  <code className={"aiflow-type-code mt-1 block truncate whitespace-nowrap " + mutedToneClass}>
+                  <code title={run.id} className={"aiflow-type-code mt-1 block truncate whitespace-nowrap " + mutedToneClass}>
                     {run.id.slice(0, 8)}
                   </code>
                 </td>
@@ -1854,21 +1833,7 @@ function InstanceList({
                   {date(run.createdAt)}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    title={
-                      !(run.availableOperations ?? []).length
-                        ? "无可执行操作；仅可查看实例详情"
-                        : "打开实例详情"
-                    }
-                    className="min-h-11 px-1 text-xs text-aiflow-info"
-                    id={`workbench-run-row-${run.id}`}
-                    onClick={event => onOpenRun(run.id, event.currentTarget)}
-                  >
-                    实例详情
-                  </Button>
+                  {detailsAction(run)}
                 </td>
               </tr>
             ))

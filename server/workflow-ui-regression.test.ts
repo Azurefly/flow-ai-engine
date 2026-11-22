@@ -2091,7 +2091,7 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("恢复原版画布左右键、框选、拖放和路径菜单交互", () => {
-    expect(canvasSource).toContain("FLOW_NODE_ALLOWED_TARGETS");
+    expect(canvasSource).toContain("isAppendTarget(targetNode, item.type)");
     expect(canvasSource).toContain("canConnectFlowNodeTypes");
     expect(nodeContractSource).toContain("FLOW_NODE_ALLOWED_TARGETS");
     expect(canvasSource).toContain("canConnectCanvasNodes");
@@ -2170,9 +2170,8 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain(
       'data-aiflow-workbench-list-filters=""'
     );
-    expect(processWorkbenchSource).toContain(
-      'aria-label="搜索流程、任务节点或发起人"'
-    );
+    expect(processWorkbenchSource).toContain("流程、实例编号或发起人账号");
+    expect(processWorkbenchSource).toContain("流程、任务节点或发起人");
     expect(processWorkbenchSource).toContain(
       '? "任务状态" : "流程状态 / 业务阶段"'
     );
@@ -2203,14 +2202,15 @@ describe("流程设计器界面回归约束", () => {
       'role="alert" className="aiflow-type-body mt-1 text-aiflow-danger"'
     );
     expect(processWorkbenchSource).toContain(
-      "trpc.task.page.useQuery(taskInput"
+      "trpc.task.page.useQuery({ ...listInput,"
     );
     expect(processWorkbenchSource).toContain(
-      "trpc.task.instancePage.useQuery(instanceInput"
+      "trpc.task.instancePage.useQuery({ ...listInput,"
     );
     expect(processWorkbenchSource).toContain("上一页");
     expect(processWorkbenchSource).toContain("下一页");
-    expect(processWorkbenchSource).toContain("当前页没有符合筛选条件的记录");
+    expect(processWorkbenchSource).toContain("没有匹配记录，请调整筛选。");
+    expect(processWorkbenchSource).toContain("本页暂无可见记录，可以继续下一页。");
     expect(p1ServiceSource).toContain("collectAuthorizedPage");
     expect(p1ServiceSource).toContain("hasTaskActorAccess(row)");
     expect(p1ServiceSource).toContain("DATE_FORMAT(t.createdAt");
@@ -2795,7 +2795,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("commentRequired");
     expect(processWorkbenchSource).not.toContain("拒绝并终止流程");
     expect(processWorkbenchSource).toContain("处理审批");
-    expect(processWorkbenchSource).toContain("无可执行操作");
+    expect(processWorkbenchSource).toContain("仅可查看本人办理记录");
     expect(processWorkbenchSource).toContain("直接上级审核通过，待经理通过");
     expect(processWorkbenchSource).not.toContain(
       "批量处理结果必须是合法 JSON 对象"
@@ -2825,7 +2825,7 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("收起已启动流程导航");
     expect(processWorkbenchSource).toContain("展开已启动流程导航");
     expect(processWorkbenchSource).toContain(
-      "当前视图仅展示具备运行权限的流程实例与人工任务"
+      "任务按当前权限显示。批量处理会逐条返回结果。"
     );
     expect(processWorkbenchSource).toContain("PanelLeftClose");
     expect(processWorkbenchSource).toContain("PanelLeftOpen");
@@ -2862,7 +2862,10 @@ describe("流程设计器界面回归约束", () => {
     expect(processWorkbenchSource).toContain("runReturn.rememberOpener(button)");
     expect(homeSource).toContain("routeRun={workbenchRoute?.instance}");
     expect(processWorkbenchSource).toMatch(
-      /setView\(next\);\s*setSelectedTaskId\(null\);\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);\s*invalidate\(\);/
+      /setView\(next\);\s*setSelectedTaskId\(null\);\s*resetListFilters\(\);\s*invalidate\(\);/
+    );
+    expect(processWorkbenchSource).toMatch(
+      /const resetListFilters = \(\) => \{\s*setSelectedTaskIds\(\[\]\);\s*setPageCursorStack\(\[undefined\]\);\s*setListSearch\(""\);\s*setDebouncedListSearch\(""\);\s*setListStatus\("all"\);\s*setListFrom\(""\);\s*setListThrough\(""\);/
     );
     expect(styleSource).toContain("--aiflow-section-gap: 1rem;");
     expect(processWorkbenchRunPageSource).toContain('backLabel="返回流程工作台"');
@@ -2884,7 +2887,7 @@ describe("流程设计器界面回归约束", () => {
       'className="aiflow-type-meta min-w-0 break-words text-right tabular-nums text-muted-foreground"'
     );
     expect(processWorkbenchSource).toContain(
-      'className="aiflow-type-control mt-3 min-h-11 w-full text-aiflow-info"'
+      "aiflow-type-control mt-3 min-h-11 w-full text-aiflow-info"
     );
   });
 
@@ -3238,7 +3241,7 @@ describe("流程设计器界面回归约束", () => {
       '<summary className="aiflow-type-control flex min-h-11 cursor-pointer list-none items-center justify-between gap-2'
     );
     expect(processWorkbenchSource).toContain(
-      "人工操作由服务端暂停和续跑；移交、退回与批量处理逐项执行，任务仅在当前流程授权范围内可见。"
+      "任务按当前权限显示。批量处理会逐条返回结果。"
     );
     expect(navigationStart).toBeGreaterThanOrEqual(0);
     expect(navigationSource).toContain('aria-label="已启动流程视图"');

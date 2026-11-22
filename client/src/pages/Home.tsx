@@ -15,6 +15,7 @@ import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
 import { useAccountQueryIsolation } from "@/_core/hooks/useAccountQueryIsolation";
 import { AccountDraftSession, openWorkflowDraft, type AccountDraftLease } from "@shared/account-draft-session";
+import type { WorkbenchListSnapshot } from "@/components/ProcessWorkbench";
 import { useSessionDraftField } from "@/_core/hooks/useSessionDraftField";
 import { useClientVersionUpdate } from "@/hooks/useClientVersionUpdate";
 import { useContextReveal } from "@/hooks/useContextReveal";
@@ -643,14 +644,14 @@ function FlowConsole({
   const navigateRoute = useCallback(
     (
       route: ConsoleRoute,
-      options?: { replace?: boolean; editorReturn?: FlowEditorReturn; returnToWorkbench?: true }
+      options?: { replace?: boolean; editorReturn?: FlowEditorReturn; returnToWorkbench?: true; workbenchList?: WorkbenchListSnapshot }
     ) => {
       if (!consoleAlive.current) return false;
       return consoleHistory.current?.navigate(
         formatConsoleRoute(route),
         {
           aiflowEditorReturn: options?.editorReturn ?? null,
-          ...(options?.returnToWorkbench && { aiflowReturnToWorkbench: true }),
+          ...(options?.returnToWorkbench && { aiflowReturnToWorkbench: true, aiflowWorkbenchList: options.workbenchList }),
         },
         options?.replace
       ) ?? false;
@@ -660,10 +661,11 @@ function FlowConsole({
   const clearWorkbenchSelection = useCallback(() => {
     navigateRoute({ section: "runs", view: "workbench" }, { replace: true });
   }, [navigateRoute]);
-  const openWorkbenchRun = useCallback((instance: WorkbenchRunTarget) => {
+  const openWorkbenchRun = useCallback((instance: WorkbenchRunTarget, workbenchList?: WorkbenchListSnapshot) => {
+    consoleHistory.current?.replaceSilently(window.location.hash, { aiflowWorkbenchList: workbenchList });
     navigateRoute(
       { section: "runs", view: "workbench", instance },
-      { returnToWorkbench: true }
+      { returnToWorkbench: true, workbenchList }
     );
   }, [navigateRoute]);
   const closeWorkbenchRun = useCallback(() => {
@@ -2122,6 +2124,7 @@ function FlowConsole({
             <div>
               {runView === "workbench" ? (
                 <ProcessWorkbench
+                  accountId={user.id}
                   navigationControls={runNavigation}
                   routeTaskId={workbenchRoute?.taskId}
                   routeRun={workbenchRoute?.instance}

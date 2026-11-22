@@ -1670,34 +1670,8 @@ export async function listProcessInstances(
   input: { view: "initiated" | "all"; limit?: number }
 ) {
   const limit = Math.min(Math.max(input.limit ?? 100, 1), 200);
-  const [rows] = await db().query<mysql.RowDataPacket[]>(
-    input.view === "initiated"
-      ? `SELECT r.*,w.name AS workflowName,w.projectId,initiator.name AS initiatedByName,ps.stateCode AS participantStateCode,ps.stateName AS participantStatusName,ps.flowStatus AS participantFlowStatus,ps.stateColor,ps.availableOperationsJson,${businessStateLabelSql} AS stateName,${recordedBusinessStateNameSql} AS currentStateName
-           FROM workflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
-           LEFT JOIN workflow_participant_state ps ON ps.id=(SELECT latest.id FROM workflow_participant_state latest WHERE latest.runId=r.id AND latest.userId=? ORDER BY latest.updatedAt DESC,latest.id DESC LIMIT 1)
-           ${businessStateJoinSql}
-          WHERE r.triggeredByUserId=? ORDER BY r.createdAt DESC LIMIT ?`
-      : `SELECT r.*,w.name AS workflowName,w.projectId,initiator.name AS initiatedByName,ps.stateCode AS participantStateCode,ps.stateName AS participantStatusName,ps.flowStatus AS participantFlowStatus,ps.stateColor,ps.availableOperationsJson,${businessStateLabelSql} AS stateName,${recordedBusinessStateNameSql} AS currentStateName
-           FROM workflow_run r JOIN workflow w ON w.id=r.workflowId LEFT JOIN users initiator ON initiator.id=r.triggeredByUserId
-           LEFT JOIN workflow_participant_state ps ON ps.id=(SELECT latest.id FROM workflow_participant_state latest WHERE latest.runId=r.id AND latest.userId=? ORDER BY latest.updatedAt DESC,latest.id DESC LIMIT 1)
-           ${businessStateJoinSql}
-          ORDER BY r.createdAt DESC LIMIT ?`,
-    input.view === "initiated" ? [user.id, user.id, limit] : [user.id, limit]
-  );
-  const accessible: mysql.RowDataPacket[] = [];
-  for (const row of rows) {
-    if (
-      row.participantStatusName ||
-      (await hasWorkflowPermission(
-        user,
-        String(row.workflowId),
-        "workflow:view"
-      ))
-    ) {
-      accessible.push(presentProcessInstance(row) as mysql.RowDataPacket);
-    }
-  }
-  return accessible;
+  const page = await pageProcessInstances(user, { ...input, limit, scanLimit: limit });
+  return page.items;
 }
 
 export async function pageProcessInstances(
@@ -1736,13 +1710,24 @@ export async function pageProcessInstances(
   }
   const search = input.search?.trim();
   if (search) {
-    clauses.push(
-      `LOCATE(LOWER(?),LOWER(CONCAT_WS(' ',w.name,initiator.name,${businessStateLabelSql},ps.stateName,r.status)))>0`
-    );
-    baseParams.push(search);
+    const runId = /^(?:run\s+)?([a-f0-9]{8}(?:-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})?)$/i.exec(search)?.[1]?.toLowerCase();
+    if (runId?.length === 36) {
+      clauses.push("r.id=?");
+      baseParams.push(runId);
+    } else if (runId && /^run\s/i.test(search)) {
+      clauses.push("r.id LIKE ?");
+      baseParams.push(runId + "%");
+    } else {
+      const textMatch = `LOCATE(LOWER(?),LOWER(CONCAT_WS(' ',w.name,initiator.name,initiator.username,${businessStateLabelSql},ps.stateName,r.status)))>0`;
+      clauses.push(runId ? `(${textMatch} OR r.id LIKE ?)` : textMatch);
+      baseParams.push(search);
+      if (runId) baseParams.push(runId + "%");
+    }
   }
 
   const canViewWorkflow = workflowViewPermissionCache(user);
+  const canViewRun = (row: mysql.RowDataPacket) =>
+    user.role === "admin" ? Promise.resolve(true) : canViewWorkflow(String(row.workflowId));
   return collectAuthorizedPage<
     mysql.RowDataPacket,
     Extract<WorkbenchPageCursor, { kind: "instance" }>
@@ -1759,7 +1744,11 @@ export async function pageProcessInstances(
       }
       params.push(batchLimit);
       const [rows] = await db().query<mysql.RowDataPacket[]>(
-        `SELECT r.*,w.name AS workflowName,w.projectId,
+        `SELECT r.id,r.workflowId,r.ownerUserId,r.flowType,r.businessKey,
+                r.currentStateCode,r.currentStateNodeId,r.stateVersion,r.endReason,
+                r.status,r.triggerType,r.startedAt,r.finishedAt,r.durationMs,r.createdAt,
+                r.triggeredByUserId,r.executionSource,r.definitionVersion,
+                w.name AS workflowName,w.projectId,
                 initiator.name AS initiatedByName,ps.stateCode AS participantStateCode,ps.stateName AS participantStatusName,ps.flowStatus AS participantFlowStatus,
                 ${businessStateLabelSql} AS stateName,${recordedBusinessStateNameSql} AS currentStateName,
                 ps.stateColor,ps.availableOperationsJson,
@@ -1784,13 +1773,13 @@ export async function pageProcessInstances(
       createdAt: String(row.cursorCreatedAt),
       id: String(row.id),
     }),
-    isAuthorized: async row =>
-      user.role === "admin" ||
-      Boolean(row.participantStatusName) ||
-      (await canViewWorkflow(String(row.workflowId))),
-  }).then(page => ({
+    isAuthorized: async row => Boolean(row.participantStatusName) || (await canViewRun(row)),
+  }).then(async page => ({
     ...page,
-    items: page.items.map(presentProcessInstance),
+    items: await Promise.all(page.items.map(async row => {
+      const { cursorCreatedAt: _cursor, ...summary } = row;
+      return { ...presentProcessInstance(summary), canViewRun: await canViewRun(row) };
+    })),
   }));
 }
 

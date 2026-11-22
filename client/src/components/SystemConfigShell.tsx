@@ -416,8 +416,12 @@ function RuntimeStatus() {
           <RuntimeDetail label="数据库迁移版本" value={info.migrationVersion} />
           <RuntimeDetail label="运行环境" value={info.nodeEnv} />
           <RuntimeDetail
-            label="已处理 Job"
+            label="已处理作业数"
             value={String(info.worker.processedJobs)}
+          />
+          <RuntimeDetail
+            label="每进程并发槽位（流程／数据／连接测试）"
+            value={Object.values(info.worker.concurrency ?? {}).join(" / ") || "—"}
           />
         </dl>
       </details>

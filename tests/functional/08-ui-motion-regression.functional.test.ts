@@ -300,7 +300,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       );
       expectSemanticBodyForCopy(
         processWorkbenchSource,
-        "人工操作由服务端暂停和续跑；移交、退回与批量处理逐项执行，任务仅在当前流程授权范围内可见。"
+        "任务按当前权限显示。批量处理会逐条返回结果。"
       );
       expectSemanticBodyForCopy(
         projectWorkspaceSource,

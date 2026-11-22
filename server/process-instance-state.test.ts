@@ -80,15 +80,33 @@ describe("instance state scopes", () => {
     mocks.query.mockResolvedValue([
       [{ ...row, participantStatusName: "处理中" }],
     ]);
-    expect(
-      (
-        await pageProcessInstances(
-          { id: 7, role: "user" },
-          { view: "all", limit: 10 }
-        )
-      ).items
-    ).toHaveLength(1);
-    expect(mocks.permission).not.toHaveBeenCalled();
+    const user = { id: 7, role: "user" } as const;
+    expect((await pageProcessInstances(user, { view: "all", limit: 10 })).items)
+      .toMatchObject([{ participantStatusName: "处理中", canViewRun: false, availableOperations: [] }]);
+    expect(mocks.permission).toHaveBeenCalledTimes(1);
+    mocks.permission.mockResolvedValue(true);
+    expect(await listProcessInstances(user, { view: "all" }))
+      .toMatchObject([{ participantStatusName: "处理中", canViewRun: true }]);
+  });
+  it("queries instance numbers with bound parameters and returns only summary columns", async () => {
+    mocks.query.mockResolvedValue([[row]]);
+    const user = { id: 7, role: "admin" } as const;
+    const id = "ac12fe90-1234-4789-8123-0123456789ab";
+    const page = await pageProcessInstances(user, { view: "all", search: id.toUpperCase() });
+    const [sql, parameters] = mocks.query.mock.calls[0];
+    expect(sql).toContain("WHERE r.id=?");
+    expect(sql).not.toMatch(/r\.\*|definitionSnapshotJson|inputJson|contextJson|executionLockToken/);
+    expect(parameters).toContain(id);
+    expect(page.items[0]).not.toHaveProperty("cursorCreatedAt");
+    expect(page.items[0]).toHaveProperty("canViewRun", true);
+
+    await pageProcessInstances(user, { view: "all", search: "RUN ac12fe90" });
+    expect(mocks.query.mock.calls[1][0]).toContain("WHERE r.id LIKE ?");
+    expect(mocks.query.mock.calls[1][1]).toContain("ac12fe90%");
+    await pageProcessInstances(user, { view: "initiated", search: "ac12fe90", status: "waiting" });
+    expect(mocks.query.mock.calls[2][0]).toContain("OR r.id LIKE ?");
+    expect(mocks.query.mock.calls[2][0]).toContain("initiator.username");
+    expect(mocks.query.mock.calls[2][1]).toEqual([7, 7, "waiting", "waiting", "ac12fe90", "ac12fe90%", 200]);
   });
   it("takes business labels from the latest matching immutable transition, only for state runs", () => {
     expect(businessStateJoinSql).toContain("r.flowType='state'");

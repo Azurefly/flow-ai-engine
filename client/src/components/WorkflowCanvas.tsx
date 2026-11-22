@@ -145,7 +145,6 @@ import type { Definition } from "../../../server/workflow-service";
 import {
   canConnectFlowNodeTypes,
   createDefaultNodeConfig,
-  FLOW_NODE_ALLOWED_TARGETS,
   FLOW_NODE_DEFINITIONS,
   readConditionHandles,
   readOperateOutcomeMode,
@@ -2180,10 +2179,20 @@ function FieldHelp({ help }: { help: string }) {
   return <p data-config-help="" className={canvasBodyHelpClass}>{help}</p>;
 }
 
+function conditionEdgeLabel(config: NodeConfig, handle: Edge["sourceHandle"]) {
+  const [yes, no] = readConditionHandles(config);
+  if (handle === yes) return "成立";
+  if (handle === no) return "不成立";
+}
+
 type ConfigField = FlowNodeDefinition["fields"][number];
 type ConfigGroup = { label: string; keys: string[] };
 
 const CONFIG_GROUPS: Partial<Record<NodeKind, ConfigGroup[]>> = {
+  condition: [
+    { label: "判断规则", keys: ["left", "operator", "right"] },
+    { label: "分支代号", keys: ["trueHandle", "falseHandle"] },
+  ],
   rest: SERVICE_NODE_CONFIG_GROUPS,
   method: SERVICE_NODE_CONFIG_GROUPS,
   join: [
@@ -2390,6 +2399,7 @@ export default function WorkflowCanvas({
     viewportFit && !compactReadOnlyPreview && !fullscreen
   );
   const [paletteOpen, setPaletteOpen] = useState<"nodes" | "reuse" | null>(null);
+  const [connectNext, setConnectNext] = useState(false);
   const paletteOpenRef = useRef<"nodes" | "reuse" | null>(null);
   const paletteNodeCount = useRef(nodes.length);
   const suppressPaletteFocus = useRef(false);
@@ -2397,6 +2407,7 @@ export default function WorkflowCanvas({
   const displayLocationFocus = useRef(false);
   const changePalette = (kind: "nodes" | "reuse", open: boolean) => {
     if (open) {
+      setConnectNext(false);
       paletteNodeCount.current = nodes.length;
       paletteOpenRef.current = kind;
       setPaletteOpen(kind);
@@ -2892,6 +2903,9 @@ export default function WorkflowCanvas({
     () => nodes.find(node => node.id === selectedId),
     [nodes, selectedId]
   );
+  const appendSource = selected &&
+    sourceHandles(selected.data.kind, selected.data.config).join() === "default" &&
+    !edges.some(edge => edge.source === selected.id) ? selected : undefined;
   const loopLimitValue = (edges.find(edge => edge.id === selectedEdgeId)?.data?.loop as any)?.maxIterations ?? "";
   const loopLimitInvalid = readWorkflowLoopLimit(String(loopLimitValue)) === null;
   const selectedDefinition = selected
@@ -3045,6 +3059,8 @@ export default function WorkflowCanvas({
             ? String(route?.label ?? edge.sourceHandle ?? "默认路径")
             : source?.data.kind === "operate" && operateOutcome
               ? operateOutcome.label
+              : source?.data.kind === "condition"
+                ? conditionEdgeLabel(source.data.config, edge.sourceHandle)
               : source?.data.kind === "llm" && edge.sourceHandle !== "default"
                 ? `失败：${edge.sourceHandle}`
                 : undefined;
@@ -3148,28 +3164,47 @@ export default function WorkflowCanvas({
     setInspectorMode("normal");
     afterCanvasPaint(() => { void fitCanvas(id); });
   };
-  const addNode = (item: (typeof palette)[number]) => {
+  const addNode = (item: (typeof palette)[number], source?: CanvasNode) => {
     if (readOnly) return;
     if (!isFlowNodeAllowed(flowType, item.type)) {
       toast.error("当前流程类型不支持此节点，请切换到适用的流程。");
       return;
     }
-    pushHistory();
     const suffix = Math.random().toString(36).slice(2, 7);
-    setNodes(current =>
-      current.map(node => ({ ...node, selected: false })).concat({
-        selected: true,
-        id: `${item.type}-${suffix}`,
-        type: "workflowNode",
-        position: nextWorkflowNodePosition(current, insertionCenter()),
-        data: {
-          label: item.label,
-          kind: item.type,
-          config: createDefaultNodeConfig(item.type),
-        },
-      })
-    );
-    revealAddedNode(`${item.type}-${suffix}`);
+    const node: CanvasNode = {
+      selected: true,
+      id: `${item.type}-${suffix}`,
+      type: "workflowNode",
+      position: nextWorkflowNodePosition(nodes, source ? {
+        x: source.position.x + (source.measured?.width ?? 240) + 152,
+        y: source.position.y + 80,
+      } : insertionCenter()),
+      data: { label: item.label, kind: item.type, config: createDefaultNodeConfig(item.type) },
+    };
+    if (source && !canConnectCanvasNodes(source, node, edges, flowType)) {
+      toast.error("当前节点无法接到所选下一步，请检查已有出口。");
+      return;
+    }
+    pushHistory();
+    const nextEdges = source ? edges.concat({
+      id: `edge-${node.id}`,
+      source: source.id,
+      sourceHandle: sourceHandles(source.data.kind, source.data.config)[0] ?? "default",
+      target: node.id,
+      targetHandle: "target",
+      animated: false,
+      interactionWidth: 24,
+      style: { stroke: "#64748b", strokeWidth: 2 },
+    }) : edges;
+    setNodes(current => {
+      const nextNodes = [...current.map(existing => ({ ...existing, selected: false })), node];
+      return source?.data.kind === "router"
+        ? syncRouterRouteTargets(nextNodes, nextEdges, source.id)
+        : nextNodes;
+    });
+    if (source) setEdges(nextEdges);
+    setContextMenu(null);
+    revealAddedNode(node.id);
   };
 
   const addReusableNode = (input: {
@@ -3278,62 +3313,6 @@ export default function WorkflowCanvas({
     [nodes, pushHistory, readOnly, setNodes]
   );
 
-  const addContextNode = useCallback(
-    (item: (typeof palette)[number], sourceId: string) => {
-      if (readOnly) return;
-      const source = nodes.find(node => node.id === sourceId);
-      if (!source) return;
-      pushHistory();
-      const suffix = Math.random().toString(36).slice(2, 7);
-      const nodeId = `${item.type}-${suffix}`;
-      const nextNode: CanvasNode = {
-        id: nodeId,
-        type: "workflowNode",
-        position: { x: source.position.x + 250, y: source.position.y },
-        data: {
-          label: item.label,
-          kind: item.type,
-          config: createDefaultNodeConfig(item.type),
-        },
-      };
-      if (!canConnectCanvasNodes(source, nextNode, edges, flowType)) {
-        setContextMenu(null);
-        return;
-      }
-      const sourceHandle =
-        source.data.kind === "condition"
-          ? readConditionHandles(source.data.config)[0]
-          : source.data.kind === "router"
-            ? String(source.data.config.defaultRoute ?? "default")
-            : source.data.kind === "operate" &&
-                readOperateOutcomeMode(source.data.config) === "explicit"
-              ? (readOperateOutcomes(source.data.config)[0]?.sourceHandle ??
-                "default")
-              : "default";
-      const nextEdge: Edge = {
-        id: `edge-${Date.now()}`,
-        source: sourceId,
-        sourceHandle,
-        target: nodeId,
-        targetHandle: "target",
-        animated: false,
-        interactionWidth: 24,
-        style: { stroke: "#64748b", strokeWidth: 2 },
-      };
-      setNodes(current =>
-        syncRouterRouteTargets(
-          current.concat(nextNode),
-          edges.concat(nextEdge),
-          source.data.kind === "router" ? source.id : undefined
-        )
-      );
-      setEdges(current => current.concat(nextEdge));
-      setSelectedId(nodeId);
-      setSelectedEdgeId(null);
-      setContextMenu(null);
-    },
-    [edges, nodes, readOnly, setEdges, setNodes, flowType]
-  );
   const onConnect = useCallback(
     (connection: Connection) => {
       if (readOnly || !connection.source || !connection.target) return;
@@ -3991,9 +3970,13 @@ export default function WorkflowCanvas({
   const availablePalette = palette.filter(item =>
     isFlowNodeAllowed(flowType, item.type) && (!participantMode || ["start", "end", "state", "operate", "router"].includes(item.type))
   );
+  const connectionSource = connectNext ? appendSource : undefined;
+  const isAppendTarget = (source: CanvasNode, kind: NodeKind) =>
+    canConnectCanvasNodes(source, { id: "", data: { kind, config: {} } }, edges, flowType);
   const normalizedNodeSearch = nodePaletteSearch.trim().toLowerCase();
   const categoryFor = (type: NodeKind) => ["http", "rest", "method", "llm"].includes(type) ? "service" : ["state", "operate", "form"].includes(type) ? "human" : ["start", "end", "condition", "router", "wait", "message_catch", "milestone", "subflow"].includes(type) ? "control" : "data";
   const visiblePalette = availablePalette.filter(item =>
+    (!connectionSource || isAppendTarget(connectionSource, item.type)) &&
     (nodeCategory === "all" || categoryFor(item.type) === nodeCategory) &&
     (!normalizedNodeSearch || item.label.toLowerCase().includes(normalizedNodeSearch) || item.description.toLowerCase().includes(normalizedNodeSearch))
   );
@@ -4114,9 +4097,15 @@ export default function WorkflowCanvas({
                     />
                   </label>
                   <label className={canvasStackedLabelClass}>节点分类<select className={canvasSelectClass} value={nodeCategory} onChange={event => setNodeCategory(event.target.value)}><option value="all">全部节点</option>{[["control","流程控制"],["service","服务与 AI"],["human","人员与表单"],["data","数据处理"]].filter(([id]) => availablePalette.some(item => categoryFor(item.type) === id)).map(([id,label]) => <option key={id} value={id}>{label}</option>)}</select></label>
-                  <p className={canvasSectionHelpClass}>
-                    拖拽或单击添加节点；新增后会自动定位，请按所需顺序连线。
-                  </p>
+                  {appendSource && <Button
+                    type="button"
+                    variant={connectNext ? "secondary" : "outline"}
+                    aria-pressed={connectNext}
+                    onClick={() => setConnectNext(value => !value)}
+                  >
+                    接到当前节点：{appendSource.data.label}
+                  </Button>}
+                  <p className={canvasSectionHelpClass}>{connectionSource ? "选择下一步，自动新增连线。" : "单击或拖拽添加节点，分支请手动接线。"}</p>
                   {visiblePalette.length ? (
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {visiblePalette.map(item => (
@@ -4126,10 +4115,10 @@ export default function WorkflowCanvas({
                           variant="ghost"
                           className="h-auto min-h-12 justify-start gap-2 rounded-lg border border-border px-2.5 py-2 text-left hover:border-aiflow-info-border hover:bg-aiflow-info-surface/50"
                           disabled={readOnly}
-                          draggable={!readOnly}
+                          draggable={!readOnly && !connectionSource}
                           aria-label={"添加" + item.label + "：" + item.description}
                           onDragStart={event => handlePaletteDragStart(event, item)}
-                          onClick={() => addNode(item)}
+                          onClick={() => addNode(item, connectionSource)}
                           title={item.description}
                         >
                           <NodeTypeGlyph
@@ -4151,11 +4140,6 @@ export default function WorkflowCanvas({
                   ) : (
                     <p className={"aiflow-type-body mt-3 rounded-md bg-muted p-4 text-center " + mutedToneClass}>
                       没有匹配的节点。
-                    </p>
-                  )}
-                  {(flowType === "state" || flowType === "control") && (
-                    <p className={"aiflow-type-body mt-3 border-t border-border pt-2 " + mutedToneClass}>
-                      业务资源与物理资源节点尚未接入当前项目。
                     </p>
                   )}
                 </PopoverContent>
@@ -4558,15 +4542,7 @@ export default function WorkflowCanvas({
                   const canDelete =
                     !readOnly &&
                     !["start", "end"].includes(targetNode.data.kind);
-                  const allowed =
-                    FLOW_NODE_ALLOWED_TARGETS[targetNode.data.kind] ??
-                    palette.map(item => item.type);
-                  const addable = palette.filter(
-                    item =>
-                      isFlowNodeAllowed(flowType, item.type) &&
-                      allowed.includes(item.type) &&
-                      item.type !== "start"
-                  );
+                  const addable = readOnly ? [] : availablePalette.filter(item => isAppendTarget(targetNode, item.type));
                   return (
                     <>
                       {!["start", "end"].includes(targetNode.data.kind) && (
@@ -4631,19 +4607,17 @@ export default function WorkflowCanvas({
                         查看路径
                       </button>
                       <div className="my-1 border-t border-border" />
-                      {!readOnly && targetNode.data.kind !== "end" && (
+                      {addable.length > 0 && (
                         <div className={"aiflow-type-control px-3 py-1 font-semibold " + mutedToneClass}>
                           在此节点后添加
                         </div>
                       )}
-                      {!readOnly &&
-                        targetNode.data.kind !== "end" &&
-                        addable.slice(0, 8).map(item => (
+                      {addable.slice(0, 8).map(item => (
                           <button
                             key={item.type}
                             type="button"
                             className="block w-full px-3 py-1.5 text-left hover:bg-muted"
-                            onClick={() => addContextNode(item, targetNode.id)}
+                            onClick={() => addNode(item, targetNode)}
                           >
                             添加{item.label}
                           </button>
