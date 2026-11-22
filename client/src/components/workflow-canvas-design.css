@@ -1,16 +1,10 @@
 /* Desktop canvas foundations are isolated from lists, forms and runtime graphs. */
 [data-canvas-redesign] {
-  --aiflow-canvas-edge: #526782;
-  --aiflow-canvas-selected: #315efb;
-  --aiflow-canvas-return: #ad771c;
   --aiflow-canvas-dot: #d7dfeb;
   --canvas-zoom: 1;
   box-shadow: none;
 }
 .dark [data-canvas-redesign] {
-  --aiflow-canvas-edge: #a2b1c7;
-  --aiflow-canvas-selected: #8aa9ff;
-  --aiflow-canvas-return: #f1c175;
   --aiflow-canvas-dot: #344157;
 }
 [data-canvas-redesign] [data-flow-canvas-viewport] {background: var(--background); container:flow-canvas / inline-size;}

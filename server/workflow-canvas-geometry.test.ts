@@ -27,11 +27,11 @@ describe("画布阅读布局与连线可见性", () => {
   it("短分支标签留在两节点之间，回退标签沿外侧长通道显示", () => {
     const rects = canvasNodeRects([node("a", 40, 40), node("b", 376, 40)]);
     const points = canvasConnectionPoints({ x: 252, y: 70 }, { x: 372, y: 84 }, rects, "a", "b");
-    const label = canvasEdgeLabelAnchor(points, 0.87), halfWidth = 64 / 0.87 / 2;
+    const label = canvasEdgeLabelAnchor(points, 0.87)!, halfWidth = 64 / 0.87 / 2;
     expect(label.x - halfWidth).toBeGreaterThan(rects[0].x + rects[0].width);
     expect(label.x + halfWidth).toBeLessThan(rects[1].x);
     const back = canvasConnectionPoints({ x: 588, y: 84 }, { x: 36, y: 84 }, rects, "b", "a");
-    expect(canvasEdgeLabelAnchor(back, 0.87).y).toBeLessThan(Math.min(...rects.map(r => r.y)));
+    expect(canvasEdgeLabelAnchor(back, 0.87)!.y).toBeLessThan(Math.min(...rects.map(r => r.y)));
   });
   it("长列表末尾的返回线仍在附近绕行，不会把总览撑到节点区外数千像素", () => {
     const rects = canvasNodeRects([node("a", 40, 40), node("b", 376, 40)]);

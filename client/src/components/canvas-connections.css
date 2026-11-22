@@ -1,0 +1,42 @@
+:is([data-canvas-redesign], [data-run-canvas-design], .canvas-viewport) {
+  --aiflow-canvas-edge: #62758a;
+  --aiflow-canvas-selected: #315df0;
+  --aiflow-canvas-trace: #3966b8;
+  --aiflow-canvas-approve: #238365;
+  --aiflow-canvas-reject: #bc465a;
+  --aiflow-canvas-return: #9b6a29;
+  --aiflow-canvas-sweep: #80afff;
+  --aiflow-caption-ink: #273850;
+}
+.dark :is([data-canvas-redesign], [data-run-canvas-design], .canvas-viewport) {
+  --aiflow-canvas-edge: #9caec4;
+  --aiflow-canvas-selected: #99b8fc;
+  --aiflow-canvas-trace: #86aaef;
+  --aiflow-canvas-approve: #64c5a5;
+  --aiflow-canvas-reject: #ef92a2;
+  --aiflow-canvas-return: #dfb877;
+  --aiflow-canvas-sweep: #d8e9ff;
+  --aiflow-caption-ink: #e1e9f6;
+}
+.aiflow-edge-caption { pointer-events: none; }
+.aiflow-edge-caption[data-caption-muted] { opacity: 0; visibility: hidden; }
+.react-flow__edge:is(:hover,:focus-within,.selected) .aiflow-edge-caption { opacity: 1; visibility: visible; }
+.run-edge-flow {
+  pointer-events: none;
+  vector-effect: non-scaling-stroke;
+  stroke: var(--aiflow-canvas-sweep);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-dasharray: 14 112;
+  opacity: 0;
+  animation: run-edge-sweep 760ms ease-out 1 both;
+}
+@keyframes run-edge-sweep {
+  0% { stroke-dashoffset: 14; opacity: 0; }
+  18%, 78% { opacity: .88; }
+  100% { stroke-dashoffset: -100; opacity: 0; }
+}
+[data-run-motion-paused] .run-edge-flow { display: none; animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .run-edge-flow, [data-run-canvas-actions] [data-run-motion-toggle] { display: none; animation: none; }
+}

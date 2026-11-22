@@ -133,21 +133,48 @@ export function roundedCanvasPath(points: CanvasPoint[]) {
   for (let i = 1; i < points.length - 1; i++) {
     const a = points[i - 1], p = points[i], b = points[i + 1];
     const before = Math.hypot(p.x - a.x, p.y - a.y), after = Math.hypot(b.x - p.x, b.y - p.y);
-    const r = Math.min(12, before / 2, after / 2);
+    const r = Math.min(18, before / 2, after / 2);
     if (!before || !after) continue;
+    if ((p.x - a.x) * (b.x - p.x) + (p.y - a.y) * (b.y - p.y) > 0) continue;
     path += ` L${p.x - (p.x - a.x) * r / before},${p.y - (p.y - a.y) * r / before} Q${p.x},${p.y} ${p.x + (b.x - p.x) * r / after},${p.y + (b.y - p.y) * r / after}`;
   }
   const last = points[points.length - 1];
   return path + ` L${last.x},${last.y}`;
 }
 
-/** Short forward labels belong in the port gap, away from adjacent return lanes. */
-export function canvasEdgeLabelAnchor(points: CanvasPoint[], zoom: number) {
-  let a = points[0], b = points[1] ?? a;
-  for (let i = 1; i < points.length; i++) if (Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) > Math.hypot(b.x - a.x, b.y - a.y)) { a = points[i - 1]; b = points[i]; }
-  const end = points[points.length - 1];
-  if (points.length <= 4 && end.x > points[0].x) { a = points[0]; b = end; }
-  return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 - 24 / zoom };
+/** Place captions beside real path segments, leaving the stroke intact. */
+export function canvasEdgeLabelAnchor(points: CanvasPoint[], zoom: number, width = 64, rects: CanvasRect[] = [], outcome?: "approve" | "reject") {
+  const start = points[0], end = points[points.length - 1];
+  const halfWidth = width / zoom / 2, gap = 6 / zoom, rise = 16 / zoom;
+  const candidates: (CanvasPoint & { line: CanvasPoint })[] = [];
+  const attach = (x: number, y: number, dx: number, dy: number) =>
+    candidates.push({ x: x + dx, y: y + dy, line: { x, y } });
+  const verticalOffset = outcome === "reject" ? rise : -rise;
+  if (points.length <= 4 && end.x > start.x && Math.abs(start.y - end.y) * zoom < 18) {
+    const y = outcome === "reject" ? Math.max(start.y, end.y) : Math.min(start.y, end.y);
+    attach((start.x + end.x) / 2, y, 0, verticalOffset);
+  }
+  const segments = points.slice(1).map((b, i) => {
+    const a = points[i];
+    return { a, b, length: Math.hypot(b.x - a.x, b.y - a.y) };
+  });
+  if (!outcome) segments.sort((a, b) => b.length - a.length);
+  for (const { a, b } of segments) {
+    for (const proportion of [.5, .27, .73]) {
+      const x = a.x + (b.x - a.x) * proportion, y = a.y + (b.y - a.y) * proportion;
+      if (a.y === b.y) {
+        attach(x, y, 0, verticalOffset);
+        attach(x, y, 0, -verticalOffset);
+      } else {
+        attach(x, y, halfWidth + gap, 0);
+        attach(x, y, -halfWidth - gap, 0);
+      }
+    }
+  }
+  return candidates.find(({ x, y }) => rects.every(n =>
+    x + halfWidth + 3 / zoom < n.x || x - halfWidth - 3 / zoom > n.x + n.width ||
+    y + 12 / zoom < n.y || y - 12 / zoom > n.y + n.height
+  ));
 }
 
 export function canvasBounds(rects: CanvasRect[], points: CanvasPoint[] = []) {

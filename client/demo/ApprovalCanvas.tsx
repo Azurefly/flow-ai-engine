@@ -6,7 +6,6 @@ import {
   getNodesBounds,
   getViewportForBounds,
   Handle,
-  MarkerType,
   MiniMap,
   Position,
   ReactFlow,
@@ -28,6 +27,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { workflowNodeTypeLabel } from "../../shared/workflow-node-label";
+import { canvasNodeRects } from "../../shared/workflow-canvas-geometry";
+import { workflowEdgeCaption } from "../../shared/workflow-edge-caption";
+import { CanvasConnectionEdge } from "../src/components/CanvasConnectionEdge";
 import {
   definition,
   nodesById,
@@ -66,6 +68,7 @@ const nodeLayout = definition.nodes.map(node => ({
   ...nodeSize,
 }));
 const overviewBounds = getNodesBounds(nodeLayout);
+const rects = canvasNodeRects(nodeLayout.map(node => ({ ...node, measured: nodeSize })));
 
 function ApprovalNode({ data }: NodeProps<CanvasNode>) {
   const node = data.definition;
@@ -98,6 +101,7 @@ function ApprovalNode({ data }: NodeProps<CanvasNode>) {
 }
 
 const nodeTypes = { approval: ApprovalNode };
+const edgeTypes = { approval: CanvasConnectionEdge };
 
 function CanvasControls({ phaseIndex }: { phaseIndex: number }) {
   const { setViewport, viewportInitialized } = useReactFlow<CanvasNode, Edge>();
@@ -186,19 +190,20 @@ export default function ApprovalCanvas({ phaseIndex }: { phaseIndex: number }) {
       selected: node.id === selectedId,
     },
   }));
-  const edges: Edge[] = definition.edges.map(edge => {
+  const edges: Edge[] = definition.edges.map((edge, canvasLane) => {
     const visited =
       reached.has(edge.sourceNodeId) &&
       (reached.has(edge.targetNodeId) ||
         edge.targetNodeId === phase.currentNode);
-    const color = visited ? "#3c62e9" : "#a8b4c7";
+    const source = nodesById.get(edge.sourceNodeId);
+    const { label, tone } = workflowEdgeCaption(source?.type, source?.config, "sourceHandle" in edge ? edge.sourceHandle : undefined);
     return {
       id: edge.id,
       source: edge.sourceNodeId,
       target: edge.targetNodeId,
-      type: "smoothstep",
-      style: { stroke: color, strokeWidth: visited ? 2.4 : 1.6 },
-      markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
+      type: "approval",
+      label,
+      data: { canvasRects: rects, canvasLane, canvasTrace: visited, canvasTone: tone, quietLabels: true },
     };
   });
 
@@ -222,6 +227,7 @@ export default function ApprovalCanvas({ phaseIndex }: { phaseIndex: number }) {
           nodes={nodes}
           edges={edges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           nodesDraggable={false}
           nodesConnectable={false}
           nodesFocusable={false}

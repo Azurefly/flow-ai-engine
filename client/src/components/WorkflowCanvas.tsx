@@ -66,6 +66,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { compareRouterRulePriority, normalizeReferenceRouterConfig, normalizeReferenceRouterRule, type NormalizedRouterRule } from "@shared/reference-router-config";
+import { workflowEdgeCaption } from "@shared/workflow-edge-caption";
 import { conditionText } from "@shared/approval-condition-presentation";
 import { operateParticipantFields } from "@shared/operate-participant-fields";
 import { WorkflowParticipantPicker } from "./WorkflowParticipantPicker";
@@ -2205,12 +2206,6 @@ function FieldHelp({ help }: { help: string }) {
   return <p data-config-help="" className={canvasBodyHelpClass}>{help}</p>;
 }
 
-function conditionEdgeLabel(config: NodeConfig, handle: Edge["sourceHandle"]) {
-  const [yes, no] = readConditionHandles(config);
-  if (handle === yes) return "成立";
-  if (handle === no) return "不成立";
-}
-
 type ConfigField = FlowNodeDefinition["fields"][number];
 type ConfigGroup = { label: string; keys: string[] };
 
@@ -3077,107 +3072,8 @@ export default function WorkflowCanvas({
     () =>
       edges.map(edge => {
         const source = nodeMap.get(edge.source);
-        const routes =
-          source?.data.kind === "router"
-            ? normalizeReferenceRouterConfig(source.data.config).rules.map(
-                rule => ({ handle: rule.handle, label: rule.name })
-              )
-            : [];
-        const route = routes.find(
-          item =>
-            String(item.handle ?? "default") ===
-            String(edge.sourceHandle ?? "default")
-        );
-        const operateOutcome =
-          source?.data.kind === "operate"
-            ? readOperateOutcomes(source.data.config).find(
-                item =>
-                  item.sourceHandle === String(edge.sourceHandle ?? "default")
-              )
-            : undefined;
-        const label =
-          source?.data.kind === "router"
-            ? String(route?.label ?? edge.sourceHandle ?? "默认路径")
-            : source?.data.kind === "operate" && operateOutcome
-              ? operateOutcome.label
-              : source?.data.kind === "condition"
-                ? conditionEdgeLabel(source.data.config, edge.sourceHandle)
-              : source?.data.kind === "llm" && edge.sourceHandle !== "default"
-                ? `失败：${edge.sourceHandle}`
-                : undefined;
-        const isOperateRejected =
-          source?.data.kind === "operate" &&
-          (edge.sourceHandle === "rejected" ||
-            operateOutcome?.code === "rejected");
-        const isOperateApproved =
-          source?.data.kind === "operate" &&
-          (edge.sourceHandle === "approved" ||
-            operateOutcome?.code === "approved");
-        const outcomeStroke = isOperateRejected
-          ? "#ef4444"
-          : isOperateApproved
-            ? "#10b981"
-            : undefined;
-
-        return edge.id === selectedEdgeId
-          ? {
-              ...edge,
-              label,
-              data: { ...edge.data, outcomeColor: outcomeStroke },
-              selected: true,
-              animated: true,
-              interactionWidth: 24,
-              labelStyle: {
-                fill: isOperateRejected
-                  ? "#dc2626"
-                  : isOperateApproved
-                    ? "#059669"
-                    : "#5b21b6",
-                fontSize: 14,
-                fontWeight: 600,
-              },
-              labelBgStyle: {
-                fill: isOperateRejected
-                  ? "#fef2f2"
-                  : isOperateApproved
-                    ? "#ecfdf5"
-                    : "#f5f3ff",
-                fillOpacity: 0.96,
-              },
-              labelBgPadding: [5, 3] as [number, number],
-              labelBgBorderRadius: 6,
-              style: {
-                ...edge.style,
-                stroke: isOperateRejected
-                  ? "#dc2626"
-                  : isOperateApproved
-                    ? "#059669"
-                    : "#4f46e5",
-                strokeWidth: 3,
-              },
-            }
-          : {
-              ...edge,
-              label,
-              data: { ...edge.data, outcomeColor: outcomeStroke },
-              selected: false,
-              interactionWidth: 24,
-              labelStyle: {
-                fill: isOperateRejected
-                  ? "#ef4444"
-                  : isOperateApproved
-                    ? "#059669"
-                    : "#6d28d9",
-                fontSize: 14,
-                fontWeight: 600,
-              },
-              labelBgStyle: { fill: "#ffffff", fillOpacity: 0.94 },
-              labelBgPadding: [5, 3] as [number, number],
-              labelBgBorderRadius: 6,
-              style: outcomeStroke
-                ? { ...edge.style, stroke: outcomeStroke }
-                : edge.style,
-            };
+        const { label, tone } = workflowEdgeCaption(source?.data.kind, source?.data.config, edge.sourceHandle ?? "default");
+        return { ...edge, label, selected: edge.id === selectedEdgeId, animated: false, data: { ...edge.data, canvasTone: tone } };
       }),
     [edges, nodeMap, selectedEdgeId]
   );
@@ -3189,7 +3085,7 @@ export default function WorkflowCanvas({
     ...edge, type: "workspace",
     ...(routeEdge?.id === edge.id && { zIndex: 6, className: `${edge.className ?? ""} aiflow-route-edge` }),
     data: { ...edge.data, canvasRects, canvasLane, ...(routeEdge?.id === edge.id && {
-      canvasEmphasis: true, canvasStroke: "var(--aiflow-canvas-selected)",
+      canvasEmphasis: true,
     }) },
   })), [visibleEdges, canvasRects, routeEdge]);
   const presentedEdges = useMemo(() => {

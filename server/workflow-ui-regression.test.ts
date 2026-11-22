@@ -533,8 +533,8 @@ describe("流程设计器界面回归约束", () => {
     expect(packageSource).toContain('"check:bundle"');
     expect(packageSource).toContain("pnpm check:bundle");
     expect(bundleBudgetSource).toContain("maxChunkBytes = 450 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_697 * 1024");
-    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 527 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalBytes = 1_702 * 1024");
+    expect(bundleBudgetSource).toContain("maxTotalGzipBytes = 531 * 1024");
     expect(bundleBudgetSource).toContain("gzipSync(contents)");
     expect(bundleBudgetSource).toContain("maxHtmlBytes = 20 * 1024");
     expect(bundleBudgetSource).toContain('id="manus-runtime"');
@@ -2122,7 +2122,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("流程身份（逗号分隔）");
     expect(canvasSource).toContain("未连线");
     expect(canvasSource).toContain("在画布定位");
-    expect(canvasSource).toContain("默认路径");
+    expect(source("../shared/workflow-edge-caption.ts")).toContain("默认分支");
     expect(canvasSource).toContain('label: "调用配置"');
     expect(canvasSource).not.toContain('label: "迁移兼容"');
     expect(canvasSource).toContain(
@@ -3512,8 +3512,9 @@ it("组织保存失败在弹窗内保留错误并允许修改重试", () => {
 
 it("路由连线与节点使用统一规则解析，出口提示展示业务名称", () => {
   expect(canvasSource).toContain(
-    "normalizeReferenceRouterConfig(source.data.config).rules.map"
+    'workflowEdgeCaption(source?.data.kind, source?.data.config, edge.sourceHandle ?? "default")'
   );
+  expect(source("../shared/workflow-edge-caption.ts")).toContain("normalizeReferenceRouterConfig(config)");
   expect(canvasSource).not.toContain(
     "source.data.config.routes as NodeConfig[]"
   );
@@ -4279,9 +4280,9 @@ it("阅读投影隔离于持久化，拖动和整理仍可连同显示模式一�
   expect(canvasDesignStyles).toContain("overflow: visible;");
   const edge = source("../client/src/components/CanvasConnectionEdge.tsx");
   expect(edge).toContain("interactionWidth={24 / zoom}");
-  expect(edge).toContain("const arrowSize = (traced ? 14 : 9) / zoom");
+  expect(edge).toContain("const arrowSize = (located ? 13 : focused || traced ? 11 : 9) / zoom");
   expect(edge).toContain("markerWidth={arrowSize}");
-  expect(edge).toContain("strokeWidth: (traced ? 5 : emphasized ? 3 : 2) / zoom");
+  expect(edge).toContain("strokeWidth: (located ? 4 : focused ? 3.3 : traced ? 2.6 : 1.7) / zoom");
 });
 
 

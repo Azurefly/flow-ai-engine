@@ -336,6 +336,54 @@ describe("实例执行画布投影", () => {
       },
     })).toEqual(["pass"]);
   });
+  it("人员状态历史按命令版本和任务还原整条路线，并合并同去向但未记录分支的连线", () => {
+    const model = "participant-v1";
+    const state = (id: string) => ({ stateNodeId: id });
+    const visit = (id: string, nodeId: string, sequenceNo: number, outputJson: object, status = "success") =>
+      ({ id, nodeId, sequenceNo, outputJson, status, inputJson: { model } });
+    const graph = projectRunGraph(run({
+      flowType: "state",
+      definitionSnapshotJson: {
+        settings: { stateModel: model },
+        nodes: [
+          { id: "start", type: "start" }, { id: "draft", type: "state" },
+          { id: "submit", type: "operate", config: { outcomeMode: "explicit", outcomes: [{ code: "approved", label: "同意", sourceHandle: "yes" }] } },
+          { id: "router", type: "router", config: { routes: [{ handle: "path_1", label: "部门审核" }] } },
+          { id: "a", type: "state" }, { id: "alternate", type: "state" },
+        ],
+        edges: [
+          { id: "opened", source: "start", target: "draft" },
+          { id: "task", source: "draft", target: "submit" },
+          { id: "approved", source: "submit", target: "router", sourceHandle: "yes" },
+          { id: "team-a1", source: "router", target: "a", sourceHandle: "path_1" },
+          { id: "team-a2", source: "router", target: "a", sourceHandle: "path_2" },
+          { id: "other", source: "router", target: "alternate", sourceHandle: "path_3" },
+        ],
+      },
+      nodeRuns: [
+        visit("start-run", "start", 1, {}),
+        // A waiting task was created before the draft state record was written.
+        visit("operation", "submit", 2, { outcome: "approved" }),
+        visit("draft-run", "draft", 3, { userIds: [1], stateVersion: 1 }),
+        visit("routed", "router", 4, { userIds: [1], stateVersion: 2 }),
+        visit("team", "a", 5, { userIds: [1], stateVersion: 2 }),
+        visit("not-this-person", "alternate", 6, { userIds: [2], stateVersion: 2 }),
+      ],
+      taskActivities: [{ id: "t1", nodeRunId: "operation", status: "completed" }],
+      stateTransitions: [
+        { sequenceNo: 1, transitionCode: "initialize", actorUserId: 1,
+          payloadJson: { model, changes: [{ userId: 1, after: state("draft") }] } },
+        { sequenceNo: 2, transitionCode: "SUBMIT", taskId: "t1", actorUserId: 1,
+          payloadJson: { model, changes: [{ userId: 1, before: state("draft"), after: state("a") }] } },
+      ],
+    }));
+    expect(graph.edges.filter(edge => edge.traversed).map(edge => edge.id))
+      .toEqual(["opened", "task", "approved", "team-a1"]);
+    expect(graph.edges.find(edge => edge.id === "team-a1")).toMatchObject({
+      label: "部门审核", traceShared: true, traceRecords: new Set(["routed", "team"]),
+    });
+    expect(graph.edges.find(edge => edge.id === "approved")?.label).toBe("同意");
+  });
   it("循环保留连线且自动布局有限、无重叠、不改快照", () => {
     const before = JSON.stringify(definition);
     const graph = projectRunGraph(run());

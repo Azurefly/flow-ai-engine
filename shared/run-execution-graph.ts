@@ -1,4 +1,7 @@
 import { readableCanvasLayout } from "./workflow-canvas-geometry";
+import { isParticipantStateDefinition } from "./participant-state";
+import { participantRunRoute } from "./participant-run-route";
+import { workflowEdgeCaption } from "./workflow-edge-caption";
 export type RunRecord = Record<string, any>;
 export type RunGraphFocus = {
   nodeId?: string;
@@ -112,6 +115,7 @@ function ordered(records: RunRecord[]) {
 export function projectRunGraph(run: RunRecord) {
   const snapshot = parseRunValue(run.definitionSnapshotJson);
   const definition = snapshot?.definition ?? snapshot;
+  const participant = isParticipantStateDefinition(definition);
   const rawNodes = Array.isArray(definition?.nodes) ? definition.nodes : [];
   const executions = new Map<string, RunRecord[]>();
   for (const item of run.nodeRuns ?? []) {
@@ -187,11 +191,6 @@ export function projectRunGraph(run: RunRecord) {
     edgeIds.add(id);
     const node = nodeMap.get(source)!;
     const handle = String(edge.sourceHandle ?? "default");
-    const configured = Array.isArray(node.config?.outcomes)
-      ? node.config.outcomes.find(
-          (o: RunRecord) => String(o.sourceHandle ?? o.code) === handle
-        )
-      : undefined;
     const selectedRecords = node.records.filter((record: RunRecord) => {
       if (record.status !== "success") return false;
       const output = parseRunValue(record.outputJson);
@@ -225,34 +224,45 @@ export function projectRunGraph(run: RunRecord) {
     });
     // A sequential step needs more than adjacent timestamps. The later visit
     // must record the predecessor's output and the snapshot must have one exit.
-    const direct = handle === "default" && outlets.get(source) === 1 &&
+    const direct = outlets.get(source) === 1 &&
       !["condition", "router", "end"].includes(node.type) &&
       !(node.type === "operate" && node.config?.outcomeMode === "explicit");
-    const dispatch = (direct ? node.records : selectedRecords).find(record =>
+    const dispatch = !participant && run.flowType !== "data" && (direct ? node.records : selectedRecords).find(record =>
       record.status === "success" && Number.isSafeInteger(record.sequenceNo)
     );
-    const traversed = run.flowType !== "data" && Boolean(dispatch &&
-      nodeMap.get(target)!.records.some(record =>
+    const arrivals = dispatch
+      ? nodeMap.get(target)!.records.filter(record =>
         Number.isSafeInteger(record.sequenceNo) && record.sequenceNo > dispatch.sequenceNo &&
         (!direct || Object.hasOwn(parseRunValue(record.inputJson)?.context?.nodes ?? {}, source))
-      ));
+      ) : [];
     edges.push({
       ...edge,
       id,
       source,
       target,
-      label: configured?.label ?? (handle === "default" ? "" : handle),
+      ...workflowEdgeCaption(node.type, node.config, handle, edge.label),
       confirmed: selectedRecords.length,
-      traversed,
+      traversed: arrivals.length > 0,
+      traceRecords: new Set(arrivals.length && dispatch ? [dispatch.id, ...arrivals.map(record => record.id)] : []),
       returning: false,
     });
+  }
+  if (participant) {
+    const history = participantRunRoute(run, nodes, edges, parseRunValue);
+    for (const edge of edges) {
+      const fact = history.get(edge.id);
+      if (!fact) continue;
+      edge.traversed = true;
+      edge.traceRecords = fact.records;
+      edge.traceShared = fact.shared;
+    }
   }
   // Remove DFS back edges for ranking only; retain every edge in the displayed graph.
   const outgoing = new Map<string, RunRecord[]>();
   for (const n of nodes) outgoing.set(n.id, []);
   for (const e of edges) outgoing.get(e.source)!.push(e);
   const colors = new Map<string, number>();
-  for (const node of nodes) {
+  for (const node of [...nodes.filter(item => item.type === "start"), ...nodes]) {
     if (colors.get(node.id)) continue;
     const stack = [{ id: node.id, index: 0 }];
     colors.set(node.id, 1);

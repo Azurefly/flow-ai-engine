@@ -37,7 +37,7 @@ import { initialRunViewNode, runGraphFitOptions, runGraphHandles } from "@shared
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import { Button } from "./ui/button";
 type ViewerNode = Node<
-  { item: RunGraphNode; choose: (id: string) => void; selected: boolean },
+  { item: RunGraphNode; kind: string; choose: (id: string) => void; selected: boolean },
   "runNode"
 >;
 function modelEvidence(value: unknown): Record<string, unknown> {
@@ -129,11 +129,29 @@ export default function RunExecutionCanvas({
   const chosenRecords = useRef(new Map<string, string>());
   const [layout, setLayout] = useState(true);
   const [expanded, setExpanded] = useState(false);
-  const hasTrace = graph.edges.some(edge => edge.traversed);
+  const trace = useMemo(() => {
+    const pairs = new Map<string, RunRecord>();
+    const ids = new Set<string>();
+    for (const edge of graph.edges) {
+      if (!edge.traversed) continue;
+      ids.add(edge.source).add(edge.target);
+      const key = JSON.stringify([edge.source, edge.target]);
+      const first = pairs.get(key);
+      pairs.set(key, first ? {
+        ...first, label: "多次流转",
+        traceRecords: new Set([...Array.from(first.traceRecords), ...Array.from(edge.traceRecords)]),
+      } : edge);
+    }
+    return { ids, edges: Array.from(pairs.values()) };
+  }, [graph.edges]);
+  const hasTrace = trace.edges.length > 0;
   const [routeView, setRouteView] = useState(workspace && hasTrace && !entryTaskId && !focusRequest);
   const [motionPaused, setMotionPaused] = useState(false);
   const routeOnly = layout && routeView && hasTrace;
-  const visibleEdges = routeOnly ? graph.edges.filter(edge => edge.traversed) : graph.edges;
+  const visibleEdges = routeOnly ? trace.edges : graph.edges;
+  const traceStart = graph.nodes.find(node => node.type === "start" && trace.ids.has(node.id));
+  const unlinked = routeOnly ? graph.nodes.filter(node => !trace.ids.has(node.id) &&
+    node.records.some(record => record.status !== "skipped")).length : 0;
   const api = useRef<ReactFlowInstance<ViewerNode, Edge> | null>(null);
   const [ready, setReady] = useState(false);
   const [measured, setMeasured] = useState(false);
@@ -150,7 +168,9 @@ export default function RunExecutionCanvas({
     // UX：隐藏的阅读面板没有可用尺寸，恢复可见后再由ResizeObserver适配。
     if (!api.current || !region || !region.clientWidth || !region.clientHeight) return;
     const rects = canvasNodeRects(viewNodes.current);
-    const next = getViewportForBounds(canvasViewBounds(rects, viewEdges.current, canvasContextIds(rects, viewEdges.current, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18);
+    const historyEdges = nodeId ? viewEdges.current.filter(edge => edge.data?.canvasTrace) : [];
+    const links = historyEdges.some(edge => edge.source === nodeId || edge.target === nodeId) ? historyEdges : viewEdges.current;
+    const next = getViewportForBounds(canvasViewBounds(rects, links, canvasContextIds(rects, links, nodeId)), region.clientWidth, region.clientHeight, 0.01, 1, 0.18);
     void api.current.setViewport(next, { duration: 0 });
   };
   const showRunView = (route: boolean) => {
@@ -159,7 +179,7 @@ export default function RunExecutionCanvas({
     setRouteView(route);
     if (route) {
       setLayout(true);
-      if (!active?.records.length) setSelected("");
+      if (!active || !trace.ids.has(active.id)) setSelected("");
     }
   };
   const current = graph.nodes.filter(n =>
@@ -175,6 +195,7 @@ export default function RunExecutionCanvas({
     record && ["waiting", "running", "pending"].includes(record.status);
   const choose = (id: string, recordId?: string) => {
     fit(id);
+    if (routeOnly && !trace.ids.has(id)) setRouteView(false);
     if (id === active?.id && !recordId && (!workspace || selected)) return;
     if (id !== active?.id && active && record) chosenRecords.current.set(active.id, record.id);
     setSelected(id);
@@ -196,33 +217,30 @@ export default function RunExecutionCanvas({
     if (row.top < bounds.top) scroller.scrollTop += row.top - bounds.top - 8;
     else if (row.bottom > bounds.bottom) scroller.scrollTop += row.bottom - bounds.bottom + 8;
   }, [workspace, activeRecordId]);
-  const rawNodes: ViewerNode[] = (routeOnly ? graph.nodes.filter(node => node.records.length) : graph.nodes).map(n => ({
+  const rawNodes: ViewerNode[] = (routeOnly ? graph.nodes.filter(node => trace.ids.has(node.id)) : graph.nodes).map(n => ({
     id: n.id,
     type: "runNode",
     position: layout ? n.layout : n.position,
-    data: { item: n, choose, selected: active?.id === n.id },
+    data: { item: n, kind: n.type, choose, selected: active?.id === n.id },
     draggable: false,
     connectable: false,
     measured: sizes.get(n.id),
     handles: runGraphHandles(sizes.get(n.id) ?? { width: 208, height: 104 }),
   }));
   // UX: measured reading geometry is shared with the designer; original snapshot stays intact.
-  const nodes = layout ? readableCanvasLayout(rawNodes, visibleEdges.map(e => ({ source: String(e.source), target: String(e.target), data: { loop: e.returning } }))) : rawNodes;
+  const nodes = layout ? readableCanvasLayout(rawNodes, visibleEdges.map(e => ({ source: String(e.source), target: String(e.target), data: { loop: e.loop } }))) : rawNodes;
   const rects = canvasNodeRects(nodes);
   viewNodes.current = nodes;
-  const edges: Edge[] = visibleEdges.map((e, canvasLane) => ({
-    id: e.id,
-    source: e.source,
-    target: e.target,
-    type: "runEdge",
-    className: e.traversed ? "run-edge-traversed" : undefined,
-    zIndex: e.traversed ? 1 : 0,
-    data: { canvasRects: rects, canvasLane, loop: e.returning, canvasEmphasis: e.traversed, canvasFlow: e.traversed, canvasStroke: e.traversed ? "var(--aiflow-canvas-selected)" : undefined },
-    label: e.label
-      ? `${e.returning ? "返回 · " : ""}${e.label}${e.confirmed ? ` · 已选${e.confirmed}次` : ""}`
-      : undefined,
-
-  }));
+  const edges: Edge[] = visibleEdges.map((e, canvasLane) => {
+    const flow = (routeOnly || selected) && record?.id && e.traceRecords.has(record.id) ? record.id : undefined;
+    return {
+      id: e.id, source: e.source, target: e.target, type: "runEdge",
+      className: e.traversed ? "run-edge-traversed" : undefined,
+      zIndex: flow ? 2 : e.traversed ? 1 : 0,
+      data: { canvasRects: rects, canvasLane, loop: e.loop, canvasTrace: e.traversed, canvasFlow: flow, quietLabels: visibleEdges.length > 30 },
+      label: e.traceShared ? "已到达 · 分支未记录" : e.label || (e.loop ? "循环返回" : undefined),
+    };
+  });
   viewEdges.current = edges;
   const nodeActivities = (run.taskActivities ?? []).filter(
     (t: RunRecord) => t.nodeId === active?.id
@@ -420,7 +438,7 @@ export default function RunExecutionCanvas({
             实例流程图
           </h3>
           <p>
-            {graph.hasSnapshot ? "基于本次运行快照" : "仅有节点执行记录"} · {routeOnly && "已到达 "}{nodes.length} 个节点 ·{" "}
+            {graph.hasSnapshot ? "基于本次运行快照" : "仅有节点执行记录"} · {routeOnly ? `${nodes.length} 个节点 · ${edges.length} 段路线` : `${nodes.length} 个节点`} ·{" "}
             {current.filter(n => n.activeCount).length} 处进行中
           </p>
         </div>
@@ -435,6 +453,7 @@ export default function RunExecutionCanvas({
           >
             查看全图
           </Button>
+          {routeOnly && traceStart && <Button variant="outline" size="sm" onClick={() => choose(traceStart.id)}>从起点看</Button>}
           <Button
             variant="outline"
             size="sm"
@@ -473,10 +492,11 @@ export default function RunExecutionCanvas({
               {label}
             </span>
           ))}
-          <span>{run.flowType === "data" ? "灰线表示快照依赖，节点颜色表示执行状态。" : "蓝色粗线表示有记录证实的流转，箭头指向下一个节点。"}</span>
+          <span>{run.flowType === "data" ? "灰线表示快照依赖，节点颜色表示执行状态。" : "蓝色实线表示经过的路线。选择记录时，关联连线沿箭头轻扫一次。"}</span>
         </div>
         </details>
       </header>
+      {unlinked > 0 && <p className="px-4 py-2 aiflow-type-meta text-muted-foreground">另有 {unlinked} 个节点的流转记录不足，可在全图查看。</p>}
       {!layout && canvasHasCrowding(nodes) && <p role="status" className="px-4 py-2 text-sm text-muted-foreground">原始布局重叠，请切换自动排布（不修改快照）。</p>}
       {graph.warning && (
         <p
