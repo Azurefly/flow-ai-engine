@@ -10,7 +10,7 @@ Flow AI Engine 是一个面向业务流程、自动化编排和数据处理的�
 
 ### 设备报警处置主演示
 
-这是一个使用合成设备报警的独立业务应用。控制流程按等级派发并等待固定版本的状态子流程结案。状态流程驱动确认、处置和复核。数据流程从已结案记录生成分组统计。三类流程均在 Flow AI Engine 中正式发布和执行。[演练源码（私有仓库）](https://github.com/Azurefly/alarm-response-demo)
+这是一个使用合成设备报警的独立业务应用。控制流程按等级派发并等待固定版本的状态子流程结案。状态流程驱动确认、处置和复核。数据流程从已结案记录生成分组统计。三类流程均在 Flow AI Engine 中正式发布和执行。[演练源码](https://github.com/Azurefly/alarm-response-demo) · [对接 Flow AI Engine](https://github.com/Azurefly/alarm-response-demo/blob/main/docs/flow-engine-integration.md)
 
 **报警处置台与结案统计**
 
@@ -45,7 +45,7 @@ Flow AI Engine 是一个面向业务流程、自动化编排和数据处理的�
 | 常规误报关闭 | 值班员在「上报报警」选择「填入通信离线样例」并提交。核实为误报后填写处理意见，点「关闭误报」。流程在值班环节结束，业务状态为「误报关闭」。 |
 | 退回补充后升级结案 | 值班员确认属实，处置员提交记录。复核员填写退回理由，点「退回重处置」。处置员完成「补充处置」，复核员在「再次复核」填写意见并点「升级结案」。业务状态为「升级结案」。 |
 
-2026 年 11 月 21 日的桌面与接口联测覆盖了三条路径。截图中的统计包含 5 条演练记录，正常关闭 2 条、误报关闭 2 条、升级结案 1 条。[完整验收记录（私有仓库）](https://github.com/Azurefly/alarm-response-demo/blob/main/docs/acceptance.md)
+2026 年 11 月 21 日的桌面与接口联测覆盖了三条路径。截图中的统计包含 5 条演练记录，正常关闭 2 条、误报关闭 2 条、升级结案 1 条。[完整验收记录](https://github.com/Azurefly/alarm-response-demo/blob/main/docs/acceptance.md)
 
 ### 请假审批辅助演示
 
