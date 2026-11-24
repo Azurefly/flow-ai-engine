@@ -163,6 +163,9 @@ importers:
       lucide-react:
         specifier: ^0.453.0
         version: 0.453.0(react@19.2.1)
+      markdown-to-jsx:
+        specifier: 9.11.0
+        version: 9.11.0(react@19.2.1)
       mysql2:
         specifier: ^3.15.0
         version: 3.15.1
@@ -3444,6 +3447,24 @@ packages:
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
+
+  markdown-to-jsx@9.11.0:
+    resolution: {integrity: sha512-g9DFUSPOD0HkdY8F2d30w3XxL4OUhJXGO/MzqB8zPnh18AhANsDhr/da+R0idzIcBRpL7MZWi+aiD3x0sOb5LQ==}
+    engines: {node: '>= 18'}
+    peerDependencies:
+      react: '>= 16.0.0'
+      react-native: '*'
+      solid-js: '>=1.0.0'
+      vue: '>=3.0.0'
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-native:
+        optional: true
+      solid-js:
+        optional: true
+      vue:
+        optional: true
 
   marked@16.4.1:
     resolution: {integrity: sha512-ntROs7RaN3EvWfy3EZi14H4YxmT6A5YvywfhO+0pm+cH/dnSQRmdAmoFIc3B9aiwTehyk7pESH4ofyBY+V5hZg==}
@@ -7881,6 +7902,10 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   markdown-table@3.0.4: {}
+
+  markdown-to-jsx@9.11.0(react@19.2.1):
+    optionalDependencies:
+      react: 19.2.1
 
   marked@16.4.1: {}
 

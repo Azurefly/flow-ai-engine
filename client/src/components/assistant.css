@@ -140,11 +140,33 @@
   color: var(--muted-foreground);
   font-size: 0.75rem;
 }
-.assistant-message p,
+.assistant-message > p,
 .assistant-proposal p {
   white-space: pre-wrap;
   line-height: 1.55;
 }
+.assistant-markdown {
+  line-height: 1.55;
+}
+.assistant-markdown :is(p, ul, ol, pre, blockquote, table) + *,
+.assistant-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin-block-start: 0.65em;
+}
+.assistant-markdown :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1.05em;
+  font-weight: 650;
+}
+.assistant-markdown ul { list-style: disc; }
+.assistant-markdown ol { list-style: decimal; }
+.assistant-markdown :is(ul, ol) { padding-inline-start: 1.5em; }
+.assistant-markdown li + li { margin-block-start: 0.25em; }
+.assistant-markdown a { color: var(--primary); text-decoration: underline; }
+.assistant-markdown pre,
+.assistant-markdown table { display: block; overflow-x: auto; }
+.assistant-markdown :is(code, pre) { background: var(--muted); }
+.assistant-markdown pre { padding: 0.6em; }
+.assistant-markdown :is(th, td) { border: 1px solid var(--border); padding: 0.25em 0.5em; }
+.assistant-markdown blockquote { border-inline-start: 3px solid var(--border); padding-inline-start: 0.7em; }
 .assistant-message[data-speaker="user"] {
   margin-left: 15%;
   background: var(--muted);

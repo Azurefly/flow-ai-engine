@@ -187,6 +187,9 @@ export default defineConfig(({ command }) => {
           // Low-frequency management dialogs stay lazy and share repeated UI code.
           manualChunks(id) {
             const modulePath = id.replace(/\\/g, "/");
+            if (modulePath.endsWith("/components/AssistantReplyMarkdown.tsx") ||
+                modulePath.includes("/node_modules/markdown-to-jsx/"))
+              return "assistant-markdown";
             // Both canvases share this edge renderer. Keep it with React Flow
             // so the chunk merger cannot pull the graph into the root page.
             if (modulePath.endsWith("/components/CanvasConnectionEdge.tsx"))

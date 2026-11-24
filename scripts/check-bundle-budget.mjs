@@ -71,6 +71,9 @@ const maxChunkBytes = 450 * 1024;
 // Contextual assistant shortcuts and default Agent controls: 1707.76 / 532.39 KiB on Windows.
 const maxTotalBytes = 1_710 * 1024;
 const maxTotalGzipBytes = 534 * 1024;
+// The assistant loads its Markdown parser only when a reply is displayed.
+const maxMarkdownBytes = 70 * 1024;
+const maxMarkdownGzipBytes = 28 * 1024;
 const maxHtmlBytes = 20 * 1024;
 
 let assets;
@@ -116,6 +119,9 @@ const sizes = assets
   .sort((left, right) => right.bytes - left.bytes);
 const totalBytes = sizes.reduce((sum, asset) => sum + asset.bytes, 0);
 const totalGzipBytes = sizes.reduce((sum, asset) => sum + asset.gzipBytes, 0);
+const markdown = sizes.find(asset => /^assistant-markdown-[\w-]+\.js$/.test(asset.file));
+const appBytes = totalBytes - (markdown?.bytes ?? 0);
+const appGzipBytes = totalGzipBytes - (markdown?.gzipBytes ?? 0);
 console.log(`JavaScript syntax verified: ${assets.length} modules`);
 const oversized = sizes.filter(asset => asset.bytes > maxChunkBytes);
 
@@ -124,18 +130,19 @@ for (const asset of sizes) {
 }
 console.log(`bundle total: ${(totalBytes / 1024).toFixed(2)} KiB`);
 console.log(`bundle gzip total: ${(totalGzipBytes / 1024).toFixed(2)} KiB`);
+if (markdown) console.log(`assistant Markdown: ${(markdown.bytes / 1024).toFixed(2)} KiB raw, ${(markdown.gzipBytes / 1024).toFixed(2)} KiB gzip`);
 console.log(`HTML shell: ${(htmlBytes / 1024).toFixed(2)} KiB`);
 console.log(
-  `bundle budget: ${maxChunkBytes / 1024} KiB/chunk, ${maxTotalBytes / 1024} KiB raw total, ${maxTotalGzipBytes / 1024} KiB gzip total, ${maxHtmlBytes / 1024} KiB HTML`
+  `bundle budget: ${maxChunkBytes / 1024} KiB/chunk, app ${maxTotalBytes / 1024}/${maxTotalGzipBytes / 1024} KiB raw/gzip, optional Markdown ${maxMarkdownBytes / 1024}/${maxMarkdownGzipBytes / 1024} KiB raw/gzip, ${maxHtmlBytes / 1024} KiB HTML`
 );
 
 const details = oversized.map(
   asset => `${asset.file}=${(asset.bytes / 1024).toFixed(2)} KiB`
 );
-if (totalBytes > maxTotalBytes)
-  details.push(`total=${(totalBytes / 1024).toFixed(2)} KiB`);
-if (totalGzipBytes > maxTotalGzipBytes)
-  details.push(`gzip total=${(totalGzipBytes / 1024).toFixed(2)} KiB`);
+if (appBytes > maxTotalBytes || appGzipBytes > maxTotalGzipBytes)
+  details.push(`app=${(appBytes / 1024).toFixed(2)}/${(appGzipBytes / 1024).toFixed(2)} KiB raw/gzip`);
+if (markdown && (markdown.bytes > maxMarkdownBytes || markdown.gzipBytes > maxMarkdownGzipBytes))
+  details.push(`Markdown=${(markdown.bytes / 1024).toFixed(2)}/${(markdown.gzipBytes / 1024).toFixed(2)} KiB raw/gzip`);
 if (htmlBytes > maxHtmlBytes)
   details.push(`index.html=${(htmlBytes / 1024).toFixed(2)} KiB`);
 if (html.includes('id="manus-runtime"'))

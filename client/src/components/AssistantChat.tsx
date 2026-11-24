@@ -15,6 +15,7 @@ import { assistantStarters, type AssistantPage } from "./assistant-starters";
 import "./assistant.css";
 
 const WorkflowPreview = lazy(() => import("./WorkflowCanvas"));
+const AssistantReplyMarkdown = lazy(() => import("./AssistantReplyMarkdown"));
 
 type Props = {
   userId: number;
@@ -30,6 +31,7 @@ type Attempt = {
   action: string;
   key: string;
   text: string;
+  kind?: "message" | "decide";
   until: number;
   timeZone?: string;
   focus?: AssistantObjectFocus;
@@ -58,16 +60,23 @@ function readAttempt(key: string): Attempt | null {
     const value = JSON.parse(
       stored(key) ?? "null"
     ) as Attempt | null;
-    return value &&
+    if (value &&
       typeof value.key === "string" &&
       typeof value.sessionId === "string" &&
       typeof value.text === "string" &&
-      Number.isSafeInteger(value.revision)
-      ? value
-      : null;
+      Number.isSafeInteger(value.revision)) {
+      // Older attempts encoded the approval flag in the second action field.
+      return { ...value, kind: value.kind ?? (typeof JSON.parse(value.action)[1] === "boolean" ? "decide" : "message") };
+    }
+    return null;
   } catch {
     return null;
   }
+}
+
+function readDraft(key: string, attempt: Attempt | null) {
+  const draft = stored(key) ?? "";
+  return attempt?.kind === "message" && draft.trim() === attempt.text ? "" : draft;
 }
 
 export default function AssistantChat(props: Props) {
@@ -87,25 +96,21 @@ function ScopedAssistantChat({
   const preview = Boolean(trial);
   const [sessionId, setSessionId] = useState(() => stored(storageKey) ?? "");
   const draftKey = (id: string) => storageKey + ".draft." + id;
-  const [attempt, setAttempt] = useState(() =>
-    readAttempt(storageKey + ".request")
-  );
+  const attemptKey = (id: string) => storageKey + ".request." + id;
+  const [attempt, setAttempt] = useState(() => {
+    const saved = readAttempt(attemptKey(sessionId)) ?? readAttempt(storageKey + ".request");
+    return saved && (saved.sessionId === sessionId || (!sessionId && saved.start)) ? saved : null;
+  });
   const [selectedAgent, setSelectedAgent] = useState(
     attempt?.start?.agentId ?? ""
   );
-  const [text, setText] = useState(
-    () => stored(draftKey(sessionId)) ?? (attempt &&
-      (attempt.sessionId === sessionId || (!sessionId && attempt.start))
-      ? attempt.text
-      : "")
-  );
+  const [text, setText] = useState(() => readDraft(draftKey(sessionId), attempt));
   useEffect(() => { store(draftKey(sessionId), text); }, [storageKey, sessionId, text]);
   const activeView = useRef(true);
   useLayoutEffect(() => {
     activeView.current = true;
     return () => { activeView.current = false; };
   }, []);
-  const [sending, setSending] = useState("");
   const [error, setError] = useState("");
   const locked = useRef(false);
   const tail = useRef<HTMLDivElement>(null);
@@ -157,6 +162,9 @@ function ScopedAssistantChat({
   const recovering = Boolean(
     !foreignScope && attempt && sessionId === attempt.sessionId && !locked.current
   );
+  const outgoing = !foreignScope && attempt?.kind === "message" &&
+    (!sessionId || (sessionId === attempt.sessionId && !current.isError)) &&
+    (!session || session.revision <= attempt.revision) ? attempt : null;
   const receipt = trpc.assistant.get.useQuery(
     { sessionId, pageSize, requestId: attempt?.key },
     {
@@ -208,6 +216,8 @@ function ScopedAssistantChat({
   function remember(value: Attempt | null) {
     setAttempt(value);
     store(storageKey + ".request", value && JSON.stringify(value));
+    if (value) store(attemptKey(value.sessionId), JSON.stringify(value));
+    else if (attempt) store(attemptKey(attempt.sessionId), null);
   }
   const legacyKey = "flow.assistant." + userId + ".customer..";
   const [legacy, setLegacy] = useState(() => {
@@ -228,7 +238,7 @@ function ScopedAssistantChat({
     const source = existing?.context ?? (legacyDetail.error?.data?.code === "NOT_FOUND" ? old?.start?.context : undefined);
     if (!source || existing?.preview || !sameAssistantScope(source, context)) return;
     if (existing) { setSessionId(existing.id); store(storageKey, existing.id); }
-    if (old) { remember(old); setText(old.text); if (old.start) setSelectedAgent(old.start.agentId); }
+    if (old) { remember(old); if (old.start) setSelectedAgent(old.start.agentId); }
     if (stored(legacyKey) === legacy.id) store(legacyKey, null);
     if (old && readAttempt(legacyKey + ".request")?.key === old.key) store(legacyKey + ".request", null);
   }, [legacy, legacyDetail.data, legacyDetail.error, legacyDetail.isSuccess, legacyDetail.isError, sessionId, attempt, text, storageKey, context, legacyKey]);
@@ -244,6 +254,7 @@ function ScopedAssistantChat({
       void Promise.allSettled([utils.project.invalidate(), utils.workflow.page.invalidate(), utils.config.publicGeneral.invalidate(), utils.config.settings.invalidate()]);
     }
     if (attempt?.key === background.requestId && ["cancelled", "failed"].includes(background.status)) {
+      if (attempt.kind === "message") setText(draft => draft || attempt.text);
       remember(null);
       setError(assistantJobErrors[background.failureCode ?? ""] ?? "");
     }
@@ -261,9 +272,9 @@ function ScopedAssistantChat({
     utils.assistant.get.setData({ sessionId, pageSize }, result);
     remember(null);
     if (result.requestCommitted) {
-      setText(existing => (existing === attempt.text ? "" : existing));
       setError("");
     } else {
+      if (attempt.kind === "message") setText(draft => draft || attempt.text);
       setError("对话已在别处更新。请核对最新消息后重新提交。");
     }
   }, [recovering, receipt.data, receipt.isError, attempt, sessionId, utils]);
@@ -275,7 +286,7 @@ function ScopedAssistantChat({
       log.scrollTop = scrollAnchor.current.top + log.scrollHeight - scrollAnchor.current.height;
       scrollAnchor.current = null;
     } else if (keepBottom.current) log.scrollTop = log.scrollHeight;
-  }, [older, sessionId, session?.revision, sending]);
+  }, [older, sessionId, session?.revision, outgoing?.key]);
   useEffect(() => {
     if (!keepBottom.current && session?.revision) setUnread(true);
   }, [session?.revision]);
@@ -283,14 +294,17 @@ function ScopedAssistantChat({
     if (waiting || !shouldFocus.current) return;
     shouldFocus.current = false;
     (pending ? proposalHeading.current : composer.current)?.focus({ preventScroll: true });
-  }, [waiting, pending, sending, error]);
+  }, [waiting, pending, error]);
 
   function selectSession(id: string) {
     setOlder(null); setUnread(false); keepBottom.current = true; scrollAnchor.current = null;
     setSessionId(id);
     setError("");
-    setText(stored(draftKey(id)) ?? "");
-    remember(null);
+    if (attempt && sessionId) store(attemptKey(sessionId), JSON.stringify(attempt));
+    const saved = id ? readAttempt(attemptKey(id)) : null;
+    setText(readDraft(draftKey(id), saved));
+    setAttempt(saved);
+    store(storageKey + ".request", saved && JSON.stringify(saved));
     store(storageKey, id);
   }
 
@@ -321,7 +335,7 @@ function ScopedAssistantChat({
             context,
             expectedConfigVersion: activeAgent!.version,
           });
-      const request =
+      const request: Attempt =
         attempt && attempt.action === requestAction(attempt.focus) && attempt.revision === revision
           ? attempt
           : {
@@ -330,12 +344,14 @@ function ScopedAssistantChat({
               start: creation,
               revision,
               key: newResourceRequestKey(),
+              kind: approve === undefined ? "message" : "decide",
               text: message,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
               ...(focus ? { focus } : {}),
               until: Date.now() + 180_000,
             };
       remember(request);
+      if (approve === undefined) setText(draft => draft.trim() === message ? "" : draft);
       if (!target && creation) {
         target = await start.mutateAsync({
           ...creation,
@@ -354,7 +370,6 @@ function ScopedAssistantChat({
         revision: request.revision,
         requestId: request.key, pageSize,
       };
-      if (approve === undefined) setSending(message);
       const next = await enqueue.mutateAsync({ ...payload, payload: approve === undefined
         ? { kind: "message", text: message, proposalId: target.pending?.id, timeZone: request.timeZone, focus: request.focus }
         : { kind: "decide", approve, proposalId: pending!.id } });
@@ -366,7 +381,6 @@ function ScopedAssistantChat({
         await utils.assistant.get.invalidate({ sessionId: target.id });
       else if (!trial) void utils.assistant.available.invalidate();
     } finally {
-      setSending("");
       locked.current = false;
       void utils.assistant.sessionsPage.invalidate();
     }
@@ -503,7 +517,11 @@ function ScopedAssistantChat({
             data-speaker={item.role}
           >
             <span>{item.role === "user" ? "你" : session?.agentName}</span>
-            <p>{item.content}</p>
+            {item.role === "user" ? <p>{item.content}</p> : (
+              <Suspense fallback={<p role="status">正在显示回复…</p>}>
+                <AssistantReplyMarkdown content={item.content} />
+              </Suspense>
+            )}
             {item.links?.map(link => (
               <button
                 key={link.href + link.label}
@@ -516,10 +534,10 @@ function ScopedAssistantChat({
             ))}
           </div>
         ))}
-        {sending && session?.messages.at(-1)?.content !== sending && (
+        {outgoing && (
           <div className="assistant-message" data-speaker="user">
             <span>你</span>
-            <p>{sending}</p>
+            <p>{outgoing.text}</p>
           </div>
         )}
         {pending && (
@@ -580,9 +598,11 @@ function ScopedAssistantChat({
             正在处理…
           </p>
         )}
-        {!waiting && attempt?.sessionId === sessionId && (
+        {!waiting && attempt && (attempt.sessionId === sessionId || (!sessionId && attempt.start)) && (
           <p className="assistant-note">
-            上一条请求的结果尚待同步，可以重新提交同一请求。
+            上一条请求的结果尚待同步。
+            {outgoing && !readOnly && <button type="button" className="assistant-link"
+              onClick={() => void respond(undefined, outgoing.text)}>重新提交这条提问</button>}
           </p>
         )}
         {!foreignScope && !readOnly && !waiting && session?.retryText && !pending && (
