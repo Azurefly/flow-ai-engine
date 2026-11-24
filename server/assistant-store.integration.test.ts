@@ -1,21 +1,27 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { ResultSetHeader, RowDataPacket } from "mysql2/promise";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { closeSharedPool, getSharedPool } from "./db";
 import { assistantHistoryQuery, type HistoryScope } from "./assistant-history-query";
 import { getP1SystemSettings, updateP1SystemSetting } from "./p1-service";
+import type { TrpcContext } from "./_core/context";
+import { assistantRouter } from "./assistant-router";
+import { claimAssistantJob, enqueueAssistantJob, getAssistantJob } from "./assistant-jobs";
+import { processAssistantLease } from "./assistant-job-worker";
 import {
   ASSISTANT_DEFAULT_ID,
   createAssistantSession,
   assistantSessionsPage,
   getAssistantConfig,
   getAssistantSession,
+  getDefaultAssistant,
   listAssistantSessions,
   listAvailableAssistantConfigs,
   mutateAssistantSession,
   publishAssistantConfig,
   saveAssistantDraft,
+  setDefaultAssistant,
   type AssistantConfig,
   type AssistantUser,
 } from "./assistant-store";
@@ -26,6 +32,7 @@ suite("全局助手 MySQL 持久化", () => {
   let user: AssistantUser;
   let other: AssistantUser;
   let defaultConfig: AssistantConfig;
+  let defaultSetting: RowDataPacket;
   const agents: string[] = [];
   const actors: number[] = [];
   async function actor(role: AssistantUser["role"]) {
@@ -44,11 +51,25 @@ suite("全局助手 MySQL 持久化", () => {
     agents.push(output.agentId);
     return output;
   }
+  async function makeDefault(agentId: string, expectedPublishedVersion = 1) {
+    const { revision } = await getDefaultAssistant();
+    return setDefaultAssistant(admin, agentId, revision, expectedPublishedVersion);
+  }
   beforeAll(async () => {
     admin = await actor("admin");
     user = await actor("user");
     other = await actor("user");
     defaultConfig = (await getAssistantConfig(ASSISTANT_DEFAULT_ID)).draft;
+    const [[setting]] = await getSharedPool().query<RowDataPacket[]>(
+      "SELECT valueJson,updatedByUserId FROM system_setting WHERE `key`='assistant.defaultAgent'"
+    );
+    defaultSetting = setting;
+  });
+  afterEach(async () => {
+    await getSharedPool().query(
+      "UPDATE system_setting SET valueJson=?,updatedByUserId=? WHERE `key`='assistant.defaultAgent'",
+      [typeof defaultSetting.valueJson === "string" ? defaultSetting.valueJson : JSON.stringify(defaultSetting.valueJson), defaultSetting.updatedByUserId]
+    );
   });
   afterAll(async () => {
     const pool = getSharedPool();
@@ -62,6 +83,51 @@ suite("全局助手 MySQL 持久化", () => {
     if (agents.length)
       await pool.query("DELETE FROM assistant_agent WHERE id IN (?)", [agents]);
     await closeSharedPool();
+  });
+
+  it("普通用户仅能使用默认 Agent，切换后保留历史和原请求回执", async () => {
+    const original = await getDefaultAssistant();
+    const previous = await createAssistantSession(user, false);
+    const requestId = randomUUID();
+    const payload = { kind: "message" as const, text: "保留的历史" };
+    await mutateAssistantSession(user, previous.id, 0, requestId, payload, () => ({
+      messages: [{ role: "user", content: payload.text }],
+    }));
+    const nextAgent = await agent({ name: "第二个可发布 Agent" });
+    await publishAssistantConfig(admin, 1, nextAgent.agentId);
+    const customer = assistantRouter.createCaller({ user } as TrpcContext);
+    const operator = assistantRouter.createCaller({ user: admin } as TrpcContext);
+    const switchInput = { agentId: nextAgent.agentId, expectedRevision: original.revision, expectedPublishedVersion: 1 };
+    expect((await customer.available()).map(item => item.id)).toEqual([original.agentId]);
+    expect((await operator.available()).map(item => item.id)).toContain(nextAgent.agentId);
+    await expect(customer.start({ agentId: nextAgent.agentId })).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(customer.setDefaultAgent(switchInput)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const queuedRequest = randomUUID();
+    const queued = await enqueueAssistantJob(user, previous.id, 1, queuedRequest, { kind: "message", text: "待处理请求" });
+    const lease = await claimAssistantJob(queued.id);
+    expect(lease).toBeTruthy();
+    const changed = await operator.setDefaultAgent(switchInput);
+    expect(changed).toEqual({ agentId: nextAgent.agentId, revision: original.revision + 1 });
+    expect(await operator.setDefaultAgent(switchInput)).toEqual(changed);
+    expect((await customer.available()).map(item => [item.id, item.isDefault])).toEqual([[nextAgent.agentId, true]]);
+    expect((await customer.start({ agentId: nextAgent.agentId })).agentId).toBe(nextAgent.agentId);
+    expect((await operator.start({ agentId: original.agentId })).agentId).toBe(original.agentId);
+    let modelInvoked = false;
+    await processAssistantLease(lease!, async () => {
+      modelInvoked = true;
+      throw new Error("旧默认助手不应执行");
+    });
+    expect(modelInvoked).toBe(false);
+    expect(await getAssistantJob(user, previous.id, queuedRequest)).toMatchObject({
+      status: "failed", failureCode: "permission_changed",
+    });
+    expect(await customer.get({ sessionId: previous.id, requestId })).toMatchObject({
+      canContinue: false, requestCommitted: true, messages: [{ content: payload.text }],
+    });
+    await expect(customer.enqueue({ sessionId: previous.id, revision: 1, requestId: randomUUID(), payload }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(customer.enqueue({ sessionId: previous.id, revision: 0, requestId, payload }))
+      .resolves.toMatchObject({ legacy: true, requestId });
   });
 
   it("原装助手升级创建能力一次，保留管理员保存的配置", async () => {
@@ -109,6 +175,7 @@ suite("全局助手 MySQL 持久化", () => {
   it("相同更新时间按 ID 续读，范围变动拒绝游标，历史可按修订分段", async () => {
     const a = await agent();
     await publishAssistantConfig(admin, 1, a.agentId);
+    await makeDefault(a.agentId);
     const scope = { preview: false, agentId: a.agentId, search: "分页" };
     const sessions = await Promise.all([1,2,3,4].map(n => createAssistantSession(user, false, "分页" + n, null, a.agentId)));
     const ids = sessions.map(item => item.id).sort();
@@ -182,6 +249,7 @@ suite("全局助手 MySQL 持久化", () => {
       i > 265 ? 2 : 1, JSON.stringify(defaultConfig), "2026-01-01 00:00:00",
     ]);
     await getSharedPool().query("INSERT INTO assistant_session(id,ownerUserId,agentId,trial,title,projectId,configVersion,configJson,updatedAt) VALUES ?", [rows]);
+    await makeDefault(a.agentId);
     await createAssistantSession(other, false, "其他账号", null, a.agentId);
     await createAssistantSession(admin, true, "管理员试聊", null, a.agentId);
     const empty = await assistantSessionsPage(reader, scope, 3);
@@ -204,6 +272,7 @@ suite("全局助手 MySQL 持久化", () => {
     const pendingOnly: AssistantConfig = { ...defaultConfig, tools: ["listMyTasks"] };
     const a = await agent(pendingOnly);
     await publishAssistantConfig(admin, 1, a.agentId);
+    await makeDefault(a.agentId);
     const previous = await createAssistantSession(user, false, undefined, null, a.agentId);
     await saveAssistantDraft(admin, 1, { ...pendingOnly, tools: ["listMyTasks", "listMyCompletedTasks"] }, a.agentId);
     await publishAssistantConfig(admin, 2, a.agentId);
@@ -216,7 +285,7 @@ suite("全局助手 MySQL 持久化", () => {
   });
 
   it("系统内置助手可以准备流程草稿，自定义助手发布前仅供管理员试聊", async () => {
-    expect(defaultConfig.tools).toEqual(["listMyTasks", "searchWorkflows", "listMyCompletedTasks", "createWorkflowDraft"]);
+    expect(defaultConfig.tools).toEqual(["listMyTasks", "searchWorkflows", "listMyCompletedTasks", "createWorkflowDraft", "workspaceRead", "workspaceWrite"]);
     const a = await agent();
     expect(a.published).toBeNull();
     await expect(
@@ -272,6 +341,7 @@ suite("全局助手 MySQL 持久化", () => {
   it("固定会话启动版本，修改草稿不影响已发布工具；重新发布后收回旧工具或角色", async () => {
     const a = await agent();
     await publishAssistantConfig(admin, 1, a.agentId);
+    await makeDefault(a.agentId);
     const s = await createAssistantSession(
       user,
       false,
@@ -305,6 +375,12 @@ suite("全局助手 MySQL 持久化", () => {
       { ...next, roles: ["admin"] },
       a.agentId
     );
+    await expect(publishAssistantConfig(admin, 3, a.agentId))
+      .rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    expect((await listAvailableAssistantConfigs(user)).map(entry => entry.agentId)).toEqual([a.agentId]);
+    const replacement = await agent();
+    await publishAssistantConfig(admin, 1, replacement.agentId);
+    await makeDefault(replacement.agentId);
     await publishAssistantConfig(admin, 3, a.agentId);
     await expect(getAssistantSession(user, s.id)).rejects.toMatchObject({
       code: "FORBIDDEN",
@@ -316,6 +392,7 @@ suite("全局助手 MySQL 持久化", () => {
     const projectId = randomUUID();
     const a = await agent({ projectIds: [projectId] });
     await publishAssistantConfig(admin, 1, a.agentId);
+    await makeDefault(a.agentId);
     expect(
       (await listAvailableAssistantConfigs(user)).map(item => item.agentId)
     ).not.toContain(a.agentId);
@@ -380,6 +457,7 @@ suite("全局助手 MySQL 持久化", () => {
         sessionId: id,
       })
     ).rejects.toMatchObject({ code: "CONFLICT" });
+    await makeDefault(a.agentId, 2);
     await expect(
       createAssistantSession(user, false, undefined, null, a.agentId, null, {
         sessionId: id,

@@ -644,7 +644,8 @@ async function claimTaskSnapshot(user: User, taskId: string, task: mysql.RowData
 export async function executeWorkflowTask(
   user: User,
   taskId: string,
-  result: JsonRecord
+  result: JsonRecord,
+  expectedOwnerVersion?: number
 ) {
   const task: any = await getWorkflowTask(user, taskId, { forAction: true });
   if (!task)
@@ -656,6 +657,8 @@ export async function executeWorkflowTask(
     const replay = await replayParticipantTask(task, user.id, validateWorkflowTaskSubmission(task, result));
     if (replay) return { ...replay, canViewRun: task.canViewRun === true };
   }
+  if (expectedOwnerVersion !== undefined && Number(task.ownerVersion) !== expectedOwnerVersion)
+    throw new TRPCError({ code: "CONFLICT", message: "人工任务分配已变化，请重新查看任务。" });
   if (
     task.status !== "pending" &&
     (task.status !== "claimed" || Number(task.claimedByUserId) !== user.id)

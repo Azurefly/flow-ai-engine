@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import { MessageSquare, Settings2, X } from "lucide-react";
+import { Maximize2, MessageSquare, Minimize2, Settings2, X } from "lucide-react";
 import type { ConsoleRoute } from "@shared/console-route";
+import type { AssistantPage } from "./assistant-starters";
 
 const AssistantChat = lazy(() => import("./AssistantChat"));
 
@@ -11,22 +12,34 @@ export function AssistantLauncher({
   isAdmin,
   userId,
   context,
+  page,
+  openRequest,
   scopeNotice,
   onNavigate,
 }: {
   isAdmin: boolean;
   userId: number;
   context: AssistantContext;
+  page?: AssistantPage;
+  openRequest?: number;
   scopeNotice?: string;
   onNavigate: AssistantNavigation;
 }) {
   const [open, setOpen] = useState(false);
   const [visited, setVisited] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const lastOpenRequest = useRef<number | undefined>(undefined);
   const trigger = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (open) heading.current?.focus();
   }, [open]);
+  useEffect(() => {
+    if (openRequest === undefined || openRequest === lastOpenRequest.current) return;
+    lastOpenRequest.current = openRequest;
+    setVisited(true);
+    setOpen(true);
+  }, [openRequest]);
   const close = () => {
     setOpen(false);
     requestAnimationFrame(() => trigger.current?.focus());
@@ -55,7 +68,7 @@ export function AssistantLauncher({
           id="flow-assistant-panel"
           aria-labelledby="flow-assistant-heading"
           hidden={!open}
-          className="fixed right-2 bottom-2 z-40 flex h-[min(39rem,calc(100dvh-1rem))] w-[min(25rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-2xl sm:right-4 sm:bottom-4"
+          className={`fixed right-2 bottom-2 z-40 flex h-[min(39rem,calc(100dvh-1rem))] flex-col overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-2xl sm:right-4 sm:bottom-4 ${expanded ? "w-[min(43rem,calc(100vw-1rem))]" : "w-[min(26rem,calc(100vw-1rem))]"}`}
           style={{ display: open ? undefined : "none" }}
           onKeyDown={event => {
             if (
@@ -93,6 +106,14 @@ export function AssistantLauncher({
             )}
             <button
               type="button"
+              aria-label={expanded ? "恢复助手宽度" : "展开助手"}
+              className="hidden rounded-md p-2 hover:bg-muted sm:block"
+              onClick={() => setExpanded(value => !value)}
+            >
+              {expanded ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
+            <button
+              type="button"
               aria-label="收起助手"
               className="rounded-md p-2 hover:bg-muted"
               onClick={close}
@@ -110,6 +131,8 @@ export function AssistantLauncher({
             {scopeNotice ? <p className="p-4" role="status">{scopeNotice}</p> : <AssistantChat
               userId={userId}
               context={context}
+              page={page}
+              isAdmin={isAdmin}
               onNavigate={route => {
                 close();
                 onNavigate(route);

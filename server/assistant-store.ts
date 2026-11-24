@@ -12,6 +12,13 @@ import { getProjectAccess, type ProjectUser } from "./project-service";
 import { assistantHistoryQuery, type HistoryScope } from "./assistant-history-query";
 
 export const ASSISTANT_DEFAULT_ID = "flow-assistant";
+const defaultAgentSettingKey = "assistant.defaultAgent";
+const defaultAgentSettingSchema = z.object({
+  agentId: z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),
+  revision: z.number().int().positive(),
+});
+type DefaultAgentSetting = z.infer<typeof defaultAgentSettingSchema>;
+
 export const assistantConfigSchema = z
   .object({
     name: z.string().trim().min(1).max(80),
@@ -76,6 +83,7 @@ export type SessionSummary = {
 };
 export type AssistantSession = SessionSummary & {
   config: AssistantConfig;
+  canContinue?: boolean;
   messages: AssistantMessage[];
   olderBefore?: number | null;
   task: Record<string, unknown> | null;
@@ -161,6 +169,20 @@ export async function listAssistantConfigs() {
   return rows.map(mapAgent);
 }
 
+export async function getDefaultAssistant(
+  connection?: PoolConnection,
+  lock?: "share" | "update"
+): Promise<DefaultAgentSetting> {
+  const [rows] = await (connection ?? getSharedPool()).query<RowDataPacket[]>(
+    "SELECT valueJson FROM system_setting WHERE `key`=?" +
+      (lock === "share" ? " FOR SHARE" : lock === "update" ? " FOR UPDATE" : ""),
+    [defaultAgentSettingKey]
+  );
+  return rows[0]
+    ? defaultAgentSettingSchema.parse(parseJson(rows[0].valueJson))
+    : { agentId: ASSISTANT_DEFAULT_ID, revision: 1 };
+}
+
 async function verifyAdmin(user: AssistantUser, connection: PoolConnection) {
   const [rows] = await connection.query<RowDataPacket[]>(
     "SELECT role,status,tokenVersion FROM users WHERE id=? FOR SHARE",
@@ -175,6 +197,41 @@ async function verifyAdmin(user: AssistantUser, connection: PoolConnection) {
       actor.tokenVersion !== user.tokenVersion)
   )
     throw denied();
+}
+
+export async function setDefaultAssistant(
+  user: AssistantUser,
+  agentId: string,
+  expectedRevision: number,
+  expectedPublishedVersion: number
+) {
+  if (user.role !== "admin") throw denied();
+  return transaction(async connection => {
+    const agent = await readAgent(agentId, connection, true);
+    await verifyAdmin(user, connection);
+    if (agent.publishedVersion !== expectedPublishedVersion) throw conflict();
+    if (!agent.published?.enabled || !agent.published.roles.includes("user"))
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "请先发布配置，并启用客户入口和普通用户权限。",
+      });
+    const current = await getDefaultAssistant(connection, "update");
+    if (current.agentId === agentId) return current;
+    if (current.revision !== expectedRevision) throw conflict();
+    const next = { agentId, revision: current.revision + 1 };
+    await connection.execute(
+      "INSERT INTO system_setting (`key`,valueJson,updatedByUserId) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valueJson=VALUES(valueJson),updatedByUserId=VALUES(updatedByUserId)",
+      [defaultAgentSettingKey, JSON.stringify(next), user.id]
+    );
+    await recordAuthorizationAudit({
+      actorUserId: user.id,
+      action: "user_updated",
+      resourceType: "assistant_agent",
+      resourceId: agentId,
+      details: { operation: "set_default", previousAgentId: current.agentId, revision: next.revision },
+    }, connection);
+    return next;
+  });
 }
 
 export async function saveAssistantDraft(
@@ -262,6 +319,13 @@ export async function publishAssistantConfig(
     const current = mapAgent(rows[0]);
     if (current.draftVersion !== expectedVersion) throw conflict();
     if (current.publishedVersion === expectedVersion) return current;
+    if ((!current.draft.enabled || !current.draft.roles.includes("user")) &&
+        (await getDefaultAssistant(connection, "share")).agentId === agentId) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "请先切换默认助手，再停用此 Agent 或取消普通用户权限。",
+      });
+    }
     await connection.query(
       "UPDATE assistant_agent SET publishedJson=draftJson,publishedVersion=draftVersion,updatedByUserId=? WHERE id=?",
       [user.id, agentId]
@@ -335,12 +399,17 @@ export async function listAvailableAssistantConfigs(
   projectId?: string | null
 ) {
   if (!(await canViewProject(user, projectId))) return [];
-  const agents = await listAssistantConfigs();
+  const { agentId: defaultId } = await getDefaultAssistant();
+  const agents = (await listAssistantConfigs()).filter(
+    agent => user.role === "admin" || agent.agentId === defaultId
+  );
+  agents.sort((left, right) => Number(right.agentId === defaultId) - Number(left.agentId === defaultId));
   return agents.flatMap(agent =>
     agent.published && inScope(agent.published, user, projectId)
       ? [
           {
             agentId: agent.agentId,
+            isDefault: agent.agentId === defaultId,
             config: agent.published,
             version: agent.publishedVersion,
           },
@@ -401,6 +470,8 @@ async function readSession(
     connection,
     lock
   );
+  const canContinue = user.role === "admin" ||
+    (await getDefaultAssistant(connection, lock ? "share" : undefined)).agentId === session.agentId;
   const pinned = assistantConfigSchema.parse(parseJson(session.configJson));
   const [turns] = page
     ? await connection.query<RowDataPacket[]>(
@@ -415,6 +486,7 @@ async function readSession(
   if (page) turns.reverse();
   return {
     ...sessionSummary(session),
+    canContinue,
     ...(page ? { olderBefore: hasOlder ? Number(turns[0].revision) : null } : {}),
     task: parseJson(session.taskJson),
     messages: turns.flatMap(turn =>
@@ -432,13 +504,14 @@ export async function createAssistantSession(
   trial: boolean,
   title?: string,
   projectId?: string | null,
-  agentId = ASSISTANT_DEFAULT_ID,
+  requestedAgentId?: string,
   workflowId?: string | null,
   options: { sessionId?: string; expectedConfigVersion?: number } = {}
 ) {
   const id = options.sessionId ?? randomUUID();
   if (!z.string().uuid().safeParse(id).success)
     throw new TRPCError({ code: "BAD_REQUEST", message: "会话标识无效。" });
+  const agentId = requestedAgentId ?? (await getDefaultAssistant()).agentId;
   try {
     return await transaction(async connection => {
       const { config, version } = await authorizedConfig(
@@ -449,6 +522,11 @@ export async function createAssistantSession(
         connection,
         true
       );
+      if (user.role === "admin") {
+        await verifyAdmin(user, connection);
+      } else if ((await getDefaultAssistant(connection, "share")).agentId !== agentId) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "普通用户只能使用当前默认助手，请刷新后新建对话。" });
+      }
       await connection.query(
         "INSERT INTO assistant_session (id,ownerUserId,agentId,title,trial,projectId,workflowId,configVersion,configJson) VALUES (?,?,?,?,?,?,?,?,?)",
         [
@@ -489,6 +567,11 @@ export async function createAssistantSession(
       throw conflict();
     return existing;
   }
+}
+
+export function assertAssistantCanContinue(session: AssistantSession) {
+  if (session.canContinue === false)
+    throw new TRPCError({ code: "FORBIDDEN", message: "此会话可供查阅。请使用当前默认助手新建对话。" });
 }
 
 type HistoryCursor = { scope: string; time: number; id: string };
@@ -626,6 +709,7 @@ export async function mutateAssistantSession(
         if (prior[0].payloadHash !== hash) throw conflict();
         return pageSize ? readSession(user, id, connection, false, { size: pageSize }) : session;
       }
+      assertAssistantCanContinue(session);
       if (session.revision !== expectedRevision) throw conflict();
       const change = await apply(session);
       const changed = await appendAssistantChange(connection, session, requestId, hash, change);

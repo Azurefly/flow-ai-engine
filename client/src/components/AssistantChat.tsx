@@ -1,16 +1,17 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
-import { ArrowUp, Plus } from "lucide-react";
+import { ArrowUp, ArrowUpRight, Plus } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { parseConsoleRoute } from "@shared/console-route";
 import { newOperationUuid, newResourceRequestKey } from "@shared/resource-creation";
 import { assistantJobActive, assistantJobErrors, assistantJobLabels } from "@shared/assistant-job";
-import { assistantScopeRoute, assistantStorageKey, sameAssistantScope } from "@shared/assistant-scope";
-import type { AssistantMessage } from "../../../server/assistant-store";
+import { assistantScopeRoute, assistantStorageKey, sameAssistantScope, type AssistantObjectFocus } from "@shared/assistant-scope";
+import type { AssistantConfig, AssistantMessage } from "../../../server/assistant-store";
 import type {
   AssistantContext,
   AssistantNavigation,
 } from "./AssistantLauncher";
+import { assistantStarters, type AssistantPage } from "./assistant-starters";
 import "./assistant.css";
 
 const WorkflowPreview = lazy(() => import("./WorkflowCanvas"));
@@ -18,8 +19,10 @@ const WorkflowPreview = lazy(() => import("./WorkflowCanvas"));
 type Props = {
   userId: number;
   context: AssistantContext;
+  page?: AssistantPage;
+  isAdmin?: boolean;
   onNavigate: AssistantNavigation;
-  trial?: { id: string; name: string; greeting: string; version: number };
+  trial?: { id: string; name: string; greeting: string; version: number; tools: AssistantConfig["tools"] };
 };
 type Attempt = {
   sessionId: string;
@@ -29,6 +32,7 @@ type Attempt = {
   text: string;
   until: number;
   timeZone?: string;
+  focus?: AssistantObjectFocus;
   start?: {
     agentId: string;
     context: AssistantContext;
@@ -74,6 +78,8 @@ export default function AssistantChat(props: Props) {
 function ScopedAssistantChat({
   userId,
   context,
+  page = { surface: context.workflowId ? "workflow" : context.projectId ? "project" : "home" },
+  isAdmin = false,
   onNavigate,
   trial,
   storageKey,
@@ -136,6 +142,7 @@ function ScopedAssistantChat({
   );
   const session = current.isError ? undefined : current.data;
   const foreignScope = Boolean(session && !sameAssistantScope(session.context, context));
+  const readOnly = session?.canContinue === false;
   const start = trpc.assistant.start.useMutation();
   const enqueue = trpc.assistant.enqueue.useMutation();
   const cancelJob = trpc.assistant.cancelJob.useMutation();
@@ -169,7 +176,10 @@ function ScopedAssistantChat({
   );
   const agents = trial ? [trial] : (list.data ?? []);
   const activeAgent =
-    agents.find(item => item.id === selectedAgent) ?? agents[0];
+    (isAdmin ? agents.find(item => item.id === selectedAgent) : undefined) ?? agents[0];
+  const sessionAgent = session ? agents.find(item => item.id === session.agentId) : undefined;
+  const newerAgent = Boolean(sessionAgent && session && sessionAgent.version > session.configVersion);
+  const starters = assistantStarters(page, (sessionId ? session?.tools : activeAgent?.tools) ?? []);
   const sessions = Array.from(new Map(history.data?.pages.flatMap(page => page.items.map(item => [item.id, item] as const))).values());
   const before = older?.id === sessionId ? older.before : session?.olderBefore;
   const messages = !session ? [] : Array.from(new Map([...(older?.id === sessionId ? older.messages : []), ...session.messages]
@@ -287,39 +297,42 @@ function ScopedAssistantChat({
   async function respond(approve?: boolean, retryText?: string) {
     const message = (retryText ?? text).trim();
     if (
-      foreignScope || locked.current ||
+      foreignScope || readOnly || locked.current ||
       waiting ||
       (approve === undefined ? !message : !pending)
     )
       return;
-    if (!session && (sessionId || (!activeAgent && !attempt?.start))) return;
+    if (!session && (sessionId || !activeAgent)) return;
     locked.current = true;
     shouldFocus.current = true;
     setError("");
     let target = session;
     try {
-      const id =
-        target?.id ?? (attempt?.start ? attempt.sessionId : newOperationUuid());
+      const resumedStart = attempt?.start?.agentId === activeAgent?.id ? attempt?.start : undefined;
+      const id = target?.id ?? (resumedStart && attempt ? attempt.sessionId : newOperationUuid());
       const revision = target?.revision ?? 0;
-      const action = JSON.stringify([id, approve, pending?.id, message]);
+      const actionParts = [id, approve, pending?.id, message];
+      const focus = approve === undefined ? page.focus : undefined;
+      const requestAction = (object?: AssistantObjectFocus) => JSON.stringify(object ? [...actionParts, object] : actionParts);
       const creation = target
         ? undefined
-        : (attempt?.start ?? {
+        : (resumedStart ?? {
             agentId: activeAgent!.id,
             context,
-            expectedConfigVersion: trial?.version,
+            expectedConfigVersion: activeAgent!.version,
           });
       const request =
-        attempt?.action === action && attempt.revision === revision
+        attempt && attempt.action === requestAction(attempt.focus) && attempt.revision === revision
           ? attempt
           : {
-              action,
+              action: requestAction(focus),
               sessionId: id,
               start: creation,
               revision,
               key: newResourceRequestKey(),
               text: message,
               timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              ...(focus ? { focus } : {}),
               until: Date.now() + 180_000,
             };
       remember(request);
@@ -343,7 +356,7 @@ function ScopedAssistantChat({
       };
       if (approve === undefined) setSending(message);
       const next = await enqueue.mutateAsync({ ...payload, payload: approve === undefined
-        ? { kind: "message", text: message, proposalId: target.pending?.id, timeZone: request.timeZone }
+        ? { kind: "message", text: message, proposalId: target.pending?.id, timeZone: request.timeZone, focus: request.focus }
         : { kind: "decide", approve, proposalId: pending!.id } });
       utils.assistant.job.setData({ sessionId: target.id, requestId: request.key }, next);
       utils.assistant.job.setData({ sessionId: target.id }, next);
@@ -351,12 +364,27 @@ function ScopedAssistantChat({
       setError(cause instanceof Error ? cause.message : "请求失败，请重试。");
       if (target)
         await utils.assistant.get.invalidate({ sessionId: target.id });
+      else if (!trial) void utils.assistant.available.invalidate();
     } finally {
       setSending("");
       locked.current = false;
       void utils.assistant.sessionsPage.invalidate();
     }
   }
+
+  const starterButtons = (
+    <div className="assistant-starters">
+      {starters.map(({ label, prompt }) => (
+        <button type="button" key={label} disabled={waiting || readOnly || foreignScope || Boolean(pending)}
+          onClick={() => {
+            setText(value => value.trim() ? `${value.trimEnd()}\n${prompt}`.slice(0, 4000) : prompt);
+            composer.current?.focus();
+          }}>
+          {label}<ArrowUpRight size={14} aria-hidden="true" />
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="assistant-chat">
@@ -365,9 +393,9 @@ function ScopedAssistantChat({
           <summary>筛选对话</summary>
           <label>标题<input aria-label="历史对话标题" maxLength={160} value={historySearch} onChange={e => setHistorySearch(e.target.value)} /></label>
           {!trial && <>
-            <label>助手<select aria-label="历史助手" value={historyAgent} onChange={e => setHistoryAgent(e.target.value)}>
+            {isAdmin && <label>助手<select aria-label="历史助手" value={historyAgent} onChange={e => setHistoryAgent(e.target.value)}>
               <option value="">全部助手</option>{agents.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-            </select></label>
+            </select></label>}
             <label>范围<select aria-label="历史项目范围" value={historyScope} onChange={e => setHistoryScope(e.target.value)}>
               <option value="all">全部可见项目</option><option value="current">{context.projectId ? "本项目" : "工作台"}</option>
             </select></label>
@@ -403,7 +431,7 @@ function ScopedAssistantChat({
           <Plus size={16} /> 新对话
         </button>
       </div>
-      {!sessionId && agents.length > 1 && (
+      {isAdmin && !sessionId && agents.length > 1 && (
         <label className="assistant-agent-select">
           选择助手
           <select
@@ -415,11 +443,18 @@ function ScopedAssistantChat({
           >
             {agents.map(item => (
               <option key={item.id} value={item.id}>
-                {item.name}
+                {item.name}{"isDefault" in item && item.isDefault ? "（默认）" : ""}
               </option>
             ))}
           </select>
         </label>
+      )}
+      {(page.workflowName || page.focus || page.hasUnsavedChanges) && !foreignScope && (
+        <div className="assistant-page-context" aria-label="当前页面上下文">
+          {page.workflowName && <span>{page.workflowName}</span>}
+          {page.focus && <span>{page.focus.kind === "task" ? "任务" : "运行实例"} · {page.focus.id.slice(0, 8)}</span>}
+          {page.hasUnsavedChanges && <span>当前画布有未保存修改，助手读取已保存版本。</span>}
+        </div>
       )}
       <div
         className="assistant-log"
@@ -437,6 +472,9 @@ function ScopedAssistantChat({
               : "工作台"}
           </p>
         )}
+        {readOnly && <p className="assistant-note">该会话可查阅。继续提问时请使用默认助手新建对话。</p>}
+        {!readOnly && !foreignScope && newerAgent && <button type="button" className="assistant-link"
+          disabled={waiting || Boolean(pending)} onClick={() => selectSession("")}>新建对话使用新版助手</button>}
         {!sessionId && (
           <div className="assistant-intro">
             <h3>{activeAgent?.name || "流程助手"}</h3>
@@ -453,6 +491,7 @@ function ScopedAssistantChat({
               <button type="button" className="assistant-link" disabled={list.isFetching}
                 onClick={() => void list.refetch()}>重新加载助手</button>
             )}
+            {starters.length > 0 && starterButtons}
           </div>
         )}
         {session && before && <button type="button" className="assistant-link" disabled={loadingOlder}
@@ -507,7 +546,7 @@ function ScopedAssistantChat({
                 ))}
               </ul>
             )}
-            {!foreignScope && <div className="assistant-actions">
+            {!foreignScope && !readOnly && <div className="assistant-actions">
               <button
                 type="button"
                 className="assistant-primary"
@@ -546,7 +585,7 @@ function ScopedAssistantChat({
             上一条请求的结果尚待同步，可以重新提交同一请求。
           </p>
         )}
-        {!foreignScope && !waiting && session?.retryText && !pending && (
+        {!foreignScope && !readOnly && !waiting && session?.retryText && !pending && (
           <button
             type="button"
             className="assistant-link"
@@ -576,6 +615,12 @@ function ScopedAssistantChat({
         store(assistantStorageKey(userId, session.context, trial), session.id);
         onNavigate(assistantScopeRoute(session.context));
       }}>打开会话所属页面继续</button>}
+      {session && !readOnly && !foreignScope && !pending && starters.length > 0 && (
+        <details className="assistant-starter-menu">
+          <summary>本页可问</summary>
+          {starterButtons}
+        </details>
+      )}
       <form
         className="assistant-composer"
         onSubmit={event => {
@@ -589,7 +634,7 @@ function ScopedAssistantChat({
           rows={2}
           maxLength={4000}
           placeholder={pending ? "补充或修改条件…" : "输入任务或问题…"}
-          disabled={waiting || foreignScope}
+          disabled={waiting || foreignScope || readOnly}
           onChange={e => setText(e.target.value)}
           onKeyDown={e => {
             if (
@@ -608,7 +653,7 @@ function ScopedAssistantChat({
           type="submit"
           aria-label="发送消息"
           disabled={
-            waiting || foreignScope ||
+            waiting || foreignScope || readOnly ||
             !text.trim() ||
             (!session && (!activeAgent || Boolean(sessionId)))
           }

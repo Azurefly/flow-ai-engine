@@ -1,6 +1,7 @@
 import type { ConsoleRoute } from "./console-route";
 
 export type AssistantScope = { projectId?: string | null; workflowId?: string | null };
+export type AssistantObjectFocus = { kind: "workflowRun" | "dataRun" | "task"; id: string };
 
 export function sameAssistantScope(left: AssistantScope, right: AssistantScope) {
   return (left.projectId ?? null) === (right.projectId ?? null) &&

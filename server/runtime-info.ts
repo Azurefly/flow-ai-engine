@@ -6,8 +6,8 @@ import { getRuntimeModels } from "./workflow-engine";
 import { getSharedPool } from "./db";
 import { assistantHistoryIndexes } from "./assistant-history-query";
 
-export const DATABASE_MIGRATION_VERSION = "0051_assistant_workflow_creation_default";
-export const DATABASE_MIGRATION_EPOCH = 1795224531834;
+export const DATABASE_MIGRATION_VERSION = "0052_assistant_workspace_default";
+export const DATABASE_MIGRATION_EPOCH = 1795392000000;
 export const DATABASE_REQUIRED_COLUMN_COUNT = 85;
 export const PUBLIC_APP_VERSION = "1.0.0";
 

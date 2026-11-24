@@ -8,11 +8,13 @@ import {
   type SessionSummary,
   createAssistantSession,
   getAssistantSession,
+  getDefaultAssistant,
   listAssistantConfigs,
   listAssistantSessions,
   listAvailableAssistantConfigs,
   publishAssistantConfig,
   saveAssistantDraft,
+  setDefaultAssistant,
 } from "./assistant-store";
 import { publicSession } from "./assistant-runtime";
 import { assistantJobOperations, cancelAssistantJob, getAssistantJob, reviewAssistantJob } from "./assistant-jobs";
@@ -39,6 +41,10 @@ const message = z.object({
     catch { return false; }
   }, "时区无效").optional(),
   proposalId: id.optional(),
+  focus: z.strictObject({
+    kind: z.enum(["workflowRun", "dataRun", "task"]),
+    id: z.string().regex(/^[A-Za-z0-9_-]{8,128}$/),
+  }).optional(),
 });
 const decision = z.object({ proposalId: id, approve: z.boolean() });
 const payload = z.discriminatedUnion("kind", [
@@ -89,15 +95,28 @@ export const assistantRouter = router({
         ctx.user,
         scope.projectId
       );
-      return agents.map(({ agentId, config }) => ({
+      return agents.map(({ agentId, config, isDefault, version }) => ({
         id: agentId,
         name: config.name,
         greeting: config.greeting,
+        isDefault,
+        version,
+        tools: config.tools.filter(tool => tool !== "updateWatermark" || ctx.user.role === "admin"),
       }));
     }),
   adminAgents: adminProcedure.query(async () =>
     (await listAssistantConfigs()).map(adminView)
   ),
+  defaultAgent: adminProcedure.query(() => getDefaultAssistant()),
+  setDefaultAgent: adminProcedure
+    .input(z.object({
+      agentId: id,
+      expectedRevision: z.number().int().positive(),
+      expectedPublishedVersion: z.number().int().positive(),
+    }))
+    .mutation(({ ctx, input }) => setDefaultAssistant(
+      ctx.user, input.agentId, input.expectedRevision, input.expectedPublishedVersion
+    )),
   saveDraft: adminProcedure
     .input(
       z.object({
@@ -213,9 +232,9 @@ export const assistantRouter = router({
     .mutation(({ ctx, input }) => reviewAssistantJob(ctx.user, input.jobId, input.applied, input.evidence)),
   message: protectedProcedure.input(update.extend(message.shape))
     .mutation(async ({ ctx, input }) => {
-      const { sessionId, revision, requestId, text, proposalId, timeZone } = input;
+      const { sessionId, revision, requestId, text, proposalId, timeZone, focus } = input;
       const session = await waitForAssistantTurn(ctx.user, sessionId, revision, requestId,
-        { kind: "message", text, proposalId, ...(timeZone ? { timeZone } : {}) }, input.pageSize);
+        { kind: "message", text, proposalId, ...(timeZone ? { timeZone } : {}), ...(focus ? { focus } : {}) }, input.pageSize);
       return publicSession(session);
     }),
   decide: protectedProcedure

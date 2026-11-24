@@ -980,7 +980,7 @@ export async function diffWorkflowVersions(
   });
   const edgeKey = (edge: Edge) =>
     `${edge.sourceNodeId}|${edge.sourceHandle ?? "default"}|${edge.targetNodeId}`;
-  const fromEdges = new Set(from.definition.edges.map(edgeKey));
+  const fromEdges = new Map(from.definition.edges.map(edge => [edgeKey(edge), edge]));
   const toEdges = new Set(to.definition.edges.map(edgeKey));
   return {
     fromVersion,
@@ -991,6 +991,12 @@ export async function diffWorkflowVersions(
     addedEdges: to.definition.edges.filter(
       edge => !fromEdges.has(edgeKey(edge))
     ),
+    changedEdges: to.definition.edges.flatMap(edge => {
+      const previous = fromEdges.get(edgeKey(edge));
+      return previous && previous.loop?.maxIterations !== edge.loop?.maxIterations
+        ? [{ id: edge.id, sourceNodeId: edge.sourceNodeId, targetNodeId: edge.targetNodeId, changedFields: ["loop"] }]
+        : [];
+    }),
     removedEdges: from.definition.edges.filter(
       edge => !toEdges.has(edgeKey(edge))
     ),

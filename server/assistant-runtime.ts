@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { formatConsoleRoute } from "../shared/console-route";
+import type { AssistantObjectFocus } from "../shared/assistant-scope";
 import {
   invokeLLM,
   listLLMModels,
@@ -101,6 +102,8 @@ export function publicSession(session: AssistantSession) {
     updatedAt,
     projectId,
     context: { projectId, workflowId },
+    canContinue: session.canContinue !== false,
+    tools: session.config.tools ?? [],
     messages,
     olderBefore: session.olderBefore,
     status: task.status,
@@ -165,6 +168,13 @@ const draftBehavior = [
   "数据流程选择 data。用 start 开始，再用 source 绑定本项目已有资产，至少有一个 end 或 output 终点。客户未给出可确定的源数据时先询问，禁止编造资产名或 ID。用户只要空白起止模板时可直接生成两个节点。",
   '数据节点额外字段直接写在各节点对象内。例：{"id":"orders","type":"source","name":"读订单","asset":"订单样本"}，{"id":"paid","type":"filter","name":"筛选","field":"status","operator":"equals","value":"paid"}，{"id":"totals","type":"aggregate","name":"汇总","groupBy":["region"],"metrics":[{"name":"total","operation":"sum","field":"amount"}]}。连线用 {"from":"orders","to":"paid"}。',
 ].join("\n");
+const workspaceBehavior = [
+  "设计检查用 workflow.checkDraft；运行预检用 workflow.preflight；用 workflow.versions 选取真实版本后调用 workflow.compareVersions。",
+  "排障先核对实例和节点明细：状态/控制流程用 workflow.inspectRun，数据流程用 data.inspectRun。区分本次实例、保存画布版本、已发布版本和数据调度。",
+  "待办问题用 task.page 定位任务，再用 task.inspect 查询办理资格、表单字段和审批结果。只在客户明确给出决定和必填字段后准备提交，不猜测填报值。",
+  "data.resourceOptions 可以查到资产标识，用 data.assetProfile 检查字段和读取能力；用 data.workflowSchedule 核对下次运行。调度表达式固定为 UTC 六段（秒、分、时、日、月、星期），秒字段必须为 0。",
+  "涉及多个对象时可以在同轮查询；说明实际查询范围，显示样本以外的数量，并注明暂缺的证据。未取得失败原因时不要猜测。",
+].join("\n");
 
 export async function runAssistantTurn(
   actor: ProjectUser,
@@ -174,7 +184,7 @@ export async function runAssistantTurn(
   observedProposalId?: string,
   request?: AssistantWorkContext,
   timeZone = "UTC",
-  execution?: { signal?: AbortSignal; commit: typeof commitAssistantTool }
+  execution?: { signal?: AbortSignal; commit: typeof commitAssistantTool; focus?: AssistantObjectFocus }
 ) {
   const allowed = new Set<string>(session.config.tools);
   if (actor.role !== "admin") allowed.delete("updateWatermark");
@@ -220,7 +230,9 @@ export async function runAssistantTurn(
         session.config.instructions,
         behavior,
         allowed.has("createWorkflowDraft") ? draftBehavior : "此助手未启用创建流程草稿。如客户要求创建流程，说明需使用启用了创建流程草稿的助手。",
-        JSON.stringify({ context, trial: session.trial, now: new Date().toISOString(), timeZone }),
+        ...(allowed.has("workspaceRead") ? [workspaceBehavior] : []),
+        JSON.stringify({ context, focus: execution?.focus, trial: session.trial, now: new Date().toISOString(), timeZone }),
+        ...(execution?.focus ? ["“当前实例”或“当前任务”指 focus 对应的页面对象。把它的 id 作为查询参数，权限和所属范围由工具核对。"] : []),
         "涉及最近一周、昨天等相对时间时，根据当前时间和用户时区换算查询范围，并在答复中注明统计期间。",
       ].join("\n\n"),
     },
@@ -247,6 +259,7 @@ export async function runAssistantTurn(
   let question: string | undefined;
   let answer = "";
   let toolError = "";
+  let hasReadEvidence = false;
   function finish(content: string, task: ConversationTask) {
     if (previous && !task.pending)
       content += "\n上一版提案已失效，如需执行请重新生成预览。";
@@ -374,6 +387,7 @@ export async function runAssistantTurn(
               };
             } else {
               result = prepared.result;
+              if (prepared.message !== "已查询操作参数。") hasReadEvidence = true;
               events.push({
                 role: "assistant",
                 content: prepared.message,
@@ -404,7 +418,7 @@ export async function runAssistantTurn(
       break;
     }
   }
-  if (toolError && !pending && !question)
+  if (toolError && !pending && !question && !hasReadEvidence)
     return fail(`工具未完成操作。${toolError}`, "tool_rejected");
   if (!answer) return fail("模型没有返回可显示的回复，请重试。");
   const task: ConversationTask = pending
@@ -498,7 +512,7 @@ export async function decideAssistantProposal(
       });
       return { messages: events, task: { status: "failed", failureCode: "receipt_unavailable", pending } };
     }
-    const links = receipt.workflowId
+    const links = receipt.links ?? (receipt.workflowId
       ? [
           {
             label: "打开流程草稿",
@@ -509,7 +523,7 @@ export async function decideAssistantProposal(
             }),
           },
         ]
-      : undefined;
+      : undefined);
     events.push({ role: "assistant", content: receipt.message, links });
   }
   return { messages: events, task: { status: "completed" } };

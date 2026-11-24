@@ -145,7 +145,7 @@ const filterLabelClass = ("aiflow-type-control grid min-w-0 gap-1 font-medium " 
 const summaryRowClass = "flex min-w-0 justify-between gap-2";
 const detailTextClass = ("aiflow-type-body mt-1 break-words " + mutedToneClass);
 
-export default function ProcessWorkbench({ accountId, navigationControls, routeTaskId, routeRun, onClearTaskRoute, onOpenRun, onBackFromRun }: {
+export default function ProcessWorkbench({ accountId, navigationControls, routeTaskId, routeRun, onClearTaskRoute, onOpenRun, onBackFromRun, onAskAssistant }: {
   accountId: number;
   navigationControls?: ReactNode;
   routeTaskId?: string;
@@ -153,6 +153,7 @@ export default function ProcessWorkbench({ accountId, navigationControls, routeT
   onClearTaskRoute: () => void;
   onOpenRun: (target: WorkbenchRunTarget, snapshot?: WorkbenchListSnapshot) => void;
   onBackFromRun: () => void;
+  onAskAssistant?: (taskId: string) => void;
 }) {
   const utils = trpc.useUtils();
   const savedList = window.history.state?.aiflowWorkbenchList as WorkbenchListSnapshot | undefined;
@@ -907,6 +908,10 @@ export default function ProcessWorkbench({ accountId, navigationControls, routeT
           busy={busy}
           onClose={() => setSelectedTaskId(null)}
           onOpenRun={(runId: string) => openTaskRun(runId, selectedTaskId)}
+          onAskAssistant={onAskAssistant ? () => {
+            setSelectedTaskId(null);
+            onAskAssistant(selectedTaskId);
+          } : undefined}
           onClaim={() => claim.mutate({ taskId: selectedTaskId })}
           onExecute={(result: {
             decision: "approved" | "rejected" | "abstained";
@@ -2550,6 +2555,7 @@ function TaskDrawer({
   busy,
   onClose,
   onOpenRun,
+  onAskAssistant,
   onClaim,
   onExecute,
   onComplete,
@@ -2795,6 +2801,8 @@ function TaskDrawer({
         </header>
         {task && (
           <fieldset ref={taskBody} disabled={busy} className="task-body">
+            {onAskAssistant && <Button type="button" variant="outline" className="min-h-11 w-fit"
+              onClick={() => requestExit(onAskAssistant)}>问助手</Button>}
             {task.canViewRun === true && task.runId && <Button type="button" variant="outline" className="min-h-11 w-fit" onClick={()=>requestExit(()=>onOpenRun(String(task.runId)))}>查看实例流程图</Button>}
 
             {task.payload?.assignmentRecovery?.reason && (

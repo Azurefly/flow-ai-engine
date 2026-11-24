@@ -12,9 +12,11 @@ import {
 } from "./project-service";
 import { updateWorkflow, type Definition } from "./workflow-service";
 import { settleWorkflowCommand } from "./workflow-command-test-support";
+import { commitWorkspace, prepareWorkspace } from "./assistant-workspace";
 
 const runIntegration = process.env.DATABASE_URL ? it : it.skip;
 const suffix = randomUUID().slice(0, 8);
+const taskReceiptKey = randomUUID();
 let pool: mysql.Pool | undefined;
 let owner: any;
 let operator: any;
@@ -76,6 +78,7 @@ function callerFor(user: any) {
 describe("P1 人工任务与服务端续跑", () => {
   afterAll(async () => {
     if (!pool) return;
+    await pool.query("DELETE FROM assistant_action_receipt WHERE id=?", [taskReceiptKey]);
     if (projectId) {
       await pool.query(
         "DELETE FROM workflow_run_alert WHERE workflowId IN (SELECT id FROM workflow WHERE projectId=?)",
@@ -373,6 +376,44 @@ describe("P1 人工任务与服务端续跑", () => {
             ?.durationMs ?? 0
         )
       );
+      const assistantScope = { projectId, workflowId };
+      const operatorContext = { user: operator } as TrpcContext;
+      const second = await settleWorkflowCommand(pool, await callerFor(owner).workflow.run({
+        workflowId, input: { applicant: "助手办理验收", assigneeUserId: operator.id },
+      }));
+      const diagnosis = await prepareWorkspace(operatorContext, assistantScope, false, {
+        action: "workflow.inspectRun", arguments: { runId: second.runId },
+      });
+      expect(diagnosis).toMatchObject({ result: {
+        status: "waiting", execution: { attention: { items: [{ nodeId: "operate", status: "waiting" }] } },
+      } });
+      expect(JSON.stringify(diagnosis)).not.toContain("助手办理验收");
+      await expect(prepareWorkspace({ user: outsider }, assistantScope, false, {
+        action: "workflow.inspectRun", arguments: { runId: second.runId },
+      })).rejects.toMatchObject({ code: "NOT_FOUND" });
+      expect(await prepareWorkspace(operatorContext, assistantScope, false, {
+        action: "task.inspect", arguments: { taskId: second.taskId },
+      })).toMatchObject({ result: { canAct: true, taskId: second.taskId, workflowId } });
+      const stale = await prepareWorkspace(operatorContext, assistantScope, true, {
+        action: "task.execute", arguments: { taskId: second.taskId, result: { decision: "approved" } },
+      });
+      if (stale.kind !== "proposal") throw new Error("缺少办理预览");
+      await callerFor(operator).task.claim({ taskId: second.taskId });
+      await callerFor(operator).task.returnToPending({ taskId: second.taskId });
+      await expect(commitWorkspace(operatorContext, assistantScope, stale.proposal.payload.input, randomUUID()))
+        .rejects.toMatchObject({ code: "BAD_REQUEST" });
+      const ready = await prepareWorkspace(operatorContext, assistantScope, true, {
+        action: "task.execute",
+        arguments: { taskId: second.taskId, result: { decision: "approved", comment: "资料完整" } },
+      });
+      if (ready.kind !== "proposal") throw new Error("缺少办理预览");
+      expect(await callerFor(operator).task.get({ taskId: second.taskId })).toMatchObject({ status: "pending" });
+      const confirm = () => commitWorkspace(operatorContext, assistantScope, ready.proposal.payload.input, taskReceiptKey);
+      const receipt = await confirm();
+      expect(receipt).toMatchObject({ links: [{ href: `#/runs/workbench/task/${second.taskId}` }] });
+      expect(await confirm()).toEqual(receipt);
+      expect(await callerFor(operator).task.get({ taskId: second.taskId })).toMatchObject({ status: "completed" });
+      expect(await settleWorkflowCommand(pool, { runId: second.runId, status: "queued" })).toMatchObject({ status: "success" });
       const [audits] = await pool.query<mysql.RowDataPacket[]>(
         "SELECT detailsJson FROM authorization_audit_log WHERE resourceType='workflow_task' AND resourceId=? ORDER BY createdAt",
         [waiting.taskId]

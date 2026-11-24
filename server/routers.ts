@@ -1373,10 +1373,11 @@ export const appRouter = router({
         z.object({
           taskId: z.string().uuid(),
           result: approvalResultSchema,
+          expectedOwnerVersion: z.number().int().nonnegative().optional(),
         })
       )
       .mutation(({ ctx, input }) =>
-        executeWorkflowTask(ctx.user, input.taskId, input.result).catch(throwTaskSubmissionError)
+        executeWorkflowTask(ctx.user, input.taskId, input.result, input.expectedOwnerVersion).catch(throwTaskSubmissionError)
       ),
     handover: protectedProcedure
       .input(

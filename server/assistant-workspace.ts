@@ -2,26 +2,28 @@ import { createHash } from "node:crypto";
 import { callTRPCProcedure, TRPCError, type AnyTRPCRouter } from "@trpc/server";
 import type { RowDataPacket } from "mysql2/promise";
 import { z } from "zod";
+import type { AssistantScope } from "../shared/assistant-scope";
 import { canonicalResourcePayload } from "../shared/resource-creation";
 import { formatConsoleRoute } from "../shared/console-route";
 import type { TrpcContext } from "./_core/context";
 import { getSharedPool } from "./db";
-import { getWorkflowTask } from "./p1-service";
+import { getWorkflowTask, inspectWorkflowTaskAction } from "./p1-service";
+import { dataflowRunReceipt } from "./p2-service";
 import { createFolder, getProjectAccess } from "./project-service";
-import { getWorkflow } from "./workflow-service";
+import { getWorkflow, getWorkflowVersion, hasWorkflowPermission } from "./workflow-service";
+import { validateWorkflowTaskSubmission } from "./workflow-engine";
 import { inspectWorkflowRunReadiness } from "./workflow-run-readiness";
+import { assistantRunLink, assistantScalarFields, findWorkspaceInsight, workspaceInsights } from "./assistant-insights";
 
 // This catalog only includes business procedures which can run with a reauthorized actor.
 export type AssistantWorkContext = Pick<TrpcContext, "user" | "requestId">;
-export type WorkspaceScope = {
-  projectId?: string | null;
-  workflowId?: string | null;
-};
-type Scope = "global" | "project" | "workflow" | "task";
+export type WorkspaceScope = AssistantScope;
+type Scope = "global" | "project" | "workflow" | "task" | "run";
 function action(label: string, scope: Scope, fields = "") {
   return { label, scope, fields: fields ? fields.split(" ") : [] };
 }
 export const workspaceQueries = {
+  ...workspaceInsights,
   "task.dashboard": action(
     "我的工作台统计（待办、已办、发起与可见实例）",
     "global"
@@ -151,6 +153,11 @@ export const workspaceMutations = {
     "workflow",
     "id name expectedDefinitionVersion"
   ),
+  "workflow.rollbackVersion": action(
+    "恢复历史流程版本为草稿",
+    "workflow",
+    "workflowId targetVersion expectedDefinitionVersion restoreAsDraft"
+  ),
   "workflow.run": action(
     "发起正式流程实例",
     "workflow",
@@ -158,6 +165,7 @@ export const workspaceMutations = {
   ),
   "task.claim": action("领取待办", "task", "taskId"),
   "task.complete": action("提交任务审批意见", "task", "taskId result"),
+  "task.execute": action("办理待领取或本人已领取的审批任务", "task", "taskId result expectedOwnerVersion"),
   "task.handover": action("移交任务", "task", "taskId targetUserId"),
   "task.delegate": action("委托办理", "task", "taskId targetUserId"),
   "task.reassign": action(
@@ -177,6 +185,11 @@ export const workspaceMutations = {
   ),
   "task.returnToPending": action("退回待领取", "task", "taskId"),
   "data.createTag": action("创建数据标签", "project", "projectId name color"),
+  "data.run": action(
+    "发起数据流程运行，支持正式或测试模式",
+    "workflow",
+    "projectId workflowId mode data expectedDefinitionVersion expectedExecutionPlanHash"
+  ),
   "data.updateAsset": action(
     "更改数据资产名称或状态",
     "project",
@@ -255,12 +268,12 @@ async function router(): Promise<AnyTRPCRouter> {
 // Only these business fields may leave the service. Workflow configs, raw run inputs,
 // connection settings, credentials and uploaded data have no representation here.
 const valueKeys = new Set(
-  "id projectId workflowId taskId runId nodeId userId name label value disabled description code processCode username displayName role roleCode roleName projectName workflowName nodeName stateName taskName folderId parentId status runStatus flowStatus auditStatus flowType assetType type version revision definitionVersion publishedVersion ownerVersion memberVersion infoConfigToken ownerUserId assigneeName assignedName displayStatus canAct canReassign creatorName createdAt updatedAt dueAt startedAt finishedAt completedAt triggeredByName durationMs runCount totalRuns executingRuns waitingRuns successfulRuns failedRuns averageDurationMs durationSamples maxDurationMs failureRate hasMore nextCursor total page limit count todo done initiated all cronExpression color message title decision comment sourceNodeId targetNodeId sourceHandle targetHandle".split(
+  "id projectId workflowId taskId runId nodeId userId name label value disabled description code processCode username displayName role roleCode roleName projectName workflowName nodeName stateName taskName folderId parentId status runStatus flowStatus auditStatus flowType assetType type version revision definitionVersion publishedVersion ownerVersion memberVersion infoConfigToken ownerUserId assigneeName assignedName displayStatus canAct canReassign creatorName createdAt updatedAt dueAt startedAt finishedAt completedAt triggeredByName durationMs runCount totalRuns executingRuns waitingRuns successfulRuns failedRuns averageDurationMs durationSamples maxDurationMs failureRate hasMore nextCursor total page limit count todo done initiated all cronExpression color message title decision comment sourceNodeId targetNodeId sourceHandle targetHandle nextRunAt schedulerType taskConfigured activationAvailable actionLabel blockedReason signMode approved rejected decided required completed".split(
     " "
   )
 );
 const groupKeys = new Set(
-  "items rows counts recent folders workflows sources assets tags udfs schedules nodes edges roles members units alerts runs events definition".split(
+  "items rows counts recent folders workflows sources assets tags udfs schedules nodes edges roles members units alerts runs events definition approvalProgress".split(
     " "
   )
 );
@@ -298,11 +311,12 @@ async function prepare(
   const op = catalog[parsed.action];
   if (!availableInScope(parsed.action, op, ctx.user.role, scope)) return deny();
   const path = parsed.action;
-  const app = await router();
-  const procedure = app._def.procedures[path];
+  const insight = write ? undefined : findWorkspaceInsight(path);
+  const app = insight ? undefined : await router();
+  const procedure = app?._def.procedures[path];
   const type = write ? "mutation" : "query";
-  if (!procedure || procedure._def.type !== type) return bad("操作尚不可用。");
-  const schema = procedure._def.inputs[0] as z.ZodType | undefined;
+  if (!insight && procedure?._def.type !== type) return bad("操作尚不可用。");
+  const schema = insight?.schema ?? procedure?._def.inputs[0] as z.ZodType | undefined;
   const args = { ...parsed.arguments };
   let targetName = "";
   if (parsed.describe) {
@@ -332,27 +346,23 @@ async function prepare(
       ([key, v]) =>
         v !== null &&
         typeof v === "object" &&
-        key !== "result" &&
-        key !== "input"
+        !["result", "input", "data"].includes(key)
     )
   )
     return bad("该参数需要标量值。");
-  if (args.input !== undefined)
-    args.input = z
-      .record(
-        z
-          .string()
-          .regex(/^[a-zA-Z][a-zA-Z0-9_]{0,63}$/)
-          .refine(k => !["constructor", "prototype"].includes(k)),
-        z.union([z.boolean(), z.number(), z.string().max(1000)])
-      )
-      .parse(args.input);
+  if (args.input !== undefined) args.input = assistantScalarFields.parse(args.input);
+  if (args.data !== undefined) args.data = assistantScalarFields.parse(args.data);
   if (args.result !== undefined)
     args.result = z
-      .strictObject({
+      .object({
         decision: z.enum(["approved", "rejected", "abstained"]),
         comment: z.string().trim().max(2000).optional(),
+        outcome: z.string().trim().min(1).max(120).optional(),
       })
+      .catchall(z.union([
+        z.boolean(), z.number(), z.string().max(1000), z.null(),
+        z.array(z.string().max(160)).max(25),
+      ]))
       .parse(args.result);
   if (op.fields.includes("projectId") && scope.projectId) {
     if (args.projectId !== undefined && args.projectId !== scope.projectId)
@@ -385,11 +395,26 @@ async function prepare(
       args.expectedDefinitionVersion ??= flow.definitionVersion;
     if (write && op.fields.includes("expectedConfigToken"))
       args.expectedConfigToken ??= flow.infoConfigToken;
-    if (parsed.action === "workflow.run") {
+    if (path === "workflow.rollbackVersion") {
+      if (!(await hasWorkflowPermission(ctx.user, flow.id, "workflow:edit")) ||
+        (flow.status === "published" && !(await hasWorkflowPermission(ctx.user, flow.id, "workflow:publish"))))
+        return deny();
+      const targetVersion = z.number().int().positive().parse(args.targetVersion);
+      if (!(await getWorkflowVersion(flow.id, targetVersion, ctx.user))) return bad("找不到要恢复的历史版本。");
+      args.restoreAsDraft = true;
+      if (flow.status === "published") targetName += " · 将撤回发布并恢复为草稿";
+    }
+    if (path === "data.workflowSchedule" && flow.flowType !== "data") return bad("目标不是数据流程。");
+    if (path === "workflow.run" || path === "data.run") {
+      if (path === "data.run" && flow.flowType !== "data") return bad("目标不是数据流程。");
+      const mode = path === "data.run"
+        ? z.enum(["formal", "test"]).parse(args.mode ?? "formal")
+        : "formal";
+      if (path === "data.run") args.mode = mode;
       const ready = await inspectWorkflowRunReadiness(ctx.user, {
         workflowId: flow.id,
-        input: args.input as Record<string, unknown> | undefined,
-        mode: "formal",
+        input: (path === "data.run" ? args.data : args.input) as Record<string, unknown> | undefined,
+        mode,
       });
       if (!ready.canStart)
         return bad(
@@ -407,7 +432,7 @@ async function prepare(
       if (ready.planHash) args.expectedExecutionPlanHash = ready.planHash;
     }
   }
-  if (op.scope === "task") {
+  if (op.scope === "task" && !insight) {
     const taskId = z.string().uuid().parse(args.taskId);
     const task = await getWorkflowTask(ctx.user, taskId);
     if (
@@ -418,6 +443,20 @@ async function prepare(
       return deny();
     if (write && parsed.action === "task.complete" && !task.canAct)
       return deny();
+    if (path === "task.execute") {
+      const eligibility = await inspectWorkflowTaskAction(ctx.user, taskId, task.workflowId);
+      if (!eligibility.canAct) return bad(eligibility.reason);
+      const input = z.record(z.string(), z.unknown()).parse(args.result);
+      if (Object.keys(input).some(key => /^(?:__proto__|constructor|prototype)$/.test(key)))
+        return bad("表单包含无效字段。");
+      validateWorkflowTaskSubmission(task, input);
+      const row: Record<string, unknown> = task;
+      const ownerVersion = Number(row.ownerVersion);
+      if (args.expectedOwnerVersion !== undefined && args.expectedOwnerVersion !== ownerVersion)
+        return bad("任务分配已变化，请重新预览。");
+      args.expectedOwnerVersion = ownerVersion;
+      targetName = [row.workflowName, row.nodeName].filter(Boolean).join(" · ");
+    }
   }
   if (typeof args.projectId === "string") {
     const access = await getProjectAccess(ctx.user, args.projectId);
@@ -447,15 +486,16 @@ async function prepare(
       .max(25)
       .parse(args.pageSize ?? 15);
   const input = schema ? args : undefined;
+  if (insight) return { readInsight: () => insight.read(ctx.user!, args, scope) };
   if (schema) await schema.parseAsync(input);
   const execute = (actionKey?: string): Promise<unknown> =>
     callTRPCProcedure({
-      router: app,
+      router: app!,
       ctx,
       path,
       type,
       getRawInput: async () => actionKey && input ? {
-        ...input, ...(path === "workflow.run" ? { idempotencyKey: actionKey } :
+        ...input, ...(path === "workflow.run" || path === "data.run" ? { idempotencyKey: actionKey } :
           path === "data.createTag" || path === "workflow.duplicate" ? { requestKey: actionKey } : {}),
       } : input,
       signal: undefined,
@@ -494,7 +534,12 @@ const fieldLabels: Record<string, string> = {
   expectedRevision: "调度版本",
   memberVersion: "会签成员版本",
   ownerVersion: "办理人版本",
+  expectedOwnerVersion: "办理人版本",
   cronExpression: "调度表达式",
+  targetVersion: "恢复版本",
+  restoreAsDraft: "恢复为草稿",
+  mode: "运行模式",
+  data: "启动参数",
 };
 export async function prepareWorkspace(
   ctx: AssistantWorkContext,
@@ -503,6 +548,7 @@ export async function prepareWorkspace(
   raw: unknown
 ) {
   const res = await prepare(ctx, scope, write, raw);
+  if (res.readInsight) return { kind: "read" as const, ...await res.readInsight() };
   if (res.description)
     return {
       kind: "read" as const,
@@ -573,12 +619,43 @@ export async function prepareWorkspace(
               },
             ]
           : [];
+  if (["task.page", "workflow.runHistoryPage", "data.runPage"].includes(res.input.action)) {
+    const items = value && typeof value === "object" && "items" in value && Array.isArray(value.items)
+      ? value.items : [];
+    for (const item of items.slice(0, 4)) {
+      if (typeof item?.id !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(item.id)) continue;
+      if (res.input.action === "task.page") {
+        links.push({
+          label: `任务 · ${String(item.nodeName ?? item.id.slice(0, 8)).slice(0, 60)}`,
+          href: formatConsoleRoute({ section: "runs", view: "workbench", taskId: item.id }),
+        });
+      } else {
+        const workflowId = args.workflowId ?? item.workflowId;
+        if (typeof workflowId === "string") links.push({
+          ...assistantRunLink(workflowId, item.id),
+          label: `运行 · ${item.id.slice(0, 8)}`,
+        });
+      }
+    }
+  }
   return {
     kind: "read" as const,
     message: "已查询：" + res.label,
     result,
     links,
   };
+}
+
+function workspaceReceipt(input: WorkspaceInput, message: string) {
+  const { taskId, workflowId } = input.arguments;
+  const runId = /^已提交(?:数据流程)?运行。运行 ID：([A-Za-z0-9_-]{8,64})[，。]/.exec(message)?.[1];
+  if (runId && typeof workflowId === "string")
+    return { message, links: [assistantRunLink(workflowId, runId)] };
+  if (typeof taskId === "string")
+    return { message, links: [{ label: "打开任务", href: formatConsoleRoute({ section: "runs", view: "workbench", taskId }) }] };
+  if (input.action === "workflow.rollbackVersion" && typeof workflowId === "string")
+    return { message, links: [{ label: "打开恢复后的流程草稿", href: formatConsoleRoute({ section: "flows", view: "editor", workflowId }) }] };
+  return { message };
 }
 
 // A receipt is reserved before dispatch. An interruption between the business commit
@@ -603,11 +680,17 @@ export async function commitWorkspace(
     if (rows[0].payloadHash !== hash) return deny();
     const op = (workspaceMutations as Catalog)[input.action];
     if (!op || !availableInScope(input.action, op, ctx.user!.role, scope)) return deny();
-    const project = scope.projectId ?? input.arguments.projectId;
-    if (typeof project === "string" && !(await getProjectAccess(ctx.user!, project, { includeArchived: true })).permissions.has("project:view")) return deny();
-    const workflow = scope.workflowId ?? input.arguments.workflowId ?? (op.scope === "workflow" ? input.arguments.id : null);
-    if (typeof workflow === "string" && !(await getWorkflow(workflow, ctx.user!))) return deny();
-    if (op.scope === "task" && (typeof input.arguments.taskId !== "string" || !(await getWorkflowTask(ctx.user!, input.arguments.taskId)))) return deny();
+    if (op.scope === "task") {
+      const taskId = input.arguments.taskId;
+      const task = typeof taskId === "string" ? await getWorkflowTask(ctx.user!, taskId) : null;
+      if (!task || (scope.projectId && task.projectId !== scope.projectId) ||
+        (scope.workflowId && task.workflowId !== scope.workflowId)) return deny();
+    } else {
+      const project = scope.projectId ?? input.arguments.projectId;
+      if (typeof project === "string" && !(await getProjectAccess(ctx.user!, project, { includeArchived: true })).permissions.has("project:view")) return deny();
+      const workflow = scope.workflowId ?? input.arguments.workflowId ?? (op.scope === "workflow" ? input.arguments.id : null);
+      if (typeof workflow === "string" && !(await getWorkflow(workflow, ctx.user!))) return deny();
+    }
     if (rows[0].message === "!rejected") return bad("原业务请求已被拒绝，请重新预览。");
     if (!rows[0].message) {
       let message: string | undefined;
@@ -616,6 +699,13 @@ export async function commitWorkspace(
         const [runs] = await db.query<RowDataPacket[]>("SELECT runId FROM workflow_run_job WHERE idempotencyKey=?",
           [`workflow:start:${args.workflowId}:${ctx.user!.id}:${key}`]);
         if (runs[0]) message = "已提交运行。运行 ID：" + runs[0].runId + "，可在流程运行历史中查看进度。";
+      }
+      if (input.action === "data.run" && typeof args.projectId === "string" && typeof args.workflowId === "string") {
+        const run = await dataflowRunReceipt(ctx.user!, {
+          projectId: args.projectId, workflowId: args.workflowId,
+          mode: args.mode === "test" ? "test" : "formal", idempotencyKey: key,
+        });
+        if (run) message = "已提交数据流程运行。运行 ID：" + run.runId + "，可打开实例查看进度。";
       }
       if (input.action === "data.createTag" && typeof args.projectId === "string") {
         const [tags] = await db.query<RowDataPacket[]>(
@@ -631,9 +721,9 @@ export async function commitWorkspace(
       }
       if (!message) throw new WorkspaceOutcomeUnknown();
       await db.execute("UPDATE assistant_action_receipt SET message=? WHERE id=? AND payloadHash=? AND message IS NULL", [message, key, hash]);
-      return { message };
+      return workspaceReceipt(input, message);
     }
-    return { message: String(rows[0].message) };
+    return workspaceReceipt(input, String(rows[0].message));
   }
   const existing = await findReceipt();
   if (existing) return existing;
@@ -709,13 +799,13 @@ export async function commitWorkspace(
       ? value.id
       : null;
   const runId = value && typeof value === "object" && "runId" in value && typeof value.runId === "string" ? value.runId : undefined;
-  const message = input.action === "workflow.run" && runId
-    ? "已提交运行。运行 ID：" + runId + "，可在流程运行历史中查看进度。"
+  const message = runId && (input.action === "workflow.run" || input.action === "data.run")
+    ? (input.action === "data.run" ? "已提交数据流程运行。运行 ID：" : "已提交运行。运行 ID：") + runId + "，可打开实例查看进度。"
     : "已执行：" + res.label + (id ? "（" + id + "）" : "") + "。";
   await db.execute(
     "UPDATE assistant_action_receipt SET message=? WHERE id=? AND payloadHash=?",
     [message, key, hash]
   );
-  return { message };
+  return workspaceReceipt(input, message);
 }
 export class WorkspaceOutcomeUnknown extends Error {}

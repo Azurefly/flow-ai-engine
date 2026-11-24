@@ -10,6 +10,7 @@ import { IdentityWorkspace } from "@/components/IdentityWorkspace";
 import type { IdentityTab, WorkbenchRunTarget } from "@shared/console-route";
 import { WorkspaceHeader } from "@/components/WorkspaceHeader";
 import { AssistantLauncher } from "@/components/AssistantLauncher";
+import type { AssistantPage } from "@/components/assistant-starters";
 import { EditorCommandBar, EditorNotice } from "@/components/EditorCommandBar";
 import type { WorkflowOperationTarget } from "@shared/workflow-creation-form";
 import { authorizationQueryPolicy } from "@shared/authorization-query-policy";
@@ -824,6 +825,10 @@ function FlowConsole({
   const monitorRunId = resolveMonitorRunId(requestedRoute.route, selectedRunId);
   const workbenchRoute = requestedRoute.route.section === "runs" && requestedRoute.route.view === "workbench"
     ? requestedRoute.route : null;
+  const [assistantTask, setAssistantTask] = useState<{ id: string; token: number }>();
+  useEffect(() => {
+    if (!workbenchRoute || workbenchRoute.instance) setAssistantTask(undefined);
+  }, [Boolean(workbenchRoute), Boolean(workbenchRoute?.instance)]);
   const detailInput = useMemo(
     () => ({ runId: monitorRunId ?? "00000000-0000-0000-0000-000000000000" }),
     [monitorRunId]
@@ -1479,6 +1484,22 @@ function FlowConsole({
     </>
   );
 
+  const assistantRoute = requestedRoute.route;
+  const assistantRunId = workbenchRoute?.instance?.runId ??
+    (assistantRoute.section === "runs" && assistantRoute.view === "monitor" ? monitorRunId : null);
+  const assistantTaskId = workbenchRoute?.taskId ?? (workbenchRoute ? assistantTask?.id : undefined);
+  const assistantPage: AssistantPage = {
+    surface: workbenchRoute ? "workbench"
+      : assistantRoute.section === "runs" ? "monitor"
+      : assistantRoute.section === "flows" && assistantRoute.view === "editor" ? "editor"
+      : routeWorkflowId ? "workflow" : routeProjectId ? "project" : "home",
+    workflowName: canViewWorkflow && routeWorkflowId ? selectedWorkflow?.name : undefined,
+    dataFlow: selectedWorkflow?.flowType === "data",
+    hasUnsavedChanges: editorActive && isDraftDirty,
+    focus: assistantRunId ? { kind: !workbenchRoute && selectedWorkflow?.flowType === "data" ? "dataRun" : "workflowRun", id: assistantRunId }
+      : assistantTaskId ? { kind: "task", id: assistantTaskId } : undefined,
+  };
+
   return (
     <main
       data-aiflow-console=""
@@ -1486,7 +1507,8 @@ function FlowConsole({
       className="aiflow-console relative min-h-screen bg-background text-foreground"
     >
       {!agentSettingsActive && <AssistantLauncher key={user.id} isAdmin={user.role === "admin"}
-        userId={user.id} onNavigate={navigateRoute} scopeNotice={assistantScopeNotice} context={{ projectId: routeProjectId ?? (routeWorkflowId && canViewWorkflow ? selectedWorkflow?.projectId : undefined) ?? undefined,
+        userId={user.id} onNavigate={navigateRoute} scopeNotice={assistantScopeNotice} page={assistantPage}
+        openRequest={workbenchRoute ? assistantTask?.token : undefined} context={{ projectId: routeProjectId ?? (routeWorkflowId && canViewWorkflow ? selectedWorkflow?.projectId : undefined) ?? undefined,
           workflowId: canViewWorkflow ? routeWorkflowId ?? undefined : undefined }} />}
       {commandOpen && <Suspense fallback={<p role="status" className="fixed right-4 top-20 z-50 rounded-xl border bg-card p-4">正在打开快捷查找…</p>}>
         <WorkspaceCommandDialog target={commandTarget} canManageIdentity={canManageIdentity} isAdmin={user.role === "admin"} onClose={() => setCommandOpen(false)} onNavigate={navigateRoute} />
@@ -2131,6 +2153,7 @@ function FlowConsole({
                   onClearTaskRoute={clearWorkbenchSelection}
                   onOpenRun={openWorkbenchRun}
                   onBackFromRun={closeWorkbenchRun}
+                  onAskAssistant={taskId => setAssistantTask({ id: taskId, token: Date.now() })}
                 />
               ) : (
                 <div

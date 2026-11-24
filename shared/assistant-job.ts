@@ -1,3 +1,5 @@
+import type { AssistantObjectFocus } from "./assistant-scope";
+
 export type AssistantJobStatus =
   | "queued"
   | "running"
@@ -7,7 +9,7 @@ export type AssistantJobStatus =
   | "needs_review";
 
 export type AssistantJobPayload =
-  | { kind: "message"; text: string; proposalId?: string; timeZone?: string }
+  | { kind: "message"; text: string; proposalId?: string; timeZone?: string; focus?: AssistantObjectFocus }
   | { kind: "decide"; proposalId: string; approve: boolean };
 
 export function assistantJobActive(status?: AssistantJobStatus) {

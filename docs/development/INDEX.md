@@ -25,7 +25,7 @@
 
 ## 从页面定位到执行与验收
 
-[当前注册的 API](optimization/api-current.json)按模块列出 224 个过程和调用方式。接口变化后在仓库根目录运行 `node --import tsx scripts/index-project-api.mjs` 更新；加 `--check` 可检查生成物。在审计时点做对照可读取上面的基线清单。
+[当前注册的 API](optimization/api-current.json)按模块列出 226 个过程和调用方式。接口变化后在仓库根目录运行 `node --import tsx scripts/index-project-api.mjs` 更新，加 `--check` 可检查生成物。审计对照使用上面的基线清单。
 
 在 [Home](../../client/src/pages/Home.tsx) 找页面装配，在 [console-route](../../shared/console-route.ts) 找可直达的路由，在 [routers](../../server/routers.ts) 找同名 tRPC 过程。表定义及索引集中在 [schema](../../drizzle/schema.ts)。下表的最后一列是适合修改后先跑的一条用例。
 

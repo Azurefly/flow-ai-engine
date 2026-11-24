@@ -609,7 +609,7 @@ export async function commitAssistantTool(
   proposal: AssistantToolProposal,
   requestKey: string,
   request?: AssistantWorkContext
-): Promise<{ message: string; workflowId?: string; projectId?: string }> {
+): Promise<{ message: string; workflowId?: string; projectId?: string; links?: ToolLink[] }> {
   if (proposal.tool === "workspaceWrite") {
     if (!request || request.user?.id !== actor.id) forbidden("当前账号无法执行业务操作。");
     return commitWorkspace(request, proposal.payload.scope, proposal.payload.input, requestKey);

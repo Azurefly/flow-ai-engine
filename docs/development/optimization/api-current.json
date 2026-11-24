@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "count": 224,
+  "count": 226,
   "namespaces": {
     "assistant": {
       "source": "server/assistant-router.ts",
@@ -20,6 +20,10 @@
         {
           "name": "assistant.decide",
           "method": "mutation"
+        },
+        {
+          "name": "assistant.defaultAgent",
+          "method": "query"
         },
         {
           "name": "assistant.enqueue",
@@ -60,6 +64,10 @@
         {
           "name": "assistant.sessionsPage",
           "method": "query"
+        },
+        {
+          "name": "assistant.setDefaultAgent",
+          "method": "mutation"
         },
         {
           "name": "assistant.start",

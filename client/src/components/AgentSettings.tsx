@@ -20,8 +20,8 @@ function versions(entry: Entry) {
 const toolLabels = {
   listMyTasks: "查看我的待办",
   listMyCompletedTasks: "查看我的已办",
-  workspaceRead: "工作台查询与统计",
-  workspaceWrite: "办理工作台业务（逐项确认）",
+  workspaceRead: "项目统计、流程版本与预检、运行诊断、任务与数据查询",
+  workspaceWrite: "准备业务变更并逐项确认",
   searchWorkflows: "查找流程",
   createWorkflowDraft: "创建流程草稿",
   updateWatermark: "修改系统水印",
@@ -48,6 +48,20 @@ export default function AgentSettings({
   const entries = trpc.assistant.adminAgents.useQuery(undefined, {
     retry: false,
   });
+  const defaultAgent = trpc.assistant.defaultAgent.useQuery(undefined, { retry: false });
+  const setDefault = trpc.assistant.setDefaultAgent.useMutation({
+    onSuccess: setting => {
+      utils.assistant.defaultAgent.setData(undefined, setting);
+      void utils.assistant.available.invalidate();
+      void utils.assistant.get.invalidate();
+    },
+    onError: error => {
+      if (error.data?.code === "CONFLICT") {
+        void defaultAgent.refetch();
+        void entries.refetch();
+      }
+    },
+  });
   const [selected, setSelected] = useState<string>();
   const [draftId, setDraftId] = useState(newResourceRequestKey);
   const [dirty, setDirty] = useState(false);
@@ -60,6 +74,9 @@ export default function AgentSettings({
   const active = editingNew
     ? undefined
     : (entries.data?.find(item => item.id === selected) ?? entries.data?.[0]);
+  const currentDefault = entries.data?.find(item => item.id === defaultAgent.data?.agentId);
+  const canSetDefault = Boolean(active?.published?.enabled &&
+    active.published.roles.includes("user"));
   const select = (value: string) => {
     if (busy || (dirty && !window.confirm("离开并丢弃未保存的 Agent 修改？")))
       return;
@@ -105,6 +122,32 @@ export default function AgentSettings({
           返回系统配置
         </button>
       </header>
+      <div className="agent-default">
+        <div>
+          <h2>默认助手</h2>
+          <p>{defaultAgent.isPending ? "正在读取…" : currentDefault?.published?.name ?? currentDefault?.draft.name ?? "暂不可用"}</p>
+          <p className="assistant-note">普通用户使用此 Agent。管理员可以在新对话里选择其他已发布的 Agent。</p>
+        </div>
+        {active && defaultAgent.data && active.id !== defaultAgent.data.agentId && (
+          <button type="button" className="assistant-link" disabled={busy || setDefault.isPending || !canSetDefault}
+            onClick={() => setDefault.mutate({
+              agentId: active.id,
+              expectedRevision: defaultAgent.data.revision,
+              expectedPublishedVersion: active.publishedVersion,
+            })}>
+            {setDefault.isPending ? "正在切换…" : "将所选 Agent 设为默认"}
+          </button>
+        )}
+        {active && defaultAgent.data && active.id !== defaultAgent.data.agentId && !canSetDefault && (
+          <p className="assistant-note">默认项需已发布并启用普通用户入口。</p>
+        )}
+        {(setDefault.isError || defaultAgent.isError) && (
+          <p role="alert" className="assistant-error">
+            {setDefault.error?.message ?? defaultAgent.error?.message}{" "}
+            {defaultAgent.isError && <button type="button" className="assistant-link" onClick={() => void defaultAgent.refetch()}>重新读取</button>}
+          </p>
+        )}
+      </div>
       {entries.isSuccess && <AssistantOperations />}
       {entries.isLoading ? (
         <p role="status">正在读取 Agent 配置…</p>
@@ -138,7 +181,7 @@ export default function AgentSettings({
               >
                 {entry.draft.name}
                 <small>
-                  {versions(entry)}
+                  {versions(entry)}{entry.id === defaultAgent.data?.agentId && " · 默认助手"}
                 </small>
               </button>
             ))}
@@ -370,7 +413,7 @@ function AgentEditor({
                       )
                     }
                   />
-                  {role === "admin" ? "管理员" : "普通用户"}
+                    {role === "admin" ? "管理员" : "普通用户（默认助手）"}
                 </label>
               ))}
             </div>
@@ -483,6 +526,7 @@ function AgentEditor({
                 version: base.version,
                 name: form.name,
                 greeting: form.greeting,
+                tools: entry.draft.tools,
               }}
               context={{ projectId: trialProject || undefined }}
             />

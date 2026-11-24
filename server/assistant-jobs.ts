@@ -14,6 +14,7 @@ import { getSharedPool } from "./db";
 import { recordAuthorizationAudit } from "./iam-service";
 import {
   appendAssistantChange,
+  assertAssistantCanContinue,
   assistantDatabaseUsage,
   assistantOperationHash,
   assistantTransaction,
@@ -133,6 +134,7 @@ export async function enqueueAssistantJob(
     const hash = assistantOperationHash(revision, payload);
     const prior = await priorJob(connection, sessionId, requestId, hash);
     if (prior) return prior;
+    assertAssistantCanContinue(session);
     if (process.env.ASSISTANT_JOB_INTAKE === "paused")
       throw new TRPCError({
         code: "PRECONDITION_FAILED",
@@ -309,6 +311,7 @@ async function ownedSession(
     [lease.id, lease.token]
   );
   if (!owned.length) throw new LostAssistantLease();
+  assertAssistantCanContinue(session);
   if (session.revision !== lease.revision) throw busy("会话修订已变化。");
   if (tool && !session.config.tools.some(allowed => allowed === tool))
     throw denied();
@@ -362,7 +365,7 @@ export async function finishAssistantJob(
           ? "failed"
           : "completed";
     await connection.execute(
-      "UPDATE assistant_turn_job SET status=?,failureCode=?,finishedAt=NOW(3),leaseToken=NULL,leaseUntil=NULL,payloadJson=JSON_REMOVE(payloadJson,'$.text','$.timeZone','$.proposalId','$.approve','$.kind') WHERE id=?",
+      "UPDATE assistant_turn_job SET status=?,failureCode=?,finishedAt=NOW(3),leaseToken=NULL,leaseUntil=NULL,payloadJson=JSON_REMOVE(payloadJson,'$.text','$.timeZone','$.proposalId','$.approve','$.kind','$.focus') WHERE id=?",
       [status, code, lease.id]
     );
   });

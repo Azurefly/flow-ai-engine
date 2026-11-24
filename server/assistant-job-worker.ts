@@ -117,7 +117,7 @@ export async function processAssistantLease(
             payload.proposalId,
             { user: actor, requestId: lease.requestId },
             payload.timeZone,
-            { signal: controller.signal, commit }
+            { signal: controller.signal, commit, focus: payload.focus }
           );
     if (modelReceipts.length) change.task = { ...change.task, modelReceipts };
     await finishAssistantJob(lease, change, usedTools);
