@@ -115,6 +115,18 @@ describe("Agent conversation execution with scripted model responses", () => {
       )
     ).toBe(false);
   });
+  it("连续五轮查询后使用已取得的结果生成答复，汇总时关闭工具", async () => {
+    const read = reply("", { name: "searchWorkflows", args: { query: "请假" } });
+    const deps = scripted(...Array(5).fill(read), reply("有一个请假流程。"));
+    deps.prepare.mockResolvedValue({ kind: "read", message: "已查询流程。", result: { count: 1 }, links: [] });
+    const change = await runAssistantTurn(actor, session, "查询请假流程", deps);
+    expect(deps.prepare).toHaveBeenCalledTimes(5);
+    const summary = deps.model.mock.calls[5][0];
+    expect(summary.toolChoice).toBe("none");
+    expect(summary.messages.filter(message => message.role === "tool")).toHaveLength(5);
+    expect(change.task.status).toBe("ready");
+    expect(change.messages.at(-1)?.content).toBe("有一个请假流程。");
+  });
   it("keeps completed-task access separate from pending-task access", async () => {
     const deps = scripted(reply("", { name: "listMyCompletedTasks", args: {} }), reply("无法查询。"));
     const restricted = { ...session, config: { ...session.config, tools: ["listMyTasks" as const] } };

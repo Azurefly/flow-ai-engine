@@ -291,14 +291,19 @@ export async function runAssistantTurn(
     );
   }
   const deadline = Date.now() + 110_000;
-  for (let step = 0; step < 5; step++) {
-    const finalStep = Boolean(pending);
+  const maxToolRounds = 5;
+  for (let step = 0; step <= maxToolRounds; step++) {
+    const summarizeReads = step === maxToolRounds && hasReadEvidence && !pending;
+    if (step === maxToolRounds && !summarizeReads) break;
+    const finalStep = Boolean(pending) || summarizeReads;
     let response: InvokeResult;
     try {
       const remaining = deadline - Date.now();
       if (remaining <= 0) throw new Error("deadline");
       response = await model({
-        messages: [...messages],
+        messages: summarizeReads
+          ? [...messages, { role: "user", content: "请根据本轮工具已经返回的结果直接答复。只说明已核实的事实，指出仍缺的信息。" }]
+          : [...messages],
         tools,
         ...(finalStep ? { toolChoice: "none" } : {}),
         maxTokens: 4096,
