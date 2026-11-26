@@ -247,17 +247,17 @@ export default function ApprovalCanvas({ phaseIndex }: { phaseIndex: number }) {
             "minimap.ariaLabel": "流程缩略图",
           }}
         >
-          <Background gap={20} size={1.15} color="#c8d2e4" />
+          <Background gap={20} size={1.15} color="var(--line)" />
           <CanvasControls phaseIndex={phaseIndex} />
           <MiniMap
             className="canvas-map"
             style={{ width: 144, height: 64 }}
             nodeColor={node =>
               node.data.status === "current"
-                ? "#315df5"
+                ? "var(--blue)"
                 : node.data.status === "reached"
-                  ? "#83c7b0"
-                  : "#c5cfe0"
+                  ? "var(--green)"
+                  : "var(--muted)"
             }
             pannable
             zoomable

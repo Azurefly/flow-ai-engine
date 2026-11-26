@@ -36,6 +36,7 @@ import { approvalGroupsForRecord } from "@shared/run-approval-progress";
 import { initialRunViewNode, runGraphFitOptions, runGraphHandles } from "@shared/run-graph-viewport";
 import { workflowNodeTypeLabel } from "@shared/workflow-node-label";
 import { Button } from "./ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 type ViewerNode = Node<
   { item: RunGraphNode; kind: string; choose: (id: string) => void; selected: boolean },
   "runNode"
@@ -208,6 +209,11 @@ export default function RunExecutionCanvas({
   const recordsScroll = useRef<HTMLDivElement>(null);
   const activeRecordButton = useRef<HTMLButtonElement>(null);
   const activeRecordId = selected ? record?.id : undefined;
+  const recordIndex = executionEntries.findIndex(entry => entry.node.id === activeRecordId);
+  function stepRecord(offset: number) {
+    const entry = executionEntries[recordIndex + offset];
+    if (entry) choose(entry.node.nodeId, entry.node.id);
+  }
   useEffect(() => {
     const scroller = recordsScroll.current;
     const button = activeRecordButton.current;
@@ -596,7 +602,11 @@ export default function RunExecutionCanvas({
             <>
               <header data-run-records-header="">
                 <h2 className="aiflow-type-section-title font-semibold">节点执行记录</h2>
-                <span className="aiflow-type-meta text-muted-foreground">{executionEntries.length} 条</span>
+                <div className="run-record-paging">
+                  <span aria-live="polite">{recordIndex >= 0 ? `${recordIndex + 1} / ${executionEntries.length}` : `${executionEntries.length} 条`}</span>
+                  <button type="button" aria-label="上一条执行记录" title="上一条执行记录" disabled={recordIndex < 1} onClick={() => stepRecord(-1)}><ChevronLeft size={16} /></button>
+                  <button type="button" aria-label="下一条执行记录" title="下一条执行记录" disabled={recordIndex + 1 >= executionEntries.length} onClick={() => stepRecord(1)}><ChevronRight size={16} /></button>
+                </div>
               </header>
               <div ref={recordsScroll} data-run-records-scroll="" tabIndex={0}>
                 {run.childLinks?.length > 0 && (

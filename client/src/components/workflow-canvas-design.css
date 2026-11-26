@@ -7,7 +7,7 @@
 .dark [data-canvas-redesign] {
   --aiflow-canvas-dot: #344157;
 }
-[data-canvas-redesign] [data-flow-canvas-viewport] {background: var(--background); container:flow-canvas / inline-size;}
+[data-canvas-redesign] [data-flow-canvas-viewport] {background: var(--canvas-background); container:flow-canvas / inline-size;}
 [data-canvas-redesign] .flow-design-node {
   position: relative;
   display: flex;
@@ -17,9 +17,9 @@
   padding: 12px 14px;
   overflow: visible;
   border: 1px solid var(--border);
-  border-radius: 10px !important;
+  border-radius: 14px !important;
   background: var(--card);
-  box-shadow: 0 2px 4px #0f172a08, 0 8px 24px #0f172a08;
+  box-shadow: var(--aiflow-surface-shadow);
   transition: border-color 150ms, box-shadow 150ms;
 }
 [data-canvas-redesign] .flow-design-node:hover {border-color: var(--aiflow-canvas-edge); box-shadow: 0 4px 12px #0f172a10;}
@@ -94,10 +94,10 @@
 [data-canvas-redesign] .react-flow__handle::after {content: ""; position: absolute; width: max(18px, calc(24px / var(--canvas-zoom))); height: max(18px, calc(24px / var(--canvas-zoom))); left: 50%; top: 50%; transform: translate(-50%, -50%);}
 [data-canvas-redesign] .react-flow__handle:hover {border-color: var(--aiflow-canvas-selected) !important;}
 [data-canvas-redesign] .react-flow__edge.selected {z-index: 2;}
-[data-canvas-redesign] [data-canvas-view-controls] {box-shadow: 0 2px 8px #0f172a08;}
+[data-canvas-redesign] [data-canvas-view-controls] {border-radius: 999px; box-shadow: var(--aiflow-surface-shadow);}
 [data-canvas-redesign] [data-canvas-view-controls] button {min-height: 30px; padding-inline: 10px; font-size: 13px; transition: background-color 150ms, color 150ms;}
 [data-canvas-redesign] [data-canvas-view-controls] button:disabled {opacity: .4; cursor: default;}
-[data-canvas-redesign] [data-canvas-view-controls] button {border-radius: 4px;}
+[data-canvas-redesign] [data-canvas-view-controls] button {border-radius: 999px;}
 [data-canvas-redesign] [data-canvas-view-controls] button:enabled:hover {background-color: var(--muted);}
 [data-canvas-redesign] [data-canvas-view-controls] button:focus-visible {outline: 2px solid var(--aiflow-canvas-selected); outline-offset: 2px;}
 [data-canvas-redesign] [data-flow-canvas-viewport] > details > summary {min-height: 38px; padding: 8px 12px; font-size: 13px; font-weight: 500;}

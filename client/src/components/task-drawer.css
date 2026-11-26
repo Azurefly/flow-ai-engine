@@ -7,6 +7,7 @@
   width: 100%;
   max-width: 36rem;
   height: 100dvh;
+  max-height: 100dvh;
   flex-direction: column;
   gap: 0;
   padding: 0;
@@ -220,4 +221,23 @@
   .task-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.task-body { background: var(--background); scrollbar-gutter: stable; }
+.task-body :is([data-task-form], .task-secondary) {
+  border: 1px solid var(--border);
+  border-radius: var(--aiflow-surface-radius);
+  background: var(--card);
+  padding: clamp(.75rem, 2vw, 1.15rem);
+}
+.task-title { font-size: clamp(1.1rem, 2vw, 1.4rem); line-height: 1.35; }
+.task-input { border-radius: 9px; }
+.task-field[data-invalid="true"] .task-input { border-color: var(--aiflow-danger); }
+@media (min-width: 640px) {
+  [data-task-drawer].task-drawer { border-radius: 18px 0 0 18px; box-shadow: var(--aiflow-surface-shadow-raised); }
+}
+@media (max-height: 540px) {
+  /* A short landscape window can still reach the body and both action rows. */
+  .task-header { max-height: 25dvh; padding-block: 8px; overflow-y: auto; }
+  .task-actions { max-height: 32dvh; padding-block: 6px; overflow-y: auto; }
 }

@@ -11,7 +11,7 @@ describe("已启动流程类型展示", () => {
     ["control", "控制流程"],
     ["data", "数据流程"],
     [undefined, "未标注类型"],
-    ["legacy", "未标注类型"],
+    ["legacy", "未知类型（原值：legacy）"],
   ])("明确展示 %s 的实际类型", (type, label) => {
     const run = presentProcessInstance({ flowType: type });
     const html = renderToStaticMarkup(createElement(FlowTypeBadge, { type: run.flowType }));

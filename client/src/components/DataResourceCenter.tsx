@@ -1,3 +1,4 @@
+import { catalogSearchText } from "@/lib/resource-catalog-search";
 import { showDataflowRunResult, useManualDataflowRun } from "@/hooks/useManualDataflowRun";
 import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
@@ -70,6 +71,7 @@ import {
   Plus,
   Puzzle,
   RefreshCw,
+  Search,
   Table2,
   Tags,
   Trash2,
@@ -98,6 +100,15 @@ const resourceTitleClassName =
   "aiflow-type-section-title font-semibold text-foreground";
 
 type Tab = "sources" | "assets" | "udfs" | "tags" | "plugins" | "flows";
+
+const resourceCategories = [
+  { id: "sources", label: "数据源", icon: Database },
+  { id: "assets", label: "资源探查", icon: Table2 },
+  { id: "udfs", label: "函数", icon: FileCode2 },
+  { id: "tags", label: "标签", icon: Tags },
+  { id: "plugins", label: "项目插件", icon: Puzzle },
+  { id: "flows", label: "数据流", icon: Braces },
+] as const;
 
 function formatDataflowTime(value?: string | Date | null) {
   return value
@@ -134,6 +145,13 @@ export default function DataResourceCenter({
   const [dataflowSection, setDataflowSection] = useState<
     "overview" | "runs" | "schedules"
   >("overview");
+  const [search, setSearch] = useState("");
+  const searchInput = useRef<HTMLInputElement>(null);
+  function selectCategory(next: Tab) {
+    if (next === tab) return;
+    setSearch("");
+    setTab(next);
+  }
   const [activeFlowId, setActiveFlowId] = useState("");
   const resources = trpc.data.resources.useQuery(
     { projectId },
@@ -450,75 +468,30 @@ export default function DataResourceCenter({
     void resources.refetch();
   };
 
-  const entries = useMemo(
-    () => [
-      {
-        id: "sources" as const,
-        label: "数据源",
-        icon: Database,
-        count: resources.isLoading
-          ? null
-          : resources.error
-            ? null
-            : (resources.data?.sources.length ?? 0),
-      },
-      {
-        id: "assets" as const,
-        label: "资源探查",
-        icon: Table2,
-        count: resources.isLoading
-          ? null
-          : resources.error
-            ? null
-            : (resources.data?.assets.length ?? 0),
-      },
-      {
-        id: "udfs" as const,
-        label: "函数",
-        icon: FileCode2,
-        count: resources.isLoading
-          ? null
-          : resources.error
-            ? null
-            : (resources.data?.udfs.length ?? 0),
-      },
-      {
-        id: "tags" as const,
-        label: "标签",
-        icon: Tags,
-        count: resources.isLoading
-          ? null
-          : resources.error
-            ? null
-            : (resources.data?.tags.length ?? 0),
-      },
-      {
-        id: "plugins" as const,
-        label: "项目插件",
-        icon: Puzzle,
-        count: resources.isLoading
-          ? null
-          : resources.error
-            ? null
-            : (resources.data?.plugins.length ?? 0),
-      },
-      {
-        id: "flows" as const,
-        label: "数据流",
-        icon: Braces,
-        count:
-          flows.isLoading || flows.error ? null : (flows.data?.length ?? 0),
-      },
-    ],
-    [
-      flows.data,
-      flows.error,
-      flows.isLoading,
-      resources.data,
-      resources.error,
-      resources.isLoading,
-    ]
+  const query = search.trim().toLocaleLowerCase();
+  const catalogRows = tab === "flows" ? [] : resources.data?.[tab] ?? [];
+  const visibleRows = query ? catalogRows.filter(row =>
+    catalogSearchText(row).toLocaleLowerCase().includes(query)
+  ) : catalogRows;
+  const entries = resourceCategories.map(category => ({
+    ...category,
+    count: category.id === "flows"
+      ? (flows.isSuccess ? flowList.length : null)
+      : (resources.isSuccess ? resources.data[category.id].length : null),
+  }));
+  const toolbar = catalogRows.length > 0 && (
+    <div className="catalog-search">
+      <label>
+        <Search size={16} aria-hidden="true" />
+        <input ref={searchInput} type="search" aria-label="搜索当前类别资源"
+          placeholder="搜索名称或类型" value={search}
+          onChange={event => setSearch(event.target.value)} />
+      </label>
+      {search && <button type="button" onClick={() => { setSearch(""); searchInput.current?.focus(); }}>清除搜索</button>}
+      <span role="status">{query ? `匹配 ${visibleRows.length} / ${catalogRows.length} 项` : `${catalogRows.length} 项`}</span>
+    </div>
   );
+  const noMatches = query && catalogRows.length ? "没有匹配的资源，试试其他关键词。" : "";
 
   return (
     <ResourceCatalogContext.Provider
@@ -560,7 +533,7 @@ export default function DataResourceCenter({
               data-resource-category-select=""
               aria-label="项目资源类别"
               value={tab}
-              onChange={event => setTab(event.target.value as Tab)}
+              onChange={event => selectCategory(event.target.value as Tab)}
               className="aiflow-type-control h-11 min-w-0 rounded-md border border-border bg-card px-3 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               {entries.map(item => (
@@ -582,7 +555,7 @@ export default function DataResourceCenter({
                 type="button"
                 data-selection="tab"
                 aria-current={tab === item.id ? "page" : undefined}
-                onClick={() => setTab(item.id)}
+                onClick={() => selectCategory(item.id)}
                 title={item.label}
                 className={`resource-category-tab ${tab === item.id ? "is-active" : mutedToneClass}`}
               >
@@ -707,10 +680,10 @@ export default function DataResourceCenter({
             tab === "sources" && (
               <ResourceTable
                 columns={["名称", "类型 / 读取能力", "状态", "最近校验", "操作"]}
-                empty="尚未配置数据源。"
-
+                toolbar={toolbar}
+                empty={noMatches || "尚未配置数据源。"}
               >
-                {(resources.data?.sources ?? []).map((source: any) => (
+                {visibleRows.map((source: any) => (
                   <tr key={source.id}>
                     <Cell
                       primary={source.name}
@@ -745,10 +718,10 @@ export default function DataResourceCenter({
                 "操作",
               ]}
               allowReadActions
-              empty="尚无已探查资源。"
-
+              toolbar={toolbar}
+                empty={noMatches || "尚无已探查资源。"}
             >
-              {(resources.data?.assets ?? []).map((asset: any) => (
+              {visibleRows.map((asset: any) => (
                 <tr key={asset.id}>
                   <Cell
                     primary={asset.name}
@@ -891,10 +864,10 @@ export default function DataResourceCenter({
             {!resources.isLoading && !resources.error && (
               <ResourceTable
                 columns={["函数", "类型", "描述", "状态", "操作"]}
-                empty="尚未注册函数。"
-
+                toolbar={tab === "udfs" && toolbar}
+                empty={noMatches || "尚未注册函数。"}
               >
-                {(resources.data?.udfs ?? []).map((udf: any) => (
+                {(tab === "udfs" ? visibleRows : []).map((udf: any) => (
                   <tr key={udf.id}>
                     <Cell
                       primary={udf.name}
@@ -957,14 +930,15 @@ export default function DataResourceCenter({
             </ResourceForm>
             {!resources.isLoading && !resources.error && (
               <div className="rounded-lg border border-border bg-card p-5">
+                {tab === "tags" && toolbar}
                 <div className="flex flex-wrap gap-2">
-                  {(resources.data?.tags ?? []).map((tag: any) => (
+                  {(tab === "tags" ? visibleRows : []).map((tag: any) => (
                     <span
                       key={tag.id}
                       className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium"
                       style={{
                         backgroundColor: `${tag.color}18`,
-                        color: tag.color,
+                        color: "var(--foreground)",
                       }}
                     >
                       <i
@@ -981,9 +955,9 @@ export default function DataResourceCenter({
                       />
                     </span>
                   ))}
-                  {!(resources.data?.tags ?? []).length && (
+                  {tab === "tags" && !visibleRows.length && (
                     <span className={"text-sm " + mutedToneClass}>
-                      尚未创建标签。
+                      {noMatches || "尚未创建标签。"}
                     </span>
                   )}
                 </div>
@@ -1062,10 +1036,10 @@ export default function DataResourceCenter({
             {!resources.isLoading && !resources.error && (
               <ResourceTable
                 columns={["插件", "类型", "版本", "状态", "操作"]}
-                empty="尚未登记项目插件。"
-
+                toolbar={tab === "plugins" && toolbar}
+                empty={noMatches || "尚未登记项目插件。"}
               >
-                {(resources.data?.plugins ?? []).map((plugin: any) => (
+                {(tab === "plugins" ? visibleRows : []).map((plugin: any) => (
                   <tr key={plugin.id}>
                     <Cell primary={plugin.name} secondary="项目级插件" />
                     <td className={mutedCellClassName}>{plugin.pluginType}</td>
@@ -1607,7 +1581,7 @@ function ResourceForm({
       </div>
       <Button
         type="button"
-        className="h-11 w-fit bg-blue-600 text-white shadow-2xs hover:bg-blue-700 sm:h-9"
+        className="h-11 w-fit sm:h-9"
         onClick={() => {
           toast.dismiss();
           setOpen(true);
@@ -2253,11 +2227,13 @@ function ResourceTable({
   columns,
   children,
   empty,
+  toolbar,
   allowReadActions = false,
 }: {
   columns: string[];
   children: React.ReactNode;
   empty: string;
+  toolbar?: React.ReactNode;
   allowReadActions?: boolean;
 }) {
   const showActions =
@@ -2266,6 +2242,7 @@ function ResourceTable({
   const hasRows = Children.toArray(children).some(isValidElement);
   return (
     <section className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+      {toolbar}
       {hasRows ? (
         <div
           data-resource-table-desktop=""

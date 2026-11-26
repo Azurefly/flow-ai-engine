@@ -1,3 +1,4 @@
+import { FlowTypeBadge } from "./FlowTypeBadge";
 import { showDataflowRunResult, useManualDataflowRun } from "@/hooks/useManualDataflowRun";
 import { BusinessImport } from "./BusinessImport";
 // Reuse one static class token; emitted class values and handlers are unchanged.
@@ -130,26 +131,11 @@ const projectRoleLabel = (role: string) =>
     }) as Record<string, string>
   )[role] ?? role;
 
-const flowTypeLabel = {
-  state: "状态流程",
-  control: "控制流程",
-  data: "数据流程",
-} as const;
-const flowTypeStyle = {
-  state: "bg-aiflow-info-surface text-aiflow-info",
-  control: "bg-aiflow-special-surface text-aiflow-special",
-  data: "bg-aiflow-success-surface text-aiflow-success",
-} as const;
 const auditLabel = {
   init: "待审核",
   approved: "审核通过",
   rejected: "审核驳回",
 } as const;
-const displayFlowType = (value?: string | null) =>
-  value
-    ? (flowTypeLabel[value as keyof typeof flowTypeLabel] ??
-      `未知类型（原值：${value}）`)
-    : "未知类型";
 const displayAuditStatus = (value?: string | null) =>
   value
     ? (auditLabel[value as keyof typeof auditLabel] ??
@@ -650,11 +636,11 @@ function BusinessCenterView({
             <div className="aiflow-type-section-title mb-2 flex items-center gap-2 font-semibold text-foreground">
               <FolderKanban size={15} className={mutedToneClass} />
               业务列表
-              <span className={"aiflow-type-meta font-normal " + mutedToneClass}>
-                （{total}）
+              <span className="business-count aiflow-type-meta">
+                {total}
               </span>
             </div>
-            <div className="mb-3 flex flex-wrap gap-2" role="group" aria-label="业务归档范围">
+            <div className="business-scope-picker" role="group" aria-label="业务归档范围">
               {([['active', '在用业务'], ['archived', '已归档']] as const).map(([value, label]) =>
                 <Button key={value} type="button" variant={status === value ? "secondary" : "outline"} aria-pressed={status === value} onClick={() => onStatusChange(value)}>{label}</Button>)}
             </div>
@@ -783,15 +769,20 @@ function BusinessCenterView({
                       className="border-t border-border hover:bg-muted/70"
                     >
                       <td className="min-w-0 px-4 py-3">
-                        <p
-                          className="aiflow-type-body truncate font-medium text-foreground"
-                          title={project.name}
-                        >
-                          {project.name}
-                        </p>
-                        <p className={"aiflow-type-meta mt-0.5 truncate font-mono " + mutedToneClass}>
-                          {project.code}
-                        </p>
+                        <div className="business-project-name">
+                          <FolderKanban size={20} aria-hidden="true" />
+                          <div className="min-w-0">
+                            <p
+                              className="aiflow-type-body truncate font-medium text-foreground"
+                              title={project.name}
+                            >
+                              {project.name}
+                            </p>
+                            <p className={"aiflow-type-meta mt-0.5 truncate font-mono " + mutedToneClass}>
+                              {project.code}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                       <td className="aiflow-type-body px-4 py-3 text-right font-mono tabular-nums text-foreground">
                         {status === "archived" ? (project.archivedWorkflowCount ?? 0) : project.workflowCount == null
@@ -1111,25 +1102,6 @@ export function ProjectWorkspace({
     { id: "resources" as const, label: "资源配置中心", icon: Database },
     { id: "services" as const, label: "服务端点", icon: Globe2 },
   ];
-  if (view === "process" && workflows.isLoading)
-    return (
-      <div
-        data-project-workspace-loading
-        role="status"
-        aria-live="polite"
-        className="grid min-h-[calc(100vh-48px)] place-items-center bg-card p-6 text-center"
-      >
-        <div className="border border-border bg-card px-5 py-4 shadow-2xs">
-          <Loader2 className="mx-auto animate-spin text-foreground" size={20} />
-          <p className="mt-2 text-sm font-medium text-foreground">
-            正在读取项目流程
-          </p>
-          <p className={surfaceClass2}>
-            正在加载当前业务授权范围内的流程与审核状态…
-          </p>
-        </div>
-      </div>
-    );
   if (access.isError || (access.isSuccess && !capabilities.ready))
     return (
       <section role="alert" data-project-access-denied="" className="m-4 grid gap-3 rounded-lg border border-border bg-card p-5">
@@ -1208,6 +1180,7 @@ export function ProjectWorkspace({
               type="button"
               data-selection="tab"
               aria-current={view === item.id ? "page" : undefined}
+              aria-label={item.label}
               title={sidebarCollapsed ? item.label : undefined}
               onClick={() => {
                 if (item.id === view) return;
@@ -1225,7 +1198,7 @@ export function ProjectWorkspace({
                   <span className="min-w-0 flex-1 truncate whitespace-nowrap">
                     {item.label}
                   </span>
-                  {item.id === "members" && (
+                  {item.id === "members" && members.isSuccess && (
                     <span className={"aiflow-type-meta shrink-0 rounded bg-card/70 px-1.5 " + mutedToneClass + " tabular-nums"}>
                       {new Set((members.data ?? []).map(member => member.userId)).size}
                     </span>
@@ -1250,7 +1223,13 @@ export function ProjectWorkspace({
           error={access.isError}
           onRetry={() => void refreshAccess()}
         />
-        {view === "process" && (
+        {view === "process" && workflows.isLoading && (
+          <div data-project-workspace-loading role="status" className="workspace-loading">
+            <Loader2 aria-hidden="true" className="animate-spin" size={20} />
+            正在读取项目流程
+          </div>
+        )}
+        {view === "process" && !workflows.isLoading && (
           <ProcessCenter
             project={project}
             workflows={(workflows.data ?? []) as any[]}
@@ -1299,7 +1278,7 @@ export function ProjectWorkspace({
         {view === "resources" && (
           <ResourceEditContext.Provider value={{ ...capabilities, refreshing: access.isFetching || members.isFetching, refresh: () => void refreshAccess() }}>
             <Suspense fallback={<p role="status" className={"aiflow-type-body py-4 " + mutedToneClass}>正在加载资源配置中心…</p>}>
-              <DataResourceCenter projectId={project.id} onOpenWorkflow={onOpenWorkflow} />
+              <DataResourceCenter key={project.id} projectId={project.id} onOpenWorkflow={onOpenWorkflow} />
             </Suspense>
           </ResourceEditContext.Provider>
         )}
@@ -1308,6 +1287,7 @@ export function ProjectWorkspace({
             projectId={project.id}
             endpoints={(serviceEndpoints.data ?? []) as any[]}
             loading={serviceEndpoints.isLoading}
+            failed={serviceEndpoints.isError}
             canManage={canManage}
           />
         )}
@@ -1336,11 +1316,13 @@ function ServiceEndpointCenter({
   projectId,
   endpoints,
   loading,
+  failed,
   canManage,
 }: {
   projectId: string;
   endpoints: any[];
   loading: boolean;
+  failed: boolean;
   canManage: boolean;
 }) {
   const utils = trpc.useUtils();
@@ -1489,7 +1471,13 @@ function ServiceEndpointCenter({
             正在加载服务端点…
           </div>
         )}
-        {!loading && !endpoints.length && (
+        {failed && (
+          <div role="alert" className="workspace-query-error">
+            服务端点读取失败。
+            <Button type="button" variant="outline" onClick={refresh}>重新读取服务端点</Button>
+          </div>
+        )}
+        {!failed && !loading && !endpoints.length && (
           <div className="flex min-h-28 items-center justify-center p-5 sm:p-8">
             <p className={"aiflow-type-body max-w-md text-center leading-6 " + mutedToneClass}>
               尚未登记服务端点。项目控制流程中的 HTTP/REST/METHOD
@@ -1498,8 +1486,8 @@ function ServiceEndpointCenter({
           </div>
         )}
 
-        {!loading && endpoints.length > 0 && (
-          <div className="overflow-x-auto">
+        {!failed && !loading && endpoints.length > 0 && (
+          <div className="overflow-x-auto" role="region" aria-label="服务端点列表" tabIndex={0}>
             <table className="endpoint-table">
               <thead className={"aiflow-type-body bg-muted " + mutedToneClass}>
                 <tr>
@@ -2107,7 +2095,7 @@ function ProcessCenter({
               { allowed: actionsFor(workflow).canReview, label: "审核驳回", tone: "danger", run: () => setReview({ workflow: workflowReviewSnapshot(workflow), decision: "rejected" }) },
             ].filter(action => action.allowed).map(action => (
               <button key={action.label} type="button" disabled={publish.isPending || unpublish.isPending}
-                className={`aiflow-type-control min-h-11 rounded-md border bg-card px-3 py-2 sm:min-h-0 sm:px-2.5 sm:py-1.5 ${action.tone === "success" ? "border-aiflow-success-border text-aiflow-success hover:bg-aiflow-success-surface" : action.tone === "warning" ? "border-aiflow-warning-border text-aiflow-warning hover:bg-aiflow-warning-surface" : "border-red-200 text-red-600 hover:bg-red-50"}`}
+                className={`aiflow-type-control min-h-11 rounded-md border bg-card px-3 py-2 sm:min-h-0 sm:px-2.5 sm:py-1.5 ${action.tone === "success" ? "border-aiflow-success-border text-aiflow-success hover:bg-aiflow-success-surface" : action.tone === "warning" ? "border-aiflow-warning-border text-aiflow-warning hover:bg-aiflow-warning-surface" : "border-aiflow-danger-border text-aiflow-danger hover:bg-aiflow-danger-surface"}`}
                 onClick={() => { setOpenWorkflowActionsId(null); action.run(); }}
               >{action.label}</button>
             ))}
@@ -2352,16 +2340,7 @@ function ProcessCenter({
                     )}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <span
-                      className={
-                        "inline-flex rounded px-2.5 py-1 text-xs " +
-                        (flowTypeStyle[
-                          workflow.flowType as keyof typeof flowTypeStyle
-                        ] ?? ("bg-muted " + mutedToneClass))
-                      }
-                    >
-                      {displayFlowType(workflow.flowType)}
-                    </span>
+                    <FlowTypeBadge type={workflow.flowType} />
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs">
                     <span
@@ -2537,13 +2516,18 @@ function ProcessCenter({
                   正在读取审批记录…
                 </p>
               )}
-              {!approvalHistory.isLoading &&
-                !(approvalHistory.data ?? []).length && (
+              {approvalHistory.isSuccess && !approvalHistory.data.length && (
                   <p className={surfaceClass18}>
                     暂无审批记录。
                   </p>
                 )}
-              {(approvalHistory.data ?? []).map((entry: any) => (
+              {approvalHistory.isError && (
+                <div role="alert" className="workspace-query-error">
+                  审批记录读取失败。
+                  <Button variant="outline" onClick={() => void approvalHistory.refetch()}>重新读取审批记录</Button>
+                </div>
+              )}
+              {(approvalHistory.isSuccess ? approvalHistory.data : []).map((entry: any) => (
                 <div
                   key={entry.id}
                   className="border-l-2 border-aiflow-info bg-muted px-3 py-2.5"

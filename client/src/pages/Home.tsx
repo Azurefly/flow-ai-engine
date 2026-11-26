@@ -1,3 +1,4 @@
+import { moveTabFocus } from "@/lib/tab-navigation";
 import { showDataflowRunResult, useManualDataflowRun } from "@/hooks/useManualDataflowRun";
 import RoleAuthorizationPanel from "@/components/RoleAuthorizationPanel";
 // Reuse one static class token; emitted class values and handlers are unchanged.
@@ -107,6 +108,7 @@ import {
   Clock3,
   Compass,
   Copy,
+  Database,
   Download,
   FileJson,
   FolderKanban,
@@ -381,10 +383,9 @@ function LoginScreen({
         <h2>让流程清晰，<br />让协作顺畅。</h2>
         <p className="aiflow-type-body">从业务状态到自动化编排，再到数据处理，在一个工作空间中完成设计、协作与运行。</p>
         <div data-login-flow-types="">
-          <span>状态流程</span><span>控制流程</span><span>数据流程</span>
-        </div>
-        <div data-login-flow-illustration="" aria-hidden="true">
-          <span>设计</span><i /><span>协作</span><i /><span>运行</span>
+          <span><Activity size={16} aria-hidden="true" />状态流程</span>
+          <span><FolderTree size={16} aria-hidden="true" />控制流程</span>
+          <span><Database size={16} aria-hidden="true" />数据流程</span>
         </div>
       </section>
       <section data-login-card="" className="relative w-full max-w-md overflow-hidden border border-border bg-card shadow-sm">
@@ -392,7 +393,7 @@ function LoginScreen({
           <div className="flex items-center gap-3">
             <div
               aria-hidden="true"
-              className="grid h-10 w-10 place-items-center rounded-lg bg-blue-600 text-white shadow-sm"
+              className="flow-brand-icon grid h-10 w-10 place-items-center"
             >
               <Gauge size={21} />
             </div>
@@ -450,7 +451,7 @@ function LoginScreen({
             />
           </label>
           <Button
-            className="mt-2 min-h-11 bg-blue-600 hover:bg-blue-700 text-white shadow-2xs font-medium"
+            className="mt-2 min-h-11 font-medium"
             disabled={pending}
           >
             {pending && <Loader2 className="animate-spin" />}登录流程引擎
@@ -1433,7 +1434,7 @@ function FlowConsole({
   const runNavigation = (
     <>
       <div
-        data-aiflow-run-view-tabs
+        data-aiflow-run-view-tabs onKeyDown={moveTabFocus}
         role="tablist"
         aria-orientation="horizontal"
         aria-label="已启动流程视图"
@@ -1445,6 +1446,7 @@ function FlowConsole({
           aria-label="流程工作台"
           title="流程工作台"
           aria-selected={runView === "workbench"}
+          tabIndex={runView === "workbench" ? 0 : -1}
           className={`aiflow-module-link w-full ${runView === "workbench" ? "bg-accent font-semibold text-primary" : (mutedToneClass + " hover:bg-muted")}`}
           onClick={() => navigateRoute({ section: "runs", view: "workbench" })}
         >
@@ -1457,6 +1459,7 @@ function FlowConsole({
           aria-label="运行监控"
           title="运行监控"
           aria-selected={runView === "monitor"}
+          tabIndex={runView === "monitor" ? 0 : -1}
           className={`aiflow-module-link w-full ${runView === "monitor" ? "bg-accent font-semibold text-primary" : (mutedToneClass + " hover:bg-muted")}`}
           onClick={() => {
             selectedId &&
@@ -1504,7 +1507,7 @@ function FlowConsole({
     <main
       data-aiflow-console=""
       data-editor-active={editorActive}
-      className="aiflow-console relative min-h-screen bg-background text-foreground"
+      className="aiflow-console workspace-desktop relative min-h-screen bg-background text-foreground"
     >
       {!agentSettingsActive && <AssistantLauncher key={user.id} isAdmin={user.role === "admin"}
         userId={user.id} onNavigate={navigateRoute} scopeNotice={assistantScopeNotice} page={assistantPage}

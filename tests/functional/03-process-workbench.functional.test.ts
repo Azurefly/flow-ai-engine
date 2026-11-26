@@ -104,13 +104,12 @@ describe("功能测试 - 模块 3：已启动流程工作台与运行中心 (Pro
       expect(source).toContain('data-workbench-view-navigation=""');
       expect(source).toContain("min-w-0 flex-1 whitespace-nowrap");
       expect(source).toContain("shrink-0 whitespace-nowrap rounded bg-card");
-      expect(source).toContain("p-2 sm:p-4");
-      expect(source).toContain("truncate whitespace-nowrap");
-      expect(source).toContain("hidden shrink-0 sm:block");
-      expect(source).toContain("aiflow-type-display mt-1 font-bold sm:mt-2");
-      expect(source).toContain(
-        "aiflow-type-body flex min-w-0 items-center justify-between gap-1 font-medium"
-      );
+      const metricStyles = readFileSync(new URL("../../client/src/desktop-workspace.css", import.meta.url), "utf8");
+      const metric = readFileSync(new URL("../../client/src/components/WorkspaceMetric.tsx", import.meta.url), "utf8");
+      expect(source).toContain("<WorkspaceMetric");
+      expect(metric).toContain("min-w-0 break-words font-bold tabular-nums");
+      expect(metricStyles).toMatch(/@media \(max-width: 479px\)[^{]*\{[^}]*\.workspace-metric svg[^}]*display: none/);
+      expect(metricStyles).toMatch(/\.workspace-metric > div\s*\{[^}]*font-size: var\(--aiflow-type-body\)/);
       expect(styles).not.toContain("[data-workbench-view-navigation] {");
       expect(source).toContain('aria-label="刷新当前视图"');
       expect(source).toContain("sr-only sm:not-sr-only");

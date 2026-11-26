@@ -133,7 +133,7 @@ function DialogContent({
         data-slot="dialog-content"
         className={cn(
           "nokey",
-          "bg-background fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg sm:max-w-lg",
+          "bg-background fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-h-[calc(100dvh-1.5rem)] overflow-y-auto overscroll-contain max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg sm:max-w-lg",
           className
         )}
         onEscapeKeyDown={handleEscapeKeyDown}

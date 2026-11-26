@@ -1,3 +1,4 @@
+import { moveTabFocus } from "@/lib/tab-navigation";
 import { useEffect, useRef, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { roleExpiryInput } from "@shared/role-expiry";
@@ -416,12 +417,15 @@ export default function WorkflowRoleBindingsDialog({
             </DialogDescription>
           </DialogHeader>
           <div className="auth-row">
-            <div role="tablist" aria-label="流程授权类别" className="auth-tabs">
+            <div role="tablist" aria-label="流程授权类别" onKeyDown={moveTabFocus} className="auth-tabs">
               {(["builtin", "custom"] as const).map(value => (
                 <Button
                   key={value}
                   role="tab"
                   aria-selected={tab === value}
+                  tabIndex={tab === value ? 0 : -1}
+                  id={`workflow-role-tab-${value}`}
+                  aria-controls="workflow-role-panel"
                   variant={tab === value ? "default" : "ghost"}
                   disabled={busy}
                   onClick={() => {
@@ -455,6 +459,7 @@ export default function WorkflowRoleBindingsDialog({
               填写仍保留在当前账号会话中，可导出后再确认权限。
             </p>
           )}
+          <div role="tabpanel" id="workflow-role-panel" aria-labelledby={`workflow-role-tab-${tab}`}>
           <form
             className="auth-form"
             onSubmit={event => {
@@ -701,6 +706,7 @@ export default function WorkflowRoleBindingsDialog({
               </p>
             )}
           </form>
+          </div>
           <section className="space-y-3" aria-label="流程授权记录">
             <div className="auth-row">
               <h3 className="auth-title">

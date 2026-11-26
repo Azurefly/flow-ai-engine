@@ -1,3 +1,4 @@
+import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
@@ -98,26 +99,6 @@ type DeleteTarget =
   | null;
 
 const displayWorkflowName = (name: string) => name.replaceAll("_", "_\u200b");
-
-function FlowBadge({ type }: { type: string }) {
-  const styles: Record<string, string> = {
-    state: "bg-aiflow-info-surface text-aiflow-info",
-    control: "bg-aiflow-special-surface text-aiflow-special",
-    data: "bg-aiflow-success-surface text-aiflow-success",
-  };
-  const labels: Record<string, string> = {
-    state: "状态",
-    control: "控制",
-    data: "数据",
-  };
-  return (
-    <span
-      className={`aiflow-type-meta rounded px-1.5 py-0.5 ${styles[type] ?? ("bg-muted " + mutedToneClass)}`}
-    >
-      {labels[type] ?? type}
-    </span>
-  );
-}
 
 export default function WorkflowWarehouse({
   onOpenWorkflow,
@@ -231,6 +212,18 @@ export default function WorkflowWarehouse({
   ).filter(workflow => workflow.projectId === activeProjectId);
   const selectedFolder =
     folders.find(folder => folder.id === selectedFolderId) ?? null;
+  const folderPath: Folder[] = [];
+  const visited = new Set<string>();
+  const folderById = new Map(folders.map(folder => [folder.id, folder]));
+  for (let folder = selectedFolder; folder && !visited.has(folder.id); folder = folderById.get(folder.parentId ?? "") ?? null) {
+    visited.add(folder.id);
+    folderPath.push(folder);
+  }
+  folderPath.reverse();
+  const selectFolder = (id: string | null) => {
+    setSelectedFolderId(id);
+    setSelectedWorkflowId(null);
+  };
   const scoped = selectedFolderId
     ? workflows.filter(workflow => workflow.folderId === selectedFolderId)
     : workflows.filter(workflow => !workflow.folderId);
@@ -755,7 +748,7 @@ export default function WorkflowWarehouse({
                   <button
                     className={`flex min-h-11 w-full items-center gap-2 rounded px-2 py-2 text-left text-sm ${!selectedFolderId ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
                     aria-pressed={!selectedFolderId}
-                    onClick={() => setSelectedFolderId(null)}
+                    onClick={() => selectFolder(null)}
                   >
                     <ArchiveRestore size={15} />
                     根目录{" "}
@@ -770,7 +763,7 @@ export default function WorkflowWarehouse({
                       level={0}
                       childrenOf={children}
                       selectedId={selectedFolderId}
-                      onSelect={setSelectedFolderId}
+                      onSelect={selectFolder}
                       canEdit={canEdit}
                       onAddSibling={folder =>
                         openFolderDialog("sibling", folder)
@@ -787,7 +780,16 @@ export default function WorkflowWarehouse({
                 className={`overflow-hidden rounded-lg border border-border bg-card shadow-sm ${selectedWorkflowId ? "hidden xl:block" : ""}`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border p-3">
-                  <div>
+                  <div className="min-w-0">
+                    {selectedFolder && (
+                      <nav aria-label="仓库目录路径" className="warehouse-path">
+                        <button type="button" onClick={() => selectFolder(null)}>根目录</button>
+                        {folderPath.slice(0, -1).map(folder => (
+                          <button type="button" key={folder.id} onClick={() => selectFolder(folder.id)}>{folder.name}</button>
+                        ))}
+                        <span aria-current="location">{selectedFolder.name}</span>
+                      </nav>
+                    )}
                     <h2 className={warehouseHeadingClass}>
                       {selectedFolder?.name ?? "根目录流程"}
                     </h2>
@@ -875,7 +877,7 @@ export default function WorkflowWarehouse({
                           {workflow.description || "未填写流程简介"}
                         </p>
                         <div className="mt-1 flex items-center gap-1.5">
-                          <FlowBadge type={workflow.flowType} />
+                          <FlowTypeBadge type={workflow.flowType} />
                           <span className={surfaceClass2}>
                             v{workflow.definitionVersion}
                           </span>
@@ -983,7 +985,7 @@ export default function WorkflowWarehouse({
                             {displayWorkflowName(selectedDetail.name)}
                           </p>
                           <div className="flex shrink-0 flex-col items-end gap-1">
-                            <FlowBadge type={selectedDetail.flowType} />
+                            <FlowTypeBadge type={selectedDetail.flowType} />
                             <span className={surfaceClass2}>
                               v{selectedDetail.definitionVersion}
                             </span>
@@ -1235,28 +1237,21 @@ function FolderTree({
         data-selection-row=""
         className={`group flex items-center rounded text-sm ${selectedId === folder.id ? "bg-accent text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
       >
+        <div className="folder-disclosure" style={{ paddingInlineStart: `${Math.min(level, 5) * 12}px` }}>
+          {children.length > 0 && (
+            <button type="button" aria-expanded={expanded}
+              aria-label={`${expanded ? "收起" : "展开"}目录 ${folder.name}`}
+              onClick={() => setExpanded(value => !value)}>
+              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+          )}
+        </div>
         <button
-          className="flex min-w-0 flex-1 items-center gap-1 px-2 py-1.5 text-left"
-          style={{ paddingLeft: `${8 + level * 16}px` }}
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left"
           aria-pressed={selectedId === folder.id}
           onClick={() => onSelect(folder.id)}
         >
-          {children.length ? (
-            <span
-              onClick={event => {
-                event.stopPropagation();
-                setExpanded(value => !value);
-              }}
-            >
-              {expanded ? (
-                <ChevronDown size={14} />
-              ) : (
-                <ChevronRight size={14} />
-              )}
-            </span>
-          ) : (
-            <span className="w-3.5" />
-          )}
           {expanded ? <FolderOpen size={15} /> : <FolderClosed size={15} />}
           <span className="truncate">{folder.name}</span>
         </button>
@@ -1266,6 +1261,7 @@ function FolderTree({
               type="button"
               aria-label={`${folder.name} 的目录操作`}
               title="目录操作"
+              aria-expanded={menuOpen}
               className={"rounded p-1 " + mutedToneClass + " opacity-0 hover:bg-card hover:text-foreground group-hover:opacity-100 focus:opacity-100"}
               onClick={() => setMenuOpen(value => !value)}
             >

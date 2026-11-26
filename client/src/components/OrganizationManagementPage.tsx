@@ -1,3 +1,4 @@
+import { moveTabFocus } from "@/lib/tab-navigation";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 // Shared presentation strings keep equivalent controls consistent without changing handlers.
@@ -540,7 +541,7 @@ export default function OrganizationManagementPage({
             ref={unitActionsRef}
             className="relative self-start sm:self-auto"
           >
-            <summary className="inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-white shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 min-[1024px]:h-10">
+            <summary className="inline-flex h-11 cursor-pointer list-none items-center gap-2 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-2xs hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 min-[1024px]:h-10">
               <Plus size={15} />
               新增部门 <ChevronDown size={14} />
             </summary>
@@ -800,7 +801,7 @@ export default function OrganizationManagementPage({
                 </div>
                 <div
                   role="tablist"
-                  data-org-tabs=""
+                  data-org-tabs="" onKeyDown={moveTabFocus}
                   aria-label="组织部门详情"
                   className="mt-5 grid min-w-0 grid-cols-3 gap-1 border-b border-border sm:flex sm:flex-wrap"
                 >
@@ -824,6 +825,9 @@ export default function OrganizationManagementPage({
                       type="button"
                       role="tab"
                       aria-selected={tab === item.id}
+                      tabIndex={tab === item.id ? 0 : -1}
+                      id={`org-tab-${item.id}`}
+                      aria-controls="org-panel"
                       className={`aiflow-type-control flex h-11 min-w-0 items-center justify-center gap-1 border-b-2 px-1.5 text-center sm:gap-2 sm:px-4 ${tab === item.id ? "border-aiflow-info bg-aiflow-info-surface text-aiflow-info" : ("border-transparent " + mutedToneClass + " hover:bg-muted")}`}
                       onClick={() => setTab(item.id)}
                     >
@@ -836,7 +840,7 @@ export default function OrganizationManagementPage({
                 </div>
                 {tab === "overview" && (
                   <div
-                    data-org-overview=""
+                    data-org-overview="" role="tabpanel" id="org-panel" aria-labelledby={`org-tab-${tab}`} tabIndex={0}
                     className="mt-4 grid grid-cols-1 gap-2 min-[448px]:grid-cols-2 xl:grid-cols-3"
                   >
                     <Info
@@ -915,7 +919,7 @@ export default function OrganizationManagementPage({
                   </div>
                 )}
                 {tab === "members" && (
-                  <div data-org-members="" className="mt-5">
+                  <div data-org-members="" role="tabpanel" id="org-panel" aria-labelledby={`org-tab-${tab}`} tabIndex={0} className="mt-5">
                     <div className={surfaceClass7}>
                       <p className={surfaceClass8}>
                         成员可跨部门任职；主部门用于确定直属上级。
@@ -1130,7 +1134,7 @@ export default function OrganizationManagementPage({
                   </div>
                 )}
                 {tab === "permissions" && (
-                  <div data-org-permissions="" className="mt-5">
+                  <div data-org-permissions="" role="tabpanel" id="org-panel" aria-labelledby={`org-tab-${tab}`} tabIndex={0} className="mt-5">
                     <div className={surfaceClass7}>
                       <p className={surfaceClass8}>
                         绑定后，部门启用成员按有效期实时继承权限；可选择是否覆盖子部门成员。

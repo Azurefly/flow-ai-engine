@@ -3,11 +3,11 @@
 :root {
   --selection-surface: #eaf0ff;
   --selection-surface-hover: #dfe8ff;
-  --selection-text: #2449b5;
-  --selection-stroke: #a5b9f0;
-  --selection-indicator: #315df5;
+  --selection-text: #004d9e;
+  --selection-stroke: #b1c8e5;
+  --selection-indicator: var(--primary);
   --selection-highlight: #ffffffb3;
-  --selection-focus: #315df5;
+  --selection-focus: var(--primary);
 }
 .dark {
   --selection-surface: #233757;
@@ -18,17 +18,6 @@
   --selection-highlight: #ffffff0d;
   --selection-focus: #a8c4ff;
 }
-/* The primary navigation has a dark surface in both themes. */
-[data-workspace-header] {
-  --selection-surface: #2c4168;
-  --selection-surface-hover: #354e7a;
-  --selection-text: #ffffff;
-  --selection-stroke: #637fae;
-  --selection-indicator: #b7ceff;
-  --selection-highlight: #ffffff12;
-  --selection-focus: #c0d4ff;
-}
-
 :root :is([role="tab"], [data-selection="tab"], .aiflow-module-link,
   button[aria-pressed], [data-slot="toggle"], [data-slot="toggle-group-item"]) {
   position: relative;

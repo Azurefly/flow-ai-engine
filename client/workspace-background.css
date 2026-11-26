@@ -1,0 +1,26 @@
+/* One stationary backdrop behind the console and the standalone approval demo. */
+.workspace-desktop {
+  --desk-base: light-dark(#edf1fa, #171c2c);
+  --desk-aura: light-dark(#dedff7, #30314e);
+  --desk-ridge: light-dark(#f7f7ff, #3b4565);
+  --desk-fold: light-dark(#d5e3f7, #1b2c43);
+  --desk-horizon: light-dark(#e6e7fa, #293451);
+  --desk-warmth: light-dark(#f9f0ed, #302839);
+  isolation: isolate;
+}
+.workspace-desktop::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  pointer-events: none;
+  background-color: var(--desk-base);
+  background-image:
+    radial-gradient(ellipse 112% 94% at 100% 151%, var(--desk-fold) 45%, var(--desk-ridge) 82%, transparent 82.4%),
+    radial-gradient(ellipse 108% 118% at 120% 124%, var(--desk-horizon) 46%, var(--desk-aura) 64%, var(--desk-ridge) 73%, transparent 73.4%),
+    radial-gradient(ellipse at 7% 0%, var(--desk-warmth), transparent 50%),
+    linear-gradient(145deg, var(--desk-base) 14%, var(--desk-aura) 74%, var(--desk-fold));
+}
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce), (forced-colors: active), print {
+  .workspace-desktop::before { display: none; }
+}

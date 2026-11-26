@@ -98,6 +98,127 @@
 .endpoint-table .endpoint-address { color: var(--muted-foreground); font-family: var(--font-mono,monospace); font-size: 13px; white-space: normal; overflow-wrap: anywhere; }
 .endpoint-table td:nth-child(4) { white-space: normal; overflow-wrap: anywhere; }
 
+.workspace-loading, .workspace-query-error {
+  display: flex;
+  min-height: 9rem;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: .75rem;
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--aiflow-surface-radius);
+  background: var(--card);
+  color: var(--muted-foreground);
+}
+.workspace-query-error { color: var(--aiflow-danger); }
+.catalog-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.catalog-search label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 12rem;
+  min-width: 0;
+  max-width: 24rem;
+  padding-inline: 10px;
+  border-radius: 10px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+.catalog-search label:focus-within { outline: 2px solid var(--ring); }
+.catalog-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  background: transparent;
+  border: 0;
+  color: var(--foreground);
+  outline: none;
+}
+.catalog-search input::-webkit-search-cancel-button { appearance: none; }
+.catalog-search button { min-height: 44px; color: var(--aiflow-info); }
+.catalog-search [role="status"] { margin-inline-start: auto; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+[data-resource-editor="tags"] .catalog-search { margin: -1.25rem -1.25rem 1rem; }
+.warehouse-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  margin-bottom: 4px;
+  color: var(--muted-foreground);
+  font-size: var(--aiflow-type-meta);
+}
+.warehouse-path > * { max-width: 100%; overflow-wrap: anywhere; }
+.warehouse-path button { color: var(--aiflow-info); min-height: 36px; }
+.warehouse-path button:hover { text-decoration: underline; }
+.warehouse-path > * + *::before { content: "›" / ""; color: var(--muted-foreground); padding-right: 6px; }
+.folder-disclosure { display: grid; min-width: 32px; box-sizing: content-box; place-items: center; }
+.folder-disclosure button { display: grid; width: 32px; height: 36px; place-items: center; border-radius: 8px; }
+.folder-disclosure button:hover { color: var(--foreground); background: var(--muted); }
+[data-aiflow-warehouse] [data-selection-row] > button svg { flex-shrink: 0; }
+@media (hover: none) {
+  [data-aiflow-warehouse] button[title="目录操作"] { opacity: 1; min-width: 44px; min-height: 44px; }
+  .folder-disclosure button { width: 44px; height: 44px; }
+}
+
+/* Settings are read as rows. The native checkbox keeps its keyboard, label and form behavior. */
+.preference-rows { display: grid; min-width: 0; }
+.preference-rows label {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) minmax(0, 1.3fr);
+  align-items: center;
+  gap: 10px 24px;
+  min-height: 58px;
+  padding: 10px 0;
+  font-size: var(--aiflow-type-body);
+  font-weight: 500;
+}
+.preference-rows > * + * { border-top: 1px solid var(--border); }
+.preference-rows input:not([type="checkbox"]), .preference-rows select { width: 100%; }
+.preference-rows label:has(.preference-switch) { display: flex; flex-direction: row-reverse; justify-content: space-between; }
+input.preference-switch {
+  appearance: none;
+  position: relative;
+  display: inline-block;
+  width: 42px;
+  height: 26px;
+  flex: none;
+  margin: 0;
+  border: 1px solid var(--muted-foreground);
+  border-radius: 999px;
+  background: var(--muted);
+  cursor: pointer;
+}
+input.preference-switch::after {
+  position: absolute;
+  content: "";
+  inset: 3px auto 3px 3px;
+  width: 18px;
+  border-radius: 50%;
+  background: var(--muted-foreground);
+}
+input.preference-switch:checked { background: var(--primary); border-color: var(--primary); }
+input.preference-switch:checked::after { transform: translateX(16px); background: var(--primary-foreground); }
+input.preference-switch:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+input.preference-switch:disabled { cursor: default; opacity: .55; }
+@media (prefers-reduced-motion: no-preference) {
+  input.preference-switch::after { transition: transform var(--duration-surface) var(--ease-spring); }
+}
+@media (forced-colors: active) {
+  input.preference-switch { appearance: auto; }
+  input.preference-switch::after { display: none; }
+}
+@media (max-width: 599px) {
+  .preference-rows label { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* 系统配置使用横向分类，内容区域获得完整桌面宽度。 */
 @media (min-width: 1024px) {
   [data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: minmax(0,1fr); align-content: start; gap: 20px; }

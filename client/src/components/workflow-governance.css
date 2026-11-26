@@ -43,7 +43,7 @@
   @apply max-h-[520px] overflow-y-auto rounded-md border border-border bg-muted p-2;
 }
 .gov-version-link {
-  @apply font-semibold text-indigo-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500;
+  @apply font-semibold text-aiflow-special hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500;
 }
 .gov-tag {
   @apply rounded bg-muted px-2 py-1 text-muted-foreground;
@@ -70,7 +70,7 @@
   @apply min-w-0 whitespace-pre-wrap break-words text-foreground;
 }
 .gov-state-badge {
-  @apply rounded-full bg-teal-50 px-2.5 py-1 text-teal-700;
+  @apply rounded-full bg-aiflow-success-surface px-2.5 py-1 text-aiflow-success;
 }
 .gov-wide-empty {
   @apply rounded-lg border border-dashed border-border p-4 text-center text-muted-foreground sm:col-span-2 xl:col-span-3;

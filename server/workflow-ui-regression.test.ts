@@ -690,7 +690,8 @@ describe("流程设计器界面回归约束", () => {
     expect(projectWorkspaceSource).toContain("workflowCode(workflow)");
     expect(projectWorkspaceSource).toContain("h-11 min-h-11 flex-1");
     expect(projectWorkspaceSource).toContain("未知审核状态（原值：${value}）");
-    expect(projectWorkspaceSource).toContain("未知类型（原值：${value}）");
+    expect(projectWorkspaceSource).toContain("<FlowTypeBadge type={workflow.flowType}");
+    expect(source("../client/src/components/FlowTypeBadge.tsx")).toContain("未知类型（原值：${type}）");
   });
 
   it("全站字号采用统一层级并收敛历史过小字号", () => {
@@ -1716,7 +1717,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain('data-flow-canvas-actions=""');
     expect(canvasSource).toContain("showCanvasActions = true");
     expect(processDetailPageSource).toContain("showCanvasActions={false}");
-    expect(canvasDesignStyles).toContain("border-radius: 10px !important;");
+    expect(canvasDesignStyles).toMatch(/\.flow-design-node\s*\{[^}]*border-radius: 14px !important;/);
     expect(canvasDesignStyles).toContain("width: 208px;");
     expect(canvasSource).toContain("break-words text-sm font-semibold");
     expect(canvasSource).toContain("justify-start");
@@ -1780,7 +1781,7 @@ describe("流程设计器界面回归约束", () => {
     expect(mobileCards).toContain("发起人");
     expect(mobileCards).toContain("开始时间");
     expect(mobileCards).toContain("结束时间");
-    expect(mobileCards).toContain("presentation.label");
+    expect(mobileCards).toContain("<RunStatusBadge status={status}");
     expect(mobileCards).toContain("aiflow-type-meta");
     expect(mobileCards).toContain("aiflow-type-body");
     expect(mobileCards).toContain("h-11 min-h-11 w-full justify-center");
@@ -1916,7 +1917,7 @@ describe("流程设计器界面回归约束", () => {
     expect(routerSource).toContain(
       "triggeredByQuery: z.string().trim().min(1).max(80).optional()"
     );
-    expect(governanceSource).toContain("未知状态（原值：${status}）");
+    expect(source("../client/src/components/RunStatusBadge.tsx")).toContain("formatRunStatus(status)");
     expect(instanceDetailSource).toContain("未知状态（原值：${value}）");
     expect(instanceDetailSource).toContain('waiting: "等待中"');
     expect(instanceDetailSource).toContain('blocked: "已阻塞"');
@@ -1939,7 +1940,7 @@ describe("流程设计器界面回归约束", () => {
       'className={`${compactButtonClass} text-aiflow-warning`}'
     );
     expect(runCenterSource).toContain(
-      'className={`${compactButtonClass} text-red-700`}'
+      'className={`${compactButtonClass} text-aiflow-danger`}'
     );
     expect(runCenterSource).not.toContain("sm:h-7");
     expect(runCenterSource).not.toContain("sm:h-8");
@@ -1986,7 +1987,7 @@ describe("流程设计器界面回归约束", () => {
       'metrics.data.totalRuns > 0 ? "emerald" : "slate"'
     );
     expect(runCenterSource).toContain("tone={failedMetricTone}");
-    expect(runCenterSource).toContain(
+    expect(source("../client/src/components/WorkspaceMetric.tsx")).toContain(
       "aiflow-type-display min-w-0 break-words font-bold tabular-nums mt-1 sm:mt-2"
     );
     expect(runCenterSource).not.toContain("sm:text-2xl");
@@ -1994,9 +1995,8 @@ describe("流程设计器界面回归约束", () => {
   });
 
   it("运行监控把关键指标与状态说明设为正文档，元信息仅保留次级字号", () => {
-    expect(runCenterSource).toContain(
-      "aiflow-type-body flex items-center justify-between gap-1 font-medium"
-    );
+    expect(runCenterSource).toContain("<WorkspaceMetric");
+    expect(source("../client/src/desktop-workspace.css")).toMatch(/\.workspace-metric > div\s*\{[^}]*font-size: var\(--aiflow-type-body\)/);
     expect(runCenterSource).toContain(
       "aiflow-type-body rounded-lg border border-border bg-card px-3 py-2 text-muted-foreground"
     );
@@ -2364,7 +2364,7 @@ describe("流程设计器界面回归约束", () => {
     );
     expect(projectWorkspaceSource).toContain("正在读取项目流程");
     expect(projectWorkspaceSource).toContain(
-      "正在加载当前业务授权范围内的流程与审核状态"
+      "正在读取项目流程"
     );
     expect(projectWorkspaceSource).toContain("重置筛选");
     expect(projectWorkspaceSource).toContain("可重置筛选或从右上角新建流程。");
@@ -2585,7 +2585,7 @@ describe("流程设计器界面回归约束", () => {
     expect(canvasSource).toContain("最小化面板");
     expect(canvasSource).toContain('role="tablist"');
     expect(canvasSource).toContain('role={selectedFieldGroups.length > 1 ? "tabpanel" : "region"}');
-    expect(canvasDesignStyles).toContain("border-radius: 10px !important;");
+    expect(canvasDesignStyles).toMatch(/\.flow-design-node\s*\{[^}]*border-radius: 14px !important;/);
     expect(canvasSource).toContain("画布说明");
     expect(canvasSource).toContain("RotateCcw");
     expect(canvasSource).toContain("若无元件，请添加元件。");

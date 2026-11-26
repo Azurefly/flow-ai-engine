@@ -1,3 +1,5 @@
+import { RunStatusBadge } from "./RunStatusBadge";
+import { WorkspaceMetric } from "./WorkspaceMetric";
 import { FlowTypeBadge } from "./FlowTypeBadge";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
@@ -12,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { formatRunDuration } from "@shared/run-duration";
 import { runMonitorRefreshInterval } from "@shared/run-monitor-refresh";
-import { formatRunStatus, runStatusSummary } from "@shared/run-status-summary";
+import { runStatusSummary } from "@shared/run-status-summary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trpc } from "@/lib/trpc";
@@ -247,8 +249,8 @@ export default function RunCenter({
     },
     onError: refreshControlError,
   });
-  const workflowAlerts = (alerts.data ?? []) as any[];
-  const workflowRuns = runs.data?.items ?? [];
+  const workflowAlerts = (alerts.isSuccess ? alerts.data : []) as any[];
+  const workflowRuns = runs.isSuccess ? runs.data.items : [];
   const queryError =
     runs.error?.message || metrics.error?.message || alerts.error?.message;
   const queryLoading = runs.isLoading || metrics.isLoading || alerts.isLoading;
@@ -351,7 +353,7 @@ export default function RunCenter({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className={`${compactButtonClass} text-red-700`}
+                    className={`${compactButtonClass} text-aiflow-danger`}
                     disabled={controlPending}
                     onClick={() => {
                       setControlError("");
@@ -506,9 +508,6 @@ export default function RunCenter({
         className="flex min-w-0 flex-col gap-3 lg:flex-row lg:items-end lg:justify-between"
       >
         <div className="min-w-0 lg:flex-1">
-          <p className="aiflow-type-meta font-bold tracking-[.18em] text-aiflow-info">
-            RUNTIME OBSERVABILITY
-          </p>
           <h1
             data-aiflow-page-title=""
             className="aiflow-type-page-title mt-1 font-semibold"
@@ -694,19 +693,19 @@ export default function RunCenter({
         </div>
       )}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
-        <MetricCard
+        <WorkspaceMetric
           label="运行数"
           value={metricsUnavailable ? "—" : metrics.data.totalRuns}
           icon={BarChart3}
           tone="blue"
         />
-        <MetricCard
+        <WorkspaceMetric
           label="失败"
           value={metricsUnavailable ? "—" : metrics.data.failedRuns}
           icon={XCircle}
           tone={failedMetricTone}
         />
-        <MetricCard
+        <WorkspaceMetric
           label="成功/失败平均耗时"
           value={
             metricsUnavailable
@@ -739,7 +738,7 @@ export default function RunCenter({
           </span>
         </div>
       </details>
-      {workflowAlerts.length === 0 && !alerts.isLoading ? (
+      {alerts.isError ? null : workflowAlerts.length === 0 && !alerts.isLoading ? (
         <div className={"aiflow-type-body flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-border bg-card px-4 py-2.5 " + mutedToneClass + " shadow-2xs"}>
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
             <CheckCircle2 size={14} className="text-aiflow-success" />
@@ -753,13 +752,13 @@ export default function RunCenter({
           </span>
         </div>
       ) : (
-        <section className="overflow-hidden rounded-lg border border-red-100 bg-card shadow-sm">
-          <div className="flex items-center justify-between border-b border-red-100 bg-red-50 px-4 py-3">
-            <div className="aiflow-type-section-title flex items-center gap-2 font-semibold text-red-900">
+        <section className="overflow-hidden rounded-lg border border-aiflow-danger-border bg-card shadow-sm">
+          <div className="flex items-center justify-between border-b border-aiflow-danger-border bg-aiflow-danger-surface px-4 py-3">
+            <div className="aiflow-type-section-title flex items-center gap-2 font-semibold text-aiflow-danger">
               <AlertTriangle size={15} />
               失败告警
             </div>
-            <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-red-700">
+            <span className="aiflow-type-meta rounded bg-card px-2 py-0.5 text-aiflow-danger">
               {workflowAlerts.filter((alert: any) => !alert.readAt).length} 未读
             </span>
           </div>
@@ -847,11 +846,7 @@ export default function RunCenter({
                 <code className={"aiflow-type-code font-mono " + mutedToneClass}>
                   {run.id.slice(0, 8)}
                 </code>
-                <span
-                  className={`aiflow-type-meta rounded px-1.5 py-0.5 font-medium border ${run.status === "success" ? "bg-aiflow-success-surface text-aiflow-success border-aiflow-success-border" : run.status === "failed" ? "bg-red-50 text-red-700 border-red-200" : "bg-aiflow-warning-surface text-aiflow-warning border-aiflow-warning-border"}`}
-                >
-                  {formatRunStatus(run.status)}
-                </span>
+                <RunStatusBadge status={run.status} />
               </div>
               <div className={"mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 " + mutedToneClass}>
                 <span className={timeClass}>
@@ -868,7 +863,7 @@ export default function RunCenter({
               </div>
             </button>
           ))}
-          {!runs.isFetching && !workflowRuns.length && (
+          {runs.isSuccess && !runs.isFetching && !workflowRuns.length && (
             <p className={"aiflow-type-body p-6 text-center " + mutedToneClass}>
               当前筛选条件下尚无运行记录。
             </p>
@@ -876,7 +871,7 @@ export default function RunCenter({
         </div>
         <div className={"aiflow-type-control flex flex-col gap-2 border-t border-border px-4 py-3 " + mutedToneClass + " sm:flex-row sm:items-center sm:justify-between"}>
           <span aria-live="polite">
-            第 {historyCursorStack.length} 页 · 本页 {workflowRuns.length} 条
+            第 {historyCursorStack.length} 页{runs.isSuccess && ` · 本页 ${workflowRuns.length} 条`}
           </span>
           <div className="flex gap-2">
             <Button
@@ -915,43 +910,6 @@ export default function RunCenter({
         </div>
       </section>
 
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  icon: Icon,
-  tone,
-  fullWidthOnMobile = false,
-}: {
-  label: string;
-  value: string | number;
-  icon: typeof BarChart3;
-  tone: "blue" | "emerald" | "red" | "amber" | "slate";
-  fullWidthOnMobile?: boolean;
-}) {
-  const tones = {
-    blue: "border-aiflow-info-border bg-aiflow-info-surface text-aiflow-info",
-    emerald:
-      "border-aiflow-success-border bg-aiflow-success-surface text-aiflow-success",
-    red: "border-red-100 bg-red-50 text-red-700",
-    amber:
-      "border-aiflow-warning-border bg-aiflow-warning-surface text-aiflow-warning",
-    slate: "border-border bg-muted text-foreground",
-  };
-  return (
-    <div
-      className={`min-w-0 rounded-lg border p-2.5 sm:p-4 ${fullWidthOnMobile ? "col-span-2 sm:col-span-1" : ""} ${tones[tone]}`}
-    >
-      <div className="aiflow-type-body flex items-center justify-between gap-1 font-medium">
-        <span className="min-w-0 break-words">{label}</span>
-        <Icon className="shrink-0" size={14} />
-      </div>
-      <p className="aiflow-type-display min-w-0 break-words font-bold tabular-nums mt-1 sm:mt-2">
-        {value}
-      </p>
     </div>
   );
 }

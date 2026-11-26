@@ -1,29 +1,80 @@
-/* 桌面设计系统。仅匹配产品语义区域，画布几何、业务状态和表单事件由原组件管理。 */
+/* Opaque reading surfaces and a single translucent layer for navigation and tools. */
 :root {
-  --aiflow-page-gutter: 24px;
+  --aiflow-page-gutter: clamp(16px, 2.5vw, 40px);
   --aiflow-content-max: 1600px;
-  --aiflow-surface-radius: 12px;
-  --aiflow-surface-shadow: 0 2px 8px rgb(23 37 61 / 4%);
-  --aiflow-surface-shadow-raised: 0 16px 48px rgb(23 37 61 / 12%);
-  --aiflow-topbar: #17243c;
-  --aiflow-topbar-text: #d5deed;
+  --aiflow-surface-radius: 18px;
+  --aiflow-surface-shadow: 0 2px 6px rgb(30 35 52 / 3%), 0 10px 30px -18px rgb(30 35 52 / 18%);
+  --aiflow-surface-shadow-raised: 0 20px 60px -16px rgb(24 31 52 / 22%);
+  --aiflow-topbar: var(--card);
+  --glass-filter: none;
+  --glass-edge: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --glass-highlight: rgb(255 255 255 / 72%);
 }
-
-/* 一级导航与页面内容使用明确的明暗层级，选中、悬停、键盘焦点各自可辨。 */
-[data-aiflow-console] > [data-workspace-header] {
+.dark {
+  --aiflow-surface-shadow: 0 2px 8px rgb(0 0 0 / 16%);
+  --aiflow-surface-shadow-raised: 0 20px 64px -12px rgb(0 0 0 / 55%);
+  --glass-highlight: rgb(255 255 255 / 12%);
+}
+@supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+  :root {
+    --aiflow-topbar: color-mix(in srgb, var(--card) 82%, transparent);
+    --glass-filter: saturate(145%) blur(18px);
+  }
+}
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more), (forced-colors: active) {
+  :root { --aiflow-topbar: var(--card); --glass-filter: none; --glass-edge: var(--input); }
+}
+#aiflow-mobile-navigation, [data-aiflow-console] > [data-workspace-header], .editor-command-bar,
+[data-slot="dropdown-menu-content"], [data-canvas-redesign] [data-canvas-view-controls] {
   background: var(--aiflow-topbar);
-  border-bottom-color: transparent;
-  color: var(--aiflow-topbar-text);
-  box-shadow: 0 2px 8px rgb(15 23 42 / 10%);
+  -webkit-backdrop-filter: var(--glass-filter);
+  backdrop-filter: var(--glass-filter);
+  border-color: var(--glass-edge);
 }
-[data-workspace-header] [data-aiflow-brand-name] { color: #fff; font-size: 15px; letter-spacing: -.2px; }
-[data-workspace-header] [data-workspace-brand-mark] { background: #526df5; border-radius: 8px; }
-[data-workspace-header] [data-aiflow-primary-nav] > a { color: var(--aiflow-topbar-text); min-height: 40px; padding-inline: 16px; }
-[data-workspace-header] [data-aiflow-primary-nav] > a:hover { background: #ffffff0f; color: #fff; }
-[data-workspace-header] :is([data-workspace-search-trigger],[data-aiflow-theme-toggle]) { color: var(--aiflow-topbar-text); background: transparent; border-color: #ffffff26; }
-[data-workspace-header] :is([data-workspace-search-trigger],[data-aiflow-theme-toggle]):hover { color: #fff; background: #ffffff18; }
-[data-workspace-header] kbd { color: inherit; background: #ffffff12; border-color: #ffffff26; }
-[data-workspace-header] [data-workspace-avatar] { background: #ffffff18; color: #fff; border-color: #ffffff26; }
+[data-aiflow-console] > [data-workspace-header] {
+  color: var(--foreground);
+  box-shadow: inset 0 1px var(--glass-highlight), 0 1px 8px rgb(32 32 40 / 4%);
+}
+[data-workspace-header] [data-aiflow-brand-name] { color: var(--foreground); font-size: 15px; letter-spacing: -.025em; }
+.flow-brand-icon, [data-workspace-header] [data-workspace-brand-mark] {
+  border-radius: 28%;
+  background: linear-gradient(145deg, #7e9dff, #3860df 55%, #343fac);
+  color: white;
+  box-shadow: inset 0 1px 2px #ffffff80, 0 2px 5px #253a9c33;
+}
+[data-workspace-header] [data-aiflow-primary-nav] {
+  isolation: isolate;
+  gap: 2px;
+  border-radius: 999px;
+  padding: 4px;
+  background: var(--muted);
+}
+[data-workspace-header] [data-aiflow-primary-nav] > a {
+  z-index: 1;
+  min-height: 36px;
+  padding-inline: clamp(10px, 1.2vw, 20px);
+  border-radius: 999px;
+  color: var(--muted-foreground);
+}
+[data-workspace-header] [data-aiflow-primary-nav] > a:hover { color: var(--foreground); background: var(--card); }
+:root [data-workspace-header] [data-nav-indicator-ready] > a[aria-current="page"] {
+  color: var(--accent-foreground);
+  font-weight: 650;
+  background: transparent;
+  box-shadow: none;
+}
+[data-workspace-header] :is([data-workspace-search-trigger], [data-aiflow-theme-toggle]) {
+  border-radius: 999px; color: var(--muted-foreground); background: var(--muted); border-color: var(--glass-edge);
+}
+[data-workspace-header] kbd { border-radius: 4px; padding-inline: 3px; color: var(--muted-foreground); background: var(--card); }
+[data-workspace-header] [data-workspace-avatar] { color: var(--accent-foreground); background: var(--accent); border-color: var(--glass-edge); }
+
+#aiflow-mobile-navigation {
+  border-radius: 0 22px 22px 0;
+  box-shadow: var(--aiflow-surface-shadow-raised);
+}
+#aiflow-mobile-navigation::backdrop { background: rgb(12 14 22 / 40%); }
+#aiflow-mobile-navigation nav [data-selection] { border-radius: 12px; }
 
 /* 二级导航横向排列。业务选择、分区和内容区各占一层，长业务名不挤压操作。 */
 @media (min-width: 1024px) {
@@ -38,7 +89,7 @@
   [data-aiflow-project-workspace] > aside > div:first-child > p:empty { display: none; }
   [data-aiflow-project-workspace] .aiflow-business-picker { flex: 1; min-width: 0; margin: 0; padding: 8px 12px; border: 1px solid var(--border); background: var(--card); }
   [data-aiflow-project-workspace] > aside nav { display: flex; flex: 1; flex-wrap: wrap; gap: 4px; padding: 0; border: 0; }
-  [data-aiflow-project-workspace] > aside nav button { min-height: 40px; padding: 10px 16px; border-radius: 6px; gap: 8px; }
+  [data-aiflow-project-workspace] > aside nav button { min-height: 40px; padding: 10px 16px; border-radius: 999px; gap: 8px; }
   [data-aiflow-project-workspace][data-navigation-collapsed="true"] > aside > div:first-child { flex: 0 0 auto; }
   [data-aiflow-project-workspace] > section { width: 100%; max-width: 1600px; margin-inline: auto; padding: 20px 28px 32px; }
   [data-aiflow-project-workspace] > section > div { max-width: none; }
@@ -69,7 +120,7 @@
 [data-aiflow-warehouse] > div > .grid > :is(aside,section),
 [data-system-config-content],
 [data-aiflow-identity-page] :is([data-iam-user-workbench],[data-iam-role-workbench]) > section {
-  border-radius: 12px; box-shadow: var(--aiflow-surface-shadow); border-color: var(--border);
+  border-radius: var(--aiflow-surface-radius); box-shadow: var(--aiflow-surface-shadow); border-color: var(--border);
 }
 [data-business-list-toolbar] { background: var(--card); padding: 18px 20px; }
 [data-aiflow-business-center] table :is(th,td) { padding: 14px 20px; }
@@ -86,7 +137,18 @@
 
 /* 人员目录与详情保持稳定的主从关系，分区导航使用一致的选中标记。 */
 [data-aiflow-identity-page] [data-identity-navigation],
-[data-aiflow-system-config] [data-system-config-navigation] { border-radius: 10px; box-shadow: none; }
+[data-aiflow-system-config] [data-system-config-navigation],
+[data-workbench-layout] > [data-workbench-navigation] {
+  border-radius: var(--aiflow-surface-radius);
+  border-color: var(--glass-edge);
+  background: var(--muted);
+}
+:is([data-system-config-navigation], [data-identity-navigation], [data-workbench-navigation]) {
+  --selection-surface: var(--card);
+  --selection-surface-hover: var(--card);
+  --selection-stroke: var(--glass-edge);
+}
+:is([data-system-config-navigation], [data-identity-navigation]) .aiflow-module-link { border-radius: 999px; }
 [data-iam-user-workbench] > section:first-child > div:first-child,
 [data-iam-role-workbench] > section:first-child > div:first-child { background: var(--card); padding: 16px; }
 [data-iam-user-row], [data-iam-role-row] { padding-inline: 16px; }
@@ -100,10 +162,10 @@
 /* 详情、版本治理、运行画布与抽屉共用阅读节奏。 */
 [data-aiflow-process-detail-page] > header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
 [data-aiflow-process-detail-page] > header h1 { overflow-wrap: anywhere; }
-.gov-panel { border-radius: 12px; box-shadow: var(--aiflow-surface-shadow); }
+.gov-panel { border-radius: var(--aiflow-surface-radius); box-shadow: var(--aiflow-surface-shadow); }
 .gov-toolbar, .gov-header { padding: 16px 20px; }
 .gov-footer { padding: 12px 20px; }
-[data-run-canvas-design] { border-radius: 12px; box-shadow: var(--aiflow-surface-shadow); }
+[data-run-canvas-design] { border-radius: var(--aiflow-surface-radius); box-shadow: var(--aiflow-surface-shadow); }
 [data-run-canvas-design] > header { padding: 16px 20px; }
 [data-run-node-details] { padding: 20px; border-top: 1px solid var(--border); }
 .task-header, .task-actions { padding: 20px 24px; }
@@ -112,22 +174,79 @@
 
 /* 弹层保持原焦点管理、提交行为和滚动容器，统一文字与边界。 */
 [data-slot="dialog-content"]:not([data-task-drawer]),
-[data-slot="alert-dialog-content"] { border-radius: 14px; border-color: var(--border); box-shadow: 0 24px 80px #0f172a33; }
+[data-slot="alert-dialog-content"] { border-radius: 20px; background: var(--card); border-color: var(--glass-edge); box-shadow: var(--aiflow-surface-shadow-raised); }
 [data-slot="dialog-title"], [data-slot="alert-dialog-title"] { font-size: 18px; line-height: 28px; padding-right: 28px; overflow-wrap: anywhere; }
 [data-slot="dialog-description"], [data-slot="alert-dialog-description"] { font-size: 14px; line-height: 22px; overflow-wrap: anywhere; }
 [data-slot="dialog-footer"], [data-slot="alert-dialog-footer"] { padding-top: 16px; border-top: 1px solid var(--border); gap: 8px; }
 [data-slot="popover-content"], [data-slot="dropdown-menu-content"] { border-radius: 10px; box-shadow: var(--aiflow-surface-shadow-raised); }
 [data-slot="dropdown-menu-item"] { min-height: 36px; border-radius: 6px; }
 
-/* 登录页采用同一品牌颜色，表单与说明各自有明确边界。 */
-[data-aiflow-login] { background: var(--background); }
-[data-login-card] { border-radius: 16px; box-shadow: var(--aiflow-surface-shadow-raised); }
-[data-login-introduction] { padding: 40px; border-left: 3px solid var(--primary); }
-[data-login-introduction] h2 { font-size: clamp(28px,3vw,40px); line-height: 1.4; letter-spacing: -1px; }
-[data-login-card] form input { min-height: 44px; }
+/* The poster is local and only fetched on the sign-in screen. */
+[data-aiflow-login] {
+  --login-shade: linear-gradient(90deg, rgb(6 14 48 / 58%), rgb(8 20 59 / 21%) 50%, transparent 80%);
+  min-height: 100svh;
+  background-color: #142352;
+  background-image: var(--login-shade), url("./assets/flow-fold.webp");
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center;
+}
+.dark [data-aiflow-login] {
+  --login-shade: linear-gradient(92deg, rgb(5 11 34 / 68%), rgb(6 12 36 / 40%) 55%, rgb(6 11 32 / 34%));
+}
+[data-login-card] { border-radius: 24px; box-shadow: 0 20px 68px -18px rgb(5 13 44 / 52%); }
+[data-login-card] form input { min-height: 44px; background: var(--muted); border-color: var(--input); }
 [data-login-card] form label { color: var(--foreground); }
-[data-login-flow-illustration] { box-shadow: none; }
+[data-login-card] form > button { min-height: 44px; }
+@media (min-width: 1024px) {
+  [data-aiflow-login] { gap: clamp(32px, 6vw, 112px); }
+  [data-login-introduction] { align-content: center; justify-self: start; width: 100%; gap: 20px; color: white; }
+  [data-login-introduction] > p:first-child { font-size: 13px; letter-spacing: .12em; color: #e3ebff; }
+  [data-login-introduction] h2 { font-size: clamp(42px, 4.2vw, 68px) !important; line-height: 1.13 !important; font-weight: 650; letter-spacing: -.045em; }
+  [data-login-introduction] > p:last-of-type { max-width: 24em; color: #edf1ff; }
+  [data-login-flow-types] { margin-top: 8px; color: #fff; }
+}
+@media (prefers-contrast: more), (prefers-reduced-transparency: reduce), (forced-colors: active) {
+  [data-aiflow-login] { background-image: none; }
+}
+@media (forced-colors: active) {
+  [data-aiflow-login], [data-login-introduction] { background: Canvas; color: CanvasText; }
+}
 
+/* Only the page frames reveal the desktop. Reading surfaces and graph nodes own their fill. */
+.workspace-desktop #aiflow-console-panel :is(.aiflow-page-frame, [data-aiflow-project-workspace], [data-aiflow-process-detail-page], [data-runs-monitor-workspace]),
+.workspace-desktop [data-aiflow-project-workspace] > section { background: transparent; }
+.workspace-desktop { --canvas-background: light-dark(#f2f5fb, #1a2130); }
+
+.business-scope-picker {
+  display: inline-flex; justify-self: start; align-items: center; gap: 2px;
+  border-radius: 999px; padding: 3px; background: var(--muted);
+}
+@media (min-width: 640px) { .business-scope-picker { justify-self: end; } }
+[data-business-list-toolbar] .business-scope-picker button {
+  border-radius: 999px; border: 0; background: transparent; color: var(--muted-foreground); box-shadow: none;
+}
+:root [data-business-list-toolbar] .business-scope-picker button[aria-pressed="true"] {
+  color: var(--foreground); background: var(--card); box-shadow: 0 1px 4px var(--glass-edge);
+}
+.business-count {
+  min-width: 1.6rem; padding: 1px 7px; text-align: center; border-radius: 999px;
+  font-variant-numeric: tabular-nums; background: var(--muted); color: var(--muted-foreground);
+}
+.business-project-name { display: flex; align-items: center; gap: 12px; }
+.business-project-name > svg {
+  flex: none; box-sizing: content-box; padding: 9px; border-radius: 12px; background: var(--accent); color: var(--accent-foreground);
+}
+@media (max-width: 639px) { .business-project-name > svg { display: none; } }
+.business-page-heading, .management-page-header { --aiflow-type-page-title: clamp(1.5rem, 2vw, 2rem); --aiflow-leading-page-title: 1.25; }
+[data-aiflow-business-center] table th { background: var(--muted); }
+@media (min-width: 640px) and (max-width: 1023px) {
+  [data-aiflow-business-center] table :is(th, td) { padding-inline: 10px; }
+}
+[data-aiflow-business-center] table tbody tr:hover { background: color-mix(in srgb, var(--accent) 50%, var(--card)); }
+[data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"] { background: rgb(12 14 22 / 40%); }
+#flow-assistant-panel { border-radius: 22px; box-shadow: var(--aiflow-surface-shadow-raised); }
+#flow-assistant-panel > header { background: var(--muted); }
 /* 长文案换行限于内容区域，标识符仍由原完整查看组件承担。 */
 .flow-type-badge { display: inline-flex; flex-shrink: 0; align-items: center; margin: 4px 8px 0 0; padding: 2px 8px; border-radius: 5px; background: var(--muted); color: var(--muted-foreground); font-size: 13px; line-height: 20px; font-weight: 500; white-space: nowrap; }
 .flow-type-badge[data-flow-type="state"] { background: var(--aiflow-info-surface); color: var(--aiflow-info); }
@@ -136,7 +255,7 @@
 [data-workbench-instance-name] ~ code { display: inline-block; margin: 4px 0 0; vertical-align: middle; }
 :is([data-system-config-content],[data-workbench-panel],[data-project-authorizations]) :is(h1,h2,h3,legend) { overflow-wrap: anywhere; }
 [data-aiflow-console] :is(button,a,summary):focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
-[data-workspace-header] :is(button,a):focus-visible { outline-color: #b6c9ff; }
+[data-workspace-header] :is(button,a):focus-visible { outline-color: var(--ring); }
 @media (prefers-reduced-motion: reduce) {
   [data-aiflow-console] *, [data-aiflow-login] * { scroll-behavior: auto; }
 }
@@ -150,3 +269,86 @@
   [data-business-list-toolbar] { grid-template-columns: minmax(0, 1fr); }
   [data-business-list-toolbar] > :first-child { white-space: nowrap; }
 }
+
+/* A settings sidebar works on wide screens. The identity list keeps its own department column. */
+@media (min-width: 1280px) {
+  [data-aiflow-system-config] > div.aiflow-split-layout { grid-template-columns: 206px minmax(0, 1fr); align-items: start; }
+  [data-aiflow-system-config] > div.aiflow-split-layout[data-navigation-collapsed="true"] { grid-template-columns: 68px minmax(0, 1fr); }
+  [data-aiflow-system-config] [data-system-config-navigation] {
+    position: sticky;
+    top: calc(var(--workspace-header-height) + 16px);
+    display: grid;
+    align-self: start;
+    gap: 12px;
+    max-height: calc(100dvh - var(--workspace-header-height) - 32px);
+    overflow-y: auto;
+    padding: 12px;
+  }
+  [data-aiflow-system-config] [data-system-config-nav-header] { padding: 0 2px 10px 8px; border-bottom: 1px solid var(--border); }
+  [data-aiflow-system-config] [data-system-config-tabs] { display: grid; gap: 4px; }
+  [data-aiflow-system-config] [data-system-config-tabs] button { width: 100%; height: auto; min-height: 42px; border-radius: 10px; padding: 6px 9px; }
+  [data-system-config-tabs] button svg { box-sizing: content-box; padding: 4px; border-radius: 7px; color: var(--aiflow-info); background: var(--aiflow-info-surface); }
+  :root [data-system-config-tabs] [aria-current="page"]::after { inset: 25% auto 25% 0; height: auto; width: 3px; }
+  [data-aiflow-system-config] > div[data-navigation-collapsed="true"] > aside { padding: 8px; }
+  [data-config-navigation-collapsed="true"] [data-system-config-tabs] button { justify-content: center; }
+  [data-config-navigation-collapsed="true"] [data-system-config-nav-header] button { margin: auto; }
+}
+[data-system-settings-editor] > header, [data-system-settings-editor] > form { max-width: 58rem; }
+[data-system-settings-editor] > form > fieldset:has(.preference-rows) { padding: 8px clamp(14px, 2vw, 26px); }
+[data-system-settings-editor] > form > fieldset:has(.preference-rows) > .grid { padding-block: 12px; }
+[data-system-config-content] { box-shadow: none; }
+[data-settings-change-bar] { border-radius: var(--aiflow-surface-radius); }
+[data-workbench-panel] > header h1, [data-system-config-content] h1,
+[data-aiflow-process-detail-page] h1, [data-runtime-monitor] [data-aiflow-page-title] {
+  font-size: clamp(1.4rem, 1.8vw, 1.9rem);
+  line-height: 1.25;
+  letter-spacing: -.035em;
+}
+.workspace-metric {
+  min-width: 0;
+  height: 100%;
+  padding: clamp(10px, 1.35vw, 22px);
+  border-radius: var(--aiflow-surface-radius);
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+.workspace-metric > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: var(--aiflow-type-body); line-height: 1.4; font-weight: 550; }
+.workspace-metric svg { flex: none; }
+.workspace-metric[data-tone="amber"] svg { color: var(--aiflow-warning); }
+.workspace-metric[data-tone="blue"] svg { color: var(--aiflow-info); }
+.workspace-metric[data-tone="emerald"] svg { color: var(--aiflow-success); }
+.workspace-metric[data-tone="red"] svg { color: var(--aiflow-danger); }
+@media (max-width: 479px) { [data-workbench-panel] .workspace-metric svg { display: none; } }
+.workspace-metric svg {
+  box-sizing: content-box;
+  padding: 6px;
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 10%, var(--card));
+}
+.workspace-metric > p {
+  color: var(--foreground);
+  font-size: clamp(1.5rem, 2.3vw, 2.2rem);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.035em;
+}
+button:is(:hover, :focus-visible) > .workspace-metric { border-color: var(--selection-stroke); background: var(--muted); }
+[data-run-history-panel] button[id^="run-history-"] { border-inline-start: 3px solid transparent; }
+[data-run-history-panel] button[id^="run-history-"]:is(:hover, :focus-visible) { border-inline-start-color: var(--selection-indicator); }
+[data-aiflow-process-detail-page] [aria-label="流程详情分区"] {
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 14px;
+  background: var(--muted);
+}
+[data-aiflow-process-detail-page] [aria-label="流程详情分区"] button { border-radius: 10px; }
+[data-slot="dialog-content"]:has([data-aiflow-creation-dialog]) { border-radius: 18px; }
+[data-aiflow-creation-dialog] > :last-child { padding-top: 12px; margin-top: 12px; border-top: 1px solid var(--border); }
+
+.run-status-badge { display: inline-flex; flex-shrink: 0; align-items: center; border-radius: 999px; padding: 2px 9px; font-size: var(--aiflow-type-meta); font-weight: 550; background: var(--muted); color: var(--muted-foreground); }
+.run-status-badge[data-status="success"] { background: var(--aiflow-success-surface); color: var(--aiflow-success); }
+.run-status-badge[data-status="failed"] { background: var(--aiflow-danger-surface); color: var(--aiflow-danger); }
+.run-status-badge[data-status="running"] { background: var(--aiflow-info-surface); color: var(--aiflow-info); }
+.run-status-badge:is([data-status="waiting"], [data-status="blocked"]) { background: var(--aiflow-warning-surface); color: var(--aiflow-warning); }

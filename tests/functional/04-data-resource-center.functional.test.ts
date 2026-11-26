@@ -77,7 +77,7 @@ describe("功能测试 - 模块 4：数据资源中心 (Data Resource Center)", 
     expect(resourceCenter).toContain('data-resource-category-select=""');
     expect(resourceCenter).toContain('aria-label="项目资源类别"');
     expect(resourceCenter).toContain(
-      "onChange={event => setTab(event.target.value as Tab)}"
+      "onChange={event => selectCategory(event.target.value as Tab)}"
     );
     expect(resourceCenter).toContain('{`（${item.count ?? "…"}）`}');
     expect(resourceCenter).toContain('data-resource-category-desktop=""');

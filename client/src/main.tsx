@@ -8,6 +8,7 @@ import App from "./App";
 import { refreshAccountIdentity } from "./lib/account-query-isolation";
 import "./index.css";
 import "./components/management-pages.css";
+import "../workspace-background.css";
 import "./desktop-workspace.css";
 import "./selection-states.css";
 import "./workspace-motion.css";

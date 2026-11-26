@@ -59,8 +59,8 @@ export function WorkspaceHeader({
       indicator.hidden = !width;
       strip.toggleAttribute("data-nav-indicator-ready", Boolean(width));
       if (selected && width) {
-        const center = selected.offsetLeft + width / 2;
-        indicator.style.transform = `translateX(${center - indicator.offsetWidth / 2}px)`;
+        indicator.style.width = `${width}px`;
+        indicator.style.transform = `translateX(${selected.offsetLeft}px)`;
       }
     };
 
@@ -92,7 +92,7 @@ export function WorkspaceHeader({
           data-aiflow-brand
           className="flex min-w-0 items-center gap-2.5 px-4"
         >
-          <span data-workspace-brand-mark>
+          <span data-workspace-brand-mark className="flow-brand-icon">
             <Gauge size={17} />
           </span>
           <span

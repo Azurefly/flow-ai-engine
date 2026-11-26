@@ -400,7 +400,7 @@ export default function SystemSettingsEditor({
                 className="grid min-w-0 gap-5 rounded-2xl border border-border bg-card p-5"
               >
                 {activeKey === "general" ? (
-                  <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="preference-rows">
                     <label className="grid content-start gap-2 text-sm font-medium">
                       平台名称
                       <Input
@@ -413,10 +413,10 @@ export default function SystemSettingsEditor({
                         }
                       />
                     </label>
-                    <div className="grid content-start gap-4">
+                    <div className="preference-rows">
                       <label className="flex min-h-11 items-center gap-2 text-sm font-medium">
                         <input
-                          type="checkbox"
+                          type="checkbox" className="preference-switch"
                           checked={draft.form.watermarkEnabled}
                           onChange={event =>
                             edit({ watermarkEnabled: event.target.checked })
@@ -451,10 +451,10 @@ export default function SystemSettingsEditor({
                         要求审核时，流程需通过审核才可发布。独立复核要求由其他有权审核的人员处理，设计所有人不能自审。
                       </p>
                     </div>
-                    <div className="grid content-start gap-4">
+                    <div className="preference-rows">
                       <label className="flex min-h-11 items-center gap-2 text-sm font-medium">
                         <input
-                          type="checkbox"
+                          type="checkbox" className="preference-switch"
                           checked={draft.form.requireProjectApproval}
                           onChange={event =>
                             edit({

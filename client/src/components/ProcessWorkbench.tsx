@@ -1,3 +1,4 @@
+import { WorkspaceMetric } from "./WorkspaceMetric";
 // Reuse one static class token; emitted class values and handlers are unchanged.
 const mutedToneClass = "text-muted-foreground";
 import { outcomeDecision, type SigningDecision } from "@shared/operate-signing-outcomes";
@@ -1081,21 +1082,21 @@ function Board({
             icon: ListTodo,
             label: "待办",
             value: counts.todo ?? 0,
-            tone: "amber",
+            tone: "amber" as const,
           },
           {
             view: "initiated" as const,
             icon: Send,
             label: "我发起",
             value: counts.initiated ?? 0,
-            tone: "blue",
+            tone: "blue" as const,
           },
           {
             view: "all" as const,
             icon: UsersRound,
             label: "全部可见",
             value: counts.all ?? 0,
-            tone: "slate",
+            tone: "slate" as const,
           },
         ].map(item => (
           <button
@@ -1105,7 +1106,7 @@ function Board({
             className="min-w-0 rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             onClick={() => onView(item.view)}
           >
-            <Stat
+            <WorkspaceMetric
               icon={item.icon}
               label={item.label}
               value={item.value}
@@ -1171,28 +1172,6 @@ function Board({
           )}
         </div>
       </section>
-    </div>
-  );
-}
-
-function Stat({ icon: Icon, label, value, tone }: any) {
-  const colors: any = {
-    amber: "bg-aiflow-warning-surface text-aiflow-warning",
-    emerald: "bg-aiflow-success-surface text-aiflow-success",
-    blue: "bg-aiflow-info-surface text-aiflow-info",
-    slate: "bg-muted text-foreground",
-  };
-  return (
-    <div
-      className={`rounded-lg border border-border p-2 sm:p-4 ${colors[tone]}`}
-    >
-      <div className="aiflow-type-body flex min-w-0 items-center justify-between gap-1 font-medium">
-        <span className="truncate whitespace-nowrap" title={label}>
-          {label}
-        </span>
-        <Icon size={15} className="hidden shrink-0 sm:block" />
-      </div>
-      <p className="aiflow-type-display mt-1 font-bold sm:mt-2">{value}</p>
     </div>
   );
 }
@@ -1593,7 +1572,7 @@ function TaskList({
                   <p className={"mt-1 text-sm " + mutedToneClass}>
                     {task.nodeName}
                     {approvalLabel(task) && (
-                      <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
+                      <span className="ml-2 rounded bg-aiflow-special-surface px-1.5 py-0.5 text-sm text-aiflow-special">
                         {approvalProgressText(task)}
                       </span>
                     )}
@@ -2782,7 +2761,7 @@ function TaskDrawer({
             <DialogDescription className="task-subtitle">
               {task?.nodeName}
               {approvalLabel(task) && (
-                <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-sm text-indigo-600">
+                <span className="ml-2 rounded bg-aiflow-special-surface px-1.5 py-0.5 text-sm text-aiflow-special">
                   {approvalProgressText(task)}
                 </span>
               )}

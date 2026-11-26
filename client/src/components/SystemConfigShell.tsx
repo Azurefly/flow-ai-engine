@@ -125,6 +125,7 @@ export default function SystemConfigShell({ openAssistant }: { openAssistant: ()
                 type="button"
                 data-selection="tab"
                 aria-current={tab === item.id ? "page" : undefined}
+                aria-label={item.label}
                 title={collapsed ? item.label : undefined}
                 onClick={() => setTab(item.id)}
                 className={`flex h-11 min-w-0 items-center gap-2 rounded px-3 text-left text-sm min-[1024px]:h-10 ${collapsed ? "justify-center" : ""} ${tab === item.id ? "bg-accent font-semibold text-aiflow-info" : (mutedToneClass + " hover:bg-muted")}`}
@@ -135,7 +136,7 @@ export default function SystemConfigShell({ openAssistant }: { openAssistant: ()
                 </span>
               </button>
             ))}
-            <button type="button" onClick={openAssistant} title="AI 助手配置"
+            <button type="button" onClick={openAssistant} aria-label="AI 助手配置" title="AI 助手配置"
               className="flex min-h-10 items-center gap-2 rounded px-3 text-left text-sm hover:bg-muted">
               <Workflow size={16} /><span className={collapsed ? "lg:hidden" : "truncate"}>AI 助手配置</span>
             </button>

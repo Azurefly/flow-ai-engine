@@ -224,7 +224,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
       expect(workflowDetailSource).not.toContain(
         "text-xs text-muted-foreground shadow-none"
       );
-      expect(runCenterSource).toContain(
+      expect(readFileSync("client/src/components/WorkspaceMetric.tsx", "utf8")).toContain(
         "aiflow-type-display min-w-0 break-words font-bold tabular-nums"
       );
       expect(runCenterSource).not.toContain("sm:text-2xl");
@@ -977,7 +977,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         'className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3"'
       );
       expect(source).toContain("fullWidthOnMobile");
-      expect(source).toContain("col-span-2 sm:col-span-1");
+      expect(readFileSync("client/src/components/WorkspaceMetric.tsx", "utf8")).toContain("col-span-2 sm:col-span-1");
       expect(source).toContain('className="flex min-w-0 flex-row gap-2"');
       expect(source).toContain(
         'const refreshButtonClass = "aiflow-type-control h-11 min-w-0 flex-1 px-2 sm:px-3 lg:h-9 lg:flex-none"'
@@ -1005,7 +1005,7 @@ describe("功能测试 - 模块 8：界面交互优化与防退化功能回归 (
         'className={`${compactButtonClass} text-aiflow-warning`}'
       );
       expect(source).toContain(
-        'className={`${compactButtonClass} text-red-700`}'
+        'className={`${compactButtonClass} text-aiflow-danger`}'
       );
       expect(source).not.toContain("sm:h-7");
       expect(source).not.toContain("sm:h-8");

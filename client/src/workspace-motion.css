@@ -4,13 +4,13 @@
 
 [data-workspace-nav-indicator] {
   position: absolute;
-  z-index: 2;
-  inset-block-end: 2px;
+  z-index: 0;
+  inset-block: 4px;
   left: 0;
-  width: 24px;
-  height: 3px;
-  border-radius: 3px;
-  background: var(--selection-indicator);
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  background: var(--card);
+  box-shadow: inset 0 1px var(--glass-highlight), 0 1px 3px var(--glass-edge);
   pointer-events: none;
 }
 
@@ -19,7 +19,7 @@
 }
 
 @media (forced-colors: active) {
-  [data-workspace-nav-indicator] { background: Highlight; forced-color-adjust: none; }
+  [data-workspace-nav-indicator] { background: Canvas; border-color: Highlight; forced-color-adjust: none; }
 }
 
 @keyframes aiflow-layer-in {
@@ -42,7 +42,7 @@
 
 @media (prefers-reduced-motion: no-preference) {
   [data-workspace-nav-indicator] {
-    transition: transform var(--duration-drawer) cubic-bezier(.45, 0, .3, 1);
+    transition: transform var(--duration-drawer) var(--ease-spring), width var(--duration-surface) var(--ease-out-expo);
   }
 
   :is([data-slot="dialog-overlay"], [data-slot="alert-dialog-overlay"])[data-state="open"] {
@@ -54,12 +54,14 @@
   }
 
   :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"]) {
-    --layer-scale: .97;
+    --layer-y: 6px;
+    --layer-scale: .985;
     --layer-duration: var(--duration-surface);
   }
 
   [data-task-drawer] {
     --layer-x: 20px;
+    --layer-y: 0;
     --layer-scale: 1;
     --layer-duration: var(--duration-drawer);
   }
@@ -79,6 +81,14 @@
 
   :is([data-slot="dialog-content"], [data-slot="alert-dialog-content"], [data-slot="popover-content"])[data-state="closed"] {
     animation: aiflow-layer-out var(--duration-micro) ease-in;
+  }
+
+  #aiflow-mobile-navigation[open] {
+    --layer-x: -18px;
+    animation: aiflow-layer-in var(--duration-drawer) var(--ease-out-expo);
+  }
+  #aiflow-mobile-navigation[open]::backdrop {
+    animation: aiflow-surface-in var(--duration-surface) ease-out;
   }
 
   #flow-assistant-panel:not([hidden]) {
@@ -101,6 +111,14 @@
 }
 
 @media (prefers-reduced-motion: no-preference) and (hover: hover) and (pointer: fine) {
+  :is([data-aiflow-console], [data-aiflow-login]) [data-slot="button"]:not([role="tab"], [aria-pressed], [aria-expanded]) {
+    transition-property: background-color, color, border-color, box-shadow, filter;
+    transition-duration: var(--duration-micro);
+    transition-timing-function: var(--ease-out-expo);
+  }
+  :is([data-aiflow-console], [data-aiflow-login]) [data-slot="button"]:active:not(:disabled, [aria-disabled="true"], [role="tab"], [aria-pressed], [aria-expanded]) {
+    filter: brightness(.93);
+  }
   [data-motion-lift] {
     transition: translate var(--duration-micro) var(--ease-out-expo),
       background-color var(--duration-micro), color var(--duration-micro),
@@ -110,5 +128,12 @@
   [data-motion-lift]:hover:not(:active, :disabled, [aria-disabled="true"]) {
     translate: 0 -2px;
     box-shadow: var(--aiflow-surface-shadow-raised);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .workspace-metric { transition: background-color var(--duration-micro), border-color var(--duration-micro); }
+  [data-org-detail] [role="tabpanel"], [data-system-settings-editor] form, [data-resource-center] .resource-catalog-table {
+    animation: aiflow-surface-in var(--duration-surface) var(--ease-out-expo);
   }
 }

@@ -3922,7 +3922,7 @@ export default function WorkflowCanvas({
   const visiblePalette = availablePalette.filter(item =>
     (!connectionSource || isAppendTarget(connectionSource, item.type)) &&
     (nodeCategory === "all" || categoryFor(item.type) === nodeCategory) &&
-    (!normalizedNodeSearch || item.label.toLowerCase().includes(normalizedNodeSearch) || item.description.toLowerCase().includes(normalizedNodeSearch))
+    (!normalizedNodeSearch || item.type.includes(normalizedNodeSearch) || item.label.toLowerCase().includes(normalizedNodeSearch) || item.description.toLowerCase().includes(normalizedNodeSearch))
   );
   const {
     availableTemplates,
@@ -4035,9 +4035,14 @@ export default function WorkflowCanvas({
                     <input
                       type="search"
                       className={canvasSelectClass}
-                      placeholder="输入节点名称或用途"
+                      placeholder="名称、类型或用途"
                       value={nodePaletteSearch}
                       onChange={event => setNodePaletteSearch(event.target.value)}
+                      onKeyDown={event => {
+                        if (event.key !== "Enter" || event.repeat || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || !normalizedNodeSearch || visiblePalette.length !== 1) return;
+                        event.preventDefault();
+                        addNode(visiblePalette[0], connectionSource);
+                      }}
                     />
                   </label>
                   <label className={canvasStackedLabelClass}>节点分类<select className={canvasSelectClass} value={nodeCategory} onChange={event => setNodeCategory(event.target.value)}><option value="all">全部节点</option>{[["control","流程控制"],["service","服务与 AI"],["human","人员与表单"],["data","数据处理"]].filter(([id]) => availablePalette.some(item => categoryFor(item.type) === id)).map(([id,label]) => <option key={id} value={id}>{label}</option>)}</select></label>
@@ -4050,6 +4055,9 @@ export default function WorkflowCanvas({
                     接到当前节点：{appendSource.data.label}
                   </Button>}
                   <p className={canvasSectionHelpClass}>{connectionSource ? "选择下一步，自动新增连线。" : "单击或拖拽添加节点，分支请手动接线。"}</p>
+                  {normalizedNodeSearch && <p role="status" className={canvasSectionHelpClass}>
+                    {visiblePalette.length === 1 ? "1 个匹配节点，按 Enter 添加。" : `匹配 ${visiblePalette.length} 个节点`}
+                  </p>}
                   {visiblePalette.length ? (
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {visiblePalette.map(item => (

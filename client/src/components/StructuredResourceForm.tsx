@@ -354,7 +354,7 @@ export function StructuredResourceForm({
       </div>
       <Button
         type="button"
-        className="h-11 w-fit bg-blue-600 text-white shadow-2xs hover:bg-blue-700 sm:h-10"
+        className="h-11 w-fit sm:h-10"
         onClick={() => {
           toast.dismiss();
           setOpen(true);

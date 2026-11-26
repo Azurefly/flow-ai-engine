@@ -1,3 +1,4 @@
+import { FlowTypeBadge } from "./FlowTypeBadge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Definition } from "../../../server/workflow-service";
@@ -32,12 +33,6 @@ const sections: Array<{ value: WorkflowGovernanceSection; label: string }> = [
   { value: "runs", label: "运行记录" },
   { value: "versions", label: "版本历史" },
 ];
-
-function workflowTypeLabel(flowType?: WorkflowDetailRecord["flowType"]) {
-  if (flowType === "data") return "数据流程";
-  if (flowType === "control") return "控制流程";
-  return "状态流程";
-}
 
 function workflowNameWithBreakpoints(name: string) {
   return name.split(/([_-])/g).map((part, index) => (
@@ -110,9 +105,7 @@ export function WorkflowDetailPage({
               >
                 {workflowNameWithBreakpoints(workflow.name)}
               </h1>
-              <span className="rounded bg-muted px-2 py-1 text-[11px] text-muted-foreground">
-                {workflowTypeLabel(workflow.flowType)}
-              </span>
+              <FlowTypeBadge type={workflow.flowType} />
               <span className="rounded bg-aiflow-info-surface px-2 py-1 text-[11px] text-aiflow-info">
                 {`v${workflow.definitionVersion ?? "—"}`}
               </span>

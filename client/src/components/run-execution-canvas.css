@@ -7,7 +7,7 @@
   scroll-margin-top: 80px;
   border: 1px solid var(--border);
   background: var(--card);
-  border-radius: 10px;
+  border-radius: 14px;
   box-shadow: none;
 }
 .dark [data-run-canvas-design] {
@@ -21,7 +21,7 @@
 [data-run-canvas-design] [data-run-legend] > summary {width: fit-content; cursor: pointer; font-size: 13px; color: var(--muted-foreground);}
 [data-run-canvas-design] [data-run-legend] > div {position: absolute; top: calc(100% + 8px); left: 0; z-index: 10; width: min(640px, calc(100vw - 80px)); border: 1px solid var(--border); border-radius: 8px; background: var(--card); box-shadow: 0 4px 12px #0f172a12;}
 [data-run-canvas-design] [data-run-canvas-body] {display: grid; min-width: 0; min-height: 0; align-items: stretch; grid-template-columns: minmax(0,1fr) clamp(280px,25vw,340px);}
-[data-run-canvas-design] [aria-label="实例只读流程画布"] {position: relative; min-width: 0; min-height: 0; height: 100%; border-bottom: 0; border-right: 1px solid var(--border); background: var(--background);}
+[data-run-canvas-design] [aria-label="实例只读流程画布"] {position: relative; min-width: 0; min-height: 0; height: 100%; border-bottom: 0; border-right: 1px solid var(--border); background: var(--canvas-background);}
 [data-run-canvas-design] .run-graph-node {
   position: relative;
   display: block;
@@ -29,12 +29,12 @@
   height: 104px;
   overflow: visible;
   border: 1px solid var(--border) !important;
-  border-radius: 10px;
+  border-radius: 14px;
   padding: 12px 14px;
   text-align: left;
   background: var(--card) !important;
   color: var(--foreground) !important;
-  box-shadow: 0 2px 5px #0f172a08;
+  box-shadow: var(--aiflow-surface-shadow);
   transition: border-color 150ms, box-shadow 150ms;
 }
 [data-run-canvas-design] .run-graph-node:hover {border-color: var(--aiflow-canvas-edge) !important; box-shadow: 0 4px 12px #0f172a10;}
@@ -148,3 +148,10 @@
   [data-run-canvas-design] > header { grid-template-columns:minmax(0,1fr); }
   [data-run-canvas-design] [data-run-canvas-actions] { width:fit-content; }
 }
+
+.run-record-paging { display: flex; flex-shrink: 0; gap: 2px; align-items: center; }
+.run-record-paging span { margin-right: 5px; color: var(--muted-foreground); font-size: var(--aiflow-type-meta); font-variant-numeric: tabular-nums; }
+.run-record-paging button { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 9px; color: var(--foreground); background: var(--muted); }
+.run-record-paging button:disabled { opacity: .4; }
+.run-record-paging button:hover:enabled { color: var(--primary); background: var(--accent); }
+@media (pointer: coarse) { .run-record-paging button { width: 44px; height: 44px; } }

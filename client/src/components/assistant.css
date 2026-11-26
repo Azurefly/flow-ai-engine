@@ -123,7 +123,7 @@
   margin-bottom: 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border);
-  border-radius: 0.65rem;
+  border-radius: var(--aiflow-surface-radius);
 }
 .agent-default h2 {
   margin-bottom: 0.25rem;
@@ -170,7 +170,7 @@
 .assistant-message[data-speaker="user"] {
   margin-left: 15%;
   background: var(--muted);
-  border-radius: 0.65rem;
+  border-radius: var(--aiflow-surface-radius);
   padding: 0.5rem 0.7rem;
 }
 .assistant-message .assistant-link {
@@ -213,9 +213,10 @@
   align-items: flex-end;
   padding: 0.45rem;
   border: 1px solid var(--border);
-  border-radius: 0.7rem;
-  background: var(--background);
+  border-radius: 1rem;
+  background: var(--muted);
 }
+.assistant-composer:focus-within { border-color: var(--ring); }
 .assistant-composer textarea {
   flex: 1;
   resize: vertical;
@@ -253,7 +254,7 @@
 .agent-columns > * {
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: 0.65rem;
+  border-radius: var(--aiflow-surface-radius);
   background: var(--card);
 }
 .agent-columns aside,
@@ -267,7 +268,7 @@
   width: 100%;
   margin-top: 0.5rem;
   padding: 0.5rem;
-  border-radius: 0.4rem;
+  border-radius: 9px;
   overflow-wrap: anywhere;
 }
 .agent-list-item[aria-current="page"] {
@@ -346,5 +347,23 @@
   }
   .agent-trial {
     height: 32rem;
+  }
+}
+
+.agent-columns > aside { background: var(--muted); }
+.agent-columns > aside .agent-list-item[aria-current="page"] {
+  color: var(--selection-text);
+  background: var(--card);
+  box-shadow: inset 3px 0 var(--selection-indicator);
+}
+.agent-editor label > textarea { line-height: 1.6; }
+.agent-editor :is(input, select, textarea):focus-visible,
+.assistant-chat :is(textarea, button):focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+@media (min-width: 1180px) and (min-height: 640px) {
+  .agent-columns > aside, .agent-trial {
+    position: sticky;
+    top: calc(var(--workspace-header-height) + 16px);
+    max-height: calc(100dvh - var(--workspace-header-height) - 32px);
+    overflow-y: auto;
   }
 }

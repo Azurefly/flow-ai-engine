@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2 } from "lucide-react";
-import { useRef, type RefObject, type ReactNode } from "react";
+import { useEffect, useRef, type RefObject, type ReactNode } from "react";
 
 export function CreationDialog({
   open,
@@ -44,6 +44,10 @@ export function CreationDialog({
   cancelLabel?: string;
 }) {
   const opener = useRef<HTMLElement | null>(null);
+  const errorSummary = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (open && errorMessage) errorSummary.current?.scrollIntoView({ block: "nearest" });
+  }, [open, errorMessage]);
   return (
     <Dialog
       open={open}
@@ -99,6 +103,7 @@ export function CreationDialog({
           <div className="mt-4 min-h-0 flex-auto overflow-y-auto overscroll-contain pr-1">
             {errorMessage && (
               <div
+                ref={errorSummary}
                 role="alert"
                 className="aiflow-type-body mb-3 rounded-lg border border-aiflow-danger-border bg-aiflow-danger-surface p-3 text-aiflow-danger"
               >
@@ -123,7 +128,7 @@ export function CreationDialog({
             <Button
               type="submit"
               variant={destructive ? "destructive" : "default"}
-              className={`h-11 font-medium shadow-2xs min-[1024px]:h-10 ${destructive ? "" : "bg-blue-600 text-white hover:bg-blue-700"}`}
+              className="h-11 font-medium min-[1024px]:h-10"
               disabled={pending || submitDisabled}
             >
               {pending && <Loader2 className="animate-spin" size={14} />}

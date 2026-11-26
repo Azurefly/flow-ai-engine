@@ -1,3 +1,4 @@
+import { RunStatusBadge } from "./RunStatusBadge";
 import "./workflow-governance.css";
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
@@ -38,38 +39,6 @@ function formatTime(value: unknown) {
   return Number.isNaN(parsed.getTime())
     ? "—"
     : parsed.toLocaleString("zh-CN", { hour12: false });
-}
-
-const runStatusPresentation: Record<
-  string,
-  { label: string; className: string }
-> = {
-  queued: { label: "排队中", className: "bg-muted text-foreground" },
-  running: {
-    label: "运行中",
-    className: "bg-aiflow-info-surface text-aiflow-info",
-  },
-  waiting: {
-    label: "等待中",
-    className: "bg-aiflow-warning-surface text-aiflow-warning",
-  },
-  blocked: { label: "已阻塞", className: "bg-orange-100 text-orange-700" },
-  success: {
-    label: "成功",
-    className: "bg-aiflow-success-surface text-aiflow-success",
-  },
-  failed: { label: "失败", className: "bg-red-100 text-red-700" },
-  cancelled: { label: "已取消", className: "bg-muted text-muted-foreground" },
-  terminated: { label: "已终止", className: "bg-muted text-muted-foreground" },
-};
-
-function getRunStatusPresentation(status: string) {
-  return (
-    runStatusPresentation[status] ?? {
-      label: status ? `未知状态（原值：${status}）` : "未知状态",
-      className: "bg-muted text-muted-foreground",
-    }
-  );
 }
 
 export default function WorkflowGovernance({
@@ -352,7 +321,6 @@ export default function WorkflowGovernance({
               >
                 {visibleRuns.map(run => {
                   const status = String(run.status ?? "");
-                  const presentation = getRunStatusPresentation(status);
                   const runId = String(run.id);
                   return (
                     <article
@@ -366,11 +334,7 @@ export default function WorkflowGovernance({
                         >
                           {runId.slice(0, 8)}
                         </code>
-                        <span
-                          className={`aiflow-type-meta shrink-0 rounded-full px-2 py-1 font-medium ${presentation.className}`}
-                        >
-                          {presentation.label}
-                        </span>
+                        <RunStatusBadge status={status} />
                       </div>
                       <dl className="mt-3 grid min-w-0 grid-cols-2 gap-x-3 gap-y-2">
                         <div className="min-w-0">
@@ -427,7 +391,6 @@ export default function WorkflowGovernance({
                   <tbody>
                     {visibleRuns.map(run => {
                       const status = String(run.status ?? "");
-                      const presentation = getRunStatusPresentation(status);
                       const runId = String(run.id);
                       return (
                         <tr key={run.id} className="border-t border-border">
@@ -447,11 +410,7 @@ export default function WorkflowGovernance({
                             {formatTime(run.finishedAt)}
                           </td>
                           <td className="px-4 py-3">
-                            <span
-                              className={`aiflow-type-meta inline-flex rounded-full px-2 py-1 font-medium ${presentation.className}`}
-                            >
-                              {presentation.label}
-                            </span>
+                            <RunStatusBadge status={status} />
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-right">
                             <Button
